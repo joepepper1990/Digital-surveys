@@ -1,0 +1,133 @@
+// ---------------------------------------------------------------------------
+// DesignTokens — GENERATED FILE, DO NOT EDIT
+//
+// Source:    design/tokens.json
+// Generator: design/emit_powerfx.py
+//
+// Paste into App.Formulas. Every control reads these names; no control declares
+// a colour, spacing value, radius, height or type size of its own (§8).
+// Regenerate with:  python3 design/emit_powerfx.py
+// ---------------------------------------------------------------------------
+
+// --- Colour ------------------------------------------------------------
+tokBackgroundPage = RGBA(244, 246, 248, 1);   // app canvas behind all cards
+tokSurface = RGBA(255, 255, 255, 1);   // card and panel background
+tokSurfaceRaised = RGBA(255, 255, 255, 1);   // modal and popover background
+tokSurfaceMuted = RGBA(237, 241, 245, 1);   // inactive / not-due / disabled surface
+tokSurfaceInset = RGBA(248, 250, 251, 1);   // input wells and read-only blocks
+tokCommandBar = RGBA(16, 32, 46, 1);   // top application bar
+tokCommandBarInk = RGBA(242, 246, 249, 1);   // text on the command bar
+tokCommandBarInkMuted = RGBA(169, 187, 201, 1);   // secondary text on the command bar
+tokInkPrimary = RGBA(15, 26, 36, 1);   // primary text
+tokInkSecondary = RGBA(67, 86, 106, 1);   // secondary text and labels
+tokInkMuted = RGBA(94, 114, 134, 1);   // hint and metadata text
+tokInkInverse = RGBA(255, 255, 255, 1);   // text on strong fills
+tokActionPrimary = RGBA(0, 85, 140, 1);   // primary action fill
+tokActionPrimaryHover = RGBA(0, 68, 116, 1);   // primary action hover
+tokActionPrimaryPressed = RGBA(0, 54, 92, 1);   // primary action pressed
+tokActionSecondaryInk = RGBA(0, 85, 140, 1);   // secondary action text and border
+tokSuccessInk = RGBA(19, 106, 64, 1);   // valid / complete
+tokSuccessSurface = RGBA(228, 243, 234, 1);   // valid / complete background
+tokWarningInk = RGBA(138, 75, 0, 1);   // outstanding action / deferred
+tokWarningSurface = RGBA(251, 239, 223, 1);   // outstanding action background
+tokCriticalInk = RGBA(162, 29, 22, 1);   // expired calibration, failed check, not surveyed
+tokCriticalSurface = RGBA(251, 232, 230, 1);   // critical background
+tokInfoInk = RGBA(14, 84, 128, 1);   // informational / in progress
+tokInfoSurface = RGBA(229, 240, 247, 1);   // informational background
+tokDisabledSurface = RGBA(227, 233, 238, 1);   // disabled control fill
+tokDisabledInk = RGBA(85, 97, 108, 1);   // disabled control text — kept above 4.5:1 so a disabled control is still legible, not just faint (§45)
+tokBorder = RGBA(201, 211, 219, 1);   // control and card border
+tokDivider = RGBA(226, 232, 237, 1);   // hairline separators
+tokFocusRing = RGBA(0, 114, 206, 1);   // keyboard and stylus focus indicator
+tokHazardInk = RGBA(107, 45, 143, 1);   // known condition / hotspot indicator, deliberately distinct from the status ramp
+tokHazardSurface = RGBA(241, 232, 247, 1);   // known condition background
+
+// --- Spacing -----------------------------------------------------------
+tokSpaceXS = 4;
+tokSpaceSM = 8;
+tokSpaceMD = 12;
+tokSpaceLG = 16;
+tokSpaceXL = 24;
+tokSpaceXXL = 32;
+tokSpaceXXXL = 48;
+tokSpaceSECTION = 64;
+
+// --- Radius ------------------------------------------------------------
+tokRadiusNone = 0;
+tokRadiusSm = 4;
+tokRadiusMd = 8;
+tokRadiusLg = 12;
+tokRadiusXl = 16;
+tokRadiusPill = 999;
+
+// --- Size --------------------------------------------------------------
+tokMinTouchTarget = 48;
+tokFieldHeight = 56;
+tokButtonHeight = 56;
+tokButtonHeightLarge = 64;
+tokCommandBarHeight = 72;
+tokSectionHeaderHeight = 56;
+tokCapabilityCardMinHeight = 200;
+tokPointRowHeight = 88;
+tokStatusBadgeHeight = 32;
+tokIconSize = 24;
+tokBorderWidth = 1;
+tokBorderWidthStrong = 2;
+tokFocusRingWidth = 3;
+
+// --- Typography --------------------------------------------------------
+tokFontFamily = "Segoe UI";
+tokFontFamilyFallback = "Open Sans";
+tokTypeDisplaySize = 40;   // survey card headline
+tokTypeDisplayWeight = FontWeight.Semibold;
+tokTypeHeading1Size = 30;   // screen title
+tokTypeHeading1Weight = FontWeight.Semibold;
+tokTypeHeading2Size = 24;   // card title
+tokTypeHeading2Weight = FontWeight.Semibold;
+tokTypeHeading3Size = 20;   // section heading within a card
+tokTypeHeading3Weight = FontWeight.Semibold;
+tokTypeBodyLargeSize = 18;   // measurement values and primary readable text
+tokTypeBodyLargeWeight = FontWeight.Normal;
+tokTypeBodySize = 16;   // default body text — the floor for anything a technician reads in plant
+tokTypeBodyWeight = FontWeight.Normal;
+tokTypeBodyStrongSize = 16;   // field labels and emphasis
+tokTypeBodyStrongWeight = FontWeight.Semibold;
+tokTypeCaptionSize = 14;   // status badges and units
+tokTypeCaptionWeight = FontWeight.Semibold;
+tokTypeNumericSize = 28;   // numeric measurement entry — deliberately large (§29)
+tokTypeNumericWeight = FontWeight.Semibold;
+
+// --- Elevation ---------------------------------------------------------
+tokScrimFill = ColorFade(Color.Black, -0.45);
+
+// --- Capability, point and instrument status (§16, §26) ----------------
+tokStatusStyles = Table(
+    { Key: "notSelected", Ink: tokInkMuted, Surface: tokSurfaceMuted, Glyph: "○", Label: "Not selected" },
+    { Key: "incomplete", Ink: tokWarningInk, Surface: tokWarningSurface, Glyph: "◑", Label: "Details incomplete" },
+    { Key: "valid", Ink: tokSuccessInk, Surface: tokSuccessSurface, Glyph: "✓", Label: "Valid" },
+    { Key: "calExpired", Ink: tokCriticalInk, Surface: tokCriticalSurface, Glyph: "✕", Label: "Calibration expired" },
+    { Key: "preUseFailed", Ink: tokCriticalInk, Surface: tokCriticalSurface, Glyph: "✕", Label: "Pre-use failed" },
+    { Key: "backgroundDue", Ink: tokWarningInk, Surface: tokWarningSurface, Glyph: "◑", Label: "Background required" },
+    { Key: "invalid", Ink: tokCriticalInk, Surface: tokCriticalSurface, Glyph: "✕", Label: "Invalid capability" },
+    { Key: "pointNotDue", Ink: tokInkMuted, Surface: tokSurfaceMuted, Glyph: "–", Label: "Not due" },
+    { Key: "pointDue", Ink: tokInkPrimary, Surface: tokSurface, Glyph: "○", Label: "Due" },
+    { Key: "pointInProgress", Ink: tokInfoInk, Surface: tokInfoSurface, Glyph: "◐", Label: "In progress" },
+    { Key: "pointComplete", Ink: tokSuccessInk, Surface: tokSuccessSurface, Glyph: "✓", Label: "Complete" },
+    { Key: "pointAction", Ink: tokWarningInk, Surface: tokWarningSurface, Glyph: "!", Label: "Outstanding action" },
+    { Key: "pointNotSurveyed", Ink: tokCriticalInk, Surface: tokCriticalSurface, Glyph: "✕", Label: "Not surveyed" },
+    { Key: "knownCondition", Ink: tokHazardInk, Surface: tokHazardSurface, Glyph: "▲", Label: "Known condition" }
+);
+
+// --- Sync state, presented separately from workflow state (§37) --------
+tokSyncStyles = Table(
+    { Key: "savedLocally", Ink: tokInkMuted, Surface: tokSurfaceMuted, Glyph: "▪", Label: "Saved locally" },
+    { Key: "pendingSync", Ink: tokWarningInk, Surface: tokWarningSurface, Glyph: "↑", Label: "Pending sync" },
+    { Key: "syncing", Ink: tokInfoInk, Surface: tokInfoSurface, Glyph: "↻", Label: "Syncing" },
+    { Key: "synced", Ink: tokSuccessInk, Surface: tokSuccessSurface, Glyph: "✓", Label: "Synced" },
+    { Key: "syncError", Ink: tokCriticalInk, Surface: tokCriticalSurface, Glyph: "!", Label: "Sync error" }
+);
+
+// --- Lookup helpers ----------------------------------------------------
+// Status is never colour alone: a badge renders Glyph, Label and Ink together.
+tokStatusOf(key: Text): Record = LookUp(tokStatusStyles, Key = key);
+tokSyncOf(key: Text): Record = LookUp(tokSyncStyles, Key = key);

@@ -19,7 +19,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from validators import pa_source, rules_config, rules_package, rules_static  # noqa: E402
+from validators import design_tokens, pa_source, rules_config, rules_package, rules_static  # noqa: E402
 from validators.model import Finding, Report, Severity  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -87,6 +87,9 @@ def main(argv: list[str] | None = None) -> int:
 
     # --- configuration ----------------------------------------------------
     report.extend(rules_config.run_all(pathlib.Path(args.config)))
+
+    # --- design system ----------------------------------------------------
+    report.extend(design_tokens.check())
 
     _print(report, package, source)
     return 1 if report.errors else 0
