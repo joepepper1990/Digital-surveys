@@ -1,0 +1,79 @@
+# Synthetic fixture. Reproduces the SHAPE of each confirmed 1.0.0.8 defect so
+# that the analysers in tests/validators/rules_static.py are demonstrably able
+# to detect them. This file is never packed into an app.
+Screens:
+  InstrumentIssueScreen:
+    Properties:
+      Fill: =RGBA(255, 255, 255, 1)
+    Children:
+      # Defect 4.1 — Extra instrument calibration state read from "Neutron".
+      - lblExtraCalStatus:
+          Control: Label
+          Properties:
+            Text: =LookUp(colInstruments, Key="Extra").Serial
+            Fill: =If(LookUp(colInstruments, Key="Neutron").CalDue < Today(), Color.Red, Color.Green)
+
+      # Defect 4.2 — Floor Monitor shows its own post-use, colours from Neutron.
+      - lblFloorPostUse:
+          Control: Label
+          Properties:
+            Text: =LookUp(colInstruments, Key="Floor").PostCheck
+            Fill: =If(LookUp(colInstruments, Key="Neutron").PostCheck = "Fail", Color.Red, Color.Green)
+
+      # Defect 4.3 — paired component displayed, primary component's state used.
+      - lblGammaPairedPostUse:
+          Control: Label
+          Properties:
+            Text: =LookUp(colInstruments, Key="Gamma").PairPostCheck
+            Fill: =If(LookUp(colInstruments, Key="Gamma").PostCheck = "Fail", Color.Red, Color.Green)
+
+      # Defect 4.4 — post-use failure alert created already resolved.
+      - btnRecordPostUseFail:
+          Control: Button
+          Properties:
+            Text: ="Record post-use result"
+            OnSelect: |
+              =Collect(colAlerts, { AlertType: "PostUseFail", Outcome: "Fail", Status: "Resolved" })
+
+      # §4.6 — current capability coverage taken from history.
+      - lblCapabilityCoverage:
+          Control: Label
+          Properties:
+            Text: =CountRows(Filter(colInstrumentHistory, RequiredCapability = varCapability)) & " capabilities covered"
+
+      # §53 — background subtracted automatically.
+      - lblNetReading:
+          Control: Label
+          Properties:
+            Text: =ThisItem.ReadingValue - ThisItem.BackgroundValue
+
+      # §17 — calibration presented as "cal current".
+      - lblCalHeading:
+          Control: Label
+          Properties:
+            Text: ="CAL CURRENT"
+
+      # §5 — superseded version literal presented as current.
+      - lblVersion:
+          Control: Label
+          Properties:
+            Text: ="Version 1.0.0.5"
+
+      # §42 — removed fingerprint workflow artefact, still present and hidden.
+      - grpFingerprintCapture:
+          Control: GroupContainer
+          Properties:
+            Visible: =false
+            OnVisible: =Set(varFingerprintState, LookUp(colFingerprints, UserId = User().Email).Status); Set(varFingerprintReady, true)
+
+      # §41 — RWP branched in a screen formula.
+      - lblRwpNote:
+          Control: Label
+          Properties:
+            Text: =If(varRWP = "850", "Neutron survey required", "Standard survey")
+
+      # §42 — reference to a control that does not exist.
+      - lblStaleRef:
+          Control: Label
+          Properties:
+            Text: =lblRemovedInPriorBuild.Text

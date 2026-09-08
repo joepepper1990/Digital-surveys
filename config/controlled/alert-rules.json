@@ -1,0 +1,10 @@
+{
+  "$schema": "../schemas/alert-rules.schema.json",
+  "configId": "alert-rules",
+  "source": {
+    "document": "SOURCE_REQUIRED",
+    "verified": false,
+    "note": "Radiation thresholds and their required follow-up actions are controlled facts described in the master brief, which was not supplied to this build. Directive §49 forbids inventing thresholds. tests/cases/alert-boundaries.json exercises the below/at/above harness against this table; it is empty until the controlled values are imported."
+  },
+  "rules": []
+}

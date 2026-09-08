@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "survey-schedule.schema.json",
+  "title": "Survey month schedule",
+  "type": "object",
+  "required": ["configId", "source", "sections", "months"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "configId": { "const": "survey-schedule" },
+    "description": { "type": "string" },
+    "source": { "$ref": "controlled-source.schema.json" },
+    "sections": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[A-Z][0-9]?$" }
+    },
+    "months": {
+      "type": "array", "minItems": 12, "maxItems": 12,
+      "items": {
+        "type": "object",
+        "required": ["month", "name", "sections"],
+        "additionalProperties": false,
+        "properties": {
+          "month": { "type": "integer", "minimum": 1, "maximum": 12 },
+          "name": { "type": "string" },
+          "sections": {
+            "type": "array", "minItems": 1, "uniqueItems": true,
+            "items": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

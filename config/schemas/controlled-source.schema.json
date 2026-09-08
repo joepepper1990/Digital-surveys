@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "controlled-source.schema.json",
+  "title": "Controlled source provenance",
+  "description": "Every controlled operational fact carries provenance. `verified: false` means the value has NOT been reconciled against the controlling document and must not be presented to a technician as authoritative.",
+  "type": "object",
+  "required": ["document", "verified"],
+  "properties": {
+    "document": {
+      "type": "string",
+      "description": "Controlling document reference, e.g. 'C07', 'I01', 'RWP 850'. Use the literal string 'SOURCE_REQUIRED' when the controlling document has not been supplied."
+    },
+    "revision": { "type": "string" },
+    "verified": {
+      "type": "boolean",
+      "description": "True only when a named reviewer has checked the value against the controlling document revision."
+    },
+    "verifiedBy": { "type": "string" },
+    "verifiedOn": { "type": "string", "format": "date" },
+    "note": { "type": "string" }
+  }
+}

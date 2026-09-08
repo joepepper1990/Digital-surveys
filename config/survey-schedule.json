@@ -1,0 +1,26 @@
+{
+  "$schema": "./schemas/survey-schedule.schema.json",
+  "configId": "survey-schedule",
+  "description": "Monthly survey section due schedule for the AEWTP routine radiological survey.",
+  "source": {
+    "document": "CLAUDE CODE EXECUTION DIRECTIVE — ESG Digital Radiological Surveys 1.0.0.9, §56",
+    "revision": "as supplied 2026-09-08",
+    "verified": false,
+    "note": "Section membership is quoted verbatim from the execution directive. It must still be reconciled against the controlling C07 methodology before UAT sign-off."
+  },
+  "sections": ["A1", "A2", "B", "C", "D"],
+  "months": [
+    { "month":  1, "name": "January",   "sections": ["A1", "A2", "B"] },
+    { "month":  2, "name": "February",  "sections": ["A1", "A2", "C"] },
+    { "month":  3, "name": "March",     "sections": ["A1", "A2", "B"] },
+    { "month":  4, "name": "April",     "sections": ["A1", "A2", "D"] },
+    { "month":  5, "name": "May",       "sections": ["A1", "A2", "B", "C"] },
+    { "month":  6, "name": "June",      "sections": ["A1", "A2"] },
+    { "month":  7, "name": "July",      "sections": ["A1", "A2", "B"] },
+    { "month":  8, "name": "August",    "sections": ["A1", "A2", "C"] },
+    { "month":  9, "name": "September", "sections": ["A1", "A2", "B"] },
+    { "month": 10, "name": "October",   "sections": ["A1", "A2", "D"] },
+    { "month": 11, "name": "November",  "sections": ["A1", "A2", "B", "C"] },
+    { "month": 12, "name": "December",  "sections": ["A1", "A2"] }
+  ]
+}

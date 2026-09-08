@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "alert-rules.schema.json",
+  "title": "Alert / action threshold rules",
+  "description": "Machine-readable threshold rules (directive §58). Boundary behaviour is explicit: every rule states what happens BELOW, AT and ABOVE the threshold. Where the controlling document leaves the equality case ambiguous, `atThreshold` MUST be \"ReviewRequired\" — the application must not invent a radiological interpretation.",
+  "type": "object",
+  "required": ["configId", "source", "rules"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "configId": { "const": "alert-rules" },
+    "source": { "$ref": "controlled-source.schema.json" },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ruleId", "capabilityId", "unit", "threshold", "belowThreshold", "atThreshold", "aboveThreshold", "source"],
+        "additionalProperties": false,
+        "properties": {
+          "ruleId": { "type": "string" },
+          "capabilityId": { "type": "string" },
+          "measurementId": { "type": "string" },
+          "appliesToPoints": { "type": "array", "items": { "type": "string" } },
+          "unit": { "type": "string" },
+          "threshold": { "type": "number" },
+          "belowThreshold": { "$ref": "#/$defs/outcome" },
+          "atThreshold": {
+            "$ref": "#/$defs/outcome",
+            "description": "Use \"ReviewRequired\" whenever the controlling document does not unambiguously resolve the equality case."
+          },
+          "aboveThreshold": { "$ref": "#/$defs/outcome" },
+          "deferPermitted": {
+            "type": "boolean",
+            "description": "Whether the technician may DEFER the resulting action (§31). A deferred action remains visibly outstanding and blocks Technician Complete unless the rule says otherwise."
+          },
+          "requiredFollowUp": { "type": "string" },
+          "source": { "$ref": "controlled-source.schema.json" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "outcome": {
+      "enum": ["NoAction", "Advisory", "ActionRequired", "ReviewRequired"],
+      "description": "ReviewRequired means the software cannot decide and a competent person must. It is never a silent pass."
+    }
+  }
+}

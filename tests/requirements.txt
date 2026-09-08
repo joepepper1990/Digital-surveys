@@ -1,0 +1,4 @@
+# Validator suite dependencies. Everything else is Python standard library.
+jsonschema>=4.18
+pytest>=8.0
+PyYAML>=6.0

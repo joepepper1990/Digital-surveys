@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "instrument-assignment.schema.json",
+  "title": "Active survey instrument assignment",
+  "description": "Runtime shape of the active instrument set (directive §22). Modelled as a Dataverse table even though the prototype holds it in a collection. THIS is the authoritative source of the currently valid instrument set — audit/history records are NEVER consulted to satisfy current capability coverage (§4.6).",
+  "type": "object",
+  "required": ["assignmentId", "surveyId", "segmentId", "capabilityId", "instrumentDefinitionId", "components", "activeFrom", "status", "technician"],
+  "additionalProperties": false,
+  "properties": {
+    "assignmentId": { "type": "string" },
+    "surveyId": { "type": "string" },
+    "segmentId": {
+      "type": "string",
+      "description": "The technician segment. A handover starts a new segment; the incoming technician's instrument set is recorded separately (§35)."
+    },
+    "capabilityId": { "type": "string" },
+    "instrumentDefinitionId": { "type": "string" },
+
+    "components": {
+      "type": "array",
+      "minItems": 1,
+      "description": "One entry per component of the system. Primary and probe state is held separately — never concatenated into one ambiguous string (§15).",
+      "items": {
+        "type": "object",
+        "required": ["componentId", "role"],
+        "additionalProperties": false,
+        "properties": {
+          "componentId": { "type": "string" },
+          "role": { "enum": ["Primary", "Probe", "Detector"] },
+          "serial": { "type": ["string", "null"] },
+          "calibrationDue": {
+            "type": ["string", "null"], "format": "date",
+            "description": "CALIBRATION DUE date — the field is labelled 'Calibration due', never 'Cal current' (§17)."
+          },
+          "preUse": { "$ref": "#/$defs/checkResult" },
+          "postUse": { "$ref": "#/$defs/checkResult" },
+          "background": {
+            "type": ["object", "null"],
+            "description": "Background is held per component AND per capability, with its unit. Independent Alpha, Beta/Gamma and EC backgrounds are never collapsed into one generic value (§4.8). Background is stored alongside the raw reading and is NEVER automatically subtracted (§53).",
+            "required": ["capabilityId", "value", "unit", "takenAt"],
+            "additionalProperties": false,
+            "properties": {
+              "capabilityId": { "type": "string" },
+              "value": { "type": "number" },
+              "unit": { "type": "string" },
+              "takenAt": { "type": "string", "format": "date-time" }
+            }
+          }
+        }
+      }
+    },
+
+    "activeFrom": { "type": "string", "format": "date-time" },
+    "activeTo": {
+      "type": ["string", "null"], "format": "date-time",
+      "description": "Null while the assignment is current. Set when the assignment is replaced — the record itself is retained, never deleted or overwritten (§24)."
+    },
+    "status": {
+      "enum": ["Active", "Replaced", "Withdrawn"],
+      "description": "Withdrawn = removed without replacement (e.g. pre-use fail before use). Replaced = superseded by replacementAssignment."
+    },
+    "replacementOfAssignmentId": {
+      "type": ["string", "null"],
+      "description": "Set on the NEW assignment, pointing at the one it replaces. Add Instrument leaves this null — Add and Replace are distinct operations (§4.7, §23, §24)."
+    },
+    "reason": {
+      "type": ["string", "null"],
+      "description": "Mandatory for Replace; null for Add."
+    },
+    "technician": { "type": "string" },
+
+    "readingAssociations": {
+      "type": "array",
+      "description": "Readings taken under this assignment. Replacing an instrument never re-points existing readings — historical readings stay with the assignment that produced them (§24).",
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "checkResult": {
+      "type": ["object", "null"],
+      "required": ["result", "performedAt", "performedBy"],
+      "additionalProperties": false,
+      "properties": {
+        "result": { "enum": ["Pass", "Fail"] },
+        "performedAt": { "type": "string", "format": "date-time" },
+        "performedBy": { "type": "string" },
+        "comment": { "type": "string" },
+        "dispositionId": {
+          "type": ["string", "null"],
+          "description": "For a Fail: the identifier of the review exception raised. A post-use failure is NEVER created with Status='Resolved' (§4.4) — disposition is explicit and recorded separately."
+        }
+      }
+    }
+  }
+}

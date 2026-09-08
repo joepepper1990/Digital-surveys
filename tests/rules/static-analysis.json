@@ -1,0 +1,53 @@
+{
+  "description": "Configuration for the Power Fx static analysers. Kept out of code so that new collection names, state fields and documented exceptions are a data change, not a code change.",
+
+  "authoritativeVersion": "1.0.0.9",
+
+  "instrumentCollections": [
+    "colInstruments",
+    "colInstrumentRegister",
+    "colActiveInstruments",
+    "colInstrumentAssignments"
+  ],
+
+  "historyCollections": [
+    "colInstrumentHistory",
+    "colAuditEvents",
+    "colReplacedInstruments",
+    "colAudit"
+  ],
+
+  "keyProperties": ["Key", "InstrumentKey", "CapabilityId", "Capability", "AssignmentId"],
+
+  "stateFields": [
+    "CalDue", "CalibrationDue", "CalExpiry",
+    "PreCheck", "PreUse", "PreUseResult",
+    "PostCheck", "PostUse", "PostUseResult",
+    "PairPreCheck", "PairPostCheck", "PairCalDue", "PairSerial",
+    "Background", "Serial", "Status", "Valid"
+  ],
+
+  "pairedFieldPrefix": "Pair",
+
+  "displayProperties": ["Text", "Value", "HintText", "Tooltip"],
+  "stateProperties": [
+    "Fill", "Color", "BorderColor", "HoverFill", "PressedFill",
+    "DisplayMode", "Visible", "BorderThickness", "FocusedBorderColor"
+  ],
+
+  "backgroundFields": ["Background", "BackgroundValue", "Bkg", "BkgValue"],
+  "readingFields": ["Reading", "ReadingValue", "Measurement", "MeasuredValue", "Result"],
+
+  "forbiddenReferences": [
+    { "pattern": "(?i)\\bfingerprint\\b",                    "reason": "Fingerprint workflow artefacts were removed (§42)." },
+    { "pattern": "(?i)Survey\\s+C\\s+Ion\\s+Exchange",       "reason": "Generic un-numbered 'Survey C Ion Exchange' row must be replaced by identified points (§42)." },
+    { "pattern": "(?i)Decanting\\s+Pump(?!\\s*\\d)",         "reason": "Un-numbered Decanting Pump reference (§42)." },
+    { "pattern": "(?i)CAL\\s*CURRENT",                       "reason": "Calibration must be presented as CALIBRATION DUE, never 'Cal current' (§17)." }
+  ],
+
+  "supersededVersions": ["1.0.0.4", "1.0.0.5", "1.0.0.6", "1.0.0.7", "1.0.0.8"],
+
+  "screenControlBudget": 120,
+
+  "documentedExceptions": []
+}

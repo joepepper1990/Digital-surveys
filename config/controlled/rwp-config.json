@@ -1,0 +1,10 @@
+{
+  "$schema": "../schemas/rwp-config.schema.json",
+  "configId": "rwp-config",
+  "source": {
+    "document": "SOURCE_REQUIRED",
+    "verified": false,
+    "note": "RWP identities, revisions, required capabilities and MUST KNOW content are controlled facts held on the RWPs themselves. Not supplied to this build."
+  },
+  "rwps": []
+}

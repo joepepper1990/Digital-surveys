@@ -1,0 +1,10 @@
+{
+  "$schema": "../schemas/point-register.schema.json",
+  "configId": "point-register",
+  "source": {
+    "document": "SOURCE_REQUIRED",
+    "verified": false,
+    "note": "C07 survey methodology and the 1.0.0.8 baseline package were not supplied to this build. The point register (including Point 7a and the Point 33 pipework positions), level and section membership, required measurements, units, EC/wipe/neutron applicability and map hit areas are controlled facts and must be imported from the controlling source. Directive §49 forbids inventing them."
+  },
+  "points": []
+}

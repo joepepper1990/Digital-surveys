@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "rwp-config.schema.json",
+  "title": "RWP configuration",
+  "description": "RWP-dependent behaviour is table-driven (directive §41). No screen may contain If(RWP=\"850\", ...) branching.",
+  "type": "object",
+  "required": ["configId", "source", "rwps"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "configId": { "const": "rwp-config" },
+    "source": { "$ref": "controlled-source.schema.json" },
+    "rwps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["rwpId", "displayName", "revision", "requiredCapabilities", "source"],
+        "additionalProperties": false,
+        "properties": {
+          "rwpId": { "type": "string" },
+          "displayName": { "type": "string" },
+          "revision": { "type": "string" },
+          "requiredCapabilities": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Drives which capability cards appear on Instrument Issue (§14). A survey whose points need a capability this RWP does not cover raises the conflict warning required by §13."
+          },
+          "mustKnow": {
+            "type": "array",
+            "description": "Concise structured MUST KNOW items (§13). Not a transcription of the RWP document.",
+            "items": {
+              "type": "object",
+              "required": ["itemId", "text"],
+              "additionalProperties": false,
+              "properties": {
+                "itemId": { "type": "string" },
+                "text": { "type": "string" },
+                "confirmationRequired": { "type": "boolean" }
+              }
+            }
+          },
+          "source": { "$ref": "controlled-source.schema.json" }
+        }
+      }
+    }
+  }
+}

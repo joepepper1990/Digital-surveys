@@ -1,0 +1,19 @@
+{
+  "description": "Expected identity of the released solution package. Values marked null are recorded by the validator rather than asserted, because the authoritative value lives in the 1.0.0.8 baseline package which was not supplied to this build.",
+
+  "expectedVersion": "1.0.0.9",
+  "expectedManaged": false,
+  "expectedCanvasAppName": "ESG Radiological Surveys",
+  "expectedCanvasWidth": 1440,
+  "expectedCanvasHeight": 960,
+  "expectedCanvasOrientation": "Landscape",
+
+  "expectedSolutionUniqueName": null,
+  "expectedPublisherUniqueName": null,
+
+  "requiredSolutionFiles": [
+    "solution.xml",
+    "customizations.xml",
+    "[Content_Types].xml"
+  ]
+}

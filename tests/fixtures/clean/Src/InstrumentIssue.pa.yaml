@@ -1,0 +1,87 @@
+# Synthetic fixture. The corrected counterpart of tests/fixtures/defective —
+# it must produce ZERO findings. It also serves as the reference shape for the
+# 1.0.0.9 capability card: one gallery bound to the active assignment set, so a
+# row can only ever read its own record. There is no LookUp by literal
+# instrument key anywhere, which is what made defects 4.1–4.3 possible.
+Screens:
+  InstrumentIssueScreen:
+    Properties:
+      Fill: =tokBackgroundPage
+    Children:
+      - galRequiredCapabilities:
+          Control: Gallery
+          Properties:
+            # Only the capabilities this survey/RWP actually requires (§14).
+            Items: =Filter(colActiveInstruments, SurveyId = varSurveyId And SegmentId = varSegmentId)
+          Children:
+            - lblCapabilityName:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.CapabilityDisplayName
+
+            # Primary component. Every property reads ThisItem — the row cannot
+            # reach another instrument's record.
+            - lblPrimaryCalibrationDue:
+                Control: Label
+                Properties:
+                  Text: ="CALIBRATION DUE  " & Text(ThisItem.Primary.CalibrationDue, "dd mmm yyyy")
+                  Fill: =If(IsBlank(ThisItem.Primary.CalibrationDue), tokSurfaceMuted, ThisItem.Primary.CalibrationDue < Today(), tokCriticalSurface, tokSuccessSurface)
+
+            # Paired component carries its own independent state (§4.3, §15).
+            - lblProbeCalibrationDue:
+                Control: Label
+                Properties:
+                  Text: ="CALIBRATION DUE  " & Text(ThisItem.Probe.CalibrationDue, "dd mmm yyyy")
+                  Fill: =If(IsBlank(ThisItem.Probe.CalibrationDue), tokSurfaceMuted, ThisItem.Probe.CalibrationDue < Today(), tokCriticalSurface, tokSuccessSurface)
+
+            - lblProbePostUse:
+                Control: Label
+                Properties:
+                  Text: =ThisItem.Probe.PostUseResult
+                  Fill: =If(ThisItem.Probe.PostUseResult = "Fail", tokCriticalSurface, tokSuccessSurface)
+
+            # Raw reading and background are shown separately, never netted (§53).
+            - lblBackground:
+                Control: Label
+                Properties:
+                  Text: ="Background " & ThisItem.Primary.BackgroundValue & " " & ThisItem.CapabilityUnit
+
+      # A post-use failure is recorded as an OPEN exception with an explicit
+      # disposition placeholder. It is never created already resolved (§4.4).
+      - btnRecordPostUseFail:
+          Control: Button
+          Properties:
+            Text: ="Record post-use result"
+            OnSelect: |
+              =Collect(
+                  colAlerts,
+                  {
+                      AlertId: GUID(),
+                      AlertType: "PostUseFail",
+                      Outcome: "Fail",
+                      Status: "Open",
+                      DispositionId: Blank(),
+                      RaisedAt: Now(),
+                      RaisedBy: varTechnician,
+                      SurveyId: varSurveyId,
+                      SegmentId: varSegmentId
+                  }
+              )
+
+      # Coverage comes from the ACTIVE assignment set, never from history (§4.6).
+      - lblCapabilityCoverage:
+          Control: Label
+          Properties:
+            Text: =CountRows(Filter(colActiveInstruments, Status = "Active" And IsValid)) & " of " & CountRows(colRequiredCapabilities) & " required capabilities ready"
+
+      # RWP behaviour is looked up from configuration, never branched on (§41).
+      - lblRwpNote:
+          Control: Label
+          Properties:
+            Text: =Concat(LookUp(colRwpConfig, RwpId = varRwpId).MustKnow, Text, Char(10))
+
+      # One authoritative version value (§5).
+      - lblVersion:
+          Control: Label
+          Properties:
+            Text: ="Version " & varAppVersion

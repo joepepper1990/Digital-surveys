@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Thin wrapper so callers never need to know where the toolchain lives.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TC="$ROOT/tools/.toolchain"
+if [[ ! -f "$TC/pac/tools/pac.dll" ]]; then
+  echo "Toolchain missing. Run tools/bootstrap.sh first." >&2
+  exit 127
+fi
+export DOTNET_ROOT="$TC/dotnet"
+export PATH="$DOTNET_ROOT:$PATH"
+export DOTNET_CLI_TELEMETRY_OPTOUT=1
+export DOTNET_NOLOGO=1
+exec "$DOTNET_ROOT/dotnet" "$TC/pac/tools/pac.dll" "$@"

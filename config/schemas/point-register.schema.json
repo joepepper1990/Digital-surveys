@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "point-register.schema.json",
+  "title": "Survey point register",
+  "description": "Data-driven survey definition (directive §39). The UI renders from this register; there are no point-by-point duplicated controls.",
+  "type": "object",
+  "required": ["configId", "source", "points"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "configId": { "const": "point-register" },
+    "source": { "$ref": "controlled-source.schema.json" },
+    "points": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["pointId", "displayName", "level", "sections", "measurements", "source"],
+        "additionalProperties": false,
+        "properties": {
+          "pointId": {
+            "type": "string",
+            "description": "Unique. Note the register includes non-numeric identifiers such as '7a' (§55) and the pipework point '33' (§50).",
+            "pattern": "^[0-9]+[a-z]?$"
+          },
+          "displayName": { "type": "string" },
+          "level": { "type": "string" },
+          "sections": {
+            "type": "array", "minItems": 1, "uniqueItems": true,
+            "items": { "type": "string" },
+            "description": "Section membership (A1/A2/B/C/D). Combined with survey-schedule.json this determines whether the point is DUE in a given month."
+          },
+          "measurements": {
+            "type": "array",
+            "description": "Exactly the measurements required at this point. The measurement entry screen renders only these (§28).",
+            "items": {
+              "type": "object",
+              "required": ["measurementId", "capabilityId", "label", "unit", "mandatory"],
+              "additionalProperties": false,
+              "properties": {
+                "measurementId": { "type": "string" },
+                "capabilityId": { "type": "string" },
+                "label": { "type": "string" },
+                "unit": { "type": "string" },
+                "mandatory": { "type": "boolean" },
+                "appliesToSections": {
+                  "type": "array", "items": { "type": "string" },
+                  "description": "Optional. When present the measurement is required only when the survey is being performed for one of these sections."
+                }
+              }
+            }
+          },
+          "wipeRequired": { "type": "boolean" },
+          "wipeCount": { "type": "integer", "minimum": 0 },
+          "ecRequired": { "type": "boolean" },
+          "neutronRequired": { "type": "boolean" },
+          "fixedBetaGammaRuleApplies": { "type": "boolean" },
+          "keyRequired": { "type": "boolean" },
+          "knownCondition": {
+            "type": "object",
+            "description": "Current known elevated condition / hotspot information permitted for display (§52). PRIOR ROUTINE READINGS ARE NOT STORED HERE and must never be shown to a technician performing the current survey.",
+            "additionalProperties": false,
+            "properties": {
+              "present": { "type": "boolean" },
+              "summary": { "type": "string" },
+              "source": { "$ref": "controlled-source.schema.json" }
+            }
+          },
+          "map": {
+            "type": "object",
+            "description": "Configuration-driven hit area on an approved map asset (§26). Geometry is NEVER invented — absent geometry means the point is reachable from the Area References list only, and the map overlay reports the asset as outstanding.",
+            "additionalProperties": false,
+            "properties": {
+              "assetId": { "type": "string" },
+              "shape": { "enum": ["rect", "circle", "polygon"] },
+              "coordinates": { "type": "array", "items": { "type": "number" } },
+              "source": { "$ref": "controlled-source.schema.json" }
+            }
+          },
+          "subPositions": {
+            "type": "array",
+            "description": "Separately selectable positions within a point (e.g. the Point 33 pipework positions, §50). Supplied by controlled configuration only; the prototype must not synthesise geometry.",
+            "items": {
+              "type": "object",
+              "required": ["subPositionId", "displayName"],
+              "additionalProperties": false,
+              "properties": {
+                "subPositionId": { "type": "string" },
+                "displayName": { "type": "string" },
+                "map": { "type": "object" }
+              }
+            }
+          },
+          "instructions": { "type": "string" },
+          "source": { "$ref": "controlled-source.schema.json" }
+        }
+      }
+    }
+  }
+}

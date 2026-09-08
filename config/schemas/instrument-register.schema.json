@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "instrument-register.schema.json",
+  "title": "Instrument register",
+  "description": "Component-aware instrument definitions (directive §40, §4.5). A definition describes a SYSTEM; the system is made of one or more separately controlled COMPONENTS. Ratemeter/probe and base-unit/probe combinations are modelled as two components of one system, never as an ad-hoc paired exception on a single record.",
+  "type": "object",
+  "required": ["configId", "source", "capabilities", "instruments"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "configId": { "const": "instrument-register" },
+    "source": { "$ref": "controlled-source.schema.json" },
+
+    "capabilities": {
+      "type": "array",
+      "description": "The closed set of survey capabilities an instrument system can satisfy.",
+      "items": {
+        "type": "object",
+        "required": ["capabilityId", "displayName", "unit"],
+        "additionalProperties": false,
+        "properties": {
+          "capabilityId": { "type": "string", "pattern": "^[A-Za-z0-9_]+$" },
+          "displayName": { "type": "string" },
+          "unit": { "type": "string", "description": "Display unit, e.g. 'uSv/h', 'cps'. Shown next to every numeric input for this capability (§29)." },
+          "backgroundRequired": {
+            "type": "boolean",
+            "description": "Whether an at-issue background reading is required for this capability (§19). Background is recorded per instrument+component+capability and NEVER collapsed across capabilities (§4.8)."
+          },
+          "source": { "$ref": "controlled-source.schema.json" }
+        }
+      }
+    },
+
+    "instruments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["instrumentDefinitionId", "displayName", "baseModel", "systemType", "components", "active", "source"],
+        "additionalProperties": false,
+        "properties": {
+          "instrumentDefinitionId": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+$" },
+          "displayName": { "type": "string" },
+          "baseModel": { "type": "string" },
+          "systemType": {
+            "enum": ["SingleUnit", "RatemeterProbe", "BaseUnitProbe"],
+            "description": "Drives how many components the capability card renders (§15)."
+          },
+          "displayUnits": { "type": "array", "items": { "type": "string" } },
+          "active": { "type": "boolean" },
+          "source": { "$ref": "controlled-source.schema.json" },
+
+          "components": {
+            "type": "array",
+            "minItems": 1,
+            "description": "Each component is independently identified, calibrated and checked. Primary and paired components carry SEPARATE serial, calibration, pre-use, post-use and background state (§4.3, §15).",
+            "items": {
+              "type": "object",
+              "required": ["componentId", "role", "model", "serialRequired", "calibrationRequired", "preUseRequired", "postUseRequired"],
+              "additionalProperties": false,
+              "properties": {
+                "componentId": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+$" },
+                "role": { "enum": ["Primary", "Probe", "Detector"] },
+                "model": { "type": "string" },
+                "serialRequired": { "type": "boolean" },
+                "calibrationRequired": { "type": "boolean" },
+                "preUseRequired": { "type": "boolean" },
+                "postUseRequired": { "type": "boolean" },
+                "backgroundRequired": { "type": "boolean" },
+                "capabilities": {
+                  "type": "array",
+                  "description": "Capabilities this specific component contributes. The system satisfies a capability only when the contributing component is itself valid.",
+                  "items": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "$schema": "../schemas/instrument-register.schema.json",
+  "configId": "instrument-register",
+  "source": {
+    "document": "SOURCE_REQUIRED",
+    "verified": false,
+    "note": "Instrument models, component pairings and calibration/check requirements are controlled facts. The directive names FH40 G-L10 + FHZ 512A, Electra + detector and RadEye SX + detector as systems whose component pairing is currently missing (§4.5), but the authoritative register lives in the 1.0.0.8 baseline package, which was not supplied. Directive §49 forbids inventing instrument models."
+  },
+  "capabilities": [],
+  "instruments": []
+}
