@@ -1,0 +1,150 @@
+# The corrected counterpart of tests/fixtures/runtime-defective. Every analyser
+# in tests/validators/rules_runtime.py must stay silent on this file, and it
+# doubles as the reference shape for the header band and for any screen whose
+# content is conditional.
+#
+# Header rules used here:
+#   header band      Y 24..68, one 44 px row, nothing else inside it
+#   nav buttons      200 px wide, 16 px gutter, right-aligned within the canvas
+#   content start    Y 120, clear of the band
+#   touch targets    >= 48 px in both axes
+Screens:
+  SurveyPlanScreen:
+    Properties:
+      Fill: =RGBA(255, 255, 255, 1)
+    Children:
+      - lblSurveyTitle:
+          Control: Label
+          Properties:
+            X: =32
+            Y: =24
+            Width: =400
+            Height: =44
+            Text: ="Survey plan"
+
+      # Four 200 px buttons, 16 px gutters, the last ending on the 1408 px
+      # right margin: 760, 976, 1192 + 216 = 1408.
+      - btnHandover:
+          Control: Button
+          Properties:
+            X: =544
+            Y: =24
+            Width: =200
+            Height: =48
+            Text: ="HANDOVER"
+
+      - btnInstruments:
+          Control: Button
+          Properties:
+            X: =760
+            Y: =24
+            Width: =200
+            Height: =48
+            Text: ="INSTRUMENTS"
+
+      - btnSummary:
+          Control: Button
+          Properties:
+            X: =976
+            Y: =24
+            Width: =200
+            Height: =48
+            Text: ="SUMMARY"
+
+      - btnHome:
+          Control: Button
+          Properties:
+            X: =1192
+            Y: =24
+            Width: =200
+            Height: =48
+            Text: ="HOME"
+
+      # Status sits below the band, not inside it.
+      - lblSurveyStatus:
+          Control: Label
+          Properties:
+            X: =32
+            Y: =88
+            Width: =600
+            Height: =32
+            Text: ="4 of 33 points complete"
+
+      - btnLevelBasement:
+          Control: Button
+          Properties:
+            X: =32
+            Y: =136
+            Width: =200
+            Height: =48
+            Text: ="Basement"
+
+  InstrumentSignOutScreen:
+    Properties:
+      Fill: =RGBA(255, 255, 255, 1)
+    Children:
+      # The heading and Cancel are always visible, so the screen can never be
+      # blank. Everything conditional explains its own absence.
+      - lblSignOutHeading:
+          Control: Label
+          Properties:
+            X: =32
+            Y: =24
+            Width: =600
+            Height: =44
+            Visible: =true
+            Text: ="SIGN OUT INSTRUMENT"
+            OnVisible: |
+              =Set(varSignOutReady, !IsBlank(varSelectedInstrument));
+               ClearCollect(colInstrumentDraft, { Slot: 1, SerialNumber: "", CalibrationDue: Blank() })
+
+      - lblNoInstrumentSelected:
+          Control: Label
+          Properties:
+            X: =32
+            Y: =100
+            Width: =600
+            Height: =32
+            Visible: =varSignOutReady = "no"
+            Text: ="No instrument selected. Go back and choose one from the register."
+
+      - lblComponentOneModel:
+          Control: Label
+          Properties:
+            X: =32
+            Y: =100
+            Width: =600
+            Height: =32
+            Visible: =varSignOutReady = "yes"
+            Text: =LookUp(colInstrumentDraft, Slot = 1).SerialNumber
+
+      - txtComponentOneSerial:
+          Control: TextInput
+          Properties:
+            X: =32
+            Y: =148
+            Width: =400
+            Height: =56
+            Visible: =varSignOutReady = "yes"
+            Default: =First(colInstrumentDraft).CalibrationDue
+            OnChange: =Set(varSelectedInstrument, varSelectedInstrument)
+
+      - btnSaveInstrument:
+          Control: Button
+          Properties:
+            X: =32
+            Y: =820
+            Width: =260
+            Height: =56
+            Visible: =varSignOutReady = "yes"
+            Text: ="SAVE INSTRUMENT"
+
+      - btnCancel:
+          Control: Button
+          Properties:
+            X: =320
+            Y: =820
+            Width: =260
+            Height: =56
+            Visible: =true
+            Text: ="CANCEL"

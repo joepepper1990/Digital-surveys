@@ -19,7 +19,9 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from validators import design_tokens, pa_source, rules_config, rules_package, rules_static  # noqa: E402
+from validators import (  # noqa: E402
+    design_tokens, pa_source, rules_config, rules_package, rules_runtime, rules_static,
+)
 from validators.model import Finding, Report, Severity  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -49,8 +51,9 @@ def main(argv: list[str] | None = None) -> int:
                 message="No solution ZIP to validate.",
                 location=str(ROOT / "outputs"),
                 detail=(
-                    "A 1.0.0.9 package cannot be produced until the 1.0.0.8 baseline "
-                    "artefact is placed in source-original/. See docs/BASELINE_REPORT.md."
+                    "A 1.1.0.6 package cannot be produced until the 1.1.0.5 baseline "
+                    "artefact is placed in source-original/. See "
+                    "docs/BASELINE_REPORT_1_1_0_6.md."
                 ),
             )
         )
@@ -63,13 +66,14 @@ def main(argv: list[str] | None = None) -> int:
     if source.is_empty:
         report.add(
             Finding(
-                rule="R001-R013 static-analysis",
+                rule="R001-R020 static-analysis",
                 severity=Severity.BLOCKED,
                 message="No canvas sources to analyse.",
                 location=str(sources),
                 detail=(
                     "Run tools/unpack.sh against the baseline package first. The analysers "
-                    "are self-tested against tests/fixtures — see tests/test_static_rules.py."
+                    "are self-tested against tests/fixtures — see tests/test_static_rules.py "
+                    "and tests/test_runtime_rules.py."
                 ),
             )
         )
@@ -84,6 +88,7 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
         report.extend(rules_static.run_all(source))
+        report.extend(rules_runtime.run_all(source))
 
     # --- configuration ----------------------------------------------------
     report.extend(rules_config.run_all(pathlib.Path(args.config)))

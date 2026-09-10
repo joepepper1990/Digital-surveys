@@ -7,18 +7,19 @@ directory and writes everything it produces to `source-working/`.
 
 | File | Status |
 |---|---|
-| `ESGDigitalRadiologicalSurveys_1_0_0_8_FULL_INSTRUMENT_REGISTER(1).zip` | **NOT SUPPLIED** |
+| `ESGDigitalRadiologicalSurveys_1_1_0_5_FINAL_UNMANAGED.zip` | **NOT SUPPLIED** — current baseline, expected SHA-256 `1485ec3c20d9def9b2039c58c72c06d2f6277ccdd38a00aedae725fd9299e92a` |
+| `ESGDigitalRadiologicalSurveys_1_0_0_8_FULL_INSTRUMENT_REGISTER(1).zip` | **NOT SUPPLIED** — earlier baseline, also never received |
 
-The 1.0.0.8 baseline package named in the 1.0.0.9 execution directive was not
-present in this repository or anywhere in the build environment when this cycle
-started. See `docs/BASELINE_REPORT.md` for what that blocks and what it does not.
+Neither baseline package has ever reached this repository. The 1.1.0.5 ZIP
+named in the 1.1.0.6 brief is on a Windows desktop, which a Linux container
+cannot read. See `docs/BASELINE_REPORT_1_1_0_6.md`.
 
 ## Adding the baseline
 
 ```bash
 # copy the ZIP in, then:
 tools/bootstrap.sh
-tools/unpack.sh "source-original/ESGDigitalRadiologicalSurveys_1_0_0_8_FULL_INSTRUMENT_REGISTER(1).zip"
+tools/unpack.sh source-original/ESGDigitalRadiologicalSurveys_1_1_0_5_FINAL_UNMANAGED.zip
 tests/run_all.sh
 ```
 

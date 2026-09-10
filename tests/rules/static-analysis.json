@@ -49,5 +49,13 @@
 
   "screenControlBudget": 120,
 
+  "canvasWidth": 1440,
+  "canvasHeight": 960,
+  "geometryOverlapTolerance": 0,
+  "minimumTouchTargetPx": 48,
+
+  "intentionallyConditionalScreens": [],
+  "externallyProvidedState": [],
+
   "documentedExceptions": []
 }

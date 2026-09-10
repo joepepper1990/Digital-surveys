@@ -1,6 +1,24 @@
-# Known limitations — 1.0.0.9
+# Known limitations — 1.0.0.9, still current at 1.1.0.6
 
 Nothing here is hidden or softened (§70, §77).
+
+> **1.1.0.6 update.** Every limitation below still stands, one version later and
+> for the same reason: the baseline artefact has never reached this repository.
+> The 1.1.0.5 package named in the 1.1.0.6 brief is on a Windows desktop and
+> this cycle ran in a Linux container, so §1.1–§1.4 and §2.1–§2.2 apply
+> unchanged — substitute 1.1.0.5 for 1.0.0.8 and 1.1.0.6 for 1.0.0.9.
+>
+> Two further limitations are specific to this cycle:
+>
+> * **The two Studio-confirmed runtime defects were not reproduced.** The header
+>   overlap and the blank Sign Out Instrument screen are described here from the
+>   brief, not observed. Their root causes are **not** established. `R014`–`R019`
+>   detect the *classes*; which instance is at fault in the real app is unknown.
+> * **No runtime walkthrough was performed.** Sections 9, 13–19 and 24 of the
+>   brief — every journey, every view, the keypad, alerts, handover, the review
+>   flow — were not executed. There was no application to run.
+>
+> See `docs/BASELINE_REPORT_1_1_0_6.md`.
 
 ---
 

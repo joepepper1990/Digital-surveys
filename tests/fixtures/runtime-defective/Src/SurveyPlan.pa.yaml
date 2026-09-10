@@ -1,0 +1,123 @@
+# Synthetic fixture. Reproduces the SHAPE of the two runtime defects observed in
+# Power Apps Studio on 1.1.0.5, so the analysers in
+# tests/validators/rules_runtime.py are demonstrably able to detect them.
+# This file is never packed into an app.
+#
+#   1. Survey Plan header — navigation buttons crowding each other and the
+#      status text beneath them (R014, R015, R016).
+#   2. Sign Out Instrument — every control gated on state that is never
+#      written, so the screen renders blank (R017, R018, R019).
+Screens:
+  SurveyPlanScreen:
+    Properties:
+      Fill: =RGBA(255, 255, 255, 1)
+    Children:
+      # --- Header band -----------------------------------------------------
+      - lblSurveyTitle:
+          Control: Label
+          Properties:
+            X: =32
+            Y: =24
+            Width: =600
+            Height: =44
+            Text: ="Survey plan"
+
+      # Navigation row. HANDOVER runs from 700 to 900; INSTRUMENTS starts at
+      # 860 — a 40 px collision, the shape seen in Studio.
+      - btnHandover:
+          Control: Button
+          Properties:
+            X: =700
+            Y: =24
+            Width: =200
+            Height: =44
+            Text: ="HANDOVER"
+
+      - btnInstruments:
+          Control: Button
+          Properties:
+            X: =860
+            Y: =24
+            Width: =200
+            Height: =44
+            Text: ="INSTRUMENTS / SIGN..."
+
+      # HOME is pushed past the right edge of the 1440 px canvas.
+      - btnHome:
+          Control: Button
+          Properties:
+            X: =1320
+            Y: =24
+            Width: =200
+            Height: =44
+            Text: ="HOME"
+
+      # Status text starts at Y=56, inside the 24..68 navigation band.
+      - lblSurveyStatus:
+          Control: Label
+          Properties:
+            X: =700
+            Y: =56
+            Width: =300
+            Height: =32
+            Text: ="4 of 33 points complete"
+
+      # Touch target well under the gloved-use minimum.
+      - btnLevelBasement:
+          Control: Button
+          Properties:
+            X: =32
+            Y: =120
+            Width: =120
+            Height: =28
+            Text: ="Basement"
+
+  # --- Sign Out Instrument: renders blank ---------------------------------
+  InstrumentSignOutScreen:
+    Properties:
+      Fill: =RGBA(255, 255, 255, 1)
+    Children:
+      # Every control is gated, and the gate is never written anywhere, so the
+      # technician sees an empty page with only CANCEL on it.
+      - lblSignOutHeading:
+          Control: Label
+          Properties:
+            X: =32
+            Y: =24
+            Width: =600
+            Height: =44
+            Visible: =varSignOutReady
+            Text: ="SIGN OUT INSTRUMENT"
+
+      - lblComponentOneModel:
+          Control: Label
+          Properties:
+            X: =32
+            Y: =100
+            Width: =600
+            Height: =32
+            Visible: =varSignOutReady
+            # Draft field mismatch: the write below supplies Serial, not SerialNumber.
+            Text: =LookUp(colInstrumentDraft, Slot = 1).SerialNumber
+
+      - txtComponentOneSerial:
+          Control: TextInput
+          Properties:
+            X: =32
+            Y: =140
+            Width: =400
+            Height: =56
+            Visible: =varSignOutReady
+            Default: =First(colInstrumentDraft).CalibrationDue
+
+      - btnSaveInstrument:
+          Control: Button
+          Properties:
+            X: =32
+            Y: =820
+            Width: =260
+            Height: =56
+            Visible: =varSignOutReady
+            Text: ="SAVE INSTRUMENT"
+            OnSelect: |
+              =Collect(colInstrumentDraft, { Slot: 1, Serial: "", CalDue: Blank() })
