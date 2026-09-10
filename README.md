@@ -3,26 +3,32 @@
 Development repository for the digital radiological survey Power Apps canvas
 application.
 
-> ## Build status: 1.1.0.6 — no application package produced
+> ## Build status: 1.1.0.6 — delivered
 >
-> The 1.1.0.5 baseline artefact named in the brief
-> (`ESGDigitalRadiologicalSurveys_1_1_0_5_FINAL_UNMANAGED.zip`) lives on a
-> Windows desktop. This cycle ran in an isolated Linux container with no access
-> to that machine, and the file is not in this repository, its history, its
-> releases, or any attachment mount. Nothing of 1.1.0.4 or 1.1.0.5 exists here.
+> Incoming baseline `ESGDigitalRadiologicalSurveys_1_1_0_5_FINAL_UNMANAGED.zip`
+> verified at SHA-256 `1485ec3c…9299e92a`. Delivered
+> `ESGDigitalRadiologicalSurveys_1_1_0_6_FINAL_UNMANAGED.zip` at SHA-256
+> `d5665c6c…b8f1c71c`, 1,907,832 bytes.
 >
-> The two Studio-confirmed runtime defects — the Survey Plan header overlap and
-> the blank Sign Out Instrument screen — could not be reproduced or fixed,
-> because the screens containing them were not available. No `.msapp` has been
-> modified, because there was none, and no application was invented to stand in
-> for it.
+> Both defects confirmed in Power Apps Studio were reproduced from source and
+> fixed, and both turned out to be one root cause with more instances than were
+> reported. The blank Sign Out Instrument screen was an opaque backdrop panel
+> painting **above** its own form (`ZIndex 900` over content at 552–602); seven
+> other views had the same fault, hiding 78 controls between them — including
+> the entire numeric keypad, the post-use checks, the multi-instrument chooser,
+> NEW SURVEY and SEND FOR TEAM LEADER REVIEW.
 >
-> What was built is the part that does not depend on the artefact: detectors for
-> both defect **classes** (`R014`–`R020`), red against a fixture reproducing the
-> Studio behaviour and green against its corrected counterpart. 104 tests pass.
-> When the package arrives, the suite names the offending controls directly.
+> Presentation-only release: 228 property changes, **zero** changes to any
+> `OnSelect`, `OnVisible`, `OnChange`, `Default`, `Items` or `Reset`, and the
+> same 763 controls with none added, removed or renamed — proven by
+> `tools/diff_controls.py` against the two packages.
 >
-> See **[`docs/BASELINE_REPORT_1_1_0_6.md`](docs/BASELINE_REPORT_1_1_0_6.md)**.
+> 114 tests pass. The delivered ZIP passes 37/37 structural checks and the
+> analyser suite reports 0 errors against the payload extracted from it.
+> **STUDIO VERIFICATION REQUIRED** — see
+> [`docs/STUDIO_ACCEPTANCE_1_1_0_6.md`](docs/STUDIO_ACCEPTANCE_1_1_0_6.md).
+>
+> See **[`docs/CHANGELOG_1_1_0_6.md`](docs/CHANGELOG_1_1_0_6.md)**.
 
 ---
 
@@ -35,7 +41,7 @@ config/            configuration contracts and controlled data
   schemas/         JSON Schemas for every register
   controlled/      controlled data — currently empty and marked SOURCE_REQUIRED
 design/            design tokens and the Power Fx emitter
-tests/             validation suite (104 tests)
+tests/             validation suite (114 tests)
 tools/             toolchain bootstrap and the unpack/pack pipeline
 docs/              build documentation
 outputs/           built solution ZIPs (git-ignored)
@@ -74,9 +80,12 @@ success, so a ZIP with the right filename and a corrupt payload cannot pass.
 | **BLOCKED** | The check could **not run** — a controlled source was not supplied. **Not a pass.** |
 | **INFO** | Recorded for the build record. |
 
-Current state: `errors 0  warnings 0  blocked 6  info 0`. The six blocked checks
-are the missing baseline package, the missing canvas sources, and four empty
-controlled registers.
+Current state against the delivered 1.1.0.6 payload: `errors 0  warnings 91
+blocked 4  info 6`. The four blocked checks are the four controlled registers,
+which were still not supplied. Of the 91 warnings, 86 are findings against
+controls that are hard-coded `Visible: =false` — the retired single-instrument
+architecture, proven unable to run and left in place per §18; the rest are the
+single-screen control budget and the RWP branch that needs `rwp-config.json`.
 
 Static analysis proves nothing about Canvas runtime behaviour.
 `STUDIO VERIFICATION REQUIRED` applies to every build.
@@ -118,7 +127,9 @@ Every outstanding item is tracked in
 
 | Document | |
 |---|---|
-| [`BASELINE_REPORT_1_1_0_6.md`](docs/BASELINE_REPORT_1_1_0_6.md) | **current** — the 1.1.0.5 artefact was not reachable; what that blocks and what was built instead |
+| [`CHANGELOG_1_1_0_6.md`](docs/CHANGELOG_1_1_0_6.md) | **current** — every defect fixed in 1.1.0.6, with its root cause |
+| [`STUDIO_ACCEPTANCE_1_1_0_6.md`](docs/STUDIO_ACCEPTANCE_1_1_0_6.md) | **current** — the ordered checklist for confirming 1.1.0.6 in Studio |
+| [`BASELINE_REPORT_1_1_0_6.md`](docs/BASELINE_REPORT_1_1_0_6.md) | the first half of this cycle, before the artefact was supplied |
 | [`BASELINE_REPORT.md`](docs/BASELINE_REPORT.md) | the same blocker in the 1.0.0.9 cycle |
 | [`ARCHITECTURE_1_0_0_9.md`](docs/ARCHITECTURE_1_0_0_9.md) | target screen/component architecture and workflow state machine |
 | [`DATA_MODEL_1_0_0_9.md`](docs/DATA_MODEL_1_0_0_9.md) | instrument, assignment, background, alert and audit model |

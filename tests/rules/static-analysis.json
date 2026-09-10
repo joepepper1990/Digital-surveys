@@ -57,5 +57,46 @@
   "intentionallyConditionalScreens": [],
   "externallyProvidedState": [],
 
+  "//variableInvariants": "Domains the application guarantees. Each is proven from source, not assumed: the paging variables are initialised to 1 and every mutation is Set(v,1), Set(v,v+1) or Set(v,Max(1,v-1)), so none can reach 0. Narrowing the domain stops the satisfiability search inventing unreachable states.",
+  "variableInvariants": {
+    "varInstPage":   { "min": 1 },
+    "varChoicePage": { "min": 1 },
+    "varReturnPage": { "min": 1 },
+    "varPostPage":   { "min": 1 }
+  },
+
+  "//templateSizeDefaults": "Sizes a control template supplies when the maker sets none. Read from the label widget definition in References/Templates.json inside the .msapp: Height defaultValue=\"40\", webDefaultValue=\"40\", phoneDefaultValue=\"70\". pac strips a property whose value equals the default, so an omitted Height cannot be made explicit at 40 by writing it back.",
+  "templateSizeDefaults": {
+    "label": { "Height": 40 }
+  },
+
+  "//platformControls": "Controls the Power Apps runtime provides rather than the maker. They have no author-set geometry and are not app defects.",
+  "platformControls": ["Host", "Test_7F478737223C4B69"],
+
+  "documentedOcclusionExceptions": [],
+
+  "//documentedCoexistenceExceptions": "Overlaps that are deliberate. Each carries the evidence for why the pair is not a defect; nothing is listed merely to quieten a report.",
+  "documentedCoexistenceExceptions": [
+    {
+      "prefixes": ["mapPoint", "iconKnown"],
+      "reason": "The known-condition badge is drawn on the top-right corner of its own map marker, so it overlaps it by design. Paired by trailing point number, so a badge overlapping a DIFFERENT marker is still reported."
+    },
+    {
+      "a": "lblDraftBGCO2",
+      "b": "btnDraftBGGamma",
+      "reason": "CO2 is exclusive: GMI VISA (M27) is the only register row with CanCO2 and it sets every other capability false, so the CO2 notice and the gamma background input can never both be shown. Verified against all 27 rows of colInstrumentRegister."
+    },
+    {
+      "a": "lblDraftBGCO2",
+      "b": "btnDraftBGBeta",
+      "reason": "As above — CanCO2 excludes CanBeta and CanBetaGammaContam across all 27 register rows."
+    },
+    {
+      "a": "lblDraftBGCO2",
+      "b": "btnDraftBGEC",
+      "reason": "As above — CanCO2 excludes CanEC across all 27 register rows."
+    }
+  ],
+
   "documentedExceptions": []
 }

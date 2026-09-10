@@ -7,6 +7,14 @@ Power Platform CLI is available:
   *.fx.yaml   pac canvas unpack --layout Experimental (legacy, deprecated)
   Controls/*.json  the raw control JSON inside an extracted .msapp
 
+The .fx.yaml dialect declares a control as `name As type:` with its properties
+indented beneath, rather than under `Control:`/`Properties:` keys. It is the
+only layout that can read the 1.1.0.5 artefact, so it is parsed natively.
+
+`Control.order` is the control's position in document order. In Power Apps a
+later sibling paints **on top of** an earlier one, so order is the effective
+ZIndex and is what makes occlusion analysis possible.
+
 The parser is deliberately tolerant: it walks the tree looking for control-ish
 mappings and for scalar strings that are Power Fx (leading '='), rather than
 assuming a schema version. An unknown key never aborts the scan.
@@ -16,6 +24,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import pathlib
+import re
 from typing import Iterator
 
 import yaml
@@ -48,6 +57,8 @@ class Control:
     type: str
     file: str
     formulas: dict[str, str] = dataclasses.field(default_factory=dict)
+    order: int = 0
+    """Position in document order — the effective ZIndex among siblings."""
 
     @property
     def location(self) -> str:
@@ -126,6 +137,78 @@ def _walk_yaml(node: object, path: list[str], file: str, out: list[Control]) -> 
             _walk_yaml(value, path, file, out)
 
 
+# --- .fx.yaml ("name As type:") dialect -------------------------------------
+# pac's Experimental layout, and the only layout that can read the 1.1.0.5
+# artefact. yaml.safe_load cannot help here: property values are raw Power Fx
+# that is not always valid YAML, so the block structure is read by indentation.
+_AS_DECL = re.compile(r"^(?P<indent> *)(?P<name>[A-Za-z_]\w*) As (?P<type>[A-Za-z_][\w.]*)\s*:\s*$")
+_PROP_DECL = re.compile(r"^(?P<indent> *)(?P<prop>[A-Za-z_]\w*)\s*:\s*(?P<value>.*)$")
+
+
+def _walk_fx_yaml(text: str, file: str, out: list[Control]) -> None:
+    """Parse the `name As type:` dialect, preserving document order."""
+    lines = text.splitlines()
+    stack: list[tuple[int, str]] = []          # (indent, name) of open controls
+    current: Control | None = None
+    current_indent = 0
+    pending: str | None = None                 # property with a block scalar
+    pending_indent = 0
+    block: list[str] = []
+
+    def close_block() -> None:
+        nonlocal pending, block
+        if pending is not None and current is not None:
+            value = "\n".join(block).strip()
+            if value:
+                current.formulas[pending] = value
+        pending, block = None, []
+
+    for raw in lines:
+        if not raw.strip() or raw.lstrip().startswith("#"):
+            if pending is not None:
+                block.append("")
+            continue
+
+        indent = len(raw) - len(raw.lstrip())
+
+        # Inside a block scalar: anything more-indented belongs to it.
+        if pending is not None:
+            if indent > pending_indent:
+                block.append(raw.strip())
+                continue
+            close_block()
+
+        decl = _AS_DECL.match(raw)
+        if decl:
+            indent = len(decl.group("indent"))
+            while stack and stack[-1][0] >= indent:
+                stack.pop()
+            name = decl.group("name")
+            path = "/".join([n for _, n in stack] + [name])
+            current = Control(
+                name=name,
+                path=path,
+                type=decl.group("type"),
+                file=file,
+                order=len(out),
+            )
+            out.append(current)
+            current_indent = indent
+            stack.append((indent, name))
+            continue
+
+        prop = _PROP_DECL.match(raw)
+        if prop and current is not None and indent > current_indent:
+            value = prop.group("value").strip()
+            if value in ("|", "|-", "|+", ">", ">-", ">+"):
+                pending = prop.group("prop")
+                pending_indent = indent
+                block = []
+            elif value.startswith("="):
+                current.formulas[prop.group("prop")] = value
+    close_block()
+
+
 def _walk_msapp_json(node: dict, path: list[str], file: str, out: list[Control]) -> None:
     """Collect controls from the raw control JSON found inside an .msapp."""
     name = str(node.get("Name", "") or "")
@@ -166,7 +249,12 @@ def load(root: str | pathlib.Path) -> CanvasSource:
             seen.add(path)
             rel = str(path.relative_to(root))
             try:
-                if path.name.endswith((".pa.yaml", ".fx.yaml")):
+                if path.name.endswith(".fx.yaml"):
+                    before = len(source.controls)
+                    _walk_fx_yaml(path.read_text(encoding="utf-8-sig"), rel, source.controls)
+                    if len(source.controls) > before:
+                        source.files.append(rel)
+                elif path.name.endswith(".pa.yaml"):
                     data = yaml.safe_load(path.read_text(encoding="utf-8-sig"))
                     if data is None:
                         continue

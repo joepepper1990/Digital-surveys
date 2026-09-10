@@ -1,0 +1,3 @@
+# Released packages. The ZIPs are attached to the build record, not stored in Git.
+
+d5665c6c364a9f303252f87a46833562140eced3c1151cc44604884cb8f1c71c  ESGDigitalRadiologicalSurveys_1_1_0_6_FINAL_UNMANAGED.zip

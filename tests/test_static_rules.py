@@ -120,3 +120,116 @@ def test_single_record_control_is_not_flagged():
         )
     )
     assert rules_static.cross_record_instrument_state(source, rules_static.load_rules()) == []
+
+
+# --- R009 precision (1.1.0.6) ----------------------------------------------
+# R009 was tightened after it reported ten findings against 1.1.0.5 that were
+# all co-presence noise. These tests pin both halves: the rule must still fire
+# on history genuinely used as the capability authority, and must stay silent
+# on an audit log that is merely written alongside a capability mention.
+
+def _one(control_name, formulas):
+    source = pa_source.CanvasSource(root=pathlib.Path("."))
+    source.controls.append(
+        pa_source.Control(name=control_name, path=f"Scr/{control_name}",
+                          type="Label", file="synthetic", formulas=formulas)
+    )
+    return source
+
+
+def test_history_as_authority_still_fires_on_the_real_shape():
+    source = _one("lblCoverage", {
+        "Text": '=CountRows(Filter(colInstrumentHistory, RequiredCapability = varCapability))'
+                ' & " capabilities covered"',
+    })
+    findings = rules_static.history_used_as_authority(source, rules_static.load_rules())
+    assert [f.rule.split()[0] for f in findings] == ["R009"]
+
+
+def test_history_as_authority_fires_when_lookup_is_the_query():
+    source = _one("lblCap", {
+        "Visible": '=Not(IsBlank(LookUp(colInstrumentHistory, Capability = varRequiredCapabilityCode)))',
+    })
+    assert rules_static.history_used_as_authority(source, rules_static.load_rules())
+
+
+def test_audit_write_beside_a_capability_mention_is_not_a_finding():
+    # The 1.1.0.5 shape: an OnSelect that records an audit row and also names a
+    # required capability. Nothing is being decided from the audit log.
+    source = _one("btnDraftSave", {
+        "OnSelect": '=Collect(colAuditLog,{AuditID:Text(GUID()),EventType:"INSTRUMENT_ISSUED",'
+                    'Detail:"issued"});Set(varRequiredCapabilityCode,"");'
+                    'Set(varView,"Instruments")',
+    })
+    assert rules_static.history_used_as_authority(source, rules_static.load_rules()) == []
+
+
+def test_audit_log_counted_for_display_is_not_a_finding():
+    # The Team Leader card counting entry-error corrections: an audit log used
+    # as an audit log.
+    source = _one("cardTLCorrections", {
+        "Text": '="ENTRY-ERROR CORRECTIONS" & Char(10) & '
+                'CountRows(Filter(colAuditLog,SurveyID=varSurveyID && EventType="ENTRY_ERROR_CLEARED"))',
+    })
+    assert rules_static.history_used_as_authority(source, rules_static.load_rules()) == []
+
+
+def test_colaudit_does_not_match_colauditlog_by_substring():
+    rules = rules_static.load_rules()
+    assert "colAudit" in rules["historyCollections"]
+    source = _one("lblRequired", {
+        "Text": '=CountRows(Filter(colAuditLog, Capability = varRequiredCapabilityCode))',
+    })
+    # colAuditLog is a different collection from the configured colAudit.
+    findings = rules_static.history_used_as_authority(source, rules)
+    assert all("colAudit'" not in f.message for f in findings)
+
+
+# --- R002 precision (1.1.0.6) ----------------------------------------------
+# R002 reported 16 findings against 1.1.0.5: four real creations in retired
+# controls, plus the schema seed and 22 legitimate resolutions. It now
+# distinguishes creating an alert from closing one.
+
+def test_alert_created_already_resolved_still_fires():
+    # The real 1.1.0.5 shape: the post-use result is patched to "Fail" and the
+    # alert for it is created already Resolved, in one handler.
+    source = _one("btnPostGamma", {
+        "OnSelect": '=Patch(colInstruments,LookUp(colInstruments,Key="Gamma"),'
+                    '{PostCheck:"Fail"}); Collect(colAlerts,{AlertKey:"INST_POST_Gamma",'
+                    'RuleCode:"INSTRUMENT_POST_FAIL",Status:"Resolved"})',
+    })
+    findings = rules_static.self_resolving_alerts(source, rules_static.load_rules())
+    assert [f.rule.split()[0] for f in findings] == ["R002"]
+    assert findings[0].severity is Severity.ERROR
+
+
+def test_patch_that_closes_an_existing_alert_is_not_a_finding():
+    source = _one("numDone", {
+        "OnSelect": '=If(Not(IsBlank(LookUp(colPointData,PointID=varSelectedPoint).Dose05m)),'
+                    'Patch(colAlerts,LookUp(colAlerts,AlertKey=Text(varSelectedPoint)&"-DOSE05M_REQ"),'
+                    '{Status:"Resolved"}))',
+    })
+    assert rules_static.self_resolving_alerts(source, rules_static.load_rules()) == []
+
+
+def test_schema_seed_row_removed_in_the_same_expression_is_not_an_alert():
+    source = _one("App", {
+        "OnVisible": '=ClearCollect(colAlerts,{AlertKey:"SEED",PointID:0,RuleCode:"",'
+                     'Status:"Resolved",Action:"",Comment:""}); RemoveIf(colAlerts,AlertKey="SEED")',
+    })
+    assert rules_static.self_resolving_alerts(source, rules_static.load_rules()) == []
+
+
+def test_seed_that_is_never_removed_is_still_reported():
+    source = _one("App", {
+        "OnVisible": '=ClearCollect(colAlerts,{AlertKey:"SEED",Status:"Resolved"})',
+    })
+    assert rules_static.self_resolving_alerts(source, rules_static.load_rules())
+
+
+def test_live_post_use_path_creating_an_open_alert_is_not_a_finding():
+    source = _one("btnReturnPost2_1", {
+        "OnSelect": '=Collect(colAlerts,{AlertKey:akey,RuleCode:"INSTRUMENT_POST_FAIL",'
+                    'Message:"component 2 failed the post-use check",Status:"Open"})',
+    })
+    assert rules_static.self_resolving_alerts(source, rules_static.load_rules()) == []

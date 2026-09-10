@@ -1,24 +1,38 @@
-# Known limitations — 1.0.0.9, still current at 1.1.0.6
+# Known limitations — 1.0.0.9, updated for 1.1.0.6
 
 Nothing here is hidden or softened (§70, §77).
 
-> **1.1.0.6 update.** Every limitation below still stands, one version later and
-> for the same reason: the baseline artefact has never reached this repository.
-> The 1.1.0.5 package named in the 1.1.0.6 brief is on a Windows desktop and
-> this cycle ran in a Linux container, so §1.1–§1.4 and §2.1–§2.2 apply
-> unchanged — substitute 1.1.0.5 for 1.0.0.8 and 1.1.0.6 for 1.0.0.9.
+> **1.1.0.6 update.** The 1.1.0.5 artefact was supplied part-way through this
+> cycle, so §1.1–§1.3 below no longer apply: the package exists, the defects
+> were reproduced from real source, and 1.1.0.6 is delivered. §1.4 stands — no
+> controlled register has been imported, and four checks remain BLOCKED.
 >
-> Two further limitations are specific to this cycle:
+> Still limiting 1.1.0.6:
 >
-> * **The two Studio-confirmed runtime defects were not reproduced.** The header
->   overlap and the blank Sign Out Instrument screen are described here from the
->   brief, not observed. Their root causes are **not** established. `R014`–`R019`
->   detect the *classes*; which instance is at fault in the real app is unknown.
-> * **No runtime walkthrough was performed.** Sections 9, 13–19 and 24 of the
->   brief — every journey, every view, the keypad, alerts, handover, the review
->   flow — were not executed. There was no application to run.
+> * **Power Apps Studio was never opened.** This cycle had no authenticated
+>   tenant. Both confirmed defects were reproduced from source, and the fix for
+>   each is evidenced by geometry and paint order, but nothing has been seen
+>   rendering. §2.1 applies in full.
+> * **No workflow was executed.** The end-to-end journey was reasoned through
+>   the state model, not run. Behaviour is unchanged from 1.1.0.5 by
+>   construction — zero behaviour properties were touched — which is the
+>   strongest claim available without a runtime.
+> * **The rendered view images are not Studio.** `tools/render_views.py` draws
+>   real geometry, fills and literal text, which is enough to see crowding,
+>   raggedness and occlusion. It does not implement Power Fx, text metrics or
+>   control templates, so it cannot confirm exact wrapping or font rendering.
+> * **86 of 91 warnings are retired controls.** The superseded
+>   single-instrument architecture is still present, hard-coded invisible. It
+>   is proven inert (an invisible control takes no taps) and was left in place
+>   per §18, but it still carries the 1.0.0.8 defect shapes and would misbehave
+>   if any of it were re-enabled.
+> * **`R013` needs a controlled source.** RWP 850's MUST KNOW text is branched
+>   inside `lblSetupNote`. Moving it to `rwp-config.json` needs the controlled
+>   RWP configuration, which was not supplied.
+> * **`R011`: 763 controls on one screen.** The single-screen architecture is
+>   unchanged; splitting it is not a presentation fix.
 >
-> See `docs/BASELINE_REPORT_1_1_0_6.md`.
+> See `docs/CHANGELOG_1_1_0_6.md` and `docs/STUDIO_ACCEPTANCE_1_1_0_6.md`.
 
 ---
 

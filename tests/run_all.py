@@ -21,6 +21,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from validators import (  # noqa: E402
     design_tokens, pa_source, rules_config, rules_package, rules_runtime, rules_static,
+    rules_view,
 )
 from validators.model import Finding, Report, Severity  # noqa: E402
 
@@ -35,7 +36,7 @@ def _default_package() -> pathlib.Path | None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--package", default=None, help="Solution ZIP to validate")
-    parser.add_argument("--sources", default=str(ROOT / "source-working" / "canvas"))
+    parser.add_argument("--sources", default=str(ROOT / "source-working" / "canvas" / "Src"))
     parser.add_argument("--config", default=str(ROOT / "config"))
     args = parser.parse_args(argv)
 
@@ -66,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
     if source.is_empty:
         report.add(
             Finding(
-                rule="R001-R020 static-analysis",
+                rule="R001-R029 static-analysis",
                 severity=Severity.BLOCKED,
                 message="No canvas sources to analyse.",
                 location=str(sources),
@@ -89,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
             )
         report.extend(rules_static.run_all(source))
         report.extend(rules_runtime.run_all(source))
+        report.extend(rules_view.run_all(source))
 
     # --- configuration ----------------------------------------------------
     report.extend(rules_config.run_all(pathlib.Path(args.config)))

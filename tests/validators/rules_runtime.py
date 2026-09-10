@@ -31,6 +31,7 @@ import re
 
 from .model import Finding, Severity
 from .pa_source import CanvasSource, Control
+from .powerfx import can_coexist
 
 # --- state writes -----------------------------------------------------------
 # Set(varX, ...) / UpdateContext({varX: ...}) / ClearCollect(colX, ...) etc.
@@ -186,14 +187,31 @@ def _screen_of(control: Control) -> str:
     return control.path.split("/")[0] if control.path else control.file
 
 
+def _is_view_driven(source: CanvasSource) -> bool:
+    """True when the app builds its screens by gating siblings on one variable.
+
+    Such an app has no meaningful state-free geometry: nearly every sibling
+    pair shares pixels and nearly none shares a moment. `rules_view` answers
+    the question properly, per view, so this module stands aside rather than
+    restating it thousands of times.
+    """
+    from .rules_view import discover_views
+
+    return len(discover_views(source)) >= 3
+
+
 def geometry_collisions(source: CanvasSource, rules: dict) -> list[Finding]:
     """R014 — sibling controls whose rectangles partially overlap.
 
-    The Survey Plan header shape: HANDOVER / INSTRUMENTS / SUMMARY / HOME and
-    the status text beneath them occupying the same pixels. Siblings only, so a
-    control sitting inside its own container is never reported; and containment
-    is layering, so only partial overlaps count.
+    The header shape: navigation buttons and the status text beneath them
+    occupying the same pixels. Siblings only, so a control sitting inside its
+    own container is never reported; and containment is layering, so only
+    partial overlaps count.
+
+    On a view-driven app this defers to `R022`, which binds the view first.
     """
+    if _is_view_driven(source):
+        return []
     tolerance = float(rules.get("geometryOverlapTolerance", 0))
     findings: list[Finding] = []
     by_parent: dict[str, list[_Rect]] = collections.defaultdict(list)
@@ -211,6 +229,16 @@ def geometry_collisions(source: CanvasSource, rules: dict) -> list[Finding]:
                 if dx <= tolerance or dy <= tolerance:
                     continue
                 if _mutually_exclusive(_visible(first.control), _visible(second.control)):
+                    continue
+                # The cheap complement test above only recognises exact
+                # opposites. Ask the solver before reporting: on a single-screen
+                # app whose views are all gated on one variable, almost every
+                # sibling pair shares pixels and almost none shares a moment.
+                if not can_coexist(
+                    first.control.formulas.get("Visible"),
+                    second.control.formulas.get("Visible"),
+                    invariants=rules.get("variableInvariants"),
+                ):
                     continue
                 findings.append(
                     Finding(
@@ -293,15 +321,23 @@ def touch_target_size(source: CanvasSource, rules: dict) -> list[Finding]:
 
 
 def screens_that_can_render_blank(source: CanvasSource, rules: dict) -> list[Finding]:
-    """R017 — a screen with no unconditionally visible control.
+    """R017 — a screen that shows nothing in the state it first loads in.
 
     The Sign Out Instrument shape: every control gated on a variable or draft
-    record, so when that state is absent the technician sees an empty page. A
-    screen must always show something — at minimum a title and its own explanation
-    of why the rest is missing.
+    record, so when that state is absent the technician sees an empty page.
+
+    "Unconditionally visible" is the wrong test for a view-driven app, which
+    legitimately gates everything — what matters is whether anything is on
+    screen at first load. So every variable the app reads is bound to blank,
+    which is what Power Fx actually starts with, and the question becomes: does
+    this screen render anything at all? A control gated on `IsBlank(varView)`
+    answers yes, and is not a defect.
     """
+    from .powerfx import UNKNOWN as _U, is_true, visibility
+
     exempt = set(rules.get("intentionallyConditionalScreens", []))
     screens = [c for c in source.controls if "/" not in c.path and c.path]
+    blank_env = {name: None for name in _state_names(source)}
     findings: list[Finding] = []
     for screen in screens:
         if screen.name in exempt:
@@ -313,7 +349,10 @@ def screens_that_can_render_blank(source: CanvasSource, rules: dict) -> list[Fin
         ]
         if not children:
             continue
-        always = [c for c in children if _visible(c).lower() == "true"]
+        always = [
+            c for c in children
+            if is_true(visibility(c.formulas.get("Visible"), blank_env))
+        ]
         if always:
             continue
         gates = sorted({_visible(c) for c in children})
@@ -323,14 +362,31 @@ def screens_that_can_render_blank(source: CanvasSource, rules: dict) -> list[Fin
                 severity=Severity.ERROR,
                 message=(
                     f"Screen '{screen.name}' has {len(children)} controls and not one of them is "
-                    "unconditionally visible. If every gate evaluates false the technician sees "
-                    "a blank page with no way to understand it."
+                    "visible in the state the app loads in, with every variable blank. The "
+                    "technician's first sight of it is an empty page."
                 ),
                 location=screen.location,
                 detail="gates: " + "; ".join(gates[:6]) + ("; ..." if len(gates) > 6 else ""),
             )
         )
     return findings
+
+
+def _state_names(source: CanvasSource) -> set[str]:
+    """Every var/col name the application mentions, read or written."""
+    names: set[str] = set()
+    for control in source.controls:
+        for expression in control.formulas.values():
+            names.update(m.group("name") for m in _STATE_READ.finditer(expression))
+    return names
+
+
+def _unreachable_controls(source: CanvasSource) -> set[str]:
+    """Controls hard-coded `Visible: =false`, which cannot be tapped."""
+    return {
+        control.name for control in source.controls
+        if _visible(control).lower() == "false"
+    }
 
 
 def _written_names(source: CanvasSource) -> set[str]:
@@ -357,29 +413,50 @@ def state_never_written(source: CanvasSource, rules: dict) -> list[Finding]:
     """
     exempt = set(rules.get("externallyProvidedState", []))
     written = _written_names(source) | exempt
-    reads: dict[str, Control] = {}
+    reads: dict[str, list[Control]] = collections.defaultdict(list)
     for control in source.controls:
         for prop, expression in control.formulas.items():
             for match in _STATE_READ.finditer(expression):
-                reads.setdefault(match.group("name"), control)
+                bucket = reads[match.group("name")]
+                if control not in bucket:
+                    bucket.append(control)
 
+    unreachable = _unreachable_controls(source)
     findings = []
     for name in sorted(reads):
         if name in written:
             continue
-        control = reads[name]
-        findings.append(
-            Finding(
-                rule="R018 state-never-written",
-                severity=Severity.ERROR,
-                message=(
-                    f"'{name}' is read but never written anywhere in the application. It is "
-                    "blank at runtime, so anything derived from it is empty or invisible."
-                ),
-                location=control.location,
-                detail=f"first read in {control.name}",
+        readers = reads[name]
+        live = [c for c in readers if c.name not in unreachable]
+        control = (live or readers)[0]
+        if live:
+            findings.append(
+                Finding(
+                    rule="R018 state-never-written",
+                    severity=Severity.ERROR,
+                    message=(
+                        f"'{name}' is read but never written anywhere in the application. It is "
+                        "blank at runtime, so anything derived from it is empty or invisible."
+                    ),
+                    location=control.location,
+                    detail="read by live control(s): "
+                           + ", ".join(sorted(c.name for c in live)[:8]),
+                )
             )
-        )
+        else:
+            findings.append(
+                Finding(
+                    rule="R018/dead state-never-written-in-dead-control",
+                    severity=Severity.WARNING,
+                    message=(
+                        f"'{name}' is never written, and every control that reads it is "
+                        "hard-coded Visible=false, so the path cannot run. Retired code, not a "
+                        "live defect — but it would misbehave if any of these were re-enabled."
+                    ),
+                    location=control.location,
+                    detail="dead readers: " + ", ".join(sorted(c.name for c in readers)[:8]),
+                )
+            )
     return findings
 
 
@@ -427,6 +504,26 @@ def record_field_never_written(source: CanvasSource, rules: dict) -> list[Findin
     return findings
 
 
+def geometry_rule_scope(source: CanvasSource, rules: dict) -> list[Finding]:
+    """R029 — record when the state-free geometry rules stood aside, and why."""
+    if not _is_view_driven(source):
+        return []
+    from .rules_view import discover_views
+
+    return [
+        Finding(
+            rule="R029 geometry-rules-deferred",
+            severity=Severity.INFO,
+            message=(
+                f"R014 (state-free sibling overlap) stood aside: this app gates its "
+                f"{len(discover_views(source))} views on varView, so geometry is only "
+                "meaningful per view. R021-R028 carry the geometry checks instead."
+            ),
+            location=str(source.root),
+        )
+    ]
+
+
 def geometry_coverage(source: CanvasSource, rules: dict) -> list[Finding]:
     """R020 — how much of the layout the geometry rules could actually check.
 
@@ -458,6 +555,7 @@ ANALYSERS = (
     off_canvas_controls,
     touch_target_size,
     screens_that_can_render_blank,
+    geometry_rule_scope,
     state_never_written,
     record_field_never_written,
     geometry_coverage,

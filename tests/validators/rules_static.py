@@ -12,6 +12,7 @@ tests/rules/static-analysis.json.
 from __future__ import annotations
 
 import collections
+import dataclasses
 import json
 import pathlib
 import re
@@ -167,21 +168,52 @@ def cross_record_instrument_state(source: CanvasSource, rules: dict) -> list[Fin
 
 
 def self_resolving_alerts(source: CanvasSource, rules: dict) -> list[Finding]:
-    """An alert must not be created already Resolved (defect 4.4).
+    """An alert must not be *created* already Resolved (defect 4.4).
 
-    Flags any expression that writes Status:"Resolved" in the same statement
-    that records a failure, and any Patch/Collect that sets Status:"Resolved"
-    with no accompanying disposition field.
+    Creation is the defect. `Patch(colAlerts, LookUp(...), {Status:"Resolved"})`
+    is the opposite — it closes an alert whose condition has cleared, which is
+    how 1.1.0.5 resolves an "information required" alert once the reading is
+    supplied, and there are 22 of them. Flagging those alongside the four real
+    creations buried the real ones.
+
+    A record that the same expression removes again is a schema seed, not an
+    alert: `ClearCollect(colAlerts, {AlertKey:"SEED", ..., Status:"Resolved"});
+    RemoveIf(colAlerts, AlertKey="SEED")` establishes the collection's shape.
     """
     findings: list[Finding] = []
+    creation = re.compile(
+        r'\b(?:Clear)?Collect\s*\(\s*(?P<collection>[A-Za-z_]\w*)\s*,\s*'
+        r'(?P<record>\{[^{}]*\})',
+        re.IGNORECASE,
+    )
     resolved = re.compile(r'Status\s*:\s*"Resolved"', re.IGNORECASE)
+    key_literal = re.compile(r'\b\w*Key\s*:\s*"(?P<key>[^"]*)"', re.IGNORECASE)
     fail_words = re.compile(r'"(Fail(ed)?|PostUseFail|PreUseFail)"', re.IGNORECASE)
     disposition = re.compile(r"\bDisposition\w*\s*:", re.IGNORECASE)
 
     for formula in source.formulas:
         expression = formula.expression
-        if not resolved.search(expression):
+        creations = [
+            match for match in creation.finditer(expression)
+            if resolved.search(match.group("record"))
+        ]
+        if not creations:
             continue
+        live = []
+        for match in creations:
+            key = key_literal.search(match.group("record"))
+            removed = key and re.search(
+                r"\bRemove(?:If)?\s*\(\s*" + re.escape(match.group("collection"))
+                + r'\s*,[^;)]*"' + re.escape(key.group("key")) + '"',
+                expression,
+            )
+            if not removed:
+                live.append(match)
+        if not live:
+            continue
+        # The creation records decide *whether* to report. The failure being
+        # recorded normally sits elsewhere in the same handler — that pairing
+        # is the defect — so severity is still judged on the whole expression.
         if fail_words.search(expression):
             findings.append(
                 Finding(
@@ -212,17 +244,39 @@ def self_resolving_alerts(source: CanvasSource, rules: dict) -> list[Finding]:
 
 
 def history_used_as_authority(source: CanvasSource, rules: dict) -> list[Finding]:
-    """Current capability coverage must not be satisfied from history (§4.6)."""
+    """Current capability coverage must not be satisfied from history (§4.6).
+
+    The collection must be *queried* — the source argument of a coverage
+    function — not merely mentioned somewhere in the same expression. Two
+    imprecisions were making this rule unusable against 1.1.0.5:
+
+    * `colAudit` matched `colAuditLog` by substring. No collection called
+      `colAudit` exists in the app; `colAuditLog` is written 52 times and read
+      once, by the Team Leader card that counts entry-error corrections for
+      display, which is what an audit log is for.
+    * A coverage function anywhere in a long `OnSelect` counted, so every
+      handler that happened to both write an audit row and mention a required
+      capability was reported. Capability in this app is decided from
+      `colIssuedInstruments` against `varRequiredCapabilityCode`.
+
+    Requiring the query shape keeps the rule firing on the real defect - see
+    `test_history_as_authority_still_fires_on_the_real_shape` - while dropping
+    the co-presence noise.
+    """
     findings: list[Finding] = []
     history = set(rules["historyCollections"])
-    coverage = re.compile(r"\b(CountRows|CountIf|LookUp|Filter|First)\b")
     capability_hint = re.compile(r"(?i)capabilit|coverage|required")
 
     for formula in source.formulas:
         for name in history:
-            if name not in formula.expression:
+            queried = re.compile(
+                r"\b(?:CountRows|CountIf|LookUp|Filter|First|Last|Sort|Search)\s*\(\s*"
+                r"(?:(?:CountRows|CountIf|Filter|First|Last|Sort|Search)\s*\(\s*)?"
+                + re.escape(name) + r"\b"
+            )
+            if not queried.search(formula.expression):
                 continue
-            if coverage.search(formula.expression) and capability_hint.search(
+            if capability_hint.search(
                 formula.expression + " " + formula.control
             ):
                 findings.append(
@@ -373,6 +427,14 @@ def rwp_branching(source: CanvasSource, rules: dict) -> list[Finding]:
     ]
 
 
+_CONSTANT = re.compile(r'^=\s*"(?:[^"]|"")*"\s*$')
+
+
+def _is_constant(expression: str) -> bool:
+    """True for a formula that is one string literal and nothing else."""
+    return bool(_CONSTANT.match(expression.strip()))
+
+
 def hidden_controls_still_evaluating(source: CanvasSource, rules: dict) -> list[Finding]:
     """Controls hard-coded invisible that still carry non-trivial logic (§42, §46)."""
     findings: list[Finding] = []
@@ -380,10 +442,14 @@ def hidden_controls_still_evaluating(source: CanvasSource, rules: dict) -> list[
         visible = control.formulas.get("Visible", "").strip()
         if visible.lower().replace(" ", "") not in ("=false",):
             continue
+        # "Live" means it evaluates something. A long formula that is a single
+        # string constant evaluates nothing — this app stores its map images as
+        # base64 data URIs in the Text of 38 hidden labels, and reporting those
+        # as live logic drowned the 82 retired controls that do carry logic.
         heavy = [
             prop
             for prop, expression in control.formulas.items()
-            if prop != "Visible" and len(expression) > 80
+            if prop != "Visible" and len(expression) > 80 and not _is_constant(expression)
         ]
         if heavy:
             findings.append(
@@ -437,9 +503,63 @@ ANALYSERS = (
 )
 
 
+# --- reachability -----------------------------------------------------------
+# 1.1.0.5 still carries the controls of the superseded single-instrument
+# architecture, every one of them hard-coded `Visible: =false`. They reproduce
+# the 1.0.0.8 defect shapes faithfully — btnPostFloor really does colour itself
+# from the Neutron record — but an invisible control receives no taps and
+# renders nothing, so those are findings against retired code, not against the
+# running application.
+#
+# Reporting them at ERROR would put dead code and live defects in one list and
+# make the list untrustworthy. Reporting them not at all would hide a hazard
+# that returns the moment someone re-enables a control. So they are re-flagged:
+# same finding, WARNING, and the message says why.
+
+_RULES_EXEMPT_FROM_REACHABILITY = ("R012",)  # R012 is *about* hidden controls.
+
+
+def unreachable_control_names(source: CanvasSource) -> set[str]:
+    """Controls whose Visible is the literal `false`."""
+    return {
+        control.name
+        for control in source.controls
+        if control.formulas.get("Visible", "").strip().lstrip("=").strip().lower() == "false"
+    }
+
+
+def _apply_reachability(findings: list[Finding], source: CanvasSource) -> list[Finding]:
+    dead = unreachable_control_names(source)
+    if not dead:
+        return findings
+    out: list[Finding] = []
+    for finding in findings:
+        control = finding.location.split("::")[-1].split(".")[0].split("/")[-1]
+        if (control in dead
+                and finding.severity is Severity.ERROR
+                and not finding.rule.startswith(_RULES_EXEMPT_FROM_REACHABILITY)):
+            out.append(
+                dataclasses.replace(
+                    finding,
+                    rule=finding.rule + " [retired]",
+                    severity=Severity.WARNING,
+                    detail=(
+                        finding.detail
+                        + "\n    REACHABILITY: this control is hard-coded Visible=false, so it "
+                          "cannot be tapped and renders nothing. Retired code from the "
+                          "single-instrument architecture, not a live defect — but it would "
+                          "misbehave if re-enabled."
+                    ).strip(),
+                )
+            )
+        else:
+            out.append(finding)
+    return out
+
+
 def run_all(source: CanvasSource, rules: dict | None = None) -> list[Finding]:
     rules = rules or load_rules()
     findings: list[Finding] = []
     for analyser in ANALYSERS:
         findings.extend(analyser(source, rules))
-    return findings
+    return _apply_reachability(findings, source)

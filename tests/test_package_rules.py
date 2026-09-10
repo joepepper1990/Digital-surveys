@@ -1,4 +1,10 @@
-"""Package validator tests, driven by synthetic solution ZIPs built in-process."""
+"""Package validator tests, driven by synthetic solution ZIPs built in-process.
+
+The fixture mirrors the identity of the real released solution — unique name,
+publisher prefix and current version — because R106/R107 now assert those
+rather than merely recording them. A fixture that drifted from the real package
+would let an identity change pass unnoticed, which is the whole point of §75.
+"""
 import json
 import pathlib
 import zipfile
@@ -11,10 +17,10 @@ from validators.model import Severity
 SOLUTION_XML = """<?xml version="1.0" encoding="utf-8"?>
 <ImportExportXml>
   <SolutionManifest>
-    <UniqueName>ESGRadiologicalSurveys</UniqueName>
+    <UniqueName>ESGDigitalRadiologicalSurveys</UniqueName>
     <Version>{version}</Version>
     <Managed>{managed}</Managed>
-    <Publisher><UniqueName>esg</UniqueName></Publisher>
+    <Publisher><UniqueName>Cr837da</UniqueName></Publisher>
   </SolutionManifest>
 </ImportExportXml>
 """
@@ -33,7 +39,7 @@ def _make_msapp(path: pathlib.Path, **overrides) -> None:
         archive.writestr("Controls/1.json", json.dumps({"TopParent": {"Name": "App", "Rules": []}}))
 
 
-def _make_solution(tmp_path, version="1.0.0.9", managed="0", customizations=True, **msapp) -> pathlib.Path:
+def _make_solution(tmp_path, version="1.1.0.6", managed="0", customizations=True, **msapp) -> pathlib.Path:
     msapp_path = tmp_path / "app.msapp"
     _make_msapp(msapp_path, **msapp)
     zip_path = tmp_path / f"solution-{version}.zip"

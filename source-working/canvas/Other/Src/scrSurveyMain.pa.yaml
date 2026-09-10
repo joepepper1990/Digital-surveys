@@ -1,0 +1,17 @@
+# PLACEHOLDER - NOT THE APPLICATION SOURCE.
+#
+# This is the code-first (SourceCode-layout) projection of the screen. The authoritative
+# definition of this app is Controls/4.json inside the .msapp; pac 2.9.3's Experimental
+# layout - the only layout that can read this artifact - copies this file through verbatim
+# and cannot regenerate it. Power Apps Studio rewrites it from the live control tree the
+# first time the app is opened and saved.
+#
+# Until then, treat this file as a stub. It previously carried a leftover "v1.0.0.4"
+# banner and a phantom Label1 control that does not exist in the application; both were
+# removed in v1.1.0.4 so that nothing here misrepresents the app. See
+# docs/TOOLING_NOTES.md and docs/KNOWN_LIMITATIONS.md.
+Screens:
+  scrSurveyMain:
+    Properties:
+      LoadingSpinnerColor: =RGBA(56, 96, 178, 1)
+      ImagePosition: =ImagePosition.Stretch
