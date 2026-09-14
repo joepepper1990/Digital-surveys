@@ -75,6 +75,11 @@ EN_ROTA_R0 = 200          # (w,j) -> row 200 + (w-1)*18 + (j-1)  (200..307)
 EN_ROTA_ST_R0 = 312       # w -> row 311+w  (status of selected person)
 EN_AUTO_R0 = 340          # (d,j,slot) -> row 340 + (d-1)*54 + (j-1)*3 + (slot-1)  (planning-week auto plan)
 AUTO_MAXSLOT = 3
+EN_FREE_R0 = 730          # k -> row 729+k : who has a free day, per day, in the planning week
+EN_TASK_R0 = 760          # t -> row 759+t : ad-hoc Work Pack tasks scheduled for the planning week
+NTASK = 20                # tasks per week the scheduler places automatically
+WP_R0 = 12                # Work Pack: first data row
+WP_N = 120                # Work Pack: number of data rows
 
 # --------------------------------------------------------------------------- #
 # Style system
@@ -572,6 +577,7 @@ class Builder:
                 ws[raw] = f'=IF(C{sr}="","",{"&".join(terms)})'
                 ws[f"{L(19 + d)}{sr}"] = f'=IF({raw}="","",LEFT({raw},LEN({raw})-1))'
         self.build_auto(ws)
+        self.build_capacity_and_tasks(ws)
         ws.sheet_state = "hidden"
         ws.protection.sheet = True
         return ws
@@ -646,6 +652,122 @@ class Builder:
                         else:
                             cont = '1000000'
                         ws[f"{sc}{r}"] = f'=IF(AND(D{r}=0,F{r}=0),"",IF({elig},{cont}+({load})*1000+{trainee}+{k},""))'
+        return ws
+
+
+    def build_capacity_and_tasks(self, ws):
+        """Spare capacity for the planning week, and automatic scheduling of the
+        ad-hoc Work Pack tasks.
+
+        A task is placed from two things the user gives it: how long it is (days)
+        and how flexible it is (weekday only / any day / weekend overtime). The
+        scheduler finds people who are competent for the work type, who have that
+        many free days among the days the task is allowed on, and who are least
+        loaded; then it takes the earliest free days. Tasks are placed in order,
+        each one seeing the days the previous ones consumed.
+        """
+        C = EN_CTRL
+        team_ini = f"$B${EN_TEAM_R0}:$B${EN_TEAM_R0 + NSTAFF - 1}"
+
+        # ---- free-capacity matrix: person x day, for the planning week ----
+        put(ws, f"A{EN_FREE_R0 - 1}", "k | initials | free day Mon..Sun (planning week)", f=font(8, True))
+        for k in range(1, NSTAFF + 1):
+            r = EN_FREE_R0 + k - 1
+            tr = EN_TEAM_R0 + k - 1
+            ws[f"A{r}"] = k
+            ws[f"B{r}"] = f"=$B${tr}"
+            for d in range(1, 8):
+                cols = SLOT_COLS[d]
+                block = f"${L(cols[0])}${EN_ROSTER_R0}:${L(cols[-1])}${EN_ROSTER_R0 + NDUTY - 1}"
+                on_duty = f'COUNTIF({block},$B${tr})+COUNTIF({block},$B${tr}&" ~*")'
+                gate = f"$C${tr}=1,{L(10 + d)}${tr}=0,{on_duty}=0"
+                if d >= 6:
+                    gate += f",{L(19 + d)}${tr}=1"     # weekend needs approved overtime
+                ws[f"{L(2 + d)}{r}"] = f'=IF($B{r}="",0,IF(AND({gate}),1,0))'
+
+        # ---- ad-hoc task scheduler ----
+        put(ws, f"A{EN_TASK_R0 - 1}",
+            "t | wp row | work type | days | flexibility | duty j | person | trainee | days text | placed | elig L..R | scores T..AQ | day flags BA..BG",
+            f=font(8, True))
+        wp_rank = f"'Work Pack'!$K${WP_R0}:$K${WP_R0 + WP_N - 1}"
+        def wpcol(col):
+            return f"'Work Pack'!${col}${WP_R0}:${col}${WP_R0 + WP_N - 1}"
+        for t in range(1, NTASK + 1):
+            r = EN_TASK_R0 + t - 1
+            ws[f"A{r}"] = t
+            ws[f"B{r}"] = f'=IFERROR(MATCH({t},{wp_rank},0),"")'
+            idx = f"$B{r}"
+            ws[f"C{r}"] = f'=IF({idx}="","",INDEX({wpcol("E")},{idx})&"")'
+            ws[f"D{r}"] = f'=IF({idx}="",0,MAX(0,N(INDEX({wpcol("F")},{idx}))))'
+            ws[f"E{r}"] = f'=IF({idx}="","",INDEX({wpcol("G")},{idx})&"")'
+            ws[f"F{r}"] = f'=IFERROR(MATCH($C{r},Setup!$K$6:$K$23,0),0)'
+            # eligible days: task flexibility wins; blank falls back to the duty's Setup flag
+            for d in range(1, 8):
+                dutyflex = f'INDEX(Setup!$M$6:$M$23,MAX(1,$F{r}))="Y"'
+                if d <= 5:
+                    base_ok = f'IF($E{r}="Weekend (overtime)",0,1)'
+                else:
+                    base_ok = (f'IF($E{r}="Weekday only",0,IF($E{r}="Any day",1,'
+                               f'IF($E{r}="Weekend (overtime)",1,IF({dutyflex},1,0))))')
+                ws[f"{L(11 + d)}{r}"] = (f'=IF(OR($B{r}="",$F{r}=0,N($D{r})=0,'
+                                         f'INDEX({wpcol("I")},MAX(1,$B{r}))="Done"),0,{base_ok})')
+            # per-person score
+            for k in range(1, NSTAFF + 1):
+                tr = EN_TEAM_R0 + k - 1
+                fr = EN_FREE_R0 + k - 1
+                terms = []
+                for d in range(1, 8):
+                    elig = f"{L(11 + d)}{r}"
+                    free = f"${L(2 + d)}${fr}"
+                    if r > EN_TASK_R0:
+                        used = (f'SUMPRODUCT(($G${EN_TASK_R0}:$G{r - 1}=$B${tr})*'
+                                f'({L(52 + d)}${EN_TASK_R0}:{L(52 + d)}{r - 1}))')
+                    else:
+                        used = "0"
+                    terms.append(f"{elig}*{free}*(1-MIN(1,{used}))")
+                avail = "+".join(terms)
+                sc = L(19 + k)      # T..AQ
+                # load = duty days this week + task days already given to this person,
+                # so a run of tasks spreads across people instead of piling onto one
+                if r > EN_TASK_R0:
+                    taskload = (f'SUMPRODUCT(($G${EN_TASK_R0}:$G{r - 1}=$B${tr})*'
+                                f'($J${EN_TASK_R0}:$J{r - 1}))')
+                else:
+                    taskload = "0"
+                ws[f"{sc}{r}"] = (
+                    f'=IF(OR($B{r}="",$F{r}=0),"",'
+                    f'IF(AND($C${tr}=1,INDEX(Setup!$O$6:$AL$23,MAX(1,$F{r}),{k})<>"",({avail})>=$D{r}),'
+                    f'($R${tr}+{taskload})*1000+IF(INDEX(Setup!$O$6:$AL$23,MAX(1,$F{r}),{k})="T",500,0)+{k},""))')
+            scores = f"$T{r}:$AQ{r}"
+            manual = f'(INDEX({wpcol("H")},MAX(1,$B{r}))&"")'
+            ws[f"G{r}"] = (
+                f'=IF(OR($B{r}="",$F{r}=0,N($D{r})=0,INDEX({wpcol("I")},MAX(1,$B{r}))="Done"),"",'
+                f'IF({manual}<>"",{manual},'
+                f'IF(COUNT({scores})=0,"",INDEX({team_ini},MOD(MIN({scores}),500)))))')
+            ws[f"H{r}"] = (f'=IF($G{r}="",0,IF(IFERROR(INDEX(Setup!$O$6:$AL$23,MAX(1,$F{r}),'
+                           f'MATCH($G{r},Setup!$B$6:$B$29,0)),"")="T",1,0))')
+            # day flags: take the earliest allowed free days until the task is covered
+            for d in range(1, 8):
+                fc = L(52 + d)
+                free_range = f"${L(2 + d)}${EN_FREE_R0}:${L(2 + d)}${EN_FREE_R0 + NSTAFF - 1}"
+                free_chosen = f'IFERROR(INDEX({free_range},MATCH($G{r},{team_ini},0)),0)'
+                if r > EN_TASK_R0:
+                    used_chosen = (f'SUMPRODUCT(($G${EN_TASK_R0}:$G{r - 1}=$G{r})*'
+                                   f'({fc}${EN_TASK_R0}:{fc}{r - 1}))')
+                else:
+                    used_chosen = "0"
+                sofar = f"SUM($BA{r}:{L(51 + d)}{r})" if d > 1 else "0"
+                ws[f"{fc}{r}"] = (f'=IF($G{r}="",0,IF(AND({L(11 + d)}{r}=1,{free_chosen}=1,'
+                                  f'{used_chosen}=0,{sofar}<$D{r}),1,0))')
+            parts = "&".join(f'IF({L(52 + d)}{r}=1,"{DAY_NAMES[d - 1]} ","")' for d in range(1, 8))
+            ws[f"I{r}"] = f'=IF($G{r}="","",SUBSTITUTE(TRIM({parts})," ",", "))'
+            ws[f"J{r}"] = f'=SUM($BA{r}:$BG{r})'
+            # total days this person is committed to across the week, duties and tasks
+            ws[f"S{r}"] = (
+                f'=IF($G{r}="","",IFERROR(INDEX($R${EN_TEAM_R0}:$R${EN_TEAM_R0 + NSTAFF - 1},'
+                f'MATCH($G{r},{team_ini},0)),0)'
+                f'+SUMPRODUCT(($G${EN_TASK_R0}:$G${EN_TASK_R0 + NTASK - 1}=$G{r})*'
+                f'($J${EN_TASK_R0}:$J${EN_TASK_R0 + NTASK - 1})))')
         return ws
 
     # ---- Year sheets -------------------------------------------------------
@@ -1586,95 +1708,124 @@ class Builder:
 
     # ---- Work Pack ---------------------------------------------------------
     def build_work_pack(self):
-        """Extra work (WOCs) logged per week - the flexible work that approved
-        weekend overtime, and any spare weekday capacity, gets put against."""
+        """Extra work (WOCs) logged as it comes up, scheduled automatically from
+        how long each task is and how flexible it is."""
         ws = self.wb.create_sheet("Work Pack")
         ws.sheet_properties.tabColor = "0B6E6E"
         ws.sheet_view.showGridLines = False
         C = EN_CTRL
         E = lambda key: f"Engine!$B${C[key]}"
         INPUT = "FFFBE6"
-        NROWS = 120
-        R0 = 12
-        for c, w in zip("ABCDEFGHIJ", (2, 8, 7, 52, 18, 9, 12, 13, 2, 2)):
+        R0, N = WP_R0, WP_N
+        for c, w in zip("ABCDEFGHIJKL", (2, 7, 6, 40, 15, 6, 17, 11, 11, 30, 5, 2)):
             ws.column_dimensions[c].width = w
-        self.header_bar(ws, "WORK PACK  ·  extra work (WOCs) by week",
-                        "Log the additional work in each week's pack here. It is not tied to a particular day, so weekday spare capacity "
-                        "or approved weekend overtime can pick it up.", 10)
-        self.nav_link(ws, "H1", "◀ Dashboard", "#'Dashboard'!A1")
+        self.header_bar(ws, "WORK PACK  ·  extra work (WOCs), scheduled for you",
+                        "Log work as it comes up. Say how long it is and how flexible it is, and the planner finds who is free and when.", 12)
+        self.nav_link(ws, "J1", "◀ Dashboard", "#'Dashboard'!A1")
 
         yr, wk = E("year"), E("week")
-        yrs = f"$B${R0}:$B${R0 + NROWS - 1}"
-        wks = f"$C${R0}:$C${R0 + NROWS - 1}"
-        days = f"$F${R0}:$F${R0 + NROWS - 1}"
-        who = f"$G${R0}:$G${R0 + NROWS - 1}"
-        sts = f"$H${R0}:$H${R0 + NROWS - 1}"
+        col = lambda c: f"$${c}"
+        yrs, wks = f"$B${R0}:$B${R0 + N - 1}", f"$C${R0}:$C${R0 + N - 1}"
+        days, sts = f"$F${R0}:$F${R0 + N - 1}", f"$I${R0}:$I${R0 + N - 1}"
+        placed = f"Engine!$J${EN_TASK_R0}:$J${EN_TASK_R0 + NTASK - 1}"
+        otdays = f"SUM(Engine!$T${EN_TEAM_R0}:$Z${EN_TEAM_R0 + NSTAFF - 1})"
 
         put(ws, "B5", '="THIS WEEK:  W"&' + wk + '&"  "&' + yr, f=font(11, True, NAVY))
         tiles = [
-            ("B", "Items", f'=COUNTIFS({yrs},{yr},{wks},{wk})', "0"),
-            ("C", "Days", f'=SUMIFS({days},{yrs},{yr},{wks},{wk})', "0.0"),
-            ("D", "Still open", f'=SUMIFS({days},{yrs},{yr},{wks},{wk},{sts},"<>Done")', "0.0"),
-            ("E", "Unassigned", f'=SUMIFS({days},{yrs},{yr},{wks},{wk},{who},"")', "0.0"),
-            ("F", "OT days", f'=SUM(Engine!$T${EN_TEAM_R0}:$Z${EN_TEAM_R0 + NSTAFF - 1})', "0"),
+            ("B", "ITEMS", f'=COUNTIFS({yrs},{yr},{wks},{wk})', "0"),
+            ("C", "DAYS", f'=SUMIFS({days},{yrs},{yr},{wks},{wk})', "0.0"),
+            ("D", "OPEN", f'=SUMIFS({days},{yrs},{yr},{wks},{wk},{sts},"<>Done")', "0.0"),
+            ("E", "PLACED", f'=SUM({placed})', "0.0"),
+            ("F", "SHORT", f'=MAX(0,SUMIFS({days},{yrs},{yr},{wks},{wk},{sts},"<>Done")-SUM({placed}))', "0.0"),
+            ("G", "OT DAYS", f'={otdays}', "0"),
         ]
-        for col, title, f, nf in tiles:
-            put(ws, f"{col}6", title.upper(), f=font(8, True, "D9E1F2"), bg=NAVY2, al=CENTER)
-            put(ws, f"{col}7", f, f=font(14, True, WHITE), bg=NAVY2, al=CENTER, nf=nf)
+        for c, title, f, nf in tiles:
+            put(ws, f"{c}6", title, f=font(8, True, "D9E1F2"), bg=NAVY2, al=CENTER)
+            put(ws, f"{c}7", f, f=font(14, True, WHITE), bg=NAVY2, al=CENTER, nf=nf)
+        put(ws, "H6", "", bg=NAVY2)
+        put(ws, "H7", '=IF(F7=0,"all placed","short")', f=font(9, True, WHITE), bg=NAVY2, al=CENTER)
+        put(ws, "I6", "", bg=NAVY2)
+        put(ws, "I7", "", bg=NAVY2)
         ws.row_dimensions[6].height = 14
         ws.row_dimensions[7].height = 26
-        put(ws, "G6", "BALANCE", f=font(8, True, "D9E1F2"), bg=NAVY2, al=CENTER)
-        put(ws, "G7", f'=SUM(Engine!$T${EN_TEAM_R0}:$Z${EN_TEAM_R0 + NSTAFF - 1})'
-                      f'-SUMIFS({days},{yrs},{yr},{wks},{wk},{sts},"<>Done")', f=font(14, True, WHITE), bg=NAVY2, al=CENTER, nf="0.0;-0.0;0")
-        put(ws, "H6", "", bg=NAVY2)
-        put(ws, "H7", f'=IF(G7>=0,"overtime covers the open work","short by "&TEXT(-G7,"0.0")&" days")',
-            f=font(8, True, "D9E1F2"), bg=NAVY2, al=Alignment(horizontal="center", vertical="center", wrap_text=True))
-        ws.conditional_formatting.add("G7", CellIsRule(operator="lessThan", formula=["0"], fill=cffill("C00000")))
-        ws.conditional_formatting.add("G7", CellIsRule(operator="greaterThanOrEqual", formula=["0"], fill=cffill(GOOD_INK)))
+        ws.conditional_formatting.add("F7", CellIsRule(operator="greaterThan", formula=["0"], fill=cffill("C00000")))
+        ws.conditional_formatting.add("F7", CellIsRule(operator="equal", formula=["0"], fill=cffill(GOOD_INK)))
+        ws.conditional_formatting.add("H7", FormulaRule(formula=['$F$7=0'], fill=cffill(GOOD_INK)))
+        ws.conditional_formatting.add("H7", FormulaRule(formula=['$F$7>0'], fill=cffill("C00000")))
 
-        put(ws, "B9", "Add a row for each extra WOC. Year and Week say which week's pack it belongs to; leave Assigned to blank until someone picks it up.",
+        put(ws, "B9", "Add a row as work comes up. Days = how long it takes. Flexibility = whether it has to be a weekday, "
+                      "can be any day, or is weekend overtime work. Leave it blank to follow the work type's Setup setting. "
+                      "Leave Assigned to blank and the planner suggests someone; type a name to override it.",
             f=font(8, False, MUTED, True))
+        ws.merge_cells("B9:J9")
+        ws.row_dimensions[9].height = 22
         hdr = dict(f=font(9, True, WHITE), bg=NAVY, al=CENTER, border=BORDER)
-        for col, t in (("B", "Year"), ("C", "Week"), ("D", "Work / WOC"), ("E", "Work type"),
-                       ("F", "Days"), ("G", "Assigned to"), ("H", "Status")):
-            put(ws, f"{col}11", t, **hdr)
+        for c, t in (("B", "Year"), ("C", "Week"), ("D", "Work / WOC"), ("E", "Work type"), ("F", "Days"),
+                     ("G", "Flexibility"), ("H", "Assigned to"), ("I", "Status"), ("J", "Suggested (auto)")):
+            put(ws, f"{c}11", t, **hdr)
         ws["D11"].alignment = LEFT
         ws.row_dimensions[11].height = 20
-        for i in range(NROWS):
+        eng = lambda c: f"Engine!${c}${EN_TASK_R0}:${c}${EN_TASK_R0 + NTASK - 1}"
+        for i in range(N):
             r = R0 + i
-            zebra = PANEL if i % 2 else WHITE
-            for col in ("B", "C", "D", "E", "F", "G", "H"):
-                al = LEFT if col == "D" else CENTER
-                put(ws, f"{col}{r}", None, f=font(9), bg=(INPUT if zebra == WHITE else "FBF6E4"),
-                    al=al, border=BORDER_H, locked=False)
+            shade = INPUT if i % 2 == 0 else "FBF6E4"
+            for c in "BCDEFGHI":
+                put(ws, f"{c}{r}", None, f=font(9), bg=shade, al=(LEFT if c == "D" else CENTER),
+                    border=BORDER_H, locked=False)
             ws[f"F{r}"].number_format = '0.0;;""'
+            # rank of this row within its week (drives which scheduler slot it uses)
+            put(ws, f"K{r}",
+                f'=IF(OR($B{r}="",$C{r}="",$D{r}=""),"",IF(AND($B{r}={yr},$C{r}={wk}),'
+                f'COUNTIFS($B${R0}:$B{r},{yr},$C${R0}:$C{r},{wk},$D${R0}:$D{r},"?*"),""))',
+                f=font(8, False, MUTED), al=CENTER)
+            put(ws, f"J{r}",
+                f'=IF($K{r}="","",IF($K{r}>{NTASK},"too many tasks this week",'
+                f'IF(INDEX({eng("G")},$K{r})="","no-one free",'
+                f'INDEX({eng("G")},$K{r})&IF(INDEX({eng("H")},$K{r})=1," *","")'
+                f'&IF(INDEX({eng("I")},$K{r})=""," (no free day)"," · "&INDEX({eng("I")},$K{r}))'
+                f'&IF(INDEX({eng("J")},$K{r})<N($F{r})," - only "&INDEX({eng("J")},$K{r})&" of "&N($F{r})&" days","")'
+                f'&IF(N(INDEX({eng("S")},$K{r}))>=6,"  [!] "&INDEX({eng("S")},$K{r})&" days this week",""))))',
+                f=font(9, True, GOOD_INK), bg=shade, al=LEFT, border=BORDER_H)
             ws.row_dimensions[r].height = 15
-        # one worked example so the format is obvious
-        put(ws, f"B{R0}", 2027, f=font(9), bg=INPUT, al=CENTER, border=BORDER_H, locked=False)
-        put(ws, f"C{R0}", 1, f=font(9), bg=INPUT, al=CENTER, border=BORDER_H, locked=False)
-        put(ws, f"D{R0}", "EXAMPLE - replace: WOC 12345 additional contamination survey, Bldg 21 basement",
-            f=font(9, False, MUTED, True), bg=INPUT, al=LEFT, border=BORDER_H, locked=False)
-        put(ws, f"E{R0}", "Surveys", f=font(9), bg=INPUT, al=CENTER, border=BORDER_H, locked=False)
-        put(ws, f"F{R0}", 1, f=font(9), bg=INPUT, al=CENTER, border=BORDER_H, locked=False)
-        put(ws, f"H{R0}", "Not started", f=font(9), bg=INPUT, al=CENTER, border=BORDER_H, locked=False)
+        # worked example
+        for c, v in (("B", 2027), ("C", 1), ("D", "EXAMPLE - replace: WOC 12345 additional contamination survey, Bldg 21"),
+                     ("E", "Surveys"), ("F", 1), ("G", "Any day"), ("I", "Not started")):
+            cell = put(ws, f"{c}{R0}", v, f=font(9, False, (MUTED if c == "D" else INK), italic=(c == "D")),
+                       bg=INPUT, al=(LEFT if c == "D" else CENTER), border=BORDER_H, locked=False)
         ws[f"F{R0}"].number_format = '0.0;;""'
 
-        dv_y = DataValidation(type="list", formula1="=Setup!$K$33:$K$36", allow_blank=True)
-        dv_w = DataValidation(type="whole", operator="between", formula1="1", formula2="53", allow_blank=True,
-                              error="Enter a week number from 1 to 53.", errorTitle="Week")
-        dv_t = DataValidation(type="list", formula1=f'=OFFSET(Setup!$K$6,0,0,MAX(1,COUNTIF(Setup!$K$6:$K$23,"?*")),1)', allow_blank=True)
-        dv_p = DataValidation(type="list", formula1=f'=OFFSET(Setup!$B$6,0,0,MAX(1,COUNTIF(Setup!$B$6:$B$29,"?*")),1)', allow_blank=True)
-        dv_s = DataValidation(type="list", formula1='"Not started,In progress,Done"', allow_blank=True)
-        for dv, rngref in ((dv_y, "B"), (dv_w, "C"), (dv_t, "E"), (dv_p, "G"), (dv_s, "H")):
+        dvs = [
+            (DataValidation(type="list", formula1="=Setup!$K$33:$K$36", allow_blank=True), "B"),
+            (DataValidation(type="whole", operator="between", formula1="1", formula2="53", allow_blank=True,
+                            error="Enter a week number from 1 to 53.", errorTitle="Week"), "C"),
+            (DataValidation(type="list", formula1='=OFFSET(Setup!$K$6,0,0,MAX(1,COUNTIF(Setup!$K$6:$K$23,"?*")),1)', allow_blank=True), "E"),
+            (DataValidation(type="decimal", operator="between", formula1="0", formula2="10", allow_blank=True,
+                            error="Enter the number of days, 0 to 10.", errorTitle="Days"), "F"),
+            (DataValidation(type="list", formula1='"Weekday only,Any day,Weekend (overtime)"', allow_blank=True), "G"),
+            (DataValidation(type="list", formula1='=OFFSET(Setup!$B$6,0,0,MAX(1,COUNTIF(Setup!$B$6:$B$29,"?*")),1)', allow_blank=True), "H"),
+            (DataValidation(type="list", formula1='"Not started,In progress,Done"', allow_blank=True), "I"),
+        ]
+        for dv, c in dvs:
             ws.add_data_validation(dv)
-            dv.add(f"{rngref}{R0}:{rngref}{R0 + NROWS - 1}")
-        body = f"B{R0}:H{R0 + NROWS - 1}"
-        # this week's rows stand out; done rows fade; unassigned open work is flagged
-        ws.conditional_formatting.add(body, FormulaRule(formula=[f'$H{R0}="Done"'], font=Font(color=MUTED, italic=True, strike=True)))
-        ws.conditional_formatting.add(body, FormulaRule(
-            formula=[f'AND($B{R0}={yr},$C{R0}={wk},$H{R0}<>"Done",$G{R0}="")'], fill=cffill(GAP_FILL), font=Font(color=GAP_INK, bold=True)))
-        ws.conditional_formatting.add(body, FormulaRule(
-            formula=[f'AND($B{R0}={yr},$C{R0}={wk},$H{R0}<>"Done")'], fill=cffill("E7F3EF")))
+            dv.add(f"{c}{R0}:{c}{R0 + N - 1}")
+
+        body = f"B{R0}:J{R0 + N - 1}"
+        ws.conditional_formatting.add(body, FormulaRule(formula=[f'$I{R0}="Done"'], font=Font(color=MUTED, italic=True, strike=True)))
+        ws.conditional_formatting.add(body, FormulaRule(formula=[f'AND($B{R0}={yr},$C{R0}={wk},$I{R0}<>"Done")'], fill=cffill("E7F3EF")))
+        sug = f"J{R0}:J{R0 + N - 1}"
+        ws.conditional_formatting.add(sug, FormulaRule(formula=[f'OR($J{R0}="no-one free",ISNUMBER(SEARCH("no free day",$J{R0})))'],
+                                                       fill=cffill(BAD_FILL), font=Font(color=BAD_INK, bold=True)))
+        ws.conditional_formatting.add(sug, FormulaRule(formula=[f'ISNUMBER(SEARCH("only ",$J{R0}))'],
+                                                       fill=cffill(GAP_FILL), font=Font(color=GAP_INK, bold=True)))
+        ws.conditional_formatting.add(sug, FormulaRule(formula=[f'ISNUMBER(SEARCH("~*",$J{R0}))'], font=Font(color=TRAINEE_INK, bold=True)))
+        ws.conditional_formatting.add(sug, FormulaRule(formula=[f'ISNUMBER(SEARCH("days this week",$J{R0}))'],
+                                                       fill=cffill(GAP_FILL), font=Font(color=GAP_INK, bold=True)))
+        put(ws, f"B{R0 + N + 2}",
+            "The planner schedules the first 20 tasks in a week. Flexibility blank = follow the work type's Setup setting; "
+            "'Any day' lets a task use approved weekend overtime; 'Weekday only' keeps it Mon-Fri. "
+            "[!] against a suggestion means that person is then committed 6 or more days that week, counting duties and tasks.",
+            f=font(8, False, MUTED, True))
+        ws.column_dimensions["K"].hidden = True
         ws.freeze_panes = "A12"
         ws.page_setup.orientation = "landscape"
         ws.page_setup.fitToWidth = 1
@@ -1767,7 +1918,7 @@ class Builder:
                 "Print Week - the planning week as a clean one-page roster for the noticeboard, with who is away underneath.",
                 "My Rota - six weeks for one person, ready to print or send. Also shows how the year's duty days are shared.",
                 "Year View - the whole year on one screen: weekday gaps per duty per week (click a week to open it), then absence, training, workload and approved weekend overtime per person.",
-                "Work Pack - the extra work (WOCs) in each week's pack. Not tied to a day, so spare weekday capacity or approved weekend overtime picks it up. It totals the open days against the overtime days approved.",
+                "Work Pack - the extra work (WOCs) in each week's pack, logged as it comes up. Say how long each task is and how flexible it is, and the planner works out who does it and on which days.",
                 "Engine (hidden) - the calculations behind the dropdowns and the Dashboard. Nothing to edit. Unhide it if you are curious.",
             ]),
             ("PLANNING A WEEK IN FIVE STEPS", [
@@ -1779,6 +1930,8 @@ class Builder:
             ]),
             ("THE AUTOMATIONS", [
                 "Auto Plan (the big one): the workbook builds a whole week for you from the rules - one qualified, available person per duty per weekday, minimums met, no-one double-booked, load shared, and the same person kept on a duty Monday to Friday (if they are off midweek a stand-in covers just that day, then they get it back). Open the Auto Plan sheet (or the ⚡ Auto-fill box on the Dashboard), review it, and paste it into the week. Amber = a slot the rules could not fill.",
+                "Ad-hoc task scheduling: work that turns up during the week goes on the Work Pack sheet. Give it a work type, how many days it takes, and its flexibility (Weekday only / Any day / Weekend (overtime), or leave blank to follow the work type's Setup setting). The planner then finds someone qualified with that many free days among the days the task is allowed on, prefers whoever is least committed, takes the earliest free days, and never double-books. It says 'no-one free' rather than inventing capacity, and marks [!] if the person would end up on 6 or more days that week.",
+                "Task flexibility beats the duty setting, which is the point: Interactions is weekday work most of the time, but a particular interaction that could be done at a weekend just gets set to Any day on its own row.",
                 "Weekend overtime: weekend working is never required and is never planned for you. Mark OT against a person in the Sat or Sun availability cell once the team leader has approved their overtime. Only then will the auto-planner or the dropdowns offer them weekend work, and only on flexible duties.",
                 "Fill priority follows the duty order on Setup: the auto-planner works down the list, so put your hardest-to-cover duties near the top and they get first pick of scarce staff.",
                 "Dropdowns are context-aware for the planning week: qualified + available people only, SQEP first, trainees after with a *.",

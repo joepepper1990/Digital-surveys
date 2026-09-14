@@ -53,13 +53,34 @@ availability grid.
 * Approved overtime is totalled on the Dashboard, tracked per person per week on
   the **Year View**, and offset against the open work on the **Work Pack** sheet.
 
-## Work Pack (extra WOCs)
+## Work Pack - ad-hoc work, scheduled for you
 
-The **Work Pack** sheet is where the additional work in each week's pack is
-logged - one row per WOC, tagged with the year and week it belongs to, its work
-type, how many days it needs, who picked it up and whether it is done. The top of
-the sheet totals, for the planning week, the days of work outstanding against the
-overtime days approved, so you can see at a glance whether the weekend covers it.
+Work that turns up during the week is logged on the **Work Pack** sheet as it
+comes up - one row per WOC. You give it four things:
+
+| Field | What it does |
+|---|---|
+| `Work type` | which duty/competency it needs, so only qualified people are offered |
+| `Days` | how long it takes |
+| `Flexibility` | `Weekday only`, `Any day`, or `Weekend (overtime)`. Leave blank to follow the work type's Setup setting |
+| `Assigned to` | leave blank and the planner picks; type a name to override |
+
+The planner then schedules it: it finds people competent for the work type who
+have that many free days among the days the task is allowed on, prefers whoever
+is least committed that week, takes the earliest free days, and never
+double-books anyone. The result appears in the **Suggested** column, e.g.
+`AW · Wed, Thu`.
+
+It is honest when it cannot place work. `no-one free` means nobody qualified has
+a free day; `only 1 of 2 days` means it placed part of the task; `[!] 6 days this
+week` means that person would end up committed six or more days counting duties
+and tasks. The summary at the top totals the open days against what it managed to
+place and against the overtime days approved.
+
+**Task flexibility beats the duty setting, which is the point.** Interactions is
+weekday work most of the time, so it is marked weekday-only on Setup - but a
+particular interaction that could be done at a weekend just gets `Any day` on its
+own row. The Setup flag is only the default for a blank cell.
 
 `Radwaste` has been added as a duty because it is work you do that the original
 planner had no row for. Nobody is ticked as qualified for it yet and its weekday
