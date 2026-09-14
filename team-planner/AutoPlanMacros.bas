@@ -17,6 +17,9 @@ Attribute VB_Name = "AutoPlanMacros"
 '      File > Options > Customize Ribbon if you do not see it.)
 '
 ' THE BUTTONS
+'   CheckPlannerLinks - READ ONLY. Run this first: it changes nothing and
+'                       reports what the macro can see. Use it to prove the
+'                       plumbing before letting anything write.
 '   AutoFillYear      - fills EVERY week of the year shown on the Dashboard,
 '                       week 1 to 52 (or 53 where the year has one), in one
 '                       press. Takes a minute or two. This is the big one.
@@ -196,6 +199,65 @@ End Function
 '============================================================================
 ' AutoFillYear - the one-press annual plan
 '============================================================================
+'============================================================================
+' CheckPlannerLinks - READ ONLY. Changes nothing.
+' Run this first. It proves the macro can find the sheets and read the
+' planner's engine. If this reports sensible values, the plumbing works and
+' the buttons will too. If it fails, the message says what is wrong.
+'============================================================================
+Public Sub CheckPlannerLinks()
+    Dim eng As Worksheet, db As Worksheet, ys As Worksheet
+    Dim yr As Long, wk As Long, base As Long, nWeeks As Long
+    Dim d As Long, planned As Long, pastDays As Long, s As String
+    Dim v As Variant
+
+    If Not CheckSheets() Then Exit Sub
+    Set eng = EngineSheet()
+    Set db = ThisWorkbook.Worksheets("Dashboard")
+
+    On Error GoTo Failed
+    yr = CLng(eng.Cells(EN_YEAR, 2).Value)
+    wk = CLng(eng.Cells(EN_WEEK, 2).Value)
+    base = CLng(eng.Cells(EN_BASE, 2).Value)
+    If Not YearSheet(yr, ys) Then Exit Sub
+    nWeeks = WeeksInYear(yr)
+
+    ' how many people the plan would place in the active week, and how many
+    ' days of it are already in the past
+    For d = 1 To 7
+        If IsPastDay(ys, base, d) Then pastDays = pastDays + 1
+    Next d
+    Dim j As Long, sl As Long, r As Long
+    For d = 1 To 7
+        For j = 1 To NDUTY
+            For sl = 1 To AUTO_MS
+                If SlotCol(d, sl) > 0 Then
+                    r = AUTO_R0 + (d - 1) * NDUTY * AUTO_MS + (j - 1) * AUTO_MS + (sl - 1)
+                    If Len(CStr(eng.Cells(r, 5).Value)) > 0 Then planned = planned + 1
+                End If
+            Next sl
+        Next j
+    Next d
+
+    v = ys.Cells(base + DATES_OFF, SlotCol(1, 1)).Value
+
+    s = "Everything the macros need is readable." & vbCrLf & vbCrLf & _
+        "Today: " & Format(Date, "ddd dd mmm yyyy") & vbCrLf & _
+        "Planning year: " & yr & "   (" & nWeeks & " weeks)" & vbCrLf & _
+        "Planning week: " & wk & vbCrLf & _
+        "That week starts: " & IIf(IsDate(v), Format(CDate(v), "ddd dd mmm yyyy"), "?") & vbCrLf & _
+        "Week block starts on row: " & base & vbCrLf & vbCrLf & _
+        "The Auto Plan currently holds " & planned & " people for that week." & vbCrLf & _
+        "Days of that week already in the past: " & pastDays & vbCrLf & vbCrLf & _
+        "Nothing has been changed. If these look right, the buttons will work."
+    MsgBox s, vbInformation, "Planner check"
+    Exit Sub
+Failed:
+    MsgBox "Could not read the planner engine." & vbCrLf & vbCrLf & _
+           "Error " & Err.Number & ": " & Err.Description & vbCrLf & vbCrLf & _
+           "Tell Claude this message.", vbExclamation, "Planner check"
+End Sub
+
 Public Sub AutoFillYear()
     Dim db As Worksheet, eng As Worksheet, ys As Worksheet
     Dim yr As Long, nWeeks As Long, w As Long, base As Long
