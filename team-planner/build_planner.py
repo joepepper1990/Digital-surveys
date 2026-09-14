@@ -73,6 +73,8 @@ EN_ROSTER_R0 = 47         # j -> row 46+j   (47..64)
 EN_COV_R0 = 68            # (d,j) -> row 68 + (d-1)*18 + (j-1)   (68..193)
 EN_ROTA_R0 = 200          # (w,j) -> row 200 + (w-1)*18 + (j-1)  (200..307)
 EN_ROTA_ST_R0 = 312       # w -> row 311+w  (status of selected person)
+EN_AUTO_R0 = 340          # (d,j,slot) -> row 340 + (d-1)*54 + (j-1)*3 + (slot-1)  (planning-week auto plan)
+AUTO_MAXSLOT = 3
 
 # --------------------------------------------------------------------------- #
 # Style system
@@ -552,8 +554,68 @@ class Builder:
                 raw = f"{L(11 + d)}{sr}"
                 ws[raw] = f'=IF(C{sr}="","",{"&".join(terms)})'
                 ws[f"{L(19 + d)}{sr}"] = f'=IF({raw}="","",LEFT({raw},LEN({raw})-1))'
+        self.build_auto(ws)
         ws.sheet_state = "hidden"
         ws.protection.sheet = True
+        return ws
+
+    def build_auto(self, ws):
+        """Rule-based auto-roster for the active planning week.
+
+        One row per (day, duty, slot) in fill order (day-major, then duty, then
+        slot). Each row picks the best eligible person for that slot: SQEP or
+        trainee for the duty, active, not unavailable that day, and not already
+        placed that same day. Ties break by how many slots the person already
+        holds earlier in this generated week (fair spread), then SQEP before
+        trainee, then team order. Column E is the chosen person; G.. are the
+        per-person score helpers the pick is decoded from.
+        """
+        C = EN_CTRL
+        base = f"$B${C['base']}"
+        team_ini = f"$B${EN_TEAM_R0}:$B${EN_TEAM_R0 + NSTAFF - 1}"
+        put(ws, f"A{EN_AUTO_R0 - 1}", "AUTO PLAN (planning week): d | j | slot | required | chosen | score helpers →", f=font(8, True))
+        for d in range(1, 8):
+            day_start = EN_AUTO_R0 + (d - 1) * NDUTY * AUTO_MAXSLOT
+            for j in range(1, NDUTY + 1):
+                rr = EN_ROSTER_R0 + j - 1
+                for sl in range(1, AUTO_MAXSLOT + 1):
+                    r = day_start + (j - 1) * AUTO_MAXSLOT + (sl - 1)
+                    ws[f"A{r}"] = d
+                    ws[f"B{r}"] = j
+                    ws[f"C{r}"] = sl
+                    # required for this slot: weekday -> sl <= min; weekend -> only slot 1 and weekend cover = Y
+                    if d <= 5:
+                        req = f'=IF($B${rr}="",0,IF({sl}<=N($AB${rr}),1,0))'
+                    else:
+                        req = f'=IF($B${rr}="",0,IF(AND({sl}=1,$AC${rr}=1),1,0))'
+                    ws[f"D{r}"] = req
+                    day_col = f"$E${day_start}:$E{r - 1}" if r > day_start else None
+                    week_col = f"$E${EN_AUTO_R0}:$E{r - 1}" if r > EN_AUTO_R0 else None
+                    # chosen
+                    ws[f"E{r}"] = (
+                        f'=IF(D{r}=0,"",IF(COUNT(G{r}:AD{r})=0,"",'
+                        f'INDEX({team_ini},MOD(MIN(G{r}:AD{r}),500))&IF(MOD(MIN(G{r}:AD{r}),1000)>=500," *","")))')
+                    for k in range(1, NSTAFF + 1):
+                        tr = EN_TEAM_R0 + k - 1
+                        sc = L(6 + k)   # G=7
+                        elig = (f'AND($C{tr}=1,INDEX(Setup!$O$6:$AL$23,{j},{k})<>"",'
+                                f'{L(10 + d)}{tr}=0')
+                        if day_col:
+                            elig += f',COUNTIF({day_col},$B{tr})+COUNTIF({day_col},$B{tr}&" ~*")=0'
+                        elig += ')'
+                        if week_col:
+                            load = f'COUNTIF({week_col},$B{tr})+COUNTIF({week_col},$B{tr}&" ~*")'
+                        else:
+                            load = '0'
+                        trainee = f'IF(INDEX(Setup!$O$6:$AL$23,{j},{k})="T",500,0)'
+                        # continuity: prefer the person who held this duty the previous day (lower score wins)
+                        if d > 1:
+                            pstart = EN_AUTO_R0 + (d - 2) * NDUTY * AUTO_MAXSLOT + (j - 1) * AUTO_MAXSLOT
+                            prev = f"$E${pstart}:$E${pstart + AUTO_MAXSLOT - 1}"
+                            cont = f'IF(COUNTIF({prev},$B{tr})+COUNTIF({prev},$B{tr}&" ~*")>0,0,1000000)'
+                        else:
+                            cont = '1000000'
+                        ws[f"{sc}{r}"] = f'=IF(D{r}=0,"",IF({elig},{cont}+({load})*1000+{trainee}+{k},""))'
         return ws
 
     # ---- Year sheets -------------------------------------------------------
@@ -955,8 +1017,8 @@ class Builder:
         ws.merge_cells("L1:R1")
         # nav row 3
         links = [("C3", "Setup", "#'Setup'!A1"), ("D3", "2027", "#'2027'!A1"), ("E3", "2028", "#'2028'!A1"),
-                 ("F3", "2029", "#'2029'!A1"), ("G3", "2030", "#'2030'!A1"), ("H3", "Print Week", "#'Print Week'!A1"), ("I3", "My Rota", "#'My Rota'!A1"),
-                 ("L3", "Year view", "#'Year View'!A1"), ("M3", "Guide", "#'Guide'!A1")]
+                 ("F3", "2029", "#'2029'!A1"), ("G3", "2030", "#'2030'!A1"), ("H3", "Auto Plan", "#'Auto Plan'!A1"), ("I3", "Print Week", "#'Print Week'!A1"),
+                 ("L3", "My Rota", "#'My Rota'!A1"), ("M3", "Year view", "#'Year View'!A1"), ("N3", "Guide", "#'Guide'!A1")]
         put(ws, "B3", "Go to:", f=font(9, True, "D9E1F2"), al=Alignment(horizontal="right", vertical="center"))
         for ref, t, target in links:
             self.nav_link(ws, ref, t, target, color=WHITE, size=10)
@@ -987,6 +1049,16 @@ class Builder:
         put(ws, "I9", '=HYPERLINK("#\'"&' + E("year") + '&"\'!B"&' + E("base") + ',"Open week ▶")',
             f=font(11, True, WHITE, underline="single"), bg=NAVY, al=CENTER)
         ws.row_dimensions[9].height = 26
+        # Auto-fill call to action
+        put(ws, "B10", "⚡ AUTO-FILL", f=font(10, True, NAVY), bg=GOLD, al=CENTER, border=BORDER)
+        c = put(ws, "C10", '=HYPERLINK("#\'Auto Plan\'!A1","Build this week automatically from the rules  ▶")',
+                f=font(10, True, NAVY, underline="single"), bg="FCE9C8", al=Alignment(horizontal="left", vertical="center", indent=1), border=BORDER)
+        ws.merge_cells("C10:H10")
+        put(ws, "I10", '=IF(SUM(Engine!$D$' + str(EN_AUTO_R0) + ':$D$' + str(EN_AUTO_R0 + 7 * NDUTY * AUTO_MAXSLOT - 1) +
+            ')=0,"",SUMPRODUCT(--(Engine!$E$' + str(EN_AUTO_R0) + ':$E$' + str(EN_AUTO_R0 + 7 * NDUTY * AUTO_MAXSLOT - 1) +
+            '<>""))&"/"&SUM(Engine!$D$' + str(EN_AUTO_R0) + ':$D$' + str(EN_AUTO_R0 + 7 * NDUTY * AUTO_MAXSLOT - 1) + '))',
+            f=font(9, True, NAVY), bg="FCE9C8", al=CENTER, border=BORDER)
+        ws.row_dimensions[10].height = 22
 
         # ---- KPI tiles (row 11-13) ----
         cov = lambda col: f"Engine!${col}${EN_COV_R0}:${col}${EN_COV_R0 + 7 * NDUTY - 1}"
@@ -1328,6 +1400,143 @@ class Builder:
         ws.protection.formatRows = False
         return ws
 
+    # ---- Auto Plan ---------------------------------------------------------
+    def build_auto_plan(self):
+        ws = self.wb.create_sheet("Auto Plan")
+        ws.sheet_properties.tabColor = GOLD
+        ws.sheet_view.showGridLines = False
+        ws.sheet_view.zoomScale = 90
+        C = EN_CTRL
+        E = lambda key: f"Engine!$B${C[key]}"
+        for c, w in zip("ABCDEFGHIJ", (2, 22, 14, 14, 14, 14, 14, 12, 13, 2)):
+            ws.column_dimensions[c].width = w
+        # header
+        for c in range(1, 11):
+            for r in (1, 2, 3):
+                style(ws.cell(r, c), bg=NAVY)
+        ws.row_dimensions[1].height = 30
+        ws.row_dimensions[2].height = 16
+        ws.row_dimensions[3].height = 18
+        put(ws, "B1", "AUTO PLAN", f=font(18, True, WHITE), al=Alignment(vertical="center"))
+        put(ws, "B2", "A complete roster the workbook builds for the planning week from the rules - SQEP only, no clashes with leave, "
+                      "minimums met, load shared fairly. Review it, then apply.",
+            f=font(9, False, "D9E1F2"), al=Alignment(vertical="center"))
+        put(ws, "B3", '="Planning week:  W"&' + E("week") + '&"  ·  "&TEXT(' + E("start") + ',"ddd d mmm")&" – "&TEXT(' + E("start") +
+            '+6,"ddd d mmm yyyy")&"  ·  year "&' + E("year"),
+            f=font(9, True, GOLD), al=Alignment(vertical="center"))
+        self.nav_link(ws, "I1", "◀ Dashboard", "#'Dashboard'!A1")
+        c = put(ws, "I3", f'=HYPERLINK("#\'"&{E("year")}&"\'!B"&{E("base")},"Open week ▶")', f=font(9, True, "D9E1F2", underline="single"), al=CENTER)
+
+        # ---- how to apply ----
+        put(ws, "B5", "HOW TO USE THIS PLAN", f=font(11, True, NAVY))
+        steps = [
+            ("1", "Set the year and week on the Dashboard - this plan always follows that choice."),
+            ("2", "Read the proposed roster below. Anything shaded amber is a slot the rules could not fill (not enough qualified, available people)."),
+            ("3", "To use it: click the copy box, copy (Ctrl+C), open the week on the year sheet, click the first duty cell (C, first duty row) and Paste Special > Values."),
+            ("4", "Then fine-tune by hand. Every check still applies, so any change you make is validated instantly."),
+        ]
+        for i, (n, t) in enumerate(steps):
+            put(ws, f"B{6 + i}", n, f=font(9, True, WHITE), bg=ACCENT, al=CENTER)
+            put(ws, f"C{6 + i}", t, f=font(9), al=Alignment(horizontal="left", vertical="center", wrap_text=True))
+            ws.merge_cells(start_row=6 + i, start_column=3, end_row=6 + i, end_column=9)
+            ws.row_dimensions[6 + i].height = 26
+        put(ws, "B10", "Macro edition only: the buttons on the Dashboard (Auto-fill week, Clear week) do steps 3 to 4 in one click.",
+            f=font(8, False, MUTED, True))
+        ws.merge_cells("B10:I10")
+
+        # ---- coverage summary ----
+        auto_req = f"Engine!$D${EN_AUTO_R0}:$D${EN_AUTO_R0 + 7 * NDUTY * AUTO_MAXSLOT - 1}"
+        auto_pick = f"Engine!$E${EN_AUTO_R0}:$E${EN_AUTO_R0 + 7 * NDUTY * AUTO_MAXSLOT - 1}"
+        put(ws, "B12", "PROPOSED ROSTER", f=font(11, True, NAVY))
+        put(ws, "E12", '="Fills "&SUMPRODUCT(--(' + auto_pick + '<>""))&" of "&SUM(' + auto_req +
+            ')&" required slots"&IF(SUM(' + auto_req + ')-SUMPRODUCT(--(' + auto_pick + '<>""))=0,"  ✓ full cover","  ⚠ some gaps remain")',
+            f=font(9, True, NAVY), al=LEFT)
+        ws.merge_cells("E12:I12")
+        # grid header
+        put(ws, "B13", "Duty", f=font(10, True, WHITE), bg=NAVY, al=LEFT, border=BORDER)
+        for d in range(1, 8):
+            put(ws, f"{L(2 + d)}13", f"={E('start')}+{d - 1}", f=font(10, True, WHITE), bg=(NAVY if d <= 5 else "5B6B8C"), al=CENTER, nf="ddd d mmm", border=BORDER)
+        ws.row_dimensions[13].height = 22
+        for j in range(1, NDUTY + 1):
+            r = 13 + j
+            rr = EN_ROSTER_R0 + j - 1
+            zebra = PANEL if j % 2 == 0 else WHITE
+            put(ws, f"B{r}", f"=Engine!$B${rr}", f=font(10, True, NAVY), bg=zebra, al=LEFT, border=BORDER)
+            for d in range(1, 8):
+                day_start = EN_AUTO_R0 + (d - 1) * NDUTY * AUTO_MAXSLOT + (j - 1) * AUTO_MAXSLOT
+                cells = [f"Engine!$E${day_start + sl}" for sl in range(AUTO_MAXSLOT)]
+                joined = '&" "&'.join(cells)
+                put(ws, f"{L(2 + d)}{r}",
+                    f'=IF($B{r}="","",SUBSTITUTE(TRIM(SUBSTITUTE({joined}," *","*"))," ",", "))',
+                    f=font(10, True, INK), bg=zebra, al=Alignment(horizontal="center", vertical="center", wrap_text=True), border=BORDER)
+            ws.row_dimensions[r].height = 22
+        # amber where a required slot went unfilled that day/duty
+        covrow_req = f"Engine!$D${EN_AUTO_R0}"
+        for d in range(1, 8):
+            col = L(2 + d)
+            for j in range(1, NDUTY + 1):
+                r = 13 + j
+                day_start = EN_AUTO_R0 + (d - 1) * NDUTY * AUTO_MAXSLOT + (j - 1) * AUTO_MAXSLOT
+                reqrng = f"Engine!$D${day_start}:$D${day_start + AUTO_MAXSLOT - 1}"
+                pickrng = f"Engine!$E${day_start}:$E${day_start + AUTO_MAXSLOT - 1}"
+                # store short/gap flag off-grid in column K for CF reference
+        grid = "C14:I31"
+        ws.conditional_formatting.add("B14:I31", FormulaRule(formula=['$B14=""'], fill=cffill(PANEL), font=Font(color=PANEL), stopIfTrue=True))
+        # gap: the duty/day is short = required count > filled count in the auto region
+        def short_expr():
+            # COLUMN()-3 = day index 0..6 ; ROW()-14 = duty index 0..17
+            dstart = f"({EN_AUTO_R0}+(COLUMN()-3)*{NDUTY * AUTO_MAXSLOT}+(ROW()-14)*{AUTO_MAXSLOT})"
+            req = f"SUM(OFFSET(Engine!$D$1,{dstart}-1,0,{AUTO_MAXSLOT},1))"
+            got = f"SUMPRODUCT(--(OFFSET(Engine!$E$1,{dstart}-1,0,{AUTO_MAXSLOT},1)<>\"\"))"
+            return f"{req}>{got}"
+        ws.conditional_formatting.add(grid, FormulaRule(formula=[short_expr()], fill=cffill(GAP_FILL), font=Font(color=GAP_INK, bold=True)))
+        ws.conditional_formatting.add("C13:I13", FormulaRule(formula=["C13=TODAY()"], fill=cffill(GOLD), font=Font(color=NAVY, bold=True)))
+
+        # ---- copy box: tab-separated block, ready to paste as values into the week ----
+        put(ws, "B33", "COPY BOX", f=font(11, True, NAVY))
+        put(ws, "E33", "select B35:H52, copy, then Paste Special > Values into cell C (first duty row) of the week - "
+                       "columns line up with Mon slot1 / Tue slot1 ... one value per weekday, plus Sat and Sun",
+            f=font(8, False, MUTED, True))
+        ws.merge_cells("E33:I33")
+        # The week grid stores 3 weekday slots per day; the copy box gives slot-1..3 joined? No - to paste cleanly we
+        # emit the three weekday slot columns explicitly is 15 cols wide. Keep it simple: emit exactly the year-sheet
+        # layout C..Z (24 cols) for the 18 duty rows, reading each slot cell.
+        put(ws, "B34", "Paste target: year sheet, first duty cell of the week (top-left).", f=font(8, False, MUTED, True))
+        # year sheet duty columns per day: SLOT_COLS mapping; produce a value per grid column C(3)..Z(26)
+        grid_cols = []
+        for d in range(1, 8):
+            for c in SLOT_COLS[d]:
+                grid_cols.append((d, SLOT_COLS[d].index(c)))
+            # note column stays blank
+            grid_cols.append(("note", 0))
+        for j in range(1, NDUTY + 1):
+            r = 35 + j - 1
+            out_c = 2  # start writing at B so the block is B35:.. but paste target is C; we want first value at the col that maps to C
+            # Build values across the 24 physical columns C..Z of the year grid
+            col_phys = 3
+            for d in range(1, 8):
+                for si, c in enumerate(SLOT_COLS[d]):
+                    day_start = EN_AUTO_R0 + (d - 1) * NDUTY * AUTO_MAXSLOT + (j - 1) * AUTO_MAXSLOT
+                    src = f"Engine!$E${day_start + si}"
+                    put(ws, f"{L(col_phys)}{r}", f'=IF({src}="","",{src})', f=font(8), al=CENTER, border=BORDER_H)
+                    col_phys += 1
+                # note column - leave blank so paste does not overwrite notes
+                put(ws, f"{L(col_phys)}{r}", None, border=BORDER_H)
+                col_phys += 1
+        put(ws, "B54", "The copy box mirrors the exact column layout of the week grid, so a values-paste lands each name in the right slot and leaves the Notes columns untouched.",
+            f=font(8, False, MUTED, True))
+        ws.merge_cells("B54:AB54")
+        ws.freeze_panes = "A4"
+        ws.page_setup.orientation = "landscape"
+        ws.page_setup.fitToWidth = 1
+        ws.page_setup.fitToHeight = 0
+        ws.sheet_properties.pageSetUpPr.fitToPage = True
+        ws.print_area = "A1:I31"
+        ws.protection.sheet = True
+        ws.protection.formatColumns = False
+        ws.protection.formatRows = False
+        return ws
+
     # ---- Print Week --------------------------------------------------------
     def build_print_week(self):
         ws = self.wb.create_sheet("Print Week")
@@ -1403,7 +1612,8 @@ class Builder:
         ws.column_dimensions["C"].width = 110
         sections = [
             ("WHAT IS WHERE", [
-                "Dashboard - pick the planning week; see coverage, gaps with suggested cover, who is around, and jump anywhere.",
+                "Dashboard - pick the planning week; see coverage, gaps with suggested cover, who is around, jump anywhere, and press ⚡ Auto-fill.",
+                "Auto Plan - a complete roster the workbook generates for the planning week from every rule. Review, then paste into the week.",
                 "2027 / 2028 / 2029 / 2030 - one block per ISO week. Top half: duties x days, three slots per weekday, one at the weekend. Bottom half: team availability.",
                 "Setup - the team, the duties, the competency (SQEP) matrix, status codes and the planning years. Change things here and everything follows.",
                 "Print Week - the planning week as a clean one-page roster for the noticeboard, with who is away underneath.",
@@ -1419,6 +1629,8 @@ class Builder:
                 "5.  Red cells mean something is wrong: a person is not qualified for that duty, or is rostered on a day they are marked unavailable. Fix them before you publish.",
             ]),
             ("THE AUTOMATIONS", [
+                "Auto Plan (the big one): the workbook builds a whole week for you from the rules - one qualified, available person per duty per day, minimums met, weekend cover where required, no-one double-booked, load shared, and the same person kept on a duty across the week. Open the Auto Plan sheet (or the ⚡ Auto-fill box on the Dashboard), review it, and paste it into the week. Amber = a slot the rules could not fill.",
+                "Fill priority follows the duty order on Setup: the auto-planner works down the list, so put your hardest-to-cover duties near the top and they get first pick of scarce staff.",
                 "Dropdowns are context-aware for the planning week: qualified + available people only, SQEP first, trainees after with a *.",
                 "Gap detection on every week, every year: each duty has a minimum per weekday and a weekend-cover flag (Setup). Short days are shaded yellow, and each duty row shows how many weekdays are short.",
                 "Suggested cover: for every gap in the planning week the Dashboard proposes the least-loaded eligible person (SQEP before trainee, then fewest days already rostered).",
@@ -1500,10 +1712,11 @@ class Builder:
         self.build_dashboard()
         self.build_my_rota()
         self.build_leave()
+        self.build_auto_plan()
         self.build_print_week()
         self.build_guide()
         self.add_names()
-        order = ["Dashboard", "2027", "2028", "2029", "2030", "Print Week", "My Rota", "Year View", "Setup", "Guide", "Engine"]
+        order = ["Dashboard", "2027", "2028", "2029", "2030", "Auto Plan", "Print Week", "My Rota", "Year View", "Setup", "Guide", "Engine"]
         self.wb._sheets = [self.wb[n] for n in order]
         self.wb.active = 0
         self.wb.properties.title = "ESG Team Planner 2027-2030"
