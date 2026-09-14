@@ -608,9 +608,15 @@ class Builder:
                         else:
                             load = '0'
                         trainee = f'IF(INDEX(Setup!$O$6:$AL$23,{j},{k})="T",500,0)'
-                        # continuity: prefer the person who held this duty the previous day (lower score wins)
-                        if d > 1:
-                            pstart = EN_AUTO_R0 + (d - 2) * NDUTY * AUTO_MAXSLOT + (j - 1) * AUTO_MAXSLOT
+                        # Continuity (lower score wins). Tue-Fri follow MONDAY's pick, not
+                        # yesterday's, so the duty's owner comes back after a day of leave
+                        # instead of the stand-in keeping it for the rest of the week.
+                        # Saturday starts fresh, so weekend cover falls to whoever has done
+                        # least that week rather than to someone already working Mon-Fri;
+                        # Sunday follows Saturday so one person covers the whole weekend.
+                        anchor_day = {2: 1, 3: 1, 4: 1, 5: 1, 7: 6}.get(d)
+                        if anchor_day:
+                            pstart = EN_AUTO_R0 + (anchor_day - 1) * NDUTY * AUTO_MAXSLOT + (j - 1) * AUTO_MAXSLOT
                             prev = f"$E${pstart}:$E${pstart + AUTO_MAXSLOT - 1}"
                             cont = f'IF(COUNTIF({prev},$B{tr})+COUNTIF({prev},$B{tr}&" ~*")>0,0,1000000)'
                         else:
@@ -981,6 +987,9 @@ class Builder:
         # 13. summary columns
         cf.add(union(28, DUTY1, 28, DUTY_LAST), FormulaRule(formula=[f"AND(ISNUMBER(AB{T0 + DUTY1}),AB{T0 + DUTY1}>0)"], fill=cffill(GAP_FILL), font=Font(color=GAP_INK, bold=True)))
         cf.add(union(29, DUTY1, 29, DUTY_LAST), FormulaRule(formula=[f"LEFT(AC{T0 + DUTY1},1)=\"⚠\""], fill=cffill(GAP_FILL), font=Font(color=GAP_INK, bold=True)))
+        cf.add(union(28, STAFF1, 28, STAFF_LAST), FormulaRule(
+            formula=[f"AND(ISNUMBER(AB{T0 + STAFF1}),AB{T0 + STAFF1}>=6)"],
+            fill=cffill(GAP_FILL), font=Font(color=GAP_INK, bold=True)))
         cf.add(union(29, STAFF1, 29, STAFF_LAST), FormulaRule(formula=[f"AND(ISNUMBER(AC{T0 + STAFF1}),AC{T0 + STAFF1}>0)"], fill=cffill(BAD_FILL), font=Font(color=BAD_INK, bold=True)))
         cf.add(union(29, STAFF1, 29, STAFF_LAST), FormulaRule(formula=[f"AND(ISNUMBER(AC{T0 + STAFF1}),AC{T0 + STAFF1}=0)"], font=Font(color="D0D0D0")))
         # 14. banner: week state + active flag
@@ -1161,6 +1170,7 @@ class Builder:
             code, desc, un, fl, ink = STATUS_DEFAULTS[s - 1]
             sc = f"Setup!$B${SU_STATUS_R0 + s - 1}"
             ws.conditional_formatting.add(agrid, FormulaRule(formula=[f'AND({sc}<>"",C39={sc})'], fill=cffill(fl), font=Font(color=ink, bold=True)))
+        ws.conditional_formatting.add("L39:L62", CellIsRule(operator="greaterThanOrEqual", formula=["6"], fill=cffill(GAP_FILL), font=Font(color=GAP_INK, bold=True)))
         ws.conditional_formatting.add("M39:M62", CellIsRule(operator="greaterThan", formula=["0"], fill=cffill(BAD_FILL), font=Font(color=BAD_INK, bold=True)))
         ws.conditional_formatting.add("C38:I38", FormulaRule(formula=["C38=TODAY()"], fill=cffill(GOLD), font=Font(color=NAVY, bold=True)))
         # legend
@@ -1629,7 +1639,7 @@ class Builder:
                 "5.  Red cells mean something is wrong: a person is not qualified for that duty, or is rostered on a day they are marked unavailable. Fix them before you publish.",
             ]),
             ("THE AUTOMATIONS", [
-                "Auto Plan (the big one): the workbook builds a whole week for you from the rules - one qualified, available person per duty per day, minimums met, weekend cover where required, no-one double-booked, load shared, and the same person kept on a duty across the week. Open the Auto Plan sheet (or the ⚡ Auto-fill box on the Dashboard), review it, and paste it into the week. Amber = a slot the rules could not fill.",
+                "Auto Plan (the big one): the workbook builds a whole week for you from the rules - one qualified, available person per duty per day, minimums met, weekend cover where required, no-one double-booked, load shared, and the same person kept on a duty Monday to Friday (if they are off midweek a stand-in covers just that day, then they get it back). Weekend cover goes to whoever has worked least that week. Open the Auto Plan sheet (or the ⚡ Auto-fill box on the Dashboard), review it, and paste it into the week. Amber = a slot the rules could not fill.",
                 "Fill priority follows the duty order on Setup: the auto-planner works down the list, so put your hardest-to-cover duties near the top and they get first pick of scarce staff.",
                 "Dropdowns are context-aware for the planning week: qualified + available people only, SQEP first, trainees after with a *.",
                 "Gap detection on every week, every year: each duty has a minimum per weekday and a weekend-cover flag (Setup). Short days are shaded yellow, and each duty row shows how many weekdays are short.",
@@ -1637,7 +1647,7 @@ class Builder:
                 "Conflict checks everywhere: rostered while unavailable, or not qualified, is flagged red in the slot, in the person's row, and counted on the Dashboard.",
                 "Colour follows status: a rostered person's initials take the colour of their status that day (e.g. blue when they are on a course), so partial availability is visible in the roster itself.",
                 "Today's column is tinted; the current week's banner turns green; the planning week's banner turns orange. Past weeks are dimmed.",
-                "Per person, per week: days rostered and conflicts. Per day: how many active people are on site.",
+                "Per person, per week: days rostered and conflicts. Days rostered turns amber at 6 or more, so a six- or seven-day stretch is visible before you publish. Per day: how many active people are on site.",
                 "Everything is formula-driven: no macros to enable, works in Excel desktop, Excel Online, LibreOffice and Google Sheets.",
             ]),
             ("CHANGING THE TEAM OR THE DUTIES", [

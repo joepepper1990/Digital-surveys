@@ -19,12 +19,17 @@ generates a complete roster for the planning week from every rule at once:
   duty needs it;
 * nobody rostered on a day they are on leave, sick, off-site or training;
 * nobody double-booked across duties on the same day;
-* the same person kept on a duty all week, the way a real rota reads;
+* the same person kept on a duty Monday to Friday, the way a real rota reads - if they
+  are off midweek a stand-in covers that day only, then the owner gets the duty back;
+* weekend cover handed to whoever has worked least that week, rather than to someone
+  already on duty Monday to Friday (Sunday follows Saturday, so one person covers both);
 * load shared — least-loaded eligible people first, SQEP before trainees
   (trainees shown with a `*`).
 
 It shows how many of the required slots it could fill and shades in amber any it
-could not (not enough qualified, available people). **Fill priority follows the
+could not (not enough qualified, available people). Where the team is small enough
+that weekend cover means someone works a sixth or seventh day, the **Days rostered**
+count turns amber so you can see it before publishing. **Fill priority follows the
 order of duties on the Setup sheet**, so put the hardest-to-cover duties near the
 top and they get first pick of scarce staff.
 
