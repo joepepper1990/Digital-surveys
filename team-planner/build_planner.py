@@ -97,8 +97,8 @@ STATUS_DEFAULTS = [
     ("S", "Sick", "Y", "F8D7DA", "A61B29"),
     ("OS", "Off site / secondment", "Y", "E7E6E6", "595959"),
     ("HD", "Half day (available)", "N", "FFF2CC", "7F6000"),
+    ("OT", "Overtime approved (weekend) - team leader approved", "N", "D0F0F0", "0B6E6E"),
     ("", "", "", "E2D5F1", "5B2C86"),
-    ("", "", "", "D0F0F0", "0B6E6E"),
 ]
 
 thin = Side(style="thin", color=LINE)
@@ -222,7 +222,10 @@ class Builder:
         self.wb = Workbook()
         self.wb.remove(self.wb.active)
         self.team = src["team"]
-        self.duties = src["duties"]
+        # Radwaste is flexible work the team does but the original planner had no row for.
+        # Added here with no competencies ticked and a weekday minimum of 0, so it creates
+        # no false gaps until the SQEP column is filled in on Setup.
+        self.duties = src["duties"] + (["Radwaste"] if "Radwaste" not in src["duties"] else [])
 
     # ---- shared bits -------------------------------------------------------
     def header_bar(self, ws, title, subtitle, ncols):
@@ -284,7 +287,7 @@ class Builder:
 
         # ---------------- Duties + matrix -------------------------------------
         put(ws, "J4", "DUTIES & COMPETENCY MATRIX  (Y = SQEP, T = trainee, blank = not qualified)", f=font(11, True, NAVY))
-        for col, txt, w in (("J", "#", 4), ("K", "Duty", 18), ("L", "Min per weekday", 9), ("M", "Weekend cover", 9)):
+        for col, txt, w in (("J", "#", 4), ("K", "Duty", 18), ("L", "Min per weekday", 9), ("M", "Flexible / overtime", 9)):
             put(ws, f"{col}5", txt, **hdr)
             ws.column_dimensions[col].width = w
         ws.column_dimensions["I"].width = 2
@@ -296,14 +299,14 @@ class Builder:
             c = SU_MATRIX_C0 + k - 1
             put(ws, f"{L(c)}5", f'=IF(B{SU_TEAM_R0 + k - 1}="","",B{SU_TEAM_R0 + k - 1})', **hdr)
             ws.column_dimensions[L(c)].width = 5
-        weekend_default = set(self.duties[:7])
+        flexible_default = {"Surveys", "Greenstream", "Instruments", "Radwaste"}
         for j in range(1, NDUTY + 1):
             r = SU_DUTY_R0 + j - 1
             name = self.duties[j - 1] if j <= len(self.duties) else None
             put(ws, f"J{r}", j, f=font(9, False, MUTED), al=CENTER, border=BORDER_H)
             put(ws, f"K{r}", name, f=font(10, True, NAVY), bg=INPUT, al=LEFT, border=BORDER, locked=False)
-            put(ws, f"L{r}", (1 if name else None), f=font(10), bg=INPUT, al=CENTER, border=BORDER, locked=False)
-            put(ws, f"M{r}", (("Y" if name in weekend_default else "N") if name else None), f=font(10), bg=INPUT,
+            put(ws, f"L{r}", ((0 if name == "Radwaste" else 1) if name else None), f=font(10), bg=INPUT, al=CENTER, border=BORDER, locked=False)
+            put(ws, f"M{r}", (("Y" if name in flexible_default else "N") if name else None), f=font(10), bg=INPUT,
                 al=CENTER, border=BORDER, locked=False)
             for k in range(1, NSTAFF + 1):
                 c = SU_MATRIX_C0 + k - 1
@@ -312,13 +315,14 @@ class Builder:
                 if name and ini:
                     if ini in self.src["trainees"].get(name, []):
                         v = "T"
-                    elif self.src["matrix"][name].get(ini):
+                    elif self.src["matrix"].get(name, {}).get(ini):
                         v = "Y"
                 put(ws, f"{L(c)}{r}", v, f=font(9, True), bg=INPUT, al=CENTER, border=BORDER_H, locked=False)
         ws["L6"].comment = Comment("Minimum people needed on this duty each weekday. The planner flags a gap "
                                    "when fewer are rostered. Set 0 for duties that are ad-hoc.", "Planner")
-        ws["M6"].comment = Comment("Y = one person must be rostered on Saturday and Sunday. "
-                                   "Duties set to N are greyed out at the weekend.", "Planner")
+        ws["M6"].comment = Comment("Y = this work is not tied to a specific day, so it can be picked up on approved "
+                                   "weekend overtime (surveys, greenstream, Radwaste, instruments, extra WOCs). "
+                                   "Duties set to N are weekday-only and are greyed out at the weekend.", "Planner")
         dv_yt = DataValidation(type="list", formula1='"Y,T"', allow_blank=True)
         ws.add_data_validation(dv_yt)
         dv_yt.add(rng(SU_MATRIX_C0, 6, SU_MATRIX_C0 + NSTAFF - 1, 23))
@@ -375,7 +379,9 @@ class Builder:
             "Yellow cells are inputs. Everything else is calculated - the sheet is protected (no password) to stop accidental edits.",
             "Initials must be unique and must match what people are called in the week grids (the dropdowns take care of that).",
             "Competency matrix: Y = fully qualified (SQEP). T = trainee - offered in dropdowns with a * so they are rostered alongside a SQEP person.",
-            "Min per weekday: how many people that duty needs Mon-Fri. Weekend cover Y: one person needed Sat and Sun.",
+            "Radwaste was added as a duty because it is work you do, but the old planner had no row for it. Nobody is ticked as qualified yet and its weekday minimum is 0 - fill those in and it behaves like any other duty.",
+            "Min per weekday: how many people that duty needs Mon-Fri. Flexible / overtime Y: the work is not tied to a specific day, so approved weekend overtime can count towards it.",
+            "Weekend working is never required. Mark a person OT in the Sat/Sun availability cell once the team leader has approved their overtime; only then can they be rostered that day.",
             "Status codes: keep them short. Unavailable? = Y hides the person from that day's dropdowns and flags any conflict in red.",
         ]
         for i, t in enumerate(tips):
@@ -439,8 +445,9 @@ class Builder:
 
         # team mirror
         put(ws, f"A{EN_TEAM_R0 - 1}", "k", f=font(8, True))
-        for c, t in zip("BCDEFGHIJKLMNOPQRS", ["initials", "active", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun",
-                                              "unMon", "unTue", "unWed", "unThu", "unFri", "unSat", "unSun", "load", "conflicts"]):
+        for c, t in zip("BCDEFGHIJKLMNOPQRSTUVWXYZ", ["initials", "active", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun",
+                                              "unMon", "unTue", "unWed", "unThu", "unFri", "unSat", "unSun", "load", "conflicts",
+                                              "otMon", "otTue", "otWed", "otThu", "otFri", "otSat", "otSun"]):
             put(ws, f"{c}{EN_TEAM_R0 - 1}", t, f=font(8, True))
         for k in range(1, NSTAFF + 1):
             r = EN_TEAM_R0 + k - 1
@@ -454,6 +461,9 @@ class Builder:
                 ws[f"{col}{r}"] = (f'=IF($B{r}="","",""&' +
                                    choose_year(lambda s, k=k, d=d: f"INDEX({q(s)}!$A:$Z,$B${C['base']}+{STAFF1 - 1}+{k},{FIRST[d]})") + ")")
                 ws[f"{ucol}{r}"] = f'=IF({col}{r}="",0,IFERROR(INDEX(Setup!$G$33:$G$40,MATCH({col}{r},Setup!$B$33:$B$40,0)),0))'
+                # overtime approved that day (team leader approval, entered as the OT status code)
+                otcol = L(19 + d)       # T..Z
+                ws[f"{otcol}{r}"] = f'=IF(AND(Setup!$B$39<>"",{col}{r}=Setup!$B$39),1,0)'
             ws[f"R{r}"] = (f'=IF($B{r}="",0,N(' + choose_year(lambda s, k=k: f"INDEX({q(s)}!$AB:$AB,$B${C['base']}+{STAFF1 - 1}+{k})") + "))")
             ws[f"S{r}"] = (f'=IF($B{r}="",0,N(' + choose_year(lambda s, k=k: f"INDEX({q(s)}!$AC:$AC,$B${C['base']}+{STAFF1 - 1}+{k})") + "))")
 
@@ -489,7 +499,9 @@ class Builder:
                 ws[f"B{r}"] = j
                 ws[f"C{r}"] = f"=$B${rr}"
                 ws[f"D{r}"] = DAY_NAMES[d - 1]
-                ws[f"E{r}"] = (f'=IF(C{r}="","",' + (f"N($AB${rr})" if d <= 5 else f"N($AC${rr})") + ")")
+                # Weekend cover is optional overtime, never a requirement, so nothing is
+                # "required" on Sat/Sun and the weekend can never show as a gap.
+                ws[f"E{r}"] = (f'=IF(C{r}="","",' + (f"N($AB${rr})" if d <= 5 else "0") + ")")
                 ws[f"F{r}"] = f'=IF(C{r}="","",COUNTIF({mirror},"?*"))'
                 ws[f"G{r}"] = f'=IF(C{r}="","",MAX(0,E{r}-F{r}))'
                 ws[f"H{r}"] = (f'=IF(N(G{r})=0,"",IF(COUNT(BM{r}:CJ{r})=0,"no-one eligible",'
@@ -505,7 +517,12 @@ class Builder:
                 for k in range(1, NSTAFF + 1):
                     tr = EN_TEAM_R0 + k - 1
                     rank_c = L(39 + k)      # AN.. (AN = 40)
-                    ws[f"{rank_c}{r}"] = (f'=IF(AND($C{tr}=1,INDEX(Setup!$O$6:$AL$23,{j},{k})<>"",{L(10 + d)}{tr}=0),'
+                    gate = f'$C{tr}=1,INDEX(Setup!$O$6:$AL$23,{j},{k})<>"",{L(10 + d)}{tr}=0'
+                    if d >= 6:
+                        # weekend: only flexible work, and only people the team leader has
+                        # approved for overtime that day
+                        gate += f',$AC${rr}=1,{L(19 + d)}{tr}=1'
+                    ws[f"{rank_c}{r}"] = (f'=IF(AND({gate}),'
                                           f'{k}+IF(INDEX(Setup!$O$6:$AL$23,{j},{k})="T",100,0),"")')
                     sc_c = L(64 + k)        # BM.. (BM = 65)
                     day_first = EN_COV_R0 + (d - 1) * NDUTY
@@ -573,7 +590,7 @@ class Builder:
         C = EN_CTRL
         base = f"$B${C['base']}"
         team_ini = f"$B${EN_TEAM_R0}:$B${EN_TEAM_R0 + NSTAFF - 1}"
-        put(ws, f"A{EN_AUTO_R0 - 1}", "AUTO PLAN (planning week): d | j | slot | required | chosen | score helpers →", f=font(8, True))
+        put(ws, f"A{EN_AUTO_R0 - 1}", "AUTO PLAN (planning week): d | j | slot | required | chosen | offered(weekend OT) | score helpers →", f=font(8, True))
         for d in range(1, 8):
             day_start = EN_AUTO_R0 + (d - 1) * NDUTY * AUTO_MAXSLOT
             for j in range(1, NDUTY + 1):
@@ -584,22 +601,29 @@ class Builder:
                     ws[f"B{r}"] = j
                     ws[f"C{r}"] = sl
                     # required for this slot: weekday -> sl <= min; weekend -> only slot 1 and weekend cover = Y
+                    # D = required (weekday minimums only). Weekend working is optional
+                    # overtime, so nothing is ever required on Sat/Sun.
+                    # F = offered: weekend flexible work that approved overtime can pick up.
                     if d <= 5:
-                        req = f'=IF($B${rr}="",0,IF({sl}<=N($AB${rr}),1,0))'
+                        ws[f"D{r}"] = f'=IF($B${rr}="",0,IF({sl}<=N($AB${rr}),1,0))'
+                        ws[f"F{r}"] = 0
                     else:
-                        req = f'=IF($B${rr}="",0,IF(AND({sl}=1,$AC${rr}=1),1,0))'
-                    ws[f"D{r}"] = req
+                        ws[f"D{r}"] = 0
+                        ws[f"F{r}"] = f'=IF($B${rr}="",0,IF(AND({sl}=1,$AC${rr}=1),1,0))'
                     day_col = f"$E${day_start}:$E{r - 1}" if r > day_start else None
                     week_col = f"$E${EN_AUTO_R0}:$E{r - 1}" if r > EN_AUTO_R0 else None
                     # chosen
                     ws[f"E{r}"] = (
-                        f'=IF(D{r}=0,"",IF(COUNT(G{r}:AD{r})=0,"",'
+                        f'=IF(AND(D{r}=0,F{r}=0),"",IF(COUNT(G{r}:AD{r})=0,"",'
                         f'INDEX({team_ini},MOD(MIN(G{r}:AD{r}),500))&IF(MOD(MIN(G{r}:AD{r}),1000)>=500," *","")))')
                     for k in range(1, NSTAFF + 1):
                         tr = EN_TEAM_R0 + k - 1
                         sc = L(6 + k)   # G=7
                         elig = (f'AND($C{tr}=1,INDEX(Setup!$O$6:$AL$23,{j},{k})<>"",'
                                 f'{L(10 + d)}{tr}=0')
+                        if d >= 6:
+                            # weekend: approved overtime only
+                            elig += f',{L(19 + d)}{tr}=1'
                         if day_col:
                             elig += f',COUNTIF({day_col},$B{tr})+COUNTIF({day_col},$B{tr}&" ~*")=0'
                         elig += ')'
@@ -621,7 +645,7 @@ class Builder:
                             cont = f'IF(COUNTIF({prev},$B{tr})+COUNTIF({prev},$B{tr}&" ~*")>0,0,1000000)'
                         else:
                             cont = '1000000'
-                        ws[f"{sc}{r}"] = f'=IF(D{r}=0,"",IF({elig},{cont}+({load})*1000+{trainee}+{k},""))'
+                        ws[f"{sc}{r}"] = f'=IF(AND(D{r}=0,F{r}=0),"",IF({elig},{cont}+({load})*1000+{trainee}+{k},""))'
         return ws
 
     # ---- Year sheets -------------------------------------------------------
@@ -692,7 +716,7 @@ class Builder:
             chip_col += 1
         for txt, fl, ink, it in (("* trainee", "FFFFFF", TRAINEE_INK, True), ("gap", GAP_FILL, GAP_INK, False),
                                  ("not SQEP / conflict", BAD_FILL, BAD_INK, False), ("today", TODAY_FILL, "7F6000", False),
-                                 ("n/a weekend", NA_FILL, NA_INK, False)):
+                                 ("weekday only", NA_FILL, NA_INK, False)):
             c = ws.cell(3, chip_col)
             c.value = txt
             style(c, f=font(8, True, ink, italic=it), bg=fl, al=CENTER)
@@ -826,8 +850,7 @@ class Builder:
                 slot_rng = rng(cols[0], r, cols[-1], r)
                 if d <= 5:
                     gap_terms.append(f'(COUNTIF({slot_rng},"?*")<{req})')
-                else:
-                    gap_terms.append(f'(({L(cols[0])}{r}="")*{wkd})')
+                # Sat/Sun are optional overtime, so an empty weekend slot is never a gap.
             put(ws, f"AB{r}", f'=IF($B{r}="","",{"+".join(gap_terms)})', f=font(9, True), bg=zebra, al=CENTER, border=BORDER_H)
             put(ws, f"AC{r}", f'=IF($B{r}="","",IF(AB{r}=0,"✓ covered","⚠ "&AB{r}&IF(AB{r}=1," gap"," gaps")))',
                 f=font(8, True, GOOD_INK), bg=zebra, al=CENTER, border=BORDER_H)
@@ -847,7 +870,7 @@ class Builder:
             first, last = SLOT_COLS[d][0], NOTE_COL[d]
             for c in range(first, last + 1):
                 cell = ws.cell(A(AVH), c)
-                cell.value = DAY_NAMES[d - 1] if c == first else None
+                cell.value = (DAY_NAMES[d - 1] + (" (overtime)" if d >= 6 else "")) if c == first else None
                 style(cell, f=font(9, True, WHITE), bg=(NAVY if d <= 5 else "5B6B8C"), al=CCONT)
                 cell.border = Border(left=med if c == first else None, right=med if c == last else None)
         put(ws, f"AB{A(AVH)}", "Days rostered", f=font(8, True, WHITE), bg=NAVY, al=CENTER)
@@ -889,15 +912,19 @@ class Builder:
                         ws.cell(r, FIRST[d]).value = code
 
         # ---- totals row ----
-        put(ws, f"B{A(TOTALS)}", "Available people", f=font(8, True, NAVY), bg=PANEL2, al=LEFT, border=BORDER_H)
+        put(ws, f"B{A(TOTALS)}", "Available  ·  Sat/Sun: OT approved", f=font(8, True, NAVY), bg=PANEL2, al=LEFT, border=BORDER_H)
         s1, s2 = A(STAFF1), A(STAFF_LAST)
         for d in range(1, 8):
             first, last = SLOT_COLS[d][0], NOTE_COL[d]
             for c in range(first, last + 1):
                 cell = ws.cell(A(TOTALS), c)
                 if c == first:
-                    cell.value = (f'=COUNTIFS(Setup!$E$6:$E$29,"Y",Setup!$B$6:$B$29,"?*")'
-                                  f'-SUMPRODUCT(COUNTIF({L(first)}{s1}:{L(first)}{s2},Setup!$F$33:$F$40))')
+                    if d <= 5:
+                        cell.value = (f'=COUNTIFS(Setup!$E$6:$E$29,"Y",Setup!$B$6:$B$29,"?*")'
+                                      f'-SUMPRODUCT(COUNTIF({L(first)}{s1}:{L(first)}{s2},Setup!$F$33:$F$40))')
+                    else:
+                        # weekend: how many people the team leader has approved for overtime
+                        cell.value = f'=IF(Setup!$B$39="",0,COUNTIF({L(first)}{s1}:{L(first)}{s2},Setup!$B$39))'
                 style(cell, f=font(8, True, NAVY), bg=PANEL2, al=CCONT, border=BORDER_H)
         put(ws, f"AB{A(TOTALS)}", f'=SUM(AB{s1}:AB{s2})', f=font(8, True, NAVY), bg=PANEL2, al=CENTER, border=BORDER_H)
         put(ws, f"AC{A(TOTALS)}", f'=SUM(AC{s1}:AC{s2})', f=font(8, True, BAD_INK), bg=PANEL2, al=CENTER, border=BORDER_H)
@@ -939,7 +966,12 @@ class Builder:
         cf.add(slot_area, FormulaRule(
             formula=[f"AND({duty_first}<>\"\",{ISSLOT}=1,IFERROR(INDEX(Setup!$G$33:$G$40,MATCH({person_status},Setup!$B$33:$B$40,0)),0)=1)"],
             fill=cffill(BAD_FILL), font=Font(color=BAD_INK, bold=True), stopIfTrue=True))
-        # 4. weekend n/a
+        # 3b. weekend slot filled by someone the team leader has not approved for overtime
+        cf.add(slot_area, FormulaRule(
+            formula=[f"AND({duty_first}<>\"\",{ISSLOT}=1,{DAY}>=6,Setup!$B$39<>\"\","
+                     f"{person_status}<>Setup!$B$39)"],
+            fill=cffill(GAP_FILL), font=Font(color=GAP_INK, bold=True), stopIfTrue=True))
+        # 4. weekend: duty is weekday-only (not flexible work)
         cf.add(slot_area, FormulaRule(
             formula=[f"AND({ISSLOT}=1,{DAY}>=6,$B{T0 + DUTY1}<>\"\",INDEX(Setup!$M$6:$M$23,MATCH($B{T0 + DUTY1},Setup!$K$6:$K$23,0))<>\"Y\")"],
             fill=cffill(NA_FILL), font=Font(color=NA_INK), stopIfTrue=True))
@@ -1027,7 +1059,7 @@ class Builder:
         # nav row 3
         links = [("C3", "Setup", "#'Setup'!A1"), ("D3", "2027", "#'2027'!A1"), ("E3", "2028", "#'2028'!A1"),
                  ("F3", "2029", "#'2029'!A1"), ("G3", "2030", "#'2030'!A1"), ("H3", "Auto Plan", "#'Auto Plan'!A1"), ("I3", "Print Week", "#'Print Week'!A1"),
-                 ("L3", "My Rota", "#'My Rota'!A1"), ("M3", "Year view", "#'Year View'!A1"), ("N3", "Guide", "#'Guide'!A1")]
+                 ("L3", "My Rota", "#'My Rota'!A1"), ("M3", "Year view", "#'Year View'!A1"), ("O3", "Work Pack", "#'Work Pack'!A1"), ("N3", "Guide", "#'Guide'!A1")]
         put(ws, "B3", "Go to:", f=font(9, True, "D9E1F2"), al=Alignment(horizontal="right", vertical="center"))
         for ref, t, target in links:
             self.nav_link(ws, ref, t, target, color=WHITE, size=10)
@@ -1075,7 +1107,7 @@ class Builder:
             ("B", "Coverage", f'=IFERROR((SUM({cov("E")})-SUM({cov("G")}))/SUM({cov("E")}),0)', "0%", "of required duty-days filled"),
             ("C", "Gaps", f'=SUM({cov("G")})', "0", "duty-days still to fill"),
             ("D", "Off", f'=SUM(Engine!$K${EN_TEAM_R0}:$Q${EN_TEAM_R0 + NSTAFF - 1})', "0", "person-days unavailable"),
-            ("E", "Training", f'=COUNTIF(Engine!$D${EN_TEAM_R0}:$J${EN_TEAM_R0 + NSTAFF - 1},Setup!$B$35)', "0", "person-days on training"),
+            ("E", "Overtime", f'=SUM(Engine!$T${EN_TEAM_R0}:$Z${EN_TEAM_R0 + NSTAFF - 1})', "0", "weekend days approved"),
             ("F", "Conflicts", f'=SUM(Engine!$S${EN_TEAM_R0}:$S${EN_TEAM_R0 + NSTAFF - 1})', "0", "rostered while unavailable"),
             ("G", "Not SQEP", f'=SUM({cov("J")})', "0", "unqualified in slots"),
             ("H", "Busiest", f'=IF(MAX(Engine!$R${EN_TEAM_R0}:$R${EN_TEAM_R0 + NSTAFF - 1})=0,"–",IFERROR(INDEX(Engine!$B${EN_TEAM_R0}:$B${EN_TEAM_R0 + NSTAFF - 1},MATCH(MAX(Engine!$R${EN_TEAM_R0}:$R${EN_TEAM_R0 + NSTAFF - 1}),Engine!$R${EN_TEAM_R0}:$R${EN_TEAM_R0 + NSTAFF - 1},0))&" · "&MAX(Engine!$R${EN_TEAM_R0}:$R${EN_TEAM_R0 + NSTAFF - 1})&"d","–"))', "@", "most days rostered"),
@@ -1290,7 +1322,7 @@ class Builder:
         ws = self.wb.create_sheet("Year View")
         ws.sheet_properties.tabColor = "548235"
         self.header_bar(ws, "YEAR VIEW  ·  planning progress, leave and training at a glance",
-                        "Top: weekday gaps per duty per week - click a week number to open it. Below: absence, training and workload per person.", 62)
+                        "Top: weekday gaps per duty per week - click a week number to open it. Below: absence, training, workload and approved weekend overtime per person.", 62)
         self.nav_link(ws, "BH1", "◀ Dashboard", "#'Dashboard'!A1")
         INPUT = "FFFBE6"
         put(ws, "B4", "Year", f=font(10), al=LEFT)
@@ -1400,6 +1432,11 @@ class Builder:
                       cell_builder=lambda sheet, row: f"N(INDEX({q(sheet)}!$AB:$AB,{row}))", totals_label="Team days")
         ws.conditional_formatting.add(g3, ColorScaleRule(start_type="num", start_value=0, start_color="FFFFFF", mid_type="num", mid_value=3, mid_color="C6E0B4", end_type="num", end_value=7, end_color="548235"))
         ws.conditional_formatting.add(f"{L(57)}{top_w + 2}:{L(57)}{t3 - 1}", ColorScaleRule(start_type="min", start_color="FFFFFF", end_type="max", end_color="9BC2E6"))
+        top_ot = t3 + 4
+        g4, t4 = grid(top_ot, "WEEKEND OVERTIME  (days the team leader approved)", "Setup!$B$39",
+                      "weekend working is optional - these are approved overtime days, and they count towards flexible work",
+                      totals_label="Team OT days")
+        ws.conditional_formatting.add(g4, ColorScaleRule(start_type="num", start_value=0, start_color="FFFFFF", mid_type="num", mid_value=1, mid_color="D0F0F0", end_type="num", end_value=2, end_color="0B6E6E"))
         ws.freeze_panes = "C8"
         ws.page_setup.orientation = "landscape"
         ws.page_setup.fitToWidth = 1
@@ -1547,6 +1584,107 @@ class Builder:
         ws.protection.formatRows = False
         return ws
 
+    # ---- Work Pack ---------------------------------------------------------
+    def build_work_pack(self):
+        """Extra work (WOCs) logged per week - the flexible work that approved
+        weekend overtime, and any spare weekday capacity, gets put against."""
+        ws = self.wb.create_sheet("Work Pack")
+        ws.sheet_properties.tabColor = "0B6E6E"
+        ws.sheet_view.showGridLines = False
+        C = EN_CTRL
+        E = lambda key: f"Engine!$B${C[key]}"
+        INPUT = "FFFBE6"
+        NROWS = 120
+        R0 = 12
+        for c, w in zip("ABCDEFGHIJ", (2, 8, 7, 52, 18, 9, 12, 13, 2, 2)):
+            ws.column_dimensions[c].width = w
+        self.header_bar(ws, "WORK PACK  ·  extra work (WOCs) by week",
+                        "Log the additional work in each week's pack here. It is not tied to a particular day, so weekday spare capacity "
+                        "or approved weekend overtime can pick it up.", 10)
+        self.nav_link(ws, "H1", "◀ Dashboard", "#'Dashboard'!A1")
+
+        yr, wk = E("year"), E("week")
+        yrs = f"$B${R0}:$B${R0 + NROWS - 1}"
+        wks = f"$C${R0}:$C${R0 + NROWS - 1}"
+        days = f"$F${R0}:$F${R0 + NROWS - 1}"
+        who = f"$G${R0}:$G${R0 + NROWS - 1}"
+        sts = f"$H${R0}:$H${R0 + NROWS - 1}"
+
+        put(ws, "B5", '="THIS WEEK:  W"&' + wk + '&"  "&' + yr, f=font(11, True, NAVY))
+        tiles = [
+            ("B", "Items", f'=COUNTIFS({yrs},{yr},{wks},{wk})', "0"),
+            ("C", "Days", f'=SUMIFS({days},{yrs},{yr},{wks},{wk})', "0.0"),
+            ("D", "Still open", f'=SUMIFS({days},{yrs},{yr},{wks},{wk},{sts},"<>Done")', "0.0"),
+            ("E", "Unassigned", f'=SUMIFS({days},{yrs},{yr},{wks},{wk},{who},"")', "0.0"),
+            ("F", "OT days", f'=SUM(Engine!$T${EN_TEAM_R0}:$Z${EN_TEAM_R0 + NSTAFF - 1})', "0"),
+        ]
+        for col, title, f, nf in tiles:
+            put(ws, f"{col}6", title.upper(), f=font(8, True, "D9E1F2"), bg=NAVY2, al=CENTER)
+            put(ws, f"{col}7", f, f=font(14, True, WHITE), bg=NAVY2, al=CENTER, nf=nf)
+        ws.row_dimensions[6].height = 14
+        ws.row_dimensions[7].height = 26
+        put(ws, "G6", "BALANCE", f=font(8, True, "D9E1F2"), bg=NAVY2, al=CENTER)
+        put(ws, "G7", f'=SUM(Engine!$T${EN_TEAM_R0}:$Z${EN_TEAM_R0 + NSTAFF - 1})'
+                      f'-SUMIFS({days},{yrs},{yr},{wks},{wk},{sts},"<>Done")', f=font(14, True, WHITE), bg=NAVY2, al=CENTER, nf="0.0;-0.0;0")
+        put(ws, "H6", "", bg=NAVY2)
+        put(ws, "H7", f'=IF(G7>=0,"overtime covers the open work","short by "&TEXT(-G7,"0.0")&" days")',
+            f=font(8, True, "D9E1F2"), bg=NAVY2, al=Alignment(horizontal="center", vertical="center", wrap_text=True))
+        ws.conditional_formatting.add("G7", CellIsRule(operator="lessThan", formula=["0"], fill=cffill("C00000")))
+        ws.conditional_formatting.add("G7", CellIsRule(operator="greaterThanOrEqual", formula=["0"], fill=cffill(GOOD_INK)))
+
+        put(ws, "B9", "Add a row for each extra WOC. Year and Week say which week's pack it belongs to; leave Assigned to blank until someone picks it up.",
+            f=font(8, False, MUTED, True))
+        hdr = dict(f=font(9, True, WHITE), bg=NAVY, al=CENTER, border=BORDER)
+        for col, t in (("B", "Year"), ("C", "Week"), ("D", "Work / WOC"), ("E", "Work type"),
+                       ("F", "Days"), ("G", "Assigned to"), ("H", "Status")):
+            put(ws, f"{col}11", t, **hdr)
+        ws["D11"].alignment = LEFT
+        ws.row_dimensions[11].height = 20
+        for i in range(NROWS):
+            r = R0 + i
+            zebra = PANEL if i % 2 else WHITE
+            for col in ("B", "C", "D", "E", "F", "G", "H"):
+                al = LEFT if col == "D" else CENTER
+                put(ws, f"{col}{r}", None, f=font(9), bg=(INPUT if zebra == WHITE else "FBF6E4"),
+                    al=al, border=BORDER_H, locked=False)
+            ws[f"F{r}"].number_format = '0.0;;""'
+            ws.row_dimensions[r].height = 15
+        # one worked example so the format is obvious
+        put(ws, f"B{R0}", 2027, f=font(9), bg=INPUT, al=CENTER, border=BORDER_H, locked=False)
+        put(ws, f"C{R0}", 1, f=font(9), bg=INPUT, al=CENTER, border=BORDER_H, locked=False)
+        put(ws, f"D{R0}", "EXAMPLE - replace: WOC 12345 additional contamination survey, Bldg 21 basement",
+            f=font(9, False, MUTED, True), bg=INPUT, al=LEFT, border=BORDER_H, locked=False)
+        put(ws, f"E{R0}", "Surveys", f=font(9), bg=INPUT, al=CENTER, border=BORDER_H, locked=False)
+        put(ws, f"F{R0}", 1, f=font(9), bg=INPUT, al=CENTER, border=BORDER_H, locked=False)
+        put(ws, f"H{R0}", "Not started", f=font(9), bg=INPUT, al=CENTER, border=BORDER_H, locked=False)
+        ws[f"F{R0}"].number_format = '0.0;;""'
+
+        dv_y = DataValidation(type="list", formula1="=Setup!$K$33:$K$36", allow_blank=True)
+        dv_w = DataValidation(type="whole", operator="between", formula1="1", formula2="53", allow_blank=True,
+                              error="Enter a week number from 1 to 53.", errorTitle="Week")
+        dv_t = DataValidation(type="list", formula1=f'=OFFSET(Setup!$K$6,0,0,MAX(1,COUNTIF(Setup!$K$6:$K$23,"?*")),1)', allow_blank=True)
+        dv_p = DataValidation(type="list", formula1=f'=OFFSET(Setup!$B$6,0,0,MAX(1,COUNTIF(Setup!$B$6:$B$29,"?*")),1)', allow_blank=True)
+        dv_s = DataValidation(type="list", formula1='"Not started,In progress,Done"', allow_blank=True)
+        for dv, rngref in ((dv_y, "B"), (dv_w, "C"), (dv_t, "E"), (dv_p, "G"), (dv_s, "H")):
+            ws.add_data_validation(dv)
+            dv.add(f"{rngref}{R0}:{rngref}{R0 + NROWS - 1}")
+        body = f"B{R0}:H{R0 + NROWS - 1}"
+        # this week's rows stand out; done rows fade; unassigned open work is flagged
+        ws.conditional_formatting.add(body, FormulaRule(formula=[f'$H{R0}="Done"'], font=Font(color=MUTED, italic=True, strike=True)))
+        ws.conditional_formatting.add(body, FormulaRule(
+            formula=[f'AND($B{R0}={yr},$C{R0}={wk},$H{R0}<>"Done",$G{R0}="")'], fill=cffill(GAP_FILL), font=Font(color=GAP_INK, bold=True)))
+        ws.conditional_formatting.add(body, FormulaRule(
+            formula=[f'AND($B{R0}={yr},$C{R0}={wk},$H{R0}<>"Done")'], fill=cffill("E7F3EF")))
+        ws.freeze_panes = "A12"
+        ws.page_setup.orientation = "landscape"
+        ws.page_setup.fitToWidth = 1
+        ws.page_setup.fitToHeight = 0
+        ws.sheet_properties.pageSetUpPr.fitToPage = True
+        ws.protection.sheet = True
+        ws.protection.formatColumns = False
+        ws.protection.formatRows = False
+        return ws
+
     # ---- Print Week --------------------------------------------------------
     def build_print_week(self):
         ws = self.wb.create_sheet("Print Week")
@@ -1628,7 +1766,8 @@ class Builder:
                 "Setup - the team, the duties, the competency (SQEP) matrix, status codes and the planning years. Change things here and everything follows.",
                 "Print Week - the planning week as a clean one-page roster for the noticeboard, with who is away underneath.",
                 "My Rota - six weeks for one person, ready to print or send. Also shows how the year's duty days are shared.",
-                "Year View - the whole year on one screen: weekday gaps per duty per week (click a week to open it), then absence, training and workload per person.",
+                "Year View - the whole year on one screen: weekday gaps per duty per week (click a week to open it), then absence, training, workload and approved weekend overtime per person.",
+                "Work Pack - the extra work (WOCs) in each week's pack. Not tied to a day, so spare weekday capacity or approved weekend overtime picks it up. It totals the open days against the overtime days approved.",
                 "Engine (hidden) - the calculations behind the dropdowns and the Dashboard. Nothing to edit. Unhide it if you are curious.",
             ]),
             ("PLANNING A WEEK IN FIVE STEPS", [
@@ -1639,10 +1778,11 @@ class Builder:
                 "5.  Red cells mean something is wrong: a person is not qualified for that duty, or is rostered on a day they are marked unavailable. Fix them before you publish.",
             ]),
             ("THE AUTOMATIONS", [
-                "Auto Plan (the big one): the workbook builds a whole week for you from the rules - one qualified, available person per duty per day, minimums met, weekend cover where required, no-one double-booked, load shared, and the same person kept on a duty Monday to Friday (if they are off midweek a stand-in covers just that day, then they get it back). Weekend cover goes to whoever has worked least that week. Open the Auto Plan sheet (or the ⚡ Auto-fill box on the Dashboard), review it, and paste it into the week. Amber = a slot the rules could not fill.",
+                "Auto Plan (the big one): the workbook builds a whole week for you from the rules - one qualified, available person per duty per weekday, minimums met, no-one double-booked, load shared, and the same person kept on a duty Monday to Friday (if they are off midweek a stand-in covers just that day, then they get it back). Open the Auto Plan sheet (or the ⚡ Auto-fill box on the Dashboard), review it, and paste it into the week. Amber = a slot the rules could not fill.",
+                "Weekend overtime: weekend working is never required and is never planned for you. Mark OT against a person in the Sat or Sun availability cell once the team leader has approved their overtime. Only then will the auto-planner or the dropdowns offer them weekend work, and only on flexible duties.",
                 "Fill priority follows the duty order on Setup: the auto-planner works down the list, so put your hardest-to-cover duties near the top and they get first pick of scarce staff.",
                 "Dropdowns are context-aware for the planning week: qualified + available people only, SQEP first, trainees after with a *.",
-                "Gap detection on every week, every year: each duty has a minimum per weekday and a weekend-cover flag (Setup). Short days are shaded yellow, and each duty row shows how many weekdays are short.",
+                "Gap detection on every week, every year: each duty has a minimum per weekday (Setup). Short weekdays are shaded yellow and each duty row shows how many weekdays are short. Saturday and Sunday are never counted as gaps, because weekend working is optional overtime.",
                 "Suggested cover: for every gap in the planning week the Dashboard proposes the least-loaded eligible person (SQEP before trainee, then fewest days already rostered).",
                 "Conflict checks everywhere: rostered while unavailable, or not qualified, is flagged red in the slot, in the person's row, and counted on the Dashboard.",
                 "Colour follows status: a rostered person's initials take the colour of their status that day (e.g. blue when they are on a course), so partial availability is visible in the roster itself.",
@@ -1653,7 +1793,7 @@ class Builder:
             ("CHANGING THE TEAM OR THE DUTIES", [
                 "New person: add initials on Setup (next blank row), set Active = Y and tick their competencies. They appear in every week's availability grid and in dropdowns.",
                 "Someone leaves: set Active = N. Their history stays; they drop out of dropdowns and counts. Do not delete or reuse the initials in the same year.",
-                "New duty: type it in the next blank duty row on Setup, set its minimum per weekday and weekend cover, then tick who is qualified. It appears in every week.",
+                "New duty: type it in the next blank duty row on Setup, set its minimum per weekday and whether it is flexible / overtime work, then tick who is qualified. It appears in every week.",
                 "Rename anything on Setup and every week, dropdown and dashboard updates. Rostered initials are stored as text, so renaming initials needs a find/replace on the year sheets.",
                 "Status codes: rename, describe, and decide whether each one makes a person unavailable. Row 3 is also counted as 'training' on the Year View.",
                 "Copy a week forward: select the duty grid of a planned week (columns C to Z, the 18 duty rows), copy, and paste into the same rows of the next block. Then adjust - the checks re-run instantly.",
@@ -1663,7 +1803,8 @@ class Builder:
                 "The dropdown lists are computed for the planning week chosen on the Dashboard. If you type into a different week the list you see belongs to the planning week - the red/yellow checks still apply to every week, so nothing slips through.",
                 "Weeks are ISO weeks (Monday to Sunday, week 1 contains 4 January). 2027-2030 all have 52 weeks; block 53 is there for years that need it.",
                 "Printing: each year sheet is set to one week per page, landscape, with the navigation bar repeated. The Dashboard and My Rota fit on one page.",
-                "Weekend slots for duties without weekend cover are greyed out but can still be used for ad-hoc cover.",
+                "Weekend slots are greyed out for weekday-only duties - overtime can only pick up flexible work (Surveys, Greenstream, Radwaste, Instruments and anything else you mark Flexible on Setup).",
+                "Someone entered in a weekend slot without OT marked against them that day turns amber: the approval has not been recorded.",
                 "Migrated from the previous planner: the SQEP matrix, trainee flags, the team, and all AL/HRA/T marks and rostered initials that were present. Full names were not in the old file - add them on Setup.",
             ]),
         ]
@@ -1687,7 +1828,7 @@ class Builder:
         for code, desc, fl, ink in (("gap", "day is short of the minimum for that duty", GAP_FILL, GAP_INK),
                                     ("red", "not SQEP for the duty, or rostered while unavailable", BAD_FILL, BAD_INK),
                                     ("today", "today's column", TODAY_FILL, "7F6000"),
-                                    ("n/a", "weekend slot for a duty with no weekend cover", NA_FILL, NA_INK)):
+                                    ("weekday only", "weekend slot for work that is tied to weekdays, so overtime cannot pick it up", NA_FILL, NA_INK)):
             put(ws, f"B{r}", code, f=font(9, True, ink), bg=fl, al=CENTER)
             put(ws, f"C{r}", desc, f=font(9))
             r += 1
@@ -1723,10 +1864,11 @@ class Builder:
         self.build_my_rota()
         self.build_leave()
         self.build_auto_plan()
+        self.build_work_pack()
         self.build_print_week()
         self.build_guide()
         self.add_names()
-        order = ["Dashboard", "2027", "2028", "2029", "2030", "Auto Plan", "Print Week", "My Rota", "Year View", "Setup", "Guide", "Engine"]
+        order = ["Dashboard", "2027", "2028", "2029", "2030", "Auto Plan", "Print Week", "My Rota", "Year View", "Work Pack", "Setup", "Guide", "Engine"]
         self.wb._sheets = [self.wb[n] for n in order]
         self.wb.active = 0
         self.wb.properties.title = "ESG Team Planner 2027-2030"

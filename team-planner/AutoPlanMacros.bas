@@ -22,7 +22,9 @@ Attribute VB_Name = "AutoPlanMacros"
 '   AutoFillWeek      - writes the Auto Plan roster into the planning week
 '                       chosen on the Dashboard. Only the duty slots are
 '                       touched; notes and the availability grid are left
-'                       exactly as they are.
+'                       exactly as they are. Weekend slots are filled only
+'                       where overtime has been approved (OT marked against
+'                       the person that day), and only with flexible work.
 '   ClearWeek         - clears the duty slots of the planning week
 '                       (availability and notes are left alone).
 '   CopyPreviousWeek  - copies the previous week's duty slots into the
@@ -92,7 +94,6 @@ Public Sub AutoFillWeek()
         Next j
     Next d
     ys.Protect
-    ys.Protect: DoEvents
     Application.ScreenUpdating = True
     Application.Goto ys.Cells(base + DUTY1, 3), True
     MsgBox "Filled " & n & " duty slots for week " & wk & "." & vbCrLf & _

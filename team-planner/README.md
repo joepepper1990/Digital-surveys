@@ -15,14 +15,12 @@ The planner does not just check a week you type — it can **build the week for
 you**. The **Auto Plan** sheet (and the ⚡ Auto-fill box on the Dashboard)
 generates a complete roster for the planning week from every rule at once:
 
-* one qualified (SQEP) person per duty per weekday, plus weekend cover where a
-  duty needs it;
+* one qualified (SQEP) person per duty per weekday;
 * nobody rostered on a day they are on leave, sick, off-site or training;
 * nobody double-booked across duties on the same day;
 * the same person kept on a duty Monday to Friday, the way a real rota reads - if they
   are off midweek a stand-in covers that day only, then the owner gets the duty back;
-* weekend cover handed to whoever has worked least that week, rather than to someone
-  already on duty Monday to Friday (Sunday follows Saturday, so one person covers both);
+* **no weekend working unless it has been approved** - see Overtime below;
 * load shared — least-loaded eligible people first, SQEP before trainees
   (trainees shown with a `*`).
 
@@ -36,6 +34,36 @@ top and they get first pick of scarce staff.
 To apply the plan without macros: copy the Auto Plan copy-box and Paste Special ▸
 Values into the first duty cell of the week. With the macros installed, the
 Dashboard button does it in one click.
+
+## Weekend overtime
+
+Weekend working is optional and is never planned for you. Technicians put
+themselves forward, the team leader approves, and that approval is recorded here
+by typing **OT** against the person in the Saturday or Sunday cell of the week's
+availability grid.
+
+* Only people with OT marked for that day can be rostered that day - anyone else
+  entered in a weekend slot is flagged amber as an unrecorded approval.
+* Overtime can only pick up **flexible work**: work that is not tied to a
+  specific day. Surveys, Greenstream, Radwaste and Instruments are marked
+  flexible out of the box; tick the `Flexible / overtime` column on Setup for any
+  others. Weekday-only duties are greyed out at the weekend.
+* Saturday and Sunday are **never counted as gaps**, because nothing is required
+  at the weekend.
+* Approved overtime is totalled on the Dashboard, tracked per person per week on
+  the **Year View**, and offset against the open work on the **Work Pack** sheet.
+
+## Work Pack (extra WOCs)
+
+The **Work Pack** sheet is where the additional work in each week's pack is
+logged - one row per WOC, tagged with the year and week it belongs to, its work
+type, how many days it needs, who picked it up and whether it is done. The top of
+the sheet totals, for the planning week, the days of work outstanding against the
+overtime days approved, so you can see at a glance whether the weekend covers it.
+
+`Radwaste` has been added as a duty because it is work you do that the original
+planner had no row for. Nobody is ticked as qualified for it yet and its weekday
+minimum is 0, so it creates no false gaps - fill in the SQEP column on Setup.
 
 ## Optional buttons (macros)
 
