@@ -955,8 +955,8 @@ class Builder:
         ws.merge_cells("L1:R1")
         # nav row 3
         links = [("C3", "Setup", "#'Setup'!A1"), ("D3", "2027", "#'2027'!A1"), ("E3", "2028", "#'2028'!A1"),
-                 ("F3", "2029", "#'2029'!A1"), ("G3", "2030", "#'2030'!A1"), ("H3", "My Rota", "#'My Rota'!A1"),
-                 ("I3", "Year view", "#'Year View'!A1"), ("L3", "Guide", "#'Guide'!A1")]
+                 ("F3", "2029", "#'2029'!A1"), ("G3", "2030", "#'2030'!A1"), ("H3", "Print Week", "#'Print Week'!A1"), ("I3", "My Rota", "#'My Rota'!A1"),
+                 ("L3", "Year view", "#'Year View'!A1"), ("M3", "Guide", "#'Guide'!A1")]
         put(ws, "B3", "Go to:", f=font(9, True, "D9E1F2"), al=Alignment(horizontal="right", vertical="center"))
         for ref, t, target in links:
             self.nav_link(ws, ref, t, target, color=WHITE, size=10)
@@ -1208,7 +1208,7 @@ class Builder:
         ws = self.wb.create_sheet("Year View")
         ws.sheet_properties.tabColor = "548235"
         self.header_bar(ws, "YEAR VIEW  ·  planning progress, leave and training at a glance",
-                        "Top: weekday gaps per duty per week - click a week number to open it. Below: absence and training days per person.", 62)
+                        "Top: weekday gaps per duty per week - click a week number to open it. Below: absence, training and workload per person.", 62)
         self.nav_link(ws, "BH1", "◀ Dashboard", "#'Dashboard'!A1")
         INPUT = "FFFBE6"
         put(ws, "B4", "Year", f=font(10), al=LEFT)
@@ -1272,7 +1272,7 @@ class Builder:
             formula=[f"AND($C$4=Engine!$B${EN_CTRL['year']},COLUMN()-2=Engine!$B${EN_CTRL['week']})"], fill=cffill(GOLD), font=Font(color=NAVY, bold=True)))
 
         # ---- absence / training grids ----
-        def grid(top, title, crit_expr, note):
+        def grid(top, title, crit_expr, note, cell_builder=None, totals_label="Team total"):
             put(ws, f"B{top}", title, f=font(11, True, NAVY))
             put(ws, f"P{top}", note, f=font(8, False, MUTED, True))
             week_header(top + 1, False)
@@ -1285,14 +1285,17 @@ class Builder:
                 put(ws, f"B{r}", f'=IF(Setup!$B${sr}="","",Setup!$B${sr})', f=font(9, True, INK), al=LEFT, border=BORDER_H)
                 for w in range(1, 54):
                     row = T0 + BLOCK * (w - 1) + STAFF1 + k - 1
-                    parts = ",".join(f"SUMPRODUCT(COUNTIF({q(str(y))}!$C${row}:$Z${row},{crit_expr}))" for y in YEARS)
+                    if cell_builder is None:
+                        parts = ",".join(f"SUMPRODUCT(COUNTIF({q(str(y))}!$C${row}:$Z${row},{crit_expr}))" for y in YEARS)
+                    else:
+                        parts = ",".join(cell_builder(str(y), row) for y in YEARS)
                     put(ws, f"{L(2 + w)}{r}", f'=IF($B{r}="","",CHOOSE({yidx},{parts}))', f=font(8), al=CENTER, border=BORDER_H, nf='0;-0;""')
                 put(ws, f"{L(57)}{r}", f'=IF($B{r}="","",SUM({first}{r}:{last}{r}))', f=font(9, True, NAVY), al=CENTER, border=BORDER_H)
                 put(ws, f"{L(58)}{r}", f'=IF($B{r}="","",COUNTIF({first}{r}:{last}{r},">0"))', f=font(9), al=CENTER, border=BORDER_H)
                 put(ws, f"{L(59)}{r}", f'=IF(OR($B{r}="",N({L(57)}{r})=0),"",MATCH(MAX({first}{r}:{last}{r}),{first}{r}:{last}{r},0))', f=font(9), al=CENTER, border=BORDER_H)
                 ws.row_dimensions[r].height = 15
             tr = top + 2 + NSTAFF
-            put(ws, f"B{tr}", "Team total", f=font(9, True, NAVY), bg=PANEL2, al=LEFT, border=BORDER_H)
+            put(ws, f"B{tr}", totals_label, f=font(9, True, NAVY), bg=PANEL2, al=LEFT, border=BORDER_H)
             for w in range(1, 54):
                 c = L(2 + w)
                 put(ws, f"{c}{tr}", f"=SUM({c}{top + 2}:{c}{tr - 1})", f=font(8, True, NAVY), bg=PANEL2, al=CENTER, nf='0;-0;""')
@@ -1309,6 +1312,12 @@ class Builder:
         top_t = t1 + 4
         g2, t2 = grid(top_t, "TRAINING DAYS  (T code)", "Setup!$B$35", "cell = number of days that week; blank = none")
         ws.conditional_formatting.add(g2, ColorScaleRule(start_type="num", start_value=0, start_color="FFFFFF", mid_type="num", mid_value=3, mid_color="DDEBF7", end_type="num", end_value=7, end_color="2F5597"))
+        top_w = t2 + 4
+        g3, t3 = grid(top_w, "WORKLOAD  (days rostered per person per week)", None,
+                      "use it to keep the rota fair - dark = busy weeks; 'Total days' compares people over the year",
+                      cell_builder=lambda sheet, row: f"N(INDEX({q(sheet)}!$AB:$AB,{row}))", totals_label="Team days")
+        ws.conditional_formatting.add(g3, ColorScaleRule(start_type="num", start_value=0, start_color="FFFFFF", mid_type="num", mid_value=3, mid_color="C6E0B4", end_type="num", end_value=7, end_color="548235"))
+        ws.conditional_formatting.add(f"{L(57)}{top_w + 2}:{L(57)}{t3 - 1}", ColorScaleRule(start_type="min", start_color="FFFFFF", end_type="max", end_color="9BC2E6"))
         ws.freeze_panes = "C8"
         ws.page_setup.orientation = "landscape"
         ws.page_setup.fitToWidth = 1
@@ -1317,6 +1326,70 @@ class Builder:
         ws.protection.sheet = True
         ws.protection.formatColumns = False
         ws.protection.formatRows = False
+        return ws
+
+    # ---- Print Week --------------------------------------------------------
+    def build_print_week(self):
+        ws = self.wb.create_sheet("Print Week")
+        ws.sheet_properties.tabColor = "5B6B8C"
+        ws.sheet_view.showGridLines = False
+        C = EN_CTRL
+        E = lambda key: f"Engine!$B${C[key]}"
+        for c, w in zip("ABCDEFGHIJ", (2, 22, 15, 15, 15, 15, 15, 12, 12, 2)):
+            ws.column_dimensions[c].width = w
+        put(ws, "B1", '="ESG TEAM ROSTER  -  WEEK "&' + E("week") + '&"   ·   "&TEXT(' + E("start") + ',"ddd d mmm")&" – "&TEXT(' + E("start") + '+6,"ddd d mmm yyyy")',
+            f=font(16, True, NAVY), al=Alignment(vertical="center"))
+        ws.merge_cells("B1:I1")
+        ws.row_dimensions[1].height = 30
+        put(ws, "B2", '="Printed "&TEXT(TODAY(),"d mmm yyyy")&"   ·   this page mirrors the planning week chosen on the Dashboard   ·   * = trainee"',
+            f=font(9, False, MUTED, True))
+        self.nav_link(ws, "I2", "◀ Dashboard", "#'Dashboard'!A1", color=ACCENT)
+        put(ws, "B4", "Duty", f=font(11, True, WHITE), bg=NAVY, al=LEFT, border=BORDER)
+        for d in range(1, 8):
+            put(ws, f"{L(2 + d)}4", f"={E('start')}+{d - 1}", f=font(11, True, WHITE), bg=(NAVY if d <= 5 else "5B6B8C"), al=CENTER, nf="ddd d mmm", border=BORDER)
+        ws.row_dimensions[4].height = 24
+        for j in range(1, NDUTY + 1):
+            r = 4 + j
+            rr = EN_ROSTER_R0 + j - 1
+            zebra = PANEL if j % 2 == 0 else WHITE
+            put(ws, f"B{r}", f"=Engine!$B${rr}", f=font(11, True, NAVY), bg=zebra, al=LEFT, border=BORDER)
+            for d in range(1, 8):
+                cells = [f"Engine!${L(c)}${rr}" for c in SLOT_COLS[d]]
+                joined = "&\" \"&".join(cells)
+                put(ws, f"{L(2 + d)}{r}", f'=IF($B{r}="","",SUBSTITUTE(TRIM(SUBSTITUTE({joined}," *","*"))," ",", "))',
+                    f=font(11, True, INK), bg=zebra, al=Alignment(horizontal="center", vertical="center", wrap_text=True), border=BORDER)
+            ws.row_dimensions[r].height = 24
+        covrow = f"({EN_COV_R0}+(COLUMN()-3)*{NDUTY}+ROW()-5)"
+        ws.conditional_formatting.add("B5:I22", FormulaRule(formula=['$B5=""'], fill=cffill(WHITE), font=Font(color=WHITE), border=Border(), stopIfTrue=True))
+        ws.conditional_formatting.add("C5:I22", FormulaRule(formula=[f"N(INDEX(Engine!$G:$G,{covrow}))>0"], fill=cffill(GAP_FILL), font=Font(color=GAP_INK, bold=True)))
+        ws.conditional_formatting.add("C5:I22", FormulaRule(formula=[f"AND(COLUMN()>=8,N(INDEX(Engine!$E:$E,{covrow}))=0)"], fill=cffill(NA_FILL)))
+        # away list
+        put(ws, "B25", "AWAY THIS WEEK", f=font(12, True, NAVY))
+        put(ws, "B26", "Person", f=font(10, True, WHITE), bg=NAVY, al=LEFT, border=BORDER)
+        for d in range(1, 8):
+            put(ws, f"{L(2 + d)}26", DAY_NAMES[d - 1], f=font(10, True, WHITE), bg=(NAVY if d <= 5 else "5B6B8C"), al=CENTER, border=BORDER)
+        for k in range(1, NSTAFF + 1):
+            r = 26 + k
+            tr = EN_TEAM_R0 + k - 1
+            zebra = PANEL if k % 2 == 0 else WHITE
+            put(ws, f"B{r}", f'=IF(Engine!$B${tr}="","",Engine!$B${tr})', f=font(10, True, INK), bg=zebra, al=LEFT, border=BORDER)
+            for d in range(1, 8):
+                put(ws, f"{L(2 + d)}{r}", f"=Engine!${L(3 + d)}${tr}", f=font(10, True), bg=zebra, al=CENTER, border=BORDER)
+            ws.row_dimensions[r].height = 16
+        ws.conditional_formatting.add("B27:I50", FormulaRule(formula=['$B27=""'], fill=cffill(WHITE), font=Font(color=WHITE), border=Border(), stopIfTrue=True))
+        for s in range(1, NSTATUS + 1):
+            code, desc, un, fl, ink = STATUS_DEFAULTS[s - 1]
+            sc = f"Setup!$B${SU_STATUS_R0 + s - 1}"
+            ws.conditional_formatting.add("C27:I50", FormulaRule(formula=[f'AND({sc}<>"",C27={sc})'], fill=cffill(fl), font=Font(color=ink, bold=True)))
+        put(ws, "B52", '=IF(COUNTIF(Setup!$B$33:$B$40,"?*")=0,"","Codes: "&IF(Setup!$B$33="","",Setup!$B$33&" = "&Setup!$C$33)&IF(Setup!$B$34="","","   ·   "&Setup!$B$34&" = "&Setup!$C$34)&IF(Setup!$B$35="","","   ·   "&Setup!$B$35&" = "&Setup!$C$35)&IF(Setup!$B$36="","","   ·   "&Setup!$B$36&" = "&Setup!$C$36)&IF(Setup!$B$37="","","   ·   "&Setup!$B$37&" = "&Setup!$C$37)&IF(Setup!$B$38="","","   ·   "&Setup!$B$38&" = "&Setup!$C$38))',
+            f=font(8, False, MUTED, True))
+        ws.print_area = "B1:I52"
+        ws.page_setup.orientation = "landscape"
+        ws.page_setup.fitToWidth = 1
+        ws.page_setup.fitToHeight = 1
+        ws.sheet_properties.pageSetUpPr.fitToPage = True
+        ws.page_margins.left = ws.page_margins.right = 0.4
+        ws.protection.sheet = True
         return ws
 
     # ---- Guide -------------------------------------------------------------
@@ -1333,8 +1406,9 @@ class Builder:
                 "Dashboard - pick the planning week; see coverage, gaps with suggested cover, who is around, and jump anywhere.",
                 "2027 / 2028 / 2029 / 2030 - one block per ISO week. Top half: duties x days, three slots per weekday, one at the weekend. Bottom half: team availability.",
                 "Setup - the team, the duties, the competency (SQEP) matrix, status codes and the planning years. Change things here and everything follows.",
+                "Print Week - the planning week as a clean one-page roster for the noticeboard, with who is away underneath.",
                 "My Rota - six weeks for one person, ready to print or send. Also shows how the year's duty days are shared.",
-                "Year View - the whole year on one screen: weekday gaps per duty per week (click a week to open it), then absence and training days per person.",
+                "Year View - the whole year on one screen: weekday gaps per duty per week (click a week to open it), then absence, training and workload per person.",
                 "Engine (hidden) - the calculations behind the dropdowns and the Dashboard. Nothing to edit. Unhide it if you are curious.",
             ]),
             ("PLANNING A WEEK IN FIVE STEPS", [
@@ -1426,9 +1500,10 @@ class Builder:
         self.build_dashboard()
         self.build_my_rota()
         self.build_leave()
+        self.build_print_week()
         self.build_guide()
         self.add_names()
-        order = ["Dashboard", "2027", "2028", "2029", "2030", "My Rota", "Year View", "Setup", "Guide", "Engine"]
+        order = ["Dashboard", "2027", "2028", "2029", "2030", "Print Week", "My Rota", "Year View", "Setup", "Guide", "Engine"]
         self.wb._sheets = [self.wb[n] for n in order]
         self.wb.active = 0
         self.wb.properties.title = "ESG Team Planner 2027-2030"
