@@ -68,12 +68,72 @@ Private Function IsPastDay(ys As Worksheet, ByVal base As Long, ByVal d As Long)
     If IsDate(v) Then IsPastDay = (CDate(v) < Date)
 End Function
 
+Private Function SheetExists(ByVal nm As String) As Boolean
+    Dim sh As Object
+    On Error Resume Next
+    Set sh = ThisWorkbook.Worksheets(nm)
+    SheetExists = Not sh Is Nothing
+    On Error GoTo 0
+End Function
+
+' Checks the sheets these macros depend on. Returns "" when all is well,
+' otherwise a message naming what is missing.
+Private Function CheckWorkbook() As String
+    Dim nm As Variant
+    For Each nm In Array("Engine", "Dashboard", "Setup")
+        If Not SheetExists(CStr(nm)) Then
+            CheckWorkbook = "This does not look like the team planner: the '" & nm & _
+                            "' sheet is missing." & vbCrLf & _
+                            "Open the planner workbook and run the macro from there."
+            Exit Function
+        End If
+    Next nm
+End Function
+
 Private Function EngineSheet() As Worksheet
     Set EngineSheet = ThisWorkbook.Worksheets("Engine")
 End Function
 
 Private Function YearSheetFor(ByVal yr As Long) As Worksheet
+    On Error Resume Next
     Set YearSheetFor = ThisWorkbook.Worksheets(CStr(yr))
+    On Error GoTo 0
+End Function
+
+' The planning year from the Dashboard, or 0 if it is not a usable year.
+Private Function PlanningYear() As Long
+    Dim v As Variant
+    v = ThisWorkbook.Worksheets("Dashboard").Range("D6").Value
+    If IsNumeric(v) Then
+        If CLng(v) >= 1900 And CLng(v) <= 2999 Then PlanningYear = CLng(v)
+    End If
+End Function
+
+' Are the sheets these macros need present? Tells the user if not.
+Private Function CheckSheets() As Boolean
+    Dim msg As String
+    msg = CheckWorkbook()
+    If Len(msg) > 0 Then
+        MsgBox msg, vbExclamation, "Team planner"
+        Exit Function
+    End If
+    CheckSheets = True
+End Function
+
+' Resolves the sheet for a year. Tells the user if there is not one.
+Private Function YearSheet(ByVal yr As Long, ByRef ys As Worksheet) As Boolean
+    If yr = 0 Then
+        MsgBox "Pick a year on the Dashboard first (the Year box, 2027 to 2030).", _
+               vbExclamation, "Team planner"
+        Exit Function
+    End If
+    Set ys = YearSheetFor(yr)
+    If ys Is Nothing Then
+        MsgBox "There is no sheet for " & yr & " in this workbook." & vbCrLf & _
+               "Pick one of the years listed on the Dashboard.", vbExclamation, "Team planner"
+        Exit Function
+    End If
+    YearSheet = True
 End Function
 
 ' How many ISO weeks the given year has (52 or 53), read from Setup.
@@ -144,9 +204,11 @@ Public Sub AutoFillYear()
     Dim oldWeek As Variant, oldFollow As Variant, oldCalc As XlCalculation
     Dim errNum As Long, errMsg As String
 
+    If Not CheckSheets() Then Exit Sub
+    yr = PlanningYear()
+    If Not YearSheet(yr, ys) Then Exit Sub
     Set db = ThisWorkbook.Worksheets("Dashboard")
     Set eng = EngineSheet()
-    yr = CLng(db.Range("D6").Value)
     nWeeks = WeeksInYear(yr)
 
     ans = MsgBox("Build the whole " & yr & " plan from the rules?" & vbCrLf & vbCrLf & _
@@ -162,7 +224,6 @@ Public Sub AutoFillYear()
     overwrite = (ans = vbYes)
 
     On Error GoTo CleanUp
-    Set ys = YearSheetFor(yr)
     oldWeek = db.Range("D7").Value
     oldFollow = db.Range("D8").Value
     oldCalc = Application.Calculation
@@ -220,11 +281,12 @@ End Sub
 Public Sub AutoFillWeek()
     Dim eng As Worksheet, ys As Worksheet
     Dim base As Long, wk As Long, yr As Long, n As Long, d As Long, past As Long
+    If Not CheckSheets() Then Exit Sub
     Set eng = EngineSheet()
+    yr = CLng(eng.Cells(EN_YEAR, 2).Value)      ' active year, honours "follow today"
+    If Not YearSheet(yr, ys) Then Exit Sub
     wk = CLng(eng.Cells(EN_WEEK, 2).Value)
-    yr = CLng(eng.Cells(EN_YEAR, 2).Value)
     base = CLng(eng.Cells(EN_BASE, 2).Value)
-    Set ys = YearSheetFor(yr)
     If MsgBox("Auto-fill week " & wk & " of " & yr & " from the rules?" & vbCrLf & _
               "Existing duty entries in this week will be replaced." & vbCrLf & _
               "Days before today, leave and notes are left alone.", _
@@ -255,11 +317,12 @@ Public Sub ClearWeek()
     Dim eng As Worksheet, ys As Worksheet
     Dim base As Long, wk As Long, yr As Long
     Dim d As Long, j As Long, sl As Long, c As Long, past As Long
+    If Not CheckSheets() Then Exit Sub
     Set eng = EngineSheet()
+    yr = CLng(eng.Cells(EN_YEAR, 2).Value)      ' active year, honours "follow today"
+    If Not YearSheet(yr, ys) Then Exit Sub
     wk = CLng(eng.Cells(EN_WEEK, 2).Value)
-    yr = CLng(eng.Cells(EN_YEAR, 2).Value)
     base = CLng(eng.Cells(EN_BASE, 2).Value)
-    Set ys = YearSheetFor(yr)
     If MsgBox("Clear the duty entries in week " & wk & " of " & yr & "?" & vbCrLf & _
               "Days before today, leave and notes are left alone.", _
               vbYesNo + vbExclamation, "Clear week") <> vbYes Then Exit Sub
@@ -297,11 +360,12 @@ Public Sub CopyPreviousWeek()
     Dim eng As Worksheet, ys As Worksheet
     Dim base As Long, wk As Long, yr As Long
     Dim d As Long, j As Long, sl As Long, c As Long, past As Long
+    If Not CheckSheets() Then Exit Sub
     Set eng = EngineSheet()
+    yr = CLng(eng.Cells(EN_YEAR, 2).Value)      ' active year, honours "follow today"
+    If Not YearSheet(yr, ys) Then Exit Sub
     wk = CLng(eng.Cells(EN_WEEK, 2).Value)
-    yr = CLng(eng.Cells(EN_YEAR, 2).Value)
     base = CLng(eng.Cells(EN_BASE, 2).Value)
-    Set ys = YearSheetFor(yr)
     If wk <= 1 Then
         MsgBox "This is week 1 - there is no previous week.", vbInformation
         Exit Sub
