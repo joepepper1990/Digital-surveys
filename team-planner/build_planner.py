@@ -2039,8 +2039,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--source", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--blank", action="store_true",
+                    help="Build an empty planner: keep the team, duties and SQEP matrix, "
+                         "but carry over none of the old planner's leave marks, rostered "
+                         "names or notes.")
     a = ap.parse_args()
     src = read_source(a.source)
+    if a.blank:
+        for y in src["years"].values():
+            y["avail"], y["assigns"], y["notes"] = {}, {}, {}
     wb = Builder(src).build()
     wb.save(a.out)
     print("saved", a.out)

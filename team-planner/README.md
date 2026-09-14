@@ -5,7 +5,8 @@ A formula-driven duty roster for the ESG team, rebuilt from the original
 
 | File | What it is |
 |---|---|
-| `ESG_Team_Planner_2027-2030.xlsx` | The planner. Open it, read the **Guide** sheet, start on the **Dashboard**. |
+| `ESG_Team_Planner_2027-2030.xlsx` | The planner, carrying over the old file's leave marks and rostered names. |
+| `ESG_Team_Planner_2027-2030_BLANK.xlsx` | **The same planner with an empty four years.** Team, duties and the SQEP matrix are all there; no leave, no rostered names. Start here for a clean plan. |
 | `AutoPlanMacros.bas` | Optional macros that turn Auto Plan into real Dashboard buttons. Only for sites that allow macros. See below. |
 | `build_planner.py` | Generator. Re-running it rebuilds the workbook from the original planner. |
 
@@ -113,6 +114,10 @@ block them; the workbook is fully functional without them.
 ```bash
 pip install openpyxl
 python3 build_planner.py --source <original planner .xlsx> --out ESG_Team_Planner_2027-2030.xlsx
+
+# an empty four years - keeps the team, duties and SQEP matrix, drops all entries
+python3 build_planner.py --source <original planner .xlsx> --blank \
+        --out ESG_Team_Planner_2027-2030_BLANK.xlsx
 ```
 
 Recalculate and verify with LibreOffice (the generator writes formulas without
