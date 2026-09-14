@@ -88,8 +88,22 @@ minimum is 0, so it creates no false gaps - fill in the SQEP column on Setup.
 
 ## Optional buttons (macros)
 
-`AutoPlanMacros.bas` adds three one-click actions — **Auto-fill week**, **Clear
-week**, **Copy previous week** — that write straight into the chosen week.
+`AutoPlanMacros.bas` adds four one-click actions that write straight into the
+year sheet:
+
+| Macro | What it does |
+|---|---|
+| `AutoFillYear` | **Builds the whole year in one press** - every week of the year shown on the Dashboard, re-planning each week against that week's leave. Takes a minute or two. |
+| `AutoFillWeek` | Fills just the week chosen on the Dashboard. |
+| `ClearWeek` | Clears that week's duty entries. |
+| `CopyPreviousWeek` | Copies last week's duty entries into it. |
+
+**The past is never touched.** Every macro skips any day dated before today, so
+running `AutoFillYear` mid-year re-plans from today onwards and leaves everything
+already worked exactly as it was. `AutoFillYear` also asks whether to replace
+weeks that are already planned or to fill only the empty ones. Only duty slots
+are written - leave, training, OT approvals, notes and the Work Pack are never
+altered.
 Installation (Alt+F11 ▸ Import, then add Form-Control buttons) is documented at
 the top of the .bas file. Macros are optional and many managed/regulated sites
 block them; the workbook is fully functional without them.

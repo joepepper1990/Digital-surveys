@@ -1609,7 +1609,7 @@ class Builder:
             put(ws, f"C{6 + i}", t, f=font(9), al=Alignment(horizontal="left", vertical="center", wrap_text=True))
             ws.merge_cells(start_row=6 + i, start_column=3, end_row=6 + i, end_column=9)
             ws.row_dimensions[6 + i].height = 26
-        put(ws, "B10", "Macro edition only: the buttons on the Dashboard (Auto-fill week, Clear week) do steps 3 to 4 in one click.",
+        put(ws, "B10", "Macro edition only: the Dashboard buttons do steps 3 and 4 in one click - 'Auto-fill week' for this week, or 'Build the year' for the whole year. Neither ever changes a day that is already in the past.",
             f=font(8, False, MUTED, True))
         ws.merge_cells("B10:I10")
 
@@ -1941,7 +1941,7 @@ class Builder:
                 "Colour follows status: a rostered person's initials take the colour of their status that day (e.g. blue when they are on a course), so partial availability is visible in the roster itself.",
                 "Today's column is tinted; the current week's banner turns green; the planning week's banner turns orange. Past weeks are dimmed.",
                 "Per person, per week: days rostered and conflicts. Days rostered turns amber at 6 or more, so a six- or seven-day stretch is visible before you publish. Per day: how many active people are on site.",
-                "Everything is formula-driven: no macros to enable, works in Excel desktop, Excel Online, LibreOffice and Google Sheets.",
+                "Everything is formula-driven: no macros needed, and it works in Excel desktop, Excel Online, LibreOffice and Google Sheets. The optional macros only add one-click buttons on top.",
             ]),
             ("CHANGING THE TEAM OR THE DUTIES", [
                 "New person: add initials on Setup (next blank row), set Active = Y and tick their competencies. They appear in every week's availability grid and in dropdowns.",
@@ -1950,6 +1950,12 @@ class Builder:
                 "Rename anything on Setup and every week, dropdown and dashboard updates. Rostered initials are stored as text, so renaming initials needs a find/replace on the year sheets.",
                 "Status codes: rename, describe, and decide whether each one makes a person unavailable. Row 3 is also counted as 'training' on the Year View.",
                 "Copy a week forward: select the duty grid of a planned week (columns C to Z, the 18 duty rows), copy, and paste into the same rows of the next block. Then adjust - the checks re-run instantly.",
+            ]),
+            ("IF YOU INSTALL THE MACROS", [
+                "Build the year: one press fills every week of the year shown on the Dashboard. It works week by week, re-planning each one against that week's leave, so a year takes a minute or two.",
+                "The past is never touched. Every macro skips any day dated before today, so running Build the year in, say, July re-plans from today onwards and leaves everything already worked exactly as it was.",
+                "It asks first whether to replace weeks that are already planned, or to fill only the empty ones - so a year you have already hand-tuned is safe.",
+                "Only duty slots are written. Leave, training, OT approvals, notes and the Work Pack are never altered.",
             ]),
             ("GOOD TO KNOW", [
                 "Sheets are protected without a password so that formulas cannot be typed over by accident. Review > Unprotect Sheet lifts it in one click.",
