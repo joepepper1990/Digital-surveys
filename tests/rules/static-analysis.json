@@ -70,6 +70,18 @@
     "label": { "Height": 40 }
   },
 
+  "//modalReturnViews": "Views that are left by Set(varView, <variable>) rather than a literal, and the variable each one uses. Entering such a view without setting its return variable leaves the exit pointing nowhere. Derived from the app: every one of its 137 entry points sets the right variable, and R032 keeps it that way.",
+  "modalReturnViews": {
+    "TextEntry":          "varTextReturnView",
+    "NumericEntry":       "varNumericReturnView",
+    "Alert":              "varAlertReturnView",
+    "AlertAction":        "varAlertReturnView",
+    "InstrumentEdit":     "varInstrumentReturnView",
+    "InstrumentSelect":   "varInstrumentReturnView",
+    "InstrumentChoice":   "varMeasurementReturnView",
+    "InstrumentRequired": "varMeasurementReturnView"
+  },
+
   "//platformControls": "Controls the Power Apps runtime provides rather than the maker. They have no author-set geometry and are not app defects.",
   "platformControls": ["Host", "Test_7F478737223C4B69"],
 

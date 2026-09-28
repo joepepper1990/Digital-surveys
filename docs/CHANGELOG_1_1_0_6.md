@@ -215,3 +215,56 @@ Suite: **114 tests, all passing** (was 76). Against the delivered payload:
 cannot represent this app — `Src/scrSurveyMain.pa.yaml` is a documented stub and
 the authoritative control tree is `Controls/4.json`. Only the Experimental
 layout round-trips it, proven byte-identical before any edit was made.
+
+---
+
+## Post-release completeness audit
+
+Run after the package was built, against the same source. **No app change was
+needed** — the delivered artefact's SHA-256 is unchanged.
+
+**Navigation graph (§10, §13).** Built the full view graph from every
+`Set(varView, …)`. No dead ends and no unreachable views. Two apparent
+anomalies — `TextEntry` with no outgoing edge, `NotSurveyedOther` with no
+incoming one — are the app's return-view pattern: modal views are left with
+`Set(varView, varXReturnView)`. **All 137 entry points into a modal set the
+right return variable**, including the chained ones (picker → sign-out,
+alert → alert action). Now guarded by `R032`.
+
+**State leakage (§17).** The new-survey and discard paths both delegate to
+`Select(ctlNewSurveyRoutine)`, a hidden 1×1 control used as a subroutine. It
+resets **28 of 28** transient variables and clears **7 of 7** live collections.
+The eighth, `colInstrumentDraft`, is not cleared and does not need to be: it
+appears exactly once in the app, in `OnVisible`, where it is created and
+immediately cleared, and is never read or written anywhere else. It is a
+vestigial schema declaration — which also rules it out as the cause of the
+blank sign-out screen, one of the hypotheses in the brief. That whole reset
+hangs on one `Select` target resolving, so `R031` now checks it.
+
+**Instrument classes (§6).** Simulated the sign-out form's conditional fields
+for all ten named classes against the real register rows. Every one is correct:
+
+| | second component | background fields |
+|---|---|---|
+| RadEye G-10 | — | gamma |
+| RDS-32 + TELE-STTC-2 | serial, cal, pre-use | gamma |
+| Electra + AP2 | serial, cal, pre-use | alpha |
+| Electra + EP15 | serial, cal, pre-use | beta/beta-gamma |
+| Electra + 44B | serial, cal, pre-use | electron capture |
+| COMO 170 | — | alpha **and** beta/gamma |
+| APTEC Floor Monitor | — | beta |
+| John Caunt NMS017NG3 | — | neutron |
+| GMI VISA | — | none; CO₂ notice instead |
+| FH40 G-L10 + FHZ 512A | serial, cal, pre-use | gamma search |
+
+**Validation copy (§15).** The sign-out form already reports per field and per
+component — "• Component 1 serial number is missing.", "• Component 2 pre-use
+check must PASS.", "• Component 1 calibration date is invalid or expired." —
+as a bulleted list of exactly what is wrong. §15's preferred phrasing would
+name the component's model as well ("Electra + EP15 — probe serial number is
+required"). That is a copy improvement, not a defect: the component's model is
+already displayed on the row the message refers to. It was **not** made here,
+because it means editing `btnDraftSave.OnSelect` and forfeiting this release's
+zero-behaviour-change guarantee for a rephrasing. Recommended for 1.1.0.7.
+
+Suite: **120 tests** (was 114).

@@ -533,6 +533,96 @@ def missing_explicit_size(source: CanvasSource, rules: dict) -> list[Finding]:
     return findings
 
 
+_SELECT_TARGET = re.compile(r"\bSelect\s*\(\s*(?P<name>[A-Za-z_]\w*)\s*[,)]")
+_SET_VIEW_LITERAL = re.compile(r'Set\(\s*varView\s*,\s*"(?P<view>[^"]*)"')
+_SET_VIEW_VAR = re.compile(r"Set\(\s*varView\s*,\s*(?P<var>[A-Za-z_]\w*)\s*\)")
+
+
+def select_targets_exist(source: CanvasSource, rules: dict) -> list[Finding]:
+    """R031 — every `Select(control)` must name a control that exists.
+
+    This app runs its whole new-survey reset through `Select(ctlNewSurveyRoutine)`
+    — a hidden 1x1 control used as a subroutine, which clears 28 variables and
+    seven collections. A rename or deletion would silently stop the reset
+    happening, and nothing else in the app would complain.
+    """
+    known = {control.name for control in source.controls}
+    findings: list[Finding] = []
+    seen: set[tuple[str, str]] = set()
+    for control in source.controls:
+        for prop, expression in control.formulas.items():
+            for match in _SELECT_TARGET.finditer(expression):
+                target = match.group("name")
+                if target in known or target in ("Parent", "Self", "ThisItem"):
+                    continue
+                if (control.name, target) in seen:
+                    continue
+                seen.add((control.name, target))
+                findings.append(
+                    Finding(
+                        rule="R031 select-target-missing",
+                        severity=Severity.ERROR,
+                        message=(
+                            f"'{control.name}.{prop}' calls Select({target}), but no control "
+                            f"named '{target}' exists. The action silently does nothing."
+                        ),
+                        location=control.location,
+                    )
+                )
+    return findings
+
+
+def modal_return_view_set(source: CanvasSource, rules: dict) -> list[Finding]:
+    """R032 — entering a modal view must set the variable that leaves it.
+
+    The modal views here return with `Set(varView, varXReturnView)` rather than
+    a literal. A handler that opens one without setting its return variable
+    leaves the exit pointing at a stale view — or, on first use, at nothing.
+    Chained entries are fine: going from one modal to another in the same chain
+    inherits the return view the chain was entered with.
+    """
+    modals: dict[str, str] = rules.get("modalReturnViews") or {}
+    if not modals:
+        return []
+    chains: dict[str, set[str]] = {}
+    for view, variable in modals.items():
+        chains.setdefault(variable, set()).add(view)
+
+    all_views = discover_views(source)
+    findings: list[Finding] = []
+    for control in source.controls:
+        handler = control.formulas.get("OnSelect")
+        if not handler:
+            continue
+        visible = control.formulas.get("Visible")
+        if (visible or "").strip().lstrip("=").strip().lower() == "false":
+            continue
+        opened = {m.group("view") for m in _SET_VIEW_LITERAL.finditer(handler)}
+        for view in sorted(opened & modals.keys()):
+            variable = modals[view]
+            if re.search(r"Set\(\s*" + re.escape(variable) + r"\s*,", handler):
+                continue
+            live = {
+                candidate for candidate in all_views
+                if not is_false(visibility(visible, _env(candidate)))
+            }
+            if not (live - chains[variable]):
+                continue                      # chained entry: inherits the return view
+            findings.append(
+                Finding(
+                    rule="R032 modal-entered-without-return-view",
+                    severity=Severity.ERROR,
+                    message=(
+                        f"'{control.name}' opens the '{view}' modal from "
+                        f"{sorted(live - chains[variable])} without setting '{variable}', "
+                        "so closing it navigates to a stale or empty view."
+                    ),
+                    location=control.location,
+                )
+            )
+    return findings
+
+
 def view_coverage(source: CanvasSource, rules: dict) -> list[Finding]:
     """R027 — per-view coverage, so a silent result is never read as verified."""
     views = discover_views(source)
@@ -575,6 +665,8 @@ ANALYSERS = (
     views_that_render_blank,
     touch_targets_in_view,
     missing_explicit_size,
+    select_targets_exist,
+    modal_return_view_set,
     view_coverage,
 )
 

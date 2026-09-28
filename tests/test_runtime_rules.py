@@ -265,3 +265,87 @@ def test_collection_with_no_record_literal_write_is_left_alone():
         "lbl": {"Text": "=First(colDraft).AnyFieldAtAll"},
     })
     assert rules_runtime.record_field_never_written(source, RULES) == []
+
+
+# --- R031 / R032: navigation integrity (1.1.0.6) ----------------------------
+# Both guard load-bearing indirection found in the real app: the whole
+# new-survey reset runs through Select(ctlNewSurveyRoutine), and every modal
+# view is left via Set(varView, <variable>) rather than a literal.
+
+from validators import rules_view  # noqa: E402
+
+
+def _app(controls):
+    """controls: {name: {prop: formula}} -> a CanvasSource with a screen."""
+    source = pa_source.CanvasSource(root=pathlib.Path("."))
+    source.controls.append(
+        pa_source.Control(name="scr", path="scr", type="screen", file="synthetic")
+    )
+    for name, formulas in controls.items():
+        source.controls.append(
+            pa_source.Control(name=name, path=f"scr/{name}", type="label",
+                              file="synthetic", formulas=dict(formulas))
+        )
+    return source
+
+
+VIEW_RULES = rules_static.load_rules()
+
+
+def test_select_of_a_missing_control_is_reported():
+    source = _app({
+        "btnDiscard": {"Visible": '=varView="Home"', "OnSelect": "=Select(ctlNewSurveyRoutine)"},
+    })
+    findings = rules_view.select_targets_exist(source, VIEW_RULES)
+    assert [f.rule.split()[0] for f in findings] == ["R031"]
+    assert "ctlNewSurveyRoutine" in findings[0].message
+
+
+def test_select_of_an_existing_control_is_not_reported():
+    source = _app({
+        "btnDiscard": {"Visible": '=varView="Home"', "OnSelect": "=Select(ctlNewSurveyRoutine)"},
+        "ctlNewSurveyRoutine": {"Visible": "=false", "OnSelect": "=Set(varSurveyID,Text(GUID()))"},
+    })
+    assert rules_view.select_targets_exist(source, VIEW_RULES) == []
+
+
+def test_modal_opened_without_its_return_view_is_reported():
+    source = _app({
+        "valDose": {"Visible": '=varView="Entry"',
+                    "OnSelect": '=Set(varNumericTarget,"Dose");Set(varView,"NumericEntry")'},
+    })
+    findings = rules_view.modal_return_view_set(source, VIEW_RULES)
+    assert [f.rule.split()[0] for f in findings] == ["R032"]
+    assert "varNumericReturnView" in findings[0].message
+
+
+def test_modal_opened_with_its_return_view_is_not_reported():
+    source = _app({
+        "valDose": {"Visible": '=varView="Entry"',
+                    "OnSelect": '=Set(varNumericReturnView,"Entry");Set(varView,"NumericEntry")'},
+    })
+    assert rules_view.modal_return_view_set(source, VIEW_RULES) == []
+
+
+def test_chained_modal_entry_inherits_the_return_view():
+    # The real shape: the picker is entered with varInstrumentReturnView set, and
+    # its 27 buttons then open the sign-out form without setting it again.
+    source = _app({
+        "btnAddInstrument": {"Visible": '=varView="Instruments"',
+                             "OnSelect": '=Set(varInstrumentReturnView,"Instruments");'
+                                         'Set(varView,"InstrumentSelect")'},
+        "btnReg01": {"Visible": '=varView="InstrumentSelect"',
+                     "OnSelect": '=Set(varDraftModelKey,"M01");Set(varView,"InstrumentEdit")'},
+    })
+    assert rules_view.modal_return_view_set(source, VIEW_RULES) == []
+
+
+def test_real_app_shape_for_both_rules_is_clean():
+    # Guards the two facts established by hand against the 1.1.0.5 source:
+    # every Select target exists, and all 137 modal entry points set a return view.
+    source = pa_source.load(
+        pathlib.Path(__file__).resolve().parents[1] / "source-working" / "canvas" / "Src")
+    if source.is_empty:
+        pytest.skip("canvas sources not unpacked")
+    assert rules_view.select_targets_exist(source, VIEW_RULES) == []
+    assert rules_view.modal_return_view_set(source, VIEW_RULES) == []
