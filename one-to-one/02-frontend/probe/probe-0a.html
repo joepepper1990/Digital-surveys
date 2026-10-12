@@ -1,0 +1,331 @@
+<!--
+  ESG Technician 1-to-1 - Stage 0A feasibility probe (Welcome by Accelerator 365 custom layout)
+
+  Purpose: prove that (1) Welcome runs this script and (2) authenticated SharePoint REST
+  reads and writes work as the signed-in user. Test list only: ZZProbe0A. No real data.
+
+  Structure follows the vendor's documented custom-layout format: a metadata template
+  and a layout template containing one style block, one section and one script.
+  If Welcome does not list or run this layout, keep the script block between the two
+  marker comments inside the script and move it into whatever wrapper Welcome accepts
+  (see README.md, "If the script doesn't run").
+
+  Delete this file from the library when Stage 0A is finished.
+-->
+<template id="metadata"
+  data-name="1-to-1 probe 0A"
+  data-description="Stage 0A feasibility probe – delete after testing"
+  data-author="ESG 1-to-1"
+  data-feature-greeting="false"
+  data-feature-time="false"
+  data-feature-weather="false"
+  data-feature-search="false">
+</template>
+
+<template id="layout">
+<style>
+  .SCOPE .zzp { font-family: Segoe UI, Arial, sans-serif; font-size: 14px; color: #222; max-width: 880px; padding: 12px; border: 1px solid #ccc; background: #fff; }
+  .SCOPE .zzp h2 { font-size: 18px; margin: 0 0 8px 0; }
+  .SCOPE .zzp table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+  .SCOPE .zzp td, .SCOPE .zzp th { border: 1px solid #ddd; padding: 4px 6px; text-align: left; vertical-align: top; }
+  .SCOPE .zzp .pass { color: #0a6b2d; font-weight: bold; }
+  .SCOPE .zzp .fail { color: #a80000; font-weight: bold; }
+  .SCOPE .zzp .info { color: #555; }
+  .SCOPE .zzp button { margin: 4px 8px 4px 0; padding: 6px 12px; }
+  .SCOPE .zzp textarea { width: 100%; height: 160px; font-family: Consolas, monospace; font-size: 12px; }
+</style>
+<section class="SCOPE" data-zzprobe-root></section>
+<script>
+/* ===== ZZPROBE-JS BEGIN ===== */
+(function () {
+  'use strict';
+
+  var VERSION = '0A-1';
+  var LIST_TITLE = 'ZZProbe0A';
+  var MANAGE_PERMISSIONS_LOW = 0x2000000;   // SharePoint ManagePermissions bit (low word)
+
+  // Run once per page load, even if Welcome executes the script twice.
+  if (window.__zzprobe0aStarted) {
+    return;
+  }
+  window.__zzprobe0aStarted = true;
+
+  var state = { siteUrl: '', email: '', name: '', isOwner: false, items: [] };
+  var results = [];
+  var ui = {};
+
+  // ---------- helpers ----------
+
+  function getSiteUrl() {
+    var ctx = window._spPageContextInfo;
+    if (ctx && ctx.webAbsoluteUrl) {
+      return ctx.webAbsoluteUrl;
+    }
+    var path = window.location.pathname;
+    var i = path.toLowerCase().indexOf('/sitepages/');
+    return window.location.origin + (i >= 0 ? path.substring(0, i) : '');
+  }
+
+  // Every piece of text reaches the page through textContent, never as HTML.
+  function el(tag, text, cls) {
+    var e = document.createElement(tag);
+    if (cls) {
+      e.className = cls;
+    }
+    if (text !== undefined && text !== null) {
+      e.textContent = String(text);
+    }
+    return e;
+  }
+
+  function classify(status) {
+    if (status >= 200 && status < 300) {
+      return 'OK';
+    }
+    if (status === 401 || status === 403) {
+      return 'DENIED';
+    }
+    if (status === 404) {
+      return 'NOT FOUND';
+    }
+    return 'ERROR';
+  }
+
+  function rows(json) {
+    if (!json) {
+      return [];
+    }
+    if (json.value) {
+      return json.value;
+    }
+    if (json.d && json.d.results) {
+      return json.d.results;
+    }
+    return [];
+  }
+
+  async function call(method, path, body, digest) {
+    var headers = { 'Accept': 'application/json;odata=nometadata' };
+    if (body !== undefined) {
+      headers['Content-Type'] = 'application/json;odata=nometadata';
+    }
+    if (digest) {
+      headers['X-RequestDigest'] = digest;
+    }
+    try {
+      var r = await fetch(state.siteUrl + path, {
+        method: method,
+        credentials: 'same-origin',
+        headers: headers,
+        body: body === undefined ? undefined : JSON.stringify(body)
+      });
+      var text = await r.text();
+      var json = null;
+      try {
+        json = text ? JSON.parse(text) : null;
+      } catch (e) {
+        json = null;
+      }
+      return { status: r.status, outcome: classify(r.status), json: json, text: text };
+    } catch (err) {
+      return { status: 0, outcome: 'ERROR', json: null, text: String(err && err.message ? err.message : err) };
+    }
+  }
+
+  function short(res) {
+    var t = (res.text || '').replace(/\s+/g, ' ');
+    return 'HTTP ' + res.status + (t ? ' – ' + t.substring(0, 160) : '');
+  }
+
+  function record(id, name, pass, outcome, detail) {
+    results.push({ id: id, name: name, pass: pass, outcome: outcome, detail: detail || '' });
+    render();
+  }
+
+  // ---------- checks ----------
+
+  async function runReads() {
+    record('A1', 'Script runs inside Welcome', true, 'OK', 'Probe version ' + VERSION);
+
+    var me = await call('GET', '/_api/web/currentuser?$select=Id,Title,Email');
+    if (me.outcome === 'OK' && me.json) {
+      state.email = me.json.Email || '';
+      state.name = me.json.Title || '';
+      record('A2', 'Authenticated read: current user', true, 'OK', (me.json.Title || '') + ' <' + state.email + '>');
+    } else {
+      record('A2', 'Authenticated read: current user', false, me.outcome, short(me));
+      return;
+    }
+
+    var perms = await call('GET', '/_api/web/effectiveBasePermissions');
+    if (perms.outcome === 'OK' && perms.json) {
+      var low = Number(perms.json.Low || 0);
+      state.isOwner = (low & MANAGE_PERMISSIONS_LOW) !== 0;
+      record('A2b', 'Role on this site (information only)', true, 'OK',
+        state.isOwner ? 'Owner (Team Leader mode)' : 'Not an owner (technician mode)');
+    } else {
+      record('A2b', 'Role on this site (information only)', false, perms.outcome, short(perms));
+    }
+
+    var list = await call('GET', "/_api/web/lists/getbytitle('" + LIST_TITLE + "')/items?$select=ID,Title&$orderby=ID&$top=5");
+    var found = rows(list.json);
+    if (state.isOwner) {
+      state.items = found;
+      record('A3', 'Read test list ' + LIST_TITLE, list.outcome === 'OK' && found.length > 0, list.outcome,
+        list.outcome === 'OK' ? found.length + ' item(s): ' + found.map(function (x) { return '#' + x.ID + ' "' + x.Title + '"'; }).join(', ')
+                              : short(list));
+    } else {
+      // A technician has no access to the test list, so seeing nothing is the correct result.
+      var noData = list.outcome === 'DENIED' || list.outcome === 'NOT FOUND' || (list.outcome === 'OK' && found.length === 0);
+      record('A3', 'Read test list ' + LIST_TITLE + ' (technician: expect no access)', noData, list.outcome,
+        noData ? 'No items visible – correct for a technician' : 'UNEXPECTED: ' + found.length + ' item(s) visible');
+    }
+
+    var ctx = await call('POST', '/_api/contextinfo');
+    var digest = ctx.json && ctx.json.FormDigestValue;
+    record('A4', 'Authenticated POST: request digest', ctx.outcome === 'OK' && !!digest, ctx.outcome,
+      digest ? 'Digest obtained' : short(ctx));
+
+    ui.writeBtn.disabled = !(state.isOwner && state.items.length > 0 && digest);
+    ui.writeBtn.title = state.isOwner ? '' : 'Write test is for the Team Leader account only';
+  }
+
+  async function runWrite() {
+    ui.writeBtn.disabled = true;
+    var item = state.items[0];
+    var stamp = 'probe write ' + new Date().toISOString().substring(0, 19).replace('T', ' ');
+
+    var ctx = await call('POST', '/_api/contextinfo');
+    var digest = ctx.json && ctx.json.FormDigestValue;
+    if (!digest) {
+      record('A5', 'Authenticated write', false, ctx.outcome, 'No digest: ' + short(ctx));
+      return;
+    }
+
+    var w = await call('POST',
+      "/_api/web/lists/getbytitle('" + LIST_TITLE + "')/items(" + Number(item.ID) + ')/validateUpdateListItem',
+      { formValues: [{ FieldName: 'Title', FieldValue: stamp }], bNewDocumentUpdate: false },
+      digest);
+    var fieldErrors = rows(w.json).filter(function (f) { return f.HasException; });
+    var wrote = w.outcome === 'OK' && fieldErrors.length === 0;
+    record('A5', 'Authenticated write: update item #' + item.ID, wrote, w.outcome,
+      wrote ? 'Title set to "' + stamp + '"'
+            : (fieldErrors.length ? fieldErrors.map(function (f) { return f.FieldName + ': ' + f.ErrorMessage; }).join('; ') : short(w)));
+    if (!wrote) {
+      return;
+    }
+
+    var back = await call('GET', "/_api/web/lists/getbytitle('" + LIST_TITLE + "')/items(" + Number(item.ID) + ')?$select=Title');
+    var persisted = back.outcome === 'OK' && back.json && back.json.Title === stamp;
+    record('A6', 'Re-read confirms the write', persisted, back.outcome,
+      persisted ? 'Title now "' + back.json.Title + '"' : short(back));
+  }
+
+  // ---------- results output ----------
+
+  function resultText() {
+    var lines = ['ESG 1-to-1 Stage 0A probe ' + VERSION + ' – ' + new Date().toISOString()];
+    results.forEach(function (r) {
+      lines.push([r.id, r.pass ? 'PASS' : 'FAIL', r.outcome, r.name, r.detail].join(' | '));
+    });
+    var text = lines.join('\n');
+    if (ui.redact && ui.redact.checked) {
+      if (state.email) {
+        text = text.split(state.email).join('<EMAIL>');
+      }
+      if (state.name) {
+        text = text.split(state.name).join('<NAME>');
+      }
+      if (state.siteUrl) {
+        text = text.split(state.siteUrl).join('<SITE>');
+      }
+      text = text.split(window.location.host).join('<TENANT-HOST>');
+    }
+    return text;
+  }
+
+  function render() {
+    if (!ui.tbody) {
+      return;
+    }
+    ui.tbody.textContent = '';
+    results.forEach(function (r) {
+      var tr = el('tr');
+      tr.appendChild(el('td', r.id));
+      tr.appendChild(el('td', r.pass ? 'PASS' : 'FAIL', r.pass ? 'pass' : 'fail'));
+      tr.appendChild(el('td', r.outcome));
+      tr.appendChild(el('td', r.name));
+      tr.appendChild(el('td', r.detail, 'info'));
+      ui.tbody.appendChild(tr);
+    });
+    ui.out.value = resultText();
+  }
+
+  function build(root) {
+    root.setAttribute('data-zzprobe-started', 'true');
+    var box = el('div', null, 'zzp');
+    box.appendChild(el('h2', 'ESG 1-to-1 – Stage 0A probe'));
+    box.appendChild(el('p', 'Test list only (' + LIST_TITLE + '). No real data is read or written.', 'info'));
+
+    var table = el('table');
+    var head = el('tr');
+    ['Check', 'Result', 'Outcome', 'What', 'Detail'].forEach(function (h) { head.appendChild(el('th', h)); });
+    table.appendChild(head);
+    ui.tbody = el('tbody');
+    table.appendChild(ui.tbody);
+    box.appendChild(table);
+
+    ui.writeBtn = el('button', 'Run write test (Team Leader only)');
+    ui.writeBtn.type = 'button';
+    ui.writeBtn.disabled = true;
+    ui.writeBtn.addEventListener('click', function () { runWrite(); });
+    box.appendChild(ui.writeBtn);
+
+    var label = el('label');
+    ui.redact = el('input');
+    ui.redact.type = 'checkbox';
+    ui.redact.checked = true;
+    ui.redact.addEventListener('change', render);
+    label.appendChild(ui.redact);
+    label.appendChild(el('span', ' Redact email and site address in the copy below'));
+    box.appendChild(label);
+
+    box.appendChild(el('p', 'Copy these results back to Claude:', 'info'));
+    ui.out = el('textarea');
+    ui.out.readOnly = true;
+    box.appendChild(ui.out);
+
+    root.appendChild(box);
+  }
+
+  function findRoot(tries) {
+    var root = document.querySelector('[data-zzprobe-root]:not([data-zzprobe-started])');
+    if (root || tries <= 0) {
+      if (!root) {
+        // Fallback: the layout's section was not found, so show a fixed panel instead.
+        root = el('div');
+        root.style.position = 'fixed';
+        root.style.top = '60px';
+        root.style.right = '20px';
+        root.style.zIndex = '10000';
+        document.body.appendChild(root);
+      }
+      start(root);
+      return;
+    }
+    window.setTimeout(function () { findRoot(tries - 1); }, 250);
+  }
+
+  function start(root) {
+    state.siteUrl = getSiteUrl();
+    build(root);
+    runReads().catch(function (err) {
+      record('ERR', 'Unexpected script error', false, 'ERROR', String(err && err.message ? err.message : err));
+    });
+  }
+
+  findRoot(20);
+})();
+/* ===== ZZPROBE-JS END ===== */
+</script>
+</template>

@@ -1,6 +1,6 @@
 # ESG Monthly Technician 1-to-1 — Implementation Plan (v3)
 
-**Status:** v3. The canvas app frontend is replaced by a custom HTML/CSS/JavaScript layout in **Welcome by Accelerator 365**. See *Changes in v3* below. The v1 → v2 changes are explained in [`PLAN_REVIEW.md`](PLAN_REVIEW.md). **Nothing has been built or deployed.**
+**Status:** v3.1. Stage 0 is now split into **0A** (Welcome feasibility, artefacts in [`02-frontend/probe/`](02-frontend/probe/README.md)) and **0B** (security, prepared only after 0A passes). There are also explicit authorisation and workflow rules (D.7). The canvas app frontend is replaced by a custom HTML/CSS/JavaScript layout in **Welcome by Accelerator 365**. See *Changes in v3* below. The v1 → v2 changes are explained in [`PLAN_REVIEW.md`](PLAN_REVIEW.md). **Nothing has been built or deployed.**
 **Scope:** 5–10 technicians, one Team Leader (TL), Environmental Safety Group, Dungeness B.
 
 **Confirmed decisions**
@@ -98,7 +98,8 @@ POWER AUTOMATE (TL connection; standard connectors)
 
 | Stage | Build | Exit criterion |
 |---|---|---|
-| **0 — Proof test (2–3 h)** | Site, lists, permission levels, the technicians group, the `OneToOne` page with Welcome, the **probe layout** (K0), and one manual permission grant to Test A | The probe runs for Test A, reads only A's item and **writes** to it, with no CSP block. Test B sees nothing. The REST calls succeed under DLP. **If this fails, stop and use a fallback from E.0.** |
+| **0A — Feasibility (about 45 min)** | Site, the test list `ZZProbe0A`, the `OneToOne` page with Welcome, the technicians group, and the 0A probe ([README](02-frontend/probe/README.md)) | The script runs. As TL, authenticated REST read, digest and write all pass. As Test A, the page and script load and the test list shows nothing. **If this fails, stop and use a fallback from E.0.** |
+| **0B — Security (only after 0A passes)** | Permission levels, two throwaway `ZZProbe` lists with item-level permissions, and a 0B probe | Every **mandatory** test passes (H): own records only, locked/protected/manager-only items not writable, no permission changes, sharing, creation or deletion, no version history, no access by guessing IDs, and attack strings displayed safely for both the TL and the technician |
 | **1 — Functional MVP** | Flow 1 (creation and links), the full frontend (all 9 questions including Q8, plus the TL views), Flows 2 and 3 | Test A drafts, submits and is locked. The TL reviews and completes, and A sees the feedback. Test B sees nothing of A's at any point. |
 | **2 — Monthly automation** | Flow 1 reminders and problem report. Schedule confirmed. | Date tests F13, F14, F19 and F20 pass |
 | **3 — Appraisal tracking** | Real expectations loaded. Rollover procedure written down. | F5–F7 pass |
@@ -329,7 +330,7 @@ Technicians now need to open one SharePoint page. That's set up without making t
 
 | Step | Setting |
 |---|---|
-| Group | **Site permissions → Advanced → Create Group** named `1-to-1 Technicians`. Owner: the Owners group. Who can view membership: **Group Members**. Who can edit membership: **Group Owner**. Allow requests to join: **No**. **Give the group no permission on the site itself** (untick everything on the create page). |
+| Group | **Site permissions → Advanced → Create Group** named `1-to-1 Technicians`. Owner: the Owners group. Who can view membership: **Group Owner**, so technicians can't list each other. Who can edit membership: **Group Owner**. Allow requests to join: **No**. **Give the group no permission on the site itself** (untick everything on the create page). |
 | Page | `SitePages/OneToOne.aspx` → **Manage access → Advanced → Stop inheriting** → grant `1-to-1 Technicians` **Read**. That's this page only. The rest of Site Pages stays Owners only. |
 | Layout library | `Welcome Web Part - Custom Layouts` → **Stop inheriting** → grant `1-to-1 Technicians` **Read**. It holds code only, never data. |
 | Welcome configuration | Any list Welcome creates for its own settings (identified in Stage 0) gets **Read** for the group, and only if the page won't render without it |
@@ -340,6 +341,33 @@ Technicians now need to open one SharePoint page. That's set up without making t
 **Third-party web part.** Turn **off** all Welcome extras: weather, search, time and greeting. Weather, for example, calls an external service. The layout's own script makes same-origin `_api` calls only (E.4, rule S5). P17 checks the network traffic.
 
 **Content Security Policy.** SharePoint Online now enforces a Content Security Policy on pages. The script must run in the way Welcome supports. It uses no inline event handlers and loads nothing from outside the tenant. If the tenant blocks it, IT must allow it (IT-12) or a fallback from E.0 is used.
+
+---
+
+### D.7 Authorisation and workflow rules (v3.1)
+
+**Rule:** no authorisation or privileged workflow decision ever uses a value a technician can edit. That covers every Monthly Reviews column (including `ReviewStatus`, `Technician`, `DueDate`, `ExpectationsJson` and Title), any owner field, and *Modified By*, which may be forgeable. These values are treated as **input to be validated**, never as facts.
+
+| Decision | Authoritative source (server-controlled, TL-only list) |
+|---|---|
+| Who a review belongs to (access, emails) | `Manager Reviews.Technician`, written by Flow 1 from the TL-only Technicians list |
+| Which item belongs to which review | `Manager Reviews.ReviewItemId`, the immutable SharePoint item ID |
+| Workflow state | `Manager Reviews.ReviewState` only |
+| Due date and lateness | `Manager Reviews.DueDate`; `SubmittedOn` is stamped by Flow 2 with server time |
+| Expectation wording | `Manager Reviews.ExpectationSnapshotJson` |
+| Audit of corrections | `Manager Reviews.CorrectionLog` plus Manager Reviews versions. Monthly Reviews version history is not relied on. |
+
+**Allowed state transitions.** Each is validated by the flow that performs it. Anything else is rejected: Flow 3 reverts it and emails the TL, and Flow 2 only re-applies Read.
+
+| From → To | Performed by | Only if |
+|---|---|---|
+| Open → Submitted | Flow 2 | The changed item is the one recorded in `ReviewItemId`, and `ReviewState` = Open |
+| Submitted → Completed | Flow 3, on the TL's command | `SubmittedOn` is set |
+| Open → Closed - Not Submitted | Flow 3, on the TL's command | `SubmittedOn` is empty **and** `DueDate` has passed |
+
+The dashboard and the TL review view take status **only** from `ReviewState`. `ReviewStatus` on Monthly Reviews is used only as a "draft started" hint, and as the technician's submit signal that Flow 2 re-validates.
+
+**Accepted low risk:** a technician can trigger Flow 2 repeatedly by editing their own draft. Each run only re-applies permissions they already hold.
 
 ---
 
@@ -897,7 +925,7 @@ Concurrency control: On, degree 1.
    2. **Condition** `Valid`, in advanced mode:
 
       ```
-      @or(and(equals(outputs('Cmd'),'Completed'), not(empty(triggerBody()?['SubmittedOn']))), and(equals(outputs('Cmd'),'Closed - Not Submitted'), empty(triggerBody()?['SubmittedOn'])))
+      @or(and(equals(outputs('Cmd'),'Completed'), not(empty(triggerBody()?['SubmittedOn']))), and(equals(outputs('Cmd'),'Closed - Not Submitted'), empty(triggerBody()?['SubmittedOn']), less(ticks(triggerBody()?['DueDate']), ticks(utcNow()))))
       ```
 
       - **False:**
@@ -1059,48 +1087,11 @@ Paste each address into your browser while signed in as the TL. The page shows X
    - **1-to-1 Read**
 3. [ ] `<Site URL>/_api/web/currentuser`. Find `<d:Email>` and copy it, **in lower case**, into **TL email**.
 
-### Part 5 — Stage 0 proof test ⏱ 1–2 h — **don't skip this**
+### Part 5 — Stage 0 ⏱ about 45 min (0A), then 0B
 
-This proves that the riskiest assumption holds in your tenant before you build anything.
-
-1. [ ] In **Technicians**, add **Test A** and **Test B** (Title = their name, Technician = their account, Active = Yes).
-2. [ ] In **Monthly Reviews**, click **+ New** and create two items by hand: Title `PROOF-A`, Technician = Test A; and Title `PROOF-B`, Technician = Test B. Note their IDs. Show the **ID** column using **Add column → Show/hide columns**.
-3. [ ] Create a test flow:
-   1. Go to **make.powerautomate.com**, then **+ Create**, then **Instant cloud flow**. Name it `Proof`. Choose **Manually trigger a flow**.
-   2. Add **Send an HTTP request to SharePoint** and set Method **POST** and Uri `_api/web/ensureuser`, with the headers and body from F.0. Use Test A's claims: `i:0#.f|membership|<testA email>`.
-   3. Add the four **SETPERM** calls for list `Monthly Reviews`, item `<PROOF-A ID>`, role = your **1-to-1 Edit** ID.
-   4. Click **Save**, then **Test**, then **Manually**, then **Run**. Every step must show a green tick.
-   - [ ] If any step reports a **DLP** or **policy** error, stop and raise it with IT (IT-2).
-4. [ ] Create the group `1-to-1 Technicians` exactly as in D.6, and add Test A and Test B to it.
-5. [ ] Create the page:
-   1. Go to **Site contents → Site Pages**, then **+ New → Site page → Blank**.
-   2. Title: `OneToOne`. Add the **Welcome** web part (search "Welcome" in the web part picker).
-   3. If Welcome asks you to create a **data source**, do it. That creates the library *Welcome Web Part - Custom Layouts*.
-   4. Click **Publish**.
-   5. In **Site contents**, note any other new list or library Welcome created, and write it in the Config sheet.
-   - If Welcome isn't in the web part picker, stop and ask IT (IT-10).
-6. [ ] Give the group access as in D.6: **Read** on the `OneToOne` page item, and **Read** on the layouts library.
-7. [ ] Install the probe (K0):
-   1. Edit the `CONFIG` line at the top of the probe file(s) with your site URL.
-   2. Upload them to *Welcome Web Part - Custom Layouts*.
-   3. Edit the page, open the Welcome web part settings, and choose the layout **1-to-1 probe**.
-   4. Turn off greeting, time, weather and search. Click **Republish**.
-8. [ ] In **Test A's** window, open `<Site URL>/SitePages/OneToOne.aspx`. **Pass** only if all of these are true:
-   - the page loads
-   - the probe shows Test A's email
-   - it lists **only** PROOF-A
-   - it shows the test text `<b>not bold</b>` **literally**
-   - **Write test** reports success, and as the TL you can see PROOF-A's Q1 field now reads "probe …"
-9. [ ] In **Test B's** window, open the page. **Pass:** the page loads and lists **nothing**.
-10. [ ] In **Test A's** window, browse to `<Site URL>/Lists/MonthlyReviews/DispForm.aspx?ID=<PROOF-B ID>`. **Pass:** access denied, or "item does not exist".
-11. [ ] In **Test A's** window, browse to `<Site URL>/_api/web/lists/getbytitle('Manager%20Reviews')/items`. **Pass:** access denied.
-12. [ ] Clean up:
-    - Delete the Proof flow, and delete PROOF-A and PROOF-B.
-    - Empty both recycle bins.
-    - **Delete the probe files** from the layouts library.
-    - **Keep** the page, the group and the library, because you need them later.
-
-**If step 8 or 9 fails, stop.** For example: the script doesn't run, the browser console (F12) shows *Refused to execute script*, the write fails, or Test A sees PROOF-B. The v3 frontend depends on all of these working. Send the result to IT (IT-10, IT-12) and decide on a fallback from E.0. **The backend you've built is kept either way.**
+- **0A (feasibility):** follow [`02-frontend/probe/README.md`](02-frontend/probe/README.md). It creates the test list `ZZProbe0A`, the `OneToOne` page with Welcome, and the `1-to-1 Technicians` group with Read on the page and layout library. It then runs the probe as the TL and as Test A.
+- **0B (security):** instructions and probe are produced **only after 0A passes**. 0B uses throwaway `ZZProbe` lists, never the production lists.
+- **If 0A fails, stop.** Use a fallback from E.0. The site and group are kept either way.
 
 ### Part 6 — Build Flow 1 ⏱ 2–3 h
 
@@ -1217,7 +1208,8 @@ Run **H** tests F1–F4, F8–F12 and F18, plus **P1, P2, P3, P5, P8 and P15**. 
 
 **How to run the P (privacy) tests**
 
-- **Release blockers:** any failure of a 🔒 test.
+- **Mandatory (release-blocking):** every F test, and every P test marked 🔒. Any failure stops progression.
+- **Informational:** tests that record a fact rather than check a requirement, such as whether *Modified By* can be forged (P9, first part). **If an informational result reveals an exploitable weakness, it blocks progression just like a mandatory failure** until it's fixed, or formally accepted by the TL and recorded in J.3.
 - **Who runs what:** run each P test **first as the TL** (it should succeed, which proves the request is valid), **then as Test A** (it must fail).
 - **API attempts:** each tester makes their own *Instant* flow named `Privacy test` with **Manually trigger a flow** and one **Send an HTTP request to SharePoint** action. Under Site Address choose **Enter custom value** and paste the site URL. Change the Method, Uri and Body for each test and run it with **Test**.
 - **What counts as denied:** status 401, 403 or 404, or a response in which each field reports an error. **Always confirm in the list that nothing changed.**
@@ -1364,7 +1356,8 @@ All of these are text, contain **no tenant names, credentials or personal data**
 
 | # | File | Purpose |
 |---|---|---|
-| K0 | `02-frontend/probe/` | Stage 0 **probe layout**: shows the user, lists the visible Monthly Reviews, does one test write, and renders an HTML test string as text. **Needed before Stage 0.** |
+| K0 | `02-frontend/probe/probe-0a.html` + `README.md` | **Produced.** Stage 0A feasibility probe and instructions |
+| K0B | `02-frontend/probe/` (0B probe) | **Deferred** until 0A passes. Security probe on throwaway `ZZProbe` lists, with mandatory and informational tests. |
 | K1 | `01-sharepoint/lists.md` + `lists.csv` | Printable column-by-column checklist for Part 3 |
 | K2 | `01-sharepoint/site-security-checklist.md` | Parts 1, 2 and 4, plus D.6, as tick-lists, with what to screenshot |
 | K3 | `02-frontend/one-to-one.html` | Welcome custom layout: metadata (extras off), page shell, CSS |
@@ -1377,7 +1370,7 @@ All of these are text, contain **no tenant names, credentials or personal data**
 | K10 | `02-frontend/mock/` + `02-frontend/tests/` | Local fake SharePoint with switchable users, plus automated tests including the attack-string test (E.9) |
 | K11 | `05-deploy/frontend-security-notes.md` | One page for IT-13: what the script does, every endpoint it calls, rules S1–S7, and the test evidence |
 
-The probe (K0) is produced and tested **before** the full frontend, so no effort is spent on K3, K4 or K10 if Welcome can't run it.
+**Order:** K0 (0A) now. K0B, K1, K2 and K8 only after 0A passes. K3–K7 and K9–K11 only after 0B passes. That way no effort is spent on later artefacts if Welcome can't run the script or the security tests fail.
 
 ---
 
@@ -1390,7 +1383,7 @@ The probe (K0) is produced and tested **before** the full frontend, so no effort
    - A custom HTML/CSS/JS frontend in the **Welcome by Accelerator 365** web part on `OneToOne.aspx` (the site home page), opened from personal links. Technicians get Read on that page only, through `1-to-1 Technicians`.
 2. **Sequence:**
    1. Confirmations
-   2. Parts 1–5: site, levels, lists, IDs, group, page, **probe test**
+   2. Parts 1–5: site, levels, lists, IDs, group, page, **Stage 0A then 0B**
    3. Part 6: Flow 1
    4. Part 7: install the frontend
    5. Part 8: Flows 2 and 3
@@ -1400,19 +1393,11 @@ The probe (K0) is produced and tested **before** the full frontend, so no effort
    9. Part 12: privacy tests (including XSS), clean-down and go-live
 3. **Effort:** about 26–35 h hands-on (see I), plus the IT and HR lead time.
 4. **Blockers:** **IT-10 (Welcome available and able to run scripts)**, IT-11, IT-12, IT-13, plus IT-1, IT-2, IT-4, IT-6 and HR-2. HR-1 is needed before retention is configured.
-5. **Next Claude Code prompt** (two steps, so the main build waits for the probe result):
+5. **Next Claude Code prompt**, after running Stage 0A in the tenant:
 
    ```
-   Produce artefacts K0, K1, K2 and K8 from one-to-one/IMPLEMENTATION_PLAN.md (v3)
-   into one-to-one/, using <PLACEHOLDER> values for tenant-specific settings.
-   Commit and push to the current branch.
-   ```
-
-   Then, once Stage 0 has passed in the tenant:
-
-   ```
-   Stage 0 probe passed (notes: <what Welcome needed, any extra list it created>).
-   Produce K3–K7 and K9–K11 from one-to-one/IMPLEMENTATION_PLAN.md (v3), keep the
-   code within rules S1–S7, make the K10 tests pass locally, and list any deviation
-   in one-to-one/CHANGES_FROM_PLAN.md. Commit and push to the current branch.
+   Stage 0A result: <PASSED or FAILED>. Redacted probe output (TL and Test A):
+   <paste>. Notes: <anything Welcome needed, any extra list it created, console errors>.
+   If passed: produce the Stage 0B probe and instructions, plus K1, K2 and K8, from
+   one-to-one/IMPLEMENTATION_PLAN.md (v3.1). Commit and push to the current branch.
    ```
