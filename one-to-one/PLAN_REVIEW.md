@@ -1,6 +1,8 @@
 # Critical review of the 1-to-1 implementation plan (v1 → v2)
 
 **Scope:** a final review of `IMPLEMENTATION_PLAN.md` v1, before any build.
+
+> **Later change (v3):** the canvas app was replaced by a custom frontend in the Welcome by Accelerator 365 web part. The security findings below all still apply. Sections 5 (licensing) and 6 (non-member access) describe the **canvas app** and are superseded by the plan's *Changes in v3*, D.6 and J (IT-10 to IT-13).
 **Outcome:** the architecture is kept, which means a private SharePoint site, one canvas app and Power Automate with standard connectors. Inside it, **six security defects are fixed** and **the build is reduced by about a quarter.** The plan has been rewritten as v2.
 
 **How this review was done.** No Microsoft 365 tenant is available to this review, so nothing here has been executed. The bypass analysis (section 4) is a line-by-line threat analysis of v1's design. Every conclusion is turned into a **concrete test that must be run in the tenant** (v2 section H, tests P1–P14). Assumptions that only the tenant can confirm go into a **1–2 hour proof test before the build** (v2 Stage 0). Nothing here should be treated as proven until those tests pass.
