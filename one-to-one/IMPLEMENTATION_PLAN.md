@@ -1,6 +1,6 @@
 # ESG Monthly Technician 1-to-1 — Implementation Plan (v3)
 
-**Status:** v3.1. Stage 0 is now split into **0A** (Welcome feasibility, artefacts in [`02-frontend/probe/`](02-frontend/probe/README.md)) and **0B** (security, prepared only after 0A passes). There are also explicit authorisation and workflow rules (D.7). The canvas app frontend is replaced by a custom HTML/CSS/JavaScript layout in **Welcome by Accelerator 365**. See *Changes in v3* below. The v1 → v2 changes are explained in [`PLAN_REVIEW.md`](PLAN_REVIEW.md). **Nothing has been built or deployed.**
+**Status:** v3.1. **Current position and next actions:** [`NEXT_STEPS.md`](NEXT_STEPS.md). Stage 0A has passed for the TL, but the technician test account sees a blank frontend, so Stage 0A isn't complete. Stage 0 is now split into **0A** (Welcome feasibility, artefacts in [`02-frontend/probe/`](02-frontend/probe/README.md)) and **0B** (security, prepared only after 0A passes). There are also explicit authorisation and workflow rules (D.7). The canvas app frontend is replaced by a custom HTML/CSS/JavaScript layout in **Welcome by Accelerator 365**. See *Changes in v3* below. The v1 → v2 changes are explained in [`PLAN_REVIEW.md`](PLAN_REVIEW.md). **Nothing has been built or deployed.**
 **Scope:** 5–10 technicians, one Team Leader (TL), Environmental Safety Group, Dungeness B.
 
 **Confirmed decisions**

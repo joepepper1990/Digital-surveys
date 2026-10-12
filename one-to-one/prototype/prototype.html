@@ -1,0 +1,720 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ESG 1-to-1 prototype</title>
+<!--
+  ESG Monthly Technician 1-to-1 - VISUAL PROTOTYPE ONLY.
+  Entirely fictional people and data. Not connected to SharePoint; nothing is saved.
+  Not production code and not for upload to Welcome. Open this file in any browser.
+
+  Written so the later production frontend can reuse the structure inside Welcome:
+  all styles are scoped under .oto, all text is set with textContent (never as HTML),
+  there are no external resources, and the code sits in one mount function.
+-->
+<style>
+  .oto {
+    --navy: #1f3a5f; --navy-2: #2d527f; --ink: #1d2733; --muted: #5b6776; --line: #d9dee5;
+    --bg: #f4f6f9; --card: #ffffff; --green: #1e7a46; --green-bg: #e7f4ec; --amber: #8a5a00;
+    --amber-bg: #fff4d6; --red: #a4262c; --red-bg: #fde7e9; --blue-bg: #e8f0fa; --focus: #2b78d0;
+    font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif; font-size: 15px;
+    line-height: 1.45; color: var(--ink); background: var(--bg); min-height: 100vh;
+  }
+  .oto * { box-sizing: border-box; }
+  .oto .proto-bar { background: #3b3b3b; color: #fff; font-size: 13px; padding: 6px 16px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
+  .oto .proto-bar .roles button { background: transparent; color: #fff; border: 1px solid #888; border-radius: 4px; padding: 3px 10px; margin-left: 6px; cursor: pointer; font-size: 13px; }
+  .oto .proto-bar .roles button[aria-pressed="true"] { background: #fff; color: #222; border-color: #fff; }
+  .oto header.app { background: var(--navy); color: #fff; padding: 14px 16px; }
+  .oto header.app h1 { margin: 0; font-size: 20px; font-weight: 600; }
+  .oto header.app p { margin: 2px 0 0; opacity: .85; font-size: 13px; }
+  .oto main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+  .oto .narrow { max-width: 860px; margin: 0 auto; }
+  .oto .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin-bottom: 14px; }
+  .oto .card h2 { font-size: 17px; margin: 0 0 4px; display: flex; gap: 10px; align-items: baseline; }
+  .oto .qnum { flex: none; display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 13px; font-weight: 600; }
+  .oto .hint { color: var(--muted); font-size: 13px; margin: 2px 0 10px; }
+  .oto .guidance { background: var(--blue-bg); border-left: 4px solid var(--navy-2); padding: 8px 12px; font-size: 13px; margin: 6px 0 10px; border-radius: 0 6px 6px 0; }
+  .oto label.field { display: block; font-weight: 600; font-size: 14px; margin: 10px 0 4px; }
+  .oto textarea, .oto select, .oto input[type="date"] { width: 100%; font: inherit; color: inherit; border: 1px solid #b9c2cd; border-radius: 6px; padding: 8px 10px; background: #fff; }
+  .oto textarea { min-height: 70px; resize: vertical; }
+  .oto textarea:disabled, .oto select:disabled { background: #f1f3f6; color: #333; border-color: var(--line); }
+  .oto :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .oto .choices { display: grid; gap: 8px; }
+  .oto .choices.inline { grid-template-columns: repeat(auto-fit, minmax(110px, max-content)); }
+  .oto .choices.scale { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .oto .choice { display: flex; flex-direction: column; gap: 2px; border: 1px solid #b9c2cd; border-radius: 6px; padding: 8px 12px; cursor: pointer; background: #fff; position: relative; }
+  .oto .choice input { position: absolute; opacity: 0; pointer-events: none; }
+  .oto .choice .choice-title { font-weight: 600; }
+  .oto .choice .choice-desc { font-size: 13px; color: var(--muted); }
+  .oto .choice:has(input:checked) { border-color: var(--navy); background: var(--blue-bg); box-shadow: inset 0 0 0 1px var(--navy); }
+  .oto .choice:has(input:focus-visible) { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .oto .choice:has(input:disabled) { cursor: default; opacity: .8; }
+  .oto .btn { font: inherit; font-weight: 600; border-radius: 6px; padding: 8px 16px; border: 1px solid var(--navy); background: #fff; color: var(--navy); cursor: pointer; }
+  .oto .btn.primary { background: var(--navy); color: #fff; }
+  .oto .btn.danger { border-color: var(--red); color: var(--red); }
+  .oto .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .oto .btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .oto .sticky { position: sticky; top: 0; z-index: 5; }
+  .oto .status-bar { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; justify-content: space-between; }
+  .oto .chip { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 12px; background: #e9ecf0; color: #333; white-space: nowrap; }
+  .oto .chip.green { background: var(--green-bg); color: var(--green); }
+  .oto .chip.amber { background: var(--amber-bg); color: var(--amber); }
+  .oto .chip.red { background: var(--red-bg); color: var(--red); }
+  .oto .chip.blue { background: var(--blue-bg); color: var(--navy); }
+  .oto .feedback { background: #f3f6f2; border-left: 4px solid var(--green); padding: 8px 12px; margin-top: 10px; border-radius: 0 6px 6px 0; font-size: 14px; white-space: pre-wrap; }
+  .oto .feedback b { display: block; font-size: 12px; color: var(--green); text-transform: uppercase; letter-spacing: .03em; }
+  .oto .missing { border-left: 4px solid var(--red); background: var(--red-bg); padding: 10px 12px; border-radius: 0 6px 6px 0; }
+  .oto .done { border-left: 4px solid var(--green); background: var(--green-bg); padding: 10px 12px; border-radius: 0 6px 6px 0; }
+  .oto .exp { border: 1px solid var(--line); border-radius: 6px; padding: 12px; margin-top: 10px; }
+  .oto .exp h3 { margin: 0; font-size: 15px; }
+  .oto .answer { white-space: pre-wrap; background: #f7f8fa; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; margin: 4px 0 8px; min-height: 38px; }
+  .oto .answer.empty { color: var(--muted); font-style: italic; }
+  .oto .banner { padding: 10px 14px; border-radius: 6px; margin-bottom: 14px; font-weight: 600; }
+  .oto .banner.amber { background: var(--amber-bg); color: var(--amber); border: 1px solid #f0d58a; }
+  .oto .banner.info { background: var(--blue-bg); color: var(--navy); border: 1px solid #c4d6ee; }
+  .oto .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .oto .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .oto .kpi .v { font-size: 26px; font-weight: 700; color: var(--navy); }
+  .oto .kpi.month .v { font-size: 18px; padding-top: 6px; }
+  .oto .kpi .l { font-size: 13px; color: var(--muted); }
+  .oto .kpi.alert .v { color: var(--amber); }
+  .oto .kpi.bad .v { color: var(--red); }
+  .oto .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
+  .oto .tabs button { font: inherit; background: none; border: none; border-bottom: 3px solid transparent; padding: 8px 12px; cursor: pointer; color: var(--muted); font-weight: 600; }
+  .oto .tabs button[aria-selected="true"] { color: var(--navy); border-bottom-color: var(--navy); }
+  .oto .filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-bottom: 10px; }
+  .oto .filters > div { min-width: 180px; }
+  .oto .filters label { font-size: 13px; font-weight: 600; display: block; margin-bottom: 2px; }
+  .oto table.grid { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .oto table.grid th { text-align: left; font-size: 13px; color: var(--muted); background: #eef1f5; padding: 8px 10px; }
+  .oto table.grid td { padding: 9px 10px; border-top: 1px solid var(--line); vertical-align: top; }
+  .oto table.grid tr.req td { background: var(--amber-bg); }
+  .oto .muted { color: var(--muted); }
+  .oto .footer-note { color: var(--muted); font-size: 13px; margin-top: 14px; }
+  .oto .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0 14px; }
+  .oto .modal-back { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: grid; place-items: center; z-index: 50; padding: 16px; }
+  .oto .modal { background: #fff; border-radius: 8px; padding: 18px; max-width: 460px; width: 100%; }
+  .oto .modal h3 { margin: 0 0 8px; }
+  .oto .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: #233; color: #fff; padding: 10px 16px; border-radius: 6px; z-index: 60; max-width: 90vw; }
+  .oto .toast.err { background: var(--red); }
+  @media (max-width: 700px) {
+    .oto main { padding: 10px; }
+    .oto table.grid thead { display: none; }
+    .oto table.grid, .oto table.grid tbody, .oto table.grid tr, .oto table.grid td { display: block; width: 100%; }
+    .oto table.grid tr { border-top: 6px solid var(--bg); }
+    .oto table.grid td { border-top: none; padding: 4px 12px; }
+    .oto table.grid td::before { content: attr(data-label); display: block; font-size: 12px; color: var(--muted); }
+    .oto .sticky { position: static; }
+  }
+</style>
+</head>
+<body style="margin:0">
+<div class="oto" id="oto-root"></div>
+<script>
+(function () {
+  'use strict';
+
+  // ---------------- fixed reference data (agreed wording) ----------------
+  var WORKLOAD = [
+    { value: 1, title: '1 – Very light', desc: 'Significantly below capacity' },
+    { value: 2, title: '2 – Light', desc: 'Some spare capacity' },
+    { value: 3, title: '3 – Manageable', desc: 'Appropriate workload' },
+    { value: 4, title: '4 – Heavy', desc: 'Busy but manageable' },
+    { value: 5, title: '5 – Excessive', desc: 'Struggling to manage' }
+  ];
+  var PROGRESS = [
+    { value: 1, title: '1 – Not started', desc: 'No progress yet' },
+    { value: 2, title: '2 – Early progress', desc: "Behind where I'd expect" },
+    { value: 3, title: '3 – On track', desc: 'Progressing as expected' },
+    { value: 4, title: '4 – Strong progress', desc: 'Ahead of expectations' },
+    { value: 5, title: '5 – Fully met', desc: 'Achieved and evidenced' }
+  ];
+  var FOLLOW = [
+    'Everything has been covered — no further discussion required at present.',
+    'Quick, informal catch-up in the field.',
+    'Arrange a dedicated 1-to-1 discussion.'
+  ];
+  var DEDICATED = FOLLOW[2];
+  var YESNO = [{ value: 'Yes', title: 'Yes' }, { value: 'No', title: 'No' }];
+  var TODAY = '2026-11-24';            // fictional "today" for the prototype
+  var ME = 'Alex Morgan';              // fictional technician shown in technician view
+
+  // ---------------- fictional data ----------------
+  var MASTER_EXPECTATIONS = [
+    { id: 11, title: 'Complete annual safety refresher training', measures: 'Course passed and certificate recorded by the end of Q4.', year: '2026/27', scope: 'Shared', tech: '', active: true },
+    { id: 12, title: 'Keep instrument checks on schedule', measures: 'All assigned weekly checks completed and recorded on time.', year: '2026/27', scope: 'Shared', tech: '', active: true },
+    { id: 13, title: 'Mentor a newer team member', measures: 'Regular buddy sessions held; mentee signs off two practical tasks.', year: '2026/27', scope: 'Individual', tech: 'Alex Morgan', active: true },
+    { id: 14, title: 'Achieve task supervisor qualification', measures: 'Assessment passed; first supervised task completed.', year: '2026/27', scope: 'Individual', tech: 'Sam Patel', active: true },
+    { id: 9, title: 'Update local work instructions', measures: 'Three instructions reviewed and reissued.', year: '2025/26', scope: 'Shared', tech: '', active: false }
+  ];
+
+  function snapshotFor(tech) {
+    return MASTER_EXPECTATIONS.filter(function (e) {
+      return e.active && (e.scope === 'Shared' || e.tech === tech);
+    }).map(function (e) {
+      return { id: e.id, title: e.title, measures: e.measures, year: e.year };
+    });
+  }
+
+  function blankAnswers(snap) {
+    return {
+      q1: '', q2: { issue: '', impact: '', tried: '', support: '' },
+      q3: null, q3c: '', q4: null, q4d: '', q5: null, q5d: '', q6: null, q6what: '', q6why: '', q7: '',
+      q8: snap.map(function (e) { return { id: e.id, rating: null, comment: '' }; }),
+      q9: null
+    };
+  }
+
+  function sampleAnswers(snap, workload, follow, variant) {
+    var a = blankAnswers(snap);
+    a.q1 = variant === 1
+      ? 'Closed out the outage survey backlog two days early.\nGood feedback from the shift team on the handover notes.'
+      : 'Completed all routine checks on time and helped cover a colleague\'s area for a week.';
+    a.q2 = variant === 1
+      ? { issue: 'Waiting on spare parts for one monitor.', impact: 'Using a loan unit, which slows checks slightly.', tried: 'Chased stores twice.', support: 'Help escalating the order.' }
+      : { issue: '', impact: '', tried: '', support: '' };
+    a.q3 = workload;
+    a.q3c = workload >= 4 ? 'Busy with outage support plus routine work.' : '';
+    a.q4 = 'No';
+    a.q5 = variant === 1 ? 'Yes' : 'No';
+    a.q5d = variant === 1 ? 'Annual leave 14–18 December. Training course on 8 January.' : '';
+    a.q6 = variant === 1 ? 'Yes' : 'No';
+    a.q6what = variant === 1 ? 'Supervisor qualification course.' : '';
+    a.q6why = variant === 1 ? 'To take on supervising tasks next year.' : '';
+    a.q7 = variant === 1 ? 'The new rota has made planning much easier – thanks.' : '';
+    a.q8 = snap.map(function (e, i) {
+      return { id: e.id, rating: [3, 4, 2][i % 3], comment: ['Booked for next month.', 'All checks done this month.', 'Two sessions so far.'][i % 3] };
+    });
+    a.q9 = follow;
+    return a;
+  }
+
+  function emptyFeedback() {
+    return { q1: '', q2: '', q3: '', q4: '', q5: '', q6: '', q7: '', q9: '', overall: '', exp: {}, followOverride: '', meeting: '', actions: '', actionsDue: '', actionsStatus: 'None' };
+  }
+
+  var nextId = 100;
+  function review(tech, month, due, state, opts) {
+    opts = opts || {};
+    var snap = snapshotFor(tech);
+    var r = {
+      id: nextId++, tech: tech, month: month, due: due, state: state,
+      draft: !!opts.draft, submittedOn: opts.submittedOn || '', late: !!opts.late,
+      snapshot: snap,
+      answers: opts.answers ? opts.answers(snap) : blankAnswers(snap),
+      fb: emptyFeedback(), released: false
+    };
+    if (opts.fb) {
+      opts.fb(r.fb, snap);
+    }
+    r.released = state === 'Completed' || state === 'Closed - Not Submitted';
+    return r;
+  }
+
+  var REVIEWS = [
+    review('Alex Morgan', '2026-11', '2026-11-30', 'Open', { draft: true, answers: function (s) {
+      var a = blankAnswers(s);
+      a.q1 = 'Finished the instrument check backlog.';
+      a.q3 = 3;
+      return a;
+    } }),
+    review('Sam Patel', '2026-11', '2026-11-30', 'Submitted', { submittedOn: '2026-11-18', answers: function (s) { return sampleAnswers(s, 4, DEDICATED, 1); } }),
+    review('Jordan Lee', '2026-11', '2026-11-30', 'Completed', { submittedOn: '2026-11-10', answers: function (s) { return sampleAnswers(s, 3, FOLLOW[1], 2); },
+      fb: function (fb) { fb.overall = 'Solid month.'; fb.actions = '• Book refresher course – Jordan – by 10/12'; fb.actionsDue = '2026-12-10'; fb.actionsStatus = 'Open'; } }),
+    review('Casey Brooks', '2026-11', '2026-11-30', 'Open', {}),
+    review('Riley Evans', '2026-11', '2026-11-30', 'Submitted', { submittedOn: '2026-11-21', answers: function (s) { return sampleAnswers(s, 2, FOLLOW[0], 2); } }),
+    review('Taylor Reed', '2026-11', '2026-11-30', 'Open', { draft: true }),
+    review('Alex Morgan', '2026-10', '2026-10-31', 'Completed', { submittedOn: '2026-10-27', answers: function (s) { return sampleAnswers(s, 3, FOLLOW[1], 1); },
+      fb: function (fb, snap) {
+        fb.q1 = 'Great work on the backlog – noticed by the shift team too.';
+        fb.q2 = 'I\'ve escalated the parts order with stores.';
+        fb.q3 = 'Agree – manageable. Tell me early if outage work builds up.';
+        fb.q4 = 'Thanks – my door is always open.';
+        fb.q5 = 'Leave noted on the planner.';
+        fb.q6 = 'Supported – let\'s book the course in the new year.';
+        fb.q7 = 'Thanks, appreciated.';
+        fb.q9 = 'Quick catch-up in the field next week.';
+        fb.overall = 'A strong month. Keep the mentoring going.';
+        snap.forEach(function (e) { fb.exp[e.id] = 'Good progress – keep it up.'; });
+        fb.actions = '• Book supervisor course – Alex – by 15/12';
+        fb.actionsDue = '2026-12-15'; fb.actionsStatus = 'Open';
+      } }),
+    review('Sam Patel', '2026-10', '2026-10-31', 'Completed', { submittedOn: '2026-10-29', answers: function (s) { return sampleAnswers(s, 4, FOLLOW[1], 2); },
+      fb: function (fb) { fb.actions = '• Arrange buddy shifts – Team Leader – by 20/11'; fb.actionsDue = '2026-11-20'; fb.actionsStatus = 'Open'; } }),
+    review('Jordan Lee', '2026-10', '2026-10-31', 'Completed', { submittedOn: '2026-10-20', answers: function (s) { return sampleAnswers(s, 3, FOLLOW[0], 2); } }),
+    review('Casey Brooks', '2026-10', '2026-10-31', 'Closed - Not Submitted', {}),
+    review('Riley Evans', '2026-10', '2026-10-31', 'Completed', { submittedOn: '2026-11-02', late: true, answers: function (s) { return sampleAnswers(s, 2, FOLLOW[0], 2); } }),
+    review('Taylor Reed', '2026-10', '2026-10-31', 'Completed', { submittedOn: '2026-10-24', answers: function (s) { return sampleAnswers(s, 5, DEDICATED, 1); } })
+  ];
+  var ACTIVE_TECHS = ['Alex Morgan', 'Sam Patel', 'Jordan Lee', 'Casey Brooks', 'Riley Evans', 'Taylor Reed'];
+
+  // ---------------- small DOM helpers (text only, never HTML) ----------------
+  var uid = 0;
+  function h(tag, attrs, children) {
+    var e = document.createElement(tag);
+    if (attrs) {
+      Object.keys(attrs).forEach(function (k) {
+        var v = attrs[k];
+        if (v === null || v === undefined || v === false) { return; }
+        if (k === 'class') { e.className = v; }
+        else if (k === 'text') { e.textContent = String(v); }
+        else if (k.indexOf('on') === 0) { e.addEventListener(k.substring(2), v); }
+        else { e.setAttribute(k, v === true ? '' : String(v)); }
+      });
+    }
+    (Array.isArray(children) ? children : [children]).forEach(function (c) {
+      if (c === null || c === undefined || c === false) { return; }
+      e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+    });
+    return e;
+  }
+  function nid(p) { uid += 1; return p + '-' + uid; }
+  function fmtDate(iso) {
+    if (!iso) { return ''; }
+    var d = new Date(iso + 'T12:00:00');
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  function fmtLongDate(iso) {
+    var d = new Date(iso + 'T12:00:00');
+    return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  }
+  function monthLabel(key) {
+    var d = new Date(key + '-01T12:00:00');
+    return d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+  }
+  function isOverdue(r) { return r.state === 'Open' && TODAY > r.due; }
+  function followOf(r) { return r.fb.followOverride || (r.state === 'Open' ? '' : r.answers.q9) || ''; }
+
+  var root, live, state = { role: 'tech', view: 'tech', reviewId: null, tab: 'reviews', month: '2026-11', tech: '' };
+
+  function toast(msg, isErr) {
+    var t = h('div', { class: 'toast' + (isErr ? ' err' : ''), role: 'status', text: msg });
+    root.appendChild(t);
+    live.textContent = msg;
+    setTimeout(function () { t.remove(); }, 3200);
+  }
+
+  function confirmBox(title, body, okText, onOk) {
+    var back = h('div', { class: 'modal-back' });
+    var ok = h('button', { class: 'btn primary', type: 'button', text: okText, onclick: function () { back.remove(); onOk(); } });
+    var cancel = h('button', { class: 'btn', type: 'button', text: 'Cancel', onclick: function () { back.remove(); } });
+    back.appendChild(h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': title }, [
+      h('h3', { text: title }), h('p', { text: body }), h('div', { class: 'btn-row' }, [ok, cancel])
+    ]));
+    root.appendChild(back);
+    ok.focus();
+  }
+
+  function chipFor(r) {
+    if (r.state === 'Completed') { return h('span', { class: 'chip green', text: 'Completed' + (r.late ? ' (late)' : '') }); }
+    if (r.state === 'Submitted') { return h('span', { class: 'chip blue', text: 'Awaiting review' + (r.late ? ' (late)' : '') }); }
+    if (r.state === 'Closed - Not Submitted') { return h('span', { class: 'chip', text: 'Closed – not submitted' }); }
+    if (isOverdue(r)) { return h('span', { class: 'chip red', text: 'Overdue – ' + (r.draft ? 'draft' : 'not started') }); }
+    return h('span', { class: 'chip', text: r.draft ? 'Draft' : 'Not started' });
+  }
+
+  // ---------------- form controls ----------------
+  function choiceGroup(label, options, value, onChange, disabled, cls) {
+    var name = nid('g');
+    var group = h('div', { class: 'choices ' + (cls || ''), role: 'radiogroup', 'aria-label': label });
+    options.forEach(function (o) {
+      var id = nid('c');
+      var input = h('input', { type: 'radio', name: name, id: id, value: String(o.value) });
+      input.checked = value !== null && value !== undefined && String(value) === String(o.value);
+      input.disabled = !!disabled;
+      input.addEventListener('change', function () { onChange(o.value); });
+      group.appendChild(h('label', { class: 'choice', for: id }, [
+        input, h('span', { class: 'choice-title', text: o.title }), o.desc ? h('span', { class: 'choice-desc', text: o.desc }) : null
+      ]));
+    });
+    return group;
+  }
+
+  function textBox(label, value, onInput, disabled, placeholder, rows) {
+    var id = nid('t');
+    var ta = h('textarea', { id: id, rows: rows || 3, placeholder: placeholder || null });
+    ta.value = value || '';
+    ta.disabled = !!disabled;
+    ta.addEventListener('input', function () { onInput(ta.value); });
+    return h('div', null, [label ? h('label', { class: 'field', for: id, text: label }) : null, ta]);
+  }
+
+  function feedbackBlock(r, text) {
+    if (!r.released || !text) { return null; }
+    return h('div', { class: 'feedback' }, [h('b', { text: 'Team Leader' }), text]);
+  }
+
+  function qCard(num, title, hint, children) {
+    return h('section', { class: 'card', 'aria-labelledby': 'q' + num + '-h' }, [
+      h('h2', { id: 'q' + num + '-h' }, [h('span', { class: 'qnum', text: String(num), 'aria-hidden': 'true' }), title]),
+      hint ? h('p', { class: 'hint', text: hint }) : null
+    ].concat(children));
+  }
+
+  // ---------------- technician questionnaire ----------------
+  function missingItems(a) {
+    var m = [];
+    if (!a.q1.trim()) { m.push('Q1 What has gone well'); }
+    if (!a.q3) { m.push('Q3 Workload rating'); }
+    if (!a.q4) { m.push('Q4 Yes/No'); } else if (a.q4 === 'Yes' && !a.q4d.trim()) { m.push('Q4 details'); }
+    if (!a.q5) { m.push('Q5 Yes/No'); } else if (a.q5 === 'Yes' && !a.q5d.trim()) { m.push('Q5 details'); }
+    if (!a.q6) { m.push('Q6 Yes/No'); } else if (a.q6 === 'Yes' && !a.q6what.trim()) { m.push('Q6 what you would like'); }
+    if (a.q8.some(function (x) { return !x.rating; })) { m.push('Q8 a progress rating for each expectation'); }
+    if (!a.q9) { m.push('Q9 Follow-up preference'); }
+    return m;
+  }
+
+  function clearHidden(a) {
+    if (a.q4 !== 'Yes') { a.q4d = ''; }
+    if (a.q5 !== 'Yes') { a.q5d = ''; }
+    if (a.q6 !== 'Yes') { a.q6what = ''; a.q6why = ''; }
+  }
+
+  function techView() {
+    var mine = REVIEWS.filter(function (r) { return r.tech === ME; }).sort(function (x, y) { return x.month < y.month ? 1 : -1; });
+    var r = REVIEWS.find(function (x) { return x.id === state.reviewId; }) || mine[0];
+    state.reviewId = r.id;
+    var a = r.answers;
+    var editable = r.state === 'Open';
+    var ro = !editable;
+
+    var missingBox = h('div', { 'aria-live': 'polite' });
+    function refreshMissing() {
+      missingBox.textContent = '';
+      if (!editable) { return; }
+      var m = missingItems(a);
+      if (m.length) {
+        missingBox.appendChild(h('div', { class: 'missing' }, [h('strong', { text: 'Still to complete before you can submit: ' }), m.join(' · ')]));
+      } else {
+        missingBox.appendChild(h('div', { class: 'done', text: 'Everything required is complete – you can submit when ready.' }));
+      }
+    }
+
+    function conditional(show, children) {
+      var wrap = h('div', null, children);
+      wrap.hidden = !show;
+      return wrap;
+    }
+
+    // month picker + status bar
+    var monthSel = h('select', { 'aria-label': 'Choose a month', onchange: function () { state.reviewId = Number(monthSel.value); render(); } },
+      mine.map(function (x) { var o = h('option', { value: String(x.id), text: monthLabel(x.month) }); o.selected = x.id === r.id; return o; }));
+
+    var saveBtn = h('button', { class: 'btn', type: 'button', text: 'Save draft', onclick: function () {
+      clearHidden(a); r.draft = true;
+      toast('Draft saved at ' + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + ' (prototype – nothing is stored)');
+    } });
+    var submitBtn = h('button', { class: 'btn primary', type: 'button', text: 'Submit', onclick: function () {
+      var m = missingItems(a);
+      if (m.length) { toast('Please complete: ' + m.join(', '), true); missingBox.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+      confirmBox('Submit your 1-to-1?', "You won't be able to change it afterwards. Your Team Leader will be notified.", 'Submit', function () {
+        clearHidden(a); r.state = 'Submitted'; r.submittedOn = TODAY; r.late = TODAY > r.due;
+        toast('Submitted – your Team Leader has been notified (prototype).');
+        render();
+      });
+    } });
+
+    var head = h('div', { class: 'card sticky' }, [
+      h('div', { class: 'status-bar' }, [
+        h('div', null, [
+          h('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap' }, [h('strong', { text: 'Monthly 1-to-1' }), monthSel, chipFor(r)]),
+          h('div', { class: 'hint', style: 'margin:4px 0 0', text: 'Deadline: 23:59, ' + fmtLongDate(r.due) + (isOverdue(r) ? ' – overdue, but you can still submit' : '') })
+        ]),
+        editable ? h('div', { class: 'btn-row' }, [saveBtn, submitBtn]) : h('span', { class: 'muted', text: r.state === 'Completed' ? 'Read-only – feedback released' : 'Read-only' })
+      ])
+    ]);
+
+    var intro = h('div', { class: 'banner info' }, editable
+      ? 'Save as often as you like and come back any time before the deadline. Short answers are fine. You can ask for a conversation at any time – you don\'t need to wait for this form. Submitting it doesn\'t replace any formal appraisal or meeting your role requires.'
+      : (r.released ? 'Your Team Leader\'s feedback is shown under each answer.' : 'Submitted. Your Team Leader\'s feedback will appear here once your review is completed.'));
+
+    var cards = [];
+    cards.push(qCard(1, 'What has gone well for you this month?', 'A few bullet points is fine.', [
+      textBox(null, a.q1, function (v) { a.q1 = v; refreshMissing(); }, ro, 'e.g. jobs finished, things you are proud of', 3),
+      feedbackBlock(r, r.fb.q1)
+    ]));
+    cards.push(qCard(2, 'Challenges, blockers and support needed', 'Optional – leave blank if there is nothing to raise. A sentence or two is plenty.', [
+      h('div', { class: 'two' }, [
+        textBox("What's the issue?", a.q2.issue, function (v) { a.q2.issue = v; }, ro, null, 2),
+        textBox("What's the impact?", a.q2.impact, function (v) { a.q2.impact = v; }, ro, null, 2),
+        textBox('What have you tried?', a.q2.tried, function (v) { a.q2.tried = v; }, ro, null, 2),
+        textBox('What support is needed?', a.q2.support, function (v) { a.q2.support = v; }, ro, null, 2)
+      ]),
+      feedbackBlock(r, r.fb.q2)
+    ]));
+    cards.push(qCard(3, 'How would you rate your current workload?', null, [
+      choiceGroup('Workload rating', WORKLOAD, a.q3, function (v) { a.q3 = v; refreshMissing(); }, ro, 'scale'),
+      textBox('Comments (optional)', a.q3c, function (v) { a.q3c = v; }, ro, null, 2),
+      feedbackBlock(r, r.fb.q3)
+    ]));
+
+    var q4Detail = conditional(a.q4 === 'Yes', [textBox('What would you like to raise?', a.q4d, function (v) { a.q4d = v; refreshMissing(); }, ro, 'e.g. "I\'d like a conversation about support" – no medical details needed', 3)]);
+    cards.push(qCard(4, 'Is there anything relating to your wellbeing, workplace support or reasonable adjustments you would like to raise?', null, [
+      h('div', { class: 'guidance', text: 'Please don\'t include medical diagnoses, medical history or treatment details. You can simply say you\'d like to talk, and a conversation will be arranged. Health matters, occupational health referrals and formal adjustment requests are handled confidentially through the company\'s HR and Occupational Health processes. Employee Assistance Programme: [contact details to be confirmed].' }),
+      choiceGroup('Q4 answer', YESNO, a.q4, function (v) { a.q4 = v; q4Detail.hidden = v !== 'Yes'; refreshMissing(); }, ro, 'inline'),
+      q4Detail, feedbackBlock(r, r.fb.q4)
+    ]));
+
+    var q5Detail = conditional(a.q5 === 'Yes', [textBox('Please give details', a.q5d, function (v) { a.q5d = v; refreshMissing(); }, ro, 'Dates, availability, planned leave, courses or other commitments', 3)]);
+    cards.push(qCard(5, 'Is there anything upcoming that your line manager should be aware of for planning purposes?', null, [
+      choiceGroup('Q5 answer', YESNO, a.q5, function (v) { a.q5 = v; q5Detail.hidden = v !== 'Yes'; refreshMissing(); }, ro, 'inline'),
+      q5Detail, feedbackBlock(r, r.fb.q5)
+    ]));
+
+    var q6Detail = conditional(a.q6 === 'Yes', [h('div', { class: 'two' }, [
+      textBox('What would you like?', a.q6what, function (v) { a.q6what = v; refreshMissing(); }, ro, 'Training, qualification, competency or career goal', 3),
+      textBox('Why / what would it help with?', a.q6why, function (v) { a.q6why = v; }, ro, null, 3)
+    ])]);
+    cards.push(qCard(6, 'Do you have any training, development requirements or career aspirations you would like to discuss?', null, [
+      choiceGroup('Q6 answer', YESNO, a.q6, function (v) { a.q6 = v; q6Detail.hidden = v !== 'Yes'; refreshMissing(); }, ro, 'inline'),
+      q6Detail, feedbackBlock(r, r.fb.q6)
+    ]));
+    cards.push(qCard(7, 'Do you have any feedback for your line manager?', 'Optional.', [
+      textBox(null, a.q7, function (v) { a.q7 = v; }, ro, null, 3), feedbackBlock(r, r.fb.q7)
+    ]));
+
+    var expBlocks = r.snapshot.length ? r.snapshot.map(function (e) {
+      var ans = a.q8.find(function (x) { return x.id === e.id; });
+      return h('div', { class: 'exp' }, [
+        h('h3', { text: e.title }),
+        h('p', { class: 'hint', text: e.measures + ' (' + e.year + ')' }),
+        choiceGroup('Progress: ' + e.title, PROGRESS, ans.rating, function (v) { ans.rating = v; refreshMissing(); }, ro, 'scale'),
+        textBox('Progress comments or evidence', ans.comment, function (v) { ans.comment = v; }, ro, null, 2),
+        feedbackBlock(r, r.fb.exp[e.id])
+      ]);
+    }) : [h('p', { class: 'muted', text: 'No appraisal expectations are set for you this month.' })];
+    cards.push(qCard(8, 'Appraisal expectations – how are you progressing?', 'Rate your progress against each expectation. This is about progress, not workload.', expBlocks));
+
+    cards.push(qCard(9, "How would you prefer to follow up on this month's review?", null, [
+      choiceGroup('Follow-up preference', FOLLOW.map(function (f) { return { value: f, title: f }; }), a.q9, function (v) { a.q9 = v; refreshMissing(); }, ro),
+      feedbackBlock(r, r.fb.q9)
+    ]));
+
+    if (r.released) {
+      cards.push(h('section', { class: 'card' }, [
+        h('h2', { text: 'Overall feedback and agreed actions' }),
+        h('div', { class: 'feedback' }, [h('b', { text: 'Overall' }), r.fb.overall || '—']),
+        h('div', { class: 'feedback' }, [h('b', { text: 'Follow-up' }), followOf(r) || '—']),
+        h('div', { class: 'feedback' }, [h('b', { text: 'Agreed actions' }), r.fb.actions || 'None'])
+      ]));
+    }
+
+    refreshMissing();
+    return h('div', { class: 'narrow' }, [head, intro].concat(cards, [missingBox, editable ? h('div', { class: 'btn-row', style: 'margin-top:12px' }, [
+      h('button', { class: 'btn', type: 'button', text: 'Save draft', onclick: function () { saveBtn.click(); } }),
+      h('button', { class: 'btn primary', type: 'button', text: 'Submit', onclick: function () { submitBtn.click(); } })
+    ]) : null]));
+  }
+
+  // ---------------- manager dashboard ----------------
+  function statusText(r) {
+    if (r.state === 'Open') { return (isOverdue(r) ? 'Overdue – ' : '') + (r.draft ? 'Draft' : 'Not started'); }
+    if (r.state === 'Submitted') { return 'Awaiting your review'; }
+    if (r.state === 'Completed') { return 'Completed'; }
+    return 'Closed – not submitted';
+  }
+
+  function dashboardView() {
+    var months = Array.from(new Set(REVIEWS.map(function (r) { return r.month; }))).sort().reverse();
+    var kMonth = state.month || months[0];
+    var inMonth = REVIEWS.filter(function (r) { return r.month === kMonth; });
+    var openActions = REVIEWS.filter(function (r) { return r.fb.actionsStatus === 'Open'; });
+    function count(f) { return inMonth.filter(f).length; }
+    var kpis = [
+      { l: 'Month', v: monthLabel(kMonth), cls: 'month' },
+      { l: 'Active technicians', v: ACTIVE_TECHS.length },
+      { l: 'Submitted', v: count(function (r) { return r.state === 'Submitted' || r.state === 'Completed'; }) },
+      { l: 'Awaiting your review', v: count(function (r) { return r.state === 'Submitted'; }), cls: 'alert' },
+      { l: 'Completed', v: count(function (r) { return r.state === 'Completed'; }) },
+      { l: 'Outstanding / overdue', v: count(function (r) { return r.state === 'Open'; }) + ' / ' + count(isOverdue), cls: count(isOverdue) ? 'bad' : '' },
+      { l: 'Dedicated 1-to-1 requested', v: count(function (r) { return followOf(r) === DEDICATED; }), cls: 'alert' },
+      { l: 'Open actions (overdue)', v: openActions.length + ' (' + openActions.filter(function (r) { return r.fb.actionsDue && r.fb.actionsDue < TODAY; }).length + ')' }
+    ];
+    var kpiRow = h('div', { class: 'kpis' }, kpis.map(function (k) {
+      return h('div', { class: 'kpi ' + (k.cls || '') }, [h('div', { class: 'v', text: String(k.v) }), h('div', { class: 'l', text: k.l })]);
+    }));
+
+    function tab(id, label) {
+      return h('button', { role: 'tab', type: 'button', 'aria-selected': state.tab === id ? 'true' : 'false', text: label, onclick: function () { state.tab = id; render(); } });
+    }
+    var tabs = h('div', { class: 'tabs', role: 'tablist' }, [tab('reviews', 'Monthly Reviews'), tab('expect', 'Appraisal Expectations'), tab('actions', 'Outstanding Actions')]);
+
+    var body;
+    if (state.tab === 'expect') {
+      body = h('div', null, [
+        h('p', { class: 'hint', text: 'In the real system the Team Leader creates, edits, activates and retires expectations in the SharePoint list; changes apply from the next month and never alter past reviews.' }),
+        table(['Expectation', 'Measures', 'Year', 'Applies to', 'Active'], MASTER_EXPECTATIONS.map(function (e) {
+          return { cells: [e.title, e.measures, e.year, e.scope === 'Shared' ? 'All technicians' : e.tech, e.active ? 'Yes' : 'No (retired)'] };
+        }))
+      ]);
+    } else if (state.tab === 'actions') {
+      body = table(['Technician', 'Month', 'Agreed actions', 'Due', ''], openActions.sort(function (x, y) { return x.fb.actionsDue < y.fb.actionsDue ? -1 : 1; }).map(function (r) {
+        var overdue = r.fb.actionsDue && r.fb.actionsDue < TODAY;
+        return { cells: [r.tech, monthLabel(r.month), r.fb.actions, (overdue ? 'OVERDUE – ' : '') + fmtDate(r.fb.actionsDue), openBtn(r)] };
+      }));
+    } else {
+      var monthSel = h('select', { id: 'f-month', onchange: function () { state.month = monthSel.value; render(); } },
+        [h('option', { value: '', text: 'All months' })].concat(months.map(function (m) { var o = h('option', { value: m, text: monthLabel(m) }); o.selected = m === state.month; return o; })));
+      var techSel = h('select', { id: 'f-tech', onchange: function () { state.tech = techSel.value; render(); } },
+        [h('option', { value: '', text: 'All technicians' })].concat(ACTIVE_TECHS.map(function (t) { var o = h('option', { value: t, text: t }); o.selected = t === state.tech; return o; })));
+      var rows = REVIEWS.filter(function (r) { return (!state.month || r.month === state.month) && (!state.tech || r.tech === state.tech); })
+        .sort(function (x, y) { return x.month === y.month ? (x.tech < y.tech ? -1 : 1) : (x.month < y.month ? 1 : -1); });
+      body = h('div', null, [
+        h('div', { class: 'filters' }, [
+          h('div', null, [h('label', { for: 'f-month', text: 'Month' }), monthSel]),
+          h('div', null, [h('label', { for: 'f-tech', text: 'Technician' }), techSel]),
+          h('span', { class: 'hint', text: 'Pick a technician and "All months" to see their history and workload trend.' })
+        ]),
+        table(['Technician', 'Month', 'Status', 'Submitted', 'Workload', 'Follow-up', ''], rows.map(function (r) {
+          var f = followOf(r);
+          return {
+            req: f === DEDICATED,
+            cells: [r.tech, monthLabel(r.month), statusCell(r), r.submittedOn ? fmtDate(r.submittedOn) + (r.late ? ' (late)' : '') : '—',
+              r.answers.q3 && r.state !== 'Open' ? String(r.answers.q3) + ' / 5' : '—',
+              f === DEDICATED ? h('strong', { text: '1-to-1 requested' }) : (f ? f.replace(/\.$/, '') : '—'), openBtn(r)]
+          };
+        }))
+      ]);
+    }
+
+    return h('div', null, [kpiRow, tabs, body,
+      h('p', { class: 'footer-note', text: 'A written check-in does not by itself satisfy any formal appraisal or meeting requirement.' })]);
+  }
+
+  function statusCell(r) {
+    var s = h('span', { text: statusText(r) + (r.late && r.state !== 'Open' ? ' (late)' : '') });
+    if (isOverdue(r)) { s.style.color = 'var(--red)'; s.style.fontWeight = '600'; }
+    return s;
+  }
+  function openBtn(r) {
+    return h('button', { class: 'btn', type: 'button', text: 'Open', 'aria-label': 'Open review for ' + r.tech + ', ' + monthLabel(r.month), onclick: function () {
+      state.view = 'mgr'; state.reviewId = r.id; render();
+    } });
+  }
+  function table(headers, rows) {
+    var labels = headers;
+    return h('table', { class: 'grid' }, [
+      h('thead', null, h('tr', null, headers.map(function (x) { return h('th', { scope: 'col', text: x }); }))),
+      h('tbody', null, rows.length ? rows.map(function (row) {
+        return h('tr', { class: row.req ? 'req' : null }, row.cells.map(function (c, i) {
+          return h('td', { 'data-label': labels[i] }, typeof c === 'string' ? c : c);
+        }));
+      }) : h('tr', null, h('td', { colspan: String(headers.length), class: 'muted', text: 'Nothing to show.' })))
+    ]);
+  }
+
+  // ---------------- manager review ----------------
+  function managerView() {
+    var r = REVIEWS.find(function (x) { return x.id === state.reviewId; });
+    var a = r.answers, fb = r.fb;
+    var hasAnswers = r.state !== 'Open';
+    function ans(text) { return h('div', { class: 'answer' + (text ? '' : ' empty'), text: text || (hasAnswers ? '(left blank)' : '(not submitted yet)') }); }
+    function fbBox(key, label) { return textBox(label || 'Your feedback', fb[key], function (v) { fb[key] = v; }, false, 'Not visible to the technician until you complete the review', 2); }
+    function yn(v, detail) { return (v || '(not answered)') + (v === 'Yes' && detail ? '\n' + detail : ''); }
+    var workloadLabel = WORKLOAD.find(function (w) { return w.value === a.q3; });
+
+    var sections = [
+      qCard(1, 'What has gone well', null, [ans(a.q1), fbBox('q1')]),
+      qCard(2, 'Challenges, blockers and support needed', null, [ans(hasAnswers ? ['Issue: ' + (a.q2.issue || '—'), 'Impact: ' + (a.q2.impact || '—'), 'Tried: ' + (a.q2.tried || '—'), 'Support needed: ' + (a.q2.support || '—')].join('\n') : ''), fbBox('q2')]),
+      qCard(3, 'Workload', null, [ans(hasAnswers && workloadLabel ? workloadLabel.title + ' – ' + workloadLabel.desc + (a.q3c ? '\nComment: ' + a.q3c : '') : ''), fbBox('q3')]),
+      qCard(4, 'Wellbeing and support', null, [ans(hasAnswers ? yn(a.q4, a.q4d) : ''), fbBox('q4')]),
+      qCard(5, 'Upcoming planning', null, [ans(hasAnswers ? yn(a.q5, a.q5d) : ''), fbBox('q5')]),
+      qCard(6, 'Development, training and aspirations', null, [ans(hasAnswers ? yn(a.q6, a.q6what ? 'What: ' + a.q6what + (a.q6why ? '\nWhy: ' + a.q6why : '') : '') : ''), fbBox('q6')]),
+      qCard(7, 'Feedback for line manager', null, [ans(a.q7 && hasAnswers ? a.q7 : ''), fbBox('q7', 'Your acknowledgement / response')]),
+      qCard(8, 'Appraisal expectations', 'Titles and measures come from the snapshot taken when this month\'s review was created.', r.snapshot.map(function (e) {
+        var x = a.q8.find(function (q) { return q.id === e.id; }) || {};
+        var p = PROGRESS.find(function (pp) { return pp.value === x.rating; });
+        return h('div', { class: 'exp' }, [
+          h('h3', { text: e.title }), h('p', { class: 'hint', text: e.measures + ' (' + e.year + ')' }),
+          ans(hasAnswers ? (p ? p.title + ' – ' + p.desc : 'Not rated') + (x.comment ? '\n' + x.comment : '') : ''),
+          textBox('Your feedback', fb.exp[e.id], function (v) { fb.exp[e.id] = v; }, false, null, 2)
+        ]);
+      })),
+      qCard(9, 'Follow-up', null, [ans(hasAnswers ? 'Technician preference: ' + (a.q9 || '(not answered)') : ''), fbBox('q9', 'Your comment')])
+    ];
+
+    var followSel = h('select', { id: nid('s'), onchange: function () { fb.followOverride = followSel.value; } },
+      [h('option', { value: '', text: 'Accept technician\'s preference' })].concat(FOLLOW.map(function (f) { var o = h('option', { value: f, text: f }); o.selected = fb.followOverride === f; return o; })));
+    var meeting = h('input', { type: 'date', id: nid('d'), onchange: function () { fb.meeting = meeting.value; } }); meeting.value = fb.meeting;
+    var actDue = h('input', { type: 'date', id: nid('d'), onchange: function () { fb.actionsDue = actDue.value; } }); actDue.value = fb.actionsDue;
+    var actStatus = h('select', { id: nid('s'), onchange: function () { fb.actionsStatus = actStatus.value; } },
+      ['None', 'Open', 'Done'].map(function (s) { var o = h('option', { value: s, text: s }); o.selected = fb.actionsStatus === s; return o; }));
+
+    sections.push(h('section', { class: 'card' }, [
+      h('h2', { text: 'Overall, follow-up and agreed actions' }),
+      textBox('Overall feedback', fb.overall, function (v) { fb.overall = v; }, false, null, 3),
+      h('div', { class: 'two' }, [
+        h('div', null, [h('label', { class: 'field', for: followSel.id, text: 'Follow-up decision (override if a meeting is needed)' }), followSel]),
+        h('div', null, [h('label', { class: 'field', for: meeting.id, text: '1-to-1 meeting date (optional)' }), meeting])
+      ]),
+      textBox('Agreed actions (one per line – what, who, by when)', fb.actions, function (v) { fb.actions = v; }, false, '• Book refresher course – Technician – by 15/12', 3),
+      h('div', { class: 'two' }, [
+        h('div', null, [h('label', { class: 'field', for: actDue.id, text: 'Earliest action due' }), actDue]),
+        h('div', null, [h('label', { class: 'field', for: actStatus.id, text: 'Actions status' }), actStatus])
+      ])
+    ]));
+
+    var canComplete = r.state === 'Submitted';
+    var canClose = r.state === 'Open' && TODAY > r.due;
+    var actions = h('div', { class: 'btn-row' }, [
+      h('button', { class: 'btn', type: 'button', text: 'Save feedback', onclick: function () {
+        toast(r.released ? 'Saved – already released, so the technician can see this change (prototype).' : 'Saved – not visible to the technician until you complete the review (prototype).');
+      } }),
+      h('button', { class: 'btn primary', type: 'button', text: 'Complete & release', disabled: !canComplete, title: canComplete ? null : 'Only submitted reviews can be completed', onclick: function () {
+        confirmBox('Complete this review?', 'Your feedback will be released to ' + r.tech + ' and they will be emailed.', 'Complete & release', function () {
+          r.state = 'Completed'; r.released = true; toast('Completed – feedback released (prototype).'); render();
+        });
+      } }),
+      h('button', { class: 'btn danger', type: 'button', text: 'Close – not submitted', disabled: !canClose, title: canClose ? null : 'Only possible after the deadline for a review that was not submitted', onclick: function () {
+        confirmBox('Close as not submitted?', r.tech + ' will no longer be able to submit this review.', 'Close review', function () {
+          r.state = 'Closed - Not Submitted'; r.released = true; toast('Closed (prototype).'); render();
+        });
+      } }),
+      h('button', { class: 'btn', type: 'button', text: 'Back to dashboard', onclick: function () { state.view = 'dash'; render(); } })
+    ]);
+
+    var f = followOf(r);
+    return h('div', { class: 'narrow' }, [
+      h('div', { class: 'card sticky' }, [
+        h('div', { class: 'status-bar' }, [
+          h('div', null, [h('strong', { text: r.tech + ' – ' + monthLabel(r.month) + ' ' }), chipFor(r),
+            h('div', { class: 'hint', style: 'margin:4px 0 0', text: r.submittedOn ? 'Submitted ' + fmtDate(r.submittedOn) + (r.late ? ' (late)' : '') : 'Deadline ' + fmtLongDate(r.due) })]),
+          actions
+        ])
+      ]),
+      f === DEDICATED ? h('div', { class: 'banner amber', text: 'Dedicated 1-to-1 discussion requested' }) : null,
+      r.released ? h('div', { class: 'banner info', text: 'Feedback already released – any change you save is visible to the technician straight away. Record the reason in the correction log.' }) : null
+    ].concat(sections));
+  }
+
+  // ---------------- shell ----------------
+  function render() {
+    root.textContent = '';
+    live = h('div', { class: 'sr', 'aria-live': 'polite', style: 'position:absolute;left:-9999px' });
+    function roleBtn(role, label) {
+      return h('button', { type: 'button', 'aria-pressed': state.role === role ? 'true' : 'false', text: label, onclick: function () {
+        state.role = role; state.view = role === 'tech' ? 'tech' : 'dash'; state.reviewId = null; render();
+      } });
+    }
+    root.appendChild(h('div', { class: 'proto-bar' }, [
+      h('span', { text: 'PROTOTYPE – fictional people and data. Not connected to SharePoint; nothing is saved. "Today" is ' + fmtDate(TODAY) + '.' }),
+      h('span', { class: 'roles' }, ['View as:', roleBtn('tech', 'Technician (' + ME + ')'), roleBtn('tl', 'Team Leader')])
+    ]));
+    root.appendChild(h('header', { class: 'app' }, [
+      h('h1', { text: 'ESG Technician 1-to-1' }),
+      h('p', { text: state.role === 'tech' ? 'My monthly 1-to-1' : (state.view === 'mgr' ? 'Review and feedback' : 'Team Leader dashboard') })
+    ]));
+    var main = h('main');
+    main.appendChild(state.view === 'tech' ? techView() : state.view === 'mgr' ? managerView() : dashboardView());
+    root.appendChild(main);
+    root.appendChild(live);
+    window.scrollTo(0, 0);
+  }
+
+  root = document.getElementById('oto-root');
+  render();
+})();
+</script>
+</body>
+</html>
