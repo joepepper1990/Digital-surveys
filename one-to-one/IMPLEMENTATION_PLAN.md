@@ -1,349 +1,330 @@
-# ESG Monthly Technician 1-to-1 — Implementation Plan (v1)
+# ESG Monthly Technician 1-to-1 — Implementation Plan (v2)
 
-**Status:** Plan for approval. Nothing has been built or deployed.
-**Scope:** 5–10 technicians, one Team Leader, Environmental Safety Group, Dungeness B.
-**Platform:** Microsoft 365 only. This uses SharePoint Online lists, a Power Apps canvas app and Power Automate, with standard connectors only.
+**Status:** v2. Revised after the critical review in [`PLAN_REVIEW.md`](PLAN_REVIEW.md), which explains every change from v1. **Nothing has been built or deployed.**
+**Scope:** 5–10 technicians, one Team Leader (TL), Environmental Safety Group, Dungeness B.
 
-The finished system has five lists, one app with four screens and three flows.
+**Confirmed decisions**
+
+| # | Decision |
+|---|---|
+| D1 | Flows run under the **TL's own account** |
+| D2 | **Late submissions are accepted** and flagged late, and the TL may close a review that was never submitted |
+| D3 | Retention period: **to be confirmed with HR** |
+| D4 | **No backup owner**, subject to corporate governance |
+
+The system has four lists, three flows, one app with three screens, and two custom permission levels. It uses standard connectors only.
 
 ---
 
 ## Contents
 
-- [A. Recommended architecture](#a-recommended-architecture)
-- [B. Minimum viable scope](#b-minimum-viable-scope)
-- [C. SharePoint list schemas](#c-sharepoint-list-schemas)
-- [D. Permissions](#d-permissions)
+- [A. Architecture](#a-architecture)
+- [B. Scope and stages](#b-scope-and-stages)
+- [C. SharePoint lists](#c-sharepoint-lists)
+- [D. Security model](#d-security-model)
 - [E. Power Apps specification](#e-power-apps-specification)
 - [F. Power Automate specification](#f-power-automate-specification)
-- [G. Deployment guide](#g-deployment-guide)
+- [G. Deployment guide (step by step)](#g-deployment-guide-step-by-step)
 - [H. Testing](#h-testing)
 - [I. Delivery estimate](#i-delivery-estimate)
-- [J. Risks and decisions](#j-risks-and-decisions)
-- [K. Ready-to-build artefacts](#k-ready-to-build-artefacts)
+- [J. Blockers, confirmations and residual risks](#j-blockers-confirmations-and-residual-risks)
+- [K. Artefacts to produce next](#k-artefacts-to-produce-next)
 - [Summary and next step](#summary-and-next-step)
 
 ---
 
-## A. Recommended architecture
+## A. Architecture
 
-### A.1 Decision: a standalone canvas app, embedded on a private SharePoint site
-
-| Need | SharePoint list form customised with Power Apps | **Standalone canvas app** |
-|---|---|---|
-| Personal monthly link | List item URL. It opens SharePoint's chrome, and technicians see the list around it | `apps.powerapps.com/...&reviewId=123`, which opens directly on their review |
-| Saving drafts | Possible, but the form's SubmitForm/validation model fights partial saves | `Patch` with no required fields, so drafts are trivial |
-| Expectations (1–10, repeating) | Awkward. A gallery inside a list form, bound to one list | A normal gallery |
-| Separate manager review screen and dashboard | Not supported. The form has one integration screen per list | Separate screens in one app |
-| Data from three lists in one view | Clumsy | Natural |
-| Technicians never see raw lists | Hard, because the form *is* the list | Easy |
-| Build effort | Lower at first, but rises quickly with these needs | Moderate and predictable |
-
-**Recommendation:** use **one canvas app** with four screens: technician review, technician history, manager dashboard and manager review. Embed it on the private site's home page for the Team Leader. Technicians reach it only through the emailed link.
-
-Two alternatives were rejected:
-
-- **Microsoft Forms and Lists forms.** They can't save drafts against a personal record and can't lock records.
-- **Dataverse and model-driven apps.** They need premium licensing, which isn't justified here.
-
-### A.2 How it fits together
+### A.1 Components
 
 ```
-                         PRIVATE SHAREPOINT SITE  (Owners = Team Leader only)
- ┌───────────────────────────────────────────────────────────────────────────────┐
- │  Technicians          (manager only)                                          │
- │  Appraisal Expectations (manager only)                                        │
- │  Monthly Reviews      item-level: technician EDIT while draft, READ after     │
- │  Manager Reviews      item-level: manager only until released, then tech READ │
- │  Agreed Actions       (manager only)                                          │
- │  Home page: embedded app (dashboard) + quick links                            │
- └───────────────────────────────────────────────────────────────────────────────┘
-        ▲  signed-in user's own permissions          ▲  Team Leader connection
-        │  (SharePoint connector, delegated)         │  (owner, Manage Permissions)
- ┌──────┴──────────────┐                    ┌────────┴────────────────────────────┐
- │ Canvas app          │                    │ Flow 1  Daily scheduler (07:00 UK)  │
- │  scrTechReview      │                    │   create → protect → verify → email │
- │  scrTechHistory     │                    │   overdue flags, reminders 20th/27th│
- │  scrDashboard  (TL) │                    │ Flow 2  Review submitted → lock     │
- │  scrManagerReview   │                    │ Flow 3  Manager decision → release  │
- └─────────────────────┘                    └─────────────────────────────────────┘
+PRIVATE SHAREPOINT COMMUNICATION SITE  (Owners group = Team Leader only; no Members/Visitors)
+ ├─ Technicians             manager only        roster + stable identity (Entra object ID)
+ ├─ Appraisal Expectations  manager only        master list, shared + individual
+ ├─ Monthly Reviews         per item            technician's answers. Tech: EDIT while open, READ after
+ ├─ Manager Reviews         per item            AUTHORITATIVE record + TL feedback + actions.
+ │                                              Manager only until released, then tech READ
+ └─ Home page               Power Apps web part (TL dashboard)
+
+CANVAS APP "ESG 1-to-1" (SharePoint connector, runs as the signed-in user)
+ ├─ scrTechReview     technician questionnaire, month picker for past reviews
+ ├─ scrDashboard      TL: KPIs, review table, outstanding actions
+ └─ scrManagerReview  TL: answers + feedback per section + complete / close
+
+POWER AUTOMATE (TL connection; standard connectors)
+ ├─ Flow 1  Daily 07:00 UK   create → protect → email; reminders 20th/27th; problem report
+ ├─ Flow 2  Monthly Reviews changed to non-draft  → lock (tech READ), stamp authoritative record, notify TL
+ └─ Flow 3  Manager Reviews set Completed/Closed  → lock + release feedback (tech READ), notify tech
 ```
 
-### A.3 Microsoft 365 constraints that shape the design
+### A.2 Why this shape (short version)
 
-1. **SharePoint has no column-level security.** If a technician can read a review item, they can read every column on it. Manager feedback therefore lives in a **separate list (Manager Reviews)**. That list stays manager-only until the review is completed, and only then is the technician given Read.
-2. **The canvas app is not the security boundary.** The SharePoint connector runs as the signed-in user, so whatever the app filters, a technician can still call the list through SharePoint, REST or Graph. SharePoint permissions are the only boundary, and app filtering is only a convenience.
-3. **Technicians cannot change permissions.** Locking needs *Manage Permissions*, so a flow running under the Team Leader's connection does it. The flows use **automated SharePoint triggers** and never take a technician-supplied input such as a review ID. This means a technician can't steer a privileged flow at someone else's record.
-4. **Setting permissions needs "Send an HTTP request to SharePoint".** This action is part of the standard SharePoint connector, not the premium HTTP connector. The native "Grant access" action can only grant built-in Edit/View roles, and Edit includes *delete*. The REST calls let us reset inheritance, grant a no-delete custom level and **verify the result before emailing a link**.
-5. **SharePoint limits unique permission scopes per list.** The recommended maximum is about 5,000. The design uses **two unique scopes per technician per month**, which is about 240 a year. Expectation snapshots are therefore stored as JSON inside the review item rather than as child items. A child list would mean up to 11 scopes per review and up to 10 permission operations per technician per month.
-6. **Lookup columns to lists a technician can't read are unreliable.** All relationships therefore use a **text key** (`ReviewKey`) rather than lookups.
-7. **SharePoint triggers poll every 1–5 minutes.** There is a short window between a technician pressing Submit and the flow locking the record. See J, risk R1.
-8. **SharePoint stores times in UTC.** Every date calculation in the flows converts with the time zone `GMT Standard Time`, which handles BST automatically.
-9. **A canvas app or flow can't be packaged and validated outside the corporate tenant.** The fastest reliable route is to **build manually**, using pasteable formulas and action-by-action flow definitions.
+- **Canvas app rather than a customised list form.** A canvas app gives personal links, partial (draft) saves, a repeating expectations section and separate TL screens. A list form does none of these cleanly.
+- **Two review lists because SharePoint has no column-level security.** A technician who can edit their answers can edit every column on that item. So:
+  - **Monthly Reviews** holds only what the technician may write.
+  - **Manager Reviews** holds everything they must not see early or must not be able to change. That is identity, due date, workflow state, timestamps, the expectation snapshot, and the TL's feedback and actions.
+- **Flows never trust a technician-editable field** to decide who gets access, what the state is, or whether something is late.
+- **SharePoint item permissions are the only security boundary.** App filtering is cosmetic.
+- **Flows use automated SharePoint triggers only.** No flow accepts input supplied by a technician.
 
-### A.4 Assumptions (simplest option chosen and documented)
+### A.3 Assumptions
 
 | # | Assumption |
 |---|---|
-| AS1 | Flows run under the **Team Leader's own account** (v1). A service account is optional later (J, D1). |
-| AS2 | **Late submission is allowed.** The review stays editable after the deadline, is flagged *Overdue*, and is recorded as *Submitted late*. The Team Leader can **Close – Not Submitted**, which locks it. |
-| AS3 | Expectations apply when **Active = Yes**. The appraisal year is recorded on each expectation and in each snapshot, but the selection isn't filtered by year. Retiring old expectations (Active = No) controls rollover. |
-| AS4 | Expectations added mid-month appear from the next month. Snapshots are taken when the monthly review is created. |
-| AS5 | Q2 (challenges), the Q3 comment and Q7 (feedback for manager) are optional. All other questions are mandatory, and details are mandatory only when Yes is chosen. |
-| AS6 | When a Yes/No question is answered **No**, any text in its hidden detail field is **cleared on save**. Hidden fields are never stored, never validated and never shown to the manager. |
-| AS7 | Emails contain **links only**, never answers or feedback. |
-| AS8 | Technicians are **not** members of the site. They get access only through item-level permissions set by the flows. |
-| AS9 | Daily run time is **07:00 UK time**, and the creation run on the 1st is idempotent and self-healing on the following days. |
+| AS1 | Q2, the Q3 comment and Q7 are optional. Everything else is required at Submit, and details are required only when Yes is selected. |
+| AS2 | If the answer is **No**, any hidden detail text is **cleared when saving**. Hidden fields are never validated or stored. |
+| AS3 | Emails contain **links only**, never answers or feedback. |
+| AS4 | Expectations apply when **Active = Yes**, and are snapshotted when the month's review is created. Changes made mid-month apply from next month. |
+| AS5 | **Correction process:** the TL corrects a submitted record directly in SharePoint, at the technician's request, and writes the reason in `CorrectionLog`. Version history is the audit trail. There's no in-app "reopen" in v1. |
+| AS6 | **Agreed actions** are free text on the TL's record (one per line, with due dates), plus an *Open / Done* status and an earliest due date. |
 
 ---
 
-## B. Minimum viable scope
+## B. Scope and stages
 
-This is built first and demonstrated end to end with two test technician accounts and the Team Leader. Stages follow the requested order, with one deliberate change. The **creation and permission part of Flow 1 is built in Stage 1** and run manually, because the core journey can't be tested securely without correctly protected records. Stage 2 then adds the schedule, reminders and overdue handling.
-
-| Stage | Delivers | Done when |
+| Stage | Build | Exit criterion |
 |---|---|---|
-| **1 — Functional MVP** | Private site, all 5 lists and permissions. Flow 1 creation block (manual trigger). Technician screen Q1–Q7 and Q9, with draft and submit. Flow 2 (lock and notify). Manager review screen with feedback and actions. Flow 3 (complete, release and notify). | Test technician A drafts, submits and is locked. The TL reviews and completes. A sees the feedback, and B sees nothing of A's at any point. |
-| **2 — Monthly automation** | Flow 1 on its daily schedule: idempotent creation, personal links, overdue flags, reminders on the 20th and 27th, and failure alerts. | Date-override tests pass (H). No duplicates on rerun. |
-| **3 — Appraisal tracking** | Appraisal Expectations list in use. Snapshots in Flow 1. Q8 gallery for the technician and for manager feedback. Rollover procedure. | Shared and individual expectations appear correctly, and editing an expectation doesn't change past reviews. |
-| **4 — Dashboard and verification** | Dashboard screen, technician history, SharePoint home page, Outstanding Actions view, full privacy and operational tests, clean-down and go-live. | All tests in H pass, privacy tests are signed off and test data is removed. |
+| **0 — Proof test (1–2 h)** | Site, lists, permission levels. One manual permission grant to Test A. An auto-generated test app. | Test A sees and edits only their own item in Power Apps, there's no error banner, and the REST calls succeed under DLP. **If this fails, stop and review.** |
+| **1 — Functional MVP** | Flow 1 (creation and links), the full app (all 9 questions, including Q8), Flows 2 and 3 | Test A drafts, submits and is locked. The TL reviews and completes, and A sees the feedback. Test B sees nothing of A's at any point. |
+| **2 — Monthly automation** | Flow 1 reminders and problem report. Schedule confirmed. | Date tests F13, F14, F19 and F20 pass |
+| **3 — Appraisal tracking** | Real expectations loaded. Rollover procedure written down. | F5–F7 pass |
+| **4 — Dashboard and verification** | Dashboard screen, home page, **all privacy tests P1–P14**, clean-down, go-live | Every test in H passes |
 
-**Deferred (not v1):** an in-app expectations editor (the SharePoint list view is enough), charts, auto-save, Teams notifications, a multi-manager model, a service account and retention automation.
+The Q8 gallery is built with the rest of the questionnaire in Stage 1, because separating it costs more than it saves. Stage 3 is about loading and testing real expectation data.
+
+**Not in v1:** in-app reopen, an in-app expectations editor (the SharePoint list is enough), charts, auto-save, Teams notifications, a service account, and automated retention.
 
 ---
 
-## C. SharePoint list schemas
+## C. SharePoint lists
 
-**General rules (all lists)**
+### C.0 Rules for every list
 
-- Create every column with the **exact internal name shown (no spaces)**. You can rename display names afterwards if you want, but the flows and app use internal names.
-- Only `Title` stays required at list level. Every other "required" rule is enforced by the app at Submit, because SharePoint-required columns would block saving drafts.
-- **Choice columns:** turn "Allow fill-in choices" **off**. Where the default is shown as *none*, **delete the default value**, because SharePoint pre-fills the first choice otherwise.
-- **Multiple lines of text:** use plain text, "Append changes" No, and leave "Unlimited length" on for JSON columns.
-- **List settings → Advanced settings:** set **Attachments: Disabled**, **Allow items to appear in search results: No** and **Offline client availability: No**.
-- **Versioning:** create a version for each edit and keep 100 major versions. This is the audit trail.
-- **Never use lookup columns.** Use `ReviewKey` text keys instead.
+- **Type each column name exactly as shown, with no spaces.** The name you type becomes the permanent internal name that the app and flows use.
+- **Required:** leave every column *not required* in SharePoint, except `Title`. The app checks required answers at Submit, and SharePoint-required columns would block saving drafts.
+- **Choice columns:** turn **"Can add values manually"** off. Where the default says *(none)*, **delete the default value**. SharePoint pre-fills the first choice otherwise.
+- **Multiple lines of text:** plain text. Turn **"Use enhanced rich text"** off and **"Append changes to existing text"** off.
+- **Each list's settings:**
+
+  | Setting | Value |
+  |---|---|
+  | Versioning | On, 100 versions |
+  | Attachments | Disabled |
+  | Allow items in search results | **No** |
+  | Offline client availability | No |
+  | Permissions | Inheritance stopped, and the Members and Visitors groups removed |
 
 ### C.1 `Technicians` (manager only)
 
-| Column | Type | Req | Default | Notes |
-|---|---|---|---|---|
-| Title | Single line | Yes | — | Display name, for humans only |
-| Technician | Person (people only, single) | Yes* | — | The Microsoft 365 account |
-| TechnicianAadId | Single line | No | — | Entra object ID. **Filled automatically by Flow 1.** This is the stable identity key. Indexed. |
-| Active | Yes/No | — | Yes | Indexed. Set to No for leavers and long absences. |
+| Column | Type | Default | Notes |
+|---|---|---|---|
+| Title | (built-in) | — | Technician display name |
+| Technician | Person or Group (people only, single) | — | Their Microsoft 365 account |
+| TechnicianAadId | Single line of text | — | **Leave empty.** Flow 1 fills in the Entra object ID. **Indexed.** |
+| Active | Yes/No | Yes | **Indexed.** Set to No for leavers and long absences. |
 
-### C.2 `Appraisal Expectations` (manager only)
+### C.2 `AppraisalExpectations` → display name **Appraisal Expectations** (manager only)
 
-| Column | Type | Req | Default | Notes |
-|---|---|---|---|---|
-| Title | Single line | Yes | — | Expectation title |
-| Measures | Multiple lines (plain) | Yes* | — | Description, measures and success criteria |
-| AppraisalYear | Single line | Yes* | — | e.g. `2026/27` |
-| Scope | Choice: `Shared`, `Individual` | Yes* | Shared | |
-| Technician | Person (single) | No | — | Required when Scope = Individual (check with the "Needs attention" view) |
-| SortOrder | Number (0 dp) | — | 100 | Lower numbers appear first |
-| Active | Yes/No | — | Yes | Indexed |
+| Column | Type | Default | Notes |
+|---|---|---|---|
+| Title | (built-in) | — | Expectation title |
+| Measures | Multiple lines of text | — | Description, measures and success criteria |
+| AppraisalYear | Single line of text | — | e.g. `2026/27` |
+| AppliesTo | Choice: `Shared`, `Individual` | Shared | |
+| Technician | Person or Group (people only, single) | — | Fill in **only** when AppliesTo = Individual |
+| SortOrder | Number, 0 decimal places | 100 | Lower numbers appear first |
+| Active | Yes/No | Yes | **Indexed** |
 
-**Views:** *Active* (Active = Yes, grouped by Scope then Technician), *Needs attention* (Scope = Individual and Technician is empty) and *Retired* (Active = No).
+**Views**
 
-**Rule:** a technician gets all active Shared expectations plus their own active Individual expectations, sorted by SortOrder, **up to 10**. Flow 1 warns the TL if more than 10 apply.
+| View | Filter / layout |
+|---|---|
+| *Active* | Active = Yes, grouped by AppliesTo, sorted by SortOrder |
+| *Needs attention* | AppliesTo = Individual and Technician is empty |
+| *Retired* | Active = No |
 
-### C.3 `Monthly Reviews` (one item per technician per month; technician answers)
+**Rule:** each technician gets every active Shared expectation plus their own active Individual expectations, in SortOrder, **up to 10**. Flow 1 tells the TL if more than 10 apply.
 
-| Column | Type | Req | Default | Notes |
-|---|---|---|---|---|
-| Title | Single line | Yes | — | `Jane Smith – 2026-11` |
-| ReviewKey | Single line | Yes* | — | `{TechnicianAadId}_{yyyy-MM}`. **Enforce unique values = Yes**, which also creates an index. This is the duplicate guard. |
-| Technician | Person (single) | Yes* | — | |
-| TechnicianAadId | Single line | Yes* | — | Indexed |
-| MonthKey | Single line | Yes* | — | `2026-11`. Indexed. |
-| MonthStart | Date only | Yes* | — | `2026-11-01` |
-| DueDate | Date and time | Yes* | — | Last day of the month at 23:59:59 UK time, stored as UTC |
-| Status | Choice: `Not Started`, `Draft`, `Submitted`, `Completed`, `Closed - Not Submitted` | Yes* | Not Started | Indexed. The only workflow state. |
-| IsOverdue | Yes/No | — | No | Set by Flow 1 when past the due date and not submitted. It's a **flag, not a status**. |
-| SubmittedOn | Date and time | — | — | Set by Flow 2 (server time) |
-| SubmittedLate | Yes/No | — | No | Set by Flow 2 |
-| CompletedOn | Date and time | — | — | Set by Flow 3 |
-| LinkSentOn | Date and time | — | — | Set by Flow 1 after permissions are verified and the email is sent |
-| Q1WentWell | Multi-line | — | — | |
-| Q2Issue / Q2Impact / Q2Tried / Q2Support | Multi-line ×4 | — | — | |
-| Q3WorkloadRating | Number, 0 dp, min 1, max 5 | — | — | Workload trend history |
-| Q3WorkloadComment | Multi-line | — | — | |
-| Q4WellbeingRaise | Choice: `Yes`, `No` | — | *none* | |
-| Q4WellbeingDetail | Multi-line | — | — | Cleared when the answer is No |
-| Q5PlanningRaise | Choice: `Yes`, `No` | — | *none* | |
-| Q5PlanningDetail | Multi-line | — | — | |
-| Q6DevRaise | Choice: `Yes`, `No` | — | *none* | |
-| Q6DevWhat / Q6DevWhy | Multi-line ×2 | — | — | |
-| Q7ManagerFeedback | Multi-line | — | — | |
-| ExpectationsJson | Multi-line (plain, unlimited) | — | — | Snapshot and technician progress (see below) |
-| Q9FollowUp | Choice (3 values, see E.2) | — | *none* | |
+### C.3 `MonthlyReviews` → display name **Monthly Reviews**
 
-`ExpectationsJson` format (snapshot written by Flow 1, with `rating` and `comment` filled in by the technician):
+This list is the technician's workspace. Everything here can be edited by the technician while the review is open, so **flows treat it as untrusted**.
+
+| Column | Type | Default | Notes |
+|---|---|---|---|
+| Title | (built-in) | — | e.g. `Jane Smith – 2026-11`. Display copy. |
+| Technician | Person (single) | — | Display copy |
+| MonthKey | Single line of text | — | e.g. `2026-11`. Display copy. |
+| MonthStart | Date only | — | For sorting. Display copy. |
+| DueDate | Date and time | — | Display copy |
+| ReviewStatus | Choice: `Not Started`, `Draft`, `Submitted`, `Completed`, `Closed - Not Submitted` | Not Started | Shown to the technician. A non-draft value is the **submit signal**. |
+| Q1WentWell | Multiple lines | — | |
+| Q2Issue | Multiple lines | — | |
+| Q2Impact | Multiple lines | — | |
+| Q2Tried | Multiple lines | — | |
+| Q2Support | Multiple lines | — | |
+| Q3WorkloadRating | Number, 0 decimal places, min 1, max 5 | — | Workload history |
+| Q3WorkloadComment | Multiple lines | — | |
+| Q4WellbeingRaise | Choice: `Yes`, `No` | *(none)* | |
+| Q4WellbeingDetail | Multiple lines | — | |
+| Q5PlanningRaise | Choice: `Yes`, `No` | *(none)* | |
+| Q5PlanningDetail | Multiple lines | — | |
+| Q6DevRaise | Choice: `Yes`, `No` | *(none)* | |
+| Q6DevWhat | Multiple lines | — | |
+| Q6DevWhy | Multiple lines | — | |
+| Q7ManagerFeedback | Multiple lines | — | |
+| ExpectationsJson | Multiple lines | — | Technician's copy of the expectations, plus their ratings (see below) |
+| Q9FollowUp | Choice (the 3 values in E.1) | *(none)* | |
+
+Example of `ExpectationsJson`:
 
 ```json
-[{"id":12,"title":"Complete RP supervisor module","measures":"Pass assessment by Q4","year":"2026/27","rating":3,"comment":"Module 2 done"}]
+[{"id":12,"title":"Complete RP supervisor module","measures":"Pass by Q4","year":"2026/27","rating":3,"comment":"Module 2 done"}]
 ```
 
-`title`, `measures` and `year` are **copied** when the review is created, so later edits to the expectation never change history.
+### C.4 `ManagerReviews` → display name **Manager Reviews** (the authoritative record)
 
-### C.4 `Manager Reviews` (one per Monthly Review; manager feedback and manager decisions)
-
-| Column | Type | Req | Default | Notes |
+| Column | Type | Default | Written by | Notes |
 |---|---|---|---|---|
-| Title | Single line | Yes | — | Same as the review |
-| ReviewKey | Single line | Yes* | — | **Unique**, so it's indexed |
-| Technician | Person (single) | Yes* | — | |
-| TechnicianAadId | Single line | Yes* | — | Indexed |
-| MonthKey | Single line | Yes* | — | Indexed |
-| Status | Choice: `In Progress`, `Completed`, `Closed - Not Submitted`, `Reopen` | Yes* | In Progress | **The TL's commands.** Flow 3 acts on them. |
-| ProcessedStatus | Single line | — | — | Written by Flow 3 and used to prevent duplicates |
-| FB_Q1 … FB_Q7, FB_Q9 | Multi-line ×8 | — | — | Manager feedback per section |
-| FB_Overall | Multi-line | — | — | Overall summary |
-| ExpectationFeedbackJson | Multi-line (plain, unlimited) | — | — | `[{"id":12,"feedback":"Good progress"}]` |
-| FollowUpDecision | Choice (same 3 values as Q9) | — | *none* | The TL's **override** of the technician's preference |
-| MeetingDate | Date only | — | — | Optional, if a 1-to-1 is arranged |
-| ActionsSummary | Multi-line | — | — | Written by the app at completion so the technician can see the agreed actions |
-| CompletedOn | Date and time | — | — | Set by Flow 3 |
-| CompletedBy | Person | — | — | Set by Flow 3 from the identity that marked it Completed |
-| ReleasedOn | Date and time | — | — | Set by Flow 3 |
-| CorrectionLog | Multi-line | — | — | Reason for any reopening or correction, with versions as the audit trail |
+| Title | (built-in) | — | Flow 1 | `Jane Smith – 2026-11` |
+| ReviewKey | Single line of text | — | Flow 1 | `{EntraObjectId}_{yyyy-MM}`. **Enforce unique values = Yes**, which is the duplicate guard. |
+| ReviewItemId | Number, 0 decimal places | — | Flow 1 | The SharePoint ID of the matching Monthly Review. **Indexed.** |
+| Technician | Person (single) | — | Flow 1 | **The identity used for all access and emails** |
+| TechnicianAadId | Single line of text | — | Flow 1 | |
+| MonthKey | Single line of text | — | Flow 1 | **Indexed** |
+| DueDate | Date and time | — | Flow 1 | Last day of the month at 23:59:59 UK time |
+| ReviewState | Choice: `Open`, `Submitted`, `Completed`, `Closed - Not Submitted` | Open | Flows, and the TL (*Completed* / *Closed*) | **Indexed.** The one real workflow state. |
+| LinkSentOn | Date and time | — | Flow 1 | |
+| SubmittedOn | Date and time | — | Flow 2 | Server time |
+| SubmittedLate | Yes/No | No | Flow 2 | |
+| TechFollowUp | Single line of text | — | Flow 2 | Technician's Q9 choice, copied at submission |
+| ExpectationSnapshotJson | Multiple lines | — | Flow 1 | **Trusted** copy of titles and measures: `[{"id":12,"title":"…","measures":"…","year":"2026/27"}]` |
+| FB_Q1 … FB_Q7 | Multiple lines (7 columns) | — | TL | TL feedback per question |
+| FB_Q9 | Multiple lines | — | TL | |
+| FB_Overall | Multiple lines | — | TL | |
+| ExpectationFeedbackJson | Multiple lines | — | TL | `[{"id":12,"feedback":"…"}]` |
+| FollowUpDecision | Choice (same 3 values as Q9) | *(none)* | TL | **Override** of the technician's preference |
+| MeetingDate | Date only | — | TL | |
+| AgreedActions | Multiple lines | — | TL | One action per line, for example `• Book confined-space refresher – Tech – by 15/12` |
+| ActionsDueBy | Date only | — | TL | Earliest open due date |
+| ActionsStatus | Choice: `None`, `Open`, `Done` | None | TL | **Indexed** |
+| CompletedOn | Date and time | — | Flow 3 | |
+| CompletedBy | Single line of text | — | Flow 3 | Email of the person who completed it |
+| ReleasedOn | Date and time | — | Flow 3 | |
+| CorrectionLog | Multiple lines | — | TL | Reason for any correction made after submission |
 
-### C.5 `Agreed Actions` (manager only)
+**Views**
 
-| Column | Type | Req | Default | Notes |
-|---|---|---|---|---|
-| Title | Single line | Yes | — | The action |
-| ReviewKey | Single line | — | — | Indexed. The review where it was agreed. |
-| Technician | Person (single) | — | — | |
-| TechnicianAadId | Single line | — | — | |
-| MonthKey | Single line | — | — | |
-| Owner | Choice: `Technician`, `Team Leader`, `Both` | — | Technician | |
-| DueDate | Date only | — | — | |
-| Status | Choice: `Open`, `Done`, `Cancelled` | — | Open | Indexed |
-| CompletedOn | Date only | — | — | |
-| Notes | Multi-line | — | — | |
+| View | Filter / layout |
+|---|---|
+| *Overdue* | ReviewState = Open **and** DueDate < `[Today]` |
+| *Open actions* | ActionsStatus = Open, sorted by ActionsDueBy |
+| *All* | default view |
 
-**Views:** *Outstanding* (Status = Open, sorted by DueDate ascending, grouped by Technician). This is the "Outstanding Actions" navigation area. Also *All*.
-
-Technicians see the actions agreed in a given review through `Manager Reviews.ActionsSummary` once it's released. They never get access to this list.
-
-### C.6 Relationships
+### C.5 Relationships
 
 ```
-Technicians.TechnicianAadId ──1:N──▶ Monthly Reviews.TechnicianAadId
-Monthly Reviews.ReviewKey   ──1:1──▶ Manager Reviews.ReviewKey
-Monthly Reviews.ReviewKey   ──1:N──▶ Agreed Actions.ReviewKey
-Appraisal Expectations.ID   ──copied into──▶ Monthly Reviews.ExpectationsJson[].id
-                                           ──▶ Manager Reviews.ExpectationFeedbackJson[].id
+Technicians.TechnicianAadId ─1:N─▶ Manager Reviews.TechnicianAadId   (and ReviewKey)
+Manager Reviews.ReviewItemId ─1:1─▶ Monthly Reviews.ID               (immutable SharePoint ID)
+Appraisal Expectations.ID ──copied──▶ Manager Reviews.ExpectationSnapshotJson[].id (trusted)
+                          ──copied──▶ Monthly Reviews.ExpectationsJson[].id        (technician copy + ratings)
+                                      Manager Reviews.ExpectationFeedbackJson[].id (TL feedback)
 ```
 
-Only the Monthly Reviews and Manager Reviews lists ever carry item-level permissions.
+There are no lookup columns, so nothing breaks when a technician lacks access to a related list. About 240 unique permission scopes a year at 10 technicians, well inside SharePoint's limits.
 
 ---
 
-## D. Permissions
+## D. Security model
 
-### D.1 Site level
+### D.1 Site
 
 | Setting | Value |
 |---|---|
-| Site type | **Communication site** (classic permission groups, no Microsoft 365 group, so there's no group membership to leak) |
-| Site Owners group | **Team Leader only**, plus optionally one named, HR-approved backup owner (decision D4) |
-| Site Members / Visitors | **Empty.** Remove "Everyone except external users" if present. |
-| Sharing | Gear → Site permissions → *Change how members can share* → **Only site owners can share files, folders, and the site**. **Allow access requests: Off.** |
-| External sharing | Only people in your organisation, or none (a SharePoint admin sets this if it isn't already the tenant default) |
-| Sensitivity label | Apply the organisation's HR/Confidential label if one exists |
-| Regional settings | Time zone **(UTC) Dublin, Edinburgh, Lisbon, London**, locale English (UK) |
+| Site type | **Communication site.** No Microsoft 365 group, so there's no group membership to leak. |
+| Owners group | **TL only** (D4). A quarterly 2-minute check confirms nobody else has been added. |
+| Members, Visitors | **Empty.** Remove "Everyone except external users" if it appears. |
+| Sharing | **Only site owners can share.** **Access requests: Off.** |
+| External sharing | Off or organisation-only (IT-8) |
+| Sensitivity label | The organisation's HR/Confidential label, if one exists (IT-8) |
+| Time zone | (UTC) Dublin, Edinburgh, Lisbon, London. Locale English (UK). |
 
-### D.2 List level
+### D.2 Lists
 
-Break permission inheritance on all five lists. Remove the Members and Visitors groups so that only **Owners (Full Control)** remains. This is defence in depth: if someone adds people to the site later, they still can't see the lists.
+Break inheritance on all four lists so that only **Owners (Full Control)** remains.
 
-### D.3 Custom permission level
+### D.3 Custom permission levels
 
-Create the permission level `1-to-1 Edit (no delete)` by copying **Contribute** and unticking:
-
-- Add Items
-- Delete Items
-- Delete Versions
-- Manage Personal Views
-- Add/Remove Personal Web Parts
-- Update Personal Web Parts
-
-Keep View Items, Edit Items, Open Items, View Versions, View Pages, Open, Browse User Information, **Use Remote Interfaces** (required by Power Apps) and Use Client Integration Features.
-
-### D.4 Item level (the only places a technician has access)
-
-| Item | Technician access | When set | By |
+| Level | Created by copying | Untick | Used for |
 |---|---|---|---|
-| Monthly Review (Not Started / Draft) | `1-to-1 Edit (no delete)` on **their own item only** | At creation, **before** the email is sent | Flow 1 |
-| Monthly Review (Submitted / Completed / Closed) | **Read** | On submit (Flow 2), on close (Flow 3), re-applied on complete (Flow 3) | Flows 2 and 3 |
-| Monthly Review (reopened by TL) | `1-to-1 Edit (no delete)` again | On Reopen | Flow 3 |
-| Manager Review (In Progress) | **None.** It inherits the manager-only list. | Created by Flow 1 with no permission work needed | — |
-| Manager Review (Completed / Closed) | **Read** | On release | Flow 3 |
-| Manager Review (reopened) | **None** again (inheritance reset) | On Reopen | Flow 3 |
-| Technicians, Appraisal Expectations, Agreed Actions | **None, ever** | — | — |
+| **`1-to-1 Edit`** | Contribute | Add Items, Delete Items, Delete Versions, Manage Personal Views, Add/Remove Personal Web Parts, Update Personal Web Parts | Technician on **their own open** Monthly Review |
+| **`1-to-1 Read`** | Read | **View Versions**, Create Alerts | Technician on their submitted review and on their **released** Manager Review. Without View Versions, they can't see the TL's earlier drafts. |
 
-**The standard permission routine (`SETPERM`).** Every permission change uses the same five REST calls. The routine is idempotent because it always starts from a clean state.
+Keep **Use Remote Interfaces** ticked in both, because Power Apps needs it.
 
-1. `resetroleinheritance`. The item reverts to the list's manager-only permissions, which is the safe direction.
-2. `breakroleinheritance(copyRoleAssignments=false)`. This avoids copying list-level "Limited Access" entries for other technicians.
-3. Add the **Owners group** with Full Control.
-4. Add the **technician** with the required level (Edit (no delete) or Read).
-5. **Verify.** Read the role assignments back. Only Owners, this technician and (if SharePoint auto-added it) the flow account may be present, and the technician must hold exactly the expected level. If any other principal is present, the flow **fails before any email is sent**.
+### D.4 Who can do what
 
-**Why a technician can never receive a link to an unprotected record.** A new item is created in a list where only the Owners group has permissions, so it's private by default from the moment it exists. The technician is granted access, the grant is verified, and only then is the email sent. If any step fails, the item stays invisible to the technician, no email goes out, and the TL is alerted.
+| Item | Technician access | Set by |
+|---|---|---|
+| Own Monthly Review, while Open | `1-to-1 Edit`. They can read and edit it, but not delete it, create new items or change permissions. | Flow 1, before the email is sent |
+| Own Monthly Review, after submit or close | `1-to-1 Read` | Flow 2 (submit), Flow 3 (complete or close) |
+| Own Manager Review, before completion | **None** (inherits manager-only) | — |
+| Own Manager Review, after completion or close | `1-to-1 Read` | Flow 3 |
+| Anyone else's items | **None** | — |
+| Technicians, Appraisal Expectations | **None** | — |
 
-**Locking is enforced server-side.** After submission, the technician's permission on the item is **Read**, so SharePoint rejects any edit from the app, the list UI, REST or Graph. Completion and release are driven from the Manager Reviews list, which technicians can't write to, so a technician can't spoof a manager decision.
+**The permission routine (`SETPERM`, four REST calls).** This routine is the same everywhere it's used. It's idempotent, and it builds exactly the intended permissions:
 
-**Flow identity (least privilege in practice).** The flows use the TL's connection, because the TL is a site owner and needs Manage Permissions. Flows never accept an item ID or email from a technician. They react only to SharePoint item changes, which SharePoint has already authorised. Flow 2 ignores edits made by the TL or flow account, which prevents loops.
+1. `resetroleinheritance`. The item returns to manager-only permissions, which is always the safe direction.
+2. `breakroleinheritance(copyRoleAssignments=false)`. Nothing is copied.
+3. Add the **Owners group** with **Full Control**.
+4. Add **the technician** (taken from Manager Reviews) with `1-to-1 Edit` or `1-to-1 Read`.
 
-**Run history exposure.** Flow run history keeps action inputs and outputs for 28 days and is visible to flow owners. Turn on **Settings → Secure inputs / Secure outputs** for the trigger and for every *Get items* and *Get item* on Monthly Reviews and Manager Reviews. Don't add co-owners who aren't authorised to see review content.
+If any call fails, the flow stops **before** sending any email.
 
-**Administrators.** Global, SharePoint and Power Platform administrators can technically reach this data. That's normal for Microsoft 365, and it's covered by the organisation's admin access policies, not by this design. State this in the privacy notice.
+**Why a link can never point at an unprotected record.** A new item is created inside a list only the TL can see, so it's private from the moment it exists. Access is granted to that one technician, and only then is the email sent.
 
-### D.5 Retention and deletion (to be confirmed by HR or Data Protection, decision D3)
+**What stops technicians changing workflow state.** The only state that matters, `ReviewState` and the timestamps, lives on Manager Reviews, which technicians can't write to.
 
-- **Retention period:** use the organisation's retention schedule for line-management and appraisal records. The placeholder is "current year plus N years", with N set by HR.
-- **Mechanism:** if a Purview retention label exists for HR or appraisal records, set it as the **default label** on the Monthly Reviews, Manager Reviews and Agreed Actions lists. Otherwise, the Team Leader carries out a **documented annual deletion review** each April: filter by `MonthStart` older than the retention period, delete, and note it in a deletion log. Deleted items stay in the recycle bins for 93 days.
-- **Leavers:** set `Active = No` and keep the records for the retention period. The leaver's account is disabled by IT, so their item permissions become inert.
-- **Subject access requests:** the TL can export a technician's items, using the list view filtered by technician and *Export to CSV*, together with the matching Manager Reviews items.
-- **Data minimisation:** Q4 guidance tells people not to enter medical details, and a "No" answer clears hidden text.
+- If a technician sets their Monthly Review status to *Submitted*, *Completed* or *Closed* through the API, Flow 2 treats it as a submission. It locks the item and corrects the status.
+- Lateness is calculated from the trusted due date.
+- The TL screen and the history read expectation titles from the trusted snapshot.
+
+Section 4 of `PLAN_REVIEW.md` lists 20 bypass attempts and why each fails.
+
+**Flow identity.** The flows use the TL's connection (D1), because only an owner can change permissions. They react only to SharePoint changes that SharePoint has already authorised, and never accept a technician-supplied ID or email.
+
+**Run history.** Flow run history shows the data flows handle for 28 days, and only flow owners can see it. Once testing is finished, turn on **Secure inputs** and **Secure outputs** on the trigger and on every Get items action, and **don't add co-owners**.
+
+**Administrators.** Tenant administrators can technically access the data. Say so in the privacy notice (IT-9).
+
+### D.5 Retention and deletion
+
+These are placeholders until HR answers HR-1.
+
+- **Retention period:** HR to set the number of years.
+- **Purview label available:** apply it as the **default label** on Monthly Reviews and Manager Reviews.
+- **No label:** the TL carries out a documented **annual April deletion**. Filter by MonthKey older than the retention period, delete, record the deletion in a dated note, then empty the site recycle bin and the second-stage recycle bin.
+- **Leavers:** set Active = No in Technicians and keep their records for the retention period.
+- **Subject access requests:** export the list views filtered by technician, using **Export → CSV**.
 
 ---
 
 ## E. Power Apps specification
 
-### E.1 App setup
-
-- Go to make.powerapps.com, then the environment your organisation uses for M365 apps (usually **Default**), then **Create → Blank app → Blank canvas app**. Name it **ESG 1-to-1** and choose the **Tablet** format.
-- **Settings → Display:** Scale to fit **Off**, Lock aspect ratio **Off**. This lets you build a responsive layout with containers, which also reads acceptably on a phone.
-- **Settings → General:** Data row limit **2000**. Make sure Named formulas, ParseJSON and Formula-level error management are on if they're shown as options.
-- **Data:** add SharePoint, choose the site, and add `Monthly Reviews`, `Manager Reviews`, `Agreed Actions` and `Technicians`. **Don't** add Appraisal Expectations, because the TL edits it in SharePoint.
-- **Controls:** use classic controls throughout (they're predictable). Every screen uses a vertical container with `LayoutOverflowY = Scroll`.
-- **Sharing:** share the app with each technician as a **User**. When Power Apps offers to share the SharePoint data as well, **decline**. SharePoint item permissions are handled by the flows.
-
-### E.2 `App.Formulas`
-
-The two lines marked `// CONFIG` must be edited.
+### E.1 App.Formulas (paste as-is, then edit the two `CONFIG` lines)
 
 ```powerfx
-ManagerEmail = "team.leader@yourcompany.co.uk";          // CONFIG
-SiteUrl      = "https://yourtenant.sharepoint.com/sites/ESG-1to1";   // CONFIG
+ManagerEmail = "team.leader@yourcompany.co.uk";                       // CONFIG – exactly as User().Email shows it
+SiteUrl      = "https://yourtenant.sharepoint.com/sites/ESG-1to1";    // CONFIG
 
-IsManager = Lower(User().Email) = Lower(ManagerEmail);   // UI routing only — NOT security
-MyAadId   = Lower(Text(User().EntraObjectId));           // fallback: Lower(Office365Users.MyProfileV2().id)
-
-OptDedicated   = "Arrange a dedicated 1-to-1 discussion";
+IsManager    = Lower(User().Email) = Lower(ManagerEmail);   // routing only – NOT a security control
+OptDedicated = "Arrange a dedicated 1-to-1 discussion";
 FollowUpOptions = [
     "Everything has been covered - no further discussion required at present",
     "Quick, informal catch-up in the field",
     "Arrange a dedicated 1-to-1 discussion"
 ];
 YesNo = ["Yes", "No"];
-
 WorkloadScale = Table(
     {Value: 1, Label: "1 – Very light: significantly below capacity"},
     {Value: 2, Label: "2 – Light: some spare capacity"},
@@ -351,8 +332,6 @@ WorkloadScale = Table(
     {Value: 4, Label: "4 – Heavy: busy but manageable"},
     {Value: 5, Label: "5 – Excessive: struggling to manage"}
 );
-
-// Progress against an appraisal expectation — deliberately different wording from workload
 ProgressScale = Table(
     {Value: 1, Label: "1 – Not started: no progress yet"},
     {Value: 2, Label: "2 – Early progress: behind where I'd expect"},
@@ -362,768 +341,1202 @@ ProgressScale = Table(
 );
 ```
 
-**App.StartScreen** (this formula can't use variables, by design):
+**App.StartScreen**
 
 ```powerfx
-If(IsManager,
-    If(IsBlank(Param("reviewId")), scrDashboard, scrManagerReview),
-    scrTechReview)
+If(IsManager, If(IsBlank(Param("reviewId")), scrDashboard, scrManagerReview), scrTechReview)
 ```
 
-There's no App.OnStart. Loading happens in each screen's OnVisible.
+The app uses three data sources: **Monthly Reviews**, **Manager Reviews** and **Technicians**.
 
-### E.3 Screen `scrTechReview` (technician questionnaire, a single scrolling page)
+### E.2 Screen `scrTechReview`
 
-**Layout**, top to bottom inside `conMain` (vertical, scrolling):
+**Layout**
 
-1. **Header bar (sticky, outside the scroll area)**
-   - `lblTitle`: `"Monthly 1-to-1 – " & Text(gReview.MonthStart, "mmmm yyyy")`
-   - `lblDeadline`: `"Deadline: 23:59, " & Text(gReview.DueDate, "dddd d mmmm yyyy")`, coloured red when overdue
-   - `lblStatus`: `gReview.Status.Value & If(gOverdue, " · OVERDUE", "") & If(gReview.SubmittedLate, " · submitted late", "")`
-   - Buttons: **Save draft** (`btnSave`) and **Submit** (`btnSubmit`), visible when `gEditable`. **My previous reviews** (`btnHistory`) is always visible.
-2. **Intro note** (label): "Save as often as you like. Short answers are fine. You can ask for a conversation at any time, and you don't need to wait for this form. Submitting this form doesn't replace any formal appraisal or meeting your role requires."
-3. **Q1:** `txtQ1` (multi-line, 3 lines, hint "A few bullet points is fine").
-4. **Q2:** four multi-line inputs `txtQ2Issue`, `txtQ2Impact`, `txtQ2Tried` and `txtQ2Support`, labelled 1–4. Hint: "Optional – leave blank if nothing to raise".
-5. **Q3:** `rdoQ3` (Items `WorkloadScale`, Value field `Label`) and `txtQ3` (optional comments).
-6. **Q4:** `rdoQ4` (Items `YesNo`). There's an always-visible guidance label (E.6). `txtQ4` has `Visible = rdoQ4.Selected.Value = "Yes"`.
-7. **Q5:** `rdoQ5` and `txtQ5` (visible only on Yes). Hint: "Dates, availability, planned leave, courses, other commitments".
-8. **Q6:** `rdoQ6`, with `txtQ6What` ("What would you like?") and `txtQ6Why` ("Why / what would it help with?"), both visible only on Yes.
-9. **Q7:** `txtQ7`.
-10. **Q8:** `galQ8` (Items `colExp`, flexible height). Each row has `lblExpTitle`, `lblExpMeasures` (small grey text with the year), `rdoQ8` (Items `ProgressScale`) and `txtQ8` ("Progress comments / evidence"). There's a scale explanation label above the gallery. If `colExp` is empty, show "No appraisal expectations are set for you this month."
-11. **Q9:** `rdoQ9` (Items `FollowUpOptions`).
-12. **Released feedback.** Under each section there's a grey box, `lblFbQn`, with `Visible = !IsBlank(gFeedback)` and text `"Team Leader: " & gFeedback.FB_Qn`. Under Q8 each gallery row shows `LookUp(colExpFb, id = ThisItem.id).feedback`. At the bottom there's an **Overall feedback / Agreed actions / Follow-up decision** panel, also visible only when `!IsBlank(gFeedback)`.
-13. **Confirm dialog** `conConfirm` (an overlay container with `Visible = locConfirm`): "Submit your 1-to-1? You won't be able to change it afterwards." with **Submit** and **Cancel**.
+```
+scrTechReview
+ ├─ conScreen  (vertical container, fills screen)
+ │   ├─ conHeader (vertical, fixed height ~150, light grey)
+ │   │   ├─ ddMonth             my reviews, newest first
+ │   │   ├─ lblDeadline, lblStatus
+ │   │   └─ conButtons (horizontal): btnSave, btnSubmit, btnLoad (hidden)
+ │   └─ conPage  (vertical, flexible height, scrolls; padding 16, gap 10)
+ │       ├─ lblNoAccess
+ │       ├─ lblIntro
+ │       ├─ Q1: lblQ1, txtQ1, lblFbQ1
+ │       ├─ Q2: lblQ2, lblQ2a, txtQ2Issue, lblQ2b, txtQ2Impact, lblQ2c, txtQ2Tried, lblQ2d, txtQ2Support, lblFbQ2
+ │       ├─ Q3: lblQ3, rdoQ3, txtQ3, lblFbQ3
+ │       ├─ Q4: lblQ4, lblQ4Guide, rdoQ4, txtQ4, lblFbQ4
+ │       ├─ Q5: lblQ5, rdoQ5, txtQ5, lblFbQ5
+ │       ├─ Q6: lblQ6, rdoQ6, txtQ6What, txtQ6Why, lblFbQ6
+ │       ├─ Q7: lblQ7, txtQ7, lblFbQ7
+ │       ├─ Q8: lblQ8, lblQ8Scale, lblQ8None, galQ8 { lblExpTitle, lblExpMeasures, rdoQ8, txtQ8, lblExpFb }
+ │       ├─ Q9: lblQ9, rdoQ9, lblFbQ9
+ │       ├─ lblFbOverall          (overall feedback, follow-up decision, agreed actions)
+ │       └─ lblMissing            ("Still to complete: …")
+ └─ conConfirm (overlay, full screen): lblConfirm, btnConfirmSubmit, btnCancel
+```
 
-**Common control properties**
+**Question wording**
 
-- All inputs: `DisplayMode = If(gEditable, DisplayMode.Edit, DisplayMode.View)`
-- Defaults:
-  - `txtQ1.Default = gReview.Q1WentWell`
-  - `rdoQ3.Default = LookUp(WorkloadScale, Value = gReview.Q3WorkloadRating).Label`
-  - `rdoQ4.Default = gReview.Q4WellbeingRaise.Value`, and the same pattern for Q5, Q6 and Q9
-  - `rdoQ8.Default = LookUp(ProgressScale, Value = ThisItem.rating).Label`
-  - `txtQ8.Default = ThisItem.comment`
+| Label | Text |
+|---|---|
+| lblQ1 | "1. What has gone well for you this month?" |
+| lblQ2 | "2. Challenges, blockers and support needed (optional – a sentence or two is fine)" |
+| lblQ2a–d | "What's the issue?" / "What's the impact?" / "What have you tried?" / "What support is needed?" |
+| lblQ3 | "3. How would you rate your current workload?" |
+| lblQ4 | "4. Is there anything relating to your wellbeing, workplace support or reasonable adjustments you would like to raise?" |
+| lblQ5 | "5. Is there anything upcoming that your line manager should be aware of for planning purposes?" |
+| lblQ6 | "6. Do you have any training, development requirements or career aspirations you would like to discuss?" |
+| lblQ7 | "7. Do you have any feedback for your line manager?" |
+| lblQ8 | "8. Appraisal expectations – how are you progressing?" |
+| lblQ8Scale | "Rate your progress against each expectation (this is not a workload score): 1 Not started · 2 Early progress · 3 On track · 4 Strong progress · 5 Fully met" |
+| lblQ9 | "9. How would you prefer to follow up on this month's review?" |
 
-**`scrTechReview.OnVisible`**
+**lblIntro:** "Save as often as you like and come back any time before the deadline. Short answers are fine. You can ask for a conversation at any time – you don't need to wait for this form. Submitting this form doesn't replace any formal appraisal or meeting your role requires."
+
+**lblQ4Guide:** "Please don't include medical diagnoses, medical history or treatment details. You can simply say you'd like to talk, and a conversation will be arranged. Health matters, occupational health referrals and formal adjustment requests are handled confidentially through the company's HR and Occupational Health processes. Employee Assistance Programme: «EAP contact – CONFIG»."
+
+**Control properties**
+
+| Control | Property | Formula |
+|---|---|---|
+| scrTechReview | OnVisible | `Select(btnLoad)` |
+| btnLoad | Visible | `false` |
+| ddMonth | Items | `Sort('Monthly Reviews', MonthStart, SortOrder.Descending)` (permissions return only the technician's own items) |
+| ddMonth | Value (display field) | `MonthKey` |
+| ddMonth | Default | `gReview.MonthKey` |
+| ddMonth | OnChange | `Set(gReview, Self.Selected); Select(btnLoad)` |
+| lblDeadline | Text | `"Deadline: 23:59, " & Text(gReview.DueDate, "dddd d mmmm yyyy")` |
+| lblStatus | Text | `gReview.ReviewStatus.Value & If(gReview.ReviewStatus.Value in ["Not Started","Draft"] && Now() > gReview.DueDate, " – OVERDUE (you can still submit)", "")` |
+| btnSave, btnSubmit | Visible | `gEditable` |
+| lblNoAccess | Visible | `IsBlank(gReview)` |
+| lblNoAccess | Text | "This review could not be found, or it isn't yours. Use the link in your latest email or contact your Team Leader." |
+| All questions and inputs | Visible | `!IsBlank(gReview)` |
+| All inputs | DisplayMode | `If(gEditable, DisplayMode.Edit, DisplayMode.View)` |
+| All text inputs | Mode | `TextMode.MultiLine` |
+| All text inputs | Height | 90 |
+| txtQ1 … txtQ7 | Default | the matching field, e.g. `gReview.Q1WentWell`, `gReview.Q2Issue` |
+| rdoQ3 | Items | `WorkloadScale` (set the display field to **Label**) |
+| rdoQ3 | Default | `LookUp(WorkloadScale, Value = gReview.Q3WorkloadRating).Label` |
+| rdoQ4 / rdoQ5 / rdoQ6 | Items | `YesNo` |
+| rdoQ4 / rdoQ5 / rdoQ6 | Default | `gReview.Q4WellbeingRaise.Value` (Q5, Q6 likewise) |
+| rdoQ4 / rdoQ5 / rdoQ6 | Layout | Horizontal |
+| txtQ4 | Visible | `rdoQ4.Selected.Value = "Yes"` |
+| txtQ5 | Visible | `rdoQ5.Selected.Value = "Yes"` |
+| txtQ6What, txtQ6Why | Visible | `rdoQ6.Selected.Value = "Yes"` |
+| rdoQ9 | Items | `FollowUpOptions` |
+| rdoQ9 | Default | `gReview.Q9FollowUp.Value` |
+| lblFbQ1 … lblFbQ9 | Visible | `!IsBlank(gMgr)` |
+| lblFbQ1 … lblFbQ9 | Text | `"Team Leader: " & gMgr.FB_Q1` (Q2–Q9 likewise) |
+| lblFbQ1 … lblFbQ9 | Fill | light grey |
+| lblFbOverall | Visible | `!IsBlank(gMgr)` |
+| lblFbOverall | Text | `"Overall: " & gMgr.FB_Overall & Char(10) & "Follow-up: " & Coalesce(gMgr.FollowUpDecision.Value, gMgr.TechFollowUp) & If(IsBlank(gMgr.MeetingDate), "", " on " & Text(gMgr.MeetingDate, "dd mmm yyyy")) & Char(10) & "Agreed actions:" & Char(10) & gMgr.AgreedActions` |
+| lblQ8None | Visible | `IsEmpty(colExp)` |
+| lblQ8None | Text | "No appraisal expectations are set for you this month." |
+| galQ8 | Items | `colExp` |
+| galQ8 | TemplateSize | 330 |
+| galQ8 | Height | `Max(1, CountRows(colExp)) * 330` |
+| lblExpTitle | Text | `ThisItem.title` |
+| lblExpMeasures | Text | `ThisItem.measures & " (" & ThisItem.year & ")"` |
+| rdoQ8 | Items | `ProgressScale` (display field **Label**) |
+| rdoQ8 | Default | `LookUp(ProgressScale, Value = ThisItem.rating).Label` |
+| txtQ8 | Default | `ThisItem.comment` |
+| txtQ8 | HintText | "Progress comments / evidence" |
+| lblExpFb | Visible | `!IsBlank(gMgr)` |
+| lblExpFb | Text | `"Team Leader: " & LookUp(colExpFb, id = ThisItem.id).feedback` |
+| conConfirm | Visible | `locConfirm` |
+| lblConfirm | Text | "Submit your 1-to-1? You won't be able to change it afterwards." |
+| btnCancel | OnSelect | `UpdateContext({locConfirm: false})` |
+
+**`btnLoad.OnSelect`** loads or refreshes the current review:
 
 ```powerfx
 If(IsBlank(gReview),
-    Set(gReview, Coalesce(
-        If(!IsBlank(Param("reviewId")), LookUp('Monthly Reviews', ID = Value(Param("reviewId")))),
-        First(Sort(Filter('Monthly Reviews', TechnicianAadId = MyAadId), MonthStart, SortOrder.Descending))
-    ))
-);
-// always re-read: picks up flow-side changes (lock, completion)
+    Set(gReview, If(!IsBlank(Param("reviewId")),
+        LookUp('Monthly Reviews', ID = Value(Param("reviewId"))),
+        First(Sort('Monthly Reviews', MonthStart, SortOrder.Descending)))));
 If(!IsBlank(gReview), Set(gReview, LookUp('Monthly Reviews', ID = gReview.ID)));
-Set(gEditable, !IsBlank(gReview) && gReview.Status.Value in ["Not Started", "Draft"]
-               && Lower(gReview.TechnicianAadId) = MyAadId);
-Set(gOverdue, gReview.Status.Value in ["Not Started", "Draft"] && Now() > gReview.DueDate);
+Set(gEditable, !IsBlank(gReview) && gReview.ReviewStatus.Value in ["Not Started", "Draft"]);
+// Returns blank until the TL has released feedback (no permission = nothing to read)
+Set(gMgr, IfError(LookUp('Manager Reviews', ReviewItemId = gReview.ID), Blank()));
 ClearCollect(colExp, ForAll(Table(ParseJSON(Coalesce(gReview.ExpectationsJson, "[]"))) As e,
     {id: Value(e.Value.id), title: Text(e.Value.title), measures: Text(e.Value.measures),
      year: Text(e.Value.year), rating: Value(e.Value.rating), comment: Text(e.Value.comment)}));
-// returns blank unless SharePoint has released the item to this user
-Set(gFeedback, LookUp('Manager Reviews', ReviewKey = gReview.ReviewKey));
-ClearCollect(colExpFb, ForAll(Table(ParseJSON(Coalesce(gFeedback.ExpectationFeedbackJson, "[]"))) As f,
+ClearCollect(colExpFb, ForAll(Table(ParseJSON(Coalesce(gMgr.ExpectationFeedbackJson, "[]"))) As f,
     {id: Value(f.Value.id), feedback: Text(f.Value.feedback)}));
-UpdateContext({locConfirm: false})
+UpdateContext({locConfirm: false, locSubmit: false})
 ```
 
-If `gReview` is blank, show `lblNoAccess` instead of the form: "This review could not be found, or it isn't yours. Use the link in your latest email, or contact your Team Leader."
-
-**Answer record and validation.** These go in `App.Formulas` as named formulas that reference the controls. If your Studio version rejects control references in named formulas, paste the same record inline into both Patch calls.
+**`lblMissing.Text`** lists the required answers that are still blank. Its Visible is `gEditable && !IsBlank(Self.Text)`, and it's best shown in red.
 
 ```powerfx
-nfAnswers = {
-    Q1WentWell: txtQ1.Text,
-    Q2Issue: txtQ2Issue.Text, Q2Impact: txtQ2Impact.Text, Q2Tried: txtQ2Tried.Text, Q2Support: txtQ2Support.Text,
-    Q3WorkloadRating: rdoQ3.Selected.Value,
-    Q3WorkloadComment: txtQ3.Text,
-    Q4WellbeingRaise: If(IsBlank(rdoQ4.Selected.Value), Blank(), {Value: rdoQ4.Selected.Value}),
-    Q4WellbeingDetail: If(rdoQ4.Selected.Value = "Yes", txtQ4.Text, Blank()),
-    Q5PlanningRaise: If(IsBlank(rdoQ5.Selected.Value), Blank(), {Value: rdoQ5.Selected.Value}),
-    Q5PlanningDetail: If(rdoQ5.Selected.Value = "Yes", txtQ5.Text, Blank()),
-    Q6DevRaise: If(IsBlank(rdoQ6.Selected.Value), Blank(), {Value: rdoQ6.Selected.Value}),
-    Q6DevWhat: If(rdoQ6.Selected.Value = "Yes", txtQ6What.Text, Blank()),
-    Q6DevWhy:  If(rdoQ6.Selected.Value = "Yes", txtQ6Why.Text,  Blank()),
-    Q7ManagerFeedback: txtQ7.Text,
-    ExpectationsJson: JSON(ForAll(galQ8.AllItems,
-        {id: id, title: title, measures: measures, year: year,
-         rating: rdoQ8.Selected.Value, comment: txtQ8.Text}), JSONFormat.Compact),
-    Q9FollowUp: If(IsBlank(rdoQ9.Selected.Value), Blank(), {Value: rdoQ9.Selected.Value})
-};
-
-nfMissing = Concat(Filter(Table(
-    {Ok: !IsBlank(Trim(txtQ1.Text)),                                Item: "Q1"},
-    {Ok: !IsBlank(rdoQ3.Selected.Value),                            Item: "Q3 workload rating"},
-    {Ok: !IsBlank(rdoQ4.Selected.Value),                            Item: "Q4 Yes/No"},
-    {Ok: rdoQ4.Selected.Value <> "Yes" || !IsBlank(Trim(txtQ4.Text)), Item: "Q4 details"},
-    {Ok: !IsBlank(rdoQ5.Selected.Value),                            Item: "Q5 Yes/No"},
-    {Ok: rdoQ5.Selected.Value <> "Yes" || !IsBlank(Trim(txtQ5.Text)), Item: "Q5 details"},
-    {Ok: !IsBlank(rdoQ6.Selected.Value),                            Item: "Q6 Yes/No"},
+Concat(Filter(Table(
+    {Ok: !IsBlank(Trim(txtQ1.Text)),                                   Item: "Q1"},
+    {Ok: !IsBlank(rdoQ3.Selected.Value),                               Item: "Q3 rating"},
+    {Ok: !IsBlank(rdoQ4.Selected.Value),                               Item: "Q4 Yes/No"},
+    {Ok: rdoQ4.Selected.Value <> "Yes" || !IsBlank(Trim(txtQ4.Text)),  Item: "Q4 details"},
+    {Ok: !IsBlank(rdoQ5.Selected.Value),                               Item: "Q5 Yes/No"},
+    {Ok: rdoQ5.Selected.Value <> "Yes" || !IsBlank(Trim(txtQ5.Text)),  Item: "Q5 details"},
+    {Ok: !IsBlank(rdoQ6.Selected.Value),                               Item: "Q6 Yes/No"},
     {Ok: rdoQ6.Selected.Value <> "Yes" || !IsBlank(Trim(txtQ6What.Text)), Item: "Q6 what is required"},
-    {Ok: CountRows(Filter(galQ8.AllItems, IsBlank(rdoQ8.Selected.Value))) = 0, Item: "Q8 rating for every expectation"},
-    {Ok: !IsBlank(rdoQ9.Selected.Value),                            Item: "Q9 follow-up preference"}
-), !Ok), Item, ", ");
+    {Ok: CountRows(Filter(galQ8.AllItems, IsBlank(rdoQ8.Selected.Value))) = 0, Item: "Q8 rating for each expectation"},
+    {Ok: !IsBlank(rdoQ9.Selected.Value),                               Item: "Q9"}
+), !Ok), Item, ", ")
 ```
 
-Hidden fields can't block submission. Every detail check is guarded by `<> "Yes"`, and hidden values are saved as blank.
-
-**`btnSave.OnSelect`**
-
-```powerfx
-IfError(
-    Set(gReview, Patch('Monthly Reviews', gReview, nfAnswers, {Status: {Value: "Draft"}}));
-    Notify("Draft saved at " & Text(Now(), "hh:mm"), NotificationType.Success),
-    Notify("Draft NOT saved – " & FirstError.Message, NotificationType.Error)
-)
-```
+Every detail check passes when the answer isn't "Yes". That's why hidden fields can never block submission.
 
 **`btnSubmit.OnSelect`**
 
 ```powerfx
-If(!IsBlank(nfMissing),
-    Notify("Before submitting, please complete: " & nfMissing, NotificationType.Error),
+If(!IsBlank(lblMissing.Text),
+    Notify("Before submitting, please complete: " & lblMissing.Text, NotificationType.Error),
     UpdateContext({locConfirm: true}))
 ```
 
 **`btnConfirmSubmit.OnSelect`**
 
 ```powerfx
-IfError(
-    Set(gReview, Patch('Monthly Reviews', gReview, nfAnswers, {Status: {Value: "Submitted"}}));
-    Set(gEditable, false); UpdateContext({locConfirm: false});
-    Notify("Submitted – your Team Leader has been notified.", NotificationType.Success),
-    Notify("NOT submitted – " & FirstError.Message, NotificationType.Error)
-)
+UpdateContext({locSubmit: true}); Select(btnSave)
 ```
 
-**`btnHistory.OnSelect`:** `Navigate(scrTechHistory)`
-
-### E.4 Screen `scrTechHistory`
-
-- `galHistory.Items`: `Sort(Filter('Monthly Reviews', TechnicianAadId = MyAadId), MonthStart, SortOrder.Descending)`
-
-  Permissions already restrict the result to the user's own items. The filter is only for neatness.
-- Row: `Text(ThisItem.MonthStart, "mmmm yyyy")`, `ThisItem.Status.Value`, `"Workload: " & Coalesce(Text(ThisItem.Q3WorkloadRating), "–")`. This row is the chronological workload history.
-- `OnSelect`: `Set(gReview, ThisItem); Navigate(scrTechReview)`
-
-### E.5 Screen `scrManagerReview` (TL only)
-
-**OnVisible**
+**`btnSave.OnSelect`** is the only place that writes answers. Submit reuses it.
 
 ```powerfx
-If(IsBlank(gReview) && !IsBlank(Param("reviewId")),
-    Set(gReview, LookUp('Monthly Reviews', ID = Value(Param("reviewId")))));
-Set(gReview, LookUp('Monthly Reviews', ID = gReview.ID));
-Set(gFeedback, LookUp('Manager Reviews', ReviewKey = gReview.ReviewKey));
+IfError(
+    Set(gReview, Patch('Monthly Reviews', gReview, {
+        Q1WentWell: txtQ1.Text,
+        Q2Issue: txtQ2Issue.Text, Q2Impact: txtQ2Impact.Text, Q2Tried: txtQ2Tried.Text, Q2Support: txtQ2Support.Text,
+        Q3WorkloadRating: rdoQ3.Selected.Value,
+        Q3WorkloadComment: txtQ3.Text,
+        Q4WellbeingRaise: If(IsBlank(rdoQ4.Selected.Value), Blank(), {Value: rdoQ4.Selected.Value}),
+        Q4WellbeingDetail: If(rdoQ4.Selected.Value = "Yes", txtQ4.Text, Blank()),
+        Q5PlanningRaise: If(IsBlank(rdoQ5.Selected.Value), Blank(), {Value: rdoQ5.Selected.Value}),
+        Q5PlanningDetail: If(rdoQ5.Selected.Value = "Yes", txtQ5.Text, Blank()),
+        Q6DevRaise: If(IsBlank(rdoQ6.Selected.Value), Blank(), {Value: rdoQ6.Selected.Value}),
+        Q6DevWhat: If(rdoQ6.Selected.Value = "Yes", txtQ6What.Text, Blank()),
+        Q6DevWhy:  If(rdoQ6.Selected.Value = "Yes", txtQ6Why.Text,  Blank()),
+        Q7ManagerFeedback: txtQ7.Text,
+        ExpectationsJson: JSON(ForAll(galQ8.AllItems,
+            {id: id, title: title, measures: measures, year: year,
+             rating: rdoQ8.Selected.Value, comment: txtQ8.Text}), JSONFormat.Compact),
+        Q9FollowUp: If(IsBlank(rdoQ9.Selected.Value), Blank(), {Value: rdoQ9.Selected.Value}),
+        ReviewStatus: {Value: If(locSubmit, "Submitted", "Draft")}
+    }));
+    If(locSubmit,
+        Set(gEditable, false); Notify("Submitted – your Team Leader has been notified.", NotificationType.Success),
+        Notify("Draft saved at " & Text(Now(), "hh:mm"), NotificationType.Success)),
+    Notify(If(locSubmit, "NOT submitted – ", "Draft NOT saved – ") & FirstError.Message, NotificationType.Error)
+);
+UpdateContext({locSubmit: false, locConfirm: false})
+```
+
+### E.3 Screen `scrManagerReview` (TL)
+
+**Layout**
+
+```
+scrManagerReview
+ ├─ conScreen
+ │   ├─ conHeader:
+ │   │   ├─ lblWho, lblState, lblRequested (amber banner)
+ │   │   └─ buttons: btnSaveFb, btnComplete, btnClose, btnBack, btnLoadMgr (hidden)
+ │   └─ conPage (scrolls):
+ │       ├─ lblReleased (notice when already released)
+ │       ├─ for Q1–Q7 and Q9: heading label, lblAnsQn (technician answer, read-only), txtFbQn (TL feedback)
+ │       ├─ Q8: galFbQ8 { lblSnapTitle, lblSnapMeasures, lblTechProgress, txtFbQ8 }
+ │       ├─ txtFbOverall, ddFollowUp, dpMeeting
+ │       ├─ txtActions, dpActionsDue, ddActionsStatus
+ │       └─ txtCorrection (visible only after release)
+ └─ conConfirmMgr (overlay): lblConfirmMgr, btnConfirmMgr, btnCancelMgr
+```
+
+**`scrManagerReview.OnVisible`:** `Select(btnLoadMgr)`
+
+**`btnLoadMgr.OnSelect`**
+
+```powerfx
+If(IsBlank(gMgr) && !IsBlank(Param("reviewId")),
+    Set(gMgr, LookUp('Manager Reviews', ReviewItemId = Value(Param("reviewId")))));
+Set(gMgr, LookUp('Manager Reviews', ID = gMgr.ID));
+Set(gReview, LookUp('Monthly Reviews', ID = gMgr.ReviewItemId));
+// Trusted titles/measures come from the TL's record, not the technician's copy
+ClearCollect(colSnap, ForAll(Table(ParseJSON(Coalesce(gMgr.ExpectationSnapshotJson, "[]"))) As s,
+    {id: Value(s.Value.id), title: Text(s.Value.title), measures: Text(s.Value.measures), year: Text(s.Value.year)}));
 ClearCollect(colExp, ForAll(Table(ParseJSON(Coalesce(gReview.ExpectationsJson, "[]"))) As e,
-    {id: Value(e.Value.id), title: Text(e.Value.title), measures: Text(e.Value.measures),
-     year: Text(e.Value.year), rating: Value(e.Value.rating), comment: Text(e.Value.comment)}));
-ClearCollect(colExpFb, ForAll(Table(ParseJSON(Coalesce(gFeedback.ExpectationFeedbackJson, "[]"))) As f,
+    {id: Value(e.Value.id), rating: Value(e.Value.rating), comment: Text(e.Value.comment)}));
+ClearCollect(colExpFb, ForAll(Table(ParseJSON(Coalesce(gMgr.ExpectationFeedbackJson, "[]"))) As f,
     {id: Value(f.Value.id), feedback: Text(f.Value.feedback)}));
-ClearCollect(colActions, Filter('Agreed Actions', ReviewKey = gReview.ReviewKey));
-Set(gMgrEditable, gFeedback.Status.Value in ["In Progress", "Completed"]);
-UpdateContext({locConfirmComplete: false, locConfirmClose: false, locConfirmReopen: false})
+UpdateContext({locCommand: "", locPending: "", locConfirm: false})
 ```
 
-**Layout:** a header showing the technician name, month, status chip, due date, submitted date and "Late" chip. If `gReview.Q9FollowUp.Value = OptDedicated`, show an amber banner: **"Technician has requested a dedicated 1-to-1"**.
+**Control properties**
 
-Then, for each section Q1–Q7 and Q9:
-
-- The technician's answer, as a **read-only label**. For No answers it shows "No".
-- A **TL feedback input** (`txtFbQ1` … `txtFbQ9`, `Default = gFeedback.FB_Qn`). It's **always visible, including when the answer is No**.
-
-Q8 uses `galFbQ8` (Items `colExp`). Each row shows the title, measures, technician rating (label from `ProgressScale`) and comment, plus `txtFbQ8` with `Default = LookUp(colExpFb, id = ThisItem.id).feedback`.
-
-**Follow-up and actions panel**
-
-- `ddFollowUp` (Items `FollowUpOptions`, AllowEmptySelection on, `Default = gFeedback.FollowUpDecision.Value`). The label reads "Override technician preference (leave blank to accept)".
-- `dpMeeting` (MeetingDate).
-- `txtFbOverall`.
-- `galActions` (Items `colActions`) shows Title, Owner, Due and Status. The add-row controls are `txtActTitle`, `ddActOwner` (`["Technician","Team Leader","Both"]`), `dpActDue` and `btnAddAction`.
-
-```powerfx
-// btnAddAction.OnSelect
-Patch('Agreed Actions', Defaults('Agreed Actions'), {
-    Title: txtActTitle.Text, ReviewKey: gReview.ReviewKey, TechnicianAadId: gReview.TechnicianAadId,
-    Technician: gReview.Technician, MonthKey: gReview.MonthKey,
-    Owner: {Value: ddActOwner.Selected.Value}, DueDate: dpActDue.SelectedDate, Status: {Value: "Open"}});
-ClearCollect(colActions, Filter('Agreed Actions', ReviewKey = gReview.ReviewKey));
-Reset(txtActTitle); Reset(dpActDue)
-```
-
-**Feedback record** (named formula in App.Formulas):
-
-```powerfx
-nfFeedback = {
-    FB_Q1: txtFbQ1.Text, FB_Q2: txtFbQ2.Text, FB_Q3: txtFbQ3.Text, FB_Q4: txtFbQ4.Text,
-    FB_Q5: txtFbQ5.Text, FB_Q6: txtFbQ6.Text, FB_Q7: txtFbQ7.Text, FB_Q9: txtFbQ9.Text,
-    FB_Overall: txtFbOverall.Text,
-    ExpectationFeedbackJson: JSON(ForAll(galFbQ8.AllItems, {id: id, feedback: txtFbQ8.Text}), JSONFormat.Compact),
-    FollowUpDecision: If(IsBlank(ddFollowUp.Selected.Value), Blank(), {Value: ddFollowUp.Selected.Value}),
-    MeetingDate: dpMeeting.SelectedDate
-};
-```
-
-**Buttons.** The manager never sets Completed, Closed or Reopen on the review item directly. They set a *command* on the manager-only item, and Flow 3 carries it out.
-
-| Button | Enabled when | OnSelect (after a confirm dialog where noted) |
+| Control | Property | Formula |
 |---|---|---|
-| **Save feedback** | `gMgrEditable` | `Set(gFeedback, Patch('Manager Reviews', gFeedback, nfFeedback)); Notify("Saved – not visible to the technician until you complete the review")` |
-| **Complete & release** (confirm) | `gReview.Status.Value = "Submitted" && gFeedback.Status.Value = "In Progress"` | See below |
-| **Close – not submitted** (confirm) | `gReview.Status.Value in ["Not Started","Draft"] && Now() > gReview.DueDate` | `Patch('Manager Reviews', gFeedback, nfFeedback, {Status: {Value: "Closed - Not Submitted"}})` |
-| **Reopen for correction** (confirm with a mandatory reason, `txtReason`) | `gReview.Status.Value in ["Submitted","Completed","Closed - Not Submitted"]` | `Patch('Manager Reviews', gFeedback, {Status: {Value: "Reopen"}, CorrectionLog: Text(Now(), "dd/mm/yyyy hh:mm") & " Reopened: " & txtReason.Text & Char(10) & gFeedback.CorrectionLog})` |
-| **Back to dashboard** | always | `Set(gReview, Blank()); Navigate(scrDashboard)` |
+| lblWho | Text | `gMgr.Technician.DisplayName & " – " & gMgr.MonthKey` |
+| lblState | Text | `gMgr.ReviewState.Value & If(gMgr.SubmittedLate, " (submitted late)", "") & If(gMgr.ReviewState.Value = "Open" && Now() > gMgr.DueDate, " – OVERDUE", "") & If(gMgr.ReviewState.Value = "Open", " · technician: " & gReview.ReviewStatus.Value, "")` |
+| lblRequested | Visible | `Coalesce(gMgr.FollowUpDecision.Value, gMgr.TechFollowUp) = OptDedicated` |
+| lblRequested | Text | "Dedicated 1-to-1 discussion requested" |
+| lblRequested | Fill | amber |
+| lblReleased | Visible | `!IsBlank(gMgr.ReleasedOn)` |
+| lblReleased | Text | "Released on " & Text(gMgr.ReleasedOn, "dd mmm yyyy") & ". Any change you save now is visible to the technician immediately. Record the reason in the correction log." |
+| lblAnsQ1 | Text | `gReview.Q1WentWell` (AutoHeight on) |
+| lblAnsQ2 | Text | `"Issue: " & gReview.Q2Issue & Char(10) & "Impact: " & gReview.Q2Impact & Char(10) & "Tried: " & gReview.Q2Tried & Char(10) & "Support needed: " & gReview.Q2Support` |
+| lblAnsQ3 | Text | `Coalesce(LookUp(WorkloadScale, Value = gReview.Q3WorkloadRating).Label, "(not rated)") & Char(10) & gReview.Q3WorkloadComment` |
+| lblAnsQ4 | Text | `Coalesce(gReview.Q4WellbeingRaise.Value, "(not answered)") & Char(10) & gReview.Q4WellbeingDetail` |
+| lblAnsQ5 | Text | as Q4, using Q5 fields |
+| lblAnsQ6 | Text | `Coalesce(gReview.Q6DevRaise.Value, "(not answered)") & Char(10) & "What: " & gReview.Q6DevWhat & Char(10) & "Why: " & gReview.Q6DevWhy` |
+| lblAnsQ7 | Text | `gReview.Q7ManagerFeedback` |
+| lblAnsQ9 | Text | `"Technician preference: " & Coalesce(gReview.Q9FollowUp.Value, "(not answered)")` |
+| txtFbQ1 … txtFbQ9 | Default | `gMgr.FB_Q1` (likewise) |
+| txtFbQ1 … txtFbQ9 | Mode | MultiLine |
+| txtFbQ1 … txtFbQ9 | Visible | always, **including when the technician answered No** |
+| galFbQ8 | Items | `colSnap` (the trusted list) |
+| galFbQ8 | TemplateSize | 260 |
+| galFbQ8 | Height | `Max(1, CountRows(colSnap)) * 260` |
+| lblSnapTitle | Text | `ThisItem.title` |
+| lblSnapMeasures | Text | `ThisItem.measures & " (" & ThisItem.year & ")"` |
+| lblTechProgress | Text | `With({r: LookUp(colExp, id = ThisItem.id)}, "Technician: " & Coalesce(LookUp(ProgressScale, Value = r.rating).Label, "not rated") & Char(10) & r.comment)` |
+| txtFbQ8 | Default | `LookUp(colExpFb, id = ThisItem.id).feedback` |
+| txtFbOverall | Default | `gMgr.FB_Overall` |
+| ddFollowUp | Items | `FollowUpOptions` |
+| ddFollowUp | AllowEmptySelection | true |
+| ddFollowUp | Default | `gMgr.FollowUpDecision.Value` |
+| ddFollowUp | label above | "Override follow-up (leave blank to accept the technician's preference)" |
+| dpMeeting | DefaultDate | `gMgr.MeetingDate` |
+| txtActions | Default | `gMgr.AgreedActions` |
+| txtActions | HintText | "One action per line – what, who, by when" |
+| dpActionsDue | DefaultDate | `gMgr.ActionsDueBy` |
+| ddActionsStatus | Items | `["Open", "Done"]` |
+| ddActionsStatus | Default | `If(gMgr.ActionsStatus.Value = "Done", "Done", "Open")` |
+| txtCorrection | Visible | `!IsBlank(gMgr.ReleasedOn)` |
+| txtCorrection | Default | `gMgr.CorrectionLog` |
+| btnComplete | DisplayMode | `If(gMgr.ReviewState.Value = "Submitted", DisplayMode.Edit, DisplayMode.Disabled)` |
+| btnComplete | OnSelect | `UpdateContext({locPending: "Completed", locConfirm: true})` |
+| btnClose | DisplayMode | `If(gMgr.ReviewState.Value = "Open" && Now() > gMgr.DueDate, DisplayMode.Edit, DisplayMode.Disabled)` |
+| btnClose | OnSelect | `UpdateContext({locPending: "Closed - Not Submitted", locConfirm: true})` |
+| conConfirmMgr | Visible | `locConfirm` |
+| lblConfirmMgr | Text | `If(locPending = "Completed", "Complete this review and release your feedback to the technician?", "Close this review as not submitted? The technician will no longer be able to submit it.")` |
+| btnConfirmMgr | OnSelect | `UpdateContext({locCommand: locPending}); Select(btnSaveFb)` |
+| btnCancelMgr | OnSelect | `UpdateContext({locConfirm: false})` |
+| btnBack | OnSelect | `Set(gMgr, Blank()); Set(gReview, Blank()); Navigate(scrDashboard)` |
+
+**`btnSaveFb.OnSelect`** saves the feedback, then optionally sends the *Completed* or *Closed* command. These are two separate writes, so a save can never overwrite a state that a flow has just changed.
 
 ```powerfx
-// btnConfirmComplete.OnSelect
 IfError(
-    Set(gFeedback, Patch('Manager Reviews', gFeedback, nfFeedback, {
-        ActionsSummary: Concat(Filter('Agreed Actions', ReviewKey = gReview.ReviewKey && Status.Value <> "Cancelled"),
-            "• " & Title & " (owner: " & Owner.Value & If(IsBlank(DueDate), "", ", due " & Text(DueDate, "dd mmm yyyy")) & ")",
-            Char(10)),
-        Status: {Value: "Completed"}}));
-    Notify("Completed. The technician will be emailed within a few minutes.", NotificationType.Success);
-    Navigate(scrDashboard),
-    Notify("NOT completed – " & FirstError.Message, NotificationType.Error))
+    Set(gMgr, Patch('Manager Reviews', gMgr, {
+        FB_Q1: txtFbQ1.Text, FB_Q2: txtFbQ2.Text, FB_Q3: txtFbQ3.Text, FB_Q4: txtFbQ4.Text,
+        FB_Q5: txtFbQ5.Text, FB_Q6: txtFbQ6.Text, FB_Q7: txtFbQ7.Text, FB_Q9: txtFbQ9.Text,
+        FB_Overall: txtFbOverall.Text,
+        ExpectationFeedbackJson: JSON(ForAll(galFbQ8.AllItems, {id: id, feedback: txtFbQ8.Text}), JSONFormat.Compact),
+        FollowUpDecision: If(IsBlank(ddFollowUp.Selected.Value), Blank(), {Value: ddFollowUp.Selected.Value}),
+        MeetingDate: dpMeeting.SelectedDate,
+        AgreedActions: txtActions.Text,
+        ActionsDueBy: dpActionsDue.SelectedDate,
+        ActionsStatus: {Value: If(IsBlank(Trim(txtActions.Text)), "None", ddActionsStatus.Selected.Value)},
+        CorrectionLog: txtCorrection.Text
+    }));
+    If(!IsBlank(locCommand),
+        Patch('Manager Reviews', gMgr, {ReviewState: {Value: locCommand}});
+        Notify("Done – the technician will be emailed within about 5 minutes.", NotificationType.Success);
+        Set(gMgr, Blank()); Set(gReview, Blank()); Navigate(scrDashboard),
+        Notify(If(IsBlank(gMgr.ReleasedOn), "Saved – not visible to the technician until you complete the review.",
+                  "Saved – already released, so the technician can see this change."), NotificationType.Success)),
+    Notify("NOT saved – " & FirstError.Message, NotificationType.Error)
+);
+UpdateContext({locCommand: "", locConfirm: false})
 ```
 
-### E.6 Q4 guidance text (always shown above `rdoQ4`)
+### E.4 Screen `scrDashboard` (TL; embedded on the site home page)
 
-> **Please don't include medical diagnoses, medical history or details of treatment here.** You can simply say you'd like to talk about wellbeing, support or reasonable adjustments, and your Team Leader will arrange a conversation. Health matters, occupational health referrals and formal adjustment requests are handled confidentially through the company's HR and Occupational Health processes. Support is also available through the Employee Assistance Programme: **[EAP contact – CONFIG]**.
+**Layout**
 
-### E.7 Screen `scrDashboard` (TL only, the welcome dashboard)
+```
+scrDashboard
+ └─ conScreen
+     ├─ conTop:
+     │   ├─ lblTitle "ESG Technician 1-to-1"
+     │   ├─ conKpis (horizontal): 8 KPI labels
+     │   ├─ conNav (horizontal): btnNavReviews, btnNavExpectations, btnNavActions, btnRefresh
+     │   ├─ conFilters (horizontal): ddMonth, ddTech, lblKpiMonth (hidden), btnLoadDash (hidden)
+     │   └─ conColHeads (horizontal): column heading labels
+     ├─ galRows (flexible height): one row per review
+     └─ lblFooter
+```
 
-**OnVisible**
+**`scrDashboard.OnVisible`:** `Select(btnLoadDash)`
+
+**`btnLoadDash.OnSelect`** (a hidden button, Visible `false`):
 
 ```powerfx
 Concurrent(
     ClearCollect(colTechs, Filter(Technicians, Active = true)),
-    ClearCollect(colAllReviews, 'Monthly Reviews'),
-    ClearCollect(colAllMgr, 'Manager Reviews'),
-    ClearCollect(colOpenActions, Filter('Agreed Actions', Status.Value = "Open"))
+    ClearCollect(colMgrAll, 'Manager Reviews'),
+    ClearCollect(colRevAll, ShowColumns('Monthly Reviews', ID, ReviewStatus, Q3WorkloadRating))
 );
-ClearCollect(colRows, ForAll(colAllReviews As r, {
-    ID: r.ID, Technician: r.Technician.DisplayName, TechnicianAadId: r.TechnicianAadId,
-    MonthKey: r.MonthKey, MonthStart: r.MonthStart, Status: r.Status.Value,
-    SubmittedOn: r.SubmittedOn, Late: r.SubmittedLate, Workload: r.Q3WorkloadRating,
-    Overdue: r.Status.Value in ["Not Started", "Draft"] && Now() > r.DueDate,
-    MgrStatus: Switch(r.Status.Value, "Submitted", "Awaiting review", "Completed", "Completed",
-                      "Closed - Not Submitted", "Closed", "—"),
-    FollowUp: Coalesce(LookUp(colAllMgr, ReviewKey = r.ReviewKey).FollowUpDecision.Value, r.Q9FollowUp.Value)
-}))
+ClearCollect(colRows, ForAll(colMgrAll As m, {
+    MgrId: m.ID,
+    Technician: m.Technician.DisplayName,
+    TechnicianAadId: m.TechnicianAadId,
+    MonthKey: m.MonthKey,
+    State: m.ReviewState.Value,
+    Started: LookUp(colRevAll, ID = m.ReviewItemId).ReviewStatus.Value = "Draft",
+    Workload: LookUp(colRevAll, ID = m.ReviewItemId).Q3WorkloadRating,
+    SubmittedOn: m.SubmittedOn,
+    Late: m.SubmittedLate,
+    Overdue: m.ReviewState.Value = "Open" && Now() > m.DueDate,
+    FollowUp: Coalesce(m.FollowUpDecision.Value, m.TechFollowUp),
+    ActionsOpen: m.ActionsStatus.Value = "Open",
+    ActionsDueBy: m.ActionsDueBy
+}));
+If(IsBlank(locTab), UpdateContext({locTab: "Reviews"}))
 ```
 
-This loads every review, which is fine up to the 2,000-row limit (about 16 years at 10 technicians). Section J notes the limit.
+This loads all records, which is fine up to the 2,000-row app limit (about 16 years at 10 technicians).
 
-**Filters:** `ddMonth` (Items `Sort(Distinct(colAllReviews, MonthKey), Value, SortOrder.Descending)`, `Default = Text(Today(), "yyyy-mm")`, AllowEmptySelection on, where blank means all months) and `ddTech` (Items `Sort(colTechs, Title)`, AllowEmptySelection on, where blank means all technicians).
+**Filters and navigation**
 
-**KPI tiles.** These are plain labels in one horizontal row, using `KpiMonth = Coalesce(ddMonth.Selected.Value, Text(Today(),"yyyy-mm"))`.
+| Control | Property | Formula |
+|---|---|---|
+| ddMonth | Items | `Sort(Distinct(colRows, MonthKey), Value, SortOrder.Descending)` |
+| ddMonth | Default | `Text(Today(), "yyyy-mm")` |
+| ddMonth | AllowEmptySelection | true (blank = all months) |
+| ddTech | Items | `Sort(colTechs, Title)` |
+| ddTech | Value | `Title` |
+| ddTech | AllowEmptySelection | true (blank = all technicians) |
+| lblKpiMonth | Visible | false |
+| lblKpiMonth | Text | `Coalesce(ddMonth.Selected.Value, Text(Today(), "yyyy-mm"))` |
+| btnNavReviews | OnSelect | `UpdateContext({locTab: "Reviews"})` |
+| btnNavExpectations | OnSelect | `Launch(SiteUrl & "/Lists/AppraisalExpectations/AllItems.aspx")` |
+| btnNavActions | OnSelect | `UpdateContext({locTab: "Actions"})` |
+| btnRefresh | OnSelect | `Select(btnLoadDash)` |
 
-| Tile | Formula |
+**KPI labels** (each label's `Text`)
+
+| KPI | Formula |
 |---|---|
-| Month | `Text(DateValue(KpiMonth & "-01"), "mmmm yyyy")` |
+| Month | `Text(DateValue(lblKpiMonth.Text & "-01"), "mmmm yyyy")` |
 | Active technicians | `CountRows(colTechs)` |
-| Submitted | `CountRows(Filter(colRows, MonthKey = KpiMonth && Status in ["Submitted","Completed"]))` |
-| Awaiting your review | `CountRows(Filter(colRows, MonthKey = KpiMonth && Status = "Submitted"))` |
-| Completed | `CountRows(Filter(colRows, MonthKey = KpiMonth && Status = "Completed"))` |
-| Outstanding / overdue | `CountRows(Filter(colRows, MonthKey = KpiMonth && Status in ["Not Started","Draft"])) & " / " & CountRows(Filter(colRows, MonthKey = KpiMonth && Overdue))` |
-| Dedicated 1-to-1 requested | `CountRows(Filter(colRows, MonthKey = KpiMonth && FollowUp = OptDedicated))` |
-| Open actions (overdue) | `CountRows(colOpenActions) & " (" & CountRows(Filter(colOpenActions, DueDate < Today())) & ")"` |
+| Submitted | `CountRows(Filter(colRows, MonthKey = lblKpiMonth.Text && State in ["Submitted", "Completed"]))` |
+| Awaiting your review | `CountRows(Filter(colRows, MonthKey = lblKpiMonth.Text && State = "Submitted"))` |
+| Completed | `CountRows(Filter(colRows, MonthKey = lblKpiMonth.Text && State = "Completed"))` |
+| Outstanding / overdue | `CountRows(Filter(colRows, MonthKey = lblKpiMonth.Text && State = "Open")) & " / " & CountRows(Filter(colRows, MonthKey = lblKpiMonth.Text && Overdue))` |
+| Dedicated 1-to-1 requested | `CountRows(Filter(colRows, MonthKey = lblKpiMonth.Text && FollowUp = OptDedicated))` |
+| Open actions (overdue) | `CountRows(Filter(colRows, ActionsOpen)) & " (" & CountRows(Filter(colRows, ActionsOpen && ActionsDueBy < Today())) & ")"` |
 
-`KpiMonth` can be a named formula, because named formulas may reference `ddMonth`.
-
-**Review table:** `galRows.Items`
+**`galRows.Items`**
 
 ```powerfx
-SortByColumns(Filter(colRows,
-    (IsBlank(ddMonth.Selected.Value) || MonthKey = ddMonth.Selected.Value) &&
-    (IsBlank(ddTech.Selected.Title)  || TechnicianAadId = ddTech.Selected.TechnicianAadId)),
-  "MonthStart", SortOrder.Descending, "Technician", SortOrder.Ascending)
+If(locTab = "Actions",
+    SortByColumns(Filter(colRows, ActionsOpen), ActionsDueBy, SortOrder.Ascending),
+    SortByColumns(Filter(colRows,
+        (IsBlank(ddMonth.Selected.Value) || MonthKey = ddMonth.Selected.Value) &&
+        (IsBlank(ddTech.Selected.Title) || TechnicianAadId = ddTech.Selected.TechnicianAadId)),
+      MonthKey, SortOrder.Descending, Technician, SortOrder.Ascending))
 ```
 
-The columns are Technician, Month, Status (red "Overdue" suffix when Overdue), Submitted (date plus "late"), Manager review, Follow-up, Workload and an **Open** button. The Open button runs `Set(gReview, LookUp('Monthly Reviews', ID = ThisItem.ID)); Navigate(scrManagerReview)`.
+**Row columns** (labels inside galRows)
 
-Rows where `FollowUp = OptDedicated` get a pale amber fill and a bold **"1-to-1 requested"** marker. Filtering by technician with all months selected gives the historic reviews and workload history.
+| Column | Formula |
+|---|---|
+| Technician | `ThisItem.Technician` |
+| Month | `ThisItem.MonthKey` |
+| Status | `Switch(ThisItem.State, "Open", If(ThisItem.Overdue, "OVERDUE – ", "") & If(ThisItem.Started, "Draft", "Not started"), "Submitted", "Awaiting your review", "Completed", "Completed", "Closed - Not Submitted", "Closed – not submitted") & If(ThisItem.Late, " (late)", "")` |
+| Submitted | `Text(ThisItem.SubmittedOn, "dd mmm")` |
+| Workload | `ThisItem.Workload` |
+| Follow-up | `ThisItem.FollowUp` |
+| Actions | `If(ThisItem.ActionsOpen, "Open – due " & Text(ThisItem.ActionsDueBy, "dd mmm"), "")` |
+| Open (button) | `Set(gMgr, LookUp('Manager Reviews', ID = ThisItem.MgrId)); Navigate(scrManagerReview)` |
 
-**Navigation buttons**
+Row formatting:
 
-- **Monthly Reviews:** this screen.
-- **Appraisal Expectations:** `Launch(SiteUrl & "/Lists/AppraisalExpectations/Active.aspx")`
-- **Outstanding Actions:** `Launch(SiteUrl & "/Lists/AgreedActions/Outstanding.aspx")`
-- **Refresh:** re-runs OnVisible via `Navigate(scrDashboard)`.
+- Gallery template **Fill:** `If(ThisItem.FollowUp = OptDedicated, RGBA(255, 244, 206, 1), Transparent)`
+- Status label **Color:** `If(ThisItem.Overdue, Color.DarkRed, Color.Black)`
 
-**Footer note:** "A written check-in does not by itself satisfy any formal appraisal or meeting requirement."
+To see one technician's history, including the workload trend, choose the technician and clear the month.
 
-If a technician somehow reaches this screen, it shows only their own data, because every query runs under their permissions. The dashboard is never a security boundary.
+**lblFooter:** "A written check-in does not by itself satisfy any formal appraisal or meeting requirement."
+
+If a technician ever reached this screen, they would see only their own data, because SharePoint filters every query.
 
 ---
 
 ## F. Power Automate specification
 
-**Common to all flows**
+### F.0 Configuration values and the shared permission block
 
-- **Connections:** SharePoint and Office 365 Outlook (plus Office 365 Users for Flow 1), all **standard**, signed in as the **Team Leader**.
-- **Site address:** the private site. Action names below are suggested, so rename the actions to match, because expressions reference them.
-- **Config:** each flow starts with **Initialize variable** actions:
+**Initialize variable** actions at the top of every flow (Flow 1 also adds `varTestDate` and `varProblems`):
 
-| Variable | Value |
-|---|---|
-| `varManagerEmail` | TL email (lower case) |
-| `varAppLink` | App web link: `https://apps.powerapps.com/play/e/<ENV-ID>/a/<APP-ID>?tenantId=<TENANT-ID>&hidenavbar=true` |
-| `varEditLevel` | `1-to-1 Edit (no delete)` |
+| Variable | Type | Value |
+|---|---|---|
+| varManagerEmail | String | TL email |
+| varAppLink | String | `<App web link>&hidenavbar=true`. The web link already contains `?tenantId=…`. |
+| varOwnersId | Integer | from G Part 4 |
+| varFullControlId | Integer | from G Part 4 (normally `1073741829`) |
+| varEditId | Integer | ID of `1-to-1 Edit`, from G Part 4 |
+| varReadId | Integer | ID of `1-to-1 Read`, from G Part 4 |
 
-- **Error handling:** wrap the main logic in **Scope `Try`**. Add **Scope `Catch`**, configured to run after `Try` *has failed* or *has timed out*, which emails the TL with the run link and then **Terminates (Failed)**.
+**`SETPERM` block.** Four *Send an HTTP request to SharePoint* actions, each with:
 
-  The run link expression is `concat('https://make.powerautomate.com/environments/', workflow()?['tags']?['environmentName'], '/flows/', workflow()?['name'], '/runs/', workflow()?['run']?['name'])`.
-- **Secure inputs and outputs:** turn these on for the trigger and for every Get items / Get item on Monthly Reviews and Manager Reviews.
-- **HTTP headers:** every *Send an HTTP request to SharePoint* call uses `Accept: application/json;odata=nometadata` and, for POST requests with a body, `Content-Type: application/json;odata=nometadata`.
+- **Site Address:** the 1-to-1 site
+- **Method:** POST
+- **Headers:** `Accept` = `application/json;odata=nometadata`
 
-### F.0 Shared blocks (built once, copied with "Copy to my clipboard")
+| # | Action name | Uri |
+|---|---|---|
+| 1 | `Reset_<x>` | `_api/web/lists/getbytitle('<LIST>')/items(<ITEM-ID>)/resetroleinheritance` |
+| 2 | `Break_<x>` | `_api/web/lists/getbytitle('<LIST>')/items(<ITEM-ID>)/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)` |
+| 3 | `AddOwners_<x>` | `_api/web/lists/getbytitle('<LIST>')/items(<ITEM-ID>)/roleassignments/addroleassignment(principalid=@{variables('varOwnersId')},roledefid=@{variables('varFullControlId')})` |
+| 4 | `AddTech_<x>` | `_api/web/lists/getbytitle('<LIST>')/items(<ITEM-ID>)/roleassignments/addroleassignment(principalid=@{body('Ensure_user')?['Id']},roledefid=<ROLE-ID>)` |
 
-**`LOOKUPS` scope** (four GET calls, run once per flow run)
+`<LIST>` is `Monthly Reviews` or `Manager Reviews`. If a call returns *400 Bad Request*, write the space as `%20`.
 
-| Action | Method | Uri | Output used |
-|---|---|---|---|
-| `Get_owners` | GET | `_api/web/associatedownergroup?$select=Id` | `body('Get_owners')?['Id']` |
-| `Get_FullControl` | GET | `_api/web/roledefinitions/getbyname('Full Control')?$select=Id` | `body('Get_FullControl')?['Id']` |
-| `Get_Read` | GET | `_api/web/roledefinitions/getbyname('Read')?$select=Id` | `body('Get_Read')?['Id']` |
-| `Get_EditLevel` | GET | `_api/web/roledefinitions/getbyname('@{variables('varEditLevel')}')?$select=Id` | `body('Get_EditLevel')?['Id']` |
-| `Get_me` | GET | `_api/web/currentuser?$select=Id` | `body('Get_me')?['Id']` |
+**`Ensure_user`** resolves the technician's SharePoint principal ID. It's another *Send an HTTP request to SharePoint* action:
 
-**`ENSURE_USER`** (once per technician)
+- **Method:** POST
+- **Uri:** `_api/web/ensureuser`
+- **Headers:**
+  - `Accept` = `application/json;odata=nometadata`
+  - `Content-Type` = `application/json;odata=nometadata`
+- **Body:** `{"logonName":"<technician Claims from Manager Reviews>"}`
 
-- Method POST, Uri `_api/web/ensureuser`
-- Body: `{"logonName":"@{<technician Person field>?['Claims']}"}`
-- Output: `body('Ensure_user')?['Id']`, which is the technician's principal ID.
+The principal ID is then `body('Ensure_user')?['Id']`.
 
-**`SETPERM` scope.** Parameters: list title `L`, item id `I`, technician principal `T` and role definition `R`. All calls use the SharePoint HTTP action.
+**Error handling, the same in every flow.** Put all the work in a **Scope** named `Try`. Add a **Scope** named `Catch` and set its *Run after* to **has failed** and **has timed out** of `Try`.
 
-1. POST `_api/web/lists/getbytitle('L')/items(I)/resetroleinheritance`
-2. POST `_api/web/lists/getbytitle('L')/items(I)/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)`
-3. POST `_api/web/lists/getbytitle('L')/items(I)/roleassignments/addroleassignment(principalid=@{body('Get_owners')?['Id']},roledefid=@{body('Get_FullControl')?['Id']})`
-4. POST `_api/web/lists/getbytitle('L')/items(I)/roleassignments/addroleassignment(principalid=T,roledefid=R)`
-5. GET `_api/web/lists/getbytitle('L')/items(I)/roleassignments?$select=PrincipalId,RoleDefinitionBindings/Id&$expand=RoleDefinitionBindings`
-6. **Filter array** `Unexpected`
-   - From: `body('Verify')?['value']`
-   - Condition (advanced): `@and(not(equals(item()?['PrincipalId'], <owners>)), not(equals(item()?['PrincipalId'], T)), not(equals(item()?['PrincipalId'], body('Get_me')?['Id'])))`
-7. **Filter array** `TechRow`: `@equals(item()?['PrincipalId'], T)`
-8. **Condition** `PermOK`: `@and(equals(length(body('Unexpected')),0), equals(length(body('TechRow')),1), equals(length(first(body('TechRow'))?['RoleDefinitionBindings']),1), equals(first(body('TechRow'))?['RoleDefinitionBindings']?[0]?['Id'], R))`
-   - If no: **Compose `PERMISSION_CHECK_FAILED`** with `int('permission check failed')`. This deliberately fails the action, which fails the scope and runs `Catch`, so no email is sent.
+Inside `Catch`:
 
-**`UNRELEASE`** (Manager Reviews only): steps 1 and 5 of SETPERM. Reset inheritance, then verify that `HasUniqueRoleAssignments` is false (GET `.../items(I)?$select=HasUniqueRoleAssignments`).
+1. **Send an email (V2)** to `varManagerEmail`, subject `1-to-1 system: action needed (<flow name>)`, with this run link in the body:
 
-The list titles used in `getbytitle` are `Monthly Reviews` and `Manager Reviews`. **Renaming a list breaks the flows.**
+   ```
+   concat('https://make.powerautomate.com/environments/', workflow()?['tags']?['environmentName'], '/flows/', workflow()?['name'], '/runs/', workflow()?['run']?['name'])
+   ```
+
+2. **Terminate**, with Status **Failed**.
 
 ### F.1 Flow 1 — `1-to-1 | Daily scheduler`
 
-**Trigger:** **Recurrence**, Frequency Day, Interval 1, Time zone **(UTC+00:00) Dublin, Edinburgh, Lisbon, London**, at hour **7**, minute **0**.
+**Trigger:** **Recurrence**
 
-Trigger settings: **Concurrency control On, degree 1**, so manual and scheduled runs can't overlap. This one daily flow covers creation (idempotent and self-healing), overdue flags and reminders.
+| Setting | Value |
+|---|---|
+| Interval | 1 |
+| Frequency | Day |
+| Time zone | (UTC+00:00) Dublin, Edinburgh, Lisbon, London |
+| At these hours | 7 |
+| At these minutes | 0 |
+| Settings → Concurrency control | **On**, degree of parallelism **1** |
 
 **Actions, in order**
 
-1. Config variables (above), plus:
-   - `varTestDate` (String, **empty in production**; e.g. `2027-03-01T07:00:00` while testing)
-   - `varFailures` (Array)
-   - `varWarnings` (Array)
-2. **Compose** the date values:
+1. **Initialize variables:**
+   - varManagerEmail, varAppLink, varOwnersId, varFullControlId, varEditId
+   - `varTestDate` (String, **empty in production**)
+   - `varProblems` (Array)
+   - `varTechAad` (String)
+   - `varReviewId` (Integer)
+2. **Compose** actions, using the action name shown and the expression given:
 
-   | Compose | Expression |
+   | Name | Expression |
    |---|---|
    | `ukNow` | `if(empty(variables('varTestDate')), convertFromUtc(utcNow(), 'GMT Standard Time', 'yyyy-MM-ddTHH:mm:ss'), variables('varTestDate'))` |
    | `MonthKey` | `formatDateTime(outputs('ukNow'), 'yyyy-MM')` |
-   | `MonthStart` | `formatDateTime(outputs('ukNow'), 'yyyy-MM-01')` |
-   | `LastDay` | `formatDateTime(addDays(addToTime(startOfMonth(outputs('ukNow')), 1, 'Month'), -1), 'yyyy-MM-dd')` (handles 28, 29, 30 and 31-day months) |
-   | `DueUtc` | `convertToUtc(concat(outputs('LastDay'), 'T23:59:59'), 'GMT Standard Time')` (handles BST/GMT) |
+   | `LastDay` | `formatDateTime(addDays(addToTime(startOfMonth(outputs('ukNow')), 1, 'Month'), -1), 'yyyy-MM-dd')` |
+   | `DueUtc` | `convertToUtc(concat(outputs('LastDay'), 'T23:59:59'), 'GMT Standard Time')` |
    | `DeadlineText` | `concat('23:59 on ', formatDateTime(outputs('LastDay'), 'dddd d MMMM yyyy'))` |
    | `MonthName` | `formatDateTime(outputs('ukNow'), 'MMMM yyyy')` |
    | `Day` | `dayOfMonth(outputs('ukNow'))` |
 
-3. **Scope `Try`**
-   1. `LOOKUPS` scope.
-   2. **Get items** `Get_technicians` (Technicians), Filter `Active eq 1`.
-   3. **Get items** `Get_expectations` (Appraisal Expectations), Filter `Active eq 1`, Order By `SortOrder asc`, Top Count 500.
-   4. **Apply to each** technician (`body('Get_technicians')?['value']`), with **Concurrency Off (sequential)**.
-      - **Scope `TechTry`**
-        1. **Condition** `NeedsAad`: `empty(items('Apply_to_each')?['TechnicianAadId'])`.
-           - If yes: **Get user profile (V2)** (Office 365 Users) with User = `items('Apply_to_each')?['Technician']?['Email']`, then **Update item** (Technicians) with `TechnicianAadId = toLower(body('Get_user_profile_(V2)')?['id'])` and Title = the existing Title.
-        2. **Compose `TechAad`**: `toLower(coalesce(items('Apply_to_each')?['TechnicianAadId'], body('Get_user_profile_(V2)')?['id']))`
-        3. **Compose `ReviewKey`**: `concat(outputs('TechAad'), '_', outputs('MonthKey'))`
-        4. **Get items** `Find_review` (Monthly Reviews), Filter `ReviewKey eq '@{outputs('ReviewKey')}'`, Top 1.
-        5. **Condition** `ReviewMissing`: `equals(length(body('Find_review')?['value']), 0)`.
-           - If yes:
-             - **Filter array** `MyExpectations`, from `body('Get_expectations')?['value']`, condition `@or(equals(item()?['Scope']?['Value'], 'Shared'), equals(toLower(item()?['Technician']?['Email']), toLower(items('Apply_to_each')?['Technician']?['Email'])))`.
-             - **Condition** `TooMany`: `greater(length(body('MyExpectations')), 10)`. If yes, **Append to array variable** `varWarnings`: `concat(items('Apply_to_each')?['Title'], ': ', length(body('MyExpectations')), ' active expectations – only the first 10 by SortOrder were used')`.
-             - **Select** `SnapExp`, from `take(body('MyExpectations'), 10)`. Map `id` = `item()?['ID']`, `title` = `item()?['Title']`, `measures` = `item()?['Measures']`, `year` = `item()?['AppraisalYear']`, `rating` = `null` and `comment` = `''`.
-             - **Create item** `Create_review` (Monthly Reviews):
+   `LastDay` handles 28, 29, 30 and 31-day months, including leap years. `DueUtc` handles the change between GMT and BST.
+
+3. **Scope `Try`:**
+   1. **Get items** `Get_technicians`. List: Technicians. Filter Query: `Active eq 1`.
+   2. **Get items** `Get_expectations`. List: Appraisal Expectations. Filter Query: `Active eq 1`. Order By: `SortOrder asc`. Top Count: `500`.
+   3. **Apply to each** `Each_technician` over `body('Get_technicians')?['value']`. Settings → Concurrency control **On, degree 1**.
+      - **Scope `TechTry`:**
+        1. **Set variable** `varTechAad` = `toLower(coalesce(items('Each_technician')?['TechnicianAadId'], ''))`
+        2. **Condition** `No_AadId`: `variables('varTechAad')` *is equal to* (leave the right-hand side empty).
+           - **True:**
+             - **Get user profile (V2)** `Get_profile`, User = `items('Each_technician')?['Technician']?['Email']`
+             - **Update item** (Technicians): Id = `items('Each_technician')?['ID']`, Title = `items('Each_technician')?['Title']`, TechnicianAadId = `toLower(body('Get_profile')?['id'])`
+             - **Set variable** `varTechAad` = `toLower(body('Get_profile')?['id'])`
+        3. **Compose** `ReviewKey` = `concat(variables('varTechAad'), '_', outputs('MonthKey'))`
+        4. **Get items** `Find_mgr` (Manager Reviews): Filter `ReviewKey eq '@{outputs('ReviewKey')}'`, Top Count `1`.
+        5. **Condition** `Mgr_missing`: `length(body('Find_mgr')?['value'])` *is equal to* `0`.
+           - **True:**
+             - **Filter array** `My_expectations`. From: `body('Get_expectations')?['value']`. Advanced mode:
+
+               ```
+               @or(equals(item()?['AppliesTo']?['Value'], 'Shared'), equals(toLower(coalesce(item()?['Technician']?['Email'], '')), toLower(items('Each_technician')?['Technician']?['Email'])))
+               ```
+
+             - **Condition** `Too_many`: `length(body('My_expectations'))` *is greater than* `10`. If true, **Append to array variable** `varProblems`:
+
+               ```
+               concat(items('Each_technician')?['Title'], ': more than 10 active expectations – only the first 10 by SortOrder were used.')
+               ```
+
+             - **Select** `Snapshot`. From: `take(body('My_expectations'), 10)`. Map (key → value):
+
+               | Key | Value |
+               |---|---|
+               | `id` | `item()?['ID']` |
+               | `title` | `item()?['Title']` |
+               | `measures` | `item()?['Measures']` |
+               | `year` | `item()?['AppraisalYear']` |
+
+             - **Create item** (Manager Reviews):
 
                | Field | Value |
                |---|---|
-               | Title | `concat(items('Apply_to_each')?['Title'], ' – ', outputs('MonthKey'))` |
+               | Title | `concat(items('Each_technician')?['Title'], ' – ', outputs('MonthKey'))` |
                | ReviewKey | `outputs('ReviewKey')` |
-               | Technician Claims | `items('Apply_to_each')?['Technician']?['Claims']` |
-               | TechnicianAadId | `outputs('TechAad')` |
+               | Technician Claims | `items('Each_technician')?['Technician']?['Claims']` |
+               | TechnicianAadId | `variables('varTechAad')` |
                | MonthKey | `outputs('MonthKey')` |
-               | MonthStart | `outputs('MonthStart')` |
                | DueDate | `outputs('DueUtc')` |
-               | Status | `Not Started` |
-               | ExpectationsJson | `string(body('SnapExp'))` |
+               | ReviewState Value | `Open` |
+               | ActionsStatus Value | `None` |
+               | ExpectationSnapshotJson | `string(body('Snapshot'))` |
 
-               The new item inherits manager-only permissions, so it's private from creation. The unique `ReviewKey` makes a duplicate create **fail** rather than duplicate.
-        6. **Compose `Review`**: `if(equals(length(body('Find_review')?['value']), 0), body('Create_review'), first(body('Find_review')?['value']))`
-        7. **Get items** `Find_mgr` (Manager Reviews), Filter `ReviewKey eq '@{outputs('ReviewKey')}'`, Top 1.
-           - If it's empty, **Create item** (Manager Reviews) with Title, ReviewKey, Technician Claims, TechnicianAadId, MonthKey and Status `In Progress`. This is private by inheritance, so no permission work is needed.
-        8. **Condition** `NeedsLink`: `@and(empty(outputs('Review')?['LinkSentOn']), equals(outputs('Review')?['Status']?['Value'], 'Not Started'))`.
-           - If yes:
-             1. `ENSURE_USER` with the technician's Claims.
-             2. `SETPERM` with L = `Monthly Reviews`, I = `outputs('Review')?['ID']`, T = the technician principal and R = `body('Get_EditLevel')?['Id']`. This **stops here on any failure**.
-             3. **Send an email (V2)** to the technician, using template E1 (F.5).
-             4. **Update item** (Monthly Reviews, ID = Review ID) with `LinkSentOn = utcNow()` and Title = the existing Title.
-      - **Scope `TechCatch`** (runs after `TechTry` has failed or timed out): **Append to array variable** `varFailures` with `concat(items('Apply_to_each')?['Title'], ' – ', string(result('TechTry')))`. One technician's failure doesn't stop the others.
-   5. **Scope `Overdue`**
-      - **Get items** (Monthly Reviews), Filter `IsOverdue eq 0 and (Status eq 'Not Started' or Status eq 'Draft') and DueDate lt '@{utcNow()}'`.
-      - **Apply to each**: **Update item** with `IsOverdue = Yes` and Title = the existing Title.
-   6. **Condition** `ReminderDay`: `@or(equals(outputs('Day'), 20), equals(outputs('Day'), 27))`.
-      - If yes: **Get items** (Monthly Reviews), Filter `MonthKey eq '@{outputs('MonthKey')}' and (Status eq 'Not Started' or Status eq 'Draft') and LinkSentOn ne null`. Then **Apply to each**: **Send an email (V2)** using template E2. Submitted, completed and closed reviews are never selected.
-   7. **Condition**: `@or(greater(length(variables('varFailures')),0), greater(length(variables('varWarnings')),0))`.
-      - If yes: email the TL using template E7, listing the failures and warnings with the run link.
-      - If there are failures: **Terminate (Failed)**.
-4. **Scope `Catch`**: email the TL using template E7, then **Terminate (Failed)**.
+               The unique ReviewKey means a duplicate create *fails* rather than creating a second record.
+        6. **Get items** `Get_mgr` (Manager Reviews): same filter as `Find_mgr`, Top Count `1`. Then **Compose** `Mgr` = `first(body('Get_mgr')?['value'])`.
+        7. **Condition** `Review_missing`, in advanced mode: `@equals(outputs('Mgr')?['ReviewItemId'], null)`. Don't use `empty()` here: it isn't valid on a number.
+           - **True:**
+             - **Select** `Tech_copy`. From: `json(coalesce(outputs('Mgr')?['ExpectationSnapshotJson'], '[]'))`. Map:
 
-**Duplicate prevention** works in three layers:
+               | Key | Value |
+               |---|---|
+               | `id` | `item()?['id']` |
+               | `title` | `item()?['title']` |
+               | `measures` | `item()?['measures']` |
+               | `year` | `item()?['year']` |
+               | `rating` | `null` (entered as an expression) |
+               | `comment` | an empty string |
 
-- The `Find_review` check before creating.
-- The unique `ReviewKey` column, a SharePoint-enforced guarantee even if two runs race.
-- `LinkSentOn`, which ensures each review is emailed only once.
+             - **Create item** `Create_review` (Monthly Reviews). It's private from creation, because it inherits the manager-only list permissions.
 
-**Self-healing:** if the run on the 1st fails, the next day's run creates or emails only what's missing. A technician added mid-month gets their review the next morning.
+               | Field | Value |
+               |---|---|
+               | Title | `outputs('Mgr')?['Title']` |
+               | Technician Claims | `outputs('Mgr')?['Technician']?['Claims']` |
+               | MonthKey | `outputs('Mgr')?['MonthKey']` |
+               | MonthStart | `concat(outputs('Mgr')?['MonthKey'], '-01')` |
+               | DueDate | `outputs('Mgr')?['DueDate']` |
+               | ReviewStatus Value | `Not Started` |
+               | ExpectationsJson | `string(body('Tech_copy'))` |
 
-**Testing:** see H. Use `varTestDate` to simulate any date. While testing, keep only test accounts in Technicians.
+             - **Update item** (Manager Reviews): Id = `outputs('Mgr')?['ID']`, Title = `outputs('Mgr')?['Title']`, ReviewItemId = `body('Create_review')?['ID']`
+             - **Set variable** `varReviewId` = `body('Create_review')?['ID']`
+           - **False:** **Set variable** `varReviewId` = `outputs('Mgr')?['ReviewItemId']`
+        8. **Condition** `Needs_link`, in advanced mode:
+
+           ```
+           @and(equals(outputs('Mgr')?['ReviewState']?['Value'], 'Open'), empty(outputs('Mgr')?['LinkSentOn']))
+           ```
+
+           - **True:**
+             - `Ensure_user`, using Claims = `outputs('Mgr')?['Technician']?['Claims']`
+             - **SETPERM** on list `Monthly Reviews`, item `@{variables('varReviewId')}`, role `@{variables('varEditId')}`
+             - **Send an email (V2)** using **E1**, to `outputs('Mgr')?['Technician']?['Email']`
+             - **Update item** (Manager Reviews): Id = `outputs('Mgr')?['ID']`, Title = `outputs('Mgr')?['Title']`, LinkSentOn = `utcNow()`
+      - **Scope `TechCatch`**, with *Run after* `TechTry` **has failed** or **has timed out**. **Append to array variable** `varProblems`:
+
+        ```
+        concat('FAILED for ', items('Each_technician')?['Title'], ' – no email was sent. Open the run history for details.')
+        ```
+
+        One technician's failure doesn't stop the others. If a permission step fails, no link is emailed.
+   4. **Condition** `Reminder_day`, in advanced mode: `@or(equals(outputs('Day'), 20), equals(outputs('Day'), 27))`.
+      - **True:**
+        - **Get items** `Outstanding` (Manager Reviews). Filter:
+
+          ```
+          MonthKey eq '@{outputs('MonthKey')}' and ReviewState eq 'Open' and LinkSentOn ne null
+          ```
+
+        - **Apply to each** over its value: **Send an email (V2)** using **E2**, to `items('Apply_to_each')?['Technician']?['Email']`.
+
+        Submitted, completed and closed reviews never match, so they're never reminded.
+   5. **Condition** `Any_problems`: `length(variables('varProblems'))` *is greater than* `0`.
+      - **True:** **Send an email (V2)** using **E7** to `varManagerEmail`. The body is `join(variables('varProblems'), '<br>')` plus the run link.
+4. **Scope `Catch`** (as in F.0).
+
+**Duplicate prevention**
+
+- The `Find_mgr` check runs before anything is created.
+- **Unique ReviewKey on the manager-only list.** SharePoint itself refuses a second item, even if two runs race.
+- `LinkSentOn` on the manager-only record means one link email per review.
+
+**Self-healing.** If the run on the 1st fails part-way, the next day's run finishes only the missing steps. A technician added mid-month gets their review the next morning.
+
+**Rare orphan.** If `Create_review` succeeds but the next *Update item* fails, the TL is emailed. That leaves a private, unlinked Monthly Review, which the TL deletes. The next run creates a clean one.
 
 ### F.2 Flow 2 — `1-to-1 | Review submitted`
 
-**Trigger:** SharePoint **When an item is created or modified** on the site, list `Monthly Reviews`.
+**Trigger:** SharePoint **When an item is created or modified**. Site: the 1-to-1 site. List: **Monthly Reviews**.
 
-**Settings → Trigger conditions** (both must be true):
+**Trigger settings**
 
-```
-@not(contains(createArray('Not Started','Draft'), triggerBody()?['Status']?['Value']))
-@not(equals(toLower(triggerBody()?['Editor']?['Email']), 'team.leader@yourcompany.co.uk'))
-```
+| Setting | Value |
+|---|---|
+| Trigger condition (one line) | `@not(contains(createArray('Not Started','Draft'), triggerBody()?['ReviewStatus']?['Value']))` |
+| Concurrency control | On, degree 1 |
 
-The second condition ignores edits made by the TL or flow account, which prevents loops. Use the same address as `varManagerEmail`. If a service account is introduced, add a third condition for it.
-
-Concurrency is left at default. Turn **Secure outputs** on for the trigger.
+**There's deliberately no "Modified By" condition** (see PLAN_REVIEW S4).
 
 **Actions**
 
-1. Config variables.
-2. **Scope `Try`**
-   1. `LOOKUPS` scope.
-   2. `ENSURE_USER` with `triggerBody()?['Technician']?['Claims']`.
-   3. `SETPERM` with L = `Monthly Reviews`, I = `triggerBody()?['ID']` and R = `body('Get_Read')?['Id']`. **The submitted record is now read-only to the technician.**
-   4. **Update item** (Monthly Reviews, ID = trigger ID):
+1. **Initialize variables:** varManagerEmail, varAppLink, varOwnersId, varFullControlId, varReadId.
+2. **Scope `Try`:**
+   1. **Get items** `Find_mgr` (Manager Reviews): Filter `ReviewItemId eq @{triggerBody()?['ID']}`, Top Count `1`.
+   2. **Condition** `Unknown_item`: `length(body('Find_mgr')?['value'])` *is equal to* `0`. If true, **Terminate**, Status **Cancelled**. This ignores anything Flow 1 didn't create.
+   3. **Compose** `Mgr` = `first(body('Find_mgr')?['value'])`
+   4. **Compose** `PrevState` = `outputs('Mgr')?['ReviewState']?['Value']`
+   5. `Ensure_user` with Claims = `outputs('Mgr')?['Technician']?['Claims']`. Identity always comes from the trusted record.
+   6. **SETPERM** on list `Monthly Reviews`, item `@{triggerBody()?['ID']}`, role `@{variables('varReadId')}`. **The review is now read-only to the technician.**
+   7. **Condition** `First_submission`: `outputs('PrevState')` *is equal to* `Open`.
+      - **True:**
+        - **Update item** (Manager Reviews), Id = `outputs('Mgr')?['ID']`:
 
-      | Field | Value |
-      |---|---|
-      | Status | `Submitted` (normalises any spoofed value such as "Completed") |
-      | SubmittedOn | `utcNow()` |
-      | SubmittedLate | `greater(utcNow(), triggerBody()?['DueDate'])` |
-      | Title | `triggerBody()?['Title']` |
+          | Field | Value |
+          |---|---|
+          | Title | `outputs('Mgr')?['Title']` |
+          | ReviewState Value | `Submitted` |
+          | SubmittedOn | `utcNow()` |
+          | SubmittedLate | `greater(ticks(utcNow()), ticks(outputs('Mgr')?['DueDate']))` |
+          | TechFollowUp | `coalesce(triggerBody()?['Q9FollowUp']?['Value'], '')` |
 
-      Because the editor is now the TL or flow account, this doesn't re-trigger.
-   5. **Send an email (V2)** to `varManagerEmail` using template E3. If `triggerBody()?['Q9FollowUp']?['Value']` equals `Arrange a dedicated 1-to-1 discussion`, the subject is prefixed with **[1-to-1 REQUESTED]**.
-3. **Scope `Catch`**: email the TL with E7, worded as "Submission received but lock/notification FAILED – check permissions on item <ID>", then Terminate (Failed).
+        - **Send an email (V2)** using **E3** to `varManagerEmail`.
+   8. **Compose** `Desired` = `if(equals(outputs('PrevState'), 'Open'), 'Submitted', outputs('PrevState'))`
+   9. **Condition** `Status_differs`: `triggerBody()?['ReviewStatus']?['Value']` *is not equal to* `outputs('Desired')`.
+      - **True:** **Update item** (Monthly Reviews): Id = `triggerBody()?['ID']`, Title = `outputs('Mgr')?['Title']`, ReviewStatus Value = `outputs('Desired')`.
 
-**Duplicate prevention:** after the lock the technician can't edit, so only TL or flow edits follow, and those are excluded. One submission therefore produces one notification. A resubmission after a Reopen is a genuine new submission.
+      This normalises any value a technician forced in through the API. Writing the status can trigger this flow once more, but on that run the status already matches, so nothing further happens.
+3. **Scope `Catch`** (as in F.0). The email subject is `"Submission received but LOCK FAILED – check item " & ID`.
 
-**Testing:** H tests 10, 14 and 21.
+**Duplicate prevention.** The TL email and stamps are sent only when `PrevState` = Open on the trusted record. Every later run just re-applies Read, which changes nothing.
 
 ### F.3 Flow 3 — `1-to-1 | Manager decision`
 
-**Trigger:** SharePoint **When an item is created or modified**, list `Manager Reviews`. This list is manager-only, so its fields can be trusted.
+**Trigger:** **When an item is created or modified**, list **Manager Reviews**. This list is manager-only, so its fields can be trusted.
 
-**Trigger conditions**
+**Trigger conditions** (two lines, both must be true)
 
 ```
-@not(equals(triggerBody()?['Status']?['Value'], 'In Progress'))
-@not(equals(triggerBody()?['Status']?['Value'], triggerBody()?['ProcessedStatus']))
+@contains(createArray('Completed','Closed - Not Submitted'), triggerBody()?['ReviewState']?['Value'])
+@empty(triggerBody()?['ReleasedOn'])
 ```
+
+Concurrency control: On, degree 1.
 
 **Actions**
 
-1. Config variables.
-2. **Scope `Try`**
-   1. `LOOKUPS` scope.
-   2. **Get items** `Find_review` (Monthly Reviews), Filter `ReviewKey eq '@{triggerBody()?['ReviewKey']}'`, Top 1. Then **Compose** `Review` = `first(body('Find_review')?['value'])`.
-   3. `ENSURE_USER` with `triggerBody()?['Technician']?['Claims']`.
-   4. **Switch** on `triggerBody()?['Status']?['Value']`.
+1. **Initialize variables:** varManagerEmail, varAppLink, varOwnersId, varFullControlId, varReadId.
+2. **Scope `Try`:**
+   1. **Compose** `Cmd` = `triggerBody()?['ReviewState']?['Value']`
+   2. **Condition** `Valid`, in advanced mode:
 
-      **Case `Completed`**
+      ```
+      @or(and(equals(outputs('Cmd'),'Completed'), not(empty(triggerBody()?['SubmittedOn']))), and(equals(outputs('Cmd'),'Closed - Not Submitted'), empty(triggerBody()?['SubmittedOn'])))
+      ```
 
-      1. **Condition** `@equals(outputs('Review')?['Status']?['Value'], 'Submitted')`.
-         - If no: **Update item** (Manager Reviews) with Status `In Progress` and ProcessedStatus `Rejected`. Email the TL: "Cannot complete – the technician has not submitted. Use Close – not submitted instead." Steps 2–6 sit in the **Yes** branch, so nothing else runs.
-      2. `SETPERM` on Monthly Reviews / review ID / Read. This re-applies the lock idempotently.
-      3. `SETPERM` on Manager Reviews / trigger ID / Read. **This releases the feedback.**
-      4. **Update item** (Monthly Reviews) with Status `Completed`, CompletedOn `utcNow()` and Title.
-      5. **Update item** (Manager Reviews) with ProcessedStatus `Completed`, ReleasedOn `utcNow()`, CompletedOn `utcNow()`, CompletedBy Claims `triggerBody()?['Editor']?['Claims']` and Title.
-      6. **Send an email (V2)** to the technician (`triggerBody()?['Technician']?['Email']`) using template E4.
+      - **False:**
+        - **Update item** (Manager Reviews): Id = trigger ID, Title, ReviewState Value = `if(empty(triggerBody()?['SubmittedOn']), 'Open', 'Submitted')`
+        - **Send an email (V2)** to the TL: "Not done: you can only complete a submitted review, and only close one that hasn't been submitted."
+        - **Terminate**, Status **Cancelled**
+   3. `Ensure_user` with Claims = `triggerBody()?['Technician']?['Claims']`
+   4. **SETPERM** (suffix `_R`) on list `Monthly Reviews`, item `@{triggerBody()?['ReviewItemId']}`, role `@{variables('varReadId')}`. Locks the review.
+   5. **SETPERM** (suffix `_M`) on list `Manager Reviews`, item `@{triggerBody()?['ID']}`, role `@{variables('varReadId')}`. **Releases the feedback.**
+   6. **Update item** (Manager Reviews), Id = trigger ID:
 
-      **Case `Closed - Not Submitted`**
+      | Field | Value |
+      |---|---|
+      | Title | trigger Title |
+      | ReleasedOn | `utcNow()` |
+      | CompletedOn | `utcNow()` |
+      | CompletedBy | `triggerBody()?['Editor']?['Email']` |
 
-      1. **Condition**: the review status is `Not Started` or `Draft`. If not, reject as above.
-      2. `SETPERM` on Monthly Reviews / Read.
-      3. `SETPERM` on Manager Reviews / Read. This releases any note from the TL.
-      4. **Update item** (Monthly Reviews) with Status `Closed - Not Submitted`.
-      5. **Update item** (Manager Reviews) with ProcessedStatus `Closed - Not Submitted` and ReleasedOn `utcNow()`.
-      6. Email the technician using template E5.
+      Because `ReleasedOn` is now set, this update doesn't re-trigger Flow 3.
+   7. **Update item** (Monthly Reviews): Id = `triggerBody()?['ReviewItemId']`, Title = trigger Title, ReviewStatus Value = `outputs('Cmd')`. Flow 2 then runs once, finds nothing to change, and stops.
+   8. **Send an email (V2)** to `triggerBody()?['Technician']?['Email']`, using **E4** if `Cmd` = Completed, otherwise **E5**.
+3. **Scope `Catch`** (as in F.0).
 
-      **Case `Reopen`**
+**Why three flows is the minimum.**
 
-      1. `SETPERM` on Monthly Reviews / Edit level. The technician can edit again.
-      2. `UNRELEASE` on Manager Reviews / trigger ID. Feedback is hidden again.
-      3. **Update item** (Monthly Reviews) with Status `Draft`.
-      4. **Update item** (Manager Reviews) with Status `In Progress` and ProcessedStatus `Reopen`.
-      5. Email the technician using template E6.
-3. **Scope `Catch`**: email the TL with E7, then Terminate (Failed).
+- Flow 1 runs on a **schedule**.
+- Flow 2 runs on a **technician action**.
+- Flow 3 runs on a **TL action**.
 
-**Duplicate prevention:** `ProcessedStatus` equals `Status` after processing, and Reopen returns the status to `In Progress`, which is excluded. Later TL edits to released feedback (corrections) don't re-trigger. They're visible immediately and audited by versioning.
+Merging any two of them would need polling, or a button flow that technicians could also call.
 
-**Order of operations:** permissions are always set and verified **before** the email that tells the technician to look.
+### F.4 Email templates
 
-### F.4 Why this is the minimum
+Each email is sent with **Send an email (V2)** from the TL's mailbox. They contain **no answers or feedback**, and **no technician-typed text** except the Q9 choice in E3.
 
-There are three flows:
+The link is always `concat(variables('varAppLink'), '&reviewId=', <Monthly Review ID>)`. That's `variables('varReviewId')` in Flow 1, `items(...)?['ReviewItemId']` for reminders, `triggerBody()?['ID']` in Flow 2 and `triggerBody()?['ReviewItemId']` in Flow 3.
 
-- one schedule
-- one reaction to a technician action
-- one reaction to a manager action
-
-Reminders, overdue flags, creation and self-healing share one daily flow. There are no instant (button) flows, because those would take caller-supplied parameters and need caller validation.
-
-### F.5 Email templates
-
-All emails are sent from the TL's mailbox. They're plain and short, with **no answer or feedback content**. `{Link}` means `concat(variables('varAppLink'), '&reviewId=', <review ID>)`.
-
-| ID | To | Subject | Body (summary) |
+| ID | To | Subject | Body |
 |---|---|---|---|
-| E1 | Technician | `Your 1-to-1 for {MonthName} is ready` | "Hi {first name}, your monthly 1-to-1 for {MonthName} is ready: **[Open my 1-to-1]({Link})**. Deadline: {DeadlineText}. Save a draft and come back as often as you like. If you want to talk sooner, just ask – you don't need to wait for this form. The link only works when you're signed in with your own company account." |
-| E2 | Technician | `Reminder: your 1-to-1 for {MonthName} is due {DeadlineText}` | "Your 1-to-1 hasn't been submitted yet. Any draft you've saved is still there: [Continue]({Link})." |
-| E3 | TL | `[1-to-1 REQUESTED] ` (conditional) + `1-to-1 submitted: {Name} – {MonthKey}` | "{Name} submitted their {MonthName} 1-to-1{ late}. Follow-up preference: {Q9}. [Open review]({Link})" |
-| E4 | Technician | `Feedback on your {MonthName} 1-to-1 is ready` | "Your Team Leader has completed your review. [View feedback]({Link})" |
-| E5 | Technician | `Your {MonthName} 1-to-1 has been closed` | "This month's review was closed without a submission. [View]({Link}). Speak to your Team Leader if this is unexpected." |
-| E6 | Technician | `Your {MonthName} 1-to-1 has been reopened` | "Your Team Leader has reopened this review so it can be amended. [Open]({Link})" |
-| E7 | TL | `1-to-1 system: action needed ({flow name})` | Failures and warnings list, plus the run link. |
+| E1 | Technician | `Your 1-to-1 for @{outputs('MonthName')} is ready` | Hi @{first(split(outputs('Mgr')?['Technician']?['DisplayName'],' '))},<br>Your monthly 1-to-1 is ready: **<a href="LINK">Open my 1-to-1</a>**.<br>Deadline: @{outputs('DeadlineText')}.<br>You can save a draft and come back as often as you like before submitting. If you'd like to talk sooner, just ask – you don't need to wait for this form.<br>This link only works when you're signed in with your own company account. The first time, click **Allow** if asked. |
+| E2 | Technician | `Reminder: your 1-to-1 for @{outputs('MonthName')} is due @{outputs('DeadlineText')}` | Your 1-to-1 hasn't been submitted yet. Your saved draft is still there: <a href="LINK">Continue</a>. |
+| E3 | TL | `@{if(equals(triggerBody()?['Q9FollowUp']?['Value'],'Arrange a dedicated 1-to-1 discussion'),'[1-to-1 REQUESTED] ','')}1-to-1 submitted: @{outputs('Mgr')?['Title']}` | Submitted @{if(greater(ticks(utcNow()), ticks(outputs('Mgr')?['DueDate'])),'late','on time')}. <a href="LINK">Open review</a> |
+| E4 | Technician | `Feedback on your 1-to-1 (@{triggerBody()?['MonthKey']}) is ready` | Your Team Leader has completed your review. <a href="LINK">View feedback</a> |
+| E5 | Technician | `Your 1-to-1 (@{triggerBody()?['MonthKey']}) has been closed` | This review was closed without a submission. <a href="LINK">View</a>. Please speak to your Team Leader if this is unexpected. |
+| E7 | TL | `1-to-1 system: action needed` | List of problems and the run link |
 
 ---
 
-## G. Deployment guide
+## G. Deployment guide (step by step)
 
-> Do this in the corporate tenant, signed in as the Team Leader. Use **two test technician accounts** (Test A and Test B) that have no other access to the site. See J, blocker B3.
+Work through the parts in order and tick each box. ⏱ shows typical time. You need:
 
-### Stage 1 — Functional MVP
+- your own (TL) account
+- **Test A** and **Test B** technician test accounts (IT-6), each in its own **InPrivate** or **Incognito** browser window
+- a text file called **Config sheet** where you paste the values you collect
 
-1. **Create the site.** SharePoint start page → **+ Create site** → **Communication site** → *Blank* → Name **ESG Technician 1-to-1**, address **ESG-1to1**, language English → **Create**. If site creation is disabled, request a communication site from IT with you as the sole owner (blocker B1).
-2. **Regional settings.** Gear → *Site information* → *View all site settings* → **Regional settings** → Time zone **(UTC) Dublin, Edinburgh, Lisbon, London**, Locale **English (United Kingdom)** → OK.
-3. **Lock down the site** (D.1):
-   - Gear → *Site permissions* → *Advanced permissions settings*. Confirm Owners contains only you (and the D4 backup). Open the Members and Visitors groups and remove everyone, including "Everyone except external users".
-   - Gear → *Site permissions* → *Change how members can share* → **Only site owners can share…**, **Allow access requests: Off** → Save.
-   - Apply a sensitivity label if your organisation uses them.
-4. **Create the permission level.** *Advanced permissions settings* → ribbon **Permission Levels** → **Contribute** → **Copy Permission Level**. Name it `1-to-1 Edit (no delete)` and untick the boxes listed in D.3 → **Create**.
-5. **Create the five lists.** Repeat these steps for `Technicians`, `AppraisalExpectations`, `MonthlyReviews`, `ManagerReviews` and `AgreedActions`. Create each with **no spaces**, so the URL is clean.
-   1. Site contents → **+ New → List → Blank list**, enter the name, untick *Show in site navigation* → Create.
-   2. Rename the list to the display title (`Appraisal Expectations`, `Monthly Reviews`, `Manager Reviews`, `Agreed Actions`): List settings → *List name, description and navigation*.
-   3. Add every column from section C: **+ Add column**, choose the type, then use **exactly** the internal name. Set the choices and defaults, and clear the Choice defaults marked *none*.
-   4. List settings → **Versioning settings**: create a version each time you edit an item, keep 100 versions.
-   5. List settings → **Advanced settings**: Attachments **Disabled**, Search **No**, Offline **No**.
-   6. List settings → **Indexed columns**: add the indexes listed in C. For `ReviewKey` on Monthly Reviews and Manager Reviews, open the column and set **Enforce unique values: Yes**.
-   7. List settings → **Permissions for this list** → **Stop Inheriting Permissions**. Tick the Members and Visitors groups → **Remove User Permissions**. Only Owners should remain.
-   8. Create the views listed in C.2 and C.5.
-6. **Seed data.** Add Test A and Test B to **Technicians** (Active = Yes). Add two **Shared** expectations and one **Individual** expectation for Test A.
-7. **Build the app** (E.1–E.6). Paste `App.Formulas`, build `scrTechReview` and `scrManagerReview`, then **Save** and **Publish**. Open **Details** and copy the **Web link** (`.../play/e/<ENV-ID>/a/<APP-ID>?tenantId=<TENANT-ID>`).
-8. **Share the app** with Test A and Test B as **User**. **Decline** any prompt to share the SharePoint lists.
-9. **Build Flow 1 (creation part only)** at make.powerautomate.com. Create an **Instant cloud flow (Manually trigger)** named `1-to-1 | Daily scheduler`, and build steps 1–3.4 and 4 of F.1. You'll switch the trigger to Recurrence in Stage 2. Turn on secure inputs and outputs.
-10. **Build Flow 2** (automated cloud flow, F.2) and **Flow 3** (F.3), with trigger conditions entered under **trigger → Settings → Trigger conditions**.
-11. **Run Flow 1 manually.** Check that two reviews and two Manager Reviews were created, that each review has unique permissions (Owners plus one technician), and that two emails were sent.
-12. Run the Stage 1 tests: **H tests 1–6, 10–14 and 20**.
+### Before you start: get the confirmations
 
-### Stage 2 — Monthly automation
+- [ ] Send IT the questions **IT-1 to IT-8** and HR the questions **HR-1 to HR-5** from section J. You can build Stage 0 while you wait, but **don't put real technician data in** until IT-2, IT-5 and HR-2 are answered.
 
-13. In Flow 1, add steps 3.5–3.7 (overdue and reminders) and the failure email.
-14. Replace the manual trigger with **Recurrence**, configured as in F.1: copy the Try scope to the clipboard, create a new scheduled flow, and paste the scope in. Set **Concurrency control** to 1.
-15. Run the date tests with `varTestDate` (H tests 15–17 and 22–24). **Clear `varTestDate`** afterwards.
+Create the **Config sheet** with these lines:
 
-### Stage 3 — Appraisal tracking
+```
+TL email (as Power Apps shows it):
+Site URL:
+Owners group ID:
+Full Control role ID:
+1-to-1 Edit role ID:
+1-to-1 Read role ID:
+App web link:
+EAP contact text:
+```
 
-16. Build the Q8 gallery in `scrTechReview` and `galFbQ8` in `scrManagerReview`. The expectation snapshot logic is already in Flow 1.
-17. Run H tests 7–9.
-18. Record the **annual rollover procedure** in the configuration reference:
-    1. Shortly before the new appraisal year, add the new year's expectations, using grid view with copy and paste. Set `AppraisalYear`, `SortOrder` and `Active = Yes`.
-    2. On the last day of the old year, set the old expectations to **Active = No**. Don't delete them.
-    3. The next monthly run snapshots the new set, and old reviews keep their own copies.
+### Part 1 — Create and lock down the site ⏱ 30 min
 
-### Stage 4 — Dashboard and final verification
+1. [ ] Go to `https://<yourtenant>.sharepoint.com` and click **+ Create site**, then **Communication site**, then **Blank**.
+2. [ ] **Site name:** `ESG Technician 1-to-1`. **Site address:** `ESG-1to1`. Language English. Click **Create site**.
+   - If creating sites is disabled, ask IT for a communication site with you as the **only owner** (IT-1), then continue.
+3. [ ] Copy the site URL into the Config sheet (for example `https://contoso.sharepoint.com/sites/ESG-1to1`).
+4. [ ] Set the regional settings:
+   1. Click the **gear** (top right), then **Site information**, then **View all site settings**, then **Regional settings**.
+   2. Time zone: **(UTC) Dublin, Edinburgh, Lisbon, London**. Locale: **English (United Kingdom)**.
+   3. Click **OK**.
+5. [ ] Check site permissions:
+   1. Click the **gear**, then **Site permissions**, then **Advanced permissions settings**.
+   2. Click **ESG Technician 1-to-1 Owners** and confirm you're the only person. Go back.
+   3. Open **…Members**, then **…Visitors**. In each, tick everyone listed, then **Actions → Remove Users from Group**. Both groups must end up empty.
+   4. If **Everyone except external users** appears anywhere on the permissions page, tick it and click **Remove User Permissions**.
+6. [ ] Lock down sharing:
+   1. Click the **gear**, then **Site permissions**, then **Change how members can share**.
+   2. Choose **Only site owners can share files, folders, and the site**.
+   3. Set **Allow access requests** to **Off**.
+   4. Click **Save**.
+7. [ ] If your organisation uses sensitivity labels: click the **gear**, then **Site information**, then **Sensitivity**, and choose the HR/Confidential label (IT-8).
 
-19. Build `scrDashboard` and `scrTechHistory` (E.4, E.7), then publish.
-20. **SharePoint home page:** edit the home page and remove the default web parts. Add a **Power Apps** web part (paste the App ID, width full) and a **Quick links** web part with links to *Monthly Reviews (app)*, *Appraisal Expectations → Active view* and *Agreed Actions → Outstanding view*. **Publish.**
-21. Run the **full test plan (H)** with both test accounts and the TL. Every privacy test must pass.
-22. **Clean down:** delete the test reviews, manager reviews and actions (they then sit in the site recycle bin and the second-stage recycle bin, so delete them there if required). Remove the test technicians.
-23. **Go live:** add the real technicians, share the app with them, and confirm Flow 1 is **On**. Either wait for the 1st, or run Flow 1 manually to start the current month immediately (this is idempotent).
-24. Watch the first live month. On the 1st, check that the run succeeded and the dashboard shows all technicians. Check the reminders on the 20th, then check the overdue flags and the creation of the next month on the 1st.
+### Part 2 — Create the two permission levels ⏱ 15 min
+
+1. [ ] Click the **gear**, then **Site permissions**, then **Advanced permissions settings**. On the ribbon, click **Permission Levels**.
+2. [ ] Create `1-to-1 Edit`:
+   1. Click **Contribute**, then at the bottom click **Copy Permission Level**.
+   2. Name: `1-to-1 Edit`.
+   3. **Untick:** Add Items, Delete Items, Delete Versions, Manage Personal Views, Add/Remove Personal Web Parts, Update Personal Web Parts.
+   4. **Leave ticked:** Edit Items, View Items, Open Items, View Versions, View Pages, Browse User Information, **Use Remote Interfaces**, Use Client Integration Features, Open.
+   5. Click **Create**.
+3. [ ] Create `1-to-1 Read`:
+   1. Click **Read**, then **Copy Permission Level**.
+   2. Name: `1-to-1 Read`.
+   3. **Untick:** View Versions and Create Alerts.
+   4. Click **Create**.
+   - If you can't create permission levels (IT-4), see the fallback in J.
+
+### Part 3 — Create the four lists ⏱ about 2 h
+
+**For each list:**
+
+1. Go to **Site contents**, click **+ New**, then **List**, then **Blank list**.
+2. Type the **name without spaces** (for example `MonthlyReviews`). **Untick** *Show in site navigation*. Click **Create**.
+
+**For each column:**
+
+1. Click **+ Add column** and choose the type.
+2. Type the **Name exactly as in section C**.
+3. Open **More options** and set what the table says:
+   - **Choice:** type one choice per line. Turn **Can add values manually** off. For defaults shown as *(none)*, delete the default value.
+   - **Multiple lines of text:** turn **Use enhanced rich text** off and **Append changes** off.
+   - **Number:** decimal places 0. Set Min and Max where shown.
+   - **Date and time:** turn **Include time** on only where the table says *Date and time*.
+   - **Person:** turn **Allow selection of groups** off and **Allow multiple selections** off.
+4. Click **Save**.
+
+**Then, for each list, open the gear and List settings:**
+
+| Step | Where | What to set |
+|---|---|---|
+| a | **List name, description and navigation** | Rename to the display name: `Appraisal Expectations`, `Monthly Reviews`, `Manager Reviews`. Technicians stays as it is. |
+| b | **Versioning settings** | Create a version each time you edit an item: **Yes**. Keep **100**. |
+| c | **Advanced settings** | Attachments **Disabled**. Allow items from this list to appear in search results **No**. Offline client **No**. Then **OK**. |
+| d | **Indexed columns** → **Create a new index** | One index for each column marked *Indexed* in C |
+| e | Manager Reviews only: click the column **ReviewKey** | **Enforce unique values: Yes** |
+| f | **Permissions for this list** → **Stop Inheriting Permissions** → OK | Tick the Members and Visitors groups, if listed, then **Remove User Permissions**. Only **Owners – Full Control** should remain. |
+| g | Views | Create the views listed in C.2 and C.4: **+ Create view** (classic) or **Switch view options → Create new view**, then set the filters. |
+
+Lists and checks:
+
+- [ ] **Technicians** (C.1)
+- [ ] **Appraisal Expectations** (C.2)
+- [ ] **Monthly Reviews** (C.3)
+- [ ] **Manager Reviews** (C.4)
+- [ ] **Check:** Site contents shows four lists, and each list's permissions page shows only Owners.
+
+### Part 4 — Record the four IDs ⏱ 10 min
+
+Paste each address into your browser while signed in as the TL. The page shows XML. Use **Ctrl+F** to find the values.
+
+1. [ ] `<Site URL>/_api/web/associatedownergroup`. Find `<d:Id>` and copy the number to **Owners group ID**.
+2. [ ] `<Site URL>/_api/web/roledefinitions`. Use Ctrl+F to find each `<d:Name>` and copy the `<d:Id>` just above it:
+   - **Full Control** (usually `1073741829`)
+   - **1-to-1 Edit**
+   - **1-to-1 Read**
+3. [ ] In Power Apps, add a temporary label with Text `User().Email`, play the app, and copy exactly what it shows into **TL email**. Delete the label afterwards.
+
+### Part 5 — Stage 0 proof test ⏱ 1–2 h — **don't skip this**
+
+This proves that the riskiest assumption holds in your tenant before you build anything.
+
+1. [ ] In **Technicians**, add **Test A** and **Test B** (Title = their name, Technician = their account, Active = Yes).
+2. [ ] In **Monthly Reviews**, click **+ New** and create two items by hand: Title `PROOF-A`, Technician = Test A; and Title `PROOF-B`, Technician = Test B. Note their IDs. Show the **ID** column using **Add column → Show/hide columns**.
+3. [ ] Create a test flow:
+   1. Go to **make.powerautomate.com**, then **+ Create**, then **Instant cloud flow**. Name it `Proof`. Choose **Manually trigger a flow**.
+   2. Add **Send an HTTP request to SharePoint** and set Method **POST** and Uri `_api/web/ensureuser`, with the headers and body from F.0. Use Test A's claims: `i:0#.f|membership|<testA email>`.
+   3. Add the four **SETPERM** calls for list `Monthly Reviews`, item `<PROOF-A ID>`, role = your **1-to-1 Edit** ID.
+   4. Click **Save**, then **Test**, then **Manually**, then **Run**. Every step must show a green tick.
+   - [ ] If any step reports a **DLP** or **policy** error, stop and raise it with IT (IT-2).
+4. [ ] Create a throwaway app:
+   1. Go to **make.powerapps.com**, then **+ Create**, then **Start with data**. Choose **SharePoint**, your site, then **Monthly Reviews**.
+   2. Save it as `Proof app`.
+   3. Click **Share**, add Test A and Test B, and **don't** share the data when asked.
+5. [ ] In **Test A's** window, open the Proof app link and click **Allow** if prompted. **Pass:** only PROOF-A is listed, Test A can edit and save it, and there's no red error banner.
+6. [ ] In **Test B's** window, open the Proof app. **Pass:** nothing is listed. B has no access to anything yet.
+7. [ ] In **Test A's** window, browse to `<Site URL>/Lists/MonthlyReviews/DispForm.aspx?ID=<PROOF-B ID>`. **Pass:** access denied, or "item does not exist".
+8. [ ] In **Test A's** window, browse to `<Site URL>/_api/web/lists/getbytitle('Manager%20Reviews')/items`. **Pass:** access denied.
+9. [ ] Clean up:
+   - Delete the Proof app and the Proof flow.
+   - Delete PROOF-A and PROOF-B.
+   - Empty the site **Recycle bin**, including the **Second-stage recycle bin**.
+
+**If step 5 or 6 fails, stop.** The architecture depends on it. Note what you saw and review before going further.
+
+### Part 6 — Build Flow 1 ⏱ 2–3 h
+
+**Tips for the Power Automate designer**
+
+- Add an action with the **+** button.
+- **Rename every action** to the name in the spec using **… → Rename**, *before* you reference it in later expressions.
+- Type expressions in the **Expression** (fx) tab, then click **Add / OK**.
+- **Settings** is in the **…** menu (classic designer) or the **Settings** tab (new designer). That's where you'll find concurrency, trigger conditions and secure inputs/outputs.
+- *Run after* is in the same menu. For each `Catch` scope, tick only **has failed** and **has timed out**.
+
+**Steps**
+
+1. [ ] Go to **+ Create**, then **Scheduled cloud flow**. Name: `1-to-1 | Daily scheduler`. Start today, repeat every **1 Day**. Click **Create**.
+2. [ ] Open the **Recurrence** trigger and use **Show advanced options** to set:
+   - Time zone: **(UTC+00:00) Dublin, Edinburgh, Lisbon, London**
+   - At these hours: **7**
+   - At these minutes: **0**
+
+   Then open **Settings**, turn **Concurrency control** on and set the degree to **1**.
+3. [ ] Build the actions in F.1 exactly in the order given. Create the SETPERM group once. Later flows can reuse it: select the four actions, use **Copy to my clipboard**, then **Add an action → My clipboard**.
+4. [ ] **Save.** The flow will run daily at 07:00. During testing that's harmless, because only test technicians exist.
+5. [ ] **Check:**
+   1. Click **Run** (top bar), then **Run flow**.
+   2. In **Manager Reviews** you should see two new items with ReviewState Open, ReviewItemId filled in and LinkSentOn set.
+   3. In **Monthly Reviews** you should see two items.
+   4. Test A and Test B should each have an email.
+   5. On each Monthly Review, click **… → Manage access**. It must show only you (Owners) and that one technician.
+   6. **Run the flow again.** Nothing new should be created and no second email sent.
+
+### Part 7 — Build the app ⏱ 6–8 h
+
+**Tips for Power Apps Studio**
+
+- **Insert → Layout** gives you vertical and horizontal containers.
+- To rename a control, double-click it in the **Tree view**.
+- To set a property, select the control, pick the property in the dropdown (top left), and paste the formula into the formula bar.
+- **Display field** (the Value or Fields setting) is in the right-hand properties panel.
+- Save often (**Ctrl+S**).
+
+**Steps**
+
+1. [ ] Go to **make.powerapps.com** and choose the environment approved in IT-3. Click **+ Create**, then **Blank app**, then **Blank canvas app**. Name: `ESG 1-to-1`. Format **Tablet**. Click **Create**.
+2. [ ] Open **Settings → Display** and turn **Scale to fit** off and **Lock aspect ratio** off. Then go to **Settings → General** and set the **Data row limit** to **2000**.
+3. [ ] Go to **Data → Add data → SharePoint**, choose your site, and tick **Monthly Reviews**, **Manager Reviews** and **Technicians**. Click **Connect**.
+4. [ ] In Tree view, select **App** and choose the **Formulas** property. Paste E.1, then edit the two `CONFIG` lines from your Config sheet.
+5. [ ] Set **App → StartScreen** (formula in E.1). This needs all three screens to exist, so add them first: **+ New screen → Blank**, then rename them to `scrTechReview`, `scrDashboard` and `scrManagerReview`.
+6. [ ] Build **scrTechReview** from E.2:
+   1. Insert a **Vertical container** `conScreen` with X `0`, Y `0`, Width `Parent.Width`, Height `Parent.Height`.
+   2. Inside it, add `conHeader` (vertical, Height `150`) and `conPage` (vertical, **Flexible height** on, **Vertical overflow: Scroll**, Padding 16, Gap 10).
+   3. Add the controls in the order of the layout diagram, then paste each property from the table.
+   4. For every control inside `conPage`, set **Align in container: Stretch**.
+   5. Turn **Auto height** on for every label.
+   6. Paste the long formulas: `btnLoad.OnSelect`, `lblMissing.Text`, `btnSubmit.OnSelect`, `btnConfirmSubmit.OnSelect` and `btnSave.OnSelect`.
+   7. Add `conConfirm` directly on the screen (not inside conScreen): X 0, Y 0, full size, Fill `RGBA(0,0,0,0.4)`, Visible `locConfirm`. Put a white container inside it holding lblConfirm, btnConfirmSubmit and btnCancel.
+7. [ ] Build **scrManagerReview** from E.3, using the same pattern.
+8. [ ] Build **scrDashboard** from E.4.
+   - It's fine to leave this until Stage 4. Until then, temporarily set StartScreen to show scrManagerReview, using the link from an E3 email.
+9. [ ] Click **Save**, then **Publish**, then **Publish this version**.
+10. [ ] Go back to make.powerapps.com, then **Apps**, then **… on ESG 1-to-1**, then **Details**. Copy the **Web link** into the Config sheet.
+11. [ ] Click **Share** and add Test A and Test B as **users**. **Don't** tick any data-sharing option. You can untick *Send an email invitation*.
+12. [ ] Paste the web link into `varAppLink` in Flow 1 (with `&hidenavbar=true` at the end) and save.
+
+### Part 8 — Build Flows 2 and 3 ⏱ 2 h
+
+1. [ ] Go to **+ Create**, then **Automated cloud flow**. Name: `1-to-1 | Review submitted`. Trigger: **SharePoint – When an item is created or modified**. Choose your site and **Monthly Reviews**.
+   1. In the trigger's **Settings**, add the **Trigger condition** from F.2 and set **Concurrency control** to 1.
+   2. Build the actions in F.2.
+   3. **Save.**
+2. [ ] Do the same for `1-to-1 | Manager decision`, using **Manager Reviews** and the steps in F.3. It has two trigger-condition lines.
+3. [ ] Make sure all three flows show **On**.
+
+### Part 9 — Stage 1 test ⏱ 3 h
+
+Run **H** tests F1–F4, F8–F12 and F18, plus **P1, P2, P3, P5 and P8**. Fix anything that fails before you continue.
+
+### Part 10 — Stage 2: reminders and dates ⏱ 2 h
+
+1. [ ] Make sure Flow 1 includes the reminder and problem-report steps (F.1 steps 3.4 and 3.5).
+2. [ ] Run the date tests F13, F14, F19 and F20. For each one:
+   1. Set `varTestDate` in Flow 1 to the date given in the test.
+   2. Save and **Run** the flow.
+   3. Check the results.
+3. [ ] **Afterwards, clear `varTestDate`, save, and delete the test-month items** from both lists.
+
+### Part 11 — Stage 3: expectations ⏱ 1–2 h
+
+1. [ ] Enter real Shared expectations in **Appraisal Expectations**, plus one Individual expectation for Test A.
+2. [ ] To run tests F5–F7, create a fresh test month: set `varTestDate` to the 1st of next month and run Flow 1.
+3. [ ] Write the **annual rollover** procedure in the configuration reference:
+   1. Before the new appraisal year starts, add the new year's expectations. **Edit in grid view** makes this quick: copy, paste and change AppraisalYear.
+   2. On the last day of the old year, set the old ones to **Active = No**. **Never delete them.**
+   3. The next month's reviews pick up the new set automatically, and older reviews keep their own snapshot.
+
+### Part 12 — Stage 4: dashboard, home page, privacy tests, go-live ⏱ 6–7 h
+
+1. [ ] Finish **scrDashboard**, set **StartScreen** as in E.1, then **Publish**.
+2. [ ] Set up the home page:
+   1. Open the site home page and click **Edit**. Delete the default web parts.
+   2. Add a **Power Apps** web part, paste the **App ID** (from the app's Details page), and set the width to full.
+   3. Add a **Quick links** web part with links to the *Appraisal Expectations* list and the Manager Reviews *Overdue* and *Open actions* views.
+   4. Click **Republish**.
+3. [ ] Run **all of section H**, including **every P test**. Any failed P test **blocks go-live**.
+4. [ ] In each flow, open the trigger and every **Get items** action and turn on **Secure inputs** and **Secure outputs** in Settings. Save.
+5. [ ] **Clean-down:**
+   1. Delete all test items in Monthly Reviews and Manager Reviews, then empty both recycle bins.
+   2. Remove Test A and Test B from Technicians.
+   3. **Unshare** the app from the test accounts.
+6. [ ] **Go-live:**
+   1. Add the real technicians to Technicians and share the app with them (**User**).
+   2. Either wait for 07:00 on the 1st, or click **Run** on Flow 1 now to start the current month. That's safe, because the flow is idempotent.
+7. [ ] **First live month:**
+   - On the **1st**: check Flow 1's run history and that every technician appears on the dashboard.
+   - On the **20th**: check that the reminders went out.
+   - On the **next 1st**: check that the new month was created and the previous month's unsubmitted reviews show as **Overdue**.
+
+### Operating procedures (put these in the configuration reference)
+
+| When | Task |
+|---|---|
+| Quarterly (2 min) | Open **Site permissions**. Confirm the Owners group contains only the TL, and Members and Visitors are empty. |
+| As needed: correction | At the technician's request, open the item in SharePoint and edit it. Add a dated reason to **CorrectionLog** on the Manager Review. Version history records the change. |
+| As needed: leaver or long absence | In Technicians, set **Active = No**. |
+| As needed: new starter | Add them to Technicians and share the app with them. They get a review the next morning. |
+| TL handover | Transfer site ownership. Re-create the three flows' connections under the new TL, or re-own the flows. Update `ManagerEmail` in the app and `varManagerEmail` in each flow, then republish. |
+| Annually | Expectation rollover (Part 11). Retention deletion (D.5). |
 
 ---
 
 ## H. Testing
 
-Use **Test A**, **Test B** and **TL** accounts, each in a separate browser profile or InPrivate window. Record each test as Pass or Fail, with the date, tester and evidence (a screenshot). **Any failure in tests marked 🔒 blocks release.**
+**How to record results.** For each test, record Pass or Fail, the date, the tester and a screenshot.
 
-| # | Test | Steps | Expected |
+**How to run the P (privacy) tests**
+
+- **Release blockers:** any failure of a 🔒 test.
+- **Who runs what:** run each P test **first as the TL** (it should succeed, which proves the request is valid), **then as Test A** (it must fail).
+- **API attempts:** each tester makes their own *Instant* flow named `Privacy test` with **Manually trigger a flow** and one **Send an HTTP request to SharePoint** action. Under Site Address choose **Enter custom value** and paste the site URL. Change the Method, Uri and Body for each test and run it with **Test**.
+- **What counts as denied:** status 401, 403 or 404, or a response in which each field reports an error. **Always confirm in the list that nothing changed.**
+- **If testers can't create flows:** run the read (GET) tests by pasting the URL into the browser. Run the write tests through the SharePoint UI instead.
+
+**Placeholders used in the P tests**
+
+| Placeholder | Meaning |
+|---|---|
+| `{A}` | Test A's Monthly Review ID |
+| `{B}` | Test B's Monthly Review ID |
+| `{MA}` | Test A's Manager Review ID |
+
+**POST headers for the P tests**
+
+| Header | Value |
+|---|---|
+| `Accept` | `application/json;odata=nometadata` |
+| `Content-Type` | `application/json;odata=nometadata` |
+
+### Functional tests
+
+| # | Test | Expected |
+|---|---|---|
+| F1 | A opens the E1 link | The app opens on A's current review, showing the deadline |
+| F2 | A fills Q1–Q3, clicks **Save draft**, closes the browser and reopens the link | All answers are present, and the status is Draft |
+| F3 | A answers **No** to Q4, Q5 and Q6, then submits | Submits. Detail fields are empty in the list. |
+| F4 | Check Q3 in the list after saving | The number 1–5 is stored. On the dashboard, picking A with all months shows each month's rating in order. |
+| F5 | New month created with expectations loaded | A has the shared and individual expectations. B has the shared ones only. |
+| F6 | Check the snapshot on A's Manager Review | It matches the master list at creation time |
+| F7 | After A submits, the TL edits a shared expectation's title | A's past review (both app screens) shows the **old** text. Next month shows the new text. |
+| F8 | A submits, waits 5 minutes, then reopens | Read-only. "Submitted" is shown. The TL gets E3. |
+| F9 | The TL enters feedback on Q4 where the answer is No, and saves | Saves. Shown to A after release. |
+| F10 | The TL saves feedback but doesn't complete. A reopens the review. | **No** feedback is visible |
+| F11 | The TL clicks Complete | Within about 5 minutes A gets E4, the feedback is visible, and A can't edit anything |
+| F12 | The TL clicks Complete on a review that is still Open (by forcing it in SharePoint) | Flow 3 rejects it, the state returns to Open, and the TL gets an email |
+| F13 | Run Flow 1 three times on the same day | Exactly one review per technician, and one E1 each |
+| F14 | A submitted, B in draft. `varTestDate` = this month's 20th. Run Flow 1. | Only B receives E2 |
+| F15 | `varTestDate` = next month's 1st. Run Flow 1. | B's old review shows **Overdue** on the dashboard and in the *Overdue* view. B can still open and submit it, and it's marked "(late)". |
+| F16 | After the deadline, the TL clicks **Close – not submitted** on another open review | It becomes read-only to the technician, who gets E5 |
+| F17 | A chooses "Arrange a dedicated 1-to-1" | E3 subject is prefixed. The dashboard row is amber and the KPI counts it. A TL override replaces it. |
+| F18 | Repeat F1, F2, F8 and F11 using **only** the Test A account (no TL shortcuts) | All pass |
+| F19 | `varTestDate` = `2028-02-01T07:00:00` (test month only) | Manager Review DueDate = `2028-02-29T23:59:59Z` |
+| F20 | `varTestDate` = `2027-03-01T07:00:00`, then `2026-10-01T07:00:00` | DueDate = `2027-03-31T22:59:59Z` (BST) and `2026-10-31T23:59:59Z` (GMT) |
+| F21 | Temporarily set `varEditId` to `999`. Create a fresh test month and run. | Items are created, but **no E1 is sent**. The TL gets E7, and the technician can't see the item. Restore the value and run again: E1 is sent. |
+| F22 | A completes a draft on a phone | Usable without sideways scrolling |
+| F23 | Correction: the TL edits a locked answer in SharePoint and adds a CorrectionLog note | The version history shows the change and who made it |
+
+### Privacy and bypass tests
+
+| # | Attempt by Test A | Request | Expected |
 |---|---|---|---|
-| 1 | A opens own review | A clicks the E1 link | The app opens on A's current review, with the deadline shown |
-| 2 🔒 | A can't read B's review | (a) A opens the app link with `reviewId=<B's ID>`. (b) A browses to `/sites/ESG-1to1/Lists/MonthlyReviews/DispForm.aspx?ID=<B's ID>`. (c) A browses to `/_api/web/lists/getbytitle('Monthly Reviews')/items` | (a) "Not found or not yours". (b) Access denied. (c) Only A's items are returned. |
-| 3 🔒 | A can't edit B's records | A sends an edit through the SharePoint UI, or a REST `MERGE` on B's item | Denied |
-| 4 | Drafts save and reload | A fills Q1–Q3, saves, closes the browser and reopens from the link | All values are present and the status is Draft |
-| 5 | Hidden fields don't block | A answers No to Q4, Q5 and Q6 and completes the mandatory items, then submits | Submits. Detail fields are blank in the list. |
-| 6 | Workload stored | Check the `Q3WorkloadRating` value in the list | It's the number 1–5, and it shows in history |
-| 7 | Expectations populate | Run Flow 1 for a new month | A has 2 shared and 1 individual expectation. B has the 2 shared only. |
-| 8 🔒 | Individual expectations are private | B opens their review, then tries the AppraisalExpectations list URL and REST | B sees only the shared ones, and the list is denied |
-| 9 | History is preserved | After A submits, the TL edits the title and measures of a shared expectation | A's past review shows the old text, and the next month shows the new text |
-| 10 🔒 | Submission locks | After submitting (wait 5 min), A tries to edit in the app, in the list form and via REST | The app is read-only and the server denies edits |
-| 11 | TL comments on No answers | The TL adds feedback to Q4 where the answer is No | It saves and is shown after release |
-| 12 🔒 | Comments are not disclosed early | The TL saves feedback but doesn't complete. A opens the app and the `ManagerReviews` list URL and REST | No feedback is visible, and the list is denied or empty |
-| 13 🔒 | Completed is locked | After completion, A tries to edit the review and the feedback | Denied. A can still view both. |
-| 14 | Completion notifies | The TL completes | A receives E4 within about 5 minutes, and the link shows the feedback |
-| 15 | No duplicates | Run Flow 1 three times on the same day | One review per technician per month, and only one E1 email each |
-| 16 | Only incomplete get reminders | A submitted, B is a draft. Set `varTestDate` to day 20 and run | Only B receives E2 |
-| 17 | Overdue handling | Set `varTestDate` to the 1st of the next month and run | B's draft is still there and editable, with `IsOverdue = Yes` and the dashboard showing it as overdue. B can submit, and the submission is marked late. The TL can Close – Not Submitted, after which B is read-only. |
-| 18 | Meeting requests highlighted | A chooses "Arrange a dedicated 1-to-1" | E3 subject is prefixed, the dashboard row is amber and the KPI counts it. A TL override is reflected. |
-| 19 | New month is independent | Run Flow 1 for the next month | Previous reviews are unchanged, and new Not Started reviews exist |
-| 20 🔒 | Real accounts end to end | Repeat tests 1, 4, 10 and 14 using **only** the technician accounts | All work |
-| 21 🔒 | Technician can't delete | A tries to delete their own draft through the list UI or REST | Denied |
-| 22 | February and leap year | `varTestDate` = `2028-02-01T07:00:00` | DueDate is `2028-02-29T23:59:59Z` |
-| 23 | Daylight saving | `varTestDate` = `2027-03-01T07:00:00` and `2026-10-01T07:00:00` | DueDate is `2027-03-31T22:59:59Z` (BST) and `2026-10-31T23:59:59Z` (GMT) |
-| 24 🔒 | Failed permissions send no email | Temporarily rename the permission level, then run Flow 1 for a new month | The review is created but stays private. No E1 is sent, and the TL gets E7. Restore the name and rerun, and the email is sent. |
-| 25 🔒 | Site isn't exposed | A visits the site home page and searches SharePoint for B's name or answer text | Access denied, and no results |
-| 26 | Reopen | The TL reopens A's completed review | A can edit, the feedback is hidden again, and after resubmit and complete it's released again. The CorrectionLog and version history show the change. |
-| 27 | Phone | A completes a draft on a phone | Usable, with no horizontal scrolling of inputs |
+| P1 🔒 | Open B's review in the app | App link with `&reviewId={B}` | "Not found or isn't yours" |
+| P2 🔒 | List all reviews | GET `_api/web/lists/getbytitle('Monthly%20Reviews')/items?$select=ID,Title`, and browse to `/Lists/MonthlyReviews/AllItems.aspx` | Only A's own items |
+| P3 🔒 | Edit B's review | POST `_api/web/lists/getbytitle('Monthly%20Reviews')/items({B})/validateUpdateListItem`, body `{"formValues":[{"FieldName":"Q1WentWell","FieldValue":"tamper"}],"bNewDocumentUpdate":false}` | Denied. B's item is unchanged. |
+| P4 🔒 | Create a fake review | POST `_api/web/lists/getbytitle('Monthly%20Reviews')/AddValidateUpdateItemUsingPath`, body `{"listItemCreateInfo":{"FolderPath":{"DecodedUrl":"/sites/ESG-1to1/Lists/MonthlyReviews"},"UnderlyingObjectType":0},"formValues":[{"FieldName":"Title","FieldValue":"fake"}],"bNewDocumentUpdate":false}` | Denied. No new item. |
+| P5 🔒 | Read feedback before release | GET `_api/web/lists/getbytitle('Manager%20Reviews')/items?$select=ID,FB_Q1` | Denied or empty |
+| P6 🔒 | Read earlier drafts after release | GET `_api/web/lists/getbytitle('Manager%20Reviews')/items({MA})/versions` | Denied. As the TL, the same request lists versions. |
+| P7 🔒 | Read the roster and other technicians' expectations | GET `_api/web/lists/getbytitle('Technicians')/items` and `…getbytitle('Appraisal%20Expectations')/items` | Denied |
+| P8 🔒 | Edit own submitted review | As P3, but on `{A}` after submission | Denied, and unchanged |
+| P9 🔒 | Forge *Modified By* to dodge the lock | On A's **draft**: POST `…items({A})/validateUpdateListItem`, body `{"formValues":[{"FieldName":"ReviewStatus","FieldValue":"Submitted"},{"FieldName":"Editor","FieldValue":"[{'Key':'i:0#.f|membership|<TL email>'}]"}],"bNewDocumentUpdate":true}` | Note whether *Modified By* shows the TL; this goes in the security record. Within about 10 minutes the item **is locked anyway** (P8 passes). |
+| P10 🔒 | Tamper with own draft | On a fresh draft: one `validateUpdateListItem` with DueDate `2099-12-31T00:00:00Z`, Technician `[{'Key':'i:0#.f|membership|<TestB email>'}]`, ReviewStatus `Completed`, and ExpectationsJson with a changed title | Within about 10 minutes: A's item is read-only, and its status shows *Submitted*. The Manager Review is *Submitted*, with SubmittedLate correct against the **real** due date. **B can't see A's item** (B runs P2). The TL screen shows the **original** expectation titles. |
+| P11 🔒 | Grant access or share own item | POST `…items({A})/roleassignments/addroleassignment(principalid=<any number>,roledefid=1073741826)`. In the SharePoint UI, use **Share** on A's item. | Both denied |
+| P12 🔒 | Delete own draft | POST `…items({A})/recycle()`. In the SharePoint UI, use **Delete**. | Denied. The item is still there. |
+| P13 🔒 | Reach the TL's data through the app | A opens the app normally | Lands on own review. No dashboard data. |
+| P14 🔒 | Site and search | A opens the site URL, then searches Microsoft 365 for a phrase from B's answers | Access denied, and no results |
 
 ---
 
 ## I. Delivery estimate
 
-These are hands-on hours for someone comfortable with SharePoint and Power Apps, but not an expert. Calendar time depends mainly on the corporate approvals.
+These are hands-on hours for a first-time builder following section G. Calendar time is driven mainly by IT and HR answers.
 
-| Stage | Claude preparation | Manual configuration (TL) | Testing (TL plus 2 test users) | Depends on corporate permission or approval |
-|---|---|---|---|---|
-| 0. Approvals and accounts | — | 1 h (requests) | — | Site (B1), DLP check (B2), test accounts (B3), HR/DP sign-off (B4) |
-| 1. Functional MVP | Included in the artefact pack below | 12–16 h: site and lists 3 h, technician screen 5 h, manager screen 4 h, flows 2 and 3 plus the Flow 1 creation block 4 h | 3 h | Custom permission level (B6), app sharing |
-| 2. Monthly automation | — | 3–4 h | 2–3 h | — |
-| 3. Appraisal tracking | — | 3 h | 2 h | — |
-| 4. Dashboard and verification | — | 5–6 h (dashboard 4 h, history 1 h, home page 1 h) | 4–5 h (full privacy and operational tests), plus a live first month | — |
-| **Total** | **One Claude session, about 2–4 h including your review** | **≈ 24–30 h** | **≈ 11–13 h** | **Elapsed: unknown, typically days to weeks** |
+| Stage | Manual configuration (TL) | Testing | Depends on IT / HR |
+|---|---|---|---|
+| Confirmations | 0.5 h (send the questions) | — | IT-1 to IT-8, HR-1 to HR-5 |
+| 0 — Proof test (Parts 1–5) | 3–4 h (site, levels, lists, IDs) | 1–2 h | IT-1, IT-2, IT-4, IT-6 |
+| 1 — MVP (Parts 6–9) | 10–13 h (Flow 1: 2–3 h, app: 6–8 h, Flows 2 and 3: 2 h) | 3 h | IT-3, IT-5 |
+| 2 — Automation (Part 10) | 0.5 h | 1.5 h | — |
+| 3 — Expectations (Part 11) | 1 h | 1 h | — |
+| 4 — Dashboard and verification (Part 12) | 2–3 h | 4–5 h, plus the first live month | HR-2 before any real data |
+| **Total** | **≈ 17–22 h** | **≈ 11–13 h** | |
 
-A realistic plan is **35–45 hours of hands-on effort**, spread over 2–3 weeks part-time once approvals are in place. Generating these instructions **is not deployment**. Nothing is live until steps G1–G23 are done and section H passes in the tenant.
+That's **about 28–36 hours hands-on** in all.
+
+**Claude's remaining preparation:** one session to produce the printable checklists and build sheets listed in K. Generating instructions is not deployment. Nothing is live until Part 12 is done and every test in H passes.
 
 ---
 
-## J. Risks and decisions
+## J. Blockers, confirmations and residual risks
 
-### Decisions needed (they materially affect the build)
+### J.1 Confirm with IT (blocking unless marked otherwise)
 
-| # | Decision | Recommendation |
+| # | Question | If the answer is "no" |
 |---|---|---|
-| D1 | Which account runs the flows | **The TL's own account for v1.** It's simplest and needs no extra licence. If the TL leaves or their account changes, the flows stop and must be re-owned. Move to an approved service account later if IT can provide one. |
-| D2 | Late-submission policy | **Accept late, flag it, and let the TL close it** (AS2) |
-| D3 | Retention period and mechanism | HR or Data Protection to set N years and say whether a Purview label exists (D.5) |
-| D4 | Backup site owner | None, or one named, HR-approved person. Any owner can read everything. |
+| IT-1 | Can the TL create a **communication site** and be its **sole owner**? Does governance require two owners? | Ask IT to create the site. If two owners are mandatory, choose the second with HR (this affects D4). |
+| IT-2 | Does the DLP policy for the chosen environment allow **SharePoint, including the action "Send an HTTP request to SharePoint"**, **Office 365 Outlook** and **Office 365 Users**, all in the same data group? | **Fallback:** replace SETPERM with the SharePoint actions **Stop sharing an item or a file** and **Grant access to an item or a folder**. This only offers *Can view* and *Can edit*, so the no-delete and no-version-history protections are lost. P6 and P12 become accepted risks that HR must agree to. Ask for the HTTP action first. |
+| IT-3 | Which **Power Platform environment** may hold confidential line-management data? Is it the Default environment? | Build in the environment IT names |
+| IT-4 | May site owners create **custom permission levels**? | Ask IT to create the two levels. Using the built-in Read and Contribute would reintroduce defect S3 (version history) and allow deletions. |
+| IT-5 | Do all technicians' licences include **Power Apps use rights**? E3, E5 and F3 do. F1 and some kiosk plans may not. | Licence change needed for affected technicians |
+| IT-6 | Can you have **two test accounts** with mailboxes and Power Apps rights, allowed to create a personal flow? | Privacy can't be proven without them. Don't go live. |
+| IT-7 | Does **Conditional Access** allow `apps.powerapps.com` on work laptops and phones? (Not blocking.) | Technicians complete it on a laptop |
+| IT-8 | Is there a **sensitivity label** for HR or confidential sites, and is external sharing off for new sites? (Not blocking.) | Apply what's available |
+| IT-9 | (Information) Acknowledge that tenant administrators can technically access the data | Wording for the privacy notice |
 
-### Genuine blockers (confirm before starting)
+### J.2 Confirm with HR / Data Protection
 
-| # | Blocker | Fallback |
-|---|---|---|
-| B1 | Can the TL create a communication site and be its sole owner? | Ask IT to create it with the TL as the only owner |
-| B2 | DLP policy: are the SharePoint connector's **"Send an HTTP request to SharePoint"** action and Office 365 Users allowed in the environment? | Use the native SharePoint actions **Stop sharing an item** and **Grant access to an item** (role "Can edit" / "Can view"). This loses the no-delete level (versioning and the recycle bin cover deletions) and the automated verification step, so test 24 becomes a manual check. Avoid this if possible. |
-| B3 | Two test technician accounts, or real technicians' consent to test with dummy data | Testing with the TL account alone **doesn't** prove privacy (test 20) |
-| B4 | HR/Data Protection approval to process wellbeing-adjacent information (Q4 may attract special-category data despite the guidance). A DPIA screening may be required. | Launch with the guidance text, and keep Q4 as a "request a conversation" flag |
-| B5 | Technician licences include Power Apps use rights for standard connectors (M365 E3/E5/F3 do; **F1 doesn't**) | Confirm with IT |
-| B6 | Site owners can create custom permission levels (sometimes restricted) | Use **Read** plus built-in **Contribute** (allows delete, covered by versioning and the recycle bin) |
+| # | Question |
+|---|---|
+| HR-1 | **Retention period** (D3) and whether a **Purview retention label** exists |
+| HR-2 | Is a **DPIA screening** needed? Approve the **technician privacy notice** (artefact K8) **before any real data is entered**. |
+| HR-3 | Approve the **Q4 wellbeing wording** and supply the **EAP / Occupational Health contact** details |
+| HR-4 | Approve the wording that a written check-in doesn't replace a formal appraisal or meeting |
+| HR-5 | **TL absence:** who may be given access if the TL is unavailable long-term, and through which approved route? This takes the place of a standing backup owner (D4). |
 
-### Residual risks (accepted, with mitigation)
+### J.3 Residual risks (accepted)
 
 | # | Risk | Mitigation |
 |---|---|---|
-| R1 | Flows react to submission in about 1–5 minutes, so a technician could still edit through REST in that window | Only affects their own just-submitted record. Versions record everything, and the app becomes read-only immediately. |
-| R2 | A technician who deliberately forges "Modified By" through advanced API calls could avoid Flow 2's lock | Affects only their own draft. The dashboard still shows Submitted, and Flow 3 re-applies the lock on completion. |
-| R3 | M365, SharePoint and Power Platform administrators can access the data | Normal tenant administration, covered by admin policy and stated in the privacy notice |
-| R4 | The flow owner (TL) can see run-history data | Secure inputs and outputs are on, and there are no unauthorised co-owners |
-| R5 | The app loads up to 2,000 reviews on the dashboard | About 16 years at 10 technicians. Change it to a month filter if that's ever reached. |
-| R6 | Renaming lists or columns breaks the flows and app | The configuration reference documents a "do not rename" list |
-| R7 | Team Leader changes | Handover is in the configuration reference: transfer site ownership, re-own the flows, update `ManagerEmail` and the trigger condition. Release a new app version. |
+| R1 | About 5 minutes between Submit and the lock (SharePoint trigger polling) | Affects only the technician's own record. The server stamps the submission time, and versions record any change. |
+| R2 | A technician can submit through the API without the mandatory answers | Affects only their own record, and the TL sees the gaps |
+| R3 | Tenant administrators can access the data | Tenant admin policy, stated in the privacy notice |
+| R4 | The flows depend on the TL's account (D1) | TL handover procedure (Part 12) |
+| R5 | A close and a submission happening at the same moment can end up closed | Closing is only possible after the deadline. The answers are preserved, and the TL can correct it. |
+| R6 | Anyone added to the Owners group sees everything | Quarterly 2-minute check |
+| R7 | Renaming lists or columns breaks the app and flows | A "do not rename" list goes in the configuration reference |
 
 ---
 
-## K. Ready-to-build artefacts
+## K. Artefacts to produce next
 
-When this plan is approved, Claude will produce the following in `one-to-one/`. They are text artefacts for transfer through an approved company process, with **no tenant names, credentials or employee data**. All tenant-specific values are `<PLACEHOLDER>`s.
+All of these are text, contain **no tenant names, credentials or personal data**, and are ready to transfer through an approved company process.
 
-| # | File | Contents |
+| # | File | Purpose |
 |---|---|---|
-| K1 | `01-sharepoint/list-schemas.md` and `list-schemas.csv` | Every list, column, type, choice values, default, index, unique flag and view, as a click-through checklist |
-| K2 | `01-sharepoint/site-and-permissions-checklist.md` | Site creation, lock-down, permission level and list permission steps, with tick boxes and verification screenshots to capture |
-| K3 | `02-powerapps/App.Formulas.fx` | Paste-ready named formulas |
-| K4 | `02-powerapps/screens/*.md` | One file per screen: control tree (names, types, parent container), property table (Items, Default, Visible, DisplayMode, OnSelect…) and paste-ready formulas |
-| K5 | `02-powerapps/screens/*.pa.yaml` (optional, best effort) | Studio "paste code" YAML for the main containers. **Not validated outside the tenant.** If Studio rejects it, use K4. |
-| K6 | `03-flows/flow1-daily-scheduler.md`, `flow2-review-submitted.md`, `flow3-manager-decision.md` | Action-by-action build sheets, with the exact action names, every expression ready to copy, trigger conditions, settings and secure-IO flags. **These aren't importable packages**, and Claude won't claim they are. |
-| K7 | `03-flows/email-templates.html` | E1–E7 HTML bodies with dynamic-content placeholders |
-| K8 | `04-testing/test-plan.md` and `test-record.csv` | Section H with steps, expected results and result columns |
-| K9 | `05-deploy/deployment-checklist.md` | Section G as a tick-list with stage gates |
-| K10 | `05-deploy/configuration-reference.md` | Every placeholder, where it's used, the do-not-rename list, the TL handover procedure, annual expectation rollover, correction and reopen procedure, and the retention procedure |
-| K11 | `05-deploy/privacy-summary.md` | One page for HR/DP: what's collected, who can see it, how it's protected, retention, and the admin-access statement (supports B4) |
+| K1 | `01-sharepoint/lists.md` + `lists.csv` | Printable column-by-column checklist for Part 3 |
+| K2 | `01-sharepoint/site-security-checklist.md` | Parts 1, 2 and 4 as tick-lists, with what to screenshot |
+| K3 | `02-powerapps/App.Formulas.fx` | Paste-ready |
+| K4 | `02-powerapps/scrTechReview.md`, `scrManagerReview.md`, `scrDashboard.md` | Control-by-control build sheets: name, type, parent and every property |
+| K5 | `03-flows/flow1.md`, `flow2.md`, `flow3.md`, `setperm-block.md` | Action-by-action build sheets with every expression ready to copy. **Not importable packages.** |
+| K6 | `03-flows/email-templates.html` | E1–E7 bodies |
+| K7 | `04-testing/test-record.csv` | Section H with result columns |
+| K8 | `05-deploy/privacy-notice-draft.md` | One page for HR-2: what's collected, who sees it, protection, retention and admin access |
+| K9 | `05-deploy/configuration-reference.md` | Config sheet, do-not-rename list and the operating procedures |
 
 ---
 
 ## Summary and next step
 
-1. **Recommended build approach:** a private SharePoint communication site with five lists, secured by item-level permissions that flows apply and verify. One canvas app (technician review, history, manager dashboard and manager review) opened from personal email links and embedded on the site home page. Three Power Automate flows using standard connectors only. The app is built manually from paste-ready artefacts.
-
-2. **Implementation sequence:**
-   1. Approvals (B1–B6)
-   2. Site and lock-down
-   3. Five lists
-   4. App: technician and manager screens
-   5. Flow 1 creation block, then Flows 2 and 3
-   6. End-to-end MVP test (Stage 1)
-   7. Schedule, reminders and overdue (Stage 2)
-   8. Expectations and Q8 (Stage 3)
-   9. Dashboard, history, home page and full privacy testing (Stage 4)
-   10. Clean down and go live
-
-3. **Effort:**
-   - Stage 1: about 15–19 h
-   - Stage 2: about 5–7 h
-   - Stage 3: about 5 h
-   - Stage 4: about 9–11 h
-   - Total about 35–45 h hands-on, plus the approval lead time
-   - Claude preparation: one session
-
-4. **Genuine blockers:**
-   - Site creation and sole ownership (B1)
-   - DLP allowing *Send an HTTP request to SharePoint* (B2)
-   - Two test accounts (B3)
-   - HR/DP approval and retention period (B4 / D3)
-   - Technician licences (B5)
-   - Custom permission level allowed (B6)
-
+1. **Build approach:**
+   - A private SharePoint communication site with **four lists**.
+   - **Manager Reviews is the authoritative, tamper-proof record.** Monthly Reviews holds only the technician's answers.
+   - Two custom permission levels, applied per item by **three** standard-connector flows.
+   - One canvas app with **three** screens, opened from personal links and embedded on the site home page.
+2. **Sequence:**
+   1. Confirmations
+   2. Parts 1–5: site, levels, lists, IDs, **proof test**
+   3. Part 6: Flow 1
+   4. Part 7: the app
+   5. Part 8: Flows 2 and 3
+   6. Part 9: Stage 1 tests
+   7. Part 10: dates and reminders
+   8. Part 11: expectations
+   9. Part 12: dashboard, privacy tests, clean-down and go-live
+3. **Effort:** about 28–36 h hands-on (see I), plus the IT and HR lead time.
+4. **Blockers:** IT-1 to IT-6 and HR-2, with HR-1 needed before retention is configured.
 5. **Next Claude Code prompt:**
 
    ```
-   Plan approved as written in one-to-one/IMPLEMENTATION_PLAN.md, with decisions
-   D1 = Team Leader account, D2 = accept late / flag / TL can close,
-   D3 = <retention years or "placeholder">, D4 = <none | role of backup owner>.
-   Produce artefacts K1–K11 in one-to-one/ exactly as specified in section K,
-   using <PLACEHOLDER> values for all tenant-specific settings. Keep the Power Fx
-   and flow expressions identical to the plan unless you find an error — if so,
-   fix it and list every deviation in one-to-one/CHANGES_FROM_PLAN.md.
+   Produce artefacts K1–K9 from one-to-one/IMPLEMENTATION_PLAN.md (v2) into
+   one-to-one/, using <PLACEHOLDER> values for all tenant-specific settings.
+   Keep formulas and expressions identical to the plan unless you find an
+   error; list any deviation in one-to-one/CHANGES_FROM_PLAN.md.
    Commit and push to the current branch.
    ```
