@@ -1,0 +1,73 @@
+List,InternalName,Type,Choices / settings,Default,Indexed,Notes
+Technicians,Title,Built-in,,,,Display name
+Technicians,Technician,"Person (single, people only)",,,,
+Technicians,TechnicianAadId,Single line of text,,,Yes,Flow 1 fills
+Technicians,Active,Yes/No,,Yes,Yes,
+Technicians,AppraisalDate,Date only,,,,v4; set from Settings
+Appraisal Expectations,Title,Built-in,,,,
+Appraisal Expectations,Measures,Multiple lines (plain),,,,
+Appraisal Expectations,AppraisalYear,Single line of text,,,,e.g. 2026/27
+Appraisal Expectations,AppliesTo,Choice,Shared|Individual,Shared,,
+Appraisal Expectations,Technician,"Person (single, people only)",,,,Individual only
+Appraisal Expectations,SortOrder,Number (0 dp),,100,,
+Appraisal Expectations,Active,Yes/No,,Yes,Yes,
+Monthly Reviews,Title,Built-in,,,,
+Monthly Reviews,Technician,Person (single),,,,
+Monthly Reviews,MonthKey,Single line of text,,,,
+Monthly Reviews,MonthStart,Date only,,,,
+Monthly Reviews,DueDate,Date and time,,,,
+Monthly Reviews,ReviewStatus,Choice,Not Started|Draft|Submitted|Completed|Closed - Not Submitted,Not Started,,
+Monthly Reviews,Q1WentWell,Multiple lines (plain),,,,
+Monthly Reviews,Q2Issue,Multiple lines (plain),,,,
+Monthly Reviews,Q2Impact,Multiple lines (plain),,,,
+Monthly Reviews,Q2Tried,Multiple lines (plain),,,,
+Monthly Reviews,Q2Support,Multiple lines (plain),,,,
+Monthly Reviews,Q3WorkloadRating,Number (0 dp),min 1 max 5,,,
+Monthly Reviews,Q3WorkloadComment,Multiple lines (plain),,,,
+Monthly Reviews,Q4WellbeingRaise,Choice,Yes|No,(none),,
+Monthly Reviews,Q4WellbeingDetail,Multiple lines (plain),,,,
+Monthly Reviews,Q5PlanningRaise,Choice,Yes|No,(none),,
+Monthly Reviews,Q5PlanningDetail,Multiple lines (plain),,,,
+Monthly Reviews,Q6DevRaise,Choice,Yes|No,(none),,
+Monthly Reviews,Q6DevWhat,Multiple lines (plain),,,,
+Monthly Reviews,Q6DevWhy,Multiple lines (plain),,,,
+Monthly Reviews,Q7ManagerFeedback,Multiple lines (plain),,,,
+Monthly Reviews,ExpectationsJson,Multiple lines (plain),,,,
+Monthly Reviews,Q9FollowUp,Choice,"Everything has been covered — no further discussion required at present.|Quick, informal catch-up in the field.|Arrange a dedicated 1-to-1 discussion.",(none),,
+Monthly Reviews,Mood,Number (0 dp),min 1 max 5,,,v4
+Monthly Reviews,WinOfMonth,Multiple lines (plain),,,,v4
+Monthly Reviews,AppraisalDate,Date only,,,,v4 display copy
+Manager Reviews,Title,Built-in,,,,
+Manager Reviews,ReviewKey,Single line of text,Enforce unique values,,Yes,
+Manager Reviews,ReviewItemId,Number (0 dp),,,Yes,
+Manager Reviews,Technician,Person (single),,,,
+Manager Reviews,TechnicianAadId,Single line of text,,,,
+Manager Reviews,MonthKey,Single line of text,,,Yes,
+Manager Reviews,DueDate,Date and time,,,,
+Manager Reviews,ReviewState,Choice,Open|Submitted|Completed|Closed - Not Submitted,Open,Yes,
+Manager Reviews,LinkSentOn,Date and time,,,,
+Manager Reviews,SubmittedOn,Date and time,,,,
+Manager Reviews,SubmittedLate,Yes/No,,No,,
+Manager Reviews,TechFollowUp,Single line of text,,,,
+Manager Reviews,ExpectationSnapshotJson,Multiple lines (plain),,,,
+Manager Reviews,FB_Q1,Multiple lines (plain),,,,
+Manager Reviews,FB_Q2,Multiple lines (plain),,,,
+Manager Reviews,FB_Q3,Multiple lines (plain),,,,
+Manager Reviews,FB_Q4,Multiple lines (plain),,,,
+Manager Reviews,FB_Q5,Multiple lines (plain),,,,
+Manager Reviews,FB_Q6,Multiple lines (plain),,,,
+Manager Reviews,FB_Q7,Multiple lines (plain),,,,
+Manager Reviews,FB_Q9,Multiple lines (plain),,,,
+Manager Reviews,FB_Overall,Multiple lines (plain),,,,
+Manager Reviews,ExpectationFeedbackJson,Multiple lines (plain),,,,
+Manager Reviews,FollowUpDecision,Choice,"Everything has been covered — no further discussion required at present.|Quick, informal catch-up in the field.|Arrange a dedicated 1-to-1 discussion.",(none),,
+Manager Reviews,MeetingDate,Date only,,,,
+Manager Reviews,ActionsJson,Multiple lines (plain),,,,v4
+Manager Reviews,ActionsStatus,Choice,None|Open|Done,None,Yes,
+Manager Reviews,NextActionDue,Date only,,,,v4
+Manager Reviews,CompletedOn,Date and time,,,,
+Manager Reviews,CompletedBy,Single line of text,,,,
+Manager Reviews,ReleasedOn,Date and time,,,,
+Manager Reviews,CorrectionLog,Multiple lines (plain),,,,
+1-to-1 Settings,Title,Built-in,,,,Item: Bands
+1-to-1 Settings,Value,Multiple lines (plain),,,,JSON

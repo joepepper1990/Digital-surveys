@@ -1,194 +1,213 @@
-# ESG 1-to-1: go-live runbook (from Stage 0B to a running system)
+# ESG 1-to-1: go-live runbook (v4)
 
-This is the full path from where you are now to technicians receiving their first monthly email. Work the phases in order and tick as you go. Detailed specifications live in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md); this runbook is the sequence and the operational steps that aren't in the plan (adding technicians, adding expectations, sending the first emails, monthly running).
+This runbook takes you from where you are now to technicians receiving their first monthly email. Work through the phases in order and tick as you go.
 
-**Where you are:** site built, Welcome proven (Stage 0A complete), Stage 0B security probe built and awaiting your live test.
+**Where to find the detail:**
 
-**Legend:** 🧑 you do it in SharePoint/Power Automate · 🤖 a Claude session produces a file first · ⛔ a gate you must not pass until it's green.
+- Lists: [`01-sharepoint/lists.md`](01-sharepoint/lists.md)
+- Flows: [`03-flows/FLOW_BUILD_SHEETS.md`](03-flows/FLOW_BUILD_SHEETS.md)
+- Emails: [`03-flows/EMAIL_TEMPLATES.md`](03-flows/EMAIL_TEMPLATES.md)
+- Frontend install: [`02-frontend/README.md`](02-frontend/README.md)
+- Running the system: [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md)
+- Design record: [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) v4
 
----
+**Where you are:**
 
-## Phase 1 — Finish Stage 0B security verification 🧑 ⛔
+- Site, page, Welcome and the `1-to-1 Technicians` group are built.
+- **Stage 0A and 0B have passed.**
+- **All build files are produced** and tested locally (70 automated checks).
 
-Follow [`02-frontend/probe/README-stage0b.md`](02-frontend/probe/README-stage0b.md).
+**Legend:**
 
-- [ ] Create `1-to-1 Edit` and `1-to-1 Read` permission levels (if not already).
-- [ ] Upload `probe-0b.html` + `probe-0b.js`, select the **1-to-1 probe 0B** layout.
-- [ ] As Team Leader (TL): **Prepare / verify** → all **S** rows PASS → **Run control tests** → all PASS.
-- [ ] As **Test A**: run technician tests → every mandatory **B** test PASS.
-- [ ] As **Test B**: run technician tests → every mandatory **B** test PASS.
-- [ ] Review the informational findings (B12, B14, B17, B18, B19). None may reveal an exploitable hole.
-- [ ] Clean up the test lists; keep the site, page, library, permission levels and group.
-- [ ] Send me the redacted results for TL, Test A and Test B.
-
-**⛔ Gate:** do not build the production system until every mandatory Stage 0B test has passed for both test accounts.
-
----
-
-## Phase 2 — Decisions and HR inputs 🧑
-
-Confirm these before go-live (they don't block building, but they block real data):
-
-- [ ] **D3 retention period** — how many years reviews are kept (HR).
-- [ ] **EAP / Occupational Health contact text** — the words shown under the wellbeing question (HR-3).
-- [ ] **Privacy notice** approved, and whether a DPIA screening is needed (HR-2).
-- [ ] **D6** — make this GitHub repo **private** (recommended; it holds the security design).
-- [ ] **D8** — store choice answers as short codes (recommended; I'll build it this way unless you say otherwise).
+- 🧑 you do it in SharePoint or Power Automate
+- ⛔ a gate you must not pass until it's green
 
 ---
 
-## Phase 3 — I produce the production build files 🤖
+## Phase 1 — Stage 0 security verification ✅ done
 
-Ask me (a new session) to generate these into the repo. They don't exist yet; Stage 0B proved the approach, so they're safe to build now:
+Stage 0A and 0B passed in the live tenant. Two findings are built into the setup:
 
-- [ ] **Production frontend** — `one-to-one.html` + `one-to-one.js` (the real questionnaire, manager review and dashboard, on the same Welcome wrapper, matching the approved prototype).
-- [ ] **Flow build-sheets** — exact action-by-action instructions for the three Power Automate flows and the shared permission block.
-- [ ] **Email templates** — E1–E7.
-- [ ] **List checklist** — the four production lists, column by column.
-- [ ] **Config reference + privacy notice draft.**
+- the group needs Read on the Welcome Errors list;
+- the TL must be Site Collection Admin.
 
-**Prompt to use:**
-> Produce the production build artefacts (frontend one-to-one.html/js, flow build-sheets flow1/2/3, email templates, list checklist, config reference, privacy notice) from one-to-one/IMPLEMENTATION_PLAN.md v3.2, reusing the proven probe-0a2 Welcome wrapper. Placeholders only, no tenant data. Commit and push.
+- [ ] 🧑 Tidy up: delete the `ZZProbe…` lists and the probe files (`probe-0a*.html/js`, `probe-0b.*`) from the layouts library.
 
----
+## Phase 2 — Decisions and HR inputs ✅ settled
 
-## Phase 4 — Build the four production lists 🧑
+| Item | Decision |
+|---|---|
+| Retention | **24 months** |
+| Privacy notice | Not needed. This is between the TL and each technician. |
+| Repository | **Private** |
+| Private notes, "ask for a chat" | **Removed** |
+| Wellbeing text | Q4 wording only, with no EAP text in the form |
 
-Follow plan **section C** (and the list checklist from Phase 3). Create each with the exact internal column names.
+## Phase 3 — Production build files ✅ produced
 
-- [ ] **Technicians** — Title, Technician (person), TechnicianAadId (text), Active (yes/no).
-- [ ] **Appraisal Expectations** — Title, Measures, AppraisalYear, AppliesTo (Shared/Individual), Technician (person), SortOrder (number), Active (yes/no).
-- [ ] **Monthly Reviews** — the technician answer columns (plan C.3).
-- [ ] **Manager Reviews** — the authoritative record (plan C.4), with **ReviewKey** set to enforce unique values.
-- [ ] For every list: versioning on, attachments off, **stop inheriting permissions** and remove the Members/Visitors groups so only **Owners** remain (plan D.2). The technicians group is **never** given access to these lists.
-- [ ] Add the indexes and the views listed in section C.
-
-**⛔ Gate:** confirm each list's permission page shows only Owners.
-
----
-
-## Phase 5 — Build the three flows 🧑
-
-Follow plan **section F** (and the Phase 3 build-sheets). All standard connectors, signed in as the TL.
-
-- [ ] **Flow 1 — Daily scheduler** (creates each month's reviews, sets item permissions, sends the personal link E1, sends reminders on the 20th/27th, flags problems).
-- [ ] **Flow 2 — Review submitted** (locks the record to read-only, stamps the authoritative record, emails you).
-- [ ] **Flow 3 — Manager decision** (on Complete/Close: locks, releases feedback, emails the technician).
-- [ ] Turn on **Secure inputs/outputs** on the triggers and every Get-items action.
-- [ ] Test each flow once with a single test technician before adding real people.
-
-**⛔ Gate:** on a test technician, confirm: a created review is private until the email is sent; submitting locks it; completing releases feedback and emails them.
+| File | What it is |
+|---|---|
+| `02-frontend/one-to-one.html`, `one-to-one.js` | The app, v4.0.0. **Nothing to edit.** |
+| `01-sharepoint/lists.md`, `lists.csv` | Column-by-column list checklist |
+| `03-flows/FLOW_BUILD_SHEETS.md` | Flows 1–3, step by step |
+| `03-flows/EMAIL_TEMPLATES.md` | E1–E5, E7 |
+| `CONFIG_REFERENCE.md` | Config sheet, do-not-rename list, procedures, troubleshooting |
+| `prototype/prototype.html` | The agreed design, for reference |
 
 ---
 
-## Phase 6 — Install the production frontend 🧑
+## Phase 4 — Build the five production lists 🧑 ⏱ about 2 h
 
-- [ ] Edit the two `CONFIG` lines at the top of `one-to-one.js` (your site URL and TL email). Change nothing else.
-- [ ] Upload `one-to-one.html` + `one-to-one.js` to the **Welcome Web Part - Custom Layouts** library.
-- [ ] On the `OneToOne` page, set the Welcome layout to the production layout, extras off, republish.
-- [ ] Make `OneToOne` the site home page.
-- [ ] Confirm: as TL the page shows the **dashboard**; as a test technician the email link opens **their questionnaire**.
+Follow [`01-sharepoint/lists.md`](01-sharepoint/lists.md) column by column. Create each list **without spaces**, then rename it.
 
----
+- [ ] **Technicians.** Includes 🆕 `AppraisalDate`.
+- [ ] **Appraisal Expectations.**
+- [ ] **Monthly Reviews.** Includes 🆕 `Mood`, `WinOfMonth`, `AppraisalDate`.
+- [ ] **Manager Reviews.** Includes 🆕 `ActionsJson` and `NextActionDue`. **Not** `AgreedActions` or `ActionsDueBy`. Enforce unique values on `ReviewKey`.
+- [ ] 🆕 **1-to-1 Settings.** Title + Value, with one `Bands` item.
+- [ ] Every list: versioning on, attachments off, search off, inheritance stopped, Members and Visitors removed.
+- [ ] Indexes and views as listed.
+- [ ] **1-to-1 Settings only:** grant `1-to-1 Technicians` **Read**.
 
-## Phase 7 — Add your technicians 🧑
+**⛔ Gate:**
 
-For **each** technician (5–10 people):
+- The four data lists show **only Owners**.
+- 1-to-1 Settings shows Owners plus `1-to-1 Technicians` – Read.
 
-1. [ ] Open the **Technicians** list → **+ New**.
-2. [ ] **Title** = their name (e.g. `Jane Smith`).
-3. [ ] **Technician** = pick their Microsoft 365 account from the people picker (this is the stable identity; **leave TechnicianAadId blank** — Flow 1 fills it in automatically).
-4. [ ] **Active** = **Yes**.
-5. [ ] **Save**.
-6. [ ] Add them to the **`1-to-1 Technicians`** group (Site permissions → the group → New → Add Users), so they can open the page. Untick the email invitation.
+## Phase 5 — Record the IDs 🧑 ⏱ 10 min
 
-- [ ] When everyone is added, the Technicians list has one Active row per person, and the group contains exactly those people (plus nobody else).
+Fill in the Config sheet ([`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) §1): TL email, Owners group ID, the Full Control / 1-to-1 Edit / 1-to-1 Read role IDs, and the page link.
 
-> Leavers later: set **Active = No** and remove them from the group. New starters: add a row and add to the group; they get a review the next morning.
+Keep the filled-in sheet in the site or your OneDrive, **not in GitHub**.
 
----
+## Phase 6 — Install the frontend 🧑 ⏱ 30 min
 
-## Phase 8 — Add each technician's current appraisal expectations 🧑
+Follow [`02-frontend/README.md`](02-frontend/README.md) §Install.
 
-Open the **Appraisal Expectations** list. Use **Edit in grid view** to add rows quickly. Each technician may have **up to 10** active expectations, made up of shared ones plus their own.
+- [ ] Upload `one-to-one.html` and `one-to-one.js` to **Welcome Web Part - Custom Layouts**.
+- [ ] On `OneToOne`:
+  - put the Welcome web part in a **full-width section**;
+  - set the layout to **ESG 1-to-1**;
+  - turn the extras off;
+  - **Republish**.
+- [ ] Make `OneToOne` the home page.
+- [ ] The group has Read on the page, the layouts library, the Welcome Errors list and 1-to-1 Settings.
+- [ ] As TL: **Team overview** opens, the sidebar shows **⚙ Settings**, and the footer shows **v4.0.0**. With no reviews yet, the pages are empty but there are no errors.
 
-**For a shared expectation (applies to everyone):**
-1. [ ] **Title** = the expectation (e.g. `Complete annual safety refresher`).
-2. [ ] **Measures** = how success is judged (e.g. `Course passed and recorded by end of Q4`).
-3. [ ] **AppraisalYear** = e.g. `2026/27`.
-4. [ ] **AppliesTo** = **Shared**. Leave **Technician** blank.
-5. [ ] **SortOrder** = a number for ordering (e.g. 10, 20, 30…).
-6. [ ] **Active** = **Yes**.
+## Phase 7 — Build the three flows 🧑 ⏱ 4–5 h
 
-**For an individual expectation (one person):**
-- [ ] Same as above, but **AppliesTo** = **Individual** and **Technician** = that person.
+Follow [`03-flows/FLOW_BUILD_SHEETS.md`](03-flows/FLOW_BUILD_SHEETS.md), with emails from [`EMAIL_TEMPLATES.md`](03-flows/EMAIL_TEMPLATES.md).
 
-Checks:
-- [ ] Use the **Needs attention** view to catch any Individual rows with no technician set.
-- [ ] No technician ends up with more than 10 active expectations (shared + their own). Flow 1 warns you if they do, but it's better to check now.
-- [ ] Spot-check one technician: shared rows + their individual rows ≤ 10.
+- [ ] **Flow 1 — Daily scheduler.** Creates reviews, makes them private, sends E1, sends reminders on the 20th and 27th, and reports problems with E7.
+- [ ] **Flow 2 — Review submitted.** Locks the review, stamps the record, sends E3.
+- [ ] **Flow 3 — Manager decision.** Validates, locks, **releases**, sends E4 or E5.
+- [ ] Secure inputs/outputs, concurrency 1, and Try/Catch on every flow. `varTestDate` is empty.
 
-> These are copied into each monthly review when it's created, so later edits never change past reviews. Annual rollover is in plan G Part 11.
+## Phase 8 — Add technicians and appraisal dates 🧑 ⏱ 30 min
 
----
+For each technician:
 
-## Phase 9 — End-to-end rehearsal with test accounts 🧑 ⛔
+1. [ ] **Technicians → + New.**
+   - **Title** = name.
+   - **Technician** = their account.
+   - Leave **TechnicianAadId** blank.
+   - **Active** = Yes.
+2. [ ] Add them to the **`1-to-1 Technicians`** group, with the email invitation unticked.
 
-Before any real person is emailed, run the full journey once with **Test A** and **Test B** (temporarily add them as Active technicians):
+Then:
 
-- [ ] Run **Flow 1** manually → Test A and Test B each get an email.
-- [ ] As Test A: open the link, save a draft, complete the questionnaire (including a few expectations), submit.
-- [ ] As TL: you're notified; open the review, add feedback per section and per expectation, set actions, **Complete & release**.
-- [ ] As Test A: you receive the feedback email and can read the released feedback; the review is read-only.
-- [ ] Confirm Test B never saw any of Test A's data at any point.
-- [ ] Run the relevant privacy tests from plan **section H** (P1–P17).
+- [ ] In the app, open **⚙ Settings** and enter each **appraisal date** (DD-MMM-YYYY). Check the band thresholds, then **Save settings**.
 
-**⛔ Gate:** every privacy test passes, and the full journey works end to end. Then remove Test A/Test B from the Technicians list and the group, and delete their test reviews.
+> Start with **Test A and Test B only** (Phase 10). Add the real technicians after the rehearsal.
 
----
+## Phase 9 — Add appraisal expectations 🧑 ⏱ 1 h
 
-## Phase 10 — Go live: send the first emails 🧑
+Use the app's **Expectations** page (or the list).
 
-- [ ] Confirm all real technicians are Active in the Technicians list and in the group.
-- [ ] Confirm Flow 1, Flow 2 and Flow 3 are all **On**.
-- [ ] Confirm the HR inputs from Phase 2 are in (EAP text in the frontend; privacy notice available).
-- [ ] **Send the first emails now** by opening **Flow 1** → **Run** → **Run flow**. (It's idempotent and safe to run any time; you don't have to wait for the 1st of the month.) Each active technician gets their personal link for the current month.
-   - Or, if you'd rather start next month, just leave Flow 1 on and it fires automatically at 07:00 on the 1st.
-- [ ] Check: each technician has one review for this month, each got exactly one email, and the dashboard lists everyone.
+- [ ] **Shared** expectations: title, measures, year (e.g. `2026/27`), sort order.
+- [ ] **Individual** expectations: the same, with *Applies to* = that technician.
+- [ ] No technician has more than **10** active expectations. The page shows the count per person.
 
----
+> Expectations are copied into each month's review when it's created. Edits apply from the next month, and past reviews never change. **Retire** expectations; never delete them.
 
-## Phase 11 — Running it each month 🧑
+## Phase 10 — End-to-end rehearsal with Test A and Test B 🧑 ⛔ ⏱ 6–8 h
 
-The system now runs itself. Your routine:
+With **only Test A and Test B** in Technicians:
+
+- [ ] Run **Flow 1** manually. A and B each get E1. Running it again creates nothing new.
+- [ ] **As Test A:**
+  1. Open the link.
+  2. Fill in some answers, the energy tile and the win, then **Save**.
+  3. Close and reopen: everything is still there.
+  4. Complete the form and **Submit**.
+  5. The review is read-only within about 5 minutes.
+- [ ] **As TL** (E3 arrives):
+  1. Open the review.
+  2. Add feedback and a **TL rating** per expectation.
+  3. Add **two or more actions**, each with close-out criteria and a deadline.
+  4. Click **Complete & release**.
+- [ ] **As Test A:** E4 arrives. Feedback, ratings and actions are visible. **My appraisal** and **Appraisal report** work.
+- [ ] **As TL:**
+  - The **Actions** page closes an action.
+  - The **Appraisal report** for A prints or saves as PDF.
+- [ ] **As Test B:** throughout, B never sees anything of A's.
+- [ ] Run plan **section H**: F1–F30 and **every P test (P1–P20)**. The XSS test P15 is release-blocking.
+
+**⛔ Gate:** every P test passes and the journey works end to end.
+
+Then clean down:
+
+1. Delete the test reviews from both lists, then empty both recycle bins.
+2. Remove Test A and Test B from Technicians and from the group.
+
+## Phase 11 — Go live 🧑 ⏱ 15 min
+
+- [ ] Add the real technicians (Phase 8), then set their appraisal dates in ⚙ Settings.
+- [ ] Flows 1, 2 and 3 are **On**.
+- [ ] **Flow 1 → Run** to start the current month now. Alternatively, wait for 07:00 on the 1st.
+- [ ] Check:
+  - each technician has one review and got exactly one email;
+  - **Team overview** lists everyone.
+
+## Phase 12 — Running it each month 🧑
 
 | When | What happens / what you do |
 |---|---|
-| 1st, 07:00 | Flow 1 creates each technician's review and emails the link. Check the run succeeded and the dashboard shows everyone. |
-| During the month | Technicians fill in and submit. You get an email on each submission; review and **Complete & release**. |
-| 20th & 27th | Automatic reminders to anyone who hasn't submitted. |
-| Last day, 23:59 | Deadline. Unsubmitted reviews show as overdue; you can **Close – not submitted** after the deadline. |
-| Quarterly (5 min) | Check the Owners group is just you, Members/Visitors empty, and the `1-to-1 Technicians` group holds only current technicians. |
-| Annually | Roll over appraisal expectations (plan G Part 11); run the retention deletion once HR has set the period. |
-
-Corrections after release: edit the item in SharePoint and note the reason in the Manager Review's **CorrectionLog**; version history is the audit trail.
+| 1st, 07:00 | Flow 1 creates the reviews and emails links. Glance at Team overview. |
+| During the month | You get E3 per submission. Review, rate, add actions, then **Complete & release**. |
+| 20th and 27th | Automatic reminders to anyone who hasn't submitted |
+| Last day, 23:59 | Deadline. Unsubmitted reviews show as overdue, and you can **Close – not submitted**. |
+| Any time | **Actions** page: close completed actions. **⚙ Settings**: appraisal dates. |
+| Before an appraisal | **Appraisal report** for that technician, to help write the appraisal |
+| Quarterly | Permission check ([`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) §4) |
+| Annually | Expectation rollover; retention deletion (over 24 months) |
 
 ---
 
 ## Quick status map
 
-| Phase | Needs | State |
+| Phase | Who | State |
 |---|---|---|
-| 1 Stage 0B test | you, live | **built, awaiting your test** |
-| 2 decisions / HR | you + HR | open |
-| 3 build files | me | not started |
-| 4 lists | you | after Phase 3 |
-| 5 flows | you | after Phase 4 |
-| 6 frontend | you | after Phase 3 |
-| 7 technicians | you | after Phase 6 |
-| 8 expectations | you | after Phase 4 |
-| 9 rehearsal | you | after Phases 5–8 |
-| 10 go live | you | after Phase 9 |
-| 11 monthly | you | ongoing |
+| 1 Stage 0 | you | ✅ passed (tidy-up left) |
+| 2 decisions | you | ✅ settled |
+| 3 build files | Claude | ✅ produced |
+| 4 lists | you | **next** |
+| 5 IDs | you | after 4 |
+| 6 frontend | you | after 4 |
+| 7 flows | you | after 5 |
+| 8 technicians (test first) | you | after 6 |
+| 9 expectations | you | after 4 |
+| 10 rehearsal | you | after 7–9 |
+| 11 go live | you | after 10 |
+| 12 monthly | you | ongoing |
 
-**Rough hands-on time after Stage 0B passes:** Phase 3 is a Claude session; Phases 4–6 about 10–14 h; Phases 7–8 about 1–2 h for 5–10 people and their expectations; Phase 9 about 3–4 h; Phase 10 a few minutes. Spread over a couple of weeks around approvals.
+**Rough hands-on time from here:**
+
+| Phases | Time |
+|---|---|
+| 4–7 | about 7–8 h |
+| 8–9 | about 1–2 h |
+| 10 | about 6–8 h (testing) |
+| 11 | minutes |
+
+If a tenant test fails, use the prompt at the end of the implementation plan to get a fix.

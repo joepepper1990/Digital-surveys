@@ -1093,13 +1093,13 @@ window.ESGOneToOne = function (ctx) {
           r && followOf(r) === DEDICATED ? tip(h('span', { text: ' 🗓' }), 'Dedicated 1-to-1 requested') : null]),
         h('td', { class: 'num', text: ap ? fmtDate(ap) : 'Not set' }),
         h('td', { class: 'num ' + (days !== null && days <= 30 ? 'overdue' : ''), text: days === null ? '—' : days >= 0 ? days + ' days' : 'Passed' }),
-        h('td', { style: 'width:190px' }, [h('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:5px' }, [bandChip(o.projected), h('b', { class: 'num', text: f1(o.projected) })]), track(o.projected)]),
+        h('td', { style: 'width:170px' }, [h('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:5px' }, [bandChip(o.projected), h('b', { class: 'num', text: f1(o.projected) })]), track(o.projected)]),
         h('td', { class: 'num' }, [h('span', null, [h('i', { class: 'dot', style: 'background:' + C_SELF }), f1(o.selfAvg)]), h('br'), h('span', null, [h('i', { class: 'dot', style: 'background:' + C_TL }), f1(o.tlAvg)])]),
         h('td', null, tip(h('span', null, sparkline(o.pts.map(function (pt) { return pt.used; }), '#13516b')), 'Monthly score, oldest → newest\n' + o.pts.map(function (pt) { return monthShort(pt.month) + ' ' + pt.used.toFixed(1); }).join('  '))),
         h('td', null, chipFor(r)),
         r && r.answers.mood ? tip(h('td', { style: 'font-size:18px;text-align:center', text: MOODS[r.answers.mood - 1].emo }), moodEmoji(r.answers.mood)) : h('td', { text: '—' }),
         h('td', { class: 'num' + (od ? ' overdue' : ''), text: oa.length + (od ? ' · ' + od + ' overdue' : '') }),
-        h('td', null, h('button', { class: 'btn small ghost', type: 'button', text: '📄 Report', onclick: function () { state.report = { tech: t, aud: 'tl' }; render(false); } }))
+        h('td', null, h('button', { class: 'btn small ghost', type: 'button', text: '📄', title: 'Appraisal report for ' + t, 'aria-label': 'Appraisal report for ' + t, onclick: function () { state.report = { tech: t, aud: 'tl' }; render(false); } }))
       ]);
     });
     var teamTbl = card('Team – appraisal outlook', 'Expected outcome at each appraisal date · dates and bands are set in ⚙ Settings', [
@@ -1659,7 +1659,8 @@ window.ESGOneToOne = function (ctx) {
     }
     var dl = daysBetween(TODAY, lastDay(CUR));
     nav.push(h('div', { class: 'foot' }, [h('b', { text: monthLabel(CUR) }), dl >= 0 ? 'Deadline ' + fmtDate(lastDay(CUR)) + ' · ' + dl + ' days' : 'Deadline passed',
-      h('button', { class: 'linkbtn', type: 'button', text: '↻ Refresh data', onclick: function () { if (dirty && !window.confirm('Discard unsaved changes and reload?')) { return; } dirty = false; start(); } })]));
+      h('button', { class: 'linkbtn', type: 'button', text: '↻ Refresh data', onclick: function () { if (dirty && !window.confirm('Discard unsaved changes and reload?')) { return; } dirty = false; start(); } }),
+      h('span', { style: 'display:block;margin-top:4px;opacity:.7', text: 'v' + VERSION })]));
 
     var titles = { tech: ['My 1-to-1', 'This month'], myapp: ['', 'My appraisal'], team: ['', 'Team overview'], reviews: ['', 'Monthly reviews'],
       expect: ['', 'Appraisal expectations'], actions: ['', 'Actions'] };

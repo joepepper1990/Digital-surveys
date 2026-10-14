@@ -1,6 +1,16 @@
-# ESG Monthly Technician 1-to-1 — Implementation Plan (v3)
+# ESG Monthly Technician 1-to-1 — Implementation Plan (v4)
 
-**Status:** v3.2. **Current position and next actions:** [`NEXT_STEPS.md`](NEXT_STEPS.md). **Stage 0A is complete** (Welcome runs external JS; authenticated REST read/write confirmed; technician correctly limited). **Stage 0B security probe is built** ([`02-frontend/probe/README-stage0b.md`](02-frontend/probe/README-stage0b.md)) and awaits live testing. Stage 0 is split into **0A** (Welcome feasibility, artefacts in [`02-frontend/probe/`](02-frontend/probe/README.md)) and **0B** (security, prepared only after 0A passes). There are also explicit authorisation and workflow rules (D.7). The canvas app frontend is replaced by a custom HTML/CSS/JavaScript layout in **Welcome by Accelerator 365**. See *Changes in v3* below. The v1 → v2 changes are explained in [`PLAN_REVIEW.md`](PLAN_REVIEW.md). **Nothing has been built or deployed.**
+**Status:** v4.0, dated 14-Oct-2026. **Current position and next actions:** [`NEXT_STEPS.md`](NEXT_STEPS.md).
+
+- **Stages 0A and 0B have passed in the live tenant.** Welcome runs the external script, authenticated REST works, and the item-level security model holds.
+- The visual design was agreed through prototype v7 ([`prototype/prototype.html`](prototype/prototype.html)).
+- **The production build files are produced:**
+  - the frontend [`02-frontend/`](02-frontend/README.md), with a local mock and 70 automated checks;
+  - the list checklist [`01-sharepoint/lists.md`](01-sharepoint/lists.md);
+  - the flow build sheets and email templates [`03-flows/`](03-flows/FLOW_BUILD_SHEETS.md);
+  - the operating manual [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md).
+- **What remains is the tenant build and go-live** ([`GO_LIVE_RUNBOOK.md`](GO_LIVE_RUNBOOK.md)).
+- Earlier history: v1 → v2 in [`PLAN_REVIEW.md`](PLAN_REVIEW.md); v2 → v3 under *Changes in v3*.
 **Scope:** 5–10 technicians, one Team Leader (TL), Environmental Safety Group, Dungeness B.
 
 **Confirmed decisions**
@@ -11,8 +21,28 @@
 | D2 | **Late submissions are accepted** and flagged late, and the TL may close a review that was never submitted |
 | D3 | Retention period: **24 months** (confirmed). Reviews older than 24 months are deleted; mechanism per D.5. |
 | D4 | **No backup owner**, subject to corporate governance |
+| D5 | **No private notes** for technicians. The TL is Site Collection Admin and could read them, so the feature would be misleading. (v4) |
+| D6 | **No "ask for a chat" button.** A technician uses Q9 or simply talks to the TL. (v4) |
+| D7 | The **TL sets each technician's appraisal date** and the appraisal band thresholds in ⚙ Settings, visible only to line managers. Dates are shown as **DD-MMM-YYYY**. (v4) |
 
-The system has four lists, three flows, two custom permission levels, and one SharePoint page carrying a custom Welcome layout (the frontend). The flows use standard connectors only.
+The system has **five lists** (four data lists plus a small settings list), three flows, two custom permission levels, and one SharePoint page carrying a custom Welcome layout (the frontend). The flows use standard connectors only.
+
+## Changes in v4
+
+| Area | v3.2 | v4 |
+|---|---|---|
+| Design | Single-column questionnaire, dashboard and review screens | Desktop layout with a **narrow sidebar menu**, uniform cards, charts and an appraisal outlook (agreed via prototype v7) |
+| Technician | Questionnaire only | Adds an **energy check-in** and **win of the month** (`Mood`, `WinOfMonth` on Monthly Reviews), **My appraisal** (expected outcome, trend), and an **Appraisal report** |
+| TL ratings | Feedback text per expectation | Feedback **plus a 1–5 TL rating** per expectation, in `ExpectationFeedbackJson` |
+| Actions | One free-text box plus one due date | **Any number of action rows**, each with owner, **close-out criteria and a deadline**, in `ActionsJson`. `NextActionDue` feeds the *Open actions* view. There is a TL **Actions** page to close or reopen them. `AgreedActions` and `ActionsDueBy` are dropped. |
+| Expectations | Edited in the SharePoint list | Organised in-app **Expectations** page (add, edit, retire), as well as the list |
+| Appraisal outcome | — | TL enters each **appraisal date**: `Technicians.AppraisalDate`, plus a display copy on the current Monthly Review. Editable **bands** live in a new **`1-to-1 Settings`** list (technicians: Read). The expected outcome is calculated in the browser (E.7). |
+| Reports | — | 8-section appraisal report for the TL and the technician; print / save as PDF (E.8) |
+| Role detection | `CONFIG.managerEmail` | SharePoint **effectiveBasePermissions** (ManagePermissions = TL). There is **nothing to configure** in the JS. |
+| Removed | — | Private notes, ask-for-a-chat, workload trend, the occupational-health text (`eapText`), example text in boxes, and the "how it's worked out" panel for technicians |
+| Flows | — | Flow 1 copies `AppraisalDate` and initialises the two JSON columns. Email dates use `dd-MMM-yyyy`. E3's request tag uses `startsWith`. Flows 2 and 3 are unchanged. |
+| Security model | — | **Unchanged.** No new trust boundary: new technician fields are on the technician's own item; new TL data is on Manager Reviews (released by Flow 3); the Settings list holds no personal data. |
+
 
 ## Changes in v3
 
@@ -55,15 +85,16 @@ PRIVATE SHAREPOINT COMMUNICATION SITE  (Owners group = Team Leader only; no Memb
  ├─ Technicians             manager only        roster + stable identity (Entra object ID)
  ├─ Appraisal Expectations  manager only        master list, shared + individual
  ├─ Monthly Reviews         per item            technician's answers. Tech: EDIT while open, READ after
- ├─ Manager Reviews         per item            AUTHORITATIVE record + TL feedback + actions.
+ ├─ Manager Reviews         per item            AUTHORITATIVE record + TL feedback, ratings + actions.
  │                                              Manager only until released, then tech READ
+ ├─ 1-to-1 Settings         Owners edit         appraisal band thresholds (no personal data). Technicians group: READ
  ├─ Welcome Web Part - Custom Layouts   one-to-one.html + one-to-one.js (the frontend code; Owners edit, technicians read)
  └─ SitePages/OneToOne.aspx (home page) Welcome web part → custom layout. Technicians group: READ on this page only
 
 FRONTEND (JavaScript in the page; SharePoint REST as the signed-in user)
- ├─ #tech   technician questionnaire, month picker for past reviews
- ├─ #dash   TL: KPIs, review table, outstanding actions
- └─ #mgr    TL: answers + feedback per section + complete / close
+ ├─ Technician  This month (form) · My appraisal (outlook, trend) · Appraisal report
+ └─ TL          Team overview · Monthly reviews · manager review · Expectations · Actions ·
+                technician profiles · ⚙ Settings (appraisal dates, bands) · reports
 
 POWER AUTOMATE (TL connection; standard connectors)
  ├─ Flow 1  Daily 07:00 UK   create → protect → email; reminders 20th/27th; problem report
@@ -89,8 +120,9 @@ POWER AUTOMATE (TL connection; standard connectors)
 | AS2 | If the answer is **No**, any hidden detail text is **cleared when saving**. Hidden fields are never validated or stored. |
 | AS3 | Emails contain **links only**, never answers or feedback. |
 | AS4 | Expectations apply when **Active = Yes**, and are snapshotted when the month's review is created. Changes made mid-month apply from next month. |
-| AS5 | **Correction process:** the TL corrects a submitted record directly in SharePoint, at the technician's request, and writes the reason in `CorrectionLog`. Version history is the audit trail. There's no in-app "reopen" in v1. |
-| AS6 | **Agreed actions** are free text on the TL's record (one per line, with due dates), plus an *Open / Done* status and an earliest due date. |
+| AS5 | **Correction process:** the TL corrects a submitted record directly in SharePoint, at the technician's request, and writes the reason in `CorrectionLog`. Version history is the audit trail. There's no in-app "reopen". |
+| AS6 | **Agreed actions** are rows in `ActionsJson` on the TL's record. Each has action, owner, close-out criteria, deadline and Open/Closed status. `ActionsStatus` and `NextActionDue` summarise them for list views. (v4) |
+| AS7 | The **expected appraisal outcome** is a guide calculated from monthly ratings. It is never a decision, and wellbeing answers are never part of it or of the report. (v4) |
 
 ---
 
@@ -107,7 +139,7 @@ POWER AUTOMATE (TL connection; standard connectors)
 
 Q8 is part of the frontend file from Stage 1, because separating it costs more than it saves. Stage 3 is about loading and testing real expectation data.
 
-**Not in v1:** in-app reopen, an in-app expectations editor (the SharePoint list is enough), charts, auto-save, Teams notifications, a service account, and automated retention.
+**Not in v4:** in-app reopen, auto-save, Teams notifications, a service account, automated retention, private notes, and an in-app chat request.
 
 ---
 
@@ -115,6 +147,7 @@ Q8 is part of the frontend file from Stage 1, because separating it costs more t
 
 ### C.0 Rules for every list
 
+- **The column-by-column build checklist is [`01-sharepoint/lists.md`](01-sharepoint/lists.md)** (also as [`lists.csv`](01-sharepoint/lists.csv)). This section is the design record. 🆕 marks v4 additions.
 - **Type each column name exactly as shown, with no spaces.** The name you type becomes the permanent internal name that the frontend and flows use.
 - **Required:** leave every column *not required* in SharePoint, except `Title`. The frontend checks required answers at Submit, and SharePoint-required columns would block saving drafts.
 - **Choice columns:** turn **"Can add values manually"** off. Where the default says *(none)*, **delete the default value**. SharePoint pre-fills the first choice otherwise.
@@ -137,6 +170,7 @@ Q8 is part of the frontend file from Stage 1, because separating it costs more t
 | Technician | Person or Group (people only, single) | — | Their Microsoft 365 account |
 | TechnicianAadId | Single line of text | — | **Leave empty.** Flow 1 fills in the Entra object ID. **Indexed.** |
 | Active | Yes/No | Yes | **Indexed.** Set to No for leavers and long absences. |
+| AppraisalDate 🆕 | Date only | — | Set by the TL in ⚙ Settings. Drives the appraisal period (E.7). |
 
 ### C.2 `AppraisalExpectations` → display name **Appraisal Expectations** (manager only)
 
@@ -188,7 +222,10 @@ This list is the technician's workspace. Everything here can be edited by the te
 | Q6DevWhy | Multiple lines | — | |
 | Q7ManagerFeedback | Multiple lines | — | |
 | ExpectationsJson | Multiple lines | — | Technician's copy of the expectations, plus their ratings (see below) |
-| Q9FollowUp | Choice (the 3 values in E.1) | *(none)* | |
+| Q9FollowUp | Choice: `Everything has been covered — no further discussion required at present.` · `Quick, informal catch-up in the field.` · `Arrange a dedicated 1-to-1 discussion.` | *(none)* | |
+| Mood 🆕 | Number, 0 dp, min 1, max 5 | — | Energy check-in |
+| WinOfMonth 🆕 | Multiple lines | — | Win of the month |
+| AppraisalDate 🆕 | Date only | — | **Display copy** of Technicians.AppraisalDate, so the technician can see their own outlook. Written by Flow 1 and by ⚙ Settings. Never used for a decision (D.7). |
 
 Example of `ExpectationsJson`:
 
@@ -216,12 +253,12 @@ Example of `ExpectationsJson`:
 | FB_Q1 … FB_Q7 | Multiple lines (7 columns) | — | TL | TL feedback per question |
 | FB_Q9 | Multiple lines | — | TL | |
 | FB_Overall | Multiple lines | — | TL | |
-| ExpectationFeedbackJson | Multiple lines | — | TL | `[{"id":12,"feedback":"…"}]` |
+| ExpectationFeedbackJson | Multiple lines | — | TL | `[{"id":12,"feedback":"…","rating":4}]`. v4 adds the TL's 1–5 `rating`. |
 | FollowUpDecision | Choice (same 3 values as Q9) | *(none)* | TL | **Override** of the technician's preference |
 | MeetingDate | Date only | — | TL | |
-| AgreedActions | Multiple lines | — | TL | One action per line, for example `• Book confined-space refresher – Tech – by 15/12` |
-| ActionsDueBy | Date only | — | TL | Earliest open due date |
-| ActionsStatus | Choice: `None`, `Open`, `Done` | None | TL | **Indexed** |
+| ActionsJson 🆕 | Multiple lines | — | TL | `[{"id":"a1","text":"…","owner":"…","criteria":"…","due":"2026-12-15","status":"Open","closedOn":""}]`. Replaces `AgreedActions`. |
+| ActionsStatus | Choice: `None`, `Open`, `Done` | None | TL (app) | **Indexed.** Done = every action closed. |
+| NextActionDue 🆕 | Date only | — | TL (app) | Earliest open deadline. Replaces `ActionsDueBy`. |
 | CompletedOn | Date and time | — | Flow 3 | |
 | CompletedBy | Single line of text | — | Flow 3 | Email of the person who completed it |
 | ReleasedOn | Date and time | — | Flow 3 | |
@@ -232,8 +269,17 @@ Example of `ExpectationsJson`:
 | View | Filter / layout |
 |---|---|
 | *Overdue* | ReviewState = Open **and** DueDate < `[Today]` |
-| *Open actions* | ActionsStatus = Open, sorted by ActionsDueBy |
+| *Open actions* | ActionsStatus = Open, sorted by NextActionDue |
 | *All* | default view |
+
+### C.4a `OneToOneSettings` → display name **1-to-1 Settings** 🆕 (Owners edit, technicians read)
+
+| Column | Type | Notes |
+|---|---|---|
+| Title | (built-in) | Setting name. v4 uses one item: `Bands`. |
+| Value | Multiple lines | JSON. Default: `[{"name":"Not met","max":1.5},{"name":"Partially met","max":2.25},{"name":"Met","max":4},{"name":"Exceeded","max":null}]` |
+
+It holds no personal data. The `1-to-1 Technicians` group gets **Read** so each technician's outlook uses the same bands as the TL's. Only the TL can change it.
 
 ### C.5 Relationships
 
@@ -245,7 +291,7 @@ Appraisal Expectations.ID ──copied──▶ Manager Reviews.ExpectationSnaps
                                       Manager Reviews.ExpectationFeedbackJson[].id (TL feedback)
 ```
 
-There are no lookup columns, so nothing breaks when a technician lacks access to a related list. About 240 unique permission scopes a year at 10 technicians, well inside SharePoint's limits.
+The 1-to-1 Settings list is standalone. There are no lookup columns, so nothing breaks when a technician lacks access to a related list. About 240 unique permission scopes a year at 10 technicians, well inside SharePoint's limits.
 
 ---
 
@@ -266,7 +312,7 @@ There are no lookup columns, so nothing breaks when a technician lacks access to
 
 ### D.2 Lists
 
-Break inheritance on all four lists so that only **Owners (Full Control)** remains.
+Break inheritance on all five lists so that only **Owners (Full Control)** remains. Then add **`1-to-1 Technicians` – Read** on **1-to-1 Settings** only.
 
 ### D.3 Custom permission levels
 
@@ -287,6 +333,7 @@ Keep **Use Remote Interfaces** ticked in both, because the frontend's REST calls
 | Own Manager Review, after completion or close | `1-to-1 Read` | Flow 3 |
 | Anyone else's items | **None** | — |
 | Technicians, Appraisal Expectations | **None** | — |
+| 1-to-1 Settings (band thresholds only) | **Read**, through the `1-to-1 Technicians` group | TL, at build (v4) |
 
 **The permission routine (`SETPERM`, four REST calls).** This routine is the same everywhere it's used. It's idempotent, and it builds exactly the intended permissions:
 
@@ -336,6 +383,7 @@ Technicians now need to open one SharePoint page. That's set up without making t
 | Layout library | `Welcome Web Part - Custom Layouts` → **Stop inheriting** → grant `1-to-1 Technicians` **Read**. It holds code only, never data. |
 | Welcome configuration | Any list Welcome creates for its own settings (identified in Stage 0) gets **Read** for the group, and only if the page won't render without it |
 | Welcome Errors list | **Grant the group Read** on the Welcome **"Errors"** list (`WMW_WMReplyWelcomeWebPartErrors`, shown as *Welcome Web Part - Errors*). **Required** — confirmed in Stage 0B: without it Welcome renders a blank page for the technician and raises an access request. It holds only diagnostic text (no review data). Grant to the group, not individuals. |
+| 1-to-1 Settings list (v4) | **Read** for the group. Holds only the band thresholds, so technicians' outlooks match the TL's. |
 | Not granted | The four data lists (access stays item-level, set by the flows), the rest of Site Pages, Site Assets and every other library |
 
 **Code integrity.** Only the Owners group (the TL) can edit the page, the layouts library or the script. Anyone who could edit `one-to-one.js` could run code as every viewer, including the TL. That's why P16 is a release blocker, and why the quarterly check now includes the group's permissions.
@@ -358,6 +406,8 @@ Technicians now need to open one SharePoint page. That's set up without making t
 | Due date and lateness | `Manager Reviews.DueDate`; `SubmittedOn` is stamped by Flow 2 with server time |
 | Expectation wording | `Manager Reviews.ExpectationSnapshotJson` |
 | Audit of corrections | `Manager Reviews.CorrectionLog` plus Manager Reviews versions. Monthly Reviews version history is not relied on. |
+| Appraisal date (v4) | `Technicians.AppraisalDate`. The copy on Monthly Reviews is display only: a technician who edits it changes only their own view. |
+| TL ratings and actions (v4) | `Manager Reviews.ExpectationFeedbackJson` / `ActionsJson`. Technicians can't write them. |
 
 **Allowed state transitions.** Each is validated by the flow that performs it. Anything else is rejected: Flow 3 reverts it and emails the TL, and Flow 2 only re-applies Read.
 
@@ -367,7 +417,7 @@ Technicians now need to open one SharePoint page. That's set up without making t
 | Submitted → Completed | Flow 3, on the TL's command | `SubmittedOn` is set |
 | Open → Closed - Not Submitted | Flow 3, on the TL's command | `SubmittedOn` is empty **and** `DueDate` has passed |
 
-The dashboard and the TL review view take status **only** from `ReviewState`. `ReviewStatus` on Monthly Reviews is used only as a "draft started" hint, and as the technician's submit signal that Flow 2 re-validates.
+The TL views (Team overview, Monthly reviews, manager review) take status **only** from `ReviewState`. `ReviewStatus` on Monthly Reviews is used only as a "draft started" hint, and as the technician's submit signal that Flow 2 re-validates.
 
 **Accepted low risk:** a technician can trigger Flow 2 repeatedly by editing their own draft. Each run only re-applies permissions they already hold.
 
@@ -375,282 +425,253 @@ The dashboard and the TL review view take status **only** from `ReviewState`. `R
 
 ## E. Frontend specification (Welcome custom layout)
 
-v3 replaces the canvas app with a custom HTML/CSS/JavaScript frontend. It runs inside the **Welcome by Accelerator 365** web part, as a *custom layout*. The SharePoint lists, permission model and flows are unchanged, apart from the email links (F.4).
+The frontend is a custom HTML/CSS/JavaScript layout inside the **Welcome by Accelerator 365** web part. **v4 is built**: [`02-frontend/one-to-one.html`](02-frontend/one-to-one.html) and [`02-frontend/one-to-one.js`](02-frontend/one-to-one.js) (version 4.0.0). The approved design baseline is [`prototype/prototype.html`](prototype/prototype.html) (prototype v7). The lists, permission model and flows are as in C, D and F.
 
-### E.0 Feasibility gate (read this first)
+### E.0 Feasibility gate — passed
 
-According to Accelerator 365's own documentation, Welcome custom layouts are Handlebars HTML templates uploaded to a *Welcome Web Part - Custom Layouts* library. The release notes mention a "JavaScript context" (October 2025), a "script tag file" (September 2024) and support for SharePoint's Content Security Policy changes (February 2026).
+Stages 0A and 0B proved in the live tenant that a Welcome layout can do all of the following:
 
-**The documentation does not confirm that a layout can run general-purpose JavaScript that reads and writes SharePoint lists.** This frontend needs exactly that. Stage 0 (G Part 5) therefore includes a **probe layout** that must:
+- load a separate script (`<script src … data-layout data-exports>`);
+- read the current user;
+- read and write list items through Welcome's `spHttpClient`;
+- keep a technician confined to their own items.
 
-1. run a script
-2. read the current user
-3. read one list item
-4. **write** one field
-5. do all of this without being blocked by the tenant's Content Security Policy
+The production code uses the same wrapper as probe 0A2/0B: `window.ESGOneToOne = function (ctx) { return { onInitialize, onError, onDispose }; }`.
 
-**If the probe fails, don't build this frontend.** The fallbacks, in order of effort, are:
+Fallbacks are no longer expected, but if they're ever needed:
 
-1. Package the same JavaScript as an **SPFx web part**. This needs a tenant admin to deploy it to the app catalog.
-2. Revert to the **v2 canvas app** (git commit `16dd9c5`, section E of v2). The backend needs no changes either way.
+1. Package the same JavaScript as an **SPFx web part**.
+2. Revert to the **v2 canvas app** (git `16dd9c5`).
 
 ### E.1 What gets built
 
 | File | Where it goes | Contents |
 |---|---|---|
-| `one-to-one.html` | *Welcome Web Part - Custom Layouts* library on the 1-to-1 site | Welcome metadata block (all extra features **off**: no weather, search, time or greeting), the static page shell (headings, question text, empty containers), and CSS |
-| `one-to-one.js` | Same library, loaded the way Welcome's custom layouts support (confirmed in Stage 0) | All behaviour. Plain modern JavaScript with **no libraries, no CDNs and no external calls**. Roughly 900 lines. |
-| `OneToOne.aspx` | Site Pages, **set as the site home page** | One Welcome web part using the `one-to-one` layout |
+| `one-to-one.html` | *Welcome Web Part - Custom Layouts* library | Welcome metadata (`data-name="ESG 1-to-1"`), all CSS (scoped to the web part), an empty root element, and the script tag. No Handlebars expressions. |
+| `one-to-one.js` | Same library | All behaviour. About 1,750 lines of plain JavaScript, with **no libraries, no CDNs and no external calls**. |
+| `OneToOne.aspx` | Site Pages, **site home page**, **full-width section** | One Welcome web part using the *ESG 1-to-1* layout. Greeting, time, weather and search are off. |
 
-There's **one page for everyone**. The script decides which view to show:
+**One page for everyone**, with a narrow **sidebar menu**. Opening a link with `?reviewId=` selects that review.
 
-| Who | URL | View |
+| Who | Sidebar | Default view |
 |---|---|---|
-| Technician | `OneToOne.aspx?reviewId=123` | Their questionnaire (`#tech`) |
-| TL | `OneToOne.aspx` | Dashboard (`#dash`) |
-| TL | `OneToOne.aspx?reviewId=123` | Manager review (`#mgr`) |
+| Technician | This month · My appraisal · Appraisal report | *This month* (their latest review, or the one in `?reviewId=`) |
+| TL | Team overview · Monthly reviews (badge: awaiting review) · Expectations · Actions (badge: overdue) · team list (band dot and attention flag per technician) · ⚙ Settings | *Team overview*, or the manager review when `?reviewId=` is given |
 
-Role detection compares the signed-in email with `CONFIG.managerEmail`. That's **routing only**. Every read and write still runs as the signed-in user, so SharePoint's permissions remain the only security boundary.
+**Role detection.** The page asks SharePoint for the signed-in user's `effectiveBasePermissions` on the site. **ManagePermissions means TL.** This is the same right that makes the TL an owner and Site Collection Admin (D.1), so no email address or other configuration is needed.
 
-### E.2 Configuration (top of `one-to-one.js`)
+Role is **routing only**. Every read and write runs as the signed-in user, so a technician who forced the TL view would just see empty or forbidden data (P-tests).
+
+### E.2 Configuration
+
+There is nothing to fill in. The CONFIG block only holds the list titles and the time zone:
 
 ```js
-const CONFIG = {
-  siteUrl: '<SITE URL>',                       // e.g. https://contoso.sharepoint.com/sites/ESG-1to1
-  managerEmail: '<TL EMAIL>',                  // lower case
-  lists: { reviews: 'Monthly Reviews', mgr: 'Manager Reviews', techs: 'Technicians' },
-  eapText: '<EAP / Occupational Health contact text>'
-};
+var CONFIG = {
+  lists: { reviews: 'Monthly Reviews', mgr: 'Manager Reviews', techs: 'Technicians',
+           exp: 'Appraisal Expectations', settings: '1-to-1 Settings' },
+  timeZone: 'Europe/London', maxExpectations: 10 };
 ```
 
-The file contains no secrets. Technicians can read it, and that's fine.
+The site comes from `pageContext.web.absoluteUrl`. The file contains no secrets, URLs, emails or IDs.
 
 ### E.3 Data access: SharePoint REST, as the signed-in user
 
-All calls are same-origin `fetch` requests to the site's `_api`, using the browser's existing SharePoint session. No tokens, app registrations or Graph permissions are needed.
+Calls go through `ctx.getWebPart().spHttpClient` with `configurations.v1`. They are same-origin, use OData `nometadata`, and need no tokens or app registrations.
 
-```js
-const H = { Accept: 'application/json;odata=nometadata' };
+| Function | REST call | Notes |
+|---|---|---|
+| `spGetAll(list, select, expand)` | `items?$select…&$expand…&$top=5000`, following `odata.nextLink` | **401, 403 and 404 return an empty list**, so anything hidden by permissions simply isn't shown |
+| `spUpdate(list, id, fields)` | `items(id)/validateUpdateListItem` with `X-RequestDigest` | **The only update function.** Throws on `HasException` or 403. |
+| `spCreate(list, fields)` | `AddValidateUpdateItemUsingPath` into the list's RootFolder | **The only create function.** Used by the TL only, for expectations and the Settings item. |
+| digest | `POST /_api/contextinfo` | Cached until shortly before expiry |
+| role | `/_api/web/currentuser`, `/_api/web/effectiveBasePermissions` | |
 
-async function spGet(path) {                        // returns null when SharePoint denies or hides the data
-  const r = await fetch(CONFIG.siteUrl + path, { headers: H, credentials: 'same-origin' });
-  if (r.status === 401 || r.status === 403 || r.status === 404) return null;
-  if (!r.ok) throw new Error('Read failed (' + r.status + ')');
-  return r.json();
-}
+**Value formats for writes** (all sent as text):
 
-let _digest = { value: null, expires: 0 };
-async function digest() {                            // request digest for writes, cached until expiry
-  if (Date.now() < _digest.expires) return _digest.value;
-  const r = await fetch(CONFIG.siteUrl + '/_api/contextinfo',
-    { method: 'POST', headers: H, credentials: 'same-origin' });
-  if (!r.ok) throw new Error('Could not start a save (' + r.status + ')');
-  const j = await r.json();
-  _digest = { value: j.FormDigestValue, expires: Date.now() + (j.FormDigestTimeoutSeconds - 60) * 1000 };
-  return _digest.value;
-}
-
-// The ONLY write function. fields = { InternalName: 'string value' }; '' clears a value.
-async function spUpdate(listTitle, id, fields) {
-  if (!Number.isInteger(id) || id <= 0) throw new Error('Invalid item');
-  const body = { formValues: Object.entries(fields).map(([k, v]) => ({ FieldName: k, FieldValue: v == null ? '' : String(v) })),
-                 bNewDocumentUpdate: false };
-  const r = await fetch(CONFIG.siteUrl + "/_api/web/lists/getbytitle('" + encodeURIComponent(listTitle) + "')/items(" + id + ')/validateUpdateListItem',
-    { method: 'POST', credentials: 'same-origin',
-      headers: { ...H, 'Content-Type': 'application/json;odata=nometadata', 'X-RequestDigest': await digest() },
-      body: JSON.stringify(body) });
-  if (!r.ok) throw new Error('Save failed (' + r.status + ')');
-  const bad = (await r.json()).value.filter(f => f.HasException);
-  if (bad.length) throw new Error('Save failed: ' + bad.map(f => f.FieldName + ' – ' + f.ErrorMessage).join('; '));
-}
-```
-
-`validateUpdateListItem` takes every value as text:
-
-| Value type | How to write it |
+| Type | Format |
 |---|---|
-| Choice | The choice text, for example `Yes` |
-| Number | The digits, for example `3` |
-| Date | The **site locale** format: `dd/MM/yyyy` for English (UK), as set in Part 1 |
+| Choice | The choice text |
+| Number | Digits |
+| Date | `dd/MM/yyyy` (site locale English UK) |
+| Yes/No | `1` / `0` |
+| Person | `[{"Key":"<claims>"}]`, used only when the TL creates an Individual expectation |
 | Clear a value | `''` |
 
-The frontend never writes Person or Yes/No fields, and **never calls any permission endpoint**.
+**Date display.** Date-only values are converted to the **Europe/London calendar date** before display, so BST never moves a date by a day. All dates are shown **DD-MMM-YYYY**, for example `30-Nov-2026`, and typed the same way.
 
-**The reads**
+**Reads**
 
-| View | Request |
-|---|---|
-| Current user | `/_api/web/currentuser?$select=Email,Title` |
-| Technician: own reviews (SharePoint returns only their items) | `/_api/web/lists/getbytitle('Monthly%20Reviews')/items?$select=ID,Title,MonthKey,MonthStart,DueDate,ReviewStatus,Q1WentWell,Q2Issue,Q2Impact,Q2Tried,Q2Support,Q3WorkloadRating,Q3WorkloadComment,Q4WellbeingRaise,Q4WellbeingDetail,Q5PlanningRaise,Q5PlanningDetail,Q6DevRaise,Q6DevWhat,Q6DevWhy,Q7ManagerFeedback,ExpectationsJson,Q9FollowUp&$orderby=MonthStart desc&$top=500` |
-| Technician: released feedback (`null` until released, so no error is shown) | `/_api/web/lists/getbytitle('Manager%20Reviews')/items?$filter=ReviewItemId eq {id}&$select=FB_Q1,FB_Q2,FB_Q3,FB_Q4,FB_Q5,FB_Q6,FB_Q7,FB_Q9,FB_Overall,ExpectationFeedbackJson,FollowUpDecision,TechFollowUp,MeetingDate,AgreedActions` |
-| TL dashboard | Manager Reviews (all fields, plus `Technician/Title,Technician/EMail` with `$expand=Technician`, `$top=5000`). Monthly Reviews (`ID,ReviewStatus,Q3WorkloadRating`). Technicians (`$filter=Active eq 1`). |
-| TL review | The Manager Review by `ReviewItemId eq {id}` and the Monthly Review by `items({id})` |
+| Who | Lists read | What SharePoint returns |
+|---|---|---|
+| TL | Technicians, Appraisal Expectations, Monthly Reviews, Manager Reviews, 1-to-1 Settings | Everything |
+| Technician | Monthly Reviews, Manager Reviews, 1-to-1 Settings. The Technicians and Expectations reads return nothing (403). | Only their own Monthly Reviews, their **released** Manager Reviews, and the band thresholds |
+
+The frontend **never calls a permission endpoint** (no `roleassignments`, `breakroleinheritance` or `ensureuser`). The test suite checks this.
 
 ### E.4 Security rules for the code (release blockers)
 
-The script runs with the **full permissions of whoever views the page**. That includes the TL, who is a site owner.
+The script runs with the **full permissions of whoever views it**, including the TL. A technician's answer rendered as HTML could run code as the TL. These rules prevent that:
 
-The dangerous case is a technician who types something like `<img src=x onerror=…>` into an answer. If the TL's dashboard rendered that as HTML, the code would run **as the TL**. It could then change permissions or read every review. That is the single most serious risk this frontend introduces. These rules prevent it:
-
-| # | Rule |
-|---|---|
-| S1 | **List data is never inserted as HTML.** Don't use `innerHTML`, `outerHTML`, `insertAdjacentHTML` or `document.write` with any value read from SharePoint or typed by a user. All dynamic text goes through `el.textContent = …` or the `text()` helper below. Static markup lives only in the HTML template. |
-| S2 | In the Handlebars template, use only `{{ }}` (which escapes), never `{{{ }}}`, and never with list data. |
-| S3 | **Links are built only from numbers.** For example `'?reviewId=' + Number(id)`. No URL, `href` or `src` is ever taken from list text. |
-| S4 | No `eval`, `new Function`, string `setTimeout`, inline event-handler attributes, or JSON with a reviver that executes anything. Use `JSON.parse` inside `try`. |
-| S5 | No external scripts, fonts, CDNs, analytics or third-party calls. Only same-origin `_api` requests. |
-| S6 | Writes go only through `spUpdate`, only to the item ID loaded for the current view, and only to the fields listed in E.5 and E.6. |
-| S7 | Code integrity: only the Owners group (the TL) can edit the page, the layouts library or the script. The technicians group has **Read** only (D.6). |
-
-```js
-function text(tag, value, cls) {                    // the ONLY way data reaches the page
-  const el = document.createElement(tag);
-  if (cls) el.className = cls;
-  el.textContent = value == null ? '' : String(value);
-  return el;
-}
-```
-
-`one-to-one.js` comes with an automated test (K10) that feeds attack strings into **every** text field and every render path, and fails if any of them ends up as markup.
-
-### E.5 Technician view (`#tech`)
-
-**Content and behaviour.** These match the v2 questionnaire exactly.
-
-- **Header:**
-  - A month selector listing the technician's own reviews, newest first.
-  - The deadline: "Deadline: 23:59, *Monday 30 November 2026*".
-  - The status, followed by "– OVERDUE (you can still submit)" when it applies.
-  - **Save draft** and **Submit** buttons, shown only while the status is Not Started or Draft.
-- **Intro text:** as v2 lblIntro. The **Q4 guidance** text appears as in v2, with `CONFIG.eapText`.
-- **Questions 1–9:** the wording, scales and choices are identical to v2 (WorkloadScale, ProgressScale, the three follow-up options).
-- **Conditional fields:** Q4, Q5 and Q6 use Yes/No radio buttons. The detail fields appear only when **Yes** is selected. When **No** is selected they're hidden and **saved as empty**.
-- **Q8:** one block per expectation from `ExpectationsJson`, each with a 1–5 progress rating and a comment box. If there are none, it shows "No appraisal expectations are set for you this month."
-- **"Still to complete" list:** shown under the form, and updated as the technician types. Required items are Q1, the Q3 rating, the Q4–Q6 Yes/No answers, the Q4/Q5 details and Q6 "what" when Yes, a Q8 rating for each expectation, and Q9. A detail field that isn't relevant is never required.
-- **Submit:**
-  1. Blocked while the list isn't empty.
-  2. Then a confirmation: "Submit your 1-to-1? You won't be able to change it afterwards."
-  3. Then a save with `ReviewStatus = 'Submitted'`.
-- **Save draft:** saves with `ReviewStatus = 'Draft'`, then shows "Draft saved at hh:mm" or a clear error.
-- **Unsaved changes:** a `beforeunload` warning appears while there are unsaved edits.
-- **Read-only mode:** when the status isn't Not Started or Draft, every input is disabled and the buttons are hidden.
-- **Released feedback:** when the feedback read returns data, a grey "Team Leader:" box appears under each question. Q8 feedback appears per expectation. At the end there's an "Overall / Follow-up / Agreed actions" panel.
-- **Not found:** if `reviewId` doesn't resolve, the page shows "This review could not be found, or it isn't yours. Use the link in your latest email or contact your Team Leader."
-
-**Fields written.** Exactly these, in a single `spUpdate` to `Monthly Reviews`:
-
-- `Q1WentWell`
-- `Q2Issue`, `Q2Impact`, `Q2Tried`, `Q2Support`
-- `Q3WorkloadRating`, `Q3WorkloadComment`
-- `Q4WellbeingRaise`, `Q4WellbeingDetail`
-- `Q5PlanningRaise`, `Q5PlanningDetail`
-- `Q6DevRaise`, `Q6DevWhat`, `Q6DevWhy`
-- `Q7ManagerFeedback`
-- `ExpectationsJson`, which is `JSON.stringify` of `[{id,title,measures,year,rating,comment}]`, keeping the loaded `id/title/measures/year`
-- `Q9FollowUp`
-- `ReviewStatus`
-
-### E.6 Manager review view (`#mgr`, TL only)
-
-**Header**
-
-- Technician name and month.
-- State, plus "(submitted late)" or "OVERDUE" where it applies, and the technician's draft status while the review is Open.
-- An **amber banner** when `Coalesce(FollowUpDecision, TechFollowUp)` is "Arrange a dedicated 1-to-1 discussion".
-- When the feedback has already been released, a notice: changes are visible immediately, so record the reason in the correction log.
-
-**Body**
-
-- **Questions 1–7 and 9:** the technician's answer as read-only text, followed by a TL feedback box. The feedback box is **always shown, even when the answer is No**.
-- **Q8:** built from the **trusted** `ExpectationSnapshotJson` on Manager Reviews. Each expectation shows its title, measures and year, the technician's rating and comment (matched by `id`), and a TL feedback box.
-- **Follow-up:**
-  - The follow-up override (blank, or one of the three options).
-  - Meeting date.
-  - Overall feedback.
-- **Actions:**
-  - Agreed actions as free text.
-  - "Actions due by" date.
-  - Actions status (Open or Done).
-- **Correction log:** shown only after release.
-
-**Buttons**
-
-| Button | Writes to Manager Reviews | Enabled when |
+| # | Rule | How it's enforced |
 |---|---|---|
-| **Save feedback** | `FB_Q1`–`FB_Q7`, `FB_Q9`, `FB_Overall`, `ExpectationFeedbackJson`, `FollowUpDecision`, `MeetingDate`, `AgreedActions`, `ActionsDueBy`, `ActionsStatus` (`None` when the actions text is empty), `CorrectionLog` | always |
-| **Complete & release** (after confirmation) | Save feedback first, then a **separate** write of `ReviewState = 'Completed'` | ReviewState is Submitted |
-| **Close – not submitted** (after confirmation) | Save feedback first, then a separate write of `ReviewState = 'Closed - Not Submitted'` | ReviewState is Open and the due date has passed |
-| **Back to dashboard** | — | always |
+| S1 | List data and typed text reach the page **only through `textContent` / text nodes**. No `innerHTML`, `outerHTML`, `insertAdjacentHTML` or `document.write` anywhere in the file. | Static test, plus an XSS sweep over every view with attack strings in every field |
+| S2 | No Handlebars expressions in the layout | Static test |
+| S3 | Links are built only from numbers (`'?reviewId=' + Number(id)`) | Code review |
+| S4 | No `eval`, `new Function`, string timers or inline handlers. `JSON.parse` only inside `try`. | Static test |
+| S5 | No external resources. The only URL string in the code is the SVG namespace. | Static test |
+| S6 | Writes only through `spUpdate` / `spCreate`, only to the fields listed in E.5–E.7 | Payload allow-list tests |
+| S7 | Only Owners can edit the page, the layouts library or the script | Quarterly check, P16 |
 
-**Writes are two-step** so a feedback save can never overwrite a state that a flow has just changed. Flow 3 then does the locking, releases the feedback and sends the email.
+Charts are drawn as **inline SVG** with `createElementNS`. The printable report is built in a new window from DOM nodes (`importNode`) with inline CSS. Neither path ever parses list data as HTML.
 
-### E.7 Dashboard view (`#dash`, TL only)
+### E.5 Technician views
 
-**KPI row** for the selected month (the current month by default):
+**This month.** The current (or selected) review, as a form. A small side panel shows the deadline, status, energy tile and a mini outlook.
 
-- Month
-- Active technicians
-- Submitted
-- Awaiting your review
-- Completed
-- Outstanding / overdue
-- Dedicated 1-to-1 requested
-- Open actions (overdue)
+- **Q1–Q7 and Q9:** wording and scales as agreed. Q4–Q6 are Yes/No, and their detail boxes appear only on **Yes** (hidden details are **cleared on save**).
+- **Q8:** one row per expectation from `ExpectationsJson`, each with a 1–5 progress rating and a comment.
+- **Energy check-in** (`Mood`, 1–5) and **Win of the month** (`WinOfMonth`). Both are optional.
+- **Save** (status Draft) and **Submit**. Submit is blocked while the "Still to complete" list isn't empty, and asks for confirmation first.
+- **Unsaved-changes warning** (`beforeunload`).
+- **Read-only** once submitted. Released TL feedback, ratings and actions appear in place.
+- **Fields written** (one `spUpdate` to Monthly Reviews):
+  - Q1WentWell
+  - Q2Issue, Q2Impact, Q2Tried, Q2Support
+  - Q3WorkloadRating, Q3WorkloadComment
+  - Q4WellbeingRaise, Q4WellbeingDetail
+  - Q5PlanningRaise, Q5PlanningDetail
+  - Q6DevRaise, Q6DevWhat, Q6DevWhy
+  - Q7ManagerFeedback
+  - ExpectationsJson
+  - Q9FollowUp
+  - Mood, WinOfMonth
+  - ReviewStatus
 
-The KPI definitions are identical to v2 E.4.
+**My appraisal.**
 
-**Navigation and filters**
+- The expected appraisal outcome (E.7) for the 12 months up to their appraisal date, as a band chip with current and projected scores.
+- A trend chart (self in blue, released TL ratings in orange).
+- Per-expectation progress, their actions, and a submission streak.
 
-| Control | What it does |
-|---|---|
-| **Monthly Reviews** | The table (the default) |
-| **Appraisal Expectations** | Link to the list's *Active* view |
-| **Outstanding Actions** | The table filtered to `ActionsStatus = Open`, sorted by `ActionsDueBy` |
-| **Refresh** | Reloads the data |
-| Month filter | Blank means all months |
-| Technician filter | Blank means all. Choose a technician and clear the month to see their history, including the workload trend. |
+There is **no "how it's worked out" panel** for technicians.
 
-**Table columns**
+**Appraisal report.** See E.8.
 
-| Column | Notes |
-|---|---|
-| Technician | |
-| Month | |
-| Status | Not started / Draft / Awaiting your review / Completed / Closed, with "OVERDUE" or "(late)" where it applies. Overdue shows in red. |
-| Submitted | |
-| Workload | |
-| Follow-up | |
-| Actions | |
-| Open | Link to `?reviewId=` + `Number(ReviewItemId)` |
+**Not found.** An unknown or someone else's `reviewId` shows "Review not found".
 
-Rows where a dedicated 1-to-1 has been requested have a pale amber background.
+### E.6 Team Leader views
 
-**Footer:** "A written check-in does not by itself satisfy any formal appraisal or meeting requirement."
+| View | Content | Writes |
+|---|---|---|
+| **Team overview** | KPI tiles (submitted, awaiting review, overdue, open/overdue actions, dedicated 1-to-1s requested); a status chart; a team table (technician, this month's status, energy, expected band and projected score, appraisal date, open actions, flags) | — |
+| **Monthly reviews** | All reviews with month, technician and status filters | — |
+| **Manager review** (`?reviewId=`) | The technician's answers, read-only. TL feedback per question. Q8 shows the trusted `ExpectationSnapshotJson` wording, the technician's rating and comment, **TL feedback and TL rating (1–5)**. Follow-up override, meeting date, overall feedback. **Actions table** (add rows: action, owner, close-out criteria, deadline, status). | Manager Reviews: FB_Q1–FB_Q7, FB_Q9, FB_Overall, ExpectationFeedbackJson `[{id,feedback,rating}]`, FollowUpDecision, MeetingDate, ActionsJson, ActionsStatus, NextActionDue. Then, **as a separate write**, ReviewState = `Completed` or `Closed - Not Submitted`. |
+| **Expectations** | Grouped by Shared / per technician, with add, edit and retire (never delete). A "Show retired" toggle. | Appraisal Expectations: Title, Measures, AppraisalYear, AppliesTo, Technician (person), SortOrder, Active |
+| **Actions** | Every action across all reviews, grouped open/overdue/done, with close and reopen | Manager Reviews: ActionsJson, ActionsStatus, NextActionDue |
+| **Technician profile** (from the team list) | Outlook, trend chart, expectations, actions and history for one person; report button | — |
+| **⚙ Settings** (modal, TL only) | Appraisal date per technician (DD-MMM-YYYY); the four band names and thresholds; how the outlook is worked out | Technicians.AppraisalDate, **plus** the technician's current Monthly Review AppraisalDate (display copy). 1-to-1 Settings `Bands` item (created if missing). |
 
-### E.8 Layout and accessibility
+**Complete & release rules.**
 
-- **Layout:** a single column, max width 880 px. It's readable on a laptop, and at widths under 600 px the dashboard table becomes stacked cards, so it works on a phone.
-- **Colours:** plain system font and neutral greys. Amber is used only for meeting requests, red only for overdue and errors.
-- **Accessibility:** every input has a `<label for>`. Radio groups use `<fieldset>` and `<legend>`. Errors and save results are announced through an `aria-live` region. Every control can be operated from the keyboard.
+- **Complete & release** is offered only when the review is Submitted. It is blocked while any action is missing its close-out criteria or deadline.
+- **Close – not submitted** is offered only when the review is Open and past its deadline.
+- Flow 3 re-validates both.
+- After release, a banner reminds the TL that further changes are visible straight away and belong in the correction log.
 
-### E.9 Local verification before transfer (no tenant needed)
+### E.7 Expected appraisal outcome
 
-The code can't be tested against the corporate tenant from home, so K10 includes:
+Calculated in the browser from items the viewer can already read.
 
-- **`mock/index.html`:** a fake in-memory SharePoint `_api` that intercepts `fetch`. It has switchable users (TL, Test A, Test B) and enforces permissions the way D.4 describes. You can click through every view in a normal browser.
-- **An automated test suite** (Node, no network) that checks:
-  - the validation rules
-  - hidden fields are cleared on save
-  - write payloads contain only the allowed fields
-  - date formatting for `validateUpdateListItem`
-  - that attack strings never become markup (rule S1)
+1. **Period:** the 12 months up to the technician's appraisal date. If no date is set, the page assumes six months ahead and says "not set".
+2. **Monthly score:**
+   - Use the average of the **TL's expectation ratings** for that month when the viewer can see them. The TL always can; a technician can only once that month is released.
+   - Otherwise use the technician's own average Q8 rating.
+3. **Current position:** recency-weighted average of the monthly scores (weights 1, 2, 3 …).
+4. **Projection** (needs 3 or more months):
+   - Fit a least-squares trend line.
+   - Add half the slope × the months remaining.
+   - Cap the result at **±0.75** of the fitted value, and keep it within 1–5.
+5. **Band:** match the projection against the 1-to-1 Settings bands. The defaults are:
 
-This reduces the number of fix-and-transfer cycles. It is **not** a substitute for testing in the tenant (section H).
+   | Projection | Band |
+   |---|---|
+   | under 1.5 | Not met |
+   | 1.5 – under 2.25 | Partially met |
+   | 2.25 – under 4 | Met |
+   | 4 and above | Exceeded |
+
+This is an **aid to writing the appraisal, not a decision**. The page says so, and the TL's judgement decides the real rating.
+
+### E.8 Appraisal report
+
+Available to the TL (any technician) and to the technician (themselves). It covers the 12 months to the appraisal date and has eight sections:
+
+1. Summary (band, scores, chart)
+2. Appraisal expectations (per-month self and TL ratings, comments, feedback)
+3. Achievements (win of the month, what went well)
+4. Development and training
+5. Challenges and support
+6. Agreed actions
+7. Line manager feedback
+8. Submission record
+
+**Wellbeing (Q4) answers are never included.** A technician's report shows TL content only from released reviews.
+
+It opens in an in-page overlay with **Print / Save as PDF**. That opens a clean print window, so the browser must allow pop-ups for the site.
+
+### E.9 Layout, accessibility and local verification
+
+**Layout**
+
+- Built for desktop: the sidebar plus a wide content area, with no large blank regions.
+- Colours: navy UI; self ratings blue `#2a78d6`; TL ratings orange `#eb6834`; band colours red/amber/green/blue.
+- Overlays use z-index 10000+ so they sit above SharePoint's chrome.
+
+**Accessibility**
+
+- Labelled inputs, `fieldset` / `legend` on radio groups.
+- An `aria-live` toast region for save results.
+- Keyboard-operable controls.
+
+**Local verification (no tenant needed)** — [`02-frontend/README.md`](02-frontend/README.md):
+
+- **`mock/mock-sharepoint.js`:** an in-memory SharePoint `_api` behind a fake Welcome context.
+  - Five lists with field types and fictional users (TL, Test A, Test B and others).
+  - Item permissions as in D.4.
+  - Flow 2 and Flow 3 effects emulated.
+  - A switch for attack-string (XSS) data.
+- **`mock/index.html`:** generated from the production CSS by `tools/build-mock.js`. You can click through every view as any user.
+- **`test/run-tests.js`** (headless Chromium, 70 checks):
+  - static rules S1, S2, S4 and S5;
+  - isolation for Test A and Test B, including direct REST attempts;
+  - draft payload allow-list;
+  - submit → lock → refused write;
+  - the TL journey (feedback, ratings, actions, release);
+  - settings (dates, bands, BST round-trip);
+  - creating and retiring expectations;
+  - closing actions;
+  - the report (8 sections, print popup);
+  - an XSS sweep over 11 views.
+
+The local checks are **not** a substitute for the tenant tests in H.
 
 
 ---
 
 ## F. Power Automate specification
+
+**Build from [`03-flows/FLOW_BUILD_SHEETS.md`](03-flows/FLOW_BUILD_SHEETS.md) and [`03-flows/EMAIL_TEMPLATES.md`](03-flows/EMAIL_TEMPLATES.md).** They contain everything below, with the v4 changes applied. This section stays as the design record.
+
+**v4 changes:**
+
+- **Flow 1:**
+  - `Create item` (Manager Reviews) also sets `ExpectationFeedbackJson` = `[]` and `ActionsJson` = `[]`.
+  - `Create_review` also sets `AppraisalDate` = `items('Each_technician')?['AppraisalDate']`.
+  - `DeadlineText` uses `'dddd dd-MMM-yyyy'`.
+- **E3:** detects the request with `startsWith(…, 'Arrange a dedicated')`. The stored choice ends with a full stop, so an exact comparison never matched.
+- **E1:** drops the "talk sooner" sentence.
+- **Flows 2 and 3:** unchanged.
 
 ### F.0 Configuration values and the shared permission block
 
@@ -732,7 +753,7 @@ Inside `Catch`:
    | `MonthKey` | `formatDateTime(outputs('ukNow'), 'yyyy-MM')` |
    | `LastDay` | `formatDateTime(addDays(addToTime(startOfMonth(outputs('ukNow')), 1, 'Month'), -1), 'yyyy-MM-dd')` |
    | `DueUtc` | `convertToUtc(concat(outputs('LastDay'), 'T23:59:59'), 'GMT Standard Time')` |
-   | `DeadlineText` | `concat('23:59 on ', formatDateTime(outputs('LastDay'), 'dddd d MMMM yyyy'))` |
+   | `DeadlineText` | `concat('23:59 on ', formatDateTime(outputs('LastDay'), 'dddd dd-MMM-yyyy'))` (v4) |
    | `MonthName` | `formatDateTime(outputs('ukNow'), 'MMMM yyyy')` |
    | `Day` | `dayOfMonth(outputs('ukNow'))` |
 
@@ -787,6 +808,8 @@ Inside `Catch`:
                | ReviewState Value | `Open` |
                | ActionsStatus Value | `None` |
                | ExpectationSnapshotJson | `string(body('Snapshot'))` |
+               | ExpectationFeedbackJson | `[]` (v4) |
+               | ActionsJson | `[]` (v4) |
 
                The unique ReviewKey means a duplicate create *fails* rather than creating a second record.
         6. **Get items** `Get_mgr` (Manager Reviews): same filter as `Find_mgr`, Top Count `1`. Then **Compose** `Mgr` = `first(body('Get_mgr')?['value'])`.
@@ -814,6 +837,7 @@ Inside `Catch`:
                | DueDate | `outputs('Mgr')?['DueDate']` |
                | ReviewStatus Value | `Not Started` |
                | ExpectationsJson | `string(body('Tech_copy'))` |
+               | AppraisalDate | `items('Each_technician')?['AppraisalDate']` (v4) |
 
              - **Update item** (Manager Reviews): Id = `outputs('Mgr')?['ID']`, Title = `outputs('Mgr')?['Title']`, ReviewItemId = `body('Create_review')?['ID']`
              - **Set variable** `varReviewId` = `body('Create_review')?['ID']`
@@ -967,9 +991,9 @@ The link is always `concat(variables('varPageLink'), '?reviewId=', <Monthly Revi
 
 | ID | To | Subject | Body |
 |---|---|---|---|
-| E1 | Technician | `Your 1-to-1 for @{outputs('MonthName')} is ready` | Hi @{first(split(outputs('Mgr')?['Technician']?['DisplayName'],' '))},<br>Your monthly 1-to-1 is ready: **<a href="LINK">Open my 1-to-1</a>**.<br>Deadline: @{outputs('DeadlineText')}.<br>You can save a draft and come back as often as you like before submitting. If you'd like to talk sooner, just ask – you don't need to wait for this form.<br>This link only works when you're signed in with your own company account. The first time, click **Allow** if asked. |
+| E1 | Technician | `Your 1-to-1 for @{outputs('MonthName')} is ready` | Hi @{first(split(outputs('Mgr')?['Technician']?['DisplayName'],' '))},<br>Your monthly 1-to-1 is ready: **<a href="LINK">Open my 1-to-1</a>**.<br>Deadline: @{outputs('DeadlineText')}.<br>You can save and come back as often as you like before you submit.<br>This link only works when you're signed in with your own company account. |
 | E2 | Technician | `Reminder: your 1-to-1 for @{outputs('MonthName')} is due @{outputs('DeadlineText')}` | Your 1-to-1 hasn't been submitted yet. Your saved draft is still there: <a href="LINK">Continue</a>. |
-| E3 | TL | `@{if(equals(triggerBody()?['Q9FollowUp']?['Value'],'Arrange a dedicated 1-to-1 discussion'),'[1-to-1 REQUESTED] ','')}1-to-1 submitted: @{outputs('Mgr')?['Title']}` | Submitted @{if(greater(ticks(utcNow()), ticks(outputs('Mgr')?['DueDate'])),'late','on time')}. <a href="LINK">Open review</a> |
+| E3 | TL | `@{if(startsWith(coalesce(triggerBody()?['Q9FollowUp']?['Value'],''),'Arrange a dedicated'),'[1-to-1 REQUESTED] ','')}1-to-1 submitted: @{outputs('Mgr')?['Title']}` | Submitted @{if(greater(ticks(utcNow()), ticks(outputs('Mgr')?['DueDate'])),'late','on time')}. <a href="LINK">Open review</a> |
 | E4 | Technician | `Feedback on your 1-to-1 (@{triggerBody()?['MonthKey']}) is ready` | Your Team Leader has completed your review. <a href="LINK">View feedback</a> |
 | E5 | Technician | `Your 1-to-1 (@{triggerBody()?['MonthKey']}) has been closed` | This review was closed without a submission. <a href="LINK">View</a>. Please speak to your Team Leader if this is unexpected. |
 | E7 | TL | `1-to-1 system: action needed` | List of problems and the run link |
@@ -998,8 +1022,9 @@ Full Control role ID:
 1-to-1 Edit role ID:
 1-to-1 Read role ID:
 Page link (<Site URL>/SitePages/OneToOne.aspx):
-EAP contact text:
 ```
+
+The filled-in Config sheet stays in the site or your OneDrive, never in the repository. See [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) §1.
 
 ### Part 1 — Create and lock down the site ⏱ 30 min
 
@@ -1039,7 +1064,9 @@ EAP contact text:
    4. Click **Create**.
    - If you can't create permission levels (IT-4), see the fallback in J.
 
-### Part 3 — Create the four lists ⏱ about 2 h
+### Part 3 — Create the five lists ⏱ about 2 h
+
+**Use the tick-list [`01-sharepoint/lists.md`](01-sharepoint/lists.md).** The steps below are the general method.
 
 **For each list:**
 
@@ -1062,13 +1089,14 @@ EAP contact text:
 
 | Step | Where | What to set |
 |---|---|---|
-| a | **List name, description and navigation** | Rename to the display name: `Appraisal Expectations`, `Monthly Reviews`, `Manager Reviews`. Technicians stays as it is. |
+| a | **List name, description and navigation** | Rename to the display name: `Appraisal Expectations`, `Monthly Reviews`, `Manager Reviews`, `1-to-1 Settings`. Technicians stays as it is. |
 | b | **Versioning settings** | Create a version each time you edit an item: **Yes**. Keep **100**. |
 | c | **Advanced settings** | Attachments **Disabled**. Allow items from this list to appear in search results **No**. Offline client **No**. Then **OK**. |
 | d | **Indexed columns** → **Create a new index** | One index for each column marked *Indexed* in C |
 | e | Manager Reviews only: click the column **ReviewKey** | **Enforce unique values: Yes** |
 | f | **Permissions for this list** → **Stop Inheriting Permissions** → OK | Tick the Members and Visitors groups, if listed, then **Remove User Permissions**. Only **Owners – Full Control** should remain. |
 | g | Views | Create the views listed in C.2 and C.4: **+ Create view** (classic) or **Switch view options → Create new view**, then set the filters. |
+| h | 1-to-1 Settings only | Add the `Bands` item (C.4a), then **Grant Permissions → `1-to-1 Technicians` → Read** |
 
 Lists and checks:
 
@@ -1076,7 +1104,8 @@ Lists and checks:
 - [ ] **Appraisal Expectations** (C.2)
 - [ ] **Monthly Reviews** (C.3)
 - [ ] **Manager Reviews** (C.4)
-- [ ] **Check:** Site contents shows four lists, and each list's permissions page shows only Owners.
+- [ ] **1-to-1 Settings** (C.4a)
+- [ ] **Check:** Site contents shows five lists. The four data lists' permissions pages show only Owners. 1-to-1 Settings shows Owners plus `1-to-1 Technicians` – Read.
 
 ### Part 4 — Record the four IDs ⏱ 10 min
 
@@ -1089,7 +1118,10 @@ Paste each address into your browser while signed in as the TL. The page shows X
    - **1-to-1 Read**
 3. [ ] `<Site URL>/_api/web/currentuser`. Find `<d:Email>` and copy it, **in lower case**, into **TL email**.
 
-### Part 5 — Stage 0 ⏱ about 45 min (0A), then 0B
+### Part 5 — Stage 0 ⏱ about 45 min (0A), then 0B — ✅ passed
+
+**Both stages have passed in the live tenant.** Delete the `ZZProbe` lists and the probe files from the layouts library before go-live. The notes below are kept for reference.
+
 
 - **0A (feasibility):** follow [`02-frontend/probe/README.md`](02-frontend/probe/README.md). It creates the test list `ZZProbe0A`, the `OneToOne` page with Welcome, and the `1-to-1 Technicians` group with Read on the page and layout library. It then runs the probe as the TL and as Test A.
 - **0B (security):** instructions and probe are produced **only after 0A passes**. 0B uses throwaway `ZZProbe` lists, never the production lists.
@@ -1124,23 +1156,26 @@ Paste each address into your browser while signed in as the TL. The page shows X
    5. On each Monthly Review, click **… → Manage access**. It must show only you (Owners) and that one technician.
    6. **Run the flow again.** Nothing new should be created and no second email sent.
 
-### Part 7 — Install the frontend ⏱ 1–2 h
+### Part 7 — Install the frontend ⏱ 30 min
 
-You don't build any screens. You fill in one configuration block and upload two files.
+You don't build any screens, and **there is nothing to edit in the files**. Full steps and the smoke check are in [`02-frontend/README.md`](02-frontend/README.md).
 
-1. [ ] Open `one-to-one.js` (K4) in **Notepad**. In the `CONFIG` block at the top, fill in `siteUrl`, `managerEmail` (lower case) and `eapText` from the Config sheet. Save it. **Change nothing else.**
-2. [ ] Go to **Site contents → Welcome Web Part - Custom Layouts → Upload → Files** and upload `one-to-one.html` and `one-to-one.js`. If you're asked whether to replace an existing file, choose **Replace**.
+1. [ ] Transfer `02-frontend/one-to-one.html` and `02-frontend/one-to-one.js` through the approved route.
+2. [ ] Go to **Site contents → Welcome Web Part - Custom Layouts → Upload → Files** and upload both files. If asked, choose **Replace**.
 3. [ ] Configure the web part:
    1. Open the `OneToOne` page and click **Edit**.
-   2. Select the Welcome web part, click the **pencil** (settings), and set **Layout** to **ESG 1-to-1**.
-   3. Make sure greeting, time, weather and search are **off**.
-   4. Set the section to **full width**, then click **Republish**.
-4. [ ] Go to **Site contents → Site Pages**, click **…** next to `OneToOne`, then **Make homepage**.
-5. [ ] Check that `varPageLink` in Flow 1 matches the page link in the Config sheet.
-6. [ ] **Check as the TL:** opening the site shows the **dashboard**.
-7. [ ] **Check as Test A:** opening the E1 link from Part 6 shows **their questionnaire**.
+   2. Put the Welcome web part in a **full-width section**.
+   3. Click the **pencil** and set **Layout** to **ESG 1-to-1**.
+   4. Turn greeting, time, weather and search **off**.
+   5. Click **Republish**.
+4. [ ] **Site Pages:** `OneToOne` → **… → Make homepage**.
+5. [ ] Permissions check (D.6): `1-to-1 Technicians` has **Read** on the page, the layouts library, the Welcome Errors list and **1-to-1 Settings**.
+6. [ ] Check that `varPageLink` in the flows matches the page link.
+7. [ ] **Check as the TL:** the site opens on **Team overview**, with the sidebar showing ⚙ Settings. The sidebar footer shows **v4.0.0**.
+8. [ ] **Check as the TL:** open ⚙ **Settings**, enter each test technician's appraisal date (DD-MMM-YYYY), and save.
+9. [ ] **Check as Test A:** the E1 link opens **their** review. The sidebar shows only *This month · My appraisal · Appraisal report*.
 
-**Updating the frontend later:** upload the corrected file over the old one. The library keeps versions, so **… → Version history → Restore** rolls back a bad update. Keep a dated note of every change in the configuration reference.
+**Updating the frontend later:** upload the corrected file over the old one. The library keeps versions, so **… → Version history → Restore** rolls back a bad update. Record every change in [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) §7.
 
 ### Part 8 — Build Flows 2 and 3 ⏱ 2 h
 
@@ -1175,7 +1210,7 @@ Run **H** tests F1–F4, F8–F12 and F18, plus **P1, P2, P3, P5, P8 and P15**. 
 
 ### Part 12 — Stage 4: privacy tests and go-live ⏱ 6–7 h
 
-1. [ ] As the TL, check the dashboard KPIs and filters against the lists for the test month (E.7).
+1. [ ] As the TL, check the Team overview tiles, the Monthly reviews filters and the Actions page against the lists for the test month (E.6).
 2. [ ] Optional: add a **Quick links** web part below Welcome, linking to the Manager Reviews *Overdue* and *Open actions* views. Then **Republish**.
 3. [ ] Run **all of section H**, including **every P test**. Any failed P test **blocks go-live**.
 4. [ ] In each flow, open the trigger and every **Get items** action and turn on **Secure inputs** and **Secure outputs** in Settings. Save.
@@ -1187,20 +1222,23 @@ Run **H** tests F1–F4, F8–F12 and F18, plus **P1, P2, P3, P5, P8 and P15**. 
    1. Add the real technicians to the Technicians list **and** to the `1-to-1 Technicians` group.
    2. Either wait for 07:00 on the 1st, or click **Run** on Flow 1 now to start the current month. That's safe, because the flow is idempotent.
 7. [ ] **First live month:**
-   - On the **1st**: check Flow 1's run history and that every technician appears on the dashboard.
+   - On the **1st**: check Flow 1's run history and that every technician appears on **Team overview**.
    - On the **20th**: check that the reminders went out.
    - On the **next 1st**: check that the new month was created and the previous month's unsubmitted reviews show as **Overdue**.
 
-### Operating procedures (put these in the configuration reference)
+### Operating procedures
 
-| When | Task |
-|---|---|
-| Quarterly (5 min) | Open **Site permissions**. Confirm the Owners group contains only the TL, and Members and Visitors are empty. Confirm `1-to-1 Technicians` contains only current technicians and has **Read** only, on the page and layout library only. Confirm the layout files show only your own uploads in their version history. |
-| As needed: correction | At the technician's request, open the item in SharePoint and edit it. Add a dated reason to **CorrectionLog** on the Manager Review. Version history records the change. |
-| As needed: leaver or long absence | In Technicians, set **Active = No**. Remove a leaver from `1-to-1 Technicians`. |
-| As needed: new starter | Add them to Technicians and to `1-to-1 Technicians`. They get a review the next morning. |
-| TL handover | Transfer site ownership. Re-create the three flows' connections under the new TL, or re-own the flows. Update `managerEmail` in `one-to-one.js` (re-upload it) and `varManagerEmail` in each flow. |
-| Annually | Expectation rollover (Part 11). Retention deletion (D.5). |
+These are in [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) §4:
+
+- monthly cycle
+- appraisal dates
+- quarterly permission check (now including the 1-to-1 Settings list)
+- new starters and leavers
+- corrections
+- annual expectation rollover
+- 24-month retention
+- subject access requests
+- TL handover (no frontend change needed)
 
 ---
 
@@ -1239,7 +1277,7 @@ Run **H** tests F1–F4, F8–F12 and F18, plus **P1, P2, P3, P5, P8 and P15**. 
 | F1 | A opens the E1 link | The page opens on A's current review, showing the deadline |
 | F2 | A fills Q1–Q3, clicks **Save draft**, closes the browser and reopens the link | All answers are present, and the status is Draft |
 | F3 | A answers **No** to Q4, Q5 and Q6, then submits | Submits. Detail fields are empty in the list. |
-| F4 | Check Q3 in the list after saving | The number 1–5 is stored. On the dashboard, picking A with all months shows each month's rating in order. |
+| F4 | Check Q3 in the list after saving | The number 1–5 is stored. The TL's manager review shows it. |
 | F5 | New month created with expectations loaded | A has the shared and individual expectations. B has the shared ones only. |
 | F6 | Check the snapshot on A's Manager Review | It matches the master list at creation time |
 | F7 | After A submits, the TL edits a shared expectation's title | A's past review (both the technician and TL views) shows the **old** text. Next month shows the new text. |
@@ -1250,15 +1288,22 @@ Run **H** tests F1–F4, F8–F12 and F18, plus **P1, P2, P3, P5, P8 and P15**. 
 | F12 | The TL clicks Complete on a review that is still Open (by forcing it in SharePoint) | Flow 3 rejects it, the state returns to Open, and the TL gets an email |
 | F13 | Run Flow 1 three times on the same day | Exactly one review per technician, and one E1 each |
 | F14 | A submitted, B in draft. `varTestDate` = this month's 20th. Run Flow 1. | Only B receives E2 |
-| F15 | `varTestDate` = next month's 1st. Run Flow 1. | B's old review shows **Overdue** on the dashboard and in the *Overdue* view. B can still open and submit it, and it's marked "(late)". |
+| F15 | `varTestDate` = next month's 1st. Run Flow 1. | B's old review shows **Overdue** in Monthly reviews and in the *Overdue* view. B can still open and submit it, and it's marked "(late)". |
 | F16 | After the deadline, the TL clicks **Close – not submitted** on another open review | It becomes read-only to the technician, who gets E5 |
-| F17 | A chooses "Arrange a dedicated 1-to-1" | E3 subject is prefixed. The dashboard row is amber and the KPI counts it. A TL override replaces it. |
+| F17 | A chooses "Arrange a dedicated 1-to-1" | E3's subject is prefixed **[1-to-1 REQUESTED]**. The Team overview tile counts it and the team list flags A. A TL override replaces it. |
 | F18 | Repeat F1, F2, F8 and F11 using **only** the Test A account (no TL shortcuts) | All pass |
 | F19 | `varTestDate` = `2028-02-01T07:00:00` (test month only) | Manager Review DueDate = `2028-02-29T23:59:59Z` |
 | F20 | `varTestDate` = `2027-03-01T07:00:00`, then `2026-10-01T07:00:00` | DueDate = `2027-03-31T22:59:59Z` (BST) and `2026-10-31T23:59:59Z` (GMT) |
 | F21 | Temporarily set `varEditId` to `999`. Create a fresh test month and run. | Items are created, but **no E1 is sent**. The TL gets E7, and the technician can't see the item. Restore the value and run again: E1 is sent. |
-| F22 | A completes a draft on a phone | Usable without sideways scrolling |
+| F22 | A completes a draft on a standard laptop screen (1366 px wide) at 100% zoom | Everything is usable without sideways scrolling |
 | F23 | Correction: the TL edits a locked answer in SharePoint and adds a CorrectionLog note | The version history shows the change and who made it |
+| F24 (v4) | The TL adds **three** action rows to A's review. One is missing its close-out criteria. The TL clicks **Complete & release**. | Blocked, with a message naming the missing field. After the TL fills it in, Complete works. In Manager Reviews, `ActionsJson` holds three rows, `ActionsStatus` = Open, and `NextActionDue` = the earliest deadline. |
+| F25 (v4) | After release, the TL closes one action on the **Actions** page | The action moves to Done with today's date. A sees it closed. The list view *Open actions* updates. |
+| F26 (v4) | The TL rates A's expectations 1–5 and saves without completing | A's **My appraisal** still uses A's self-ratings only. After Complete, A's outlook uses the TL ratings for that month. |
+| F27 (v4) | ⚙ Settings: set A's appraisal date to a date in the BST period, for example `15-Jul-2027`, and save | Technicians.AppraisalDate and A's current Monthly Review AppraisalDate both show 15/07/2027. Reopening Settings shows `15-Jul-2027` (not the 14th). A's My appraisal shows the same date. |
+| F28 (v4) | ⚙ Settings: change the *Met* threshold, then save | The 1-to-1 Settings `Bands` item updates. **A's** outlook uses the new thresholds. |
+| F29 (v4) | Expectations page: add an Individual expectation for A, edit a Shared one, retire one | List items are created or changed (retired = Active No, not deleted). The next month's snapshot reflects them, and past months don't change. |
+| F30 (v4) | Appraisal report as the TL (for A) and as A, then **Print / Save as PDF** | 8 sections. **No Q4 wellbeing text.** A's report shows TL content only from released months. The print window opens (allow pop-ups if asked). |
 
 ### Privacy and bypass tests
 
@@ -1276,10 +1321,13 @@ Run **H** tests F1–F4, F8–F12 and F18, plus **P1, P2, P3, P5, P8 and P15**. 
 | P10 🔒 | Tamper with own draft | On a fresh draft: one `validateUpdateListItem` with DueDate `2099-12-31T00:00:00Z`, Technician `[{'Key':'i:0#.f|membership|<TestB email>'}]`, ReviewStatus `Completed`, and ExpectationsJson with a changed title | Within about 10 minutes: A's item is read-only, and its status shows *Submitted*. The Manager Review is *Submitted*, with SubmittedLate correct against the **real** due date. **B can't see A's item** (B runs P2). The TL screen shows the **original** expectation titles. |
 | P11 🔒 | Grant access or share own item | POST `…items({A})/roleassignments/addroleassignment(principalid=<any number>,roledefid=1073741826)`. In the SharePoint UI, use **Share** on A's item. | Both denied |
 | P12 🔒 | Delete own draft | POST `…items({A})/recycle()`. In the SharePoint UI, use **Delete**. | Denied. The item is still there. |
-| P13 🔒 | Reach the TL's data through the frontend | A opens `OneToOne.aspx` with no `reviewId`, then adds `#dash` to the address | Lands on own review. Even if a dashboard view appears, every figure comes only from A's own items. |
+| P13 🔒 | Reach the TL's data through the frontend | A opens `OneToOne.aspx` with no `reviewId`, then with `?reviewId={B}` | Lands on own review, or "Review not found". The sidebar never shows TL items, because the role comes from SharePoint permissions. Even if the TL view were forced, every figure would come only from A's own items. |
 | P14 🔒 | Rest of the site and search | A opens **Site contents**, `/Lists/MonthlyReviews/AllItems.aspx`, Site Pages and Site Assets, then searches Microsoft 365 for a phrase from B's answers | Access denied (or only A's own item in the list view), and no search results |
-| P15 🔒 | **Script injection (XSS).** This is the attack that matters most for v3. | A types each of these into **every** text field (Q1, Q2 ×4, Q3 comment, Q4–Q6 details, Q7, every Q8 comment), saves, and submits: `<img src=x onerror=alert('A1')>` · `<script>alert('A2')</script>` · `"><svg onload=alert('A3')>` · `{{constructor.constructor('alert(4)')()}}` · `javascript:alert('A5')`. The TL then puts the same strings into every feedback field and completes the review. | When the TL opens the dashboard and A's review, and when A opens the released review: every string is shown **as plain text**. **No alert box ever appears**, no new link appears, and the browser console (F12) shows no errors from the layout. |
+| P15 🔒 | **Script injection (XSS).** This is the attack that matters most for v3. | A types each of these into **every** text field (Q1, Q2 ×4, Q3 comment, Q4–Q6 details, Q7, every Q8 comment, Win of the month), saves, and submits: `<img src=x onerror=alert('A1')>` · `<script>alert('A2')</script>` · `"><svg onload=alert('A3')>` · `{{constructor.constructor('alert(4)')()}}` · `javascript:alert('A5')`. The TL then puts the same strings into every feedback field, the action rows (action, owner, criteria) and an expectation title, and completes the review. | When the TL opens Team overview, Monthly reviews, A's review, Actions, Expectations, A's profile and A's report, and when A opens the released review, My appraisal and their report: every string is shown **as plain text**. **No alert box ever appears**, no new link appears, and the browser console (F12) shows no errors from the layout. |
 | P16 🔒 | **Code integrity** | In the UI, A tries to **Edit** `OneToOne.aspx` and to upload or replace a file in *Welcome Web Part - Custom Layouts*. Through the API: POST `_api/web/getfolderbyserverrelativeurl('<library server-relative URL>')/files/add(url='one-to-one.js',overwrite=true)` | Every attempt is denied. The library's version history shows only the TL. |
+| P18 🔒 (v4) | **Settings list is read-only** | POST `_api/web/lists/getbytitle('1-to-1%20Settings')/items(1)/validateUpdateListItem`, body `{"formValues":[{"FieldName":"Value","FieldValue":"[]"}],"bNewDocumentUpdate":false}`. Also try `AddValidateUpdateItemUsingPath` on the same list. | Both denied. GET on the list succeeds (Read). |
+| P19 🔒 (v4) | **TL ratings and actions** | Before release: GET `…getbytitle('Manager%20Reviews')/items?$select=ExpectationFeedbackJson,ActionsJson`. After release: POST `…items({MA})/validateUpdateListItem` setting `ActionsJson` to `[]`. | Before release: empty. After release: the write is denied and the data is unchanged. |
+| P20 🔒 (v4) | **Appraisal date tampering** | On A's **draft**, write `AppraisalDate` = `01/01/2030` through `validateUpdateListItem` | Allowed (it's A's own display copy), but **only A's own view** changes. The TL's outlook and ⚙ Settings still show the Technicians list date. |
 | P17 🔒 | **No data leaves the tenant** | As the TL, open each view with F12 → **Network** recording (ask IT if developer tools are blocked) | Every request carrying list data goes to `<tenant>.sharepoint.com`. Record any other host contacted (for example the web part's own code CDN) for IT-11. None of them may receive review content. |
 
 ---
@@ -1301,7 +1349,9 @@ These are hands-on hours for a first-time builder following section G. Calendar 
 
 That's **about 26–35 hours hands-on**. That's similar to v2: less clicking in Power Apps Studio, but more testing and the correction rounds.
 
-**Claude's remaining preparation:** 2–3 sessions. One produces the probe and checklists (K0–K2, K8). After Stage 0 passes, 1–2 more produce the frontend code (about 900 lines), the local mock and tests, the flow sheets and the security notes. Generating instructions is not deployment. Nothing is live until Part 12 is done and every test in H passes.
+**Claude's preparation is complete (v4).** The frontend (about 1,750 lines), local mock and tests, list checklist, flow sheets, email templates and configuration reference are produced. Remaining Claude work is only fixes found during tenant testing. Generating files is not deployment: nothing is live until Part 12 is done and every test in H passes.
+
+v4 reduces Part 7 to about 30 minutes, because there is no CONFIG to edit. Allow about 1 h more in Part 9 and Part 12 for tests F24–F30 and P18–P20.
 
 ---
 
@@ -1331,7 +1381,7 @@ That's **about 26–35 hours hands-on**. That's similar to v2: less clicking in 
 |---|---|
 | HR-1 | **Retention period** (D3) and whether a **Purview retention label** exists |
 | HR-2 | Is a **DPIA screening** needed? Approve the **technician privacy notice** (artefact K8) **before any real data is entered**. |
-| HR-3 | Approve the **Q4 wellbeing wording** and supply the **EAP / Occupational Health contact** details |
+| HR-3 | Approve the **Q4 wellbeing wording**. v4 shows no EAP / Occupational Health text in the form. |
 | HR-4 | Approve the wording that a written check-in doesn't replace a formal appraisal or meeting |
 | HR-5 | **TL absence:** who may be given access if the TL is unavailable long-term, and through which approved route? This takes the place of a standing backup owner (D4). |
 
@@ -1347,59 +1397,55 @@ That's **about 26–35 hours hands-on**. That's similar to v2: less clicking in 
 | R6 | Anyone added to the Owners group sees everything | Quarterly 2-minute check |
 | R7 | Renaming lists or columns breaks the frontend and flows | A "do not rename" list goes in the configuration reference |
 | R8 | A Welcome update changes how custom layouts run scripts, and the frontend stops working | Data and permissions are unaffected, and the TL can still work in the lists directly. Check Welcome's release notes. The fallbacks in E.0 remain available. |
-| R9 | About 900 lines of custom code, owned by the TL | Plain JavaScript with no dependencies, commented, with a local mock and automated tests (K10). Changes go through Claude and the approved transfer route. |
+| R9 | About 1,750 lines of custom code, owned by the TL | Plain JavaScript with no dependencies, commented, with a local mock and automated tests (K10). Changes go through Claude and the approved transfer route. |
 | R10 | A coding mistake can't bypass SharePoint permissions, but an injection bug would act **as the viewer**, including the TL | Code rules S1–S7 (E.4), an automated attack-string test (K10), release-blocking P15 |
+| R11 (v4) | The expected appraisal outcome could be read as a decision | Labelled as a guide everywhere. The method is shown to the TL. The TL's judgement decides. Wellbeing is never included. |
+| R12 (v4) | A technician can see the band thresholds (Settings list Read) | Not personal data, and needed so their outlook matches the TL's |
 
 ---
 
-## K. Artefacts to produce next
+## K. Artefacts
 
 All of these are text, contain **no tenant names, credentials or personal data**, and are ready to transfer through an approved company process.
 
-| # | File | Purpose |
+| # | File | Status |
 |---|---|---|
-| K0 | `02-frontend/probe/probe-0a.html` + `README.md` | **Produced.** Stage 0A feasibility probe and instructions |
-| K0B | `02-frontend/probe/` (0B probe) | **Deferred** until 0A passes. Security probe on throwaway `ZZProbe` lists, with mandatory and informational tests. |
-| K1 | `01-sharepoint/lists.md` + `lists.csv` | Printable column-by-column checklist for Part 3 |
-| K2 | `01-sharepoint/site-security-checklist.md` | Parts 1, 2 and 4, plus D.6, as tick-lists, with what to screenshot |
-| K3 | `02-frontend/one-to-one.html` | Welcome custom layout: metadata (extras off), page shell, CSS |
-| K4 | `02-frontend/one-to-one.js` | All frontend behaviour (E.3–E.8), with the `CONFIG` block at the top |
-| K5 | `03-flows/flow1.md`, `flow2.md`, `flow3.md`, `setperm-block.md` | Action-by-action build sheets with every expression ready to copy. **Not importable packages.** |
-| K6 | `03-flows/email-templates.html` | E1–E7 bodies (page links) |
-| K7 | `04-testing/test-record.csv` | Section H (F1–F23, P1–P17) with result columns |
-| K8 | `05-deploy/privacy-notice-draft.md` | One page for HR-2 |
-| K9 | `05-deploy/configuration-reference.md` | Config sheet, do-not-rename list, operating procedures, frontend change log |
-| K10 | `02-frontend/mock/` + `02-frontend/tests/` | Local fake SharePoint with switchable users, plus automated tests including the attack-string test (E.9) |
-| K11 | `05-deploy/frontend-security-notes.md` | One page for IT-13: what the script does, every endpoint it calls, rules S1–S7, and the test evidence |
-
-**Order:** K0 (0A) now. K0B, K1, K2 and K8 only after 0A passes. K3–K7 and K9–K11 only after 0B passes. That way no effort is spent on later artefacts if Welcome can't run the script or the security tests fail.
+| K0 / K0B | `02-frontend/probe/` | **Produced and run.** Stage 0A and 0B passed. |
+| K1 | [`01-sharepoint/lists.md`](01-sharepoint/lists.md) + [`lists.csv`](01-sharepoint/lists.csv) | **Produced (v4)** |
+| K2 | Site security tick-list | Covered by G Parts 1–2 and D.6, plus the quarterly check in CONFIG_REFERENCE §4 |
+| K3 | [`02-frontend/one-to-one.html`](02-frontend/one-to-one.html) | **Produced (v4.0.0)** |
+| K4 | [`02-frontend/one-to-one.js`](02-frontend/one-to-one.js) | **Produced (v4.0.0)** |
+| K5 | [`03-flows/FLOW_BUILD_SHEETS.md`](03-flows/FLOW_BUILD_SHEETS.md) | **Produced (v4)**: Flows 1–3, SETPERM, Ensure_user, Try/Catch |
+| K6 | [`03-flows/EMAIL_TEMPLATES.md`](03-flows/EMAIL_TEMPLATES.md) | **Produced (v4)**: E1–E5, E7 |
+| K7 | Test record | Use section H directly (F1–F30, P1–P20); add Pass/Fail, date, tester and screenshot columns |
+| K8 | Privacy notice | **Not needed.** The TL decided it's handled between the TL and each technician. |
+| K9 | [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) | **Produced (v4)** |
+| K10 | [`02-frontend/mock/`](02-frontend/mock/), [`02-frontend/test/`](02-frontend/test/), [`02-frontend/tools/`](02-frontend/tools/) | **Produced.** 70 checks passing. |
+| K11 | Frontend security notes for IT-13 | Section E.3–E.4 plus [`02-frontend/README.md`](02-frontend/README.md) (endpoints, rules, test evidence) |
+| — | [`prototype/prototype.html`](prototype/prototype.html) | Design baseline (prototype v7) |
 
 ---
 
 ## Summary and next step
 
-1. **Build approach:**
-   - A private SharePoint communication site with **four lists**.
-   - **Manager Reviews is the authoritative, tamper-proof record.** Monthly Reviews holds only the technician's answers.
+1. **Build approach (unchanged security model):**
+   - A private SharePoint communication site with **five lists**.
+   - **Manager Reviews is the authoritative, tamper-proof record**, now holding TL ratings and multi-row actions. Monthly Reviews holds only the technician's answers. 1-to-1 Settings holds the band thresholds.
    - Two custom permission levels, applied per item by **three** standard-connector flows.
-   - A custom HTML/CSS/JS frontend in the **Welcome by Accelerator 365** web part on `OneToOne.aspx` (the site home page), opened from personal links. Technicians get Read on that page only, through `1-to-1 Technicians`.
-2. **Sequence:**
-   1. Confirmations
-   2. Parts 1–5: site, levels, lists, IDs, group, page, **Stage 0A then 0B**
-   3. Part 6: Flow 1
-   4. Part 7: install the frontend
-   5. Part 8: Flows 2 and 3
-   6. Part 9: Stage 1 tests
-   7. Part 10: dates and reminders
-   8. Part 11: expectations
-   9. Part 12: privacy tests (including XSS), clean-down and go-live
-3. **Effort:** about 26–35 h hands-on (see I), plus the IT and HR lead time.
-4. **Blockers:** **IT-10 (Welcome available and able to run scripts)**, IT-11, IT-12, IT-13, plus IT-1, IT-2, IT-4, IT-6 and HR-2. HR-1 is needed before retention is configured.
-5. **Next Claude Code prompt**, after running Stage 0A in the tenant:
+   - A desktop frontend with a sidebar menu, in the **Welcome by Accelerator 365** web part on `OneToOne.aspx`.
+2. **Status:** Stage 0A and 0B passed. All build files are produced and tested locally.
+3. **Next (the TL, in the tenant), following [`GO_LIVE_RUNBOOK.md`](GO_LIVE_RUNBOOK.md):**
+   1. Build or update the five lists.
+   2. Build Flows 1–3.
+   3. Install the frontend.
+   4. Set appraisal dates.
+   5. Load expectations.
+   6. Run the tests in section H with Test A and Test B.
+   7. Clean down and go live.
+4. **If a tenant test fails**, the next Claude Code prompt:
 
    ```
-   Stage 0A result: <PASSED or FAILED>. Redacted probe output (TL and Test A):
-   <paste>. Notes: <anything Welcome needed, any extra list it created, console errors>.
-   If passed: produce the Stage 0B probe and instructions, plus K1, K2 and K8, from
-   one-to-one/IMPLEMENTATION_PLAN.md (v3.1). Commit and push to the current branch.
+   Tenant test <ID> failed. What I did: <steps>. What I saw: <message / screenshot text,
+   redacted>. Browser console errors: <paste>. Fix one-to-one.js / the flow sheet as needed,
+   re-run the local tests, commit and push to the current branch.
    ```
