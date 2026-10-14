@@ -11,7 +11,7 @@
 window.ESGOneToOneProbe0B = function (ctx) {
     'use strict';
 
-    var VERSION = '0B-1';
+    var VERSION = '0B-2';
     var MANAGE_PERMISSIONS_LOW = 0x02000000;
     var SCAN_IDS = 40;                 // id range scanned for direct-access / guessed-id tests
     var RECORDS = 'ZZProbeRecords';
@@ -172,34 +172,29 @@ window.ESGOneToOneProbe0B = function (ctx) {
     // ===================================================================================
     //  TEAM LEADER MODE
     // ===================================================================================
+    function why(res) { return res.outcome + (res.text ? ' – ' + String(res.text).replace(/\s+/g, ' ').substring(0, 180) : ''); }
     async function createList(title, fields) {
         var digest = state.digest || await freshDigest();
         var exists = await req('GET', "/_api/web/lists/getbytitle('" + title + "')?$select=Title");
         if (exists.outcome !== 'OK') {
-            var create = await req('POST', '/_api/web/lists', { verbose: true, digest: digest,
-                body: { __metadata: { type: 'SP.List' }, Title: title, BaseTemplate: 100,
+            // Modern OData (nometadata) — the Welcome HTTP client speaks OData v4, which rejects the old verbose/__metadata form.
+            var create = await req('POST', '/_api/web/lists', { digest: digest,
+                body: { Title: title, BaseTemplate: 100,
                         Description: 'zz-probe (Stage 0B – delete after testing)', EnableVersioning: true, EnableAttachments: false, NoCrawl: true } });
-            if (create.outcome !== 'OK') { throw new Error('Could not create ' + title + ' (' + create.outcome + ')'); }
+            if (create.outcome !== 'OK') { throw new Error('Could not create ' + title + ': ' + why(create)); }
         }
         for (var i = 0; i < fields.length; i++) {
             var f = fields[i];
-            var add = await req('POST', "/_api/web/lists/getbytitle('" + title + "')/fields", { verbose: true, digest: digest,
-                body: { __metadata: { type: 'SP.Field' }, Title: f, FieldTypeKind: f.indexOf('Note') >= 0 ? 3 : 2 } });
+            var add = await req('POST', "/_api/web/lists/getbytitle('" + title + "')/fields", { digest: digest,
+                body: { Title: f, FieldTypeKind: f.indexOf('Note') >= 0 ? 3 : 2 } });
             if (add.outcome !== 'OK' && !/exist/i.test(add.text || '')) { /* non-fatal; items verify later */ }
         }
     }
-    async function entityType(list) {
-        var res = await req('GET', "/_api/web/lists/getbytitle('" + list + "')?$select=ListItemEntityTypeFullName");
-        return res.json && (res.json.ListItemEntityTypeFullName || (res.json.d && res.json.d.ListItemEntityTypeFullName));
-    }
     async function createItem(list, fields) {
         var digest = state.digest || await freshDigest();
-        var type = await entityType(list);
-        var body = { __metadata: { type: type } };
-        Object.keys(fields).forEach(function (k) { body[k] = fields[k]; });
-        var res = await req('POST', "/_api/web/lists/getbytitle('" + list + "')/items", { verbose: true, digest: digest, body: body });
-        if (res.outcome !== 'OK') { throw new Error('Create item failed in ' + list + ' (' + res.outcome + ')'); }
-        return res.json.d.Id;
+        var res = await req('POST', "/_api/web/lists/getbytitle('" + list + "')/items", { digest: digest, body: fields });
+        if (res.outcome !== 'OK') { throw new Error('Create item failed in ' + list + ': ' + why(res)); }
+        return res.json && (res.json.Id !== undefined ? res.json.Id : (res.json.d && res.json.d.Id));
     }
     // Idempotency: recycle any existing items so re-running Prepare does not duplicate records.
     async function clearItems(list) {
@@ -437,7 +432,7 @@ window.ESGOneToOneProbe0B = function (ctx) {
                 wroteForeign.length ? 'WROTE: ' + wroteForeign.join(', ') : 'all non-own writes refused across IDs 1–' + SCAN_IDS);
 
             var digest = state.digest || await freshDigest();
-            var create = await req('POST', "/_api/web/lists/getbytitle('" + RECORDS + "')/items", { verbose: true, digest: digest, body: { __metadata: { type: 'SP.Data.ZZProbeRecordsListItem' }, Title: 'rogue' } });
+            var create = await req('POST', "/_api/web/lists/getbytitle('" + RECORDS + "')/items", { digest: digest, body: { Title: 'rogue' } });
             record('B9a', 'Cannot create new records', create.outcome !== 'OK' ? 'PASS' : 'FAIL', 'M', 'create refused (' + create.outcome + ')');
             if (ownOpen) {
                 var rec = await req('POST', "/_api/web/lists/getbytitle('" + RECORDS + "')/items(" + ownOpen.Id + ")/recycle()", { digest: digest });
@@ -446,7 +441,7 @@ window.ESGOneToOneProbe0B = function (ctx) {
                 var att = await req('POST', "/_api/web/lists/getbytitle('" + RECORDS + "')/items(" + ownOpen.Id + ")/AttachmentFiles/add(FileName='x.txt')", { body: 'x', digest: digest });
                 record('B9c', 'Cannot add attachments', att.outcome !== 'OK' ? 'PASS' : 'FAIL', 'M', 'attachment upload refused (' + att.outcome + ')');
             }
-            var field = await req('POST', "/_api/web/lists/getbytitle('" + RECORDS + "')/fields", { verbose: true, digest: digest, body: { __metadata: { type: 'SP.Field' }, Title: 'Rogue', FieldTypeKind: 2 } });
+            var field = await req('POST', "/_api/web/lists/getbytitle('" + RECORDS + "')/fields", { digest: digest, body: { Title: 'Rogue', FieldTypeKind: 2 } });
             record('B9d', 'Cannot add columns', field.outcome !== 'OK' ? 'PASS' : 'FAIL', 'M', 'field creation refused (' + field.outcome + ')');
 
             if (ownOpen) {
