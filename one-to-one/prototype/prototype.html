@@ -177,8 +177,6 @@
   .oto .big-score small { font-size: 13px; color: var(--muted); font-weight: 600; }
   .oto .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 12px; margin-top: 10px; }
   .oto .kv dt { color: var(--muted); } .oto .kv dd { margin: 0; font-weight: 600; text-align: right; }
-  .oto .notes { border-left: 3px solid var(--purple); }
-  .oto .lockline { font-size: 11px; color: var(--purple); font-weight: 600; margin-bottom: 6px; }
   .oto details.how { margin-top: 10px; font-size: 12px; }
   .oto details.how summary { cursor: pointer; color: var(--navy); font-weight: 650; }
   .oto details.how ol { margin: 8px 0; padding-left: 18px; }
@@ -343,8 +341,6 @@
   ];
   var CUR_YEAR = '2026/27';
   var nextExpId = 40;
-  // Private, tech-only running notes, carried month to month (never shown to the TL).
-  var PRIVATE_NOTES = { 'Alex Morgan': 'Ask about the supervisor course dates next month.\nChase the loan monitor return.' };
 
   // ======================================================================
   // small helpers
@@ -437,7 +433,7 @@
     var snap = snapshotFor(tech);
     return { id: nextId++, tech: tech, month: month, due: lastDay(month), state: st, draft: false, submittedOn: '', late: false,
       snapshot: snap, answers: blankAnswers(snap), fb: emptyFeedback(),
-      released: st === 'Completed' || st === 'Closed - Not Submitted', chatRequested: false };
+      released: st === 'Completed' || st === 'Closed - Not Submitted' };
   }
 
   var BANK = {
@@ -535,7 +531,7 @@
       cr.answers.q1 = 'Finished the instrument check backlog.'; cr.answers.q3 = 3; cr.answers.mood = 4;
     } else if (tech === 'Sam Patel') {
       cr = mkReview(tech, CUR, 'Submitted'); fillAnswers(cr, R2, P, nb);
-      cr.answers.q9 = DEDICATED; cr.submittedOn = '2026-11-18'; cr.chatRequested = true;
+      cr.answers.q9 = DEDICATED; cr.submittedOn = '2026-11-18';
     } else if (tech === 'Jordan Lee') {
       cr = mkReview(tech, CUR, 'Completed'); fillAnswers(cr, R2, P, nb); cr.submittedOn = '2026-11-10'; fillFeedback(cr, R2, P, nb);
     } else if (tech === 'Riley Evans') {
@@ -1068,18 +1064,12 @@
           a.q2 = { issue: pa.q2.issue, impact: pa.q2.impact, tried: pa.q2.tried, support: pa.q2.support };
           a.q8.forEach(function (x) { var q = pa.q8.find(function (y) { return y.id === x.id; }); if (q) { x.rating = q.rating; x.comment = q.comment; } });
           toast('Copied your ' + monthLabel(prior.month) + ' answers — update anything that has changed.'); render();
-        } }) : null,
-        r.chatRequested
-          ? h('div', { class: 'btn-row' }, [h('span', { class: 'chip blue', text: '💬 Chat requested' }), h('button', { class: 'btn small ghost', type: 'button', text: 'Cancel', onclick: function () { r.chatRequested = false; render(); } })])
-          : h('button', { class: 'btn', type: 'button', text: '💬 Ask for a chat', onclick: function () { r.chatRequested = true; toast('Your Team Leader will see you would like a chat.'); render(); } })
+        } }) : h('div', { class: 'small muted', text: editable ? 'Nothing to copy from last month.' : 'This month is submitted.' })
       ])
     ]);
     var win = h('section', { class: 'card side-tile' }, [h('h3', { text: '🏅 Win of the month' }),
       textBox(null, a.win, function (v) { a.win = v; }, !editable, 3)]);
-    var notes = h('section', { class: 'card side-tile notes' }, [h('h3', { text: '🔒 My private notes' }),
-      h('div', { class: 'lockline', text: 'Only you can see these. Carried over each month.' }),
-      textBox(null, PRIVATE_NOTES[ME] || '', function (v) { PRIVATE_NOTES[ME] = v; }, false, 4)]);
-    return [energy, outlook, quick, win, notes];
+    return [energy, outlook, quick, win];
   }
 
   // ======================================================================
@@ -1154,7 +1144,7 @@
       tile('Submitted – ' + monthShort(CUR), [String(cnt(isIn)), h('small', { text: ' of ' + TECHS.length })], cnt(function (r) { return r.state === 'Completed'; }) + ' completed'),
       tile('Awaiting your review', String(cnt(function (r) { return r.state === 'Submitted'; })), 'Submitted, not yet released', cnt(function (r) { return r.state === 'Submitted'; }) ? 'warn' : ''),
       tile('Not yet submitted', String(cnt(function (r) { return r.state === 'Open'; })), cnt(isOverdue) + ' overdue · due ' + fmtDate(lastDay(CUR)), cnt(isOverdue) ? 'bad' : ''),
-      tile('Chats & 1-to-1s requested', String(cnt(function (r) { return r.chatRequested || followOf(r) === DEDICATED; })), 'This month'),
+      tile('Dedicated 1-to-1s requested', String(cnt(function (r) { return followOf(r) === DEDICATED; })), 'From this month\'s follow-up answers', cnt(function (r) { return followOf(r) === DEDICATED; }) ? 'warn' : ''),
       tile('Open actions', String(openA.length), openA.filter(function (x) { return acOverdue(x.ac); }).length + ' overdue', openA.some(function (x) { return acOverdue(x.ac); }) ? 'bad' : ''),
       tile('Next appraisal', nextAp ? String(daysBetween(TODAY, TECH_INFO[nextAp].appraisal)) + ' days' : '—', nextAp ? nextAp + ' · ' + fmtDate(TECH_INFO[nextAp].appraisal) : '', nextAp && daysBetween(TODAY, TECH_INFO[nextAp].appraisal) <= 30 ? 'warn' : '')
     ]);
@@ -1187,9 +1177,9 @@
       var o = outs[t], r = currentOf(t), ap = TECH_INFO[t].appraisal, days = daysBetween(TODAY, ap);
       var oa = actionsOf(function (ac, rr) { return rr.tech === t && ac.status === 'Open'; }, 'tl');
       var od = oa.filter(function (x) { return acOverdue(x.ac); }).length;
-      return h('tr', { class: r.chatRequested || followOf(r) === DEDICATED ? 'hl' : null }, [
+      return h('tr', { class: followOf(r) === DEDICATED ? 'hl' : null }, [
         h('td', null, [h('a', { href: '#', style: 'font-weight:650;color:var(--navy)', text: t, onclick: function (e) { e.preventDefault(); go('profile', { profileTech: t }); } }),
-          r.chatRequested ? tip(h('span', { text: ' 💬' }), 'Has asked for a chat') : null]),
+          followOf(r) === DEDICATED ? tip(h('span', { text: ' 🗓' }), 'Dedicated 1-to-1 requested') : null]),
         h('td', { class: 'num', text: fmtDate(ap) }),
         h('td', { class: 'num ' + (days <= 30 ? 'overdue' : ''), text: days >= 0 ? days + ' days' : 'Passed' }),
         h('td', { style: 'width:190px' }, [h('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:5px' }, [bandChip(o.projected), h('b', { class: 'num', text: f1(o.projected) })]), track(o.projected)]),
@@ -1222,12 +1212,12 @@
       .sort(function (x, y) { return x.month === y.month ? (x.tech < y.tech ? -1 : 1) : (x.month < y.month ? 1 : -1); });
     var rows = rs.map(function (r) {
       var f = followOf(r);
-      return tr([h('span', null, [r.tech, r.chatRequested ? tip(h('span', { text: ' 💬' }), 'Has asked for a chat') : null]), monthLabel(r.month), chipFor(r),
+      return tr([r.tech, monthLabel(r.month), chipFor(r),
         r.submittedOn ? fmtDate(r.submittedOn) : '—', isIn(r) ? r.answers.q3 + ' / 5' : '—', isIn(r) ? moodEmoji(r.answers.mood) : '—',
         isIn(r) ? f1(selfAvg(r)) : '—', isIn(r) ? f1(mgrAvg(r)) : '—',
         f === DEDICATED ? h('strong', { text: '1-to-1 requested' }) : (f ? f.replace(/\.$/, '').replace(/ —.*/, '') : '—'),
         String(r.fb.actions.length || '—'),
-        h('button', { class: 'btn small', type: 'button', text: 'Open', onclick: function () { go('mgr', { reviewId: r.id, backTo: 'reviews' }); } })], f === DEDICATED || r.chatRequested ? 'hl' : '');
+        h('button', { class: 'btn small', type: 'button', text: 'Open', onclick: function () { go('mgr', { reviewId: r.id, backTo: 'reviews' }); } })], f === DEDICATED ? 'hl' : '');
     });
     return card('Monthly reviews', rs.length + ' shown', [
       h('div', { class: 'filters' }, [h('div', null, [h('label', { for: 'f-month', text: 'Month' }), monthSel]), h('div', null, [h('label', { for: 'f-tech', text: 'Technician' }), techSel])]),
@@ -1441,7 +1431,6 @@
       side.appendChild(h('section', { class: 'card side-tile' }, [h('h3', { text: 'Technician check-in' }),
         h('dl', { class: 'kv', style: 'margin-top:0' }, [h('dt', { text: 'Energy' }), h('dd', { text: has || a.mood ? moodEmoji(a.mood) : '—' }),
           h('dt', { text: 'On-time streak' }), h('dd', { text: streak ? '🔥 ' + streak + ' month' + (streak === 1 ? '' : 's') : '—' }),
-          h('dt', { text: 'Chat requested' }), h('dd', { text: r.chatRequested ? '💬 Yes' : 'No' }),
           h('dt', { text: 'Follow-up preference' }), h('dd', { text: followOf(r) === DEDICATED ? 'Dedicated 1-to-1' : (has && a.q9 ? (a.q9 === FOLLOW[0] ? 'Nothing further' : 'Quick catch-up') : '—') })])]));
       side.appendChild(h('section', { class: 'card side-tile' }, [h('h3', { text: 'This month\'s ratings' }),
         h('div', { class: 'small', style: 'display:flex;justify-content:space-between;margin-bottom:4px' }, [h('span', null, [h('i', { class: 'dot', style: 'background:' + C_SELF }), 'Technician']), h('b', { text: f1(sa) })]), track(sa),
@@ -1459,7 +1448,6 @@
     }
     refreshSide();
     var banners = [];
-    if (r.chatRequested) { banners.push(h('div', { class: 'banner info', text: '💬 ' + r.tech + ' has asked for a chat — no reason needed; arrange a catch-up.' })); }
     if (followOf(r) === DEDICATED) { banners.push(h('div', { class: 'banner amber', text: 'Dedicated 1-to-1 discussion requested' })); }
     if (r.released && r.state === 'Completed') { banners.push(h('div', { class: 'banner info', text: 'Already released – any change you save is visible to the technician straight away.' })); }
     return h('div', null, [head, h('div', { class: 'layout' }, [h('div', { class: 'stack' }, banners.concat(main)), h('aside', { class: 'side-sticky' }, side)])]);
@@ -1612,7 +1600,7 @@
       rsec('8. Submission record', [rtable(['Month', 'Status', 'Submitted'], prs.map(function (r) {
         return [monthLabel(r.month), r.state === 'Closed - Not Submitted' ? 'Not submitted' : r.state === 'Open' ? (isOverdue(r) ? 'Overdue' : 'In progress') : (r.late ? 'Submitted late' : 'Submitted on time'), r.submittedOn ? fmtDate(r.submittedOn) : ''];
       }))]),
-      h('div', { class: 'note', text: 'Generated from the monthly 1-to-1 records. Wellbeing answers and private notes are deliberately excluded. The expected outcome is a guide for the appraisal conversation, not a decision.' })
+      h('div', { class: 'note', text: 'Generated from the monthly 1-to-1 records. Wellbeing answers are deliberately excluded. The expected outcome is a guide for the appraisal conversation, not a decision.' })
     ]);
     return h('div', { class: 'report-wrap', role: 'dialog', 'aria-label': 'Appraisal report' }, [
       h('div', { class: 'report-bar' }, [h('strong', { text: 'Appraisal report – ' + tech }), h('div', { class: 'btn-row' }, [
@@ -1661,10 +1649,10 @@
       nav.push(h('div', { class: 'sec', text: 'Team' }));
       TECHS.forEach(function (t) {
         var o = expectedOutcome(t, 'tl'), r = currentOf(t);
-        var needs = r.state === 'Submitted' || isOverdue(r) || r.chatRequested;
+        var needs = r.state === 'Submitted' || isOverdue(r) || followOf(r) === DEDICATED;
         var cur = (v === 'profile' && state.profileTech === t) || (v === 'mgr' && REVIEWS.some(function (x) { return x.id === state.reviewId && x.tech === t; }) && state.backTo === 'profile');
         nav.push(tip(navBtn('p-' + t, '', t, function () { go('profile', { profileTech: t }); }, needs ? h('span', { class: 'flag' }) : null, cur),
-          t + '\nExpected: ' + (o.band ? o.band.name + ' (' + o.projected.toFixed(1) + ')' : '—') + '\n' + monthShort(CUR) + ': ' + (r.state === 'Submitted' ? 'awaiting your review' : r.state === 'Open' ? (r.draft ? 'draft' : 'not started') : r.state.toLowerCase()) + (r.chatRequested ? '\nHas asked for a chat' : '')));
+          t + '\nExpected: ' + (o.band ? o.band.name + ' (' + o.projected.toFixed(1) + ')' : '—') + '\n' + monthShort(CUR) + ': ' + (r.state === 'Submitted' ? 'awaiting your review' : r.state === 'Open' ? (r.draft ? 'draft' : 'not started') : r.state.toLowerCase()) + (followOf(r) === DEDICATED ? '\nDedicated 1-to-1 requested' : '')));
         nav[nav.length - 1].querySelector('.ico').appendChild(h('i', { class: 'tdot', style: 'display:inline-block;background:' + (o.band ? BAND_COL[o.band.cls] : '#9aa4ae') }));
       });
       nav.push(h('div', { class: 'sec', text: 'Admin' }));
