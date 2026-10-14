@@ -11,7 +11,7 @@
 window.ESGOneToOneProbe0B = function (ctx) {
     'use strict';
 
-    var VERSION = '0B-2';
+    var VERSION = '0B-3';
     var MANAGE_PERMISSIONS_LOW = 0x02000000;
     var SCAN_IDS = 40;                 // id range scanned for direct-access / guessed-id tests
     var RECORDS = 'ZZProbeRecords';
@@ -445,13 +445,17 @@ window.ESGOneToOneProbe0B = function (ctx) {
             record('B9d', 'Cannot add columns', field.outcome !== 'OK' ? 'PASS' : 'FAIL', 'M', 'field creation refused (' + field.outcome + ')');
 
             if (ownOpen) {
-                var pb = await req('GET', "/_api/web/lists/getbytitle('" + RECORDS + "')/items(" + ownOpen.Id + ")/roleassignments?$select=PrincipalId");
-                var beforeCount = pb.outcome === 'OK' ? listRows(pb.json).length : -1;
-                var brk = await req('POST', "/_api/web/lists/getbytitle('" + RECORDS + "')/items(" + ownOpen.Id + ")/breakroleinheritance(copyRoleAssignments=true,clearSubscopes=false)", { digest: digest });
-                var add = await req('POST', "/_api/web/lists/getbytitle('" + RECORDS + "')/items(" + ownOpen.Id + ")/roleassignments/addroleassignment(principalid=" + state.userId + ",roledefid=1073741829)", { digest: digest });
-                var pa = await req('GET', "/_api/web/lists/getbytitle('" + RECORDS + "')/items(" + ownOpen.Id + ")/roleassignments?$select=PrincipalId");
-                var afterCount = pa.outcome === 'OK' ? listRows(pa.json).length : beforeCount;
-                record('B10a', 'Cannot change item permissions', brk.outcome !== 'OK' && add.outcome !== 'OK' && afterCount === beforeCount ? 'PASS' : 'FAIL', 'M', 'break + grant refused, assignments unchanged');
+                var base10 = "/_api/web/lists/getbytitle('" + RECORDS + "')/items(" + ownOpen.Id + ")";
+                // Enumerating role assignments needs Manage Permissions. Independent effect check:
+                // if the technician cannot read them before but can after trying to escalate, they gained control.
+                var pre = await req('GET', base10 + "/roleassignments?$select=PrincipalId");
+                var brk = await req('POST', base10 + "/breakroleinheritance(copyRoleAssignments=true,clearSubscopes=false)", { digest: digest });
+                var add = await req('POST', base10 + "/roleassignments/addroleassignment(principalid=" + state.userId + ",roledefid=1073741829)", { digest: digest });
+                var post = await req('GET', base10 + "/roleassignments?$select=PrincipalId");
+                var noWriteSucceeded = brk.outcome !== 'OK' && add.outcome !== 'OK';
+                var gainedControl = (pre.outcome !== 'OK' && post.outcome === 'OK');
+                record('B10a', 'Cannot change item permissions', noWriteSucceeded && !gainedControl ? 'PASS' : 'FAIL', 'M',
+                    'break HTTP ' + brk.status + ', grant HTTP ' + add.status + ', enumerate-perms before ' + pre.status + ' / after ' + post.status + (gainedControl ? ' — ESCALATED' : ''));
                 var share = await req('POST', '/_api/web/SP.Web.ShareObject', { body: { url: state.siteUrl, peoplePickerInput: '[]', roleValue: 'role:1073741827' }, digest: digest });
                 record('B10b', 'Cannot create sharing links', share.outcome !== 'OK' ? 'PASS' : 'FAIL', 'M', 'share refused (' + share.outcome + ')');
             }
