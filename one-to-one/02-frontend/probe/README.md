@@ -1,5 +1,8 @@
 # Stage 0A: Welcome feasibility probe
 
+> **Stage status:** Stage 0A is complete and accepted. This file is the 0A runbook, kept for reference. For Stage 0B (security verification) use **`README-stage0b.md`** and `probe-0b.html` / `probe-0b.js`. The proven 0A wrapper is preserved as `probe-0a2.html` / `probe-0a2.js`.
+
+
 **What this proves:** that **Welcome by Accelerator 365** runs our JavaScript, and that the script can **read and write** SharePoint as the signed-in user.
 
 **What it doesn't test:** permissions, privacy or protected fields. That's Stage 0B, which is produced only after 0A passes.

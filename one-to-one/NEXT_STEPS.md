@@ -1,9 +1,10 @@
 # ESG 1-to-1: next steps (prepared while away from the work environment)
 
-**Status**
+**Status (updated)**
 
-- Stage 0A **passed for the Team Leader (TL)**: checks A1–A6, including authenticated SharePoint REST reads and writes.
-- **Stage 0A is not complete.** The technician test account can open the page and the Welcome HTML/JS files, but sees a **blank frontend**. Stage 0B and everything after it waits until the restricted-account test passes.
+- **Stage 0A is COMPLETE and accepted.** The frontend runs Welcome external JavaScript; authenticated REST reads and writes work; the TL passed A1–A6; a technician passed A1, A2, A2b and A4, was recognised as a non-owner with the write button disabled, got an empty/denied list result, and an independent direct-record request confirmed the technician could not retrieve an existing item that the TL could. (The automated A3 check was over-strict; the direct-record test settled it.)
+- The blank-frontend issue was traced to a Welcome support list, `WMW_WMReplyWelcomeWebPartErrors`, which a non-owner may need **Read** on. This is handled in the Stage 0B README §17 and plan D.6.
+- **Stage 0B is built and ready for live testing** — see [`02-frontend/probe/README-stage0b.md`](02-frontend/probe/README-stage0b.md). Not yet run against the live corporate accounts, so Stage 0B is not passed.
 
 **Contents**
 

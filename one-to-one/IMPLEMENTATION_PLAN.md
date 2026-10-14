@@ -1,6 +1,6 @@
 # ESG Monthly Technician 1-to-1 — Implementation Plan (v3)
 
-**Status:** v3.1. **Current position and next actions:** [`NEXT_STEPS.md`](NEXT_STEPS.md). Stage 0A has passed for the TL, but the technician test account sees a blank frontend, so Stage 0A isn't complete. Stage 0 is now split into **0A** (Welcome feasibility, artefacts in [`02-frontend/probe/`](02-frontend/probe/README.md)) and **0B** (security, prepared only after 0A passes). There are also explicit authorisation and workflow rules (D.7). The canvas app frontend is replaced by a custom HTML/CSS/JavaScript layout in **Welcome by Accelerator 365**. See *Changes in v3* below. The v1 → v2 changes are explained in [`PLAN_REVIEW.md`](PLAN_REVIEW.md). **Nothing has been built or deployed.**
+**Status:** v3.2. **Current position and next actions:** [`NEXT_STEPS.md`](NEXT_STEPS.md). **Stage 0A is complete** (Welcome runs external JS; authenticated REST read/write confirmed; technician correctly limited). **Stage 0B security probe is built** ([`02-frontend/probe/README-stage0b.md`](02-frontend/probe/README-stage0b.md)) and awaits live testing. Stage 0 is split into **0A** (Welcome feasibility, artefacts in [`02-frontend/probe/`](02-frontend/probe/README.md)) and **0B** (security, prepared only after 0A passes). There are also explicit authorisation and workflow rules (D.7). The canvas app frontend is replaced by a custom HTML/CSS/JavaScript layout in **Welcome by Accelerator 365**. See *Changes in v3* below. The v1 → v2 changes are explained in [`PLAN_REVIEW.md`](PLAN_REVIEW.md). **Nothing has been built or deployed.**
 **Scope:** 5–10 technicians, one Team Leader (TL), Environmental Safety Group, Dungeness B.
 
 **Confirmed decisions**
@@ -334,6 +334,7 @@ Technicians now need to open one SharePoint page. That's set up without making t
 | Page | `SitePages/OneToOne.aspx` → **Manage access → Advanced → Stop inheriting** → grant `1-to-1 Technicians` **Read**. That's this page only. The rest of Site Pages stays Owners only. |
 | Layout library | `Welcome Web Part - Custom Layouts` → **Stop inheriting** → grant `1-to-1 Technicians` **Read**. It holds code only, never data. |
 | Welcome configuration | Any list Welcome creates for its own settings (identified in Stage 0) gets **Read** for the group, and only if the page won't render without it |
+| Welcome support list | `WMW_WMReplyWelcomeWebPartErrors` may need **Read** for the group: a non-owner unable to read it gets a blank frontend. It holds only diagnostic error text (no review data), so Read is low-risk; clear it periodically. Grant it only if a technician's page is blank. |
 | Not granted | The four data lists (access stays item-level, set by the flows), the rest of Site Pages, Site Assets and every other library |
 
 **Code integrity.** Only the Owners group (the TL) can edit the page, the layouts library or the script. Anyone who could edit `one-to-one.js` could run code as every viewer, including the TL. That's why P16 is a release blocker, and why the quarterly check now includes the group's permissions.

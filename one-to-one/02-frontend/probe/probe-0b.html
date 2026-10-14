@@ -1,0 +1,48 @@
+<template
+    id="metadata"
+    data-name="1-to-1 probe 0B"
+    data-description="Stage 0B Welcome security verification">
+
+    <template id="layout">
+        <style>
+            .SCOPE .zzp {
+                box-sizing: border-box;
+                font-family: Segoe UI, Arial, sans-serif;
+                font-size: 14px;
+                color: #222;
+                max-width: 980px;
+                padding: 16px;
+                border: 1px solid #ccc;
+                background: #fff;
+            }
+            .SCOPE .zzp h2 { font-size: 18px; margin: 0 0 8px; }
+            .SCOPE .zzp h3 { font-size: 15px; margin: 12px 0 4px; }
+            .SCOPE .zzp table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+            .SCOPE .zzp th, .SCOPE .zzp td {
+                border: 1px solid #ddd; padding: 5px 7px;
+                text-align: left; vertical-align: top;
+            }
+            .SCOPE .zzp .pass { color: #0a6b2d; font-weight: 700; }
+            .SCOPE .zzp .fail { color: #a80000; font-weight: 700; }
+            .SCOPE .zzp .info { color: #555; }
+            .SCOPE .zzp button { margin: 6px 8px 6px 0; padding: 6px 12px; }
+            .SCOPE .zzp input[type=text] { padding: 5px; min-width: 260px; margin: 0 8px 6px 4px; }
+            .SCOPE .zzp textarea {
+                box-sizing: border-box; width: 100%; min-height: 160px;
+                font-family: Consolas, monospace; font-size: 12px;
+            }
+            .SCOPE .zzp [data-zzprobe-xss] { max-height: 1px; overflow: hidden; }
+        </style>
+        <section class="zzp" data-zzprobe-root>
+            <h2>ESG 1-to-1 – Stage 0B security probe</h2>
+            <p class="info">Operates only on the disposable ZZProbe* test lists with fictional data. No employee review data is touched.</p>
+            <p data-zzprobe-status>Waiting for Welcome JavaScript to initialise...</p>
+            <div data-zzprobe-controls></div>
+        </section>
+        <script
+            src="probe-0b.js"
+            data-layout
+            data-exports="ESGOneToOneProbe0B">
+        </script>
+    </template>
+</template>
