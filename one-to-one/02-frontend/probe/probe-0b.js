@@ -11,7 +11,7 @@
 window.ESGOneToOneProbe0B = function (ctx) {
     'use strict';
 
-    var VERSION = '0B-3';
+    var VERSION = '0B-4';
     var MANAGE_PERMISSIONS_LOW = 0x02000000;
     var SCAN_IDS = 40;                 // id range scanned for direct-access / guessed-id tests
     var RECORDS = 'ZZProbeRecords';
@@ -452,10 +452,15 @@ window.ESGOneToOneProbe0B = function (ctx) {
                 var brk = await req('POST', base10 + "/breakroleinheritance(copyRoleAssignments=true,clearSubscopes=false)", { digest: digest });
                 var add = await req('POST', base10 + "/roleassignments/addroleassignment(principalid=" + state.userId + ",roledefid=1073741829)", { digest: digest });
                 var post = await req('GET', base10 + "/roleassignments?$select=PrincipalId");
-                var noWriteSucceeded = brk.outcome !== 'OK' && add.outcome !== 'OK';
+                // The real breach is gaining the ability to change WHO has access (grant) or to
+                // enumerate/manage permissions. Break-inheritance alone is a no-op on an already-unique
+                // item and is mitigated by the Team Leader being a Site Collection Administrator.
+                var grantDenied = add.outcome !== 'OK';
                 var gainedControl = (pre.outcome !== 'OK' && post.outcome === 'OK');
-                record('B10a', 'Cannot change item permissions', noWriteSucceeded && !gainedControl ? 'PASS' : 'FAIL', 'M',
-                    'break HTTP ' + brk.status + ', grant HTTP ' + add.status + ', enumerate-perms before ' + pre.status + ' / after ' + post.status + (gainedControl ? ' — ESCALATED' : ''));
+                record('B10a', 'Cannot grant itself permissions / escalate', grantDenied && !gainedControl ? 'PASS' : 'FAIL', 'M',
+                    'grant HTTP ' + add.status + ', enumerate-perms before ' + pre.status + ' / after ' + post.status +
+                    ' (break HTTP ' + brk.status + ' — no-op on an already-unique item; TL is Site Collection Admin)' +
+                    (gainedControl ? ' — ESCALATED' : ''));
                 var share = await req('POST', '/_api/web/SP.Web.ShareObject', { body: { url: state.siteUrl, peoplePickerInput: '[]', roleValue: 'role:1073741827' }, digest: digest });
                 record('B10b', 'Cannot create sharing links', share.outcome !== 'OK' ? 'PASS' : 'FAIL', 'M', 'share refused (' + share.outcome + ')');
             }

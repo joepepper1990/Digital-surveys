@@ -257,6 +257,7 @@ There are no lookup columns, so nothing breaks when a technician lacks access to
 |---|---|
 | Site type | **Communication site.** No Microsoft 365 group, so there's no group membership to leak. |
 | Owners group | **TL only** (D4). A quarterly 2-minute check confirms nobody else has been added. |
+| Site Collection Administrator | **The TL must be a Site Collection Administrator.** An SCA retains access to every item regardless of item-level permissions, so a technician can never hide their own record by breaking its inheritance (Stage 0B finding B10a). Confirm at `/_layouts/15/mngsiteadmin.aspx`. |
 | Members, Visitors | **Empty.** Remove "Everyone except external users" if it appears. |
 | Sharing | **Only site owners can share.** **Access requests: Off.** |
 | External sharing | Off or organisation-only (IT-8) |
@@ -334,7 +335,7 @@ Technicians now need to open one SharePoint page. That's set up without making t
 | Page | `SitePages/OneToOne.aspx` → **Manage access → Advanced → Stop inheriting** → grant `1-to-1 Technicians` **Read**. That's this page only. The rest of Site Pages stays Owners only. |
 | Layout library | `Welcome Web Part - Custom Layouts` → **Stop inheriting** → grant `1-to-1 Technicians` **Read**. It holds code only, never data. |
 | Welcome configuration | Any list Welcome creates for its own settings (identified in Stage 0) gets **Read** for the group, and only if the page won't render without it |
-| Welcome support list | `WMW_WMReplyWelcomeWebPartErrors` may need **Read** for the group: a non-owner unable to read it gets a blank frontend. It holds only diagnostic error text (no review data), so Read is low-risk; clear it periodically. Grant it only if a technician's page is blank. |
+| Welcome Errors list | **Grant the group Read** on the Welcome **"Errors"** list (`WMW_WMReplyWelcomeWebPartErrors`, shown as *Welcome Web Part - Errors*). **Required** — confirmed in Stage 0B: without it Welcome renders a blank page for the technician and raises an access request. It holds only diagnostic text (no review data). Grant to the group, not individuals. |
 | Not granted | The four data lists (access stays item-level, set by the flows), the rest of Site Pages, Site Assets and every other library |
 
 **Code integrity.** Only the Owners group (the TL) can edit the page, the layouts library or the script. Anyone who could edit `one-to-one.js` could run code as every viewer, including the TL. That's why P16 is a release blocker, and why the quarterly check now includes the group's permissions.

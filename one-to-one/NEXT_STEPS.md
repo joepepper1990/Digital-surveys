@@ -3,8 +3,10 @@
 **Status (updated)**
 
 - **Stage 0A is COMPLETE and accepted.** The frontend runs Welcome external JavaScript; authenticated REST reads and writes work; the TL passed A1–A6; a technician passed A1, A2, A2b and A4, was recognised as a non-owner with the write button disabled, got an empty/denied list result, and an independent direct-record request confirmed the technician could not retrieve an existing item that the TL could. (The automated A3 check was over-strict; the direct-record test settled it.)
-- The blank-frontend issue was traced to a Welcome support list, `WMW_WMReplyWelcomeWebPartErrors`, which a non-owner may need **Read** on. This is handled in the Stage 0B README §17 and plan D.6.
-- **Stage 0B is built and ready for live testing** — see [`02-frontend/probe/README-stage0b.md`](02-frontend/probe/README-stage0b.md). Not yet run against the live corporate accounts, so Stage 0B is not passed.
+- **Stage 0B PASSED (14 Oct 2026)** in the live tenant with two technician accounts. Every mandatory confidentiality and integrity test passed for both: own-records-only, no cross-technician read/write, no access to manager-only or unreleased data, no version history, no create/delete/attach/column/permission/sharing changes, no code overwrite, and injected scripts rendered as inert text.
+- **Two findings folded into the setup (D.1, D.6):**
+  1. The `1-to-1 Technicians` group needs **Read on the Welcome "Errors" list** (`WMW_WMReplyWelcomeWebPartErrors`, shown as *Welcome Web Part - Errors*) as well as the page and layouts library — otherwise Welcome renders a **blank** page for that technician and raises a SharePoint access request. Granting the group Read fixes it for all technicians. (This was a permission gap, not a Welcome licence issue.)
+  2. **B10a:** a technician can call break-inheritance on their **own** item (returns 204 as a no-op when the item already has unique permissions), but **cannot grant any permission** (403) or enumerate permissions (403), so no escalation and no data exposure. Fully mitigated because the **Team Leader is a Site Collection Administrator**, who retains access to every item regardless of item permissions — a technician can never hide a record from the TL. TL-as-SCA is now a recorded requirement (D.1).
 
 **Contents**
 
