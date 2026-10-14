@@ -98,6 +98,24 @@
   .oto .modal h3 { margin: 0 0 8px; }
   .oto .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: #233; color: #fff; padding: 10px 16px; border-radius: 6px; z-index: 60; max-width: 90vw; }
   .oto .toast.err { background: var(--red); }
+  .oto .meterwrap { margin-top: 8px; }
+  .oto .meterwrap .lbl { display:flex; justify-content:space-between; font-size:12px; color:var(--muted); margin-bottom:3px; }
+  .oto .meter { height: 8px; border-radius: 6px; background: #e6eaef; overflow: hidden; }
+  .oto .meter > i { display:block; height:100%; width:0; background: linear-gradient(90deg,#2d7a46,#1e7a46); transition: width .25s ease; }
+  .oto .meter.full > i { background: linear-gradient(90deg,#1e7a46,#0a6b2d); }
+  .oto .countdown { font-size:12px; font-weight:600; padding:2px 9px; border-radius:12px; white-space:nowrap; }
+  .oto .countdown.ok { background: var(--green-bg); color: var(--green); }
+  .oto .countdown.soon { background: var(--amber-bg); color: var(--amber); }
+  .oto .countdown.over { background: var(--red-bg); color: var(--red); }
+  .oto .spark { display:flex; align-items:flex-end; gap:4px; height:46px; margin-top:6px; }
+  .oto .spark .bar { flex:1; min-width:10px; border-radius:3px 3px 0 0; background: var(--navy-2); position:relative; display:flex; align-items:flex-end; justify-content:center; }
+  .oto .spark .bar span { position:absolute; top:-16px; font-size:11px; color:var(--muted); }
+  .oto .spark .bar b { font-size:10px; color:#fff; padding-bottom:2px; font-weight:600; }
+  .oto .spark .bar.w5 { background:#a4262c; } .oto .spark .bar.w4 { background:#b4690e; } .oto .spark .bar.w3 { background:#2d7a46; } .oto .spark .bar.w2 { background:#3a7fb5; } .oto .spark .bar.w1 { background:#8a8f98; }
+  .oto .ratebar { height:6px; border-radius:4px; background:#e6eaef; overflow:hidden; margin:6px 0 2px; }
+  .oto .ratebar > i { display:block; height:100%; background:var(--navy-2); transition:width .2s ease; }
+  .oto .collapse-head { cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px; }
+  .oto .collapse-head .tick { color: var(--green); font-weight:700; }
   @media (max-width: 700px) {
     .oto main { padding: 10px; }
     .oto table.grid thead { display: none; }
@@ -286,6 +304,25 @@
   function isOverdue(r) { return r.state === 'Open' && TODAY > r.due; }
   function followOf(r) { return r.fb.followOverride || (r.state === 'Open' ? '' : r.answers.q9) || ''; }
 
+  function daysLeft(r) { return Math.ceil((new Date(r.due + 'T23:59:59') - new Date(TODAY + 'T12:00:00')) / 86400000); }
+  function progressOf(a) {
+    var items = [];
+    items.push(!!(a.q1 && a.q1.trim()));
+    items.push(!!a.q3);
+    items.push(!!a.q4); if (a.q4 === 'Yes') { items.push(!!(a.q4d && a.q4d.trim())); }
+    items.push(!!a.q5); if (a.q5 === 'Yes') { items.push(!!(a.q5d && a.q5d.trim())); }
+    items.push(!!a.q6); if (a.q6 === 'Yes') { items.push(!!(a.q6what && a.q6what.trim())); }
+    a.q8.forEach(function (x) { items.push(!!x.rating); });
+    items.push(!!a.q9);
+    var done = items.filter(Boolean).length;
+    return { total: items.length, done: done, pct: Math.round(done / items.length * 100) };
+  }
+  function workloadHistory(tech) {
+    return REVIEWS.filter(function (r) { return r.tech === tech && r.answers.q3; })
+      .sort(function (x, y) { return x.month < y.month ? -1 : 1; })
+      .map(function (r) { return { month: r.month, score: r.answers.q3 }; });
+  }
+
   var root, live, state = { role: 'tech', view: 'tech', reviewId: null, tab: 'reviews', month: '2026-11', tech: '' };
 
   function toast(msg, isErr) {
@@ -381,6 +418,7 @@
 
     var missingBox = h('div', { 'aria-live': 'polite' });
     function refreshMissing() {
+      refreshMeter();
       missingBox.textContent = '';
       if (!editable) { return; }
       var m = missingItems(a);
@@ -415,15 +453,45 @@
       });
     } });
 
+    var dl = daysLeft(r);
+    var countdown = editable ? h('span', { class: 'countdown ' + (dl < 0 ? 'over' : dl <= 3 ? 'soon' : 'ok'),
+      text: dl < 0 ? Math.abs(dl) + ' day' + (Math.abs(dl) === 1 ? '' : 's') + ' overdue' : dl === 0 ? 'Due today' : dl + ' day' + (dl === 1 ? '' : 's') + ' left' }) : null;
+
+    var meterFill = h('i');
+    var meterBar = h('div', { class: 'meter' }, [meterFill]);
+    var meterLbl = h('span');
+    var meterWrap = editable ? h('div', { class: 'meterwrap' }, [
+      h('div', { class: 'lbl' }, [meterLbl, h('span', { text: 'Only you can see this until you submit' })]), meterBar
+    ]) : null;
+    function refreshMeter() {
+      if (!editable) { return; }
+      var pr = progressOf(a);
+      meterFill.style.width = pr.pct + '%';
+      meterBar.className = 'meter' + (pr.pct === 100 ? ' full' : '');
+      meterLbl.textContent = pr.pct === 100 ? 'All done — ready to submit ✓' : 'Your progress: ' + pr.done + ' of ' + pr.total + ' (' + pr.pct + '%)';
+    }
+
     var head = h('div', { class: 'card sticky' }, [
       h('div', { class: 'status-bar' }, [
         h('div', null, [
-          h('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap' }, [h('strong', { text: 'Monthly 1-to-1' }), monthSel, chipFor(r)]),
+          h('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap' }, [h('strong', { text: 'Monthly 1-to-1' }), monthSel, chipFor(r), countdown]),
           h('div', { class: 'hint', style: 'margin:4px 0 0', text: 'Deadline: 23:59, ' + fmtLongDate(r.due) + (isOverdue(r) ? ' – overdue, but you can still submit' : '') })
         ]),
         editable ? h('div', { class: 'btn-row' }, [saveBtn, submitBtn]) : h('span', { class: 'muted', text: r.state === 'Completed' ? 'Read-only – feedback released' : 'Read-only' })
-      ])
+      ]),
+      meterWrap
     ]);
+
+    // Workload trend sparkline (the technician can see their own history)
+    var wh = workloadHistory(ME);
+    var sparkCard = wh.length >= 2 ? h('section', { class: 'card' }, [
+      h('h2', { text: 'Your workload trend' }),
+      h('p', { class: 'hint', text: 'Your workload rating over recent months (1 very light – 5 excessive). For your reference.' }),
+      h('div', { class: 'spark' }, wh.slice(-6).map(function (p) {
+        return h('div', { class: 'bar w' + p.score, style: 'height:' + (20 + p.score * 16) + '%', title: monthLabel(p.month) + ': ' + p.score + '/5' },
+          [h('span', { text: monthLabel(p.month).split(' ')[0].substring(0, 3) }), h('b', { text: String(p.score) })]);
+      }))
+    ]) : null;
 
     var intro = h('div', { class: 'banner info' }, editable
       ? 'Save as often as you like and come back any time before the deadline. Short answers are fine. You can ask for a conversation at any time – you don\'t need to wait for this form. Submitting it doesn\'t replace any formal appraisal or meeting your role requires.'
@@ -479,7 +547,8 @@
       return h('div', { class: 'exp' }, [
         h('h3', { text: e.title }),
         h('p', { class: 'hint', text: e.measures + ' (' + e.year + ')' }),
-        choiceGroup('Progress: ' + e.title, PROGRESS, ans.rating, function (v) { ans.rating = v; refreshMissing(); }, ro, 'scale'),
+        (function () { var bar = h('div', { class: 'ratebar' }, [h('i', { style: 'width:' + ((ans.rating || 0) / 5 * 100) + '%' })]); return bar; })(),
+        choiceGroup('Progress: ' + e.title, PROGRESS, ans.rating, function (v) { ans.rating = v; refreshMissing(); render(); }, ro, 'scale'),
         textBox('Progress comments or evidence', ans.comment, function (v) { ans.comment = v; }, ro, null, 2),
         feedbackBlock(r, r.fb.exp[e.id])
       ]);
@@ -501,7 +570,7 @@
     }
 
     refreshMissing();
-    return h('div', { class: 'narrow' }, [head, intro].concat(cards, [missingBox, editable ? h('div', { class: 'btn-row', style: 'margin-top:12px' }, [
+    return h('div', { class: 'narrow' }, [head, intro, sparkCard].filter(Boolean).concat(cards, [missingBox, editable ? h('div', { class: 'btn-row', style: 'margin-top:12px' }, [
       h('button', { class: 'btn', type: 'button', text: 'Save draft', onclick: function () { saveBtn.click(); } }),
       h('button', { class: 'btn primary', type: 'button', text: 'Submit', onclick: function () { submitBtn.click(); } })
     ]) : null]));
