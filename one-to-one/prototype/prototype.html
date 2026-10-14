@@ -15,9 +15,11 @@
 -->
 <style>
   .oto {
-    --navy: #1f3a5f; --navy-2: #2d527f; --ink: #1d2733; --muted: #5b6776; --line: #d9dee5;
-    --bg: #f4f6f9; --card: #ffffff; --green: #1e7a46; --green-bg: #e7f4ec; --amber: #8a5a00;
-    --amber-bg: #fff4d6; --red: #a4262c; --red-bg: #fde7e9; --blue-bg: #e8f0fa; --focus: #2b78d0;
+    --navy: #13516b; --navy-2: #1f7190; --ink: #16222c; --muted: #596674; --line: #d7dde4;
+    --bg: #eef3f6; --card: #ffffff; --green: #1e7a46; --green-bg: #e7f4ec; --amber: #8a5a00;
+    --amber-bg: #fff4d6; --red: #a4262c; --red-bg: #fde7e9; --blue-bg: #e7f0f6; --focus: #2b78d0;
+    --accent: #ef7d3a; --accent-2: #f4a35f; --accent-bg: #fdeadb; --accent-ink: #b7531a;
+    --teal-bg: #e4f3f3; --purple: #6a4fb0; --purple-bg: #efeaf8;
     font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif; font-size: 15px;
     line-height: 1.45; color: var(--ink); background: var(--bg); min-height: 100vh;
   }
@@ -25,11 +27,16 @@
   .oto .proto-bar { background: #3b3b3b; color: #fff; font-size: 13px; padding: 6px 16px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
   .oto .proto-bar .roles button { background: transparent; color: #fff; border: 1px solid #888; border-radius: 4px; padding: 3px 10px; margin-left: 6px; cursor: pointer; font-size: 13px; }
   .oto .proto-bar .roles button[aria-pressed="true"] { background: #fff; color: #222; border-color: #fff; }
-  .oto header.app { background: var(--navy); color: #fff; padding: 14px 16px; }
+  .oto header.app { background: linear-gradient(100deg, var(--navy), var(--navy-2)); color: #fff; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
   .oto header.app h1 { margin: 0; font-size: 20px; font-weight: 600; }
   .oto header.app p { margin: 2px 0 0; opacity: .85; font-size: 13px; }
-  .oto main { max-width: 1100px; margin: 0 auto; padding: 16px; }
-  .oto .narrow { max-width: 860px; margin: 0 auto; }
+  .oto header.app .nav { display: flex; gap: 8px; flex-wrap: wrap; }
+  .oto header.app .nav button { font: inherit; font-weight: 600; font-size: 13px; background: rgba(255,255,255,.14); color: #fff; border: 1px solid rgba(255,255,255,.35); border-radius: 20px; padding: 6px 14px; cursor: pointer; }
+  .oto header.app .nav button[aria-current="true"] { background: #fff; color: var(--navy); border-color: #fff; }
+  .oto main { max-width: 1480px; margin: 0 auto; padding: 16px 28px; }
+  .oto .narrow { max-width: 1440px; margin: 0 auto; }
+  .oto .qgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 14px; align-items: start; }
+  .oto .fullspan { grid-column: 1 / -1; }
   .oto .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin-bottom: 14px; }
   .oto .card h2 { font-size: 17px; margin: 0 0 4px; display: flex; gap: 10px; align-items: baseline; }
   .oto .qnum { flex: none; display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 13px; font-weight: 600; }
@@ -116,6 +123,83 @@
   .oto .ratebar > i { display:block; height:100%; background:var(--navy-2); transition:width .2s ease; }
   .oto .collapse-head { cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px; }
   .oto .collapse-head .tick { color: var(--green); font-weight:700; }
+
+  /* ---- engagement: mood, streak, wins, private notes, chat ---- */
+  .oto .pill { display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:700; padding:3px 10px; border-radius:14px; white-space:nowrap; }
+  .oto .pill.streak { background: var(--accent-bg); color: var(--accent-ink); }
+  .oto .pill.flame { font-size:13px; }
+  .oto .mood { display:flex; gap:8px; flex-wrap:wrap; }
+  .oto .mood button { font:inherit; cursor:pointer; border:1px solid #c2cad3; background:#fff; border-radius:10px; padding:8px 10px; min-width:78px; display:flex; flex-direction:column; align-items:center; gap:2px; transition:transform .08s ease; }
+  .oto .mood button:hover:not(:disabled) { transform:translateY(-2px); }
+  .oto .mood button .emo { font-size:22px; line-height:1; }
+  .oto .mood button .ml { font-size:11px; color:var(--muted); font-weight:600; }
+  .oto .mood button[aria-pressed="true"] { border-color:var(--navy); background:var(--teal-bg); box-shadow:inset 0 0 0 1px var(--navy); }
+  .oto .mood button:disabled { cursor:default; opacity:.9; }
+  .oto .accent-card { border-left:4px solid var(--accent); }
+  .oto .win-wall { display:flex; flex-direction:column; gap:6px; max-height:150px; overflow:auto; margin-top:8px; }
+  .oto .win-wall .w { background:var(--accent-bg); border-radius:6px; padding:6px 10px; font-size:13px; }
+  .oto .win-wall .w b { display:block; font-size:11px; color:var(--accent-ink); text-transform:uppercase; letter-spacing:.03em; }
+  .oto .notes-card { border-left:4px solid var(--purple); background:#fbfaff; }
+  .oto .lockline { font-size:12px; color:var(--purple); font-weight:600; display:flex; align-items:center; gap:5px; }
+
+  /* ---- appraisal tracker ---- */
+  .oto .appraise { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; }
+  .oto .gauge { border:1px solid var(--line); border-radius:8px; padding:12px; }
+  .oto .gauge .who { font-size:12px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.03em; }
+  .oto .gauge .score { font-size:30px; font-weight:800; color:var(--navy); line-height:1.1; }
+  .oto .gauge .score small { font-size:14px; color:var(--muted); font-weight:600; }
+  .oto .track { position:relative; height:12px; border-radius:7px; margin:10px 0 4px; background:linear-gradient(90deg,#e7b4b6 0%,#f0cf9a 32%,#bfe3cd 55%,#8ed3ab 100%); }
+  .oto .track > i { position:absolute; top:-3px; width:4px; height:18px; border-radius:2px; background:#1a2630; box-shadow:0 0 0 2px #fff; transform:translateX(-2px); }
+  .oto .track .end { position:absolute; font-size:10px; color:var(--muted); top:14px; }
+  .oto .band { display:inline-block; font-size:12px; font-weight:700; padding:2px 10px; border-radius:12px; }
+  .oto .band.b0 { background:var(--red-bg); color:var(--red); }
+  .oto .band.b1 { background:var(--amber-bg); color:var(--amber); }
+  .oto .band.b2 { background:var(--green-bg); color:var(--green); }
+  .oto .band.b3 { background:#dff0ff; color:#0b61a4; }
+  .oto .summ { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px; margin-top:12px; }
+  .oto .summ .s { border-radius:6px; padding:8px 10px; font-size:13px; }
+  .oto .summ .s.good { background:var(--green-bg); } .oto .summ .s.improve { background:var(--amber-bg); } .oto .summ .s.pos { background:var(--blue-bg); }
+  .oto .summ .s b { display:block; font-size:11px; text-transform:uppercase; letter-spacing:.03em; margin-bottom:2px; }
+  .oto details.howto { margin-top:10px; font-size:13px; } .oto details.howto summary { cursor:pointer; color:var(--navy); font-weight:600; }
+  .oto .bandtbl { width:100%; border-collapse:collapse; margin-top:6px; } .oto .bandtbl td { border-top:1px solid var(--line); padding:4px 8px; }
+  .oto .setrow { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:6px 0; }
+  .oto .setrow input { width:90px; }
+
+  /* ---- arcade ---- */
+  .oto .arcade-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; }
+  .oto .game { border:1px solid var(--line); border-radius:10px; padding:16px; background:var(--card); display:flex; flex-direction:column; gap:8px; }
+  .oto .game.soon { opacity:.6; }
+  .oto .game .gt { font-weight:700; font-size:16px; display:flex; align-items:center; gap:8px; }
+  .oto .game .gd { font-size:13px; color:var(--muted); flex:1; }
+  .oto .game .best { font-size:12px; font-weight:700; color:var(--accent-ink); }
+  .oto .reactor { position:relative; height:16px; border-radius:9px; background:#e6eaef; overflow:hidden; }
+  .oto .reactor > i { display:block; height:100%; width:0; background:linear-gradient(90deg,#b4690e,#2d7a46,#0a6b2d); transition:width .3s ease; }
+  .oto .reactor-lbl { font-size:12px; font-weight:700; margin-top:4px; }
+  .oto .play { border:1px solid var(--line); border-radius:10px; padding:16px; background:#fafcfd; margin-top:12px; }
+  .oto .rgauge { position:relative; height:26px; border-radius:13px; overflow:hidden; background:#e7b4b6; }
+  .oto .rgauge .green { position:absolute; top:0; bottom:0; background:rgba(46,122,70,.35); }
+  .oto .rgauge .needle { position:absolute; top:-3px; width:5px; height:32px; background:#16222c; border-radius:2px; transform:translateX(-2px); }
+  .oto .reaction { height:120px; border-radius:10px; display:grid; place-items:center; color:#fff; font-weight:700; font-size:18px; cursor:pointer; user-select:none; text-align:center; padding:10px; }
+  .oto .simon { display:grid; grid-template-columns:1fr 1fr; gap:10px; max-width:260px; }
+  .oto .simon button { height:70px; border-radius:10px; border:2px solid rgba(0,0,0,.1); cursor:pointer; opacity:.55; transition:opacity .12s; }
+  .oto .simon button.lit { opacity:1; }
+  .oto .simon .s0 { background:#2d7a46; } .oto .simon .s1 { background:#a4262c; } .oto .simon .s2 { background:#1f7190; } .oto .simon .s3 { background:#d9a300; }
+  .oto .wordle { display:grid; gap:5px; justify-content:center; }
+  .oto .wordle .row { display:grid; grid-template-columns:repeat(5,42px); gap:5px; }
+  .oto .wordle .cell { width:42px; height:42px; border:2px solid #cdd4dc; border-radius:5px; display:grid; place-items:center; font-weight:700; font-size:20px; text-transform:uppercase; }
+  .oto .wordle .cell.hit { background:#2d7a46; color:#fff; border-color:#2d7a46; }
+  .oto .wordle .cell.near { background:#d9a300; color:#fff; border-color:#d9a300; }
+  .oto .wordle .cell.miss { background:#7a828c; color:#fff; border-color:#7a828c; }
+  .oto .leader { width:100%; border-collapse:collapse; }
+  .oto .leader th { text-align:left; font-size:12px; color:var(--muted); padding:6px 8px; }
+  .oto .leader td { padding:6px 8px; border-top:1px solid var(--line); }
+  .oto .leader tr.me td { background:var(--teal-bg); font-weight:700; }
+  .oto .leader .rk { width:30px; font-weight:800; color:var(--accent-ink); }
+
+  /* ---- confetti ---- */
+  .oto .confetti { position:fixed; inset:0; pointer-events:none; z-index:70; overflow:hidden; }
+  .oto .confetti i { position:absolute; width:9px; height:14px; top:-20px; border-radius:2px; animation:otofall linear forwards; }
+  @keyframes otofall { to { transform:translateY(105vh) rotate(540deg); opacity:.9; } }
   @media (max-width: 700px) {
     .oto main { padding: 10px; }
     .oto table.grid thead { display: none; }
@@ -155,8 +239,34 @@
   ];
   var DEDICATED = FOLLOW[2];
   var YESNO = [{ value: 'Yes', title: 'Yes' }, { value: 'No', title: 'No' }];
+  var MOODS = [
+    { value: 1, emo: '🪫', label: 'Running low' },
+    { value: 2, emo: '😕', label: 'A bit flat' },
+    { value: 3, emo: '🙂', label: 'Steady' },
+    { value: 4, emo: '😀', label: 'Good' },
+    { value: 5, emo: '⚡', label: 'Full charge' }
+  ];
+  // Appraisal bands – Team-Leader editable defaults (see settings panel)
+  var SETTINGS = { bands: [
+    { max: 1.5, name: 'Not met', cls: 'b0' },
+    { max: 2.25, name: 'Partially met', cls: 'b1' },
+    { max: 4, name: 'Met', cls: 'b2' },
+    { max: 99, name: 'Exceeded', cls: 'b3' }
+  ] };
   var TODAY = '2026-11-24';            // fictional "today" for the prototype
   var ME = 'Alex Morgan';              // fictional technician shown in technician view
+  // Private, tech-only running notes, carried month to month (never shown to the TL).
+  var PRIVATE_NOTES = { 'Alex Morgan': 'Remember to ask about the supervisor course dates next month.\nChase the loan monitor return.' };
+  // Deliberately-shared arcade data – mocked. In production this is a SEPARATE list
+  // (read-all / write-own, opt-in, nickname only) that NEVER touches review data.
+  var LEADERBOARD = [
+    { who: 'ReactorRon', game: 'Steady the reactor', score: 9140 },
+    { who: 'Sparkz', game: 'Steady the reactor', score: 8720 },
+    { who: 'A.M. (you)', game: 'Steady the reactor', score: 8010, me: true },
+    { who: 'DungenessDan', game: 'Steady the reactor', score: 7650 },
+    { who: 'TurbineT', game: 'Steady the reactor', score: 6980 }
+  ];
+  var GAME_BEST = { reactor: 8010, reaction: 241, simon: 7 }; // ms for reaction (lower better)
 
   // ---------------- fictional data ----------------
   var MASTER_EXPECTATIONS = [
@@ -177,6 +287,7 @@
 
   function blankAnswers(snap) {
     return {
+      mood: null, win: '',
       q1: '', q2: { issue: '', impact: '', tried: '', support: '' },
       q3: null, q3c: '', q4: null, q4d: '', q5: null, q5d: '', q6: null, q6what: '', q6why: '', q7: '',
       q8: snap.map(function (e) { return { id: e.id, rating: null, comment: '' }; }),
@@ -186,6 +297,8 @@
 
   function sampleAnswers(snap, workload, follow, variant) {
     var a = blankAnswers(snap);
+    a.mood = variant === 1 ? 4 : 3;
+    a.win = variant === 1 ? 'Closed the outage survey backlog two days early.' : 'Covered a colleague\'s area all week with no checks missed.';
     a.q1 = variant === 1
       ? 'Closed out the outage survey backlog two days early.\nGood feedback from the shift team on the handover notes.'
       : 'Completed all routine checks on time and helped cover a colleague\'s area for a week.';
@@ -209,7 +322,7 @@
   }
 
   function emptyFeedback() {
-    return { q1: '', q2: '', q3: '', q4: '', q5: '', q6: '', q7: '', q9: '', overall: '', exp: {}, followOverride: '', meeting: '', actions: '', actionsDue: '', actionsStatus: 'None' };
+    return { q1: '', q2: '', q3: '', q4: '', q5: '', q6: '', q7: '', q9: '', overall: '', exp: {}, expRating: {}, followOverride: '', meeting: '', actions: '', actionsDue: '', actionsStatus: 'None' };
   }
 
   var nextId = 100;
@@ -254,7 +367,7 @@
         fb.q7 = 'Thanks, appreciated.';
         fb.q9 = 'Quick catch-up in the field next week.';
         fb.overall = 'A strong month. Keep the mentoring going.';
-        snap.forEach(function (e) { fb.exp[e.id] = 'Good progress – keep it up.'; });
+        snap.forEach(function (e, i) { fb.exp[e.id] = 'Good progress – keep it up.'; fb.expRating[e.id] = [4, 4, 3][i % 3]; });
         fb.actions = '• Book supervisor course – Alex – by 15/12';
         fb.actionsDue = '2026-12-15'; fb.actionsStatus = 'Open';
       } }),
@@ -266,6 +379,7 @@
     review('Taylor Reed', '2026-10', '2026-10-31', 'Completed', { submittedOn: '2026-10-24', answers: function (s) { return sampleAnswers(s, 5, DEDICATED, 1); } })
   ];
   var ACTIVE_TECHS = ['Alex Morgan', 'Sam Patel', 'Jordan Lee', 'Casey Brooks', 'Riley Evans', 'Taylor Reed'];
+  REVIEWS[1].chatRequested = true;   // demo: Sam Patel has asked for a chat this month
 
   // ---------------- small DOM helpers (text only, never HTML) ----------------
   var uid = 0;
@@ -322,8 +436,59 @@
       .sort(function (x, y) { return x.month < y.month ? -1 : 1; })
       .map(function (r) { return { month: r.month, score: r.answers.q3 }; });
   }
+  // consecutive on-time submissions, newest first. An in-progress Open month
+  // (still being filled in) is skipped rather than counted or treated as a break;
+  // a late or Closed month breaks the run.
+  function streakOf(tech) {
+    var months = REVIEWS.filter(function (r) { return r.tech === tech; })
+      .sort(function (x, y) { return x.month < y.month ? 1 : -1; });
+    var n = 0;
+    for (var i = 0; i < months.length; i++) {
+      var r = months[i];
+      if (r.state === 'Open') { continue; }
+      if ((r.state === 'Submitted' || r.state === 'Completed') && !r.late) { n += 1; } else { break; }
+    }
+    return n;
+  }
+  function winsFor(tech) {
+    return REVIEWS.filter(function (r) { return r.tech === tech && r.answers.win && r.answers.win.trim(); })
+      .sort(function (x, y) { return x.month < y.month ? 1 : -1; })
+      .map(function (r) { return { month: r.month, win: r.answers.win }; });
+  }
+  function avg(arr) { return arr.length ? arr.reduce(function (s, n) { return s + n; }, 0) / arr.length : null; }
+  function selfAvg(r) { return avg(r.answers.q8.filter(function (x) { return x.rating; }).map(function (x) { return x.rating; })); }
+  function mgrAvg(r) {
+    var vals = r.snapshot.map(function (e) { return r.fb.expRating[e.id]; }).filter(function (v) { return v; });
+    return vals.length ? avg(vals) : null;
+  }
+  function bandFor(score) {
+    if (score === null || score === undefined) { return null; }
+    for (var i = 0; i < SETTINGS.bands.length; i++) { if (score < SETTINGS.bands[i].max) { return SETTINGS.bands[i]; } }
+    return SETTINGS.bands[SETTINGS.bands.length - 1];
+  }
+  function confetti() {
+    var wrap = h('div', { class: 'confetti', 'aria-hidden': 'true' });
+    var cols = ['#ef7d3a', '#1f7190', '#2d7a46', '#d9a300', '#6a4fb0', '#a4262c'];
+    for (var i = 0; i < 90; i++) {
+      var p = h('i');
+      p.style.left = Math.random() * 100 + 'vw';
+      p.style.background = cols[i % cols.length];
+      p.style.animationDuration = (2.2 + Math.random() * 1.8) + 's';
+      p.style.animationDelay = (Math.random() * 0.5) + 's';
+      p.style.transform = 'rotate(' + (Math.random() * 360) + 'deg)';
+      wrap.appendChild(p);
+    }
+    root.appendChild(wrap);
+    setTimeout(function () { wrap.remove(); }, 4200);
+  }
 
   var root, live, state = { role: 'tech', view: 'tech', reviewId: null, tab: 'reviews', month: '2026-11', tech: '' };
+
+  // game timers – cleared whenever the view is rebuilt
+  var timers = [];
+  function timer(fn, ms) { var id = setInterval(fn, ms); timers.push(id); return id; }
+  function once(fn, ms) { var id = setTimeout(fn, ms); timers.push(id); return id; }
+  function clearTimers() { timers.forEach(function (id) { clearInterval(id); clearTimeout(id); }); timers = []; }
 
   function toast(msg, isErr) {
     var t = h('div', { class: 'toast' + (isErr ? ' err' : ''), role: 'status', text: msg });
@@ -408,6 +573,115 @@
     if (a.q6 !== 'Yes') { a.q6what = ''; a.q6why = ''; }
   }
 
+  // ---------------- shared engagement builders ----------------
+  function moodSelector(a, editable) {
+    var grp = h('div', { class: 'mood', role: 'group', 'aria-label': 'Energy check-in' });
+    MOODS.forEach(function (m) {
+      var b = h('button', { type: 'button', 'aria-pressed': a.mood === m.value ? 'true' : 'false', disabled: !editable },
+        [h('span', { class: 'emo', 'aria-hidden': 'true', text: m.emo }), h('span', { class: 'ml', text: m.label })]);
+      b.addEventListener('click', function () {
+        a.mood = (a.mood === m.value ? null : m.value);
+        Array.prototype.forEach.call(grp.children, function (c, idx) { c.setAttribute('aria-pressed', a.mood === MOODS[idx].value ? 'true' : 'false'); });
+      });
+      grp.appendChild(b);
+    });
+    return grp;
+  }
+  function moodCard(r, editable) {
+    return h('section', { class: 'card' }, [
+      h('h2', { text: '🔋 How\'s your energy this month?' }),
+      h('p', { class: 'hint', text: 'A quick check-in — optional. Your Team Leader can see this too, so they can support the team.' }),
+      moodSelector(r.answers, editable)
+    ]);
+  }
+  function gauge(whoLabel, score) {
+    if (score === null || score === undefined) {
+      return h('div', { class: 'gauge' }, [h('div', { class: 'who', text: whoLabel }), h('div', { class: 'muted', style: 'margin-top:8px', text: 'Not yet rated' })]);
+    }
+    var b = bandFor(score);
+    var pct = Math.max(0, Math.min(100, (score - 1) / 4 * 100));
+    return h('div', { class: 'gauge' }, [
+      h('div', { class: 'who', text: whoLabel }),
+      h('div', { class: 'score' }, [score.toFixed(1), h('small', { text: ' / 5' })]),
+      h('span', { class: 'band ' + b.cls, text: b.name }),
+      h('div', { class: 'track' }, [
+        h('i', { style: 'left:' + pct + '%' }),
+        h('span', { class: 'end', style: 'left:2px', text: '1' }),
+        h('span', { class: 'end', style: 'right:2px', text: '5' })
+      ])
+    ]);
+  }
+  function bandHowTo() {
+    return h('details', { class: 'howto' }, [
+      h('summary', { text: 'ⓘ How this is worked out' }),
+      h('p', { class: 'hint', style: 'margin:6px 0', text: 'Your 1–5 ratings across all active expectations are averaged, then matched to a band:' }),
+      h('table', { class: 'bandtbl' }, SETTINGS.bands.map(function (b, i) {
+        var range = i === 0 ? 'under ' + b.max
+          : (b.max >= 99 ? 'above ' + SETTINGS.bands[i - 1].max : SETTINGS.bands[i - 1].max + ' – ' + b.max);
+        return h('tr', null, [h('td', null, [h('span', { class: 'band ' + b.cls, text: b.name })]), h('td', { class: 'muted', text: range })]);
+      }))
+    ]);
+  }
+  function appraisalSummary(r) {
+    var rated = r.answers.q8.filter(function (x) { return x.rating; });
+    if (!rated.length) { return null; }
+    var titleOf = function (id) { var e = r.snapshot.find(function (s) { return s.id === id; }); return e ? e.title : ''; };
+    var best = rated.slice().sort(function (x, y) { return y.rating - x.rating; })[0];
+    var worst = rated.slice().sort(function (x, y) { return x.rating - y.rating; })[0];
+    var sa = selfAvg(r), b = bandFor(sa);
+    return h('div', { class: 'summ' }, [
+      h('div', { class: 's pos' }, [h('b', { text: 'Where you\'re at' }), 'Average ' + sa.toFixed(1) + '/5 — ' + b.name + '.']),
+      h('div', { class: 's good' }, [h('b', { text: 'Going well' }), titleOf(best.id)]),
+      h('div', { class: 's improve' }, [h('b', { text: 'To focus on' }), titleOf(worst.id)])
+    ]);
+  }
+  function appraisalCard(r, showMgr, selfLabel) {
+    var sa = selfAvg(r), ma = mgrAvg(r);
+    if (sa === null && ma === null) { return null; }
+    var gauges = [gauge(selfLabel || 'Your self-rating', sa)];
+    if (showMgr) { gauges.push(gauge('Line manager rating', ma)); }
+    return h('section', { class: 'card' }, [
+      h('h2', { text: '📈 Appraisal progress' }),
+      h('p', { class: 'hint', text: 'How your appraisal expectations are tracking, averaged across all of them.' }),
+      h('div', { class: 'appraise' }, gauges),
+      appraisalSummary(r),
+      bandHowTo()
+    ].filter(Boolean));
+  }
+  function winCard(r, tech, editable) {
+    var body = [editable
+      ? textBox(null, r.answers.win, function (v) { r.answers.win = v; }, false, 'One thing you\'re proud of this month', 2)
+      : h('div', { class: 'answer' + (r.answers.win ? '' : ' empty'), text: r.answers.win || '(none added)' })];
+    var past = winsFor(tech).filter(function (w) { return w.month !== r.month; });
+    if (past.length) {
+      body.push(h('div', { class: 'win-wall' }, past.map(function (w) {
+        return h('div', { class: 'w' }, [h('b', { text: monthLabel(w.month) }), w.win]);
+      })));
+    }
+    return h('section', { class: 'card accent-card' }, [
+      h('h2', { text: '🏅 Win of the month' }),
+      h('p', { class: 'hint', text: 'Log one thing you\'re proud of. It builds into your own wins wall — handy at appraisal time.' })
+    ].concat(body));
+  }
+  function notesCard(tech) {
+    return h('section', { class: 'card notes-card' }, [
+      h('h2', { text: '🔒 My private notes' }),
+      h('div', { class: 'lockline', text: '🔒 Only you can see these — never shared with your Team Leader. Carried over each month.' }),
+      textBox(null, PRIVATE_NOTES[tech] || '', function (v) { PRIVATE_NOTES[tech] = v; }, false, 'e.g. things to raise next time', 3)
+    ]);
+  }
+  function chatControl(r) {
+    if (r.chatRequested) {
+      return h('span', { style: 'display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap' }, [
+        h('span', { class: 'pill', style: 'background:var(--blue-bg);color:var(--navy)', text: '💬 Chat requested' }),
+        h('button', { class: 'btn', type: 'button', text: 'Cancel', onclick: function () { r.chatRequested = false; render(); } })
+      ]);
+    }
+    return h('button', { class: 'btn', type: 'button', text: '💬 Ask for a chat',
+      title: 'Quietly lets your Team Leader know you\'d like a face-to-face — you don\'t have to say why.',
+      onclick: function () { r.chatRequested = true; toast('Your Team Leader will see you\'d like a chat (prototype).'); render(); } });
+  }
+
   function techView() {
     var mine = REVIEWS.filter(function (r) { return r.tech === ME; }).sort(function (x, y) { return x.month < y.month ? 1 : -1; });
     var r = REVIEWS.find(function (x) { return x.id === state.reviewId; }) || mine[0];
@@ -448,7 +722,8 @@
       if (m.length) { toast('Please complete: ' + m.join(', '), true); missingBox.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
       confirmBox('Submit your 1-to-1?', "You won't be able to change it afterwards. Your Team Leader will be notified.", 'Submit', function () {
         clearHidden(a); r.state = 'Submitted'; r.submittedOn = TODAY; r.late = TODAY > r.due;
-        toast('Submitted – your Team Leader has been notified (prototype).');
+        confetti();
+        toast('🎉 Nice one — ' + monthLabel(r.month).split(' ')[0] + ' done! Your Team Leader has been notified (prototype).');
         render();
       });
     } });
@@ -471,16 +746,36 @@
       meterLbl.textContent = pr.pct === 100 ? 'All done — ready to submit ✓' : 'Your progress: ' + pr.done + ' of ' + pr.total + ' (' + pr.pct + '%)';
     }
 
+    var streak = streakOf(ME);
+    var streakPill = streak ? h('span', { class: 'pill streak flame', text: '🔥 ' + streak + ' month' + (streak === 1 ? '' : 's') + ' on time' }) : null;
     var head = h('div', { class: 'card sticky' }, [
       h('div', { class: 'status-bar' }, [
         h('div', null, [
-          h('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap' }, [h('strong', { text: 'Monthly 1-to-1' }), monthSel, chipFor(r), countdown]),
+          h('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap' }, [h('strong', { text: 'Monthly 1-to-1' }), monthSel, chipFor(r), countdown, streakPill]),
           h('div', { class: 'hint', style: 'margin:4px 0 0', text: 'Deadline: 23:59, ' + fmtLongDate(r.due) + (isOverdue(r) ? ' – overdue, but you can still submit' : '') })
         ]),
         editable ? h('div', { class: 'btn-row' }, [saveBtn, submitBtn]) : h('span', { class: 'muted', text: r.state === 'Completed' ? 'Read-only – feedback released' : 'Read-only' })
       ]),
       meterWrap
     ]);
+
+    // quick-actions row (editable only): copy last month + ask for a chat
+    var prior = mine.filter(function (x) { return x.month < r.month && x.state !== 'Open'; })[0];
+    var quickRow = editable ? h('div', { class: 'btn-row', style: 'margin-bottom:14px' }, [
+      prior ? h('button', { class: 'btn', type: 'button', text: '⟳ Same as last month',
+        title: 'Pre-fill with your ' + monthLabel(prior.month) + ' answers, then tweak what\'s changed.',
+        onclick: function () {
+          var pa = prior.answers;
+          a.mood = pa.mood; a.q1 = pa.q1;
+          a.q2 = { issue: pa.q2.issue, impact: pa.q2.impact, tried: pa.q2.tried, support: pa.q2.support };
+          a.q3 = pa.q3; a.q3c = pa.q3c; a.q4 = pa.q4; a.q4d = pa.q4d; a.q5 = pa.q5; a.q5d = pa.q5d;
+          a.q6 = pa.q6; a.q6what = pa.q6what; a.q6why = pa.q6why; a.q7 = pa.q7; a.q9 = pa.q9;
+          a.q8.forEach(function (x) { var p = pa.q8.find(function (y) { return y.id === x.id; }); if (p) { x.rating = p.rating; x.comment = p.comment; } });
+          toast('Copied your ' + monthLabel(prior.month) + ' answers — tweak anything that\'s changed (prototype).');
+          render();
+        } }) : null,
+      chatControl(r)
+    ]) : null;
 
     // Workload trend sparkline (the technician can see their own history)
     var wh = workloadHistory(ME);
@@ -561,7 +856,7 @@
     ]));
 
     if (r.released) {
-      cards.push(h('section', { class: 'card' }, [
+      cards.push(h('section', { class: 'card fullspan' }, [
         h('h2', { text: 'Overall feedback and agreed actions' }),
         h('div', { class: 'feedback' }, [h('b', { text: 'Overall' }), r.fb.overall || '—']),
         h('div', { class: 'feedback' }, [h('b', { text: 'Follow-up' }), followOf(r) || '—']),
@@ -570,7 +865,11 @@
     }
 
     refreshMissing();
-    return h('div', { class: 'narrow' }, [head, intro, sparkCard].filter(Boolean).concat(cards, [missingBox, editable ? h('div', { class: 'btn-row', style: 'margin-top:12px' }, [
+    var qgrid = h('div', { class: 'qgrid' }, cards);
+    var engageTop = h('div', { class: 'qgrid' }, [moodCard(r, editable), winCard(r, ME, editable)]);
+    var appraiseEl = appraisalCard(r, r.released);
+    var notesEl = notesCard(ME);
+    return h('div', { class: 'narrow' }, [head, quickRow, intro, sparkCard, engageTop, appraiseEl, qgrid].filter(Boolean).concat([notesEl, missingBox, editable ? h('div', { class: 'btn-row', style: 'margin-top:12px' }, [
       h('button', { class: 'btn', type: 'button', text: 'Save draft', onclick: function () { saveBtn.click(); } }),
       h('button', { class: 'btn primary', type: 'button', text: 'Submit', onclick: function () { submitBtn.click(); } })
     ]) : null]));
@@ -598,6 +897,7 @@
       { l: 'Completed', v: count(function (r) { return r.state === 'Completed'; }) },
       { l: 'Outstanding / overdue', v: count(function (r) { return r.state === 'Open'; }) + ' / ' + count(isOverdue), cls: count(isOverdue) ? 'bad' : '' },
       { l: 'Dedicated 1-to-1 requested', v: count(function (r) { return followOf(r) === DEDICATED; }), cls: 'alert' },
+      { l: 'Chats requested', v: count(function (r) { return r.chatRequested; }), cls: count(function (r) { return r.chatRequested; }) ? 'alert' : '' },
       { l: 'Open actions (overdue)', v: openActions.length + ' (' + openActions.filter(function (r) { return r.fb.actionsDue && r.fb.actionsDue < TODAY; }).length + ')' }
     ];
     var kpiRow = h('div', { class: 'kpis' }, kpis.map(function (k) {
@@ -639,7 +939,7 @@
           var f = followOf(r);
           return {
             req: f === DEDICATED,
-            cells: [r.tech, monthLabel(r.month), statusCell(r), r.submittedOn ? fmtDate(r.submittedOn) + (r.late ? ' (late)' : '') : '—',
+            cells: [r.chatRequested ? h('span', null, [r.tech, ' ', h('span', { title: 'Chat requested', text: '💬' })]) : r.tech, monthLabel(r.month), statusCell(r), r.submittedOn ? fmtDate(r.submittedOn) + (r.late ? ' (late)' : '') : '—',
               r.answers.q3 && r.state !== 'Open' ? String(r.answers.q3) + ' / 5' : '—',
               f === DEDICATED ? h('strong', { text: '1-to-1 requested' }) : (f ? f.replace(/\.$/, '') : '—'), openBtn(r)]
           };
@@ -673,6 +973,44 @@
     ]);
   }
 
+  function moodReadout(r) {
+    var m = MOODS.find(function (x) { return x.value === r.answers.mood; });
+    var streak = streakOf(r.tech);
+    return h('section', { class: 'card' }, [
+      h('h2', { text: '🔋 Technician check-in' }),
+      h('div', { style: 'display:flex;gap:22px;flex-wrap:wrap;align-items:center' }, [
+        h('div', null, [
+          h('div', { class: 'who', style: 'font-size:12px;color:var(--muted);font-weight:600', text: 'ENERGY THIS MONTH' }),
+          m ? h('div', { style: 'font-size:18px;margin-top:2px' }, [m.emo + ' ', m.label]) : h('div', { class: 'muted', style: 'margin-top:2px', text: 'Not shared' })
+        ]),
+        streak ? h('span', { class: 'pill streak flame', text: '🔥 ' + streak + ' month' + (streak === 1 ? '' : 's') + ' on time' }) : null,
+        r.chatRequested ? h('span', { class: 'pill', style: 'background:var(--blue-bg);color:var(--navy)', text: '💬 Has asked for a chat' }) : null
+      ])
+    ]);
+  }
+  function bandSettings() {
+    var rows = SETTINGS.bands.map(function (b, i) {
+      var nameInp = h('input', { type: 'text', value: b.name, style: 'width:150px', 'aria-label': 'Band name' });
+      nameInp.addEventListener('input', function () { b.name = nameInp.value; });
+      var row = [h('span', { class: 'band ' + b.cls, text: 'Band ' + (i + 1) })];
+      if (b.max < 99) {
+        var maxInp = h('input', { type: 'number', step: '0.05', min: '0', max: '5', value: String(b.max), 'aria-label': 'Upper threshold' });
+        maxInp.addEventListener('change', function () { var v = parseFloat(maxInp.value); if (!isNaN(v)) { b.max = v; render(); } });
+        row.push(h('span', { class: 'muted', text: 'up to' }), maxInp);
+      } else { row.push(h('span', { class: 'muted', text: 'top band (and above)' })); }
+      row.push(h('span', { class: 'muted', text: 'name:' }), nameInp);
+      return h('div', { class: 'setrow' }, row);
+    });
+    var reset = h('button', { class: 'btn', type: 'button', text: 'Reset to defaults', onclick: function () {
+      SETTINGS.bands = [{ max: 1.5, name: 'Not met', cls: 'b0' }, { max: 2.25, name: 'Partially met', cls: 'b1' }, { max: 4, name: 'Met', cls: 'b2' }, { max: 99, name: 'Exceeded', cls: 'b3' }];
+      render();
+    } });
+    return h('details', { class: 'howto', style: 'margin-top:10px' }, [
+      h('summary', { text: '⚙ Band settings (Team Leader)' }),
+      h('p', { class: 'hint', style: 'margin:6px 0', text: 'Adjust the average thresholds and band names. Applies across the tool; defaults shown.' })
+    ].concat(rows).concat([reset]));
+  }
+
   // ---------------- manager review ----------------
   function managerView() {
     var r = REVIEWS.find(function (x) { return x.id === state.reviewId; });
@@ -697,6 +1035,8 @@
         return h('div', { class: 'exp' }, [
           h('h3', { text: e.title }), h('p', { class: 'hint', text: e.measures + ' (' + e.year + ')' }),
           ans(hasAnswers ? (p ? p.title + ' – ' + p.desc : 'Not rated') + (x.comment ? '\n' + x.comment : '') : ''),
+          h('label', { class: 'field', text: 'Your rating (feeds the appraisal tracker)' }),
+          choiceGroup('Manager rating: ' + e.title, PROGRESS, fb.expRating[e.id], function (v) { fb.expRating[e.id] = v; render(); }, false, 'scale'),
           textBox('Your feedback', fb.exp[e.id], function (v) { fb.exp[e.id] = v; }, false, null, 2)
         ]);
       })),
@@ -744,6 +1084,13 @@
     ]);
 
     var f = followOf(r);
+    var appraiseEl = hasAnswers ? h('section', { class: 'card' }, [
+      h('h2', { text: '📈 Appraisal progress' }),
+      h('p', { class: 'hint', text: 'Technician self-rating vs your rating, averaged across all expectations. Rate each expectation below to populate your side.' }),
+      h('div', { class: 'appraise' }, [gauge('Technician self-rating', selfAvg(r)), gauge('Your (line manager) rating', mgrAvg(r))]),
+      bandHowTo(),
+      bandSettings()
+    ]) : null;
     return h('div', { class: 'narrow' }, [
       h('div', { class: 'card sticky' }, [
         h('div', { class: 'status-bar' }, [
@@ -752,13 +1099,184 @@
           actions
         ])
       ]),
+      r.chatRequested ? h('div', { class: 'banner info', text: '💬 ' + r.tech + ' has asked for a chat — no reason needed; arrange a catch-up.' }) : null,
       f === DEDICATED ? h('div', { class: 'banner amber', text: 'Dedicated 1-to-1 discussion requested' }) : null,
-      r.released ? h('div', { class: 'banner info', text: 'Feedback already released – any change you save is visible to the technician straight away. Record the reason in the correction log.' }) : null
-    ].concat(sections));
+      r.released ? h('div', { class: 'banner info', text: 'Feedback already released – any change you save is visible to the technician straight away. Record the reason in the correction log.' }) : null,
+      hasAnswers ? moodReadout(r) : null,
+      appraiseEl
+    ].filter(Boolean).concat(sections));
+  }
+
+  // ---------------- arcade ----------------
+  function reactorPowerCard() {
+    var r = REVIEWS.filter(function (x) { return x.tech === ME && x.state === 'Open'; })[0] || REVIEWS.filter(function (x) { return x.tech === ME; })[0];
+    var pct = r ? progressOf(r.answers).pct : 0;
+    var lbl = pct === 100 ? '⚛ REACTOR AT POWER' : (pct === 0 ? 'Reactor shut down' : 'Bringing reactor online… ' + pct + '%');
+    return h('section', { class: 'game' }, [
+      h('div', { class: 'gt' }, ['⚛ Reactor power-up']),
+      h('div', { class: 'gd', text: 'Your monthly 1-to-1 completion, shown as reactor power. Finish the form to reach full power.' }),
+      h('div', { class: 'reactor' }, [h('i', { style: 'width:' + pct + '%' })]),
+      h('div', { class: 'reactor-lbl', style: 'color:' + (pct === 100 ? 'var(--green)' : 'var(--muted)'), text: lbl })
+    ]);
+  }
+  function gameReactor() {
+    var p = 50, v = 0, holding = false, score = 0, t = 60, running = false, loopId, clockId;
+    var green = h('div', { class: 'green' }); green.style.left = '36%'; green.style.right = '28%';
+    var needle = h('div', { class: 'needle' });
+    var gauge = h('div', { class: 'rgauge' }, [green, needle]);
+    var scoreEl = h('b', { text: '0' }), timeEl = h('span', { text: '60' }), bestEl = h('span', { class: 'best', text: 'Best: ' + GAME_BEST.reactor });
+    function place() { needle.style.left = p + '%'; }
+    place();
+    function tick() {
+      v += holding ? -2.2 : 1.7; v *= 0.86; p += v;
+      if (p < 0) { p = 0; v = 0; } if (p > 100) { p = 100; v = 0; }
+      place();
+      if (p >= 34 && p <= 72) { score += 7; scoreEl.textContent = String(score); }
+    }
+    var holdBtn = h('button', { class: 'btn primary', type: 'button', text: 'Hold to lift ⬆', disabled: true });
+    ['mousedown', 'touchstart'].forEach(function (ev) { holdBtn.addEventListener(ev, function (e) { e.preventDefault(); holding = true; }); });
+    ['mouseup', 'mouseleave', 'touchend'].forEach(function (ev) { holdBtn.addEventListener(ev, function () { holding = false; }); });
+    function stop() {
+      running = false; clearInterval(loopId); clearInterval(clockId);
+      holdBtn.disabled = true; startBtn.disabled = false; startBtn.textContent = 'Play again';
+      if (score > GAME_BEST.reactor) { GAME_BEST.reactor = score; bestEl.textContent = 'Best: ' + score; toast('⚡ New high score: ' + score + '!'); }
+    }
+    function start() {
+      if (running) { return; }
+      running = true; p = 50; v = 0; score = 0; t = 60; scoreEl.textContent = '0'; timeEl.textContent = '60';
+      holdBtn.disabled = false; startBtn.disabled = true;
+      loopId = timer(tick, 45);
+      clockId = timer(function () { t -= 1; timeEl.textContent = String(t); if (t <= 0) { stop(); } }, 1000);
+    }
+    var startBtn = h('button', { class: 'btn', type: 'button', text: 'Start 60s', onclick: start });
+    return h('section', { class: 'game' }, [
+      h('div', { class: 'gt' }, ['⚛ Steady the reactor']),
+      h('div', { class: 'gd', text: 'Hold to lift the control rod and keep the needle in the green band for 60 seconds.' }),
+      gauge,
+      h('div', { style: 'display:flex;gap:16px;align-items:center;font-size:13px;flex-wrap:wrap' }, [h('span', null, ['Score: ', scoreEl]), h('span', null, ['Time: ', timeEl, 's']), bestEl]),
+      h('div', { class: 'btn-row' }, [startBtn, holdBtn])
+    ]);
+  }
+  function gameReaction() {
+    var box = h('div', { class: 'reaction', style: 'background:#7a828c', text: 'Click to start' });
+    var best = h('span', { class: 'best', text: 'Best: ' + GAME_BEST.reaction + ' ms' });
+    var waiting = false, ready = false, startT = 0, toId = null;
+    box.addEventListener('click', function () {
+      if (!waiting && !ready) {
+        waiting = true; box.style.background = '#a4262c'; box.textContent = 'Wait for green…';
+        toId = once(function () { ready = true; waiting = false; box.style.background = '#2d7a46'; box.textContent = 'TAP!'; startT = Date.now(); }, 900 + Math.random() * 2500);
+      } else if (waiting) {
+        waiting = false; clearTimeout(toId); box.style.background = '#8a5a00'; box.textContent = 'Too soon! Click to retry';
+      } else if (ready) {
+        var ms = Date.now() - startT; ready = false; box.style.background = '#7a828c'; box.textContent = ms + ' ms — click to retry';
+        if (ms < GAME_BEST.reaction) { GAME_BEST.reaction = ms; best.textContent = 'Best: ' + ms + ' ms'; toast('⚡ New best reaction: ' + ms + ' ms!'); }
+      }
+    });
+    return h('section', { class: 'game' }, [
+      h('div', { class: 'gt' }, ['⚡ Reaction test']),
+      h('div', { class: 'gd', text: 'When the panel turns green, tap as fast as you can. Lower is better.' }),
+      box, best
+    ]);
+  }
+  function gameSimon() {
+    var seq = [], pos = 0, accepting = false;
+    var lvlEl = h('b', { text: '0' }), bestEl = h('span', { class: 'best', text: 'Best: ' + GAME_BEST.simon });
+    function flash(i) { pads[i].classList.add('lit'); once(function () { pads[i].classList.remove('lit'); }, 240); }
+    var pads = [0, 1, 2, 3].map(function (i) {
+      var b = h('button', { class: 's' + i, type: 'button', 'aria-label': 'Pad ' + (i + 1) });
+      b.addEventListener('click', function () {
+        if (!accepting) { return; }
+        if (i === seq[pos]) {
+          pos += 1; flash(i);
+          if (pos === seq.length) { accepting = false; once(addStep, 650); }
+        } else {
+          accepting = false; var reached = seq.length - 1;
+          if (reached > GAME_BEST.simon) { GAME_BEST.simon = reached; bestEl.textContent = 'Best: ' + reached; }
+          toast('Oops — you reached level ' + reached + '.');
+        }
+      });
+      return b;
+    });
+    var grid = h('div', { class: 'simon' }, pads);
+    function playBack() {
+      accepting = false; var k = 0;
+      (function step() {
+        if (k >= seq.length) { accepting = true; pos = 0; return; }
+        pads[seq[k]].classList.add('lit');
+        once(function () { pads[seq[k]].classList.remove('lit'); k += 1; once(step, 170); }, 420);
+      })();
+    }
+    function addStep() { seq.push(Math.floor(Math.random() * 4)); lvlEl.textContent = String(seq.length); playBack(); }
+    var startBtn = h('button', { class: 'btn', type: 'button', text: 'Start', onclick: function () { seq = []; pos = 0; lvlEl.textContent = '0'; addStep(); } });
+    return h('section', { class: 'game' }, [
+      h('div', { class: 'gt' }, ['🧠 Sequence memory']),
+      h('div', { class: 'gd', text: 'Watch the pattern, then repeat it. It grows by one each round.' }),
+      grid,
+      h('div', { style: 'font-size:13px;display:flex;gap:16px;flex-wrap:wrap' }, ['Level: ', lvlEl, bestEl]),
+      h('div', { class: 'btn-row' }, [startBtn])
+    ]);
+  }
+  function gameWord() {
+    var ANSWER = 'STEAM', rows = [], guesses = 0, done = false;
+    var board = h('div', { class: 'wordle' });
+    function draw() {
+      board.textContent = '';
+      for (var r = 0; r < 6; r++) {
+        var rowEl = h('div', { class: 'row' }); var g = rows[r] || '';
+        for (var c = 0; c < 5; c++) {
+          var ch = g[c] || ''; var cls = 'cell';
+          if (g) { if (ANSWER[c] === ch) { cls += ' hit'; } else if (ANSWER.indexOf(ch) >= 0) { cls += ' near'; } else { cls += ' miss'; } }
+          rowEl.appendChild(h('div', { class: cls, text: ch }));
+        }
+        board.appendChild(rowEl);
+      }
+    }
+    draw();
+    var inp = h('input', { type: 'text', maxlength: '5', placeholder: '5 letters', style: 'text-transform:uppercase;width:150px' });
+    var msg = h('div', { class: 'hint' });
+    var goBtn = h('button', { class: 'btn', type: 'button', text: 'Guess', onclick: function () {
+      if (done) { return; }
+      var g = (inp.value || '').toUpperCase().replace(/[^A-Z]/g, '');
+      if (g.length !== 5) { msg.textContent = 'Enter 5 letters.'; return; }
+      rows.push(g); guesses += 1; inp.value = ''; draw();
+      if (g === ANSWER) { done = true; msg.textContent = 'Nice — got it in ' + guesses + '!'; confetti(); }
+      else if (guesses >= 6) { done = true; msg.textContent = 'Out of guesses — it was ' + ANSWER + '.'; }
+      else { msg.textContent = ''; }
+    } });
+    return h('section', { class: 'game' }, [
+      h('div', { class: 'gt' }, ['🔤 Daily word']),
+      h('div', { class: 'gd', text: 'Guess the 5-letter word. Green = right spot, amber = wrong spot.' }),
+      board,
+      h('div', { class: 'btn-row' }, [inp, goBtn]), msg
+    ]);
+  }
+  function leaderCard() {
+    var sorted = LEADERBOARD.slice().sort(function (x, y) { return y.score - x.score; });
+    return h('section', { class: 'card' }, [
+      h('h2', { text: '🏆 Leaderboard — Steady the reactor' }),
+      h('p', { class: 'hint', text: 'Opt-in and shown by nickname only. (Mocked for the prototype — in the real system scores live in a separate shared list that never touches your review data.)' }),
+      h('table', { class: 'leader' }, [
+        h('thead', null, h('tr', null, [h('th', { class: 'rk', text: '#' }), h('th', { text: 'Player' }), h('th', { text: 'Score' })])),
+        h('tbody', null, sorted.map(function (x, i) { return h('tr', { class: x.me ? 'me' : null }, [h('td', { class: 'rk', text: String(i + 1) }), h('td', { text: x.who }), h('td', { text: String(x.score) })]); }))
+      ])
+    ]);
+  }
+  function arcadeView() {
+    var soon = ['🃏 Memory match', '⌨ Typing speed', '🔧 Whack-the-fault', '🔢 2048', '🐍 Snake', '🧭 Steady-hand maze', '❓ Daily trivia'].map(function (name) {
+      return h('section', { class: 'game soon' }, [h('div', { class: 'gt' }, [name]), h('div', { class: 'gd', text: 'Coming soon' })]);
+    });
+    return h('div', { class: 'narrow' }, [
+      h('div', { class: 'banner info', text: '🎮 The Arcade — a bit of optional fun. Totally separate from your 1-to-1: game scores never mix with review data. The leaderboard is opt-in and shows a nickname only.' }),
+      h('div', { class: 'arcade-grid' }, [reactorPowerCard(), gameReactor(), gameReaction(), gameSimon(), gameWord()]),
+      leaderCard(),
+      h('h2', { style: 'margin:18px 0 8px', text: 'More coming soon' }),
+      h('div', { class: 'arcade-grid' }, soon)
+    ]);
   }
 
   // ---------------- shell ----------------
   function render() {
+    clearTimers();
     root.textContent = '';
     live = h('div', { class: 'sr', 'aria-live': 'polite', style: 'position:absolute;left:-9999px' });
     function roleBtn(role, label) {
@@ -770,12 +1288,22 @@
       h('span', { text: 'PROTOTYPE – fictional people and data. Not connected to SharePoint; nothing is saved. "Today" is ' + fmtDate(TODAY) + '.' }),
       h('span', { class: 'roles' }, ['View as:', roleBtn('tech', 'Technician (' + ME + ')'), roleBtn('tl', 'Team Leader')])
     ]));
+    function navBtn(view, label) {
+      var cur = state.view === view || (view === 'dash' && state.view === 'mgr');
+      return h('button', { type: 'button', 'aria-current': cur ? 'true' : 'false', text: label, onclick: function () {
+        state.view = view; if (view === 'dash') { state.reviewId = null; } render();
+      } });
+    }
+    var home = state.role === 'tech' ? navBtn('tech', 'My 1-to-1') : navBtn('dash', 'Dashboard');
     root.appendChild(h('header', { class: 'app' }, [
-      h('h1', { text: 'ESG Technician 1-to-1' }),
-      h('p', { text: state.role === 'tech' ? 'My monthly 1-to-1' : (state.view === 'mgr' ? 'Review and feedback' : 'Team Leader dashboard') })
+      h('div', null, [
+        h('h1', { text: 'ESG Technician 1-to-1' }),
+        h('p', { text: state.view === 'arcade' ? 'The Arcade' : (state.role === 'tech' ? 'My monthly 1-to-1' : (state.view === 'mgr' ? 'Review and feedback' : 'Team Leader dashboard')) })
+      ]),
+      h('div', { class: 'nav' }, [home, navBtn('arcade', '🎮 Arcade')])
     ]));
     var main = h('main');
-    main.appendChild(state.view === 'tech' ? techView() : state.view === 'mgr' ? managerView() : dashboardView());
+    main.appendChild(state.view === 'arcade' ? arcadeView() : state.view === 'tech' ? techView() : state.view === 'mgr' ? managerView() : dashboardView());
     root.appendChild(main);
     root.appendChild(live);
     window.scrollTo(0, 0);
