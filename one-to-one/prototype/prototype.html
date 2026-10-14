@@ -166,30 +166,48 @@
   .oto .setrow input { width:90px; }
 
   /* ---- arcade ---- */
-  .oto .arcade-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; }
+  .oto .arcade-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px; align-items:start; }
   .oto .game { border:1px solid var(--line); border-radius:10px; padding:16px; background:var(--card); display:flex; flex-direction:column; gap:8px; }
   .oto .game.soon { opacity:.6; }
+  .oto .game.wide { grid-column:1 / -1; }
   .oto .game .gt { font-weight:700; font-size:16px; display:flex; align-items:center; gap:8px; }
-  .oto .game .gd { font-size:13px; color:var(--muted); flex:1; }
+  .oto .game .gd { font-size:13px; color:var(--muted); }
   .oto .game .best { font-size:12px; font-weight:700; color:var(--accent-ink); }
-  .oto .reactor { position:relative; height:16px; border-radius:9px; background:#e6eaef; overflow:hidden; }
-  .oto .reactor > i { display:block; height:100%; width:0; background:linear-gradient(90deg,#b4690e,#2d7a46,#0a6b2d); transition:width .3s ease; }
-  .oto .reactor-lbl { font-size:12px; font-weight:700; margin-top:4px; }
-  .oto .play { border:1px solid var(--line); border-radius:10px; padding:16px; background:#fafcfd; margin-top:12px; }
-  .oto .rgauge { position:relative; height:26px; border-radius:13px; overflow:hidden; background:#e7b4b6; }
-  .oto .rgauge .green { position:absolute; top:0; bottom:0; background:rgba(46,122,70,.35); }
-  .oto .rgauge .needle { position:absolute; top:-3px; width:5px; height:32px; background:#16222c; border-radius:2px; transform:translateX(-2px); }
-  .oto .reaction { height:120px; border-radius:10px; display:grid; place-items:center; color:#fff; font-weight:700; font-size:18px; cursor:pointer; user-select:none; text-align:center; padding:10px; }
-  .oto .simon { display:grid; grid-template-columns:1fr 1fr; gap:10px; max-width:260px; }
-  .oto .simon button { height:70px; border-radius:10px; border:2px solid rgba(0,0,0,.1); cursor:pointer; opacity:.55; transition:opacity .12s; }
-  .oto .simon button.lit { opacity:1; }
-  .oto .simon .s0 { background:#2d7a46; } .oto .simon .s1 { background:#a4262c; } .oto .simon .s2 { background:#1f7190; } .oto .simon .s3 { background:#d9a300; }
-  .oto .wordle { display:grid; gap:5px; justify-content:center; }
-  .oto .wordle .row { display:grid; grid-template-columns:repeat(5,42px); gap:5px; }
-  .oto .wordle .cell { width:42px; height:42px; border:2px solid #cdd4dc; border-radius:5px; display:grid; place-items:center; font-weight:700; font-size:20px; text-transform:uppercase; }
-  .oto .wordle .cell.hit { background:#2d7a46; color:#fff; border-color:#2d7a46; }
-  .oto .wordle .cell.near { background:#d9a300; color:#fff; border-color:#d9a300; }
-  .oto .wordle .cell.miss { background:#7a828c; color:#fff; border-color:#7a828c; }
+  .oto .hu-hud { display:flex; gap:14px; align-items:center; flex-wrap:wrap; font-size:13px; }
+  .oto .hu-pill { font-size:12px; font-weight:700; padding:2px 9px; border-radius:12px; background:#eef1f5; }
+  .oto .hu-pill.time { background:var(--blue-bg); color:var(--navy); } .oto .hu-pill.time.low { background:var(--red-bg); color:var(--red); }
+  .oto .hu-pill.found { background:var(--green-bg); color:var(--green); }
+  /* big tappable reaction panel */
+  .oto .react-panel { height:120px; border-radius:10px; display:grid; place-items:center; color:#fff; font-weight:700; font-size:18px; cursor:pointer; user-select:none; text-align:center; padding:10px; }
+  /* flaggable lines (procedure, form, diff) */
+  .oto .hu-doc { border:1px solid var(--line); border-radius:8px; overflow:hidden; background:#fff; font-size:13px; }
+  .oto .hu-line { display:flex; gap:8px; padding:7px 10px; border-top:1px solid #eef1f5; cursor:pointer; align-items:flex-start; }
+  .oto .hu-doc .hu-line:first-child { border-top:none; }
+  .oto .hu-line:hover { background:#f5f8fb; }
+  .oto .hu-line .ix { flex:none; width:34px; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .oto .hu-line.flag { background:var(--amber-bg); box-shadow:inset 3px 0 0 var(--amber); }
+  .oto .hu-line.ok { background:var(--green-bg); box-shadow:inset 3px 0 0 var(--green); cursor:default; }
+  .oto .hu-line.bad { background:var(--red-bg); box-shadow:inset 3px 0 0 var(--red); cursor:default; }
+  .oto .hu-line.missed { background:#fff6e6; box-shadow:inset 3px 0 0 var(--amber); cursor:default; }
+  .oto .hu-line .why { color:var(--muted); font-style:italic; }
+  .oto .diffcols { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  /* typing game */
+  .oto .type-target { font-family:"Cascadia Code",Consolas,"Courier New",monospace; font-size:14px; line-height:1.7; background:#fff; border:1px solid var(--line); border-radius:8px; padding:10px 12px; white-space:pre-wrap; }
+  .oto .type-target .c { border-radius:2px; }
+  .oto .type-target .c.ok { background:#d6efde; color:#0a6b2d; }
+  .oto .type-target .c.bad { background:#f6d4d6; color:#a4262c; text-decoration:underline; }
+  .oto .type-target .c.cur { box-shadow:inset 0 -2px 0 var(--navy); }
+  .oto .type-in { width:100%; font-family:"Cascadia Code",Consolas,"Courier New",monospace; font-size:14px; border:1px solid #b9c2cd; border-radius:6px; padding:8px 10px; min-height:70px; resize:vertical; }
+  /* option buttons (three-way, transposition) */
+  .oto .opts { display:flex; gap:8px; flex-wrap:wrap; }
+  .oto .opt-btn { font:inherit; font-weight:700; border:1px solid #b9c2cd; background:#fff; border-radius:8px; padding:8px 14px; cursor:pointer; font-variant-numeric:tabular-nums; }
+  .oto .opt-btn:hover:not(:disabled) { border-color:var(--navy); background:var(--teal-bg); }
+  .oto .opt-btn.pick-ok { border-color:var(--green); background:var(--green-bg); color:var(--green); }
+  .oto .opt-btn.pick-bad { border-color:var(--red); background:var(--red-bg); color:var(--red); }
+  .oto .tagbig { font-family:Consolas,"Courier New",monospace; font-weight:800; font-size:30px; letter-spacing:2px; background:#16222c; color:#fff; border-radius:8px; padding:12px; text-align:center; }
+  .oto .msgbox { background:var(--blue-bg); border-left:4px solid var(--navy-2); border-radius:0 6px 6px 0; padding:10px 12px; font-size:14px; }
+  .oto .readback { display:grid; gap:8px; }
+  .oto .readback .fld { font-size:13px; } .oto .readback .fld .fl { font-weight:600; margin-bottom:3px; }
   .oto .leader { width:100%; border-collapse:collapse; }
   .oto .leader th { text-align:left; font-size:12px; color:var(--muted); padding:6px 8px; }
   .oto .leader td { padding:6px 8px; border-top:1px solid var(--line); }
@@ -259,14 +277,17 @@
   var PRIVATE_NOTES = { 'Alex Morgan': 'Remember to ask about the supervisor course dates next month.\nChase the loan monitor return.' };
   // Deliberately-shared arcade data – mocked. In production this is a SEPARATE list
   // (read-all / write-own, opt-in, nickname only) that NEVER touches review data.
+  // "This month's HU points" – a simple combined score across the games.
   var LEADERBOARD = [
-    { who: 'ReactorRon', game: 'Steady the reactor', score: 9140 },
-    { who: 'Sparkz', game: 'Steady the reactor', score: 8720 },
-    { who: 'A.M. (you)', game: 'Steady the reactor', score: 8010, me: true },
-    { who: 'DungenessDan', game: 'Steady the reactor', score: 7650 },
-    { who: 'TurbineT', game: 'Steady the reactor', score: 6980 }
+    { who: 'ReactorRon', game: 'Spot the mistake', score: 2140 },
+    { who: 'Sparkz', game: 'Transposition catcher', score: 1980 },
+    { who: 'A.M. (you)', game: 'Type the Safety Message', score: 1810, me: true },
+    { who: 'DungenessDan', game: 'Spot the difference', score: 1650 },
+    { who: 'TurbineT', game: 'Three-way comms', score: 1420 }
   ];
-  var GAME_BEST = { reactor: 8010, reaction: 241, simon: 7 }; // ms for reaction (lower better)
+  // personal bests (browser-stored in production): shutdown ms = lower better;
+  // typing = chars/sec; others = best score/finds.
+  var GAME_BEST = { shutdown: 241, typing: 0, mistake: 0, paperwork: 0, threeway: 0, transpose: 0, spotdiff: 0 };
 
   // ---------------- fictional data ----------------
   var MASTER_EXPECTATIONS = [
@@ -1108,152 +1129,376 @@
   }
 
   // ---------------- arcade ----------------
-  function reactorPowerCard() {
-    var r = REVIEWS.filter(function (x) { return x.tech === ME && x.state === 'Open'; })[0] || REVIEWS.filter(function (x) { return x.tech === ME; })[0];
-    var pct = r ? progressOf(r.answers).pct : 0;
-    var lbl = pct === 100 ? '⚛ REACTOR AT POWER' : (pct === 0 ? 'Reactor shut down' : 'Bringing reactor online… ' + pct + '%');
-    return h('section', { class: 'game' }, [
-      h('div', { class: 'gt' }, ['⚛ Reactor power-up']),
-      h('div', { class: 'gd', text: 'Your monthly 1-to-1 completion, shown as reactor power. Finish the form to reach full power.' }),
-      h('div', { class: 'reactor' }, [h('i', { style: 'width:' + pct + '%' })]),
-      h('div', { class: 'reactor-lbl', style: 'color:' + (pct === 100 ? 'var(--green)' : 'var(--muted)'), text: lbl })
-    ]);
+  // deterministic "daily" pick (prototype uses the fixed TODAY; production uses the client date)
+  function dailyIndex(len) {
+    var d = new Date(TODAY + 'T12:00:00');
+    var doy = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 86400000);
+    return ((doy % len) + len) % len;
   }
-  function gameReactor() {
-    var p = 50, v = 0, holding = false, score = 0, t = 60, running = false, loopId, clockId;
-    var green = h('div', { class: 'green' }); green.style.left = '36%'; green.style.right = '28%';
-    var needle = h('div', { class: 'needle' });
-    var gauge = h('div', { class: 'rgauge' }, [green, needle]);
-    var scoreEl = h('b', { text: '0' }), timeEl = h('span', { text: '60' }), bestEl = h('span', { class: 'best', text: 'Best: ' + GAME_BEST.reactor });
-    function place() { needle.style.left = p + '%'; }
-    place();
-    function tick() {
-      v += holding ? -2.2 : 1.7; v *= 0.86; p += v;
-      if (p < 0) { p = 0; v = 0; } if (p > 100) { p = 100; v = 0; }
-      place();
-      if (p >= 34 && p <= 72) { score += 7; scoreEl.textContent = String(score); }
-    }
-    var holdBtn = h('button', { class: 'btn primary', type: 'button', text: 'Hold to lift ⬆', disabled: true });
-    ['mousedown', 'touchstart'].forEach(function (ev) { holdBtn.addEventListener(ev, function (e) { e.preventDefault(); holding = true; }); });
-    ['mouseup', 'mouseleave', 'touchend'].forEach(function (ev) { holdBtn.addEventListener(ev, function () { holding = false; }); });
-    function stop() {
-      running = false; clearInterval(loopId); clearInterval(clockId);
-      holdBtn.disabled = true; startBtn.disabled = false; startBtn.textContent = 'Play again';
-      if (score > GAME_BEST.reactor) { GAME_BEST.reactor = score; bestEl.textContent = 'Best: ' + score; toast('⚡ New high score: ' + score + '!'); }
-    }
-    function start() {
-      if (running) { return; }
-      running = true; p = 50; v = 0; score = 0; t = 60; scoreEl.textContent = '0'; timeEl.textContent = '60';
-      holdBtn.disabled = false; startBtn.disabled = true;
-      loopId = timer(tick, 45);
-      clockId = timer(function () { t -= 1; timeEl.textContent = String(t); if (t <= 0) { stop(); } }, 1000);
-    }
-    var startBtn = h('button', { class: 'btn', type: 'button', text: 'Start 60s', onclick: start });
-    return h('section', { class: 'game' }, [
-      h('div', { class: 'gt' }, ['⚛ Steady the reactor']),
-      h('div', { class: 'gd', text: 'Hold to lift the control rod and keep the needle in the green band for 60 seconds.' }),
-      gauge,
-      h('div', { style: 'display:flex;gap:16px;align-items:center;font-size:13px;flex-wrap:wrap' }, [h('span', null, ['Score: ', scoreEl]), h('span', null, ['Time: ', timeEl, 's']), bestEl]),
-      h('div', { class: 'btn-row' }, [startBtn, holdBtn])
-    ]);
-  }
-  function gameReaction() {
-    var box = h('div', { class: 'reaction', style: 'background:#7a828c', text: 'Click to start' });
-    var best = h('span', { class: 'best', text: 'Best: ' + GAME_BEST.reaction + ' ms' });
+  function shuffle(a) { a = a.slice(); for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+
+  // ---- content banks (all hard-coded; nothing is fetched) ----
+  var SAFETY_MESSAGES = [
+    'Before starting any task, take a moment to stop and think. Confirm you have the correct procedure, the right tools, and the current revision. Check the tag number against the work order, not from memory. If anything does not match, stop and raise it; do not press on. Three-way communication prevents errors: the sender gives the instruction, the receiver repeats it back, and the sender confirms. When you record a reading, read the gauge twice and write exactly what you see. Sign and date every entry as you complete it, never at the end of the shift. A questioning attitude is a strength, not a weakness. If it does not feel right, it probably is not. Take the extra minute.',
+    'Good human performance is built from small habits repeated every day. Use self-checking on each critical step: point to the component, say what you expect, confirm it, then act. Keep your place in the procedure and tick each step as it is done. Do not rely on memory for values, settings, or tag numbers; check the document every time. Watch for error traps such as time pressure, distraction, fatigue, and overconfidence. When the pace rises, slow down rather than speed up. Report near misses honestly, because every one is a lesson that protects the next person. The goal is simple: finish the job right the first time, with nobody hurt and nothing damaged.',
+    'Paperwork is part of the job, not an afterthought. A missing signature, a blank reading, or the wrong date can undo hours of good work. Fill each field as you go, in ink, and write clearly enough for the next person to read. If a step does not apply, mark it as such; never leave it blank. Check that the revision on your copy matches the controlled version before you start. When you hand over, walk through what is done and what remains, face to face. Small errors on a form can hide large risks on the plant, so give the record the same care you give the task itself.'
+  ];
+  var PROCEDURES = [
+    { title: 'Isolation of pump P-204 for maintenance', items: [
+      { ix: '1', text: 'Confirm the work order matches the permit to work.', bad: false },
+      { ix: '2', text: 'Isolate the electrical supply and apply a danger lable.', bad: true, why: '"lable" is misspelt; it should be "label".' },
+      { ix: '3', text: 'Close suction valve SV-204 and discharge valve DV-204.', bad: false },
+      { ix: '5', text: 'Vent and drain the pump casing to the drain header.', bad: true, why: 'Numbering jumps from 3 to 5 — step 4 is missing.' },
+      { ix: '6', text: 'Confirm casing pressure reads 450 bar before breaking the joint.', bad: true, why: '450 bar is impossible after draining; it should read about 0 bar.' },
+      { ix: '7', text: 'Return the pump to service and remove all tags.', bad: true, why: 'Return to service belongs at the end, not during isolation — steps are out of order.' },
+      { ix: '8', text: 'Fit blanking spades to the open flanges.', bad: false },
+      { ix: '9', text: 'Second check carried out by: __________________', bad: true, why: 'No name, signature or date recorded for the second check.' },
+      { ix: '10', text: 'File the completed permit in the control room.', bad: false }
+    ] },
+    { title: 'Weekly gas detector calibration', items: [
+      { ix: '1', text: 'Check the calibration gas cylinder is in date.', bad: false },
+      { ix: '2', text: 'Record the cylinder concentration from the certificate.', bad: false },
+      { ix: '3', text: 'Connect the regulator and set flow to 0.5 litres per minute.', bad: false },
+      { ix: '4', text: 'Allow the reading to stablise before recording.', bad: true, why: '"stablise" is misspelt; it should be "stabilise".' },
+      { ix: '4', text: 'Record the detector reading against the known value.', bad: true, why: 'Two steps are both numbered 4 — duplicate numbering.' },
+      { ix: '6', text: 'Adjust the span so the reading matches 250% of the gas value.', bad: true, why: '250% is nonsensical; the reading should match 100% of the gas value.' },
+      { ix: '7', text: 'Disconnect the gas and allow the detector to return to zero.', bad: false },
+      { ix: '8', text: 'If the detector fails, return it to service and note it later.', bad: true, why: 'A failed detector must be removed from service, not returned to it.' },
+      { ix: '9', text: 'Calibration record signed by: __________________', bad: true, why: 'No name, signature or date has been recorded.' }
+    ] }
+  ];
+  var FORMS = [
+    { title: 'Daily plant round sheet — Unit 2', items: [
+      { label: 'Operator', value: 'J. Patel', bad: false },
+      { label: 'Date', value: '31/11/2026', bad: true, why: '31 November does not exist — invalid date.' },
+      { label: 'Round start time', value: '06:00', bad: false },
+      { label: 'Pump P-201 bearing temp', value: '', bad: true, why: 'Reading left blank.' },
+      { label: 'Tank T-5 level', value: '72%', bad: false },
+      { label: 'Transformer oil temp', value: '2,400 C', bad: true, why: '2,400 C is impossible — likely a decimal or units error.' },
+      { label: 'Fire panel checked', value: 'Yes', bad: false },
+      { label: 'Round completed time', value: '05:30', bad: true, why: 'Completed time is before the start time.' },
+      { label: 'Operator signature', value: '', bad: true, why: 'No signature recorded.' }
+    ] },
+    { title: 'Permit to work — hot work', items: [
+      { label: 'Permit number', value: 'HW-2026-0481', bad: false },
+      { label: 'Location', value: 'Turbine Hall, Bay 3', bad: false },
+      { label: 'Valid from', value: '14:00', bad: false },
+      { label: 'Valid to', value: '12:00', bad: true, why: 'End time is before the start time.' },
+      { label: 'Fire watch assigned', value: '', bad: true, why: 'Fire watch left blank for hot work.' },
+      { label: 'Gas test result', value: '0% LEL', bad: false },
+      { label: 'Gas test time', value: 'yesterday', bad: true, why: 'Not a valid time and may be out of date.' },
+      { label: 'Number of workers', value: '-2', bad: true, why: 'A negative number of workers is impossible.' },
+      { label: 'Receiver signature', value: '', bad: true, why: 'Receiver has not signed to accept the permit.' }
+    ] }
+  ];
+  var DIFFS = [
+    { title: 'Valve lineup — as-found vs required', items: [
+      { label: 'SV-204 suction', left: 'Open', right: 'Open', bad: false },
+      { label: 'DV-204 discharge', left: 'Closed', right: 'Open', bad: true, why: 'Discharge differs: Closed vs Open.' },
+      { label: 'Recirc RV-204', left: 'Auto', right: 'Auto', bad: false },
+      { label: 'Cooling CW-12', left: '25%', right: '52%', bad: true, why: 'Cooling flow differs: 25% vs 52%.' },
+      { label: 'Vent VV-3', left: 'Shut', right: 'Shut', bad: false },
+      { label: 'Pump P-204', left: 'Standby', right: 'Running', bad: true, why: 'Pump state differs: Standby vs Running.' },
+      { label: 'Equipment tag', left: 'P-204', right: 'P-240', bad: true, why: 'Tag number differs: P-204 vs P-240.' }
+    ] },
+    { title: 'Reading sheet — logged vs panel', items: [
+      { label: 'Reactor power', left: '96%', right: '96%', bad: false },
+      { label: 'Feed temp', left: '184 C', right: '148 C', bad: true, why: 'Feed temp differs: 184 vs 148.' },
+      { label: 'Drum level', left: '+30 mm', right: '+30 mm', bad: false },
+      { label: 'Gas circulator', left: '2 running', right: '3 running', bad: true, why: 'Circulators differ: 2 vs 3 running.' },
+      { label: 'CO2 pressure', left: '40 bar', right: '40 bar', bad: false },
+      { label: 'Loop ID', left: 'HX-308', right: 'HX-380', bad: true, why: 'Loop ID differs: HX-308 vs HX-380.' }
+    ] }
+  ];
+  var COMMS = [
+    { msg: 'Open valve CV-203 to 40 percent and confirm.', fields: [
+      { fl: 'Component', correct: 'CV-203', options: ['CV-203', 'CV-230', 'CB-203'] },
+      { fl: 'Action', correct: 'Open', options: ['Open', 'Close'] },
+      { fl: 'Value', correct: '40%', options: ['14%', '40%', '44%'] } ] },
+    { msg: 'Close breaker 2A-14 and verify indication.', fields: [
+      { fl: 'Component', correct: '2A-14', options: ['2A-14', '2A-41', '2B-14'] },
+      { fl: 'Action', correct: 'Close', options: ['Open', 'Close'] } ] },
+    { msg: 'Set pump P-6 to standby, not stop.', fields: [
+      { fl: 'Component', correct: 'P-6', options: ['P-6', 'P-9', 'B-6'] },
+      { fl: 'State', correct: 'Standby', options: ['Standby', 'Stop', 'Run'] } ] },
+    { msg: 'Record tank T-12 level as 65 percent.', fields: [
+      { fl: 'Component', correct: 'T-12', options: ['T-12', 'T-21', 'T-12A'] },
+      { fl: 'Value', correct: '65%', options: ['56%', '65%', '66%'] } ] },
+    { msg: 'Isolate heater HX-308 and tag it out.', fields: [
+      { fl: 'Component', correct: 'HX-308', options: ['HX-308', 'HX-380', 'HX-038'] },
+      { fl: 'Action', correct: 'Isolate', options: ['Isolate', 'Start'] } ] }
+  ];
+
+  // ---- 1. Shutdown the reactor (reaction; anticipation = fail) ----
+  function gameShutdown() {
+    var box = h('div', { class: 'react-panel', style: 'background:#7a828c', text: 'Click to arm SCRAM' });
+    var best = h('span', { class: 'best', text: 'Best: ' + GAME_BEST.shutdown + ' ms' });
     var waiting = false, ready = false, startT = 0, toId = null;
     box.addEventListener('click', function () {
       if (!waiting && !ready) {
-        waiting = true; box.style.background = '#a4262c'; box.textContent = 'Wait for green…';
-        toId = once(function () { ready = true; waiting = false; box.style.background = '#2d7a46'; box.textContent = 'TAP!'; startT = Date.now(); }, 900 + Math.random() * 2500);
+        waiting = true; box.style.background = '#a4262c'; box.textContent = 'WAIT — hold position…';
+        toId = once(function () { ready = true; waiting = false; box.style.background = '#2d7a46'; box.textContent = 'SCRAM NOW'; startT = Date.now(); }, 1000 + Math.random() * 2800);
       } else if (waiting) {
-        waiting = false; clearTimeout(toId); box.style.background = '#8a5a00'; box.textContent = 'Too soon! Click to retry';
+        waiting = false; clearTimeout(toId); box.style.background = '#8a5a00'; box.textContent = 'You anticipated — reset. Click to arm';
       } else if (ready) {
-        var ms = Date.now() - startT; ready = false; box.style.background = '#7a828c'; box.textContent = ms + ' ms — click to retry';
-        if (ms < GAME_BEST.reaction) { GAME_BEST.reaction = ms; best.textContent = 'Best: ' + ms + ' ms'; toast('⚡ New best reaction: ' + ms + ' ms!'); }
+        var ms = Date.now() - startT; ready = false; box.style.background = '#7a828c'; box.textContent = ms + ' ms — click to arm again';
+        if (ms < GAME_BEST.shutdown) { GAME_BEST.shutdown = ms; best.textContent = 'Best: ' + ms + ' ms'; toast('⚡ New best: ' + ms + ' ms!'); }
       }
     });
     return h('section', { class: 'game' }, [
-      h('div', { class: 'gt' }, ['⚡ Reaction test']),
-      h('div', { class: 'gd', text: 'When the panel turns green, tap as fast as you can. Lower is better.' }),
+      h('div', { class: 'gt' }, ['🛑 Shutdown the reactor']),
+      h('div', { class: 'gd', text: 'Hit SCRAM the instant the panel turns green. Tap during WAIT and you anticipated — reset. Lower is better.' }),
       box, best
     ]);
   }
-  function gameSimon() {
-    var seq = [], pos = 0, accepting = false;
-    var lvlEl = h('b', { text: '0' }), bestEl = h('span', { class: 'best', text: 'Best: ' + GAME_BEST.simon });
-    function flash(i) { pads[i].classList.add('lit'); once(function () { pads[i].classList.remove('lit'); }, 240); }
-    var pads = [0, 1, 2, 3].map(function (i) {
-      var b = h('button', { class: 's' + i, type: 'button', 'aria-label': 'Pad ' + (i + 1) });
-      b.addEventListener('click', function () {
-        if (!accepting) { return; }
-        if (i === seq[pos]) {
-          pos += 1; flash(i);
-          if (pos === seq.length) { accepting = false; once(addStep, 650); }
-        } else {
-          accepting = false; var reached = seq.length - 1;
-          if (reached > GAME_BEST.simon) { GAME_BEST.simon = reached; bestEl.textContent = 'Best: ' + reached; }
-          toast('Oops — you reached level ' + reached + '.');
-        }
-      });
-      return b;
-    });
-    var grid = h('div', { class: 'simon' }, pads);
-    function playBack() {
-      accepting = false; var k = 0;
-      (function step() {
-        if (k >= seq.length) { accepting = true; pos = 0; return; }
-        pads[seq[k]].classList.add('lit');
-        once(function () { pads[seq[k]].classList.remove('lit'); k += 1; once(step, 170); }, 420);
-      })();
+
+  // ---- 2. Type the Daily Safety Message (CPS + accuracy) ----
+  function gameTyping() {
+    var target = SAFETY_MESSAGES[dailyIndex(SAFETY_MESSAGES.length)];
+    var view = h('div', { class: 'type-target' });
+    var ta = h('textarea', { class: 'type-in', placeholder: 'Start typing to begin the clock…', spellcheck: 'false', autocapitalize: 'off', autocomplete: 'off', autocorrect: 'off' });
+    var hud = h('div', { class: 'hu-hud' });
+    var best = h('span', { class: 'best' });
+    var started = 0, done = false;
+    function setBest() { best.textContent = GAME_BEST.typing ? 'Best: ' + GAME_BEST.typing.toFixed(1) + ' cps' : 'Best: —'; }
+    setBest();
+    function paint() {
+      var v = ta.value, correct = 0;
+      view.textContent = '';
+      for (var i = 0; i < target.length; i++) {
+        var cls = 'c';
+        if (i < v.length) { if (v[i] === target[i]) { cls += ' ok'; correct += 1; } else { cls += ' bad'; } }
+        else if (i === v.length) { cls += ' cur'; }
+        view.appendChild(h('span', { class: cls, text: target[i] }));
+      }
+      return correct;
     }
-    function addStep() { seq.push(Math.floor(Math.random() * 4)); lvlEl.textContent = String(seq.length); playBack(); }
-    var startBtn = h('button', { class: 'btn', type: 'button', text: 'Start', onclick: function () { seq = []; pos = 0; lvlEl.textContent = '0'; addStep(); } });
-    return h('section', { class: 'game' }, [
-      h('div', { class: 'gt' }, ['🧠 Sequence memory']),
-      h('div', { class: 'gd', text: 'Watch the pattern, then repeat it. It grows by one each round.' }),
-      grid,
-      h('div', { style: 'font-size:13px;display:flex;gap:16px;flex-wrap:wrap' }, ['Level: ', lvlEl, bestEl]),
-      h('div', { class: 'btn-row' }, [startBtn])
+    paint();
+    ta.addEventListener('paste', function (e) { e.preventDefault(); });
+    ta.addEventListener('input', function () {
+      if (done) { return; }
+      if (!started && ta.value.length) { started = Date.now(); }
+      var correct = paint();
+      var secs = started ? (Date.now() - started) / 1000 : 0;
+      var cps = secs > 0 ? correct / secs : 0;
+      var acc = Math.round(correct / target.length * 100);
+      hud.textContent = '';
+      hud.appendChild(h('span', { class: 'hu-pill', text: cps.toFixed(1) + ' cps' }));
+      hud.appendChild(h('span', { class: 'hu-pill', text: acc + '% accurate' }));
+      if (ta.value.length >= target.length) {
+        done = true; ta.disabled = true;
+        var finalCps = correct / Math.max(0.5, secs);
+        if (finalCps > GAME_BEST.typing) { GAME_BEST.typing = finalCps; setBest(); toast('⚡ New best: ' + finalCps.toFixed(1) + ' cps!'); }
+        hud.appendChild(h('span', { class: 'hu-pill found', text: 'Done' }));
+        if (acc === 100) { confetti(); }
+      }
+    });
+    var reset = h('button', { class: 'btn', type: 'button', text: 'Reset', onclick: function () { ta.value = ''; ta.disabled = false; started = 0; done = false; hud.textContent = ''; paint(); ta.focus(); } });
+    return h('section', { class: 'game wide' }, [
+      h('div', { class: 'gt' }, ['⌨ Type the Daily Safety Message']),
+      h('div', { class: 'gd', text: 'Type it exactly — punctuation and capitals count. Score is characters per second with your accuracy.' }),
+      view, ta,
+      h('div', { class: 'hu-hud' }, [hud, best, reset])
     ]);
   }
-  function gameWord() {
-    var ANSWER = 'STEAM', rows = [], guesses = 0, done = false;
-    var board = h('div', { class: 'wordle' });
-    function draw() {
-      board.textContent = '';
-      for (var r = 0; r < 6; r++) {
-        var rowEl = h('div', { class: 'row' }); var g = rows[r] || '';
-        for (var c = 0; c < 5; c++) {
-          var ch = g[c] || ''; var cls = 'cell';
-          if (g) { if (ANSWER[c] === ch) { cls += ' hit'; } else if (ANSWER.indexOf(ch) >= 0) { cls += ' near'; } else { cls += ' miss'; } }
-          rowEl.appendChild(h('div', { class: cls, text: ch }));
-        }
-        board.appendChild(rowEl);
-      }
-    }
-    draw();
-    var inp = h('input', { type: 'text', maxlength: '5', placeholder: '5 letters', style: 'text-transform:uppercase;width:150px' });
+
+  // ---- shared "find the planted items against the clock" engine ----
+  function huFindGame(cfg) {
+    var data = cfg.pick();
+    var targets = data.items.filter(function (it) { return it.bad; }).length;
+    var found = 0, wrong = 0, running = false, over = false, left = cfg.seconds, clockId = null;
+    var foundPill = h('span', { class: 'hu-pill found' });
+    var timePill = h('span', { class: 'hu-pill time' });
     var msg = h('div', { class: 'hint' });
-    var goBtn = h('button', { class: 'btn', type: 'button', text: 'Guess', onclick: function () {
-      if (done) { return; }
-      var g = (inp.value || '').toUpperCase().replace(/[^A-Z]/g, '');
-      if (g.length !== 5) { msg.textContent = 'Enter 5 letters.'; return; }
-      rows.push(g); guesses += 1; inp.value = ''; draw();
-      if (g === ANSWER) { done = true; msg.textContent = 'Nice — got it in ' + guesses + '!'; confetti(); }
-      else if (guesses >= 6) { done = true; msg.textContent = 'Out of guesses — it was ' + ANSWER + '.'; }
-      else { msg.textContent = ''; }
+    var doc = h('div', { class: 'hu-doc' });
+    var lineEls = [];
+    function build() {
+      doc.textContent = ''; lineEls = [];
+      data.items.forEach(function (it) {
+        var el = h('div', { class: 'hu-line' }, cfg.render(it));
+        el.dataset.flag = '0';
+        el.addEventListener('click', function () {
+          if (!running || over) { return; }
+          if (el.dataset.flag === '1') { el.dataset.flag = '0'; el.classList.remove('flag'); if (it.bad) { found -= 1; } else { wrong -= 1; } }
+          else { el.dataset.flag = '1'; el.classList.add('flag'); if (it.bad) { found += 1; } else { wrong += 1; } }
+          foundPill.textContent = found + ' / ' + targets + ' found';
+          if (found === targets) { finish(true); }
+        });
+        lineEls.push(el); doc.appendChild(el);
+      });
+    }
+    function reveal() {
+      data.items.forEach(function (it, idx) {
+        var el = lineEls[idx]; el.classList.remove('flag');
+        if (it.bad) { el.classList.add(el.dataset.flag === '1' ? 'ok' : 'missed'); el.appendChild(h('span', { class: 'why', text: ' — ' + it.why })); }
+        else if (el.dataset.flag === '1') { el.classList.add('bad'); el.appendChild(h('span', { class: 'why', text: ' — not an error' })); }
+      });
+    }
+    function finish(won) {
+      running = false; over = true; clearInterval(clockId);
+      startBtn.disabled = false; startBtn.textContent = 'Play again';
+      if (won) {
+        var score = Math.max(0, 100 - wrong * 15 + left * 2);
+        if (score > GAME_BEST[cfg.bestKey]) { GAME_BEST[cfg.bestKey] = score; bestEl.textContent = 'Best: ' + score; }
+        msg.textContent = 'All ' + targets + ' found' + (wrong ? ' (' + wrong + ' wrong flag' + (wrong === 1 ? '' : 's') + ')' : '') + '! Score ' + score + '.';
+        confetti();
+      } else { msg.textContent = 'Time up — ' + found + ' of ' + targets + ' found.'; }
+      reveal();
+    }
+    function start() {
+      if (running) { return; }
+      running = true; over = false; found = 0; wrong = 0; left = cfg.seconds;
+      build();
+      foundPill.textContent = '0 / ' + targets + ' found'; timePill.textContent = cfg.seconds + 's'; timePill.classList.remove('low'); msg.textContent = '';
+      startBtn.disabled = true;
+      clockId = timer(function () { left -= 1; timePill.textContent = left + 's'; if (left <= 10) { timePill.classList.add('low'); } if (left <= 0) { finish(false); } }, 1000);
+    }
+    build();
+    var bestEl = h('span', { class: 'best', text: 'Best: ' + GAME_BEST[cfg.bestKey] });
+    var startBtn = h('button', { class: 'btn primary', type: 'button', text: 'Start ' + cfg.seconds + 's', onclick: start });
+    foundPill.textContent = '0 / ' + targets + ' found'; timePill.textContent = cfg.seconds + 's';
+    return h('section', { class: 'game wide' }, [
+      h('div', { class: 'gt' }, [cfg.emoji + ' ' + cfg.title]),
+      h('div', { class: 'gd', text: cfg.desc }),
+      h('div', { style: 'font-weight:600;font-size:13px', text: data.title || data.subtitle || '' }),
+      doc,
+      h('div', { class: 'hu-hud' }, [foundPill, timePill, bestEl]),
+      h('div', { class: 'btn-row' }, [startBtn]), msg
+    ]);
+  }
+
+  // ---- 3. Spot the mistake in the instruction ----
+  function gameMistake() {
+    return huFindGame({
+      emoji: '🔎', title: 'Spot the mistake', bestKey: 'mistake', seconds: 60,
+      desc: 'A numbered instruction with 5 planted errors — spelling, numbering, order, impossible values, missing sign-off. Tap all 5 before time runs out. Rotates daily.',
+      pick: function () { return PROCEDURES[dailyIndex(PROCEDURES.length)]; },
+      render: function (it) { return [h('span', { class: 'ix', text: it.ix }), h('span', null, it.text)]; }
+    });
+  }
+
+  // ---- 4. Spot the paperwork defect ----
+  function gamePaperwork() {
+    return huFindGame({
+      emoji: '📋', title: 'Spot the paperwork defect', bestKey: 'paperwork', seconds: 60,
+      desc: 'A completed record with defects — blanks, missing signatures, impossible dates/values, times out of order. Tap every defect. Rotates daily.',
+      pick: function () { return FORMS[dailyIndex(FORMS.length)]; },
+      render: function (it) { return [h('span', { class: 'ix', style: 'min-width:170px;font-weight:600;color:var(--ink)', text: it.label }), h('span', { class: it.value ? '' : 'muted', text: it.value || '(blank)' })]; }
+    });
+  }
+
+  // ---- 7. Spot the difference ----
+  function gameSpotDiff() {
+    return huFindGame({
+      emoji: '🔀', title: 'Spot the difference', bestKey: 'spotdiff', seconds: 50,
+      desc: 'Two copies of a lineup or reading sheet. Tap every row where the two columns do not match. A real verification / self-checking drill. Rotates daily.',
+      pick: function () { return DIFFS[dailyIndex(DIFFS.length)]; },
+      render: function (it) { return [
+        h('span', { class: 'ix', style: 'min-width:150px;font-weight:600;color:var(--ink)', text: it.label }),
+        h('span', { style: 'font-variant-numeric:tabular-nums' }, [it.left, h('span', { class: 'muted', text: '   vs   ' }), it.right])
+      ]; }
+    });
+  }
+
+  // ---- 5. Three-way communication ----
+  function gameThreeway() {
+    var idx = dailyIndex(COMMS.length), streak = 0;
+    var msgBox = h('div', { class: 'msgbox' });
+    var fieldWrap = h('div', { class: 'readback' });
+    var result = h('div', { class: 'hint' });
+    var streakPill = h('span', { class: 'hu-pill found', text: 'Streak: 0' });
+    var bestEl = h('span', { class: 'best', text: 'Best: ' + GAME_BEST.threeway });
+    var picks = {}, confirmBtn, nextBtn;
+    function round() {
+      var r = COMMS[idx % COMMS.length]; picks = {}; result.textContent = '';
+      msgBox.textContent = 'Sender: "' + r.msg + '"';
+      fieldWrap.textContent = '';
+      r.fields.forEach(function (f, fi) {
+        var opts = h('div', { class: 'opts' }, shuffle(f.options).map(function (o) {
+          var b = h('button', { class: 'opt-btn', type: 'button', text: o, onclick: function () {
+            if (b.disabled) { return; }
+            picks[fi] = o;
+            Array.prototype.forEach.call(opts.children, function (c) { c.classList.remove('pick-ok'); });
+            b.classList.add('pick-ok');
+          } });
+          return b;
+        }));
+        fieldWrap.appendChild(h('div', { class: 'fld' }, [h('div', { class: 'fl', text: 'Read back the ' + f.fl + ':' }), opts]));
+      });
+      confirmBtn.disabled = false; nextBtn.disabled = true;
+    }
+    confirmBtn = h('button', { class: 'btn primary', type: 'button', text: 'Confirm read-back', onclick: function () {
+      var r = COMMS[idx % COMMS.length];
+      if (Object.keys(picks).length < r.fields.length) { result.textContent = 'Read back every field first.'; return; }
+      var allOk = r.fields.every(function (f, fi) { return picks[fi] === f.correct; });
+      if (allOk) { streak += 1; streakPill.textContent = 'Streak: ' + streak; if (streak > GAME_BEST.threeway) { GAME_BEST.threeway = streak; bestEl.textContent = 'Best: ' + streak; } result.textContent = 'Sender confirms: correct. ✔'; }
+      else { result.textContent = 'Mismatch — sender does not confirm. Streak reset. (Needed: ' + r.fields.map(function (f) { return f.correct; }).join(', ') + ')'; streak = 0; streakPill.textContent = 'Streak: 0'; }
+      confirmBtn.disabled = true; nextBtn.disabled = false;
     } });
+    nextBtn = h('button', { class: 'btn', type: 'button', text: 'Next', disabled: true, onclick: function () { idx += 1; round(); } });
+    round();
+    return h('section', { class: 'game wide' }, [
+      h('div', { class: 'gt' }, ['🗣 Three-way communication']),
+      h('div', { class: 'gd', text: 'Read the instruction back exactly — watch for transposed tags and values. Build the longest streak of correct read-backs.' }),
+      msgBox, fieldWrap,
+      h('div', { class: 'hu-hud' }, [streakPill, bestEl]),
+      h('div', { class: 'btn-row' }, [confirmBtn, nextBtn]), result
+    ]);
+  }
+
+  // ---- 6. Transposition catcher ----
+  function gameTranspose() {
+    function makeRound() {
+      var pre = ['1V-', '2P-', 'HX-', 'CV-', '3T-', 'LT-'][Math.floor(Math.random() * 6)];
+      var digits = String(1000 + Math.floor(Math.random() * 9000));
+      var correct = pre + digits, set = {}; set[correct] = true; var opts = [correct], tries = 0;
+      while (opts.length < 5 && tries < 60) {
+        tries += 1; var d = digits.split(''); var i = Math.floor(Math.random() * 4), j = Math.floor(Math.random() * 4);
+        if (i === j) { j = (j + 1) % 4; }
+        var t = d[i]; d[i] = d[j]; d[j] = t; var cand = pre + d.join('');
+        if (!set[cand]) { set[cand] = true; opts.push(cand); }
+      }
+      return { correct: correct, options: shuffle(opts) };
+    }
+    var tag = h('div', { class: 'tagbig' });
+    var opts = h('div', { class: 'opts' });
+    var hud = h('div', { class: 'hu-hud' });
+    var scorePill = h('span', { class: 'hu-pill found', text: 'Score: 0' });
+    var timePill = h('span', { class: 'hu-pill time', text: '30s' });
+    var bestEl = h('span', { class: 'best', text: 'Best: ' + GAME_BEST.transpose });
+    hud.appendChild(scorePill); hud.appendChild(timePill); hud.appendChild(bestEl);
+    var score = 0, left = 30, running = false, clockId = null, cur = null;
+    function next() {
+      cur = makeRound(); tag.textContent = cur.correct; opts.textContent = '';
+      cur.options.forEach(function (o) {
+        var b = h('button', { class: 'opt-btn', type: 'button', text: o, onclick: function () {
+          if (!running) { return; }
+          if (o === cur.correct) { score += 1; scorePill.textContent = 'Score: ' + score; next(); }
+          else { b.classList.add('pick-bad'); score = Math.max(0, score - 1); scorePill.textContent = 'Score: ' + score; }
+        } });
+        opts.appendChild(b);
+      });
+    }
+    function start() {
+      if (running) { return; }
+      running = true; score = 0; left = 30; scorePill.textContent = 'Score: 0'; timePill.textContent = '30s'; timePill.classList.remove('low');
+      startBtn.disabled = true; next();
+      clockId = timer(function () { left -= 1; timePill.textContent = left + 's'; if (left <= 10) { timePill.classList.add('low'); }
+        if (left <= 0) { running = false; clearInterval(clockId); startBtn.disabled = false; startBtn.textContent = 'Play again'; opts.textContent = '';
+          if (score > GAME_BEST.transpose) { GAME_BEST.transpose = score; bestEl.textContent = 'Best: ' + score; toast('⚡ New best: ' + score + '!'); } } }, 1000);
+    }
+    var startBtn = h('button', { class: 'btn primary', type: 'button', text: 'Start 30s', onclick: start });
     return h('section', { class: 'game' }, [
-      h('div', { class: 'gt' }, ['🔤 Daily word']),
-      h('div', { class: 'gd', text: 'Guess the 5-letter word. Green = right spot, amber = wrong spot.' }),
-      board,
-      h('div', { class: 'btn-row' }, [inp, goBtn]), msg
+      h('div', { class: 'gt' }, ['🔢 Transposition catcher']),
+      h('div', { class: 'gd', text: 'The exact tag is shown at the top. Pick the matching one below — the others are transposed. As many as you can in 30 seconds.' }),
+      tag, opts, hud,
+      h('div', { class: 'btn-row' }, [startBtn])
     ]);
   }
   function leaderCard() {
     var sorted = LEADERBOARD.slice().sort(function (x, y) { return y.score - x.score; });
     return h('section', { class: 'card' }, [
-      h('h2', { text: '🏆 Leaderboard — Steady the reactor' }),
+      h('h2', { text: '🏆 This month\'s HU leaderboard' }),
       h('p', { class: 'hint', text: 'Opt-in and shown by nickname only. (Mocked for the prototype — in the real system scores live in a separate shared list that never touches your review data.)' }),
       h('table', { class: 'leader' }, [
         h('thead', null, h('tr', null, [h('th', { class: 'rk', text: '#' }), h('th', { text: 'Player' }), h('th', { text: 'Score' })])),
@@ -1262,14 +1507,18 @@
     ]);
   }
   function arcadeView() {
-    var soon = ['🃏 Memory match', '⌨ Typing speed', '🔧 Whack-the-fault', '🔢 2048', '🐍 Snake', '🧭 Steady-hand maze', '❓ Daily trivia'].map(function (name) {
-      return h('section', { class: 'game soon' }, [h('div', { class: 'gt' }, [name]), h('div', { class: 'gd', text: 'Coming soon' })]);
+    var soon = [
+      ['👁 Reading verification', 'Read the gauge, type the exact value.'],
+      ['🪤 Error-trap spotter', 'Match the scenario to its error precursor.'],
+      ['✅ Place-keeping', 'Tick each step in order — don\'t skip, resist the distractor.']
+    ].map(function (g) {
+      return h('section', { class: 'game soon' }, [h('div', { class: 'gt' }, [g[0]]), h('div', { class: 'gd', text: g[1] })]);
     });
     return h('div', { class: 'narrow' }, [
-      h('div', { class: 'banner info', text: '🎮 The Arcade — a bit of optional fun. Totally separate from your 1-to-1: game scores never mix with review data. The leaderboard is opt-in and shows a nickname only.' }),
-      h('div', { class: 'arcade-grid' }, [reactorPowerCard(), gameReactor(), gameReaction(), gameSimon(), gameWord()]),
+      h('div', { class: 'banner info', text: '🎮 The HU Arcade — quick games that sharpen the Human Performance skills we use on the plant. Optional fun, totally separate from your 1-to-1: game scores never mix with review data. The leaderboard is opt-in and shows a nickname only.' }),
+      h('div', { class: 'arcade-grid' }, [gameShutdown(), gameTranspose(), gameThreeway(), gameTyping(), gameMistake(), gamePaperwork(), gameSpotDiff()]),
       leaderCard(),
-      h('h2', { style: 'margin:18px 0 8px', text: 'More coming soon' }),
+      h('h2', { style: 'margin:18px 0 8px', text: 'More HU games coming soon' }),
       h('div', { class: 'arcade-grid' }, soon)
     ]);
   }
