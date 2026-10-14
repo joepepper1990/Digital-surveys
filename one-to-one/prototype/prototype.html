@@ -5,175 +5,242 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ESG 1-to-1 prototype</title>
 <!--
-  ESG Monthly Technician 1-to-1 - VISUAL PROTOTYPE ONLY.
+  ESG Monthly Technician 1-to-1 - VISUAL PROTOTYPE ONLY (desktop).
   Entirely fictional people and data. Not connected to SharePoint; nothing is saved.
-  Not production code and not for upload to Welcome. Open this file in any browser.
+  Not production code and not for upload to Welcome.
 
   Written so the later production frontend can reuse the structure inside Welcome:
   all styles are scoped under .oto, all text is set with textContent (never as HTML),
-  there are no external resources, and the code sits in one mount function.
+  charts are built as SVG nodes, there are no external resources, and the code sits
+  in one mount function.
 -->
 <style>
   .oto {
-    --navy: #13516b; --navy-2: #1f7190; --ink: #16222c; --muted: #596674; --line: #d7dde4;
-    --bg: #eef3f6; --card: #ffffff; --green: #1e7a46; --green-bg: #e7f4ec; --amber: #8a5a00;
-    --amber-bg: #fff4d6; --red: #a4262c; --red-bg: #fde7e9; --blue-bg: #e7f0f6; --focus: #2b78d0;
-    --accent: #ef7d3a; --accent-2: #f4a35f; --accent-bg: #fdeadb; --accent-ink: #b7531a;
-    --teal-bg: #e4f3f3; --purple: #6a4fb0; --purple-bg: #efeaf8;
-    font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif; font-size: 15px;
-    line-height: 1.45; color: var(--ink); background: var(--bg); min-height: 100vh;
+    --navy: #13516b; --navy-2: #1f7190; --ink: #16222c; --muted: #5b6774; --line: #d9dfe5;
+    --bg: #eef2f5; --card: #ffffff; --soft: #f6f8fa;
+    --green: #1b7a45; --green-bg: #e6f3eb; --amber: #8a5a00; --amber-bg: #fff3d6;
+    --red: #a4262c; --red-bg: #fde8e9; --blue-bg: #e7f0f6; --focus: #2b78d0;
+    --accent: #ef7d3a; --accent-bg: #fdeadb; --accent-ink: #b7531a; --purple: #6a4fb0;
+    --self: #2a78d6; --tl: #eb6834;
+    font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif; font-size: 14px;
+    line-height: 1.45; color: var(--ink); background: var(--bg); min-height: 100vh; min-width: 1100px;
   }
   .oto * { box-sizing: border-box; }
-  .oto .proto-bar { background: #3b3b3b; color: #fff; font-size: 13px; padding: 6px 16px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
-  .oto .proto-bar .roles button { background: transparent; color: #fff; border: 1px solid #888; border-radius: 4px; padding: 3px 10px; margin-left: 6px; cursor: pointer; font-size: 13px; }
+  .oto h1, .oto h2, .oto h3 { margin: 0; }
+
+  /* ---------- shell ---------- */
+  .oto .proto-bar { background: #3b3b3b; color: #fff; font-size: 12px; padding: 5px 28px; display: flex; gap: 16px; align-items: center; justify-content: space-between; }
+  .oto .proto-bar .roles button { background: transparent; color: #fff; border: 1px solid #888; border-radius: 4px; padding: 2px 10px; margin-left: 6px; cursor: pointer; font-size: 12px; }
   .oto .proto-bar .roles button[aria-pressed="true"] { background: #fff; color: #222; border-color: #fff; }
-  .oto header.app { background: linear-gradient(100deg, var(--navy), var(--navy-2)); color: #fff; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
-  .oto header.app h1 { margin: 0; font-size: 20px; font-weight: 600; }
-  .oto header.app p { margin: 2px 0 0; opacity: .85; font-size: 13px; }
-  .oto main { max-width: 1480px; margin: 0 auto; padding: 16px 28px; }
-  .oto .narrow { max-width: 1440px; margin: 0 auto; }
-  .oto .qgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); gap: 14px; align-items: start; }
-  .oto .fullspan { grid-column: 1 / -1; }
-  .oto .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin-bottom: 14px; }
-  .oto .card h2 { font-size: 17px; margin: 0 0 4px; display: flex; gap: 10px; align-items: baseline; }
-  .oto .qnum { flex: none; display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 13px; font-weight: 600; }
-  .oto .hint { color: var(--muted); font-size: 13px; margin: 2px 0 10px; }
-  .oto .guidance { background: var(--blue-bg); border-left: 4px solid var(--navy-2); padding: 8px 12px; font-size: 13px; margin: 6px 0 10px; border-radius: 0 6px 6px 0; }
-  .oto label.field { display: block; font-weight: 600; font-size: 14px; margin: 10px 0 4px; }
-  .oto textarea, .oto select, .oto input[type="date"] { width: 100%; font: inherit; color: inherit; border: 1px solid #b9c2cd; border-radius: 6px; padding: 8px 10px; background: #fff; }
-  .oto textarea { min-height: 70px; resize: vertical; }
-  .oto textarea:disabled, .oto select:disabled { background: #f1f3f6; color: #333; border-color: var(--line); }
-  .oto :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
-  .oto .choices { display: grid; gap: 8px; }
-  .oto .choices.inline { grid-template-columns: repeat(auto-fit, minmax(110px, max-content)); }
-  .oto .choices.scale { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-  .oto .choice { display: flex; flex-direction: column; gap: 2px; border: 1px solid #b9c2cd; border-radius: 6px; padding: 8px 12px; cursor: pointer; background: #fff; position: relative; }
-  .oto .choice input { position: absolute; opacity: 0; pointer-events: none; }
-  .oto .choice .choice-title { font-weight: 600; }
-  .oto .choice .choice-desc { font-size: 13px; color: var(--muted); }
-  .oto .choice:has(input:checked) { border-color: var(--navy); background: var(--blue-bg); box-shadow: inset 0 0 0 1px var(--navy); }
-  .oto .choice:has(input:focus-visible) { outline: 3px solid var(--focus); outline-offset: 2px; }
-  .oto .choice:has(input:disabled) { cursor: default; opacity: .8; }
-  .oto .btn { font: inherit; font-weight: 600; border-radius: 6px; padding: 8px 16px; border: 1px solid var(--navy); background: #fff; color: var(--navy); cursor: pointer; }
+  .oto header.app { background: linear-gradient(100deg, var(--navy), var(--navy-2)); color: #fff; padding: 0 28px; display: flex; align-items: stretch; gap: 32px; height: 58px; }
+  .oto header.app .brand { display: flex; flex-direction: column; justify-content: center; }
+  .oto header.app h1 { font-size: 18px; font-weight: 650; }
+  .oto header.app .brand span { font-size: 12px; opacity: .8; }
+  .oto header.app nav { display: flex; align-items: stretch; gap: 2px; }
+  .oto header.app nav button { font: inherit; font-weight: 600; background: none; border: none; color: rgba(255,255,255,.78); padding: 0 16px; cursor: pointer; border-bottom: 3px solid transparent; }
+  .oto header.app nav button:hover { color: #fff; }
+  .oto header.app nav button[aria-current="true"] { color: #fff; border-bottom-color: var(--accent); }
+  .oto main { max-width: 1480px; margin: 0 auto; padding: 18px 28px 48px; }
+
+  /* ---------- layout ---------- */
+  .oto .stack { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .oto .layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 14px; align-items: start; margin-top: 14px; }
+  .oto .layout.left { grid-template-columns: 360px minmax(0, 1fr); }
+  .oto .side-sticky { position: sticky; top: 92px; }
+  .oto .list.cols { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .oto .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: stretch; }
+  .oto .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; align-items: stretch; }
+  .oto .tiles { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
+  .oto .tiles.t4 { grid-template-columns: repeat(4, 1fr); }
+  .oto .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; min-width: 0; }
+  .oto .card-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .oto .card-h h2 { font-size: 15px; font-weight: 650; }
+  .oto .card-h .sub { font-size: 12px; color: var(--muted); }
+  .oto .tile { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; min-height: 96px; display: flex; flex-direction: column; justify-content: space-between; gap: 4px; }
+  .oto .tile .tl { font-size: 11px; color: var(--muted); font-weight: 650; text-transform: uppercase; letter-spacing: .04em; }
+  .oto .tile .tv { font-size: 26px; font-weight: 750; line-height: 1.1; }
+  .oto .tile .tv small { font-size: 13px; color: var(--muted); font-weight: 600; }
+  .oto .tile .ts { font-size: 12px; color: var(--muted); }
+  .oto .tile.warn .tv { color: var(--amber); } .oto .tile.bad .tv { color: var(--red); }
+
+  /* ---------- page head ---------- */
+  .oto .pagehead { display: flex; align-items: center; justify-content: space-between; gap: 16px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 18px; }
+  .oto .pagehead .ph-l { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .oto .pagehead h2 { font-size: 17px; font-weight: 650; }
+  .oto .pagehead .meta { font-size: 12px; color: var(--muted); }
+  .oto .sticky { position: sticky; top: 0; z-index: 6; box-shadow: 0 2px 6px rgba(20,40,60,.06); }
+  .oto .meter { height: 6px; border-radius: 4px; background: #e6eaef; overflow: hidden; margin-top: 10px; }
+  .oto .meter > i { display: block; height: 100%; background: var(--green); transition: width .25s ease; }
+
+  /* ---------- controls ---------- */
+  .oto .btn { font: inherit; font-weight: 600; border-radius: 6px; padding: 7px 14px; border: 1px solid var(--navy); background: #fff; color: var(--navy); cursor: pointer; white-space: nowrap; }
   .oto .btn.primary { background: var(--navy); color: #fff; }
   .oto .btn.danger { border-color: var(--red); color: var(--red); }
+  .oto .btn.small { padding: 3px 10px; font-size: 12px; }
+  .oto .btn.ghost { border-color: var(--line); color: var(--ink); }
   .oto .btn:disabled { opacity: .45; cursor: not-allowed; }
-  .oto .btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
-  .oto .sticky { position: sticky; top: 0; z-index: 5; }
-  .oto .status-bar { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; justify-content: space-between; }
-  .oto .chip { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 12px; background: #e9ecf0; color: #333; white-space: nowrap; }
+  .oto .btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .oto textarea, .oto select, .oto input[type="date"], .oto input[type="text"], .oto input[type="number"] { width: 100%; font: inherit; color: inherit; border: 1px solid #b9c2cd; border-radius: 6px; padding: 7px 9px; background: #fff; }
+  .oto textarea { resize: vertical; min-height: 64px; }
+  .oto textarea:disabled, .oto select:disabled, .oto input:disabled { background: #f2f4f7; color: #333; border-color: var(--line); }
+  .oto :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .oto label.field { display: block; font-weight: 600; font-size: 13px; margin: 0 0 4px; }
+  .oto .fgrid { display: grid; gap: 12px; }
+  .oto .fgrid.c4 { grid-template-columns: repeat(4, 1fr); }
+  .oto .fgrid.c2 { grid-template-columns: 1fr 1fr; }
+  .oto .seg { display: inline-flex; border: 1px solid #b9c2cd; border-radius: 6px; overflow: hidden; background: #fff; }
+  .oto .seg button { font: inherit; font-weight: 650; border: none; background: none; padding: 5px 0; width: 36px; cursor: pointer; color: var(--ink); border-left: 1px solid #dfe4ea; }
+  .oto .seg button:first-child { border-left: none; }
+  .oto .seg.wide button { width: auto; padding: 5px 16px; }
+  .oto .seg button[aria-pressed="true"] { background: var(--navy); color: #fff; }
+  .oto .seg button:disabled { cursor: default; }
+  .oto .seg button:disabled:not([aria-pressed="true"]) { color: #9aa4ae; }
+  .oto .choices { display: grid; gap: 8px; }
+  .oto .choices.c5 { grid-template-columns: repeat(5, 1fr); }
+  .oto .choices.c3 { grid-template-columns: repeat(3, 1fr); }
+  .oto .choice { display: flex; flex-direction: column; gap: 1px; border: 1px solid #b9c2cd; border-radius: 6px; padding: 8px 11px; cursor: pointer; background: #fff; position: relative; }
+  .oto .choice input { position: absolute; opacity: 0; pointer-events: none; }
+  .oto .choice .ct { font-weight: 650; }
+  .oto .choice .cd { font-size: 12px; color: var(--muted); }
+  .oto .choice:has(input:checked) { border-color: var(--navy); background: var(--blue-bg); box-shadow: inset 0 0 0 1px var(--navy); }
+  .oto .choice:has(input:focus-visible) { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .oto .choice:has(input:disabled) { cursor: default; }
+
+  /* ---------- questions ---------- */
+  .oto .q-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 10px; }
+  .oto .q-head h3 { font-size: 15px; font-weight: 650; display: flex; gap: 10px; align-items: center; }
+  .oto .qnum { flex: none; display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 12px; font-weight: 650; }
+  .oto .q-head.only { margin-bottom: 0; }
+  .oto .detail { margin-top: 10px; }
+  .oto .answer { white-space: pre-wrap; background: var(--soft); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; min-height: 36px; }
+  .oto .answer.empty { color: var(--muted); font-style: italic; }
+  .oto .feedback { background: #f1f7f3; border-left: 3px solid var(--green); padding: 7px 11px; margin-top: 8px; border-radius: 0 6px 6px 0; white-space: pre-wrap; }
+  .oto .feedback b { display: block; font-size: 11px; color: var(--green); text-transform: uppercase; letter-spacing: .04em; }
+  .oto .missing { border-left: 3px solid var(--red); background: var(--red-bg); padding: 9px 12px; border-radius: 0 6px 6px 0; }
+  .oto .done { border-left: 3px solid var(--green); background: var(--green-bg); padding: 9px 12px; border-radius: 0 6px 6px 0; }
+
+  /* ---------- tables ---------- */
+  .oto table.tbl { width: 100%; border-collapse: collapse; }
+  .oto table.tbl th { text-align: left; font-size: 11px; color: var(--muted); font-weight: 650; text-transform: uppercase; letter-spacing: .04em; padding: 8px 10px; background: var(--soft); border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .oto table.tbl td { padding: 9px 10px; border-bottom: 1px solid #edf0f3; vertical-align: middle; }
+  .oto table.tbl tr:last-child td { border-bottom: none; }
+  .oto table.tbl tr.hl td { background: #fff8e6; }
+  .oto table.tbl tr.grp td { background: var(--soft); font-weight: 650; font-size: 13px; border-top: 1px solid var(--line); }
+  .oto table.tbl tr.retired td { color: #8b949e; }
+  .oto table.tbl td.num { font-variant-numeric: tabular-nums; }
+  .oto table.tbl td.top { vertical-align: top; }
+  .oto table.tbl input, .oto table.tbl select { padding: 5px 7px; }
+  .oto .tbl-wrap { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .oto .filters { display: flex; gap: 12px; align-items: end; margin-bottom: 12px; }
+  .oto .filters > div { width: 200px; }
+  .oto .filters label { font-size: 12px; font-weight: 600; display: block; margin-bottom: 3px; }
+
+  /* ---------- chips, bands, tracks ---------- */
+  .oto .chip { display: inline-block; font-size: 12px; font-weight: 650; padding: 2px 9px; border-radius: 12px; background: #e9ecf0; color: #333; white-space: nowrap; }
   .oto .chip.green { background: var(--green-bg); color: var(--green); }
   .oto .chip.amber { background: var(--amber-bg); color: var(--amber); }
   .oto .chip.red { background: var(--red-bg); color: var(--red); }
   .oto .chip.blue { background: var(--blue-bg); color: var(--navy); }
-  .oto .feedback { background: #f3f6f2; border-left: 4px solid var(--green); padding: 8px 12px; margin-top: 10px; border-radius: 0 6px 6px 0; font-size: 14px; white-space: pre-wrap; }
-  .oto .feedback b { display: block; font-size: 12px; color: var(--green); text-transform: uppercase; letter-spacing: .03em; }
-  .oto .missing { border-left: 4px solid var(--red); background: var(--red-bg); padding: 10px 12px; border-radius: 0 6px 6px 0; }
-  .oto .done { border-left: 4px solid var(--green); background: var(--green-bg); padding: 10px 12px; border-radius: 0 6px 6px 0; }
-  .oto .exp { border: 1px solid var(--line); border-radius: 6px; padding: 12px; margin-top: 10px; }
-  .oto .exp h3 { margin: 0; font-size: 15px; }
-  .oto .answer { white-space: pre-wrap; background: #f7f8fa; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; margin: 4px 0 8px; min-height: 38px; }
-  .oto .answer.empty { color: var(--muted); font-style: italic; }
-  .oto .banner { padding: 10px 14px; border-radius: 6px; margin-bottom: 14px; font-weight: 600; }
-  .oto .banner.amber { background: var(--amber-bg); color: var(--amber); border: 1px solid #f0d58a; }
-  .oto .banner.info { background: var(--blue-bg); color: var(--navy); border: 1px solid #c4d6ee; }
-  .oto .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
-  .oto .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
-  .oto .kpi .v { font-size: 26px; font-weight: 700; color: var(--navy); }
-  .oto .kpi.month .v { font-size: 18px; padding-top: 6px; }
-  .oto .kpi .l { font-size: 13px; color: var(--muted); }
-  .oto .kpi.alert .v { color: var(--amber); }
-  .oto .kpi.bad .v { color: var(--red); }
-  .oto .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
-  .oto .tabs button { font: inherit; background: none; border: none; border-bottom: 3px solid transparent; padding: 8px 12px; cursor: pointer; color: var(--muted); font-weight: 600; }
-  .oto .tabs button[aria-selected="true"] { color: var(--navy); border-bottom-color: var(--navy); }
-  .oto .filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin-bottom: 10px; }
-  .oto .filters > div { min-width: 180px; }
-  .oto .filters label { font-size: 13px; font-weight: 600; display: block; margin-bottom: 2px; }
-  .oto table.grid { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-  .oto table.grid th { text-align: left; font-size: 13px; color: var(--muted); background: #eef1f5; padding: 8px 10px; }
-  .oto table.grid td { padding: 9px 10px; border-top: 1px solid var(--line); vertical-align: top; }
-  .oto table.grid tr.req td { background: var(--amber-bg); }
+  .oto .chip.orange { background: var(--accent-bg); color: var(--accent-ink); }
+  .oto .band { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 12px; white-space: nowrap; }
+  .oto .band.b0 { background: var(--red-bg); color: var(--red); }
+  .oto .band.b1 { background: var(--amber-bg); color: var(--amber); }
+  .oto .band.b2 { background: var(--green-bg); color: var(--green); }
+  .oto .band.b3 { background: #e1edfb; color: #1659a8; }
+  .oto .band.big { font-size: 15px; padding: 4px 14px; }
+  .oto .track { position: relative; height: 8px; border-radius: 5px; background: linear-gradient(90deg, #f2c2c3 0 12.5%, #f5dc9e 12.5% 31.25%, #bfe2cd 31.25% 75%, #bcd6f3 75% 100%); }
+  .oto .track > i { position: absolute; top: -4px; width: 4px; height: 16px; border-radius: 2px; background: var(--ink); box-shadow: 0 0 0 2px #fff; transform: translateX(-2px); }
+  .oto .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: baseline; }
   .oto .muted { color: var(--muted); }
-  .oto .footer-note { color: var(--muted); font-size: 13px; margin-top: 14px; }
-  .oto .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0 14px; }
-  .oto .modal-back { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: grid; place-items: center; z-index: 50; padding: 16px; }
-  .oto .modal { background: #fff; border-radius: 8px; padding: 18px; max-width: 460px; width: 100%; }
-  .oto .modal h3 { margin: 0 0 8px; }
-  .oto .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: #233; color: #fff; padding: 10px 16px; border-radius: 6px; z-index: 60; max-width: 90vw; }
+  .oto .small { font-size: 12px; }
+  .oto .overdue { color: var(--red); font-weight: 650; }
+
+  /* ---------- side tiles ---------- */
+  .oto .side-tile h3 { font-size: 13px; font-weight: 650; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+  .oto .mood { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .oto .mood button { font: inherit; cursor: pointer; border: 1px solid #c8d0d8; background: #fff; border-radius: 8px; padding: 5px 0; font-size: 20px; line-height: 1.2; }
+  .oto .mood button[aria-pressed="true"] { border-color: var(--navy); background: var(--blue-bg); box-shadow: inset 0 0 0 1px var(--navy); }
+  .oto .mood button:disabled { cursor: default; }
+  .oto .big-score { font-size: 30px; font-weight: 750; line-height: 1.1; }
+  .oto .big-score small { font-size: 13px; color: var(--muted); font-weight: 600; }
+  .oto .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 12px; margin-top: 10px; }
+  .oto .kv dt { color: var(--muted); } .oto .kv dd { margin: 0; font-weight: 600; text-align: right; }
+  .oto .notes { border-left: 3px solid var(--purple); }
+  .oto .lockline { font-size: 11px; color: var(--purple); font-weight: 600; margin-bottom: 6px; }
+  .oto details.how { margin-top: 10px; font-size: 12px; }
+  .oto details.how summary { cursor: pointer; color: var(--navy); font-weight: 650; }
+  .oto details.how ol { margin: 8px 0; padding-left: 18px; }
+  .oto details.how li { margin-bottom: 4px; }
+  .oto .bandtbl { width: 100%; border-collapse: collapse; }
+  .oto .bandtbl td { padding: 4px 6px; border-top: 1px solid #edf0f3; }
+
+  /* ---------- charts ---------- */
+  .oto svg.chart { width: 100%; height: auto; display: block; }
+  .oto svg.chart text { font-family: inherit; font-size: 11px; fill: var(--muted); }
+  .oto .legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); margin-bottom: 6px; flex-wrap: wrap; }
+  .oto .legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  .oto .legend .sw.dash { height: 0; border-top: 2px dashed var(--muted); border-radius: 0; width: 14px; vertical-align: 3px; }
+  .oto .stackbar { display: flex; gap: 2px; height: 22px; border-radius: 5px; overflow: hidden; }
+  .oto .stackbar > div { height: 100%; }
+  .oto .slegend { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; margin-top: 12px; font-size: 13px; }
+  .oto .slegend b { float: right; font-variant-numeric: tabular-nums; }
+  .oto .pairbars { display: flex; flex-direction: column; gap: 10px; }
+  .oto .pairbars .row { display: grid; grid-template-columns: 210px 1fr 34px; gap: 4px 10px; align-items: center; font-size: 13px; }
+  .oto .pairbars .lbl { grid-row: span 2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .oto .pairbars .bar { height: 8px; background: #eef1f4; border-radius: 4px; overflow: hidden; }
+  .oto .pairbars .bar > i { display: block; height: 100%; border-radius: 0 4px 4px 0; }
+  .oto .pairbars .v { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted); text-align: right; }
+  .oto .tip { position: fixed; z-index: 95; pointer-events: none; background: #16222c; color: #fff; font-size: 12px; padding: 6px 9px; border-radius: 6px; white-space: pre-line; display: none; max-width: 260px; }
+
+  /* ---------- misc ---------- */
+  .oto .modal-back { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: grid; place-items: center; z-index: 90; }
+  .oto .modal { background: #fff; border-radius: 10px; padding: 20px; width: 460px; }
+  .oto .modal h3 { margin-bottom: 8px; }
+  .oto .toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); background: #233; color: #fff; padding: 10px 16px; border-radius: 6px; z-index: 96; }
   .oto .toast.err { background: var(--red); }
-  .oto .meterwrap { margin-top: 8px; }
-  .oto .meterwrap .lbl { display:flex; justify-content:space-between; font-size:12px; color:var(--muted); margin-bottom:3px; }
-  .oto .meter { height: 8px; border-radius: 6px; background: #e6eaef; overflow: hidden; }
-  .oto .meter > i { display:block; height:100%; width:0; background: linear-gradient(90deg,#2d7a46,#1e7a46); transition: width .25s ease; }
-  .oto .meter.full > i { background: linear-gradient(90deg,#1e7a46,#0a6b2d); }
-  .oto .countdown { font-size:12px; font-weight:600; padding:2px 9px; border-radius:12px; white-space:nowrap; }
-  .oto .countdown.ok { background: var(--green-bg); color: var(--green); }
-  .oto .countdown.soon { background: var(--amber-bg); color: var(--amber); }
-  .oto .countdown.over { background: var(--red-bg); color: var(--red); }
-  .oto .spark { display:flex; align-items:flex-end; gap:4px; height:46px; margin-top:6px; }
-  .oto .spark .bar { flex:1; min-width:10px; border-radius:3px 3px 0 0; background: var(--navy-2); position:relative; display:flex; align-items:flex-end; justify-content:center; }
-  .oto .spark .bar span { position:absolute; top:-16px; font-size:11px; color:var(--muted); }
-  .oto .spark .bar b { font-size:10px; color:#fff; padding-bottom:2px; font-weight:600; }
-  .oto .spark .bar.w5 { background:#a4262c; } .oto .spark .bar.w4 { background:#b4690e; } .oto .spark .bar.w3 { background:#2d7a46; } .oto .spark .bar.w2 { background:#3a7fb5; } .oto .spark .bar.w1 { background:#8a8f98; }
-  .oto .ratebar { height:6px; border-radius:4px; background:#e6eaef; overflow:hidden; margin:6px 0 2px; }
-  .oto .ratebar > i { display:block; height:100%; background:var(--navy-2); transition:width .2s ease; }
-  .oto .collapse-head { cursor:pointer; user-select:none; display:flex; align-items:center; gap:8px; }
-  .oto .collapse-head .tick { color: var(--green); font-weight:700; }
+  .oto .banner { padding: 9px 14px; border-radius: 8px; font-weight: 600; }
+  .oto .banner.info { background: var(--blue-bg); color: var(--navy); border: 1px solid #c4d6ee; }
+  .oto .banner.amber { background: var(--amber-bg); color: var(--amber); border: 1px solid #f0d58a; }
+  .oto .list { display: flex; flex-direction: column; gap: 8px; }
+  .oto .list .li { background: var(--soft); border-radius: 6px; padding: 7px 10px; }
+  .oto .list .li b { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .oto .covbar { display: grid; grid-template-columns: 110px 1fr 46px; gap: 10px; align-items: center; font-size: 12px; margin-bottom: 7px; }
+  .oto .covbar .bar { display: flex; gap: 2px; height: 10px; }
+  .oto .covbar .bar > i { flex: 1; border-radius: 2px; background: #e6eaef; }
+  .oto .covbar .bar > i.s { background: var(--navy-2); } .oto .covbar .bar > i.o { background: var(--accent); }
+  .oto .confetti { position: fixed; inset: 0; pointer-events: none; z-index: 97; overflow: hidden; }
+  .oto .confetti i { position: absolute; width: 9px; height: 14px; top: -20px; border-radius: 2px; animation: otofall linear forwards; }
+  @keyframes otofall { to { transform: translateY(105vh) rotate(540deg); opacity: .9; } }
 
-  /* ---- engagement: mood, streak, wins, private notes, chat ---- */
-  .oto .pill { display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:700; padding:3px 10px; border-radius:14px; white-space:nowrap; }
-  .oto .pill.streak { background: var(--accent-bg); color: var(--accent-ink); }
-  .oto .pill.flame { font-size:13px; }
-  .oto .mood { display:flex; gap:8px; flex-wrap:wrap; }
-  .oto .mood button { font:inherit; cursor:pointer; border:1px solid #c2cad3; background:#fff; border-radius:10px; padding:8px 10px; min-width:78px; display:flex; flex-direction:column; align-items:center; gap:2px; transition:transform .08s ease; }
-  .oto .mood button:hover:not(:disabled) { transform:translateY(-2px); }
-  .oto .mood button .emo { font-size:22px; line-height:1; }
-  .oto .mood button .ml { font-size:11px; color:var(--muted); font-weight:600; }
-  .oto .mood button[aria-pressed="true"] { border-color:var(--navy); background:var(--teal-bg); box-shadow:inset 0 0 0 1px var(--navy); }
-  .oto .mood button:disabled { cursor:default; opacity:.9; }
-  .oto .accent-card { border-left:4px solid var(--accent); }
-  .oto .win-wall { display:flex; flex-direction:column; gap:6px; max-height:150px; overflow:auto; margin-top:8px; }
-  .oto .win-wall .w { background:var(--accent-bg); border-radius:6px; padding:6px 10px; font-size:13px; }
-  .oto .win-wall .w b { display:block; font-size:11px; color:var(--accent-ink); text-transform:uppercase; letter-spacing:.03em; }
-  .oto .notes-card { border-left:4px solid var(--purple); background:#fbfaff; }
-  .oto .lockline { font-size:12px; color:var(--purple); font-weight:600; display:flex; align-items:center; gap:5px; }
-
-  /* ---- appraisal tracker ---- */
-  .oto .appraise { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; }
-  .oto .gauge { border:1px solid var(--line); border-radius:8px; padding:12px; }
-  .oto .gauge .who { font-size:12px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.03em; }
-  .oto .gauge .score { font-size:30px; font-weight:800; color:var(--navy); line-height:1.1; }
-  .oto .gauge .score small { font-size:14px; color:var(--muted); font-weight:600; }
-  .oto .track { position:relative; height:12px; border-radius:7px; margin:10px 0 4px; background:linear-gradient(90deg,#e7b4b6 0%,#f0cf9a 32%,#bfe3cd 55%,#8ed3ab 100%); }
-  .oto .track > i { position:absolute; top:-3px; width:4px; height:18px; border-radius:2px; background:#1a2630; box-shadow:0 0 0 2px #fff; transform:translateX(-2px); }
-  .oto .track .end { position:absolute; font-size:10px; color:var(--muted); top:14px; }
-  .oto .band { display:inline-block; font-size:12px; font-weight:700; padding:2px 10px; border-radius:12px; }
-  .oto .band.b0 { background:var(--red-bg); color:var(--red); }
-  .oto .band.b1 { background:var(--amber-bg); color:var(--amber); }
-  .oto .band.b2 { background:var(--green-bg); color:var(--green); }
-  .oto .band.b3 { background:#dff0ff; color:#0b61a4; }
-  .oto .summ { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px; margin-top:12px; }
-  .oto .summ .s { border-radius:6px; padding:8px 10px; font-size:13px; }
-  .oto .summ .s.good { background:var(--green-bg); } .oto .summ .s.improve { background:var(--amber-bg); } .oto .summ .s.pos { background:var(--blue-bg); }
-  .oto .summ .s b { display:block; font-size:11px; text-transform:uppercase; letter-spacing:.03em; margin-bottom:2px; }
-  .oto details.howto { margin-top:10px; font-size:13px; } .oto details.howto summary { cursor:pointer; color:var(--navy); font-weight:600; }
-  .oto .bandtbl { width:100%; border-collapse:collapse; margin-top:6px; } .oto .bandtbl td { border-top:1px solid var(--line); padding:4px 8px; }
-  .oto .setrow { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:6px 0; }
-  .oto .setrow input { width:90px; }
-
-  /* ---- confetti ---- */
-  .oto .confetti { position:fixed; inset:0; pointer-events:none; z-index:70; overflow:hidden; }
-  .oto .confetti i { position:absolute; width:9px; height:14px; top:-20px; border-radius:2px; animation:otofall linear forwards; }
-  @keyframes otofall { to { transform:translateY(105vh) rotate(540deg); opacity:.9; } }
-  @media (max-width: 700px) {
-    .oto main { padding: 10px; }
-    .oto table.grid thead { display: none; }
-    .oto table.grid, .oto table.grid tbody, .oto table.grid tr, .oto table.grid td { display: block; width: 100%; }
-    .oto table.grid tr { border-top: 6px solid var(--bg); }
-    .oto table.grid td { border-top: none; padding: 4px 12px; }
-    .oto table.grid td::before { content: attr(data-label); display: block; font-size: 12px; color: var(--muted); }
-    .oto .sticky { position: static; }
+  /* ---------- report ---------- */
+  .oto .report-wrap { position: fixed; inset: 0; background: #dfe5ea; z-index: 80; overflow: auto; }
+  .oto .report-bar { position: sticky; top: 0; z-index: 2; background: var(--navy); color: #fff; display: flex; align-items: center; justify-content: space-between; padding: 10px 28px; }
+  .oto .report-bar .btn { border-color: #fff; }
+  .oto .report-doc { width: 900px; margin: 22px auto 60px; background: #fff; padding: 40px 48px; box-shadow: 0 4px 18px rgba(0,0,0,.12); font-size: 13px; }
+  .oto .report-doc h1 { font-size: 22px; color: var(--navy); }
+  .oto .report-doc h2 { font-size: 15px; color: var(--navy); border-bottom: 2px solid var(--navy); padding-bottom: 4px; margin: 26px 0 10px; }
+  .oto .report-doc h3 { font-size: 13px; margin: 14px 0 4px; }
+  .oto .report-doc .rmeta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 20px; margin-top: 12px; padding: 12px 14px; background: var(--soft); border-radius: 6px; }
+  .oto .report-doc .rmeta div span { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .oto .report-doc .rmeta div b { font-size: 13px; }
+  .oto .report-doc table.rt { width: 100%; border-collapse: collapse; margin-top: 4px; }
+  .oto .report-doc table.rt th { text-align: left; font-size: 11px; color: var(--muted); padding: 5px 7px; border-bottom: 1px solid var(--line); background: var(--soft); }
+  .oto .report-doc table.rt td { padding: 5px 7px; border-bottom: 1px solid #edf0f3; vertical-align: top; }
+  .oto .report-doc .rsum { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .oto .report-doc .rsum > div { border: 1px solid var(--line); border-radius: 6px; padding: 9px 11px; }
+  .oto .report-doc .rsum > div > span:first-child { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .oto .report-doc .rsum b { font-size: 18px; }
+  .oto .report-doc .exphead { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-top: 16px; }
+  .oto .report-doc .note { font-size: 11px; color: var(--muted); margin-top: 24px; border-top: 1px solid var(--line); padding-top: 8px; }
+  @media print {
+    @page { size: A4; margin: 12mm; }
+    body { background: #fff; }
+    .oto { min-width: 0; background: #fff; }
+    .oto > *:not(.report-wrap) { display: none !important; }
+    .oto .report-wrap { position: static; background: #fff; overflow: visible; }
+    .oto .report-bar { display: none; }
+    .oto .report-doc { width: auto; margin: 0; padding: 0; box-shadow: none; }
+    .oto .report-doc .rsec { break-inside: avoid-page; }
   }
 </style>
 </head>
@@ -183,7 +250,12 @@
 (function () {
   'use strict';
 
-  // ---------------- fixed reference data (agreed wording) ----------------
+  // ======================================================================
+  // reference data (agreed wording)
+  // ======================================================================
+  var TODAY = '2026-11-24';            // fictional "today" for the prototype
+  var CUR = '2026-11';
+  var ME = 'Alex Morgan';              // fictional technician shown in technician view
   var WORKLOAD = [
     { value: 1, title: '1 – Very light', desc: 'Significantly below capacity' },
     { value: 2, title: '2 – Light', desc: 'Some spare capacity' },
@@ -192,11 +264,11 @@
     { value: 5, title: '5 – Excessive', desc: 'Struggling to manage' }
   ];
   var PROGRESS = [
-    { value: 1, title: '1 – Not started', desc: 'No progress yet' },
-    { value: 2, title: '2 – Early progress', desc: "Behind where I'd expect" },
-    { value: 3, title: '3 – On track', desc: 'Progressing as expected' },
-    { value: 4, title: '4 – Strong progress', desc: 'Ahead of expectations' },
-    { value: 5, title: '5 – Fully met', desc: 'Achieved and evidenced' }
+    { value: 1, title: 'Not started', desc: 'No progress yet' },
+    { value: 2, title: 'Early progress', desc: "Behind where I'd expect" },
+    { value: 3, title: 'On track', desc: 'Progressing as expected' },
+    { value: 4, title: 'Strong progress', desc: 'Ahead of expectations' },
+    { value: 5, title: 'Fully met', desc: 'Achieved and evidenced' }
   ];
   var FOLLOW = [
     'Everything has been covered — no further discussion required at present.',
@@ -204,7 +276,6 @@
     'Arrange a dedicated 1-to-1 discussion.'
   ];
   var DEDICATED = FOLLOW[2];
-  var YESNO = [{ value: 'Yes', title: 'Yes' }, { value: 'No', title: 'No' }];
   var MOODS = [
     { value: 1, emo: '🪫', label: 'Running low' },
     { value: 2, emo: '😕', label: 'A bit flat' },
@@ -212,133 +283,72 @@
     { value: 4, emo: '😀', label: 'Good' },
     { value: 5, emo: '⚡', label: 'Full charge' }
   ];
-  // Appraisal bands – Team-Leader editable defaults (see settings panel)
-  var SETTINGS = { bands: [
-    { max: 1.5, name: 'Not met', cls: 'b0' },
-    { max: 2.25, name: 'Partially met', cls: 'b1' },
-    { max: 4, name: 'Met', cls: 'b2' },
-    { max: 99, name: 'Exceeded', cls: 'b3' }
-  ] };
-  var TODAY = '2026-11-24';            // fictional "today" for the prototype
-  var ME = 'Alex Morgan';              // fictional technician shown in technician view
-  // Private, tech-only running notes, carried month to month (never shown to the TL).
-  var PRIVATE_NOTES = { 'Alex Morgan': 'Remember to ask about the supervisor course dates next month.\nChase the loan monitor return.' };
+  function defaultBands() {
+    return [
+      { max: 1.5, name: 'Not met', cls: 'b0' },
+      { max: 2.25, name: 'Partially met', cls: 'b1' },
+      { max: 4, name: 'Met', cls: 'b2' },
+      { max: 99, name: 'Exceeded', cls: 'b3' }
+    ];
+  }
+  var SETTINGS = { bands: defaultBands() };
+  var BAND_TINT = { b0: '#fbeaea', b1: '#fdf3dc', b2: '#e8f4ed', b3: '#e8f0fb' };
+  var BAND_COL = { b0: '#d14b4b', b1: '#d99a12', b2: '#2f9a63', b3: '#2a78d6' };
+  var C_SELF = '#2a78d6', C_TL = '#eb6834';
 
-  // ---------------- fictional data ----------------
+  var TECHS = ['Alex Morgan', 'Sam Patel', 'Jordan Lee', 'Casey Brooks', 'Riley Evans', 'Taylor Reed'];
+  // Appraisal dates – entered by the Team Leader (editable on Team overview / profile)
+  var TECH_INFO = {
+    'Alex Morgan': { appraisal: '2027-03-12' },
+    'Sam Patel': { appraisal: '2027-02-05' },
+    'Jordan Lee': { appraisal: '2027-01-22' },
+    'Casey Brooks': { appraisal: '2026-12-18' },
+    'Riley Evans': { appraisal: '2027-04-09' },
+    'Taylor Reed': { appraisal: '2027-03-26' }
+  };
   var MASTER_EXPECTATIONS = [
-    { id: 11, title: 'Complete annual safety refresher training', measures: 'Course passed and certificate recorded by the end of Q4.', year: '2026/27', scope: 'Shared', tech: '', active: true },
-    { id: 12, title: 'Keep instrument checks on schedule', measures: 'All assigned weekly checks completed and recorded on time.', year: '2026/27', scope: 'Shared', tech: '', active: true },
-    { id: 13, title: 'Mentor a newer team member', measures: 'Regular buddy sessions held; mentee signs off two practical tasks.', year: '2026/27', scope: 'Individual', tech: 'Alex Morgan', active: true },
-    { id: 14, title: 'Achieve task supervisor qualification', measures: 'Assessment passed; first supervised task completed.', year: '2026/27', scope: 'Individual', tech: 'Sam Patel', active: true },
-    { id: 9, title: 'Update local work instructions', measures: 'Three instructions reviewed and reissued.', year: '2025/26', scope: 'Shared', tech: '', active: false }
+    { id: 11, title: 'Complete annual safety refresher training', measures: 'Course passed and certificate recorded by the end of Q4.', year: '2026/27', scope: 'Shared', tech: '', sort: 10, active: true },
+    { id: 12, title: 'Keep instrument checks on schedule', measures: 'All assigned weekly checks completed and recorded on time.', year: '2026/27', scope: 'Shared', tech: '', sort: 20, active: true },
+    { id: 15, title: 'Right-first-time paperwork', measures: 'No permit, round sheet or calibration record returned for errors or omissions.', year: '2026/27', scope: 'Shared', tech: '', sort: 30, active: true },
+    { id: 16, title: 'Raise improvement ideas', measures: 'At least one improvement idea or near-miss report each quarter.', year: '2026/27', scope: 'Shared', tech: '', sort: 40, active: true },
+    { id: 13, title: 'Mentor a newer team member', measures: 'Regular buddy sessions held; mentee signs off two practical tasks.', year: '2026/27', scope: 'Individual', tech: 'Alex Morgan', sort: 50, active: true },
+    { id: 21, title: 'Deliver two toolbox talks', measures: 'Two talks delivered to the shift team and recorded.', year: '2026/27', scope: 'Individual', tech: 'Alex Morgan', sort: 60, active: true },
+    { id: 14, title: 'Achieve task supervisor qualification', measures: 'Assessment passed; first supervised task completed.', year: '2026/27', scope: 'Individual', tech: 'Sam Patel', sort: 50, active: true },
+    { id: 17, title: 'Complete radiation protection supervisor course', measures: 'Course passed and appointed as RPS on the area roster.', year: '2026/27', scope: 'Individual', tech: 'Jordan Lee', sort: 50, active: true },
+    { id: 18, title: 'Reduce overdue maintenance backlog in area 3', measures: 'Overdue routines in area 3 below five by year end.', year: '2026/27', scope: 'Individual', tech: 'Casey Brooks', sort: 50, active: true },
+    { id: 19, title: 'Lead the outage survey team', measures: 'Survey plan delivered on time with no rework.', year: '2026/27', scope: 'Individual', tech: 'Riley Evans', sort: 50, active: true },
+    { id: 20, title: 'Complete HNC module 2', measures: 'Module passed and assignment feedback shared.', year: '2026/27', scope: 'Individual', tech: 'Taylor Reed', sort: 50, active: true },
+    { id: 9, title: 'Update local work instructions', measures: 'Three instructions reviewed and reissued.', year: '2025/26', scope: 'Shared', tech: '', sort: 10, active: false }
   ];
+  var CUR_YEAR = '2026/27';
+  var nextExpId = 40;
+  // Private, tech-only running notes, carried month to month (never shown to the TL).
+  var PRIVATE_NOTES = { 'Alex Morgan': 'Ask about the supervisor course dates next month.\nChase the loan monitor return.' };
 
-  function snapshotFor(tech) {
-    return MASTER_EXPECTATIONS.filter(function (e) {
-      return e.active && (e.scope === 'Shared' || e.tech === tech);
-    }).map(function (e) {
-      return { id: e.id, title: e.title, measures: e.measures, year: e.year };
-    });
+  // ======================================================================
+  // small helpers
+  // ======================================================================
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function addMonths(key, n) { var y = +key.slice(0, 4), m = +key.slice(5, 7) - 1 + n; y += Math.floor(m / 12); m = ((m % 12) + 12) % 12; return y + '-' + pad(m + 1); }
+  function lastDay(key) { return key + '-' + pad(new Date(Date.UTC(+key.slice(0, 4), +key.slice(5, 7), 0)).getUTCDate()); }
+  function addDays(iso, n) { var d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+  function monthDiff(a, b) { return (+b.slice(0, 4) - +a.slice(0, 4)) * 12 + (+b.slice(5, 7) - +a.slice(5, 7)); }
+  function daysBetween(a, b) { return Math.round((new Date(b + 'T12:00:00Z') - new Date(a + 'T12:00:00Z')) / 86400000); }
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+  function avg(arr) { return arr.length ? arr.reduce(function (s, n) { return s + n; }, 0) / arr.length : null; }
+  function fmtDate(iso) { return iso ? new Date(iso + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : ''; }
+  function fmtLong(iso) { return new Date(iso + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }); }
+  function monthLabel(key) { return new Date(key + '-01T12:00:00Z').toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }); }
+  function monthShort(key) { return new Date(key + '-01T12:00:00Z').toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' }); }
+  function first(name) { return name.split(' ')[0]; }
+  function f1(v) { return v === null || v === undefined ? '—' : v.toFixed(1); }
+  function rng(seed) {
+    var t0 = seed >>> 0;
+    return function () { t0 = (t0 + 0x6D2B79F5) >>> 0; var t = t0; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   }
 
-  function blankAnswers(snap) {
-    return {
-      mood: null, win: '',
-      q1: '', q2: { issue: '', impact: '', tried: '', support: '' },
-      q3: null, q3c: '', q4: null, q4d: '', q5: null, q5d: '', q6: null, q6what: '', q6why: '', q7: '',
-      q8: snap.map(function (e) { return { id: e.id, rating: null, comment: '' }; }),
-      q9: null
-    };
-  }
-
-  function sampleAnswers(snap, workload, follow, variant) {
-    var a = blankAnswers(snap);
-    a.mood = variant === 1 ? 4 : 3;
-    a.win = variant === 1 ? 'Closed the outage survey backlog two days early.' : 'Covered a colleague\'s area all week with no checks missed.';
-    a.q1 = variant === 1
-      ? 'Closed out the outage survey backlog two days early.\nGood feedback from the shift team on the handover notes.'
-      : 'Completed all routine checks on time and helped cover a colleague\'s area for a week.';
-    a.q2 = variant === 1
-      ? { issue: 'Waiting on spare parts for one monitor.', impact: 'Using a loan unit, which slows checks slightly.', tried: 'Chased stores twice.', support: 'Help escalating the order.' }
-      : { issue: '', impact: '', tried: '', support: '' };
-    a.q3 = workload;
-    a.q3c = workload >= 4 ? 'Busy with outage support plus routine work.' : '';
-    a.q4 = 'No';
-    a.q5 = variant === 1 ? 'Yes' : 'No';
-    a.q5d = variant === 1 ? 'Annual leave 14–18 December. Training course on 8 January.' : '';
-    a.q6 = variant === 1 ? 'Yes' : 'No';
-    a.q6what = variant === 1 ? 'Supervisor qualification course.' : '';
-    a.q6why = variant === 1 ? 'To take on supervising tasks next year.' : '';
-    a.q7 = variant === 1 ? 'The new rota has made planning much easier – thanks.' : '';
-    a.q8 = snap.map(function (e, i) {
-      return { id: e.id, rating: [3, 4, 2][i % 3], comment: ['Booked for next month.', 'All checks done this month.', 'Two sessions so far.'][i % 3] };
-    });
-    a.q9 = follow;
-    return a;
-  }
-
-  function emptyFeedback() {
-    return { q1: '', q2: '', q3: '', q4: '', q5: '', q6: '', q7: '', q9: '', overall: '', exp: {}, expRating: {}, followOverride: '', meeting: '', actions: '', actionsDue: '', actionsStatus: 'None' };
-  }
-
-  var nextId = 100;
-  function review(tech, month, due, state, opts) {
-    opts = opts || {};
-    var snap = snapshotFor(tech);
-    var r = {
-      id: nextId++, tech: tech, month: month, due: due, state: state,
-      draft: !!opts.draft, submittedOn: opts.submittedOn || '', late: !!opts.late,
-      snapshot: snap,
-      answers: opts.answers ? opts.answers(snap) : blankAnswers(snap),
-      fb: emptyFeedback(), released: false
-    };
-    if (opts.fb) {
-      opts.fb(r.fb, snap);
-    }
-    r.released = state === 'Completed' || state === 'Closed - Not Submitted';
-    return r;
-  }
-
-  var REVIEWS = [
-    review('Alex Morgan', '2026-11', '2026-11-30', 'Open', { draft: true, answers: function (s) {
-      var a = blankAnswers(s);
-      a.q1 = 'Finished the instrument check backlog.';
-      a.q3 = 3;
-      return a;
-    } }),
-    review('Sam Patel', '2026-11', '2026-11-30', 'Submitted', { submittedOn: '2026-11-18', answers: function (s) { return sampleAnswers(s, 4, DEDICATED, 1); } }),
-    review('Jordan Lee', '2026-11', '2026-11-30', 'Completed', { submittedOn: '2026-11-10', answers: function (s) { return sampleAnswers(s, 3, FOLLOW[1], 2); },
-      fb: function (fb) { fb.overall = 'Solid month.'; fb.actions = '• Book refresher course – Jordan – by 10/12'; fb.actionsDue = '2026-12-10'; fb.actionsStatus = 'Open'; } }),
-    review('Casey Brooks', '2026-11', '2026-11-30', 'Open', {}),
-    review('Riley Evans', '2026-11', '2026-11-30', 'Submitted', { submittedOn: '2026-11-21', answers: function (s) { return sampleAnswers(s, 2, FOLLOW[0], 2); } }),
-    review('Taylor Reed', '2026-11', '2026-11-30', 'Open', { draft: true }),
-    review('Alex Morgan', '2026-10', '2026-10-31', 'Completed', { submittedOn: '2026-10-27', answers: function (s) { return sampleAnswers(s, 3, FOLLOW[1], 1); },
-      fb: function (fb, snap) {
-        fb.q1 = 'Great work on the backlog – noticed by the shift team too.';
-        fb.q2 = 'I\'ve escalated the parts order with stores.';
-        fb.q3 = 'Agree – manageable. Tell me early if outage work builds up.';
-        fb.q4 = 'Thanks – my door is always open.';
-        fb.q5 = 'Leave noted on the planner.';
-        fb.q6 = 'Supported – let\'s book the course in the new year.';
-        fb.q7 = 'Thanks, appreciated.';
-        fb.q9 = 'Quick catch-up in the field next week.';
-        fb.overall = 'A strong month. Keep the mentoring going.';
-        snap.forEach(function (e, i) { fb.exp[e.id] = 'Good progress – keep it up.'; fb.expRating[e.id] = [4, 4, 3][i % 3]; });
-        fb.actions = '• Book supervisor course – Alex – by 15/12';
-        fb.actionsDue = '2026-12-15'; fb.actionsStatus = 'Open';
-      } }),
-    review('Sam Patel', '2026-10', '2026-10-31', 'Completed', { submittedOn: '2026-10-29', answers: function (s) { return sampleAnswers(s, 4, FOLLOW[1], 2); },
-      fb: function (fb) { fb.actions = '• Arrange buddy shifts – Team Leader – by 20/11'; fb.actionsDue = '2026-11-20'; fb.actionsStatus = 'Open'; } }),
-    review('Jordan Lee', '2026-10', '2026-10-31', 'Completed', { submittedOn: '2026-10-20', answers: function (s) { return sampleAnswers(s, 3, FOLLOW[0], 2); } }),
-    review('Casey Brooks', '2026-10', '2026-10-31', 'Closed - Not Submitted', {}),
-    review('Riley Evans', '2026-10', '2026-10-31', 'Completed', { submittedOn: '2026-11-02', late: true, answers: function (s) { return sampleAnswers(s, 2, FOLLOW[0], 2); } }),
-    review('Taylor Reed', '2026-10', '2026-10-31', 'Completed', { submittedOn: '2026-10-24', answers: function (s) { return sampleAnswers(s, 5, DEDICATED, 1); } })
-  ];
-  var ACTIVE_TECHS = ['Alex Morgan', 'Sam Patel', 'Jordan Lee', 'Casey Brooks', 'Riley Evans', 'Taylor Reed'];
-  REVIEWS[1].chatRequested = true;   // demo: Sam Patel has asked for a chat this month
-
-  // ---------------- small DOM helpers (text only, never HTML) ----------------
   var uid = 0;
+  function nid(p) { uid += 1; return p + '-' + uid; }
   function h(tag, attrs, children) {
     var e = document.createElement(tag);
     if (attrs) {
@@ -357,116 +367,365 @@
     });
     return e;
   }
-  function nid(p) { uid += 1; return p + '-' + uid; }
-  function fmtDate(iso) {
-    if (!iso) { return ''; }
-    var d = new Date(iso + 'T12:00:00');
-    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  function s(tag, attrs, children) {
+    var e = document.createElementNS(SVGNS, tag);
+    if (attrs) {
+      Object.keys(attrs).forEach(function (k) {
+        var v = attrs[k];
+        if (v === null || v === undefined) { return; }
+        if (k === 'text') { e.textContent = String(v); } else { e.setAttribute(k, String(v)); }
+      });
+    }
+    (Array.isArray(children) ? children : [children]).forEach(function (c) { if (c) { e.appendChild(c); } });
+    return e;
   }
-  function fmtLongDate(iso) {
-    var d = new Date(iso + 'T12:00:00');
-    return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+  // ======================================================================
+  // fictional data (generated deterministically so the charts have history)
+  // ======================================================================
+  function snapshotFor(tech) {
+    return MASTER_EXPECTATIONS.filter(function (e) { return e.active && e.year === CUR_YEAR && (e.scope === 'Shared' || e.tech === tech); })
+      .sort(byScopeSort).map(function (e) { return { id: e.id, title: e.title, measures: e.measures, year: e.year }; });
   }
-  function monthLabel(key) {
-    var d = new Date(key + '-01T12:00:00');
-    return d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+  function byScopeSort(x, y) { if (x.scope !== y.scope) { return x.scope === 'Shared' ? -1 : 1; } return x.sort - y.sort; }
+  function blankAnswers(snap) {
+    return {
+      mood: null, win: '',
+      q1: '', q2: { issue: '', impact: '', tried: '', support: '' },
+      q3: null, q3c: '', q4: null, q4d: '', q5: null, q5d: '', q6: null, q6what: '', q6why: '', q7: '',
+      q8: snap.map(function (e) { return { id: e.id, rating: null, comment: '' }; }),
+      q9: null
+    };
   }
+  function emptyFeedback() {
+    return { q1: '', q2: '', q3: '', q4: '', q5: '', q6: '', q7: '', q9: '', overall: '', exp: {}, expRating: {}, followOverride: '', meeting: '', actions: [] };
+  }
+  var nextId = 100, actId = 1;
+  function mkReview(tech, month, st) {
+    var snap = snapshotFor(tech);
+    return { id: nextId++, tech: tech, month: month, due: lastDay(month), state: st, draft: false, submittedOn: '', late: false,
+      snapshot: snap, answers: blankAnswers(snap), fb: emptyFeedback(),
+      released: st === 'Completed' || st === 'Closed - Not Submitted', chatRequested: false };
+  }
+
+  var BANK = {
+    well: ['Closed out the outage survey backlog two days early.', 'Completed all routine checks on time and covered a colleague\'s area.', 'Good feedback from the shift team on the handover notes.', 'Finished the calibration round with no repeats.', 'Helped train the new starter on the round sheets.', 'Sorted the spares labelling in the workshop.'],
+    win: ['Found and fixed a recurring fault on the area 3 monitor.', 'First fully clean permit audit this year.', 'Delivered a toolbox talk on three-way communication.', 'Mentee signed off their first practical task.', 'Covered nights at short notice with no missed checks.', 'Spotted a transposed tag number before it caused a wrong isolation.', 'Got the outage survey plan approved first time.'],
+    challenge: [
+      { issue: 'Waiting on spare parts for one monitor.', impact: 'Using a loan unit, which slows checks slightly.', tried: 'Chased stores twice.', support: 'Help escalating the order.' },
+      { issue: 'Clash between training day and outage support.', impact: 'Risk of missing the course date.', tried: 'Asked to swap shifts.', support: 'Agreement to release me for the day.' },
+      { issue: 'Access to area 3 restricted for scaffolding.', impact: 'Two routines deferred.', tried: 'Agreed revised dates with planning.', support: 'None needed for now.' }
+    ],
+    dev: [
+      { what: 'Supervisor qualification course.', why: 'To take on supervising tasks next year.' },
+      { what: 'Advanced gas detection training.', why: 'To support calibration work on the new detectors.' },
+      { what: 'HNC study time.', why: 'To keep on track with module deadlines.' }
+    ],
+    plan: ['Annual leave 14–18 December.', 'Training course on 8 January.', 'On the outage team for two weeks from the 10th.', 'Half day on the 22nd.'],
+    evidence: ['Booked onto the next course date.', 'All checks done and recorded this month.', 'Two buddy sessions held.', 'No forms returned this month.', 'Submitted one near-miss report.', 'First talk prepared; delivery booked.', 'Assessment booked for next month.', 'Course part one completed.', 'Overdue routines down by three.', 'Plan drafted and shared for comment.', 'Module assignment submitted.'],
+    overall: ['Solid month — thanks for the effort.', 'A strong month. Keep the momentum going.', 'Good progress; let\'s keep an eye on workload.', 'Steady month. Focus on the paperwork points we discussed.', 'Excellent contribution this month.'],
+    expfb: ['Good progress — keep it up.', 'On track; evidence is clear.', 'Let\'s talk about how to move this forward.', 'Strong evidence this month.', 'Behind where we need to be — see agreed action.'],
+    actions: [
+      { text: 'Book supervisor course date', owner: 'tech', criteria: 'Course confirmed in the training system and date shared with Team Leader.' },
+      { text: 'Escalate monitor spares order with stores', owner: 'tl', criteria: 'Order raised with a confirmed delivery date.' },
+      { text: 'Re-brief round sheet completion standards', owner: 'tl', criteria: 'Briefing delivered and attendance recorded.' },
+      { text: 'Arrange buddy shifts for mentee', owner: 'tech', criteria: 'Two buddy shifts on the rota and completed.' },
+      { text: 'Agree revised dates for deferred area 3 routines', owner: 'tech', criteria: 'Revised dates entered in the maintenance system.' },
+      { text: 'Review workload balance across the shift', owner: 'tl', criteria: 'Rota adjusted and agreed with the technician.' },
+      { text: 'Submit HNC assignment draft', owner: 'tech', criteria: 'Draft submitted to tutor and feedback received.' }
+    ]
+  };
+  var PROFILE = {
+    'Alex Morgan': { from: 2.5, to: 3.4, bias: 0.2, wl: 3, mood: 4, late: [], missed: [] },
+    'Sam Patel': { from: 3.0, to: 3.7, bias: 0.1, wl: 4, mood: 3, late: [], missed: [] },
+    'Jordan Lee': { from: 3.5, to: 3.6, bias: 0, wl: 3, mood: 4, late: [], missed: [] },
+    'Casey Brooks': { from: 2.3, to: 1.6, bias: -0.3, wl: 2, mood: 2, late: ['2026-05'], missed: ['2026-07', '2026-10'] },
+    'Riley Evans': { from: 4.0, to: 4.4, bias: 0, wl: 2, mood: 5, late: ['2026-10'], missed: [] },
+    'Taylor Reed': { from: 2.9, to: 2.3, bias: -0.2, wl: 5, mood: 2, late: ['2026-08'], missed: [] }
+  };
+  var HIST = ['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10'];
+  var OFFS = {};
+
+  function fillAnswers(r, R, P, base) {
+    var a = r.answers, pick = function (arr) { return arr[Math.floor(R() * arr.length)]; };
+    a.mood = clamp(Math.round(P.mood + (R() - 0.5) * 1.6), 1, 5);
+    a.win = pick(BANK.win); a.q1 = pick(BANK.well);
+    if (R() < 0.35) { var c = pick(BANK.challenge); a.q2 = { issue: c.issue, impact: c.impact, tried: c.tried, support: c.support }; }
+    a.q3 = clamp(Math.round(P.wl + (R() - 0.5) * 1.4), 1, 5);
+    if (a.q3 >= 4) { a.q3c = 'Busy with outage support plus routine work.'; }
+    a.q4 = 'No';
+    if (R() < 0.4) { a.q5 = 'Yes'; a.q5d = pick(BANK.plan); } else { a.q5 = 'No'; }
+    if (R() < 0.3) { var d = pick(BANK.dev); a.q6 = 'Yes'; a.q6what = d.what; a.q6why = d.why; } else { a.q6 = 'No'; }
+    if (R() < 0.2) { a.q7 = 'The new rota has made planning much easier – thanks.'; }
+    a.q8.forEach(function (x) { x.rating = clamp(Math.round(base + OFFS[r.tech][x.id] + (R() - 0.5) * 0.8), 1, 5); x.comment = pick(BANK.evidence); });
+    a.q9 = a.q3 >= 5 ? DEDICATED : (R() < 0.5 ? FOLLOW[0] : FOLLOW[1]);
+  }
+  function fillFeedback(r, R, P, base) {
+    var fb = r.fb, pick = function (arr) { return arr[Math.floor(R() * arr.length)]; };
+    fb.overall = pick(BANK.overall);
+    fb.q1 = 'Thanks — good to see.';
+    r.snapshot.forEach(function (e) {
+      fb.expRating[e.id] = clamp(Math.round(base + OFFS[r.tech][e.id] + P.bias + (R() - 0.5) * 0.8), 1, 5);
+      fb.exp[e.id] = pick(BANK.expfb);
+    });
+    if (R() < 0.45) {
+      var n = R() < 0.3 ? 2 : 1;
+      for (var k = 0; k < n; k++) {
+        var t = pick(BANK.actions), due = addDays(lastDay(r.month), 20 + Math.floor(R() * 40));
+        var closed = due < TODAY ? (due < addDays(TODAY, -21) ? R() < 0.95 : R() < 0.5) : R() < 0.15;
+        fb.actions.push({ id: actId++, text: t.text, owner: t.owner === 'tech' ? r.tech : 'Team Leader', criteria: t.criteria, due: due,
+          status: closed ? 'Closed' : 'Open', closedOn: closed ? (due < TODAY ? addDays(due, -4) : TODAY) : '' });
+      }
+    }
+    r.released = true;
+  }
+
+  var REVIEWS = [];
+  TECHS.forEach(function (tech, ti) {
+    var P = PROFILE[tech], R = rng(ti * 977 + 13), snap = snapshotFor(tech);
+    OFFS[tech] = {};
+    snap.forEach(function (e) { OFFS[tech][e.id] = (R() - 0.5) * 1.2; });
+    HIST.forEach(function (m, i) {
+      if (P.missed.indexOf(m) >= 0) { REVIEWS.push(mkReview(tech, m, 'Closed - Not Submitted')); return; }
+      var base = P.from + (P.to - P.from) * i / (HIST.length - 1);
+      var r = mkReview(tech, m, 'Completed');
+      fillAnswers(r, R, P, base);
+      r.late = P.late.indexOf(m) >= 0;
+      r.submittedOn = r.late ? addMonths(m, 1) + '-02' : m + '-' + pad(18 + Math.floor(R() * 9));
+      fillFeedback(r, R, P, base);
+      REVIEWS.push(r);
+    });
+    // current month
+    var R2 = rng(ti * 977 + 999), cr;
+    var nb = P.to + (P.to - P.from) / (HIST.length - 1);
+    if (tech === 'Alex Morgan') {
+      cr = mkReview(tech, CUR, 'Open'); cr.draft = true;
+      cr.answers.q1 = 'Finished the instrument check backlog.'; cr.answers.q3 = 3; cr.answers.mood = 4;
+    } else if (tech === 'Sam Patel') {
+      cr = mkReview(tech, CUR, 'Submitted'); fillAnswers(cr, R2, P, nb);
+      cr.answers.q9 = DEDICATED; cr.submittedOn = '2026-11-18'; cr.chatRequested = true;
+    } else if (tech === 'Jordan Lee') {
+      cr = mkReview(tech, CUR, 'Completed'); fillAnswers(cr, R2, P, nb); cr.submittedOn = '2026-11-10'; fillFeedback(cr, R2, P, nb);
+    } else if (tech === 'Riley Evans') {
+      cr = mkReview(tech, CUR, 'Submitted'); fillAnswers(cr, R2, P, nb); cr.submittedOn = '2026-11-21';
+    } else if (tech === 'Taylor Reed') {
+      cr = mkReview(tech, CUR, 'Open'); cr.draft = true;
+      cr.answers.q1 = 'Kept on top of the routine work despite the outage.'; cr.answers.q3 = 5; cr.answers.mood = 2;
+    } else {
+      cr = mkReview(tech, CUR, 'Open');
+    }
+    REVIEWS.push(cr);
+  });
+  // guarantee one overdue open action for the demo
+  (function () {
+    var r = REVIEWS.find(function (x) { return x.tech === 'Sam Patel' && x.month === '2026-10'; });
+    r.fb.actions.push({ id: actId++, text: 'Arrange buddy shifts for mentee', owner: 'Team Leader', criteria: 'Two buddy shifts on the rota and completed.', due: '2026-11-20', status: 'Open', closedOn: '' });
+  })();
+
+  // ======================================================================
+  // calculations
+  // ======================================================================
   function isOverdue(r) { return r.state === 'Open' && TODAY > r.due; }
   function followOf(r) { return r.fb.followOverride || (r.state === 'Open' ? '' : r.answers.q9) || ''; }
-
-  function daysLeft(r) { return Math.ceil((new Date(r.due + 'T23:59:59') - new Date(TODAY + 'T12:00:00')) / 86400000); }
-  function progressOf(a) {
-    var items = [];
-    items.push(!!(a.q1 && a.q1.trim()));
-    items.push(!!a.q3);
-    items.push(!!a.q4); if (a.q4 === 'Yes') { items.push(!!(a.q4d && a.q4d.trim())); }
-    items.push(!!a.q5); if (a.q5 === 'Yes') { items.push(!!(a.q5d && a.q5d.trim())); }
-    items.push(!!a.q6); if (a.q6 === 'Yes') { items.push(!!(a.q6what && a.q6what.trim())); }
-    a.q8.forEach(function (x) { items.push(!!x.rating); });
-    items.push(!!a.q9);
-    var done = items.filter(Boolean).length;
-    return { total: items.length, done: done, pct: Math.round(done / items.length * 100) };
-  }
-  function workloadHistory(tech) {
-    return REVIEWS.filter(function (r) { return r.tech === tech && r.answers.q3; })
-      .sort(function (x, y) { return x.month < y.month ? -1 : 1; })
-      .map(function (r) { return { month: r.month, score: r.answers.q3 }; });
-  }
-  // consecutive on-time submissions, newest first. An in-progress Open month
-  // (still being filled in) is skipped rather than counted or treated as a break;
-  // a late or Closed month breaks the run.
-  function streakOf(tech) {
-    var months = REVIEWS.filter(function (r) { return r.tech === tech; })
-      .sort(function (x, y) { return x.month < y.month ? 1 : -1; });
-    var n = 0;
-    for (var i = 0; i < months.length; i++) {
-      var r = months[i];
-      if (r.state === 'Open') { continue; }
-      if ((r.state === 'Submitted' || r.state === 'Completed') && !r.late) { n += 1; } else { break; }
-    }
-    return n;
-  }
-  function winsFor(tech) {
-    return REVIEWS.filter(function (r) { return r.tech === tech && r.answers.win && r.answers.win.trim(); })
-      .sort(function (x, y) { return x.month < y.month ? 1 : -1; })
-      .map(function (r) { return { month: r.month, win: r.answers.win }; });
-  }
-  function avg(arr) { return arr.length ? arr.reduce(function (s, n) { return s + n; }, 0) / arr.length : null; }
+  function daysLeft(r) { return Math.ceil((new Date(r.due + 'T23:59:59Z') - new Date(TODAY + 'T12:00:00Z')) / 86400000); }
+  function reviewsOf(tech) { return REVIEWS.filter(function (r) { return r.tech === tech; }).sort(function (x, y) { return x.month < y.month ? -1 : 1; }); }
+  function currentOf(tech) { return REVIEWS.find(function (r) { return r.tech === tech && r.month === CUR; }); }
   function selfAvg(r) { return avg(r.answers.q8.filter(function (x) { return x.rating; }).map(function (x) { return x.rating; })); }
-  function mgrAvg(r) {
-    var vals = r.snapshot.map(function (e) { return r.fb.expRating[e.id]; }).filter(function (v) { return v; });
-    return vals.length ? avg(vals) : null;
-  }
+  function mgrAvg(r) { return avg(r.snapshot.map(function (e) { return r.fb.expRating[e.id]; }).filter(function (v) { return v; })); }
+  function canSeeTl(r, aud) { return aud === 'tl' || r.released; }
+  function isIn(r) { return r.state === 'Submitted' || r.state === 'Completed'; }
   function bandFor(score) {
     if (score === null || score === undefined) { return null; }
     for (var i = 0; i < SETTINGS.bands.length; i++) { if (score < SETTINGS.bands[i].max) { return SETTINGS.bands[i]; } }
     return SETTINGS.bands[SETTINGS.bands.length - 1];
   }
-  function confetti() {
-    var wrap = h('div', { class: 'confetti', 'aria-hidden': 'true' });
-    var cols = ['#ef7d3a', '#1f7190', '#2d7a46', '#d9a300', '#6a4fb0', '#a4262c'];
-    for (var i = 0; i < 90; i++) {
-      var p = h('i');
-      p.style.left = Math.random() * 100 + 'vw';
-      p.style.background = cols[i % cols.length];
-      p.style.animationDuration = (2.2 + Math.random() * 1.8) + 's';
-      p.style.animationDelay = (Math.random() * 0.5) + 's';
-      p.style.transform = 'rotate(' + (Math.random() * 360) + 'deg)';
-      wrap.appendChild(p);
+  function periodFor(tech) { var ap = TECH_INFO[tech].appraisal, end = ap.slice(0, 7); return { apDate: ap, end: end, start: addMonths(end, -12) }; }
+  function periodReviews(tech) { var p = periodFor(tech); return reviewsOf(tech).filter(function (r) { return r.month > p.start && r.month <= p.end; }); }
+
+  // Expected appraisal outcome – see "How this is worked out"
+  function expectedOutcome(tech, aud) {
+    var p = periodFor(tech), prs = periodReviews(tech);
+    var pts = prs.filter(isIn).map(function (r) {
+      var self = selfAvg(r), tl = canSeeTl(r, aud) ? mgrAvg(r) : null;
+      return { month: r.month, self: self, tl: tl, used: tl !== null ? tl : self };
+    }).filter(function (pt) { return pt.used !== null; });
+    var snap = snapshotFor(tech);
+    var perExp = snap.map(function (e) {
+      var hist = [];
+      prs.filter(isIn).forEach(function (r) {
+        var q = r.answers.q8.find(function (x) { return x.id === e.id; });
+        var see = canSeeTl(r, aud);
+        hist.push({ month: r.month, self: q && q.rating ? q.rating : null, tl: see ? (r.fb.expRating[e.id] || null) : null, comment: q ? q.comment : '', fb: see ? (r.fb.exp[e.id] || '') : '' });
+      });
+      var ls = null, lt = null;
+      hist.forEach(function (x) { if (x.self) { ls = x.self; } if (x.tl) { lt = x.tl; } });
+      return { e: e, hist: hist, latestSelf: ls, latestTl: lt, latest: lt !== null ? lt : ls };
+    });
+    if (!pts.length) { return { period: p, pts: [], current: null, projected: null, slope: 0, band: null, perExp: perExp, selfAvg: null, tlAvg: null }; }
+    var ws = 0, sum = 0;
+    pts.forEach(function (pt, i) { ws += i + 1; sum += (i + 1) * pt.used; });
+    var current = sum / ws;
+    var xs = pts.map(function (pt) { return monthDiff(p.start, pt.month); }), ys = pts.map(function (pt) { return pt.used; });
+    var slope = 0, projected = current;
+    if (pts.length >= 3) {
+      var mx = avg(xs), my = avg(ys), nu = 0, de = 0;
+      xs.forEach(function (x, i) { nu += (x - mx) * (ys[i] - my); de += (x - mx) * (x - mx); });
+      slope = de ? nu / de : 0;
+      var lastX = xs[xs.length - 1], fitNow = my + slope * (lastX - mx);
+      var remaining = Math.max(0, monthDiff(p.start, p.end) - lastX);
+      projected = clamp(fitNow + slope * remaining * 0.5, fitNow - 0.75, fitNow + 0.75);
     }
-    root.appendChild(wrap);
-    setTimeout(function () { wrap.remove(); }, 4200);
+    projected = clamp(projected, 1, 5);
+    var tlv = pts.filter(function (x) { return x.tl !== null; }).map(function (x) { return x.tl; });
+    return { period: p, pts: pts, current: current, projected: projected, slope: slope, band: bandFor(projected), perExp: perExp,
+      selfAvg: avg(pts.filter(function (x) { return x.self !== null; }).map(function (x) { return x.self; })), tlAvg: tlv.length ? avg(tlv) : null };
+  }
+  function streakOf(tech) {
+    var ms = reviewsOf(tech).reverse(), n = 0;
+    for (var i = 0; i < ms.length; i++) {
+      if (ms[i].state === 'Open') { continue; }
+      if (isIn(ms[i]) && !ms[i].late) { n += 1; } else { break; }
+    }
+    return n;
+  }
+  function onTimeOf(tech) {
+    var rs = periodReviews(tech).filter(function (r) { return r.state !== 'Open' || TODAY > r.due; });
+    return { onTime: rs.filter(function (r) { return isIn(r) && !r.late; }).length, total: rs.length };
+  }
+  function actionsOf(filterFn, aud) {
+    var out = [];
+    REVIEWS.forEach(function (r) {
+      if (aud === 'tech' && !r.released) { return; }
+      r.fb.actions.forEach(function (ac) { if (!filterFn || filterFn(ac, r)) { out.push({ ac: ac, r: r }); } });
+    });
+    return out.sort(function (x, y) { return (x.ac.due || '9') < (y.ac.due || '9') ? -1 : 1; });
+  }
+  function acOverdue(ac) { return ac.status === 'Open' && ac.due && ac.due < TODAY; }
+  function progressOf(a) {
+    var items = [];
+    items.push(!!(a.q1 && a.q1.trim())); items.push(!!a.q3);
+    items.push(!!a.q4); if (a.q4 === 'Yes') { items.push(!!a.q4d.trim()); }
+    items.push(!!a.q5); if (a.q5 === 'Yes') { items.push(!!a.q5d.trim()); }
+    items.push(!!a.q6); if (a.q6 === 'Yes') { items.push(!!a.q6what.trim()); }
+    a.q8.forEach(function (x) { items.push(!!x.rating); });
+    items.push(!!a.q9);
+    var done = items.filter(Boolean).length;
+    return { total: items.length, done: done, pct: Math.round(done / items.length * 100) };
+  }
+  function missingItems(a) {
+    var m = [];
+    if (!a.q1.trim()) { m.push('Q1 What has gone well'); }
+    if (!a.q3) { m.push('Q3 Workload'); }
+    if (!a.q4) { m.push('Q4 Yes/No'); } else if (a.q4 === 'Yes' && !a.q4d.trim()) { m.push('Q4 details'); }
+    if (!a.q5) { m.push('Q5 Yes/No'); } else if (a.q5 === 'Yes' && !a.q5d.trim()) { m.push('Q5 details'); }
+    if (!a.q6) { m.push('Q6 Yes/No'); } else if (a.q6 === 'Yes' && !a.q6what.trim()) { m.push('Q6 details'); }
+    if (a.q8.some(function (x) { return !x.rating; })) { m.push('Q8 a rating for each expectation'); }
+    if (!a.q9) { m.push('Q9 Follow-up'); }
+    return m;
+  }
+  function clearHidden(a) {
+    if (a.q4 !== 'Yes') { a.q4d = ''; }
+    if (a.q5 !== 'Yes') { a.q5d = ''; }
+    if (a.q6 !== 'Yes') { a.q6what = ''; a.q6why = ''; }
   }
 
-  var root, live, state = { role: 'tech', view: 'tech', reviewId: null, tab: 'reviews', month: '2026-11', tech: '' };
+  // ======================================================================
+  // state + feedback UI
+  // ======================================================================
+  var root, live, tipEl;
+  var state = { role: 'tech', view: 'tech', reviewId: null, profileTech: null, month: CUR, techFilter: '', actFilter: 'open', actTech: '',
+    expYear: CUR_YEAR, showRetired: false, expEdit: null, report: null };
 
   function toast(msg, isErr) {
     var t = h('div', { class: 'toast' + (isErr ? ' err' : ''), role: 'status', text: msg });
-    root.appendChild(t);
-    live.textContent = msg;
+    root.appendChild(t); live.textContent = msg;
     setTimeout(function () { t.remove(); }, 3200);
   }
-
   function confirmBox(title, body, okText, onOk) {
     var back = h('div', { class: 'modal-back' });
     var ok = h('button', { class: 'btn primary', type: 'button', text: okText, onclick: function () { back.remove(); onOk(); } });
-    var cancel = h('button', { class: 'btn', type: 'button', text: 'Cancel', onclick: function () { back.remove(); } });
     back.appendChild(h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': title }, [
-      h('h3', { text: title }), h('p', { text: body }), h('div', { class: 'btn-row' }, [ok, cancel])
+      h('h3', { text: title }), h('p', { text: body }),
+      h('div', { class: 'btn-row' }, [ok, h('button', { class: 'btn', type: 'button', text: 'Cancel', onclick: function () { back.remove(); } })])
     ]));
-    root.appendChild(back);
-    ok.focus();
+    root.appendChild(back); ok.focus();
   }
+  function confetti() {
+    var wrap = h('div', { class: 'confetti', 'aria-hidden': 'true' });
+    var cols = ['#ef7d3a', '#1f7190', '#2f9a63', '#d99a12', '#6a4fb0', '#2a78d6'];
+    for (var i = 0; i < 90; i++) {
+      var p = h('i');
+      p.style.left = Math.random() * 100 + 'vw'; p.style.background = cols[i % cols.length];
+      p.style.animationDuration = (2.2 + Math.random() * 1.8) + 's'; p.style.animationDelay = (Math.random() * 0.5) + 's';
+      wrap.appendChild(p);
+    }
+    root.appendChild(wrap);
+    setTimeout(function () { wrap.remove(); }, 4300);
+  }
+  function tip(el, text) {
+    el.addEventListener('mouseenter', function (e) { tipEl.textContent = typeof text === 'function' ? text() : text; tipEl.style.display = 'block'; moveTip(e); });
+    el.addEventListener('mousemove', moveTip);
+    el.addEventListener('mouseleave', function () { tipEl.style.display = 'none'; });
+    return el;
+  }
+  function moveTip(e) { tipEl.style.left = (e.clientX + 14) + 'px'; tipEl.style.top = (e.clientY + 14) + 'px'; }
+  function go(view, extra) { state.view = view; Object.keys(extra || {}).forEach(function (k) { state[k] = extra[k]; }); render(); }
 
+  // ======================================================================
+  // generic UI pieces
+  // ======================================================================
+  function card(title, sub, children, cls, right) {
+    return h('section', { class: 'card ' + (cls || '') }, [
+      title ? h('div', { class: 'card-h' }, [h('div', null, [h('h2', { text: title }), sub ? h('div', { class: 'sub', text: sub }) : null]), right || null]) : null
+    ].concat(children));
+  }
+  function tile(label, value, sub, cls) {
+    return h('div', { class: 'tile ' + (cls || '') }, [h('div', { class: 'tl', text: label }),
+      typeof value === 'string' ? h('div', { class: 'tv', text: value }) : h('div', { class: 'tv' }, value),
+      h('div', { class: 'ts' }, sub || '')]);
+  }
+  function bandChip(score, big) {
+    var b = bandFor(score);
+    return b ? h('span', { class: 'band ' + b.cls + (big ? ' big' : ''), text: b.name }) : h('span', { class: 'muted', text: 'Not enough data' });
+  }
+  function track(score) {
+    return h('div', { class: 'track' }, score === null || score === undefined ? [] : [h('i', { style: 'left:' + ((score - 1) / 4 * 100) + '%' })]);
+  }
   function chipFor(r) {
     if (r.state === 'Completed') { return h('span', { class: 'chip green', text: 'Completed' + (r.late ? ' (late)' : '') }); }
     if (r.state === 'Submitted') { return h('span', { class: 'chip blue', text: 'Awaiting review' + (r.late ? ' (late)' : '') }); }
     if (r.state === 'Closed - Not Submitted') { return h('span', { class: 'chip', text: 'Closed – not submitted' }); }
-    if (isOverdue(r)) { return h('span', { class: 'chip red', text: 'Overdue – ' + (r.draft ? 'draft' : 'not started') }); }
+    if (isOverdue(r)) { return h('span', { class: 'chip red', text: 'Overdue' }); }
     return h('span', { class: 'chip', text: r.draft ? 'Draft' : 'Not started' });
   }
-
-  // ---------------- form controls ----------------
+  function textBox(label, value, onInput, disabled, rows) {
+    var id = nid('t');
+    var ta = h('textarea', { id: id, rows: rows || 3 });
+    ta.value = value || ''; ta.disabled = !!disabled;
+    ta.addEventListener('input', function () { onInput(ta.value); });
+    return h('div', null, [label ? h('label', { class: 'field', for: id, text: label }) : null, ta]);
+  }
+  function seg(labels, value, onChange, disabled, wide, titles) {
+    var g = h('div', { class: 'seg' + (wide ? ' wide' : ''), role: 'radiogroup' });
+    labels.forEach(function (lab, i) {
+      var v = lab.value;
+      var b = h('button', { type: 'button', role: 'radio', 'aria-pressed': String(value) === String(v) ? 'true' : 'false', 'aria-checked': String(value) === String(v) ? 'true' : 'false', disabled: !!disabled, text: lab.text });
+      if (titles) { tip(b, titles[i]); }
+      b.addEventListener('click', function () {
+        Array.prototype.forEach.call(g.children, function (c) { c.setAttribute('aria-pressed', 'false'); c.setAttribute('aria-checked', 'false'); });
+        b.setAttribute('aria-pressed', 'true'); b.setAttribute('aria-checked', 'true');
+        onChange(v);
+      });
+      g.appendChild(b);
+    });
+    return g;
+  }
+  function ynSeg(value, onChange, disabled) { return seg([{ value: 'Yes', text: 'Yes' }, { value: 'No', text: 'No' }], value, onChange, disabled, true); }
+  function ratingSeg(value, onChange, disabled) {
+    return seg([1, 2, 3, 4, 5].map(function (n) { return { value: n, text: String(n) }; }), value, onChange, disabled, false,
+      PROGRESS.map(function (p) { return p.value + ' – ' + p.title + '\n' + p.desc; }));
+  }
   function choiceGroup(label, options, value, onChange, disabled, cls) {
     var name = nid('g');
     var group = h('div', { class: 'choices ' + (cls || ''), role: 'radiogroup', 'aria-label': label });
@@ -476,611 +735,853 @@
       input.checked = value !== null && value !== undefined && String(value) === String(o.value);
       input.disabled = !!disabled;
       input.addEventListener('change', function () { onChange(o.value); });
-      group.appendChild(h('label', { class: 'choice', for: id }, [
-        input, h('span', { class: 'choice-title', text: o.title }), o.desc ? h('span', { class: 'choice-desc', text: o.desc }) : null
-      ]));
+      group.appendChild(h('label', { class: 'choice', for: id }, [input, h('span', { class: 'ct', text: o.title }), o.desc ? h('span', { class: 'cd', text: o.desc }) : null]));
     });
     return group;
   }
-
-  function textBox(label, value, onInput, disabled, placeholder, rows) {
-    var id = nid('t');
-    var ta = h('textarea', { id: id, rows: rows || 3, placeholder: placeholder || null });
-    ta.value = value || '';
-    ta.disabled = !!disabled;
-    ta.addEventListener('input', function () { onInput(ta.value); });
-    return h('div', null, [label ? h('label', { class: 'field', for: id, text: label }) : null, ta]);
-  }
-
-  function feedbackBlock(r, text) {
-    if (!r.released || !text) { return null; }
-    return h('div', { class: 'feedback' }, [h('b', { text: 'Team Leader' }), text]);
-  }
-
-  function qCard(num, title, hint, children) {
-    return h('section', { class: 'card', 'aria-labelledby': 'q' + num + '-h' }, [
-      h('h2', { id: 'q' + num + '-h' }, [h('span', { class: 'qnum', text: String(num), 'aria-hidden': 'true' }), title]),
-      hint ? h('p', { class: 'hint', text: hint }) : null
-    ].concat(children));
-  }
-
-  // ---------------- technician questionnaire ----------------
-  function missingItems(a) {
-    var m = [];
-    if (!a.q1.trim()) { m.push('Q1 What has gone well'); }
-    if (!a.q3) { m.push('Q3 Workload rating'); }
-    if (!a.q4) { m.push('Q4 Yes/No'); } else if (a.q4 === 'Yes' && !a.q4d.trim()) { m.push('Q4 details'); }
-    if (!a.q5) { m.push('Q5 Yes/No'); } else if (a.q5 === 'Yes' && !a.q5d.trim()) { m.push('Q5 details'); }
-    if (!a.q6) { m.push('Q6 Yes/No'); } else if (a.q6 === 'Yes' && !a.q6what.trim()) { m.push('Q6 what you would like'); }
-    if (a.q8.some(function (x) { return !x.rating; })) { m.push('Q8 a progress rating for each expectation'); }
-    if (!a.q9) { m.push('Q9 Follow-up preference'); }
-    return m;
-  }
-
-  function clearHidden(a) {
-    if (a.q4 !== 'Yes') { a.q4d = ''; }
-    if (a.q5 !== 'Yes') { a.q5d = ''; }
-    if (a.q6 !== 'Yes') { a.q6what = ''; a.q6why = ''; }
-  }
-
-  // ---------------- shared engagement builders ----------------
-  function moodSelector(a, editable) {
-    var grp = h('div', { class: 'mood', role: 'group', 'aria-label': 'Energy check-in' });
-    MOODS.forEach(function (m) {
-      var b = h('button', { type: 'button', 'aria-pressed': a.mood === m.value ? 'true' : 'false', disabled: !editable },
-        [h('span', { class: 'emo', 'aria-hidden': 'true', text: m.emo }), h('span', { class: 'ml', text: m.label })]);
-      b.addEventListener('click', function () {
-        a.mood = (a.mood === m.value ? null : m.value);
-        Array.prototype.forEach.call(grp.children, function (c, idx) { c.setAttribute('aria-pressed', a.mood === MOODS[idx].value ? 'true' : 'false'); });
-      });
-      grp.appendChild(b);
-    });
-    return grp;
-  }
-  function moodCard(r, editable) {
+  function qCard(num, title, right, children) {
     return h('section', { class: 'card' }, [
-      h('h2', { text: '🔋 How\'s your energy this month?' }),
-      h('p', { class: 'hint', text: 'A quick check-in — optional. Your Team Leader can see this too, so they can support the team.' }),
-      moodSelector(r.answers, editable)
-    ]);
+      h('div', { class: 'q-head' + (children && children.length ? '' : ' only') }, [h('h3', null, [h('span', { class: 'qnum', text: String(num) }), title]), right || null])
+    ].concat(children || []));
   }
-  function gauge(whoLabel, score) {
-    if (score === null || score === undefined) {
-      return h('div', { class: 'gauge' }, [h('div', { class: 'who', text: whoLabel }), h('div', { class: 'muted', style: 'margin-top:8px', text: 'Not yet rated' })]);
-    }
-    var b = bandFor(score);
-    var pct = Math.max(0, Math.min(100, (score - 1) / 4 * 100));
-    return h('div', { class: 'gauge' }, [
-      h('div', { class: 'who', text: whoLabel }),
-      h('div', { class: 'score' }, [score.toFixed(1), h('small', { text: ' / 5' })]),
-      h('span', { class: 'band ' + b.cls, text: b.name }),
-      h('div', { class: 'track' }, [
-        h('i', { style: 'left:' + pct + '%' }),
-        h('span', { class: 'end', style: 'left:2px', text: '1' }),
-        h('span', { class: 'end', style: 'right:2px', text: '5' })
-      ])
-    ]);
+  function table(headers, rows, opts) {
+    opts = opts || {};
+    return h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl' }, [
+      h('thead', null, h('tr', null, headers.map(function (x) { return h('th', { scope: 'col', text: x }); }))),
+      h('tbody', null, rows.length ? rows : h('tr', null, h('td', { colspan: String(headers.length), class: 'muted', text: opts.empty || 'Nothing to show.' })))
+    ]));
   }
-  function bandHowTo() {
-    return h('details', { class: 'howto' }, [
+  function tr(cells, cls) { return h('tr', { class: cls || null }, cells.map(function (c) { return c && c.tagName === 'TD' ? c : h('td', null, c === null || c === undefined ? '—' : c); })); }
+  function legend(items) {
+    return h('div', { class: 'legend' }, items.map(function (it) {
+      return h('span', null, [h('i', { class: 'sw' + (it.dash ? ' dash' : ''), style: it.dash ? null : 'background:' + it.color }), it.label]);
+    }));
+  }
+  function moodEmoji(v) { var m = MOODS.find(function (x) { return x.value === v; }); return m ? m.emo + ' ' + m.label : '—'; }
+  function howWorked(tech, aud) {
+    var p = periodFor(tech);
+    return h('details', { class: 'how' }, [
       h('summary', { text: 'ⓘ How this is worked out' }),
-      h('p', { class: 'hint', style: 'margin:6px 0', text: 'Your 1–5 ratings across all active expectations are averaged, then matched to a band:' }),
+      h('ol', null, [
+        h('li', { text: 'The appraisal period is the 12 months up to the appraisal date (' + fmtDate(p.apDate) + '): ' + monthLabel(addMonths(p.start, 1)) + ' to ' + monthLabel(p.end) + '.' }),
+        h('li', { text: 'Each submitted month gets a score: the average of the 1–5 ratings across all expectations. Where the Team Leader has rated' + (aud === 'tech' ? ' and released the review' : '') + ', their rating is used; otherwise the self-rating.' }),
+        h('li', { text: 'Current position = the average of those monthly scores, with recent months counting more.' }),
+        h('li', { text: 'Projected = where the trend line puts you now, plus half of the trend carried forward to the appraisal date – a cautious estimate, never more than 0.75 from where you are now. With fewer than 3 months, the current position is used.' }),
+        h('li', { text: 'The projected score is matched to a band:' })
+      ]),
       h('table', { class: 'bandtbl' }, SETTINGS.bands.map(function (b, i) {
-        var range = i === 0 ? 'under ' + b.max
-          : (b.max >= 99 ? 'above ' + SETTINGS.bands[i - 1].max : SETTINGS.bands[i - 1].max + ' – ' + b.max);
-        return h('tr', null, [h('td', null, [h('span', { class: 'band ' + b.cls, text: b.name })]), h('td', { class: 'muted', text: range })]);
+        var range = i === 0 ? 'under ' + b.max : (b.max >= 99 ? SETTINGS.bands[i - 1].max + ' and above' : SETTINGS.bands[i - 1].max + ' to under ' + b.max);
+        return h('tr', null, [h('td', null, h('span', { class: 'band ' + b.cls, text: b.name })), h('td', { class: 'muted', text: range })]);
       }))
     ]);
   }
-  function appraisalSummary(r) {
-    var rated = r.answers.q8.filter(function (x) { return x.rating; });
-    if (!rated.length) { return null; }
-    var titleOf = function (id) { var e = r.snapshot.find(function (s) { return s.id === id; }); return e ? e.title : ''; };
-    var best = rated.slice().sort(function (x, y) { return y.rating - x.rating; })[0];
-    var worst = rated.slice().sort(function (x, y) { return x.rating - y.rating; })[0];
-    var sa = selfAvg(r), b = bandFor(sa);
-    return h('div', { class: 'summ' }, [
-      h('div', { class: 's pos' }, [h('b', { text: 'Where you\'re at' }), 'Average ' + sa.toFixed(1) + '/5 — ' + b.name + '.']),
-      h('div', { class: 's good' }, [h('b', { text: 'Going well' }), titleOf(best.id)]),
-      h('div', { class: 's improve' }, [h('b', { text: 'To focus on' }), titleOf(worst.id)])
-    ]);
-  }
-  function appraisalCard(r, showMgr, selfLabel) {
-    var sa = selfAvg(r), ma = mgrAvg(r);
-    if (sa === null && ma === null) { return null; }
-    var gauges = [gauge(selfLabel || 'Your self-rating', sa)];
-    if (showMgr) { gauges.push(gauge('Line manager rating', ma)); }
-    return h('section', { class: 'card' }, [
-      h('h2', { text: '📈 Appraisal progress' }),
-      h('p', { class: 'hint', text: 'How your appraisal expectations are tracking, averaged across all of them.' }),
-      h('div', { class: 'appraise' }, gauges),
-      appraisalSummary(r),
-      bandHowTo()
-    ].filter(Boolean));
-  }
-  function winCard(r, tech, editable) {
-    var body = [editable
-      ? textBox(null, r.answers.win, function (v) { r.answers.win = v; }, false, 'One thing you\'re proud of this month', 2)
-      : h('div', { class: 'answer' + (r.answers.win ? '' : ' empty'), text: r.answers.win || '(none added)' })];
-    var past = winsFor(tech).filter(function (w) { return w.month !== r.month; });
-    if (past.length) {
-      body.push(h('div', { class: 'win-wall' }, past.map(function (w) {
-        return h('div', { class: 'w' }, [h('b', { text: monthLabel(w.month) }), w.win]);
-      })));
-    }
-    return h('section', { class: 'card accent-card' }, [
-      h('h2', { text: '🏅 Win of the month' }),
-      h('p', { class: 'hint', text: 'Log one thing you\'re proud of. It builds into your own wins wall — handy at appraisal time.' })
-    ].concat(body));
-  }
-  function notesCard(tech) {
-    return h('section', { class: 'card notes-card' }, [
-      h('h2', { text: '🔒 My private notes' }),
-      h('div', { class: 'lockline', text: '🔒 Only you can see these — never shared with your Team Leader. Carried over each month.' }),
-      textBox(null, PRIVATE_NOTES[tech] || '', function (v) { PRIVATE_NOTES[tech] = v; }, false, 'e.g. things to raise next time', 3)
-    ]);
-  }
-  function chatControl(r) {
-    if (r.chatRequested) {
-      return h('span', { style: 'display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap' }, [
-        h('span', { class: 'pill', style: 'background:var(--blue-bg);color:var(--navy)', text: '💬 Chat requested' }),
-        h('button', { class: 'btn', type: 'button', text: 'Cancel', onclick: function () { r.chatRequested = false; render(); } })
-      ]);
-    }
-    return h('button', { class: 'btn', type: 'button', text: '💬 Ask for a chat',
-      title: 'Quietly lets your Team Leader know you\'d like a face-to-face — you don\'t have to say why.',
-      onclick: function () { r.chatRequested = true; toast('Your Team Leader will see you\'d like a chat (prototype).'); render(); } });
-  }
 
-  function techView() {
-    var mine = REVIEWS.filter(function (r) { return r.tech === ME; }).sort(function (x, y) { return x.month < y.month ? 1 : -1; });
-    var r = REVIEWS.find(function (x) { return x.id === state.reviewId; }) || mine[0];
-    state.reviewId = r.id;
-    var a = r.answers;
-    var editable = r.state === 'Open';
-    var ro = !editable;
-
-    var missingBox = h('div', { 'aria-live': 'polite' });
-    function refreshMissing() {
-      refreshMeter();
-      missingBox.textContent = '';
-      if (!editable) { return; }
-      var m = missingItems(a);
-      if (m.length) {
-        missingBox.appendChild(h('div', { class: 'missing' }, [h('strong', { text: 'Still to complete before you can submit: ' }), m.join(' · ')]));
-      } else {
-        missingBox.appendChild(h('div', { class: 'done', text: 'Everything required is complete – you can submit when ready.' }));
+  // ======================================================================
+  // charts (SVG nodes only)
+  // ======================================================================
+  // Rating trend: self vs Team Leader monthly scores on the 1–5 scale, band-shaded, with projection.
+  function trendChart(tech, aud, o, height) {
+    var p = o.period, months = [];
+    for (var k = 1; k <= 12; k++) { months.push(addMonths(p.start, k)); }
+    var W = 640, H = height || 230, pl = 30, pr = 14, pt = 10, pb = 24, iw = W - pl - pr, ih = H - pt - pb, n = months.length;
+    var x = function (i) { return pl + i * iw / (n - 1); }, y = function (v) { return pt + (5 - v) / 4 * ih; };
+    var svg = s('svg', { viewBox: '0 0 ' + W + ' ' + H, class: 'chart', role: 'img', 'aria-label': 'Monthly rating trend for ' + tech });
+    var lo = 1;
+    SETTINGS.bands.forEach(function (b) { var hi = clamp(b.max, 1, 5); if (hi > lo) { svg.appendChild(s('rect', { x: pl, y: y(hi), width: iw, height: y(lo) - y(hi), fill: BAND_TINT[b.cls] })); } lo = Math.max(lo, hi); });
+    [1, 2, 3, 4, 5].forEach(function (v) {
+      svg.appendChild(s('line', { x1: pl, x2: W - pr, y1: y(v), y2: y(v), stroke: '#ffffff', 'stroke-width': 1 }));
+      svg.appendChild(s('text', { x: pl - 8, y: y(v) + 4, 'text-anchor': 'end', text: String(v) }));
+    });
+    months.forEach(function (m, i) {
+      var t = s('text', { x: x(i), y: H - 6, 'text-anchor': 'middle', text: monthShort(m) });
+      if (m === p.end) { t.setAttribute('font-weight', '700'); t.setAttribute('style', 'fill:#16222c'); }
+      svg.appendChild(t);
+    });
+    var idx = function (m) { return months.indexOf(m); };
+    function series(key, color, name) {
+      var pts = o.pts.filter(function (pt) { return pt[key] !== null && idx(pt.month) >= 0; });
+      if (!pts.length) { return; }
+      var d = pts.map(function (pt, i) { return (i ? 'L' : 'M') + x(idx(pt.month)).toFixed(1) + ' ' + y(pt[key]).toFixed(1); }).join(' ');
+      svg.appendChild(s('path', { d: d, fill: 'none', stroke: color, 'stroke-width': 2, 'stroke-linejoin': 'round' }));
+      pts.forEach(function (pt) {
+        svg.appendChild(s('circle', { cx: x(idx(pt.month)), cy: y(pt[key]), r: 4, fill: color, stroke: '#fff', 'stroke-width': 2 }));
+        var hit = s('circle', { cx: x(idx(pt.month)), cy: y(pt[key]), r: 11, fill: 'transparent', style: 'cursor:default' });
+        tip(hit, name + ' – ' + monthLabel(pt.month) + '\n' + pt[key].toFixed(1) + ' / 5 (' + bandFor(pt[key]).name + ')');
+        svg.appendChild(hit);
+      });
+    }
+    series('self', C_SELF, 'Self-rating');
+    series('tl', C_TL, 'Team Leader rating');
+    if (o.pts.length && o.projected !== null) {
+      var lastPt = o.pts[o.pts.length - 1], li = idx(lastPt.month), ei = idx(p.end);
+      if (li >= 0 && ei > li) {
+        svg.appendChild(s('line', { x1: x(li), y1: y(lastPt.used), x2: x(ei), y2: y(o.projected), stroke: '#16222c', 'stroke-width': 1.5, 'stroke-dasharray': '4 4' }));
+        var pc = s('circle', { cx: x(ei), cy: y(o.projected), r: 5, fill: '#fff', stroke: '#16222c', 'stroke-width': 2 });
+        svg.appendChild(pc);
+        var hit = s('circle', { cx: x(ei), cy: y(o.projected), r: 12, fill: 'transparent' });
+        tip(hit, 'Projected at appraisal (' + fmtDate(p.apDate) + ')\n' + o.projected.toFixed(1) + ' / 5 – ' + o.band.name);
+        svg.appendChild(hit);
+        svg.appendChild(s('text', { x: x(ei) - 8, y: y(o.projected) - 10, 'text-anchor': 'end', style: 'fill:#16222c;font-weight:700', text: 'Projected ' + o.projected.toFixed(1) }));
       }
     }
-
-    function conditional(show, children) {
-      var wrap = h('div', null, children);
-      wrap.hidden = !show;
-      return wrap;
+    return h('div', null, [legend([{ color: C_SELF, label: 'Self-rating' }, { color: C_TL, label: 'Team Leader rating' }, { dash: true, label: 'Projection to appraisal' }]), svg]);
+  }
+  // Vertical columns over months (workload, energy)
+  function colChart(items, max, color, height, name, fmt, width) {
+    var W = width || 640, H = height || 170, pl = 26, pr = 10, pt = 14, pb = 22, iw = W - pl - pr, ih = H - pt - pb, n = items.length;
+    var svg = s('svg', { viewBox: '0 0 ' + W + ' ' + H, class: 'chart', role: 'img', 'aria-label': name });
+    for (var v = 1; v <= max; v++) {
+      svg.appendChild(s('line', { x1: pl, x2: W - pr, y1: pt + ih - v / max * ih, y2: pt + ih - v / max * ih, stroke: '#edf0f3' }));
+      svg.appendChild(s('text', { x: pl - 7, y: pt + ih - v / max * ih + 4, 'text-anchor': 'end', text: String(v) }));
     }
+    svg.appendChild(s('line', { x1: pl, x2: W - pr, y1: pt + ih, y2: pt + ih, stroke: '#c9d1d9' }));
+    var bw = Math.min(34, iw / n * 0.55);
+    items.forEach(function (it, i) {
+      var cx = pl + (i + 0.5) * iw / n;
+      svg.appendChild(s('text', { x: cx, y: H - 6, 'text-anchor': 'middle', text: it.label }));
+      if (it.value === null || it.value === undefined) { return; }
+      var bh = it.value / max * ih, x0 = cx - bw / 2, y0 = pt + ih - bh, r = Math.min(4, bh);
+      var d = 'M' + x0 + ' ' + (pt + ih) + ' L' + x0 + ' ' + (y0 + r) + ' Q' + x0 + ' ' + y0 + ' ' + (x0 + r) + ' ' + y0 + ' L' + (x0 + bw - r) + ' ' + y0 + ' Q' + (x0 + bw) + ' ' + y0 + ' ' + (x0 + bw) + ' ' + (y0 + r) + ' L' + (x0 + bw) + ' ' + (pt + ih) + ' Z';
+      svg.appendChild(s('path', { d: d, fill: it.color || color }));
+      var hit = s('rect', { x: cx - iw / n / 2, y: pt, width: iw / n, height: ih, fill: 'transparent' });
+      tip(hit, it.tipText || (it.label + ': ' + (fmt ? fmt(it.value) : it.value)));
+      svg.appendChild(hit);
+    });
+    return svg;
+  }
+  function sparkline(values, color) {
+    var W = 110, H = 28, vals = values.filter(function (v) { return v !== null; });
+    var svg = s('svg', { viewBox: '0 0 ' + W + ' ' + H, width: W, height: H, 'aria-hidden': 'true' });
+    if (vals.length < 2) { return svg; }
+    var x = function (i) { return 3 + i * (W - 6) / (vals.length - 1); }, y = function (v) { return 3 + (5 - v) / 4 * (H - 6); };
+    svg.appendChild(s('path', { d: vals.map(function (v, i) { return (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(v).toFixed(1); }).join(' '), fill: 'none', stroke: color, 'stroke-width': 1.75 }));
+    svg.appendChild(s('circle', { cx: x(vals.length - 1), cy: y(vals[vals.length - 1]), r: 3, fill: color }));
+    return svg;
+  }
+  function stackBar(segs) {
+    var total = segs.reduce(function (t, x) { return t + x.count; }, 0) || 1;
+    var bar = h('div', { class: 'stackbar' }, segs.filter(function (x) { return x.count; }).map(function (x) {
+      return tip(h('div', { style: 'flex:' + x.count + ';background:' + x.color }), x.label + ': ' + x.count + ' of ' + total);
+    }));
+    var lg = h('div', { class: 'slegend' }, segs.map(function (x) { return h('div', null, [h('i', { class: 'dot', style: 'background:' + x.color }), x.label, h('b', { text: String(x.count) })]); }));
+    return h('div', null, [bar, lg]);
+  }
+  function pairBars(perExp) {
+    return h('div', null, [legend([{ color: C_SELF, label: 'Latest self-rating' }, { color: C_TL, label: 'Latest Team Leader rating' }]),
+      h('div', { class: 'pairbars' }, perExp.map(function (x) {
+        function bar(v, c, who) {
+          return [tip(h('div', { class: 'bar' }, v ? h('i', { style: 'width:' + (v / 5 * 100) + '%;background:' + c }) : null), x.e.title + '\n' + who + ': ' + (v ? v + ' – ' + PROGRESS[v - 1].title : 'not rated yet')),
+            h('div', { class: 'v', text: v ? String(v) : '—' })];
+        }
+        return h('div', { class: 'row' }, [h('div', { class: 'lbl', title: x.e.title, text: x.e.title })].concat(bar(x.latestSelf, C_SELF, 'Self')).concat(bar(x.latestTl, C_TL, 'Team Leader')));
+      }))]);
+  }
 
-    // month picker + status bar
-    var monthSel = h('select', { 'aria-label': 'Choose a month', onchange: function () { state.reviewId = Number(monthSel.value); render(); } },
+  // ======================================================================
+  // TECHNICIAN – this month
+  // ======================================================================
+  function techView() {
+    var mine = reviewsOf(ME).slice().reverse();
+    var r = REVIEWS.find(function (x) { return x.id === state.reviewId && x.tech === ME; }) || mine[0];
+    state.reviewId = r.id;
+    var a = r.answers, editable = r.state === 'Open', ro = !editable;
+
+    var missingBox = h('div', { 'aria-live': 'polite' });
+    var meterFill = h('i'), meterTxt = h('span', { class: 'small muted' });
+    function refresh() {
+      if (!editable) { return; }
+      var pr = progressOf(a);
+      meterFill.style.width = pr.pct + '%';
+      meterTxt.textContent = pr.pct === 100 ? 'All done — ready to submit ✓' : pr.done + ' of ' + pr.total + ' complete';
+      missingBox.textContent = '';
+      var m = missingItems(a);
+      missingBox.appendChild(m.length ? h('div', { class: 'missing' }, [h('strong', { text: 'Still to complete: ' }), m.join(' · ')])
+        : h('div', { class: 'done', text: 'Everything required is complete – you can submit when ready.' }));
+    }
+    var monthSel = h('select', { 'aria-label': 'Choose a month', style: 'width:180px', onchange: function () { state.reviewId = Number(monthSel.value); render(); } },
       mine.map(function (x) { var o = h('option', { value: String(x.id), text: monthLabel(x.month) }); o.selected = x.id === r.id; return o; }));
-
-    var saveBtn = h('button', { class: 'btn', type: 'button', text: 'Save draft', onclick: function () {
-      clearHidden(a); r.draft = true;
-      toast('Draft saved at ' + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + ' (prototype – nothing is stored)');
-    } });
-    var submitBtn = h('button', { class: 'btn primary', type: 'button', text: 'Submit', onclick: function () {
+    function save() { clearHidden(a); r.draft = true; toast('Draft saved (prototype – nothing is stored).'); }
+    function submit() {
       var m = missingItems(a);
       if (m.length) { toast('Please complete: ' + m.join(', '), true); missingBox.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
       confirmBox('Submit your 1-to-1?', "You won't be able to change it afterwards. Your Team Leader will be notified.", 'Submit', function () {
         clearHidden(a); r.state = 'Submitted'; r.submittedOn = TODAY; r.late = TODAY > r.due;
-        confetti();
-        toast('🎉 Nice one — ' + monthLabel(r.month).split(' ')[0] + ' done! Your Team Leader has been notified (prototype).');
-        render();
+        confetti(); toast('🎉 Nice one — ' + monthShort(r.month) + ' done! Your Team Leader has been notified (prototype).'); render();
       });
-    } });
-
-    var dl = daysLeft(r);
-    var countdown = editable ? h('span', { class: 'countdown ' + (dl < 0 ? 'over' : dl <= 3 ? 'soon' : 'ok'),
-      text: dl < 0 ? Math.abs(dl) + ' day' + (Math.abs(dl) === 1 ? '' : 's') + ' overdue' : dl === 0 ? 'Due today' : dl + ' day' + (dl === 1 ? '' : 's') + ' left' }) : null;
-
-    var meterFill = h('i');
-    var meterBar = h('div', { class: 'meter' }, [meterFill]);
-    var meterLbl = h('span');
-    var meterWrap = editable ? h('div', { class: 'meterwrap' }, [
-      h('div', { class: 'lbl' }, [meterLbl, h('span', { text: 'Only you can see this until you submit' })]), meterBar
-    ]) : null;
-    function refreshMeter() {
-      if (!editable) { return; }
-      var pr = progressOf(a);
-      meterFill.style.width = pr.pct + '%';
-      meterBar.className = 'meter' + (pr.pct === 100 ? ' full' : '');
-      meterLbl.textContent = pr.pct === 100 ? 'All done — ready to submit ✓' : 'Your progress: ' + pr.done + ' of ' + pr.total + ' (' + pr.pct + '%)';
     }
-
-    var streak = streakOf(ME);
-    var streakPill = streak ? h('span', { class: 'pill streak flame', text: '🔥 ' + streak + ' month' + (streak === 1 ? '' : 's') + ' on time' }) : null;
-    var head = h('div', { class: 'card sticky' }, [
-      h('div', { class: 'status-bar' }, [
-        h('div', null, [
-          h('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap' }, [h('strong', { text: 'Monthly 1-to-1' }), monthSel, chipFor(r), countdown, streakPill]),
-          h('div', { class: 'hint', style: 'margin:4px 0 0', text: 'Deadline: 23:59, ' + fmtLongDate(r.due) + (isOverdue(r) ? ' – overdue, but you can still submit' : '') })
-        ]),
-        editable ? h('div', { class: 'btn-row' }, [saveBtn, submitBtn]) : h('span', { class: 'muted', text: r.state === 'Completed' ? 'Read-only – feedback released' : 'Read-only' })
+    var dl = daysLeft(r);
+    var head = h('div', { class: 'pagehead sticky', style: 'display:block' }, [
+      h('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:16px' }, [
+        h('div', { class: 'ph-l' }, [h('h2', { text: 'Monthly 1-to-1' }), monthSel, chipFor(r),
+          editable ? h('span', { class: 'chip ' + (dl < 0 ? 'red' : dl <= 3 ? 'amber' : 'green'), text: dl < 0 ? Math.abs(dl) + ' days overdue' : dl === 0 ? 'Due today' : dl + ' days left' }) : null,
+          h('span', { class: 'meta', text: 'Deadline 23:59, ' + fmtLong(r.due) })]),
+        editable ? h('div', { class: 'btn-row' }, [meterTxt, h('button', { class: 'btn', type: 'button', text: 'Save draft', onclick: save }), h('button', { class: 'btn primary', type: 'button', text: 'Submit', onclick: submit })])
+          : h('span', { class: 'muted', text: r.released ? 'Read-only – feedback released' : 'Submitted – awaiting your Team Leader' })
       ]),
-      meterWrap
+      editable ? h('div', { class: 'meter' }, meterFill) : null
     ]);
 
-    // quick-actions row (editable only): copy last month + ask for a chat
-    var prior = mine.filter(function (x) { return x.month < r.month && x.state !== 'Open'; })[0];
-    var quickRow = editable ? h('div', { class: 'btn-row', style: 'margin-bottom:14px' }, [
-      prior ? h('button', { class: 'btn', type: 'button', text: '⟳ Same as last month',
-        title: 'Pre-fill with your ' + monthLabel(prior.month) + ' answers, then tweak what\'s changed.',
-        onclick: function () {
-          var pa = prior.answers;
-          a.mood = pa.mood; a.q1 = pa.q1;
-          a.q2 = { issue: pa.q2.issue, impact: pa.q2.impact, tried: pa.q2.tried, support: pa.q2.support };
-          a.q3 = pa.q3; a.q3c = pa.q3c; a.q4 = pa.q4; a.q4d = pa.q4d; a.q5 = pa.q5; a.q5d = pa.q5d;
-          a.q6 = pa.q6; a.q6what = pa.q6what; a.q6why = pa.q6why; a.q7 = pa.q7; a.q9 = pa.q9;
-          a.q8.forEach(function (x) { var p = pa.q8.find(function (y) { return y.id === x.id; }); if (p) { x.rating = p.rating; x.comment = p.comment; } });
-          toast('Copied your ' + monthLabel(prior.month) + ' answers — tweak anything that\'s changed (prototype).');
-          render();
-        } }) : null,
-      chatControl(r)
-    ]) : null;
-
-    // Workload trend sparkline (the technician can see their own history)
-    var wh = workloadHistory(ME);
-    var sparkCard = wh.length >= 2 ? h('section', { class: 'card' }, [
-      h('h2', { text: 'Your workload trend' }),
-      h('p', { class: 'hint', text: 'Your workload rating over recent months (1 very light – 5 excessive). For your reference.' }),
-      h('div', { class: 'spark' }, wh.slice(-6).map(function (p) {
-        return h('div', { class: 'bar w' + p.score, style: 'height:' + (20 + p.score * 16) + '%', title: monthLabel(p.month) + ': ' + p.score + '/5' },
-          [h('span', { text: monthLabel(p.month).split(' ')[0].substring(0, 3) }), h('b', { text: String(p.score) })]);
-      }))
-    ]) : null;
-
-    var intro = h('div', { class: 'banner info' }, editable
-      ? 'Save as often as you like and come back any time before the deadline. Short answers are fine. You can ask for a conversation at any time – you don\'t need to wait for this form. Submitting it doesn\'t replace any formal appraisal or meeting your role requires.'
-      : (r.released ? 'Your Team Leader\'s feedback is shown under each answer.' : 'Submitted. Your Team Leader\'s feedback will appear here once your review is completed.'));
-
+    function fbBlock(text) { return r.released && text ? h('div', { class: 'feedback' }, [h('b', { text: 'Team Leader' }), text]) : null; }
     var cards = [];
-    cards.push(qCard(1, 'What has gone well for you this month?', 'A few bullet points is fine.', [
-      textBox(null, a.q1, function (v) { a.q1 = v; refreshMissing(); }, ro, 'e.g. jobs finished, things you are proud of', 3),
-      feedbackBlock(r, r.fb.q1)
-    ]));
-    cards.push(qCard(2, 'Challenges, blockers and support needed', 'Optional – leave blank if there is nothing to raise. A sentence or two is plenty.', [
-      h('div', { class: 'two' }, [
-        textBox("What's the issue?", a.q2.issue, function (v) { a.q2.issue = v; }, ro, null, 2),
-        textBox("What's the impact?", a.q2.impact, function (v) { a.q2.impact = v; }, ro, null, 2),
-        textBox('What have you tried?', a.q2.tried, function (v) { a.q2.tried = v; }, ro, null, 2),
-        textBox('What support is needed?', a.q2.support, function (v) { a.q2.support = v; }, ro, null, 2)
-      ]),
-      feedbackBlock(r, r.fb.q2)
-    ]));
+    cards.push(qCard(1, 'What has gone well for you this month?', null, [
+      textBox(null, a.q1, function (v) { a.q1 = v; refresh(); }, ro, 3), fbBlock(r.fb.q1)]));
+    cards.push(qCard(2, 'Challenges, blockers and support needed', h('span', { class: 'small muted', text: 'Optional' }), [
+      h('div', { class: 'fgrid c4' }, [
+        textBox("What's the issue?", a.q2.issue, function (v) { a.q2.issue = v; }, ro, 3),
+        textBox("What's the impact?", a.q2.impact, function (v) { a.q2.impact = v; }, ro, 3),
+        textBox('What have you tried?', a.q2.tried, function (v) { a.q2.tried = v; }, ro, 3),
+        textBox('What support is needed?', a.q2.support, function (v) { a.q2.support = v; }, ro, 3)
+      ]), fbBlock(r.fb.q2)]));
     cards.push(qCard(3, 'How would you rate your current workload?', null, [
-      choiceGroup('Workload rating', WORKLOAD, a.q3, function (v) { a.q3 = v; refreshMissing(); }, ro, 'scale'),
-      textBox('Comments (optional)', a.q3c, function (v) { a.q3c = v; }, ro, null, 2),
-      feedbackBlock(r, r.fb.q3)
-    ]));
+      choiceGroup('Workload rating', WORKLOAD, a.q3, function (v) { a.q3 = v; refresh(); }, ro, 'c5'),
+      h('div', { class: 'detail' }, textBox('Comments (optional)', a.q3c, function (v) { a.q3c = v; }, ro, 2)), fbBlock(r.fb.q3)]));
+    function ynCard(num, title, key, detailFn) {
+      var detail = h('div', { class: 'detail' }, detailFn());
+      detail.hidden = a[key] !== 'Yes';
+      return qCard(num, title, ynSeg(a[key], function (v) { a[key] = v; detail.hidden = v !== 'Yes'; refresh(); }, ro), [detail, fbBlock(r.fb[key])].filter(Boolean));
+    }
+    cards.push(ynCard(4, 'Is there anything relating to your wellbeing, workplace support or reasonable adjustments you would like to raise?', 'q4', function () {
+      return textBox('What would you like to raise?', a.q4d, function (v) { a.q4d = v; refresh(); }, ro, 3); }));
+    cards.push(ynCard(5, 'Is there anything upcoming that your line manager should be aware of for planning purposes?', 'q5', function () {
+      return textBox('Please give details', a.q5d, function (v) { a.q5d = v; refresh(); }, ro, 3); }));
+    cards.push(ynCard(6, 'Do you have any training, development requirements or career aspirations you would like to discuss?', 'q6', function () {
+      return h('div', { class: 'fgrid c2' }, [textBox('What would you like?', a.q6what, function (v) { a.q6what = v; refresh(); }, ro, 3),
+        textBox('Why / what would it help with?', a.q6why, function (v) { a.q6why = v; }, ro, 3)]); }));
+    cards.push(qCard(7, 'Do you have any feedback for your line manager?', h('span', { class: 'small muted', text: 'Optional' }), [
+      textBox(null, a.q7, function (v) { a.q7 = v; }, ro, 3), fbBlock(r.fb.q7)]));
 
-    var q4Detail = conditional(a.q4 === 'Yes', [textBox('What would you like to raise?', a.q4d, function (v) { a.q4d = v; refreshMissing(); }, ro, 'e.g. "I\'d like a conversation about support" – no medical details needed', 3)]);
-    cards.push(qCard(4, 'Is there anything relating to your wellbeing, workplace support or reasonable adjustments you would like to raise?', null, [
-      h('div', { class: 'guidance', text: 'Please don\'t include medical diagnoses, medical history or treatment details. You can simply say you\'d like to talk, and a conversation will be arranged. Health matters, occupational health referrals and formal adjustment requests are handled confidentially through the company\'s HR and Occupational Health processes. Employee Assistance Programme: [contact details to be confirmed].' }),
-      choiceGroup('Q4 answer', YESNO, a.q4, function (v) { a.q4 = v; q4Detail.hidden = v !== 'Yes'; refreshMissing(); }, ro, 'inline'),
-      q4Detail, feedbackBlock(r, r.fb.q4)
-    ]));
-
-    var q5Detail = conditional(a.q5 === 'Yes', [textBox('Please give details', a.q5d, function (v) { a.q5d = v; refreshMissing(); }, ro, 'Dates, availability, planned leave, courses or other commitments', 3)]);
-    cards.push(qCard(5, 'Is there anything upcoming that your line manager should be aware of for planning purposes?', null, [
-      choiceGroup('Q5 answer', YESNO, a.q5, function (v) { a.q5 = v; q5Detail.hidden = v !== 'Yes'; refreshMissing(); }, ro, 'inline'),
-      q5Detail, feedbackBlock(r, r.fb.q5)
-    ]));
-
-    var q6Detail = conditional(a.q6 === 'Yes', [h('div', { class: 'two' }, [
-      textBox('What would you like?', a.q6what, function (v) { a.q6what = v; refreshMissing(); }, ro, 'Training, qualification, competency or career goal', 3),
-      textBox('Why / what would it help with?', a.q6why, function (v) { a.q6why = v; }, ro, null, 3)
-    ])]);
-    cards.push(qCard(6, 'Do you have any training, development requirements or career aspirations you would like to discuss?', null, [
-      choiceGroup('Q6 answer', YESNO, a.q6, function (v) { a.q6 = v; q6Detail.hidden = v !== 'Yes'; refreshMissing(); }, ro, 'inline'),
-      q6Detail, feedbackBlock(r, r.fb.q6)
-    ]));
-    cards.push(qCard(7, 'Do you have any feedback for your line manager?', 'Optional.', [
-      textBox(null, a.q7, function (v) { a.q7 = v; }, ro, null, 3), feedbackBlock(r, r.fb.q7)
-    ]));
-
-    var expBlocks = r.snapshot.length ? r.snapshot.map(function (e) {
+    var expHead = ['Expectation', 'Your rating', 'Evidence / comments'];
+    if (r.released) { expHead = expHead.concat(['Team Leader']); }
+    var expRows = r.snapshot.map(function (e) {
       var ans = a.q8.find(function (x) { return x.id === e.id; });
-      return h('div', { class: 'exp' }, [
-        h('h3', { text: e.title }),
-        h('p', { class: 'hint', text: e.measures + ' (' + e.year + ')' }),
-        (function () { var bar = h('div', { class: 'ratebar' }, [h('i', { style: 'width:' + ((ans.rating || 0) / 5 * 100) + '%' })]); return bar; })(),
-        choiceGroup('Progress: ' + e.title, PROGRESS, ans.rating, function (v) { ans.rating = v; refreshMissing(); render(); }, ro, 'scale'),
-        textBox('Progress comments or evidence', ans.comment, function (v) { ans.comment = v; }, ro, null, 2),
-        feedbackBlock(r, r.fb.exp[e.id])
-      ]);
-    }) : [h('p', { class: 'muted', text: 'No appraisal expectations are set for you this month.' })];
-    cards.push(qCard(8, 'Appraisal expectations – how are you progressing?', 'Rate your progress against each expectation. This is about progress, not workload.', expBlocks));
-
+      var lbl = h('div', { class: 'small muted', style: 'margin-top:4px', text: ans.rating ? PROGRESS[ans.rating - 1].title : 'Not rated' });
+      var cells = [
+        h('td', { class: 'top', style: 'width:32%' }, [h('div', { style: 'font-weight:650', text: e.title }), h('div', { class: 'small muted', text: e.measures })]),
+        h('td', { class: 'top', style: 'width:200px' }, [ratingSeg(ans.rating, function (v) { ans.rating = v; lbl.textContent = PROGRESS[v - 1].title; refresh(); }, ro), lbl]),
+        h('td', { class: 'top' }, textBox(null, ans.comment, function (v) { ans.comment = v; }, ro, 2))
+      ];
+      if (r.released) {
+        var tv = r.fb.expRating[e.id];
+        cells.push(h('td', { class: 'top', style: 'width:24%' }, [h('div', { style: 'font-weight:650', text: tv ? tv + ' – ' + PROGRESS[tv - 1].title : 'Not rated' }), r.fb.exp[e.id] ? h('div', { class: 'small', text: r.fb.exp[e.id] }) : null]));
+      }
+      return h('tr', null, cells);
+    });
+    cards.push(qCard(8, 'Appraisal expectations – how are you progressing?', h('span', { class: 'small muted', text: '1 Not started · 2 Early · 3 On track · 4 Strong · 5 Fully met' }), [
+      r.snapshot.length ? table(expHead, expRows) : h('p', { class: 'muted', text: 'No appraisal expectations are set for you this month.' })]));
     cards.push(qCard(9, "How would you prefer to follow up on this month's review?", null, [
-      choiceGroup('Follow-up preference', FOLLOW.map(function (f) { return { value: f, title: f }; }), a.q9, function (v) { a.q9 = v; refreshMissing(); }, ro),
-      feedbackBlock(r, r.fb.q9)
-    ]));
-
+      choiceGroup('Follow-up preference', FOLLOW.map(function (f) { return { value: f, title: f }; }), a.q9, function (v) { a.q9 = v; refresh(); }, ro, 'c3'), fbBlock(r.fb.q9)]));
     if (r.released) {
-      cards.push(h('section', { class: 'card fullspan' }, [
-        h('h2', { text: 'Overall feedback and agreed actions' }),
-        h('div', { class: 'feedback' }, [h('b', { text: 'Overall' }), r.fb.overall || '—']),
+      cards.push(card('Overall feedback and agreed actions', null, [
+        h('div', { class: 'feedback', style: 'margin-top:0' }, [h('b', { text: 'Overall' }), r.fb.overall || '—']),
         h('div', { class: 'feedback' }, [h('b', { text: 'Follow-up' }), followOf(r) || '—']),
-        h('div', { class: 'feedback' }, [h('b', { text: 'Agreed actions' }), r.fb.actions || 'None'])
+        h('div', { style: 'margin-top:12px' }, actionsTable(r.fb.actions.map(function (ac) { return { ac: ac, r: r }; }), { showTech: false, showMonth: false }))
       ]));
     }
-
-    refreshMissing();
-    var qgrid = h('div', { class: 'qgrid' }, cards);
-    var engageTop = h('div', { class: 'qgrid' }, [moodCard(r, editable), winCard(r, ME, editable)]);
-    var appraiseEl = appraisalCard(r, r.released);
-    var notesEl = notesCard(ME);
-    return h('div', { class: 'narrow' }, [head, quickRow, intro, sparkCard, engageTop, appraiseEl, qgrid].filter(Boolean).concat([notesEl, missingBox, editable ? h('div', { class: 'btn-row', style: 'margin-top:12px' }, [
-      h('button', { class: 'btn', type: 'button', text: 'Save draft', onclick: function () { saveBtn.click(); } }),
-      h('button', { class: 'btn primary', type: 'button', text: 'Submit', onclick: function () { submitBtn.click(); } })
-    ]) : null]));
+    if (editable) {
+      cards.push(missingBox);
+      cards.push(h('div', { class: 'btn-row', style: 'justify-content:flex-end' }, [h('button', { class: 'btn', type: 'button', text: 'Save draft', onclick: save }), h('button', { class: 'btn primary', type: 'button', text: 'Submit', onclick: submit })]));
+    }
+    refresh();
+    return h('div', null, [head, h('div', { class: 'layout' }, [h('div', { class: 'stack' }, cards), h('aside', { class: 'stack side-sticky' }, techSide(r, mine))])]);
   }
 
-  // ---------------- manager dashboard ----------------
-  function statusText(r) {
-    if (r.state === 'Open') { return (isOverdue(r) ? 'Overdue – ' : '') + (r.draft ? 'Draft' : 'Not started'); }
-    if (r.state === 'Submitted') { return 'Awaiting your review'; }
-    if (r.state === 'Completed') { return 'Completed'; }
-    return 'Closed – not submitted';
-  }
-
-  function dashboardView() {
-    var months = Array.from(new Set(REVIEWS.map(function (r) { return r.month; }))).sort().reverse();
-    var kMonth = state.month || months[0];
-    var inMonth = REVIEWS.filter(function (r) { return r.month === kMonth; });
-    var openActions = REVIEWS.filter(function (r) { return r.fb.actionsStatus === 'Open'; });
-    function count(f) { return inMonth.filter(f).length; }
-    var kpis = [
-      { l: 'Month', v: monthLabel(kMonth), cls: 'month' },
-      { l: 'Active technicians', v: ACTIVE_TECHS.length },
-      { l: 'Submitted', v: count(function (r) { return r.state === 'Submitted' || r.state === 'Completed'; }) },
-      { l: 'Awaiting your review', v: count(function (r) { return r.state === 'Submitted'; }), cls: 'alert' },
-      { l: 'Completed', v: count(function (r) { return r.state === 'Completed'; }) },
-      { l: 'Outstanding / overdue', v: count(function (r) { return r.state === 'Open'; }) + ' / ' + count(isOverdue), cls: count(isOverdue) ? 'bad' : '' },
-      { l: 'Dedicated 1-to-1 requested', v: count(function (r) { return followOf(r) === DEDICATED; }), cls: 'alert' },
-      { l: 'Chats requested', v: count(function (r) { return r.chatRequested; }), cls: count(function (r) { return r.chatRequested; }) ? 'alert' : '' },
-      { l: 'Open actions (overdue)', v: openActions.length + ' (' + openActions.filter(function (r) { return r.fb.actionsDue && r.fb.actionsDue < TODAY; }).length + ')' }
-    ];
-    var kpiRow = h('div', { class: 'kpis' }, kpis.map(function (k) {
-      return h('div', { class: 'kpi ' + (k.cls || '') }, [h('div', { class: 'v', text: String(k.v) }), h('div', { class: 'l', text: k.l })]);
+  function techSide(r, mine) {
+    var a = r.answers, editable = r.state === 'Open';
+    var o = expectedOutcome(ME, 'tech');
+    // energy tile
+    var moodLbl = h('span', { class: 'small muted', text: a.mood ? MOODS[a.mood - 1].label : 'Optional' });
+    var mood = h('div', { class: 'mood', role: 'group', 'aria-label': 'Energy this month' }, MOODS.map(function (m) {
+      var b = h('button', { type: 'button', 'aria-pressed': a.mood === m.value ? 'true' : 'false', 'aria-label': m.label, disabled: !editable, text: m.emo });
+      tip(b, m.label);
+      b.addEventListener('click', function () {
+        a.mood = a.mood === m.value ? null : m.value;
+        Array.prototype.forEach.call(mood.children, function (c, i) { c.setAttribute('aria-pressed', a.mood === MOODS[i].value ? 'true' : 'false'); });
+        moodLbl.textContent = a.mood ? MOODS[a.mood - 1].label : 'Optional';
+      });
+      return b;
     }));
-
-    function tab(id, label) {
-      return h('button', { role: 'tab', type: 'button', 'aria-selected': state.tab === id ? 'true' : 'false', text: label, onclick: function () { state.tab = id; render(); } });
-    }
-    var tabs = h('div', { class: 'tabs', role: 'tablist' }, [tab('reviews', 'Monthly Reviews'), tab('expect', 'Appraisal Expectations'), tab('actions', 'Outstanding Actions')]);
-
-    var body;
-    if (state.tab === 'expect') {
-      body = h('div', null, [
-        h('p', { class: 'hint', text: 'In the real system the Team Leader creates, edits, activates and retires expectations in the SharePoint list; changes apply from the next month and never alter past reviews.' }),
-        table(['Expectation', 'Measures', 'Year', 'Applies to', 'Active'], MASTER_EXPECTATIONS.map(function (e) {
-          return { cells: [e.title, e.measures, e.year, e.scope === 'Shared' ? 'All technicians' : e.tech, e.active ? 'Yes' : 'No (retired)'] };
-        }))
-      ]);
-    } else if (state.tab === 'actions') {
-      body = table(['Technician', 'Month', 'Agreed actions', 'Due', ''], openActions.sort(function (x, y) { return x.fb.actionsDue < y.fb.actionsDue ? -1 : 1; }).map(function (r) {
-        var overdue = r.fb.actionsDue && r.fb.actionsDue < TODAY;
-        return { cells: [r.tech, monthLabel(r.month), r.fb.actions, (overdue ? 'OVERDUE – ' : '') + fmtDate(r.fb.actionsDue), openBtn(r)] };
-      }));
-    } else {
-      var monthSel = h('select', { id: 'f-month', onchange: function () { state.month = monthSel.value; render(); } },
-        [h('option', { value: '', text: 'All months' })].concat(months.map(function (m) { var o = h('option', { value: m, text: monthLabel(m) }); o.selected = m === state.month; return o; })));
-      var techSel = h('select', { id: 'f-tech', onchange: function () { state.tech = techSel.value; render(); } },
-        [h('option', { value: '', text: 'All technicians' })].concat(ACTIVE_TECHS.map(function (t) { var o = h('option', { value: t, text: t }); o.selected = t === state.tech; return o; })));
-      var rows = REVIEWS.filter(function (r) { return (!state.month || r.month === state.month) && (!state.tech || r.tech === state.tech); })
-        .sort(function (x, y) { return x.month === y.month ? (x.tech < y.tech ? -1 : 1) : (x.month < y.month ? 1 : -1); });
-      body = h('div', null, [
-        h('div', { class: 'filters' }, [
-          h('div', null, [h('label', { for: 'f-month', text: 'Month' }), monthSel]),
-          h('div', null, [h('label', { for: 'f-tech', text: 'Technician' }), techSel]),
-          h('span', { class: 'hint', text: 'Pick a technician and "All months" to see their history and workload trend.' })
-        ]),
-        table(['Technician', 'Month', 'Status', 'Submitted', 'Workload', 'Follow-up', ''], rows.map(function (r) {
-          var f = followOf(r);
-          return {
-            req: f === DEDICATED,
-            cells: [r.chatRequested ? h('span', null, [r.tech, ' ', h('span', { title: 'Chat requested', text: '💬' })]) : r.tech, monthLabel(r.month), statusCell(r), r.submittedOn ? fmtDate(r.submittedOn) + (r.late ? ' (late)' : '') : '—',
-              r.answers.q3 && r.state !== 'Open' ? String(r.answers.q3) + ' / 5' : '—',
-              f === DEDICATED ? h('strong', { text: '1-to-1 requested' }) : (f ? f.replace(/\.$/, '') : '—'), openBtn(r)]
-          };
-        }))
-      ]);
-    }
-
-    return h('div', null, [kpiRow, tabs, body,
-      h('p', { class: 'footer-note', text: 'A written check-in does not by itself satisfy any formal appraisal or meeting requirement.' })]);
-  }
-
-  function statusCell(r) {
-    var s = h('span', { text: statusText(r) + (r.late && r.state !== 'Open' ? ' (late)' : '') });
-    if (isOverdue(r)) { s.style.color = 'var(--red)'; s.style.fontWeight = '600'; }
-    return s;
-  }
-  function openBtn(r) {
-    return h('button', { class: 'btn', type: 'button', text: 'Open', 'aria-label': 'Open review for ' + r.tech + ', ' + monthLabel(r.month), onclick: function () {
-      state.view = 'mgr'; state.reviewId = r.id; render();
-    } });
-  }
-  function table(headers, rows) {
-    var labels = headers;
-    return h('table', { class: 'grid' }, [
-      h('thead', null, h('tr', null, headers.map(function (x) { return h('th', { scope: 'col', text: x }); }))),
-      h('tbody', null, rows.length ? rows.map(function (row) {
-        return h('tr', { class: row.req ? 'req' : null }, row.cells.map(function (c, i) {
-          return h('td', { 'data-label': labels[i] }, typeof c === 'string' ? c : c);
-        }));
-      }) : h('tr', null, h('td', { colspan: String(headers.length), class: 'muted', text: 'Nothing to show.' })))
+    var energy = h('section', { class: 'card side-tile' }, [h('h3', null, ['Energy this month', moodLbl]), mood,
+      h('div', { class: 'small muted', style: 'margin-top:6px', text: 'Shared with your Team Leader.' })]);
+    // appraisal outlook
+    var p = periodFor(ME), days = daysBetween(TODAY, p.apDate);
+    var outlook = h('section', { class: 'card side-tile' }, [
+      h('h3', null, ['Appraisal outlook', h('button', { class: 'btn small ghost', type: 'button', text: 'My appraisal →', onclick: function () { go('myapp'); } })]),
+      h('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px' }, [
+        h('div', { class: 'big-score' }, [f1(o.projected), h('small', { text: ' / 5 projected' })]), bandChip(o.projected, true)]),
+      track(o.projected),
+      h('dl', { class: 'kv' }, [h('dt', { text: 'Appraisal date' }), h('dd', { text: fmtDate(p.apDate) + ' (' + days + ' days)' }),
+        h('dt', { text: 'Current position' }), h('dd', { text: f1(o.current) + ' / 5' }),
+        h('dt', { text: 'Trend' }), h('dd', { text: (o.slope >= 0 ? '+' : '') + o.slope.toFixed(2) + ' per month' })]),
+      howWorked(ME, 'tech')
     ]);
-  }
-
-  function moodReadout(r) {
-    var m = MOODS.find(function (x) { return x.value === r.answers.mood; });
-    var streak = streakOf(r.tech);
-    return h('section', { class: 'card' }, [
-      h('h2', { text: '🔋 Technician check-in' }),
-      h('div', { style: 'display:flex;gap:22px;flex-wrap:wrap;align-items:center' }, [
-        h('div', null, [
-          h('div', { class: 'who', style: 'font-size:12px;color:var(--muted);font-weight:600', text: 'ENERGY THIS MONTH' }),
-          m ? h('div', { style: 'font-size:18px;margin-top:2px' }, [m.emo + ' ', m.label]) : h('div', { class: 'muted', style: 'margin-top:2px', text: 'Not shared' })
-        ]),
-        streak ? h('span', { class: 'pill streak flame', text: '🔥 ' + streak + ' month' + (streak === 1 ? '' : 's') + ' on time' }) : null,
-        r.chatRequested ? h('span', { class: 'pill', style: 'background:var(--blue-bg);color:var(--navy)', text: '💬 Has asked for a chat' }) : null
+    // streak + quick actions
+    var streak = streakOf(ME);
+    var prior = mine.filter(function (x) { return x.month < r.month && isIn(x); })[0];
+    var quick = h('section', { class: 'card side-tile' }, [
+      h('h3', null, ['Quick actions', streak ? h('span', { class: 'chip orange', text: '🔥 ' + streak + ' month' + (streak === 1 ? '' : 's') + ' on time' }) : null]),
+      h('div', { class: 'stack', style: 'gap:8px' }, [
+        editable && prior ? h('button', { class: 'btn', type: 'button', text: '⟳ Same as last month', onclick: function () {
+          var pa = prior.answers;
+          ['mood', 'q1', 'q3', 'q3c', 'q4', 'q4d', 'q5', 'q5d', 'q6', 'q6what', 'q6why', 'q7', 'q9'].forEach(function (k) { a[k] = pa[k]; });
+          a.q2 = { issue: pa.q2.issue, impact: pa.q2.impact, tried: pa.q2.tried, support: pa.q2.support };
+          a.q8.forEach(function (x) { var q = pa.q8.find(function (y) { return y.id === x.id; }); if (q) { x.rating = q.rating; x.comment = q.comment; } });
+          toast('Copied your ' + monthLabel(prior.month) + ' answers — update anything that has changed.'); render();
+        } }) : null,
+        r.chatRequested
+          ? h('div', { class: 'btn-row' }, [h('span', { class: 'chip blue', text: '💬 Chat requested' }), h('button', { class: 'btn small ghost', type: 'button', text: 'Cancel', onclick: function () { r.chatRequested = false; render(); } })])
+          : h('button', { class: 'btn', type: 'button', text: '💬 Ask for a chat', onclick: function () { r.chatRequested = true; toast('Your Team Leader will see you would like a chat.'); render(); } }),
+        h('button', { class: 'btn', type: 'button', text: '📄 Appraisal report', onclick: function () { state.report = { tech: ME, aud: 'tech' }; render(); } })
       ])
     ]);
-  }
-  function bandSettings() {
-    var rows = SETTINGS.bands.map(function (b, i) {
-      var nameInp = h('input', { type: 'text', value: b.name, style: 'width:150px', 'aria-label': 'Band name' });
-      nameInp.addEventListener('input', function () { b.name = nameInp.value; });
-      var row = [h('span', { class: 'band ' + b.cls, text: 'Band ' + (i + 1) })];
-      if (b.max < 99) {
-        var maxInp = h('input', { type: 'number', step: '0.05', min: '0', max: '5', value: String(b.max), 'aria-label': 'Upper threshold' });
-        maxInp.addEventListener('change', function () { var v = parseFloat(maxInp.value); if (!isNaN(v)) { b.max = v; render(); } });
-        row.push(h('span', { class: 'muted', text: 'up to' }), maxInp);
-      } else { row.push(h('span', { class: 'muted', text: 'top band (and above)' })); }
-      row.push(h('span', { class: 'muted', text: 'name:' }), nameInp);
-      return h('div', { class: 'setrow' }, row);
-    });
-    var reset = h('button', { class: 'btn', type: 'button', text: 'Reset to defaults', onclick: function () {
-      SETTINGS.bands = [{ max: 1.5, name: 'Not met', cls: 'b0' }, { max: 2.25, name: 'Partially met', cls: 'b1' }, { max: 4, name: 'Met', cls: 'b2' }, { max: 99, name: 'Exceeded', cls: 'b3' }];
-      render();
-    } });
-    return h('details', { class: 'howto', style: 'margin-top:10px' }, [
-      h('summary', { text: '⚙ Band settings (Team Leader)' }),
-      h('p', { class: 'hint', style: 'margin:6px 0', text: 'Adjust the average thresholds and band names. Applies across the tool; defaults shown.' })
-    ].concat(rows).concat([reset]));
+    var win = h('section', { class: 'card side-tile' }, [h('h3', { text: '🏅 Win of the month' }),
+      textBox(null, a.win, function (v) { a.win = v; }, !editable, 3)]);
+    var notes = h('section', { class: 'card side-tile notes' }, [h('h3', { text: '🔒 My private notes' }),
+      h('div', { class: 'lockline', text: 'Only you can see these. Carried over each month.' }),
+      textBox(null, PRIVATE_NOTES[ME] || '', function (v) { PRIVATE_NOTES[ME] = v; }, false, 4)]);
+    return [energy, outlook, quick, win, notes];
   }
 
-  // ---------------- manager review ----------------
+  // ======================================================================
+  // PROFILE / MY APPRAISAL (shared by technician and Team Leader)
+  // ======================================================================
+  function profileView(tech, aud) {
+    var o = expectedOutcome(tech, aud), p = o.period, days = daysBetween(TODAY, p.apDate);
+    var ot = onTimeOf(tech), acts = actionsOf(function (ac, r) { return r.tech === tech; }, aud);
+    var openActs = acts.filter(function (x) { return x.ac.status === 'Open'; });
+    var apInput;
+    if (aud === 'tl') {
+      apInput = h('input', { type: 'date', style: 'width:160px', 'aria-label': 'Appraisal date' });
+      apInput.value = p.apDate;
+      apInput.addEventListener('change', function () { if (apInput.value) { TECH_INFO[tech].appraisal = apInput.value; render(); } });
+    }
+    var head = h('div', { class: 'pagehead' }, [
+      h('div', { class: 'ph-l' }, [
+        aud === 'tl' ? h('button', { class: 'btn small ghost', type: 'button', text: '← Team overview', onclick: function () { go('team'); } }) : null,
+        h('h2', { text: aud === 'tl' ? tech : 'My appraisal' }),
+        h('span', { class: 'meta', text: 'Appraisal period ' + monthLabel(addMonths(p.start, 1)) + ' – ' + monthLabel(p.end) }),
+        aud === 'tl' ? h('label', { class: 'small', style: 'display:flex;align-items:center;gap:6px;font-weight:600' }, ['Appraisal date', apInput])
+          : h('span', { class: 'chip blue', text: 'Appraisal ' + fmtDate(p.apDate) })
+      ]),
+      h('button', { class: 'btn primary', type: 'button', text: '📄 Generate appraisal report', onclick: function () { state.report = { tech: tech, aud: aud }; render(); } })
+    ]);
+    var tiles = h('div', { class: 'tiles', style: 'margin-top:14px' }, [
+      tile('Expected outcome', [bandChip(o.projected, true)], 'Projected at appraisal'),
+      tile('Projected score', [f1(o.projected), h('small', { text: ' / 5' })], 'Trend ' + (o.slope >= 0 ? '+' : '') + o.slope.toFixed(2) + ' per month'),
+      tile('Current position', [f1(o.current), h('small', { text: ' / 5' })], 'Self ' + f1(o.selfAvg) + ' · Team Leader ' + f1(o.tlAvg)),
+      tile('Days to appraisal', String(Math.max(0, days)), fmtDate(p.apDate), days <= 30 ? 'warn' : ''),
+      tile('On-time submissions', [String(ot.onTime), h('small', { text: ' of ' + ot.total })], 'In the appraisal period'),
+      tile('Open actions', String(openActs.length), acts.filter(function (x) { return acOverdue(x.ac); }).length + ' overdue', acts.some(function (x) { return acOverdue(x.ac); }) ? 'bad' : '')
+    ]);
+    var rows = [h('div', { class: 'grid2' }, [
+      card('Rating trend', 'Monthly score on the 1–5 scale; shading shows the bands', [trendChart(tech, aud, o, 300)]),
+      card('Expectations – where each one stands', 'Most recent rating in the period', [pairBars(o.perExp), howWorked(tech, aud)])
+    ])];
+    var prs = periodReviews(tech).filter(function (r) { return r.month <= CUR; });
+    if (aud === 'tl') {
+      rows.push(h('div', { class: 'grid2' }, [
+        card('Workload by month', '1 very light – 5 excessive', [colChart(prs.map(function (r) {
+          var v = isIn(r) ? r.answers.q3 : null;
+          return { label: monthShort(r.month), value: v, color: v >= 5 ? '#d14b4b' : v === 4 ? '#d99a12' : '#1f7190', tipText: monthLabel(r.month) + ': ' + (v ? WORKLOAD[v - 1].title : 'not submitted') };
+        }), 5, '#1f7190', 170, 'Workload by month')]),
+        card('Energy by month', '1 running low – 5 full charge', [colChart(prs.map(function (r) {
+          var v = isIn(r) || r.state === 'Open' ? r.answers.mood : null;
+          return { label: monthShort(r.month), value: v, tipText: monthLabel(r.month) + ': ' + moodEmoji(v) };
+        }), 5, '#6a4fb0', 170, 'Energy by month')])
+      ]));
+    }
+    var wins = prs.filter(function (r) { return r.answers.win; }).slice().reverse();
+    rows.push(card('Actions', openActs.length + ' open · ' + (acts.length - openActs.length) + ' closed', [actionsTable(acts, { showTech: false, showMonth: true })]));
+    rows.push(card('Wins & achievements', wins.length + ' logged in the period', [h('div', { class: 'list cols' }, wins.length ? wins.map(function (r) {
+      return h('div', { class: 'li' }, [h('b', { text: monthLabel(r.month) }), r.answers.win]);
+    }) : [h('div', { class: 'muted', text: 'None logged yet.' })])]));
+    if (aud === 'tl') {
+      rows.push(card('Monthly reviews in the period', null, [table(['Month', 'Status', 'Submitted', 'Self avg', 'Your avg', 'Workload', 'Energy', ''],
+        prs.slice().reverse().map(function (r) {
+          return tr([monthLabel(r.month), chipFor(r), r.submittedOn ? fmtDate(r.submittedOn) : '—', isIn(r) ? f1(selfAvg(r)) : '—', isIn(r) ? f1(mgrAvg(r)) : '—',
+            isIn(r) ? r.answers.q3 + ' / 5' : '—', isIn(r) ? moodEmoji(r.answers.mood) : '—',
+            h('button', { class: 'btn small', type: 'button', text: 'Open', onclick: function () { go('mgr', { reviewId: r.id, backTo: 'profile' }); } })]);
+        }))]));
+    }
+    return h('div', null, [head, tiles, h('div', { class: 'stack', style: 'margin-top:14px' }, rows)]);
+  }
+
+  // ======================================================================
+  // TEAM LEADER – team overview
+  // ======================================================================
+  function teamView() {
+    var cur = TECHS.map(currentOf);
+    var outs = {};
+    TECHS.forEach(function (t) { outs[t] = expectedOutcome(t, 'tl'); });
+    function cnt(f) { return cur.filter(f).length; }
+    var allActs = actionsOf(null, 'tl'), openA = allActs.filter(function (x) { return x.ac.status === 'Open'; });
+    var nextAp = TECHS.slice().sort(function (x, y) { return TECH_INFO[x].appraisal < TECH_INFO[y].appraisal ? -1 : 1; })
+      .filter(function (t) { return TECH_INFO[t].appraisal >= TODAY; })[0];
+    var tiles = h('div', { class: 'tiles' }, [
+      tile('Submitted – ' + monthShort(CUR), [String(cnt(isIn)), h('small', { text: ' of ' + TECHS.length })], cnt(function (r) { return r.state === 'Completed'; }) + ' completed'),
+      tile('Awaiting your review', String(cnt(function (r) { return r.state === 'Submitted'; })), 'Submitted, not yet released', cnt(function (r) { return r.state === 'Submitted'; }) ? 'warn' : ''),
+      tile('Not yet submitted', String(cnt(function (r) { return r.state === 'Open'; })), cnt(isOverdue) + ' overdue · due ' + fmtDate(lastDay(CUR)), cnt(isOverdue) ? 'bad' : ''),
+      tile('Chats & 1-to-1s requested', String(cnt(function (r) { return r.chatRequested || followOf(r) === DEDICATED; })), 'This month'),
+      tile('Open actions', String(openA.length), openA.filter(function (x) { return acOverdue(x.ac); }).length + ' overdue', openA.some(function (x) { return acOverdue(x.ac); }) ? 'bad' : ''),
+      tile('Next appraisal', nextAp ? String(daysBetween(TODAY, TECH_INFO[nextAp].appraisal)) + ' days' : '—', nextAp ? nextAp + ' · ' + fmtDate(TECH_INFO[nextAp].appraisal) : '', nextAp && daysBetween(TODAY, TECH_INFO[nextAp].appraisal) <= 30 ? 'warn' : '')
+    ]);
+    // charts row
+    var statusSegs = [
+      { label: 'Completed', count: cnt(function (r) { return r.state === 'Completed'; }), color: '#2f9a63' },
+      { label: 'Awaiting review', count: cnt(function (r) { return r.state === 'Submitted'; }), color: '#2a78d6' },
+      { label: 'Draft', count: cnt(function (r) { return r.state === 'Open' && r.draft && !isOverdue(r); }), color: '#d99a12' },
+      { label: 'Not started', count: cnt(function (r) { return r.state === 'Open' && !r.draft && !isOverdue(r); }), color: '#b8c1ca' },
+      { label: 'Overdue', count: cnt(isOverdue), color: '#d14b4b' }
+    ];
+    var bandCounts = SETTINGS.bands.map(function (b) {
+      var who = TECHS.filter(function (t) { return outs[t].band && outs[t].band.cls === b.cls && outs[t].band.name === b.name; });
+      return { label: b.name, value: who.length, color: BAND_COL[b.cls], tipText: b.name + ': ' + (who.length ? who.join(', ') : 'nobody') };
+    });
+    var wl = TECHS.map(function (t) {
+      var r = currentOf(t), v = isIn(r) || (r.state === 'Open' && r.answers.q3) ? r.answers.q3 : null;
+      return { label: first(t), value: v, color: v >= 5 ? '#d14b4b' : v === 4 ? '#d99a12' : '#1f7190', tipText: t + ': ' + (v ? WORKLOAD[v - 1].title + (isIn(r) ? '' : ' (draft)') : 'not given yet') };
+    });
+    var charts = h('div', { class: 'grid3', style: 'margin-top:14px' }, [
+      card(monthLabel(CUR) + ' – review status', null, [stackBar(statusSegs),
+        h('dl', { class: 'kv', style: 'margin-top:16px;border-top:1px solid #edf0f3;padding-top:10px' }, [
+          h('dt', { text: 'Deadline' }), h('dd', { text: fmtDate(lastDay(CUR)) + ' (' + daysBetween(TODAY, lastDay(CUR)) + ' days)' }),
+          h('dt', { text: 'Reminders' }), h('dd', { text: '20th and 27th, automatic' })])]),
+      card('Expected appraisal outcomes', 'Number of technicians in each band', [colChart(bandCounts, Math.max(3, Math.max.apply(null, bandCounts.map(function (b) { return b.value; }))), '#1f7190', 170, 'Expected outcome bands', null, 420)]),
+      card('Workload – ' + monthLabel(CUR), '1 very light – 5 excessive', [colChart(wl, 5, '#1f7190', 170, 'Workload this month', null, 420)])
+    ]);
+    // team table
+    var rows = TECHS.map(function (t) {
+      var o = outs[t], r = currentOf(t), ap = TECH_INFO[t].appraisal, days = daysBetween(TODAY, ap);
+      var inp = h('input', { type: 'date', style: 'width:150px', 'aria-label': 'Appraisal date for ' + t });
+      inp.value = ap;
+      inp.addEventListener('change', function () { if (inp.value) { TECH_INFO[t].appraisal = inp.value; render(); } });
+      var oa = actionsOf(function (ac, rr) { return rr.tech === t && ac.status === 'Open'; }, 'tl');
+      var od = oa.filter(function (x) { return acOverdue(x.ac); }).length;
+      return h('tr', { class: r.chatRequested || followOf(r) === DEDICATED ? 'hl' : null }, [
+        h('td', null, [h('a', { href: '#', style: 'font-weight:650;color:var(--navy)', text: t, onclick: function (e) { e.preventDefault(); go('profile', { profileTech: t }); } }),
+          r.chatRequested ? tip(h('span', { text: ' 💬' }), 'Has asked for a chat') : null]),
+        h('td', null, inp),
+        h('td', { class: 'num ' + (days <= 30 ? 'overdue' : ''), text: days >= 0 ? days + ' days' : 'Passed' }),
+        h('td', { style: 'width:230px' }, [h('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:5px' }, [bandChip(o.projected), h('b', { class: 'num', text: f1(o.projected) })]), track(o.projected)]),
+        h('td', { class: 'num' }, [h('span', null, [h('i', { class: 'dot', style: 'background:' + C_SELF }), f1(o.selfAvg)]), h('br'), h('span', null, [h('i', { class: 'dot', style: 'background:' + C_TL }), f1(o.tlAvg)])]),
+        h('td', null, tip(h('span', null, sparkline(o.pts.map(function (pt) { return pt.used; }), '#13516b')), 'Monthly score, oldest → newest\n' + o.pts.map(function (pt) { return monthShort(pt.month) + ' ' + pt.used.toFixed(1); }).join('  '))),
+        h('td', null, chipFor(r)),
+        h('td', { text: r.answers.mood ? moodEmoji(r.answers.mood) : '—' }),
+        h('td', { class: 'num' + (od ? ' overdue' : ''), text: oa.length + (od ? ' (' + od + ' overdue)' : '') }),
+        h('td', null, h('div', { class: 'btn-row', style: 'flex-wrap:nowrap' }, [
+          h('button', { class: 'btn small', type: 'button', text: 'Profile', onclick: function () { go('profile', { profileTech: t }); } }),
+          h('button', { class: 'btn small ghost', type: 'button', text: 'Report', onclick: function () { state.report = { tech: t, aud: 'tl' }; render(); } })]))
+      ]);
+    });
+    var teamTbl = card('Team – appraisal outlook', 'Enter each appraisal date to work out the expected outcome for that date', [
+      legend([{ color: C_SELF, label: 'Self-rating average' }, { color: C_TL, label: 'Your rating average' }]),
+      table(['Technician', 'Appraisal date', 'Days to go', 'Expected outcome', 'Self / you', 'Trend', monthShort(CUR) + ' review', 'Energy', 'Open actions', ''], rows)
+    ], null, howWorkedInline());
+    return h('div', null, [tiles, charts, h('div', { style: 'margin-top:14px' }, teamTbl)]);
+  }
+  function howWorkedInline() {
+    var d = howWorked(TECHS[0], 'tl'); d.style.marginTop = '0'; d.style.maxWidth = '520px';
+    d.querySelector('ol').firstChild.textContent = 'The appraisal period is the 12 months up to each technician\'s appraisal date.';
+    return d;
+  }
+
+  // ======================================================================
+  // TEAM LEADER – monthly reviews
+  // ======================================================================
+  function reviewsView() {
+    var months = Array.from(new Set(REVIEWS.map(function (r) { return r.month; }))).sort().reverse();
+    var monthSel = h('select', { id: 'f-month', onchange: function () { state.month = monthSel.value; render(); } },
+      [h('option', { value: '', text: 'All months' })].concat(months.map(function (m) { var o = h('option', { value: m, text: monthLabel(m) }); o.selected = m === state.month; return o; })));
+    var techSel = h('select', { id: 'f-tech', onchange: function () { state.techFilter = techSel.value; render(); } },
+      [h('option', { value: '', text: 'All technicians' })].concat(TECHS.map(function (t) { var o = h('option', { value: t, text: t }); o.selected = t === state.techFilter; return o; })));
+    var rs = REVIEWS.filter(function (r) { return (!state.month || r.month === state.month) && (!state.techFilter || r.tech === state.techFilter); })
+      .sort(function (x, y) { return x.month === y.month ? (x.tech < y.tech ? -1 : 1) : (x.month < y.month ? 1 : -1); });
+    var rows = rs.map(function (r) {
+      var f = followOf(r);
+      return tr([h('span', null, [r.tech, r.chatRequested ? tip(h('span', { text: ' 💬' }), 'Has asked for a chat') : null]), monthLabel(r.month), chipFor(r),
+        r.submittedOn ? fmtDate(r.submittedOn) : '—', isIn(r) ? r.answers.q3 + ' / 5' : '—', isIn(r) ? moodEmoji(r.answers.mood) : '—',
+        isIn(r) ? f1(selfAvg(r)) : '—', isIn(r) ? f1(mgrAvg(r)) : '—',
+        f === DEDICATED ? h('strong', { text: '1-to-1 requested' }) : (f ? f.replace(/\.$/, '').replace(/ —.*/, '') : '—'),
+        String(r.fb.actions.length || '—'),
+        h('button', { class: 'btn small', type: 'button', text: 'Open', onclick: function () { go('mgr', { reviewId: r.id, backTo: 'reviews' }); } })], f === DEDICATED || r.chatRequested ? 'hl' : '');
+    });
+    return card('Monthly reviews', rs.length + ' shown', [
+      h('div', { class: 'filters' }, [h('div', null, [h('label', { for: 'f-month', text: 'Month' }), monthSel]), h('div', null, [h('label', { for: 'f-tech', text: 'Technician' }), techSel])]),
+      table(['Technician', 'Month', 'Status', 'Submitted', 'Workload', 'Energy', 'Self avg', 'Your avg', 'Follow-up', 'Actions', ''], rows)
+    ]);
+  }
+
+  // ======================================================================
+  // TEAM LEADER – appraisal expectations
+  // ======================================================================
+  function expectationsView() {
+    var years = Array.from(new Set(MASTER_EXPECTATIONS.map(function (e) { return e.year; }).concat([CUR_YEAR]))).sort().reverse();
+    var editing = state.expEdit ? MASTER_EXPECTATIONS.find(function (e) { return e.id === state.expEdit; }) : null;
+    var f = editing ? { title: editing.title, measures: editing.measures, year: editing.year, scope: editing.scope, tech: editing.tech, sort: editing.sort, active: editing.active }
+      : { title: '', measures: '', year: CUR_YEAR, scope: 'Shared', tech: '', sort: 10, active: true };
+    function activeCount(t, year, excludeId) {
+      return MASTER_EXPECTATIONS.filter(function (e) { return e.active && e.year === year && e.id !== excludeId && (e.scope === 'Shared' || e.tech === t); }).length;
+    }
+    // ---- form
+    var tIn = h('input', { type: 'text', id: 'x-title' }); tIn.value = f.title;
+    var mIn = h('textarea', { id: 'x-meas', rows: 3 }); mIn.value = f.measures;
+    var yIn = h('input', { type: 'text', id: 'x-year', style: 'width:100%' }); yIn.value = f.year;
+    var scSel = h('select', { id: 'x-scope' }, ['Shared', 'Individual'].map(function (v) { var o = h('option', { value: v, text: v === 'Shared' ? 'Shared – all technicians' : 'Individual' }); o.selected = v === f.scope; return o; }));
+    var teSel = h('select', { id: 'x-tech' }, [h('option', { value: '', text: '—' })].concat(TECHS.map(function (t) { var o = h('option', { value: t, text: t }); o.selected = t === f.tech; return o; })));
+    teSel.disabled = f.scope !== 'Individual';
+    scSel.addEventListener('change', function () { teSel.disabled = scSel.value !== 'Individual'; if (teSel.disabled) { teSel.value = ''; } });
+    var soIn = h('input', { type: 'number', id: 'x-sort', min: '0', step: '10' }); soIn.value = String(f.sort);
+    var acIn = h('input', { type: 'checkbox', id: 'x-active' }); acIn.checked = f.active;
+    function saveExp() {
+      var v = { title: tIn.value.trim(), measures: mIn.value.trim(), year: yIn.value.trim(), scope: scSel.value, tech: scSel.value === 'Individual' ? teSel.value : '', sort: Number(soIn.value) || 0, active: acIn.checked };
+      if (!v.title || !v.measures || !v.year) { toast('Title, measures and appraisal year are required.', true); return; }
+      if (v.scope === 'Individual' && !v.tech) { toast('Choose the technician for an individual expectation.', true); return; }
+      if (v.active) {
+        var over = (v.scope === 'Shared' ? TECHS : [v.tech]).filter(function (t) { return activeCount(t, v.year, editing ? editing.id : -1) + 1 > 10; });
+        if (over.length) { toast('Would take ' + over.join(', ') + ' over 10 active expectations.', true); return; }
+      }
+      if (editing) { Object.keys(v).forEach(function (k) { editing[k] = v[k]; }); toast('Expectation updated – applies from next month.'); }
+      else { v.id = nextExpId++; MASTER_EXPECTATIONS.push(v); toast('Expectation added – applies from next month.'); }
+      state.expEdit = null; render();
+    }
+    var form = card(editing ? 'Edit expectation' : 'Add an expectation', 'Changes apply from the next monthly review; past reviews never change', [
+      h('div', { class: 'stack', style: 'gap:10px' }, [
+        h('div', null, [h('label', { class: 'field', for: 'x-title', text: 'Expectation' }), tIn]),
+        h('div', null, [h('label', { class: 'field', for: 'x-meas', text: 'How success is measured' }), mIn]),
+        h('div', { class: 'fgrid c2' }, [h('div', null, [h('label', { class: 'field', for: 'x-scope', text: 'Applies to' }), scSel]), h('div', null, [h('label', { class: 'field', for: 'x-tech', text: 'Technician' }), teSel])]),
+        h('div', { class: 'fgrid c2' }, [h('div', null, [h('label', { class: 'field', for: 'x-year', text: 'Appraisal year' }), yIn]), h('div', null, [h('label', { class: 'field', for: 'x-sort', text: 'Order' }), soIn])]),
+        h('label', { class: 'small', style: 'display:flex;gap:8px;align-items:center;font-weight:600' }, [acIn, 'Active']),
+        h('div', { class: 'btn-row' }, [h('button', { class: 'btn primary', type: 'button', text: editing ? 'Save changes' : 'Add expectation', onclick: saveExp }),
+          editing ? h('button', { class: 'btn ghost', type: 'button', text: 'Cancel', onclick: function () { state.expEdit = null; render(); } }) : null])
+      ])
+    ]);
+    // ---- coverage visual
+    var cov = card('Active expectations per technician', state.expYear + ' · maximum 10', [
+      legend([{ color: '#1f7190', label: 'Shared' }, { color: '#ef7d3a', label: 'Individual' }])
+    ].concat(TECHS.map(function (t) {
+      var sh = MASTER_EXPECTATIONS.filter(function (e) { return e.active && e.year === state.expYear && e.scope === 'Shared'; }).length;
+      var ow = MASTER_EXPECTATIONS.filter(function (e) { return e.active && e.year === state.expYear && e.tech === t; }).length;
+      var cells = []; for (var i = 0; i < 10; i++) { cells.push(h('i', { class: i < sh ? 's' : i < sh + ow ? 'o' : '' })); }
+      return tip(h('div', { class: 'covbar' }, [h('span', { text: t }), h('div', { class: 'bar' }, cells), h('b', { class: 'num', text: (sh + ow) + ' / 10' })]), t + ': ' + sh + ' shared + ' + ow + ' individual');
+    })));
+    // ---- band settings
+    var bandRows = SETTINGS.bands.map(function (b, i) {
+      var nameIn = h('input', { type: 'text', 'aria-label': 'Band name' }); nameIn.value = b.name;
+      nameIn.addEventListener('change', function () { b.name = nameIn.value || b.name; render(); });
+      var maxCell;
+      if (b.max < 99) {
+        var mx = h('input', { type: 'number', step: '0.05', min: '1', max: '5', style: 'width:80px', 'aria-label': 'Upper limit' }); mx.value = String(b.max);
+        mx.addEventListener('change', function () { var v = parseFloat(mx.value); if (!isNaN(v)) { b.max = v; render(); } });
+        maxCell = h('span', { style: 'display:flex;gap:6px;align-items:center' }, [h('span', { class: 'small muted', text: 'under' }), mx]);
+      } else { maxCell = h('span', { class: 'small muted', text: 'top band' }); }
+      return h('div', { style: 'display:grid;grid-template-columns:22px 1fr 130px;gap:8px;align-items:center;margin-bottom:6px' }, [h('i', { class: 'dot', style: 'background:' + BAND_COL[b.cls] }), nameIn, maxCell]);
+    });
+    var bands = card('Appraisal bands', 'Average score thresholds used for every technician', bandRows.concat([
+      h('button', { class: 'btn small ghost', type: 'button', text: 'Reset to defaults', onclick: function () { SETTINGS.bands = defaultBands(); render(); } })]));
+
+    // ---- grouped list
+    var yearSel = h('select', { id: 'x-yf', onchange: function () { state.expYear = yearSel.value; render(); } }, years.map(function (y) { var o = h('option', { value: y, text: y }); o.selected = y === state.expYear; return o; }));
+    var retChk = h('input', { type: 'checkbox', onchange: function () { state.showRetired = retChk.checked; render(); } }); retChk.checked = state.showRetired;
+    var list = MASTER_EXPECTATIONS.filter(function (e) { return e.year === state.expYear && (state.showRetired || e.active); });
+    function rowFor(e) {
+      return h('tr', { class: e.active ? null : 'retired' }, [
+        h('td', { class: 'num', style: 'width:54px', text: String(e.sort) }),
+        h('td', { style: 'font-weight:650;width:30%', text: e.title }),
+        h('td', { class: 'small', text: e.measures }),
+        h('td', null, h('span', { class: 'chip ' + (e.active ? 'green' : ''), text: e.active ? 'Active' : 'Retired' })),
+        h('td', { style: 'width:150px' }, h('div', { class: 'btn-row', style: 'flex-wrap:nowrap' }, [
+          h('button', { class: 'btn small', type: 'button', text: 'Edit', onclick: function () { state.expEdit = e.id; render(); window.scrollTo(0, 0); } }),
+          h('button', { class: 'btn small ghost', type: 'button', text: e.active ? 'Retire' : 'Reactivate', onclick: function () {
+            if (!e.active) {
+              var over = (e.scope === 'Shared' ? TECHS : [e.tech]).filter(function (t) { return activeCount(t, e.year, e.id) + 1 > 10; });
+              if (over.length) { toast('Would take ' + over.join(', ') + ' over 10 active expectations.', true); return; }
+            }
+            e.active = !e.active; render();
+          } })]))
+      ]);
+    }
+    var body = [];
+    var shared = list.filter(function (e) { return e.scope === 'Shared'; }).sort(byScopeSort);
+    body.push(h('tr', { class: 'grp' }, h('td', { colspan: '5', text: 'Shared – applies to every technician (' + shared.filter(function (e) { return e.active; }).length + ' active)' })));
+    body = body.concat(shared.length ? shared.map(rowFor) : [h('tr', null, h('td', { colspan: '5', class: 'muted', text: 'None.' }))]);
+    TECHS.forEach(function (t) {
+      var own = list.filter(function (e) { return e.scope === 'Individual' && e.tech === t; }).sort(byScopeSort);
+      body.push(h('tr', { class: 'grp' }, h('td', { colspan: '5', text: t + ' – individual (' + activeCount(t, state.expYear, -1) + ' of 10 active including shared)' })));
+      body = body.concat(own.length ? own.map(rowFor) : [h('tr', null, h('td', { colspan: '5', class: 'muted small', text: 'No individual expectations.' }))]);
+    });
+    var listCard = card('Expectations – ' + state.expYear, list.length + ' shown', [
+      h('div', { class: 'filters' }, [h('div', null, [h('label', { for: 'x-yf', text: 'Appraisal year' }), yearSel]),
+        h('label', { class: 'small', style: 'display:flex;gap:6px;align-items:center;font-weight:600;padding-bottom:8px' }, [retChk, 'Show retired'])]),
+      h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl' }, [
+        h('thead', null, h('tr', null, ['Order', 'Expectation', 'How success is measured', 'Status', ''].map(function (x) { return h('th', { text: x }); }))),
+        h('tbody', null, body)]))
+    ]);
+    return h('div', { class: 'layout left', style: 'margin-top:0' }, [h('div', { class: 'stack' }, [form, cov, bands]), h('div', { class: 'stack' }, [listCard])]);
+  }
+
+  // ======================================================================
+  // actions (shared table + TL actions page)
+  // ======================================================================
+  function actionsTable(items, opts) {
+    opts = opts || {};
+    var headers = [].concat(opts.showTech ? ['Technician'] : [], opts.showMonth ? ['From'] : [], ['Action', 'Owner', 'Close-out criteria', 'Deadline', 'Status'], opts.manage ? [''] : []);
+    var rows = items.map(function (x) {
+      var ac = x.ac, od = acOverdue(ac);
+      var cells = [].concat(opts.showTech ? [x.r.tech] : [], opts.showMonth ? [monthShort(x.r.month)] : [], [
+        h('span', { style: 'font-weight:600', text: ac.text }), ac.owner,
+        h('span', { class: 'small', text: ac.criteria }),
+        h('span', { class: od ? 'overdue' : '', text: fmtDate(ac.due) + (od ? ' – overdue' : '') }),
+        h('span', { class: 'chip ' + (ac.status === 'Closed' ? 'green' : od ? 'red' : 'amber'), text: ac.status === 'Closed' ? 'Closed ' + (ac.closedOn ? fmtDate(ac.closedOn) : '') : 'Open' })
+      ], opts.manage ? [h('button', { class: 'btn small ' + (ac.status === 'Open' ? '' : 'ghost'), type: 'button', text: ac.status === 'Open' ? 'Close out' : 'Reopen', onclick: function () {
+        if (ac.status === 'Open') {
+          confirmBox('Close out this action?', 'Confirm the close-out criteria have been met: "' + ac.criteria + '"', 'Close out', function () { ac.status = 'Closed'; ac.closedOn = TODAY; render(); });
+        } else { ac.status = 'Open'; ac.closedOn = ''; render(); }
+      } })] : []);
+      return tr(cells, od ? 'hl' : '');
+    });
+    return table(headers, rows, { empty: 'No actions.' });
+  }
+  function actionsView() {
+    var all = actionsOf(null, 'tl');
+    var soon = addDays(TODAY, 14);
+    var techSel = h('select', { id: 'a-tech', onchange: function () { state.actTech = techSel.value; render(); } },
+      [h('option', { value: '', text: 'All technicians' })].concat(TECHS.map(function (t) { var o = h('option', { value: t, text: t }); o.selected = t === state.actTech; return o; })));
+    var stSel = h('select', { id: 'a-st', onchange: function () { state.actFilter = stSel.value; render(); } },
+      [['open', 'Open'], ['overdue', 'Overdue'], ['closed', 'Closed'], ['all', 'All']].map(function (v) { var o = h('option', { value: v[0], text: v[1] }); o.selected = v[0] === state.actFilter; return o; }));
+    var shown = all.filter(function (x) {
+      if (state.actTech && x.r.tech !== state.actTech) { return false; }
+      if (state.actFilter === 'open') { return x.ac.status === 'Open'; }
+      if (state.actFilter === 'overdue') { return acOverdue(x.ac); }
+      if (state.actFilter === 'closed') { return x.ac.status === 'Closed'; }
+      return true;
+    });
+    var open = all.filter(function (x) { return x.ac.status === 'Open'; });
+    var tiles = h('div', { class: 'tiles t4' }, [
+      tile('Open', String(open.length), 'Across the team'),
+      tile('Overdue', String(open.filter(function (x) { return acOverdue(x.ac); }).length), 'Past their deadline', open.some(function (x) { return acOverdue(x.ac); }) ? 'bad' : ''),
+      tile('Due in 14 days', String(open.filter(function (x) { return !acOverdue(x.ac) && x.ac.due <= soon; }).length), 'By ' + fmtDate(soon), ''),
+      tile('Closed', String(all.length - open.length), 'This appraisal year')
+    ]);
+    return h('div', null, [tiles, h('div', { style: 'margin-top:14px' }, card('Agreed actions', 'Raised in monthly reviews – each needs close-out criteria and a deadline', [
+      h('div', { class: 'filters' }, [h('div', null, [h('label', { for: 'a-st', text: 'Status' }), stSel]), h('div', null, [h('label', { for: 'a-tech', text: 'Technician' }), techSel])]),
+      actionsTable(shown, { showTech: true, showMonth: true, manage: true })
+    ]))]);
+  }
+
+  // ======================================================================
+  // TEAM LEADER – review a technician's month
+  // ======================================================================
   function managerView() {
     var r = REVIEWS.find(function (x) { return x.id === state.reviewId; });
-    var a = r.answers, fb = r.fb;
-    var hasAnswers = r.state !== 'Open';
-    function ans(text) { return h('div', { class: 'answer' + (text ? '' : ' empty'), text: text || (hasAnswers ? '(left blank)' : '(not submitted yet)') }); }
-    function fbBox(key, label) { return textBox(label || 'Your feedback', fb[key], function (v) { fb[key] = v; }, false, 'Not visible to the technician until you complete the review', 2); }
-    function yn(v, detail) { return (v || '(not answered)') + (v === 'Yes' && detail ? '\n' + detail : ''); }
-    var workloadLabel = WORKLOAD.find(function (w) { return w.value === a.q3; });
-
-    var sections = [
-      qCard(1, 'What has gone well', null, [ans(a.q1), fbBox('q1')]),
-      qCard(2, 'Challenges, blockers and support needed', null, [ans(hasAnswers ? ['Issue: ' + (a.q2.issue || '—'), 'Impact: ' + (a.q2.impact || '—'), 'Tried: ' + (a.q2.tried || '—'), 'Support needed: ' + (a.q2.support || '—')].join('\n') : ''), fbBox('q2')]),
-      qCard(3, 'Workload', null, [ans(hasAnswers && workloadLabel ? workloadLabel.title + ' – ' + workloadLabel.desc + (a.q3c ? '\nComment: ' + a.q3c : '') : ''), fbBox('q3')]),
-      qCard(4, 'Wellbeing and support', null, [ans(hasAnswers ? yn(a.q4, a.q4d) : ''), fbBox('q4')]),
-      qCard(5, 'Upcoming planning', null, [ans(hasAnswers ? yn(a.q5, a.q5d) : ''), fbBox('q5')]),
-      qCard(6, 'Development, training and aspirations', null, [ans(hasAnswers ? yn(a.q6, a.q6what ? 'What: ' + a.q6what + (a.q6why ? '\nWhy: ' + a.q6why : '') : '') : ''), fbBox('q6')]),
-      qCard(7, 'Feedback for line manager', null, [ans(a.q7 && hasAnswers ? a.q7 : ''), fbBox('q7', 'Your acknowledgement / response')]),
-      qCard(8, 'Appraisal expectations', 'Titles and measures come from the snapshot taken when this month\'s review was created.', r.snapshot.map(function (e) {
-        var x = a.q8.find(function (q) { return q.id === e.id; }) || {};
-        var p = PROGRESS.find(function (pp) { return pp.value === x.rating; });
-        return h('div', { class: 'exp' }, [
-          h('h3', { text: e.title }), h('p', { class: 'hint', text: e.measures + ' (' + e.year + ')' }),
-          ans(hasAnswers ? (p ? p.title + ' – ' + p.desc : 'Not rated') + (x.comment ? '\n' + x.comment : '') : ''),
-          h('label', { class: 'field', text: 'Your rating (feeds the appraisal tracker)' }),
-          choiceGroup('Manager rating: ' + e.title, PROGRESS, fb.expRating[e.id], function (v) { fb.expRating[e.id] = v; render(); }, false, 'scale'),
-          textBox('Your feedback', fb.exp[e.id], function (v) { fb.exp[e.id] = v; }, false, null, 2)
-        ]);
-      })),
-      qCard(9, 'Follow-up', null, [ans(hasAnswers ? 'Technician preference: ' + (a.q9 || '(not answered)') : ''), fbBox('q9', 'Your comment')])
+    var a = r.answers, fb = r.fb, has = r.state !== 'Open';
+    function ans(text) { return h('div', { class: 'answer' + (text ? '' : ' empty'), text: text || (has ? '(left blank)' : '(not submitted yet)') }); }
+    function fbBox(key, label) { return h('div', { style: 'margin-top:10px' }, textBox(label || 'Your feedback', fb[key], function (v) { fb[key] = v; }, false, 2)); }
+    function yn(v, detail) { return has ? (v || '(not answered)') + (v === 'Yes' && detail ? ' – ' + detail : '') : ''; }
+    var wl = WORKLOAD.find(function (w) { return w.value === a.q3; });
+    var main = [
+      qCard(1, 'What has gone well', null, [ans(has ? a.q1 : ''), fbBox('q1')]),
+      qCard(2, 'Challenges, blockers and support needed', null, [has && (a.q2.issue || a.q2.support)
+        ? h('div', { class: 'fgrid c4' }, [['Issue', a.q2.issue], ['Impact', a.q2.impact], ['Tried', a.q2.tried], ['Support needed', a.q2.support]].map(function (p) {
+          return h('div', null, [h('div', { class: 'small muted', style: 'font-weight:600', text: p[0] }), ans(p[1])]); }))
+        : ans(''), fbBox('q2')]),
+      qCard(3, 'Workload', null, [ans(has && wl ? wl.title + ' – ' + wl.desc + (a.q3c ? '\n' + a.q3c : '') : ''), fbBox('q3')]),
+      qCard(4, 'Wellbeing and support', null, [ans(yn(a.q4, a.q4d)), fbBox('q4')]),
+      qCard(5, 'Upcoming planning', null, [ans(yn(a.q5, a.q5d)), fbBox('q5')]),
+      qCard(6, 'Development, training and aspirations', null, [ans(yn(a.q6, a.q6what ? a.q6what + (a.q6why ? ' (' + a.q6why + ')' : '') : '')), fbBox('q6')]),
+      qCard(7, 'Feedback for line manager', null, [ans(has ? a.q7 : ''), fbBox('q7', 'Your response')]),
+      qCard(8, 'Appraisal expectations', h('span', { class: 'small muted', text: 'Your ratings feed the appraisal outlook' }), [table(['Expectation', 'Technician', 'Your rating', 'Your feedback'],
+        r.snapshot.map(function (e) {
+          var x = a.q8.find(function (q) { return q.id === e.id; }) || {};
+          var lbl = h('div', { class: 'small muted', style: 'margin-top:4px', text: fb.expRating[e.id] ? PROGRESS[fb.expRating[e.id] - 1].title : 'Not rated' });
+          return h('tr', null, [
+            h('td', { class: 'top', style: 'width:28%' }, [h('div', { style: 'font-weight:650', text: e.title }), h('div', { class: 'small muted', text: e.measures })]),
+            h('td', { class: 'top', style: 'width:24%' }, has ? [h('div', { style: 'font-weight:650', text: x.rating ? x.rating + ' – ' + PROGRESS[x.rating - 1].title : 'Not rated' }), x.comment ? h('div', { class: 'small', text: x.comment }) : null] : h('span', { class: 'muted', text: '—' })),
+            h('td', { class: 'top', style: 'width:200px' }, [ratingSeg(fb.expRating[e.id], function (v) { fb.expRating[e.id] = v; lbl.textContent = PROGRESS[v - 1].title; refreshSide(); }, false), lbl]),
+            h('td', { class: 'top' }, textBox(null, fb.exp[e.id], function (v) { fb.exp[e.id] = v; }, false, 2))
+          ]);
+        }))]),
+      qCard(9, 'Follow-up', null, [ans(has ? 'Technician preference: ' + (a.q9 || '(not answered)') : ''), fbBox('q9', 'Your comment')]),
+      card('Agreed actions', 'Add as many as needed – each needs an owner, close-out criteria and a deadline', [actionsEditor(r)]),
+      card('Overall feedback', null, [textBox(null, fb.overall, function (v) { fb.overall = v; }, false, 3)])
     ];
-
-    var followSel = h('select', { id: nid('s'), onchange: function () { fb.followOverride = followSel.value; } },
-      [h('option', { value: '', text: 'Accept technician\'s preference' })].concat(FOLLOW.map(function (f) { var o = h('option', { value: f, text: f }); o.selected = fb.followOverride === f; return o; })));
-    var meeting = h('input', { type: 'date', id: nid('d'), onchange: function () { fb.meeting = meeting.value; } }); meeting.value = fb.meeting;
-    var actDue = h('input', { type: 'date', id: nid('d'), onchange: function () { fb.actionsDue = actDue.value; } }); actDue.value = fb.actionsDue;
-    var actStatus = h('select', { id: nid('s'), onchange: function () { fb.actionsStatus = actStatus.value; } },
-      ['None', 'Open', 'Done'].map(function (s) { var o = h('option', { value: s, text: s }); o.selected = fb.actionsStatus === s; return o; }));
-
-    sections.push(h('section', { class: 'card' }, [
-      h('h2', { text: 'Overall, follow-up and agreed actions' }),
-      textBox('Overall feedback', fb.overall, function (v) { fb.overall = v; }, false, null, 3),
-      h('div', { class: 'two' }, [
-        h('div', null, [h('label', { class: 'field', for: followSel.id, text: 'Follow-up decision (override if a meeting is needed)' }), followSel]),
-        h('div', null, [h('label', { class: 'field', for: meeting.id, text: '1-to-1 meeting date (optional)' }), meeting])
-      ]),
-      textBox('Agreed actions (one per line – what, who, by when)', fb.actions, function (v) { fb.actions = v; }, false, '• Book refresher course – Technician – by 15/12', 3),
-      h('div', { class: 'two' }, [
-        h('div', null, [h('label', { class: 'field', for: actDue.id, text: 'Earliest action due' }), actDue]),
-        h('div', null, [h('label', { class: 'field', for: actStatus.id, text: 'Actions status' }), actStatus])
-      ])
-    ]));
-
-    var canComplete = r.state === 'Submitted';
-    var canClose = r.state === 'Open' && TODAY > r.due;
+    var canComplete = r.state === 'Submitted', canClose = r.state === 'Open' && TODAY > r.due;
+    function incompleteActions() { return r.fb.actions.filter(function (ac) { return !ac.text.trim() || !ac.criteria.trim() || !ac.due; }).length; }
     var actions = h('div', { class: 'btn-row' }, [
       h('button', { class: 'btn', type: 'button', text: 'Save feedback', onclick: function () {
-        toast(r.released ? 'Saved – already released, so the technician can see this change (prototype).' : 'Saved – not visible to the technician until you complete the review (prototype).');
+        toast(r.released ? 'Saved – already released, so the technician sees this change.' : 'Saved – not visible to the technician until you complete the review.'); } }),
+      h('button', { class: 'btn primary', type: 'button', text: 'Complete & release', disabled: !canComplete, onclick: function () {
+        var n = incompleteActions();
+        if (n) { toast(n + ' action' + (n === 1 ? ' is' : 's are') + ' missing the action, close-out criteria or deadline.', true); return; }
+        confirmBox('Complete this review?', 'Your feedback, ratings and actions will be released to ' + r.tech + ' and they will be emailed.', 'Complete & release', function () {
+          r.state = 'Completed'; r.released = true; toast('Completed – feedback released (prototype).'); render(); });
       } }),
-      h('button', { class: 'btn primary', type: 'button', text: 'Complete & release', disabled: !canComplete, title: canComplete ? null : 'Only submitted reviews can be completed', onclick: function () {
-        confirmBox('Complete this review?', 'Your feedback will be released to ' + r.tech + ' and they will be emailed.', 'Complete & release', function () {
-          r.state = 'Completed'; r.released = true; toast('Completed – feedback released (prototype).'); render();
-        });
-      } }),
-      h('button', { class: 'btn danger', type: 'button', text: 'Close – not submitted', disabled: !canClose, title: canClose ? null : 'Only possible after the deadline for a review that was not submitted', onclick: function () {
+      h('button', { class: 'btn danger', type: 'button', text: 'Close – not submitted', disabled: !canClose, onclick: function () {
         confirmBox('Close as not submitted?', r.tech + ' will no longer be able to submit this review.', 'Close review', function () {
-          r.state = 'Closed - Not Submitted'; r.released = true; toast('Closed (prototype).'); render();
-        });
+          r.state = 'Closed - Not Submitted'; r.released = true; toast('Closed (prototype).'); render(); });
       } }),
-      h('button', { class: 'btn', type: 'button', text: 'Back to dashboard', onclick: function () { state.view = 'dash'; render(); } })
+      h('button', { class: 'btn ghost', type: 'button', text: '← Back', onclick: function () { go(state.backTo || 'reviews'); } })
     ]);
-
-    var f = followOf(r);
-    var appraiseEl = hasAnswers ? h('section', { class: 'card' }, [
-      h('h2', { text: '📈 Appraisal progress' }),
-      h('p', { class: 'hint', text: 'Technician self-rating vs your rating, averaged across all expectations. Rate each expectation below to populate your side.' }),
-      h('div', { class: 'appraise' }, [gauge('Technician self-rating', selfAvg(r)), gauge('Your (line manager) rating', mgrAvg(r))]),
-      bandHowTo(),
-      bandSettings()
-    ]) : null;
-    return h('div', { class: 'narrow' }, [
-      h('div', { class: 'card sticky' }, [
-        h('div', { class: 'status-bar' }, [
-          h('div', null, [h('strong', { text: r.tech + ' – ' + monthLabel(r.month) + ' ' }), chipFor(r),
-            h('div', { class: 'hint', style: 'margin:4px 0 0', text: r.submittedOn ? 'Submitted ' + fmtDate(r.submittedOn) + (r.late ? ' (late)' : '') : 'Deadline ' + fmtLongDate(r.due) })]),
-          actions
-        ])
-      ]),
-      r.chatRequested ? h('div', { class: 'banner info', text: '💬 ' + r.tech + ' has asked for a chat — no reason needed; arrange a catch-up.' }) : null,
-      f === DEDICATED ? h('div', { class: 'banner amber', text: 'Dedicated 1-to-1 discussion requested' }) : null,
-      r.released ? h('div', { class: 'banner info', text: 'Feedback already released – any change you save is visible to the technician straight away. Record the reason in the correction log.' }) : null,
-      hasAnswers ? moodReadout(r) : null,
-      appraiseEl
-    ].filter(Boolean).concat(sections));
+    var head = h('div', { class: 'pagehead sticky' }, [
+      h('div', { class: 'ph-l' }, [h('h2', { text: r.tech + ' – ' + monthLabel(r.month) }), chipFor(r),
+        h('span', { class: 'meta', text: r.submittedOn ? 'Submitted ' + fmtDate(r.submittedOn) + (r.late ? ' (late)' : '') : 'Deadline ' + fmtLong(r.due) })]), actions]);
+    // side
+    var side = h('div', { class: 'stack' });
+    function refreshSide() {
+      side.textContent = '';
+      var o = expectedOutcome(r.tech, 'tl'), streak = streakOf(r.tech), sa = selfAvg(r), ma = mgrAvg(r);
+      side.appendChild(h('section', { class: 'card side-tile' }, [h('h3', { text: 'Technician check-in' }),
+        h('dl', { class: 'kv', style: 'margin-top:0' }, [h('dt', { text: 'Energy' }), h('dd', { text: has || a.mood ? moodEmoji(a.mood) : '—' }),
+          h('dt', { text: 'On-time streak' }), h('dd', { text: streak ? '🔥 ' + streak + ' month' + (streak === 1 ? '' : 's') : '—' }),
+          h('dt', { text: 'Chat requested' }), h('dd', { text: r.chatRequested ? '💬 Yes' : 'No' }),
+          h('dt', { text: 'Follow-up preference' }), h('dd', { text: followOf(r) === DEDICATED ? 'Dedicated 1-to-1' : (has && a.q9 ? (a.q9 === FOLLOW[0] ? 'Nothing further' : 'Quick catch-up') : '—') })])]));
+      side.appendChild(h('section', { class: 'card side-tile' }, [h('h3', { text: 'This month\'s ratings' }),
+        h('div', { class: 'small', style: 'display:flex;justify-content:space-between;margin-bottom:4px' }, [h('span', null, [h('i', { class: 'dot', style: 'background:' + C_SELF }), 'Technician']), h('b', { text: f1(sa) })]), track(sa),
+        h('div', { class: 'small', style: 'display:flex;justify-content:space-between;margin:12px 0 4px' }, [h('span', null, [h('i', { class: 'dot', style: 'background:' + C_TL }), 'You']), h('b', { text: f1(ma) })]), track(ma)]));
+      side.appendChild(h('section', { class: 'card side-tile' }, [
+        h('h3', null, ['Appraisal outlook', h('button', { class: 'btn small ghost', type: 'button', text: 'Profile →', onclick: function () { go('profile', { profileTech: r.tech }); } })]),
+        h('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px' }, [h('div', { class: 'big-score' }, [f1(o.projected), h('small', { text: ' / 5' })]), bandChip(o.projected, true)]),
+        track(o.projected),
+        h('dl', { class: 'kv' }, [h('dt', { text: 'Appraisal' }), h('dd', { text: fmtDate(o.period.apDate) }), h('dt', { text: 'Current' }), h('dd', { text: f1(o.current) })])]));
+      var followSel = h('select', { id: nid('s'), onchange: function () { fb.followOverride = followSel.value; } },
+        [h('option', { value: '', text: 'Accept technician\'s preference' })].concat(FOLLOW.map(function (x) { var op = h('option', { value: x, text: x }); op.selected = fb.followOverride === x; return op; })));
+      var meeting = h('input', { type: 'date', id: nid('d'), onchange: function () { fb.meeting = meeting.value; } }); meeting.value = fb.meeting;
+      side.appendChild(h('section', { class: 'card side-tile' }, [h('h3', { text: 'Follow-up decision' }),
+        h('div', { class: 'stack', style: 'gap:8px' }, [followSel, h('div', null, [h('label', { class: 'field', for: meeting.id, text: '1-to-1 meeting date (optional)' }), meeting])])]));
+    }
+    refreshSide();
+    var banners = [];
+    if (r.chatRequested) { banners.push(h('div', { class: 'banner info', text: '💬 ' + r.tech + ' has asked for a chat — no reason needed; arrange a catch-up.' })); }
+    if (followOf(r) === DEDICATED) { banners.push(h('div', { class: 'banner amber', text: 'Dedicated 1-to-1 discussion requested' })); }
+    if (r.released && r.state === 'Completed') { banners.push(h('div', { class: 'banner info', text: 'Already released – any change you save is visible to the technician straight away.' })); }
+    return h('div', null, [head, h('div', { class: 'layout' }, [h('div', { class: 'stack' }, banners.concat(main)), h('aside', { class: 'side-sticky' }, side)])]);
+  }
+  function actionsEditor(r) {
+    var wrap = h('div');
+    function draw() {
+      wrap.textContent = '';
+      var rows = r.fb.actions.map(function (ac, i) {
+        var t = h('input', { type: 'text', 'aria-label': 'Action' }); t.value = ac.text; t.addEventListener('input', function () { ac.text = t.value; });
+        var ow = h('select', { 'aria-label': 'Owner' }, [r.tech, 'Team Leader'].map(function (v) { var o = h('option', { value: v, text: v }); o.selected = ac.owner === v; return o; }));
+        ow.addEventListener('change', function () { ac.owner = ow.value; });
+        var cr = h('input', { type: 'text', 'aria-label': 'Close-out criteria' }); cr.value = ac.criteria; cr.addEventListener('input', function () { ac.criteria = cr.value; });
+        var du = h('input', { type: 'date', 'aria-label': 'Deadline' }); du.value = ac.due; du.addEventListener('change', function () { ac.due = du.value; });
+        var st = h('select', { 'aria-label': 'Status' }, ['Open', 'Closed'].map(function (v) { var o = h('option', { value: v, text: v }); o.selected = ac.status === v; return o; }));
+        st.addEventListener('change', function () { ac.status = st.value; ac.closedOn = st.value === 'Closed' ? TODAY : ''; });
+        return h('tr', null, [h('td', { class: 'num', style: 'width:30px', text: String(i + 1) }), h('td', { style: 'width:26%' }, t), h('td', { style: 'width:150px' }, ow), h('td', null, cr),
+          h('td', { style: 'width:150px' }, du), h('td', { style: 'width:100px' }, st),
+          h('td', { style: 'width:40px' }, h('button', { class: 'btn small ghost', type: 'button', text: '✕', 'aria-label': 'Remove action', onclick: function () { r.fb.actions.splice(i, 1); draw(); } }))]);
+      });
+      wrap.appendChild(table(['#', 'Action', 'Owner', 'Close-out criteria', 'Deadline', 'Status', ''], rows, { empty: 'No actions yet.' }));
+      wrap.appendChild(h('div', { style: 'margin-top:10px' }, h('button', { class: 'btn', type: 'button', text: '+ Add action', onclick: function () {
+        r.fb.actions.push({ id: actId++, text: '', owner: r.tech, criteria: '', due: '', status: 'Open', closedOn: '' }); draw();
+        var ins = wrap.querySelectorAll('tbody input[type="text"]'); if (ins.length) { ins[ins.length - 2].focus(); }
+      } })));
+    }
+    draw();
+    return wrap;
   }
 
-  // ---------------- shell ----------------
+  // ======================================================================
+  // APPRAISAL REPORT (printable)
+  // ======================================================================
+  function reportView(tech, aud) {
+    var o = expectedOutcome(tech, aud), p = o.period;
+    var prs = periodReviews(tech).filter(function (r) { return r.month <= CUR; });
+    var subs = prs.filter(isIn), ot = onTimeOf(tech);
+    var acts = actionsOf(function (ac, r) { return r.tech === tech; }, aud);
+    var sorted = o.perExp.filter(function (x) { return x.latest; }).slice().sort(function (x, y) { return y.latest - x.latest; });
+    function rsec(title, children) { return h('section', { class: 'rsec' }, [h('h2', { text: title })].concat(children)); }
+    function rtable(headers, rows, empty) {
+      return h('table', { class: 'rt' }, [h('thead', null, h('tr', null, headers.map(function (x) { return h('th', { text: x }); }))),
+        h('tbody', null, rows.length ? rows.map(function (cells) { return h('tr', null, cells.map(function (c) { return h('td', null, c === null || c === undefined || c === '' ? '—' : c); })); })
+          : h('tr', null, h('td', { colspan: String(headers.length), class: 'muted', text: empty || 'None in this period.' })))]);
+    }
+    var doc = h('div', { class: 'report-doc' }, [
+      h('div', { class: 'small muted', text: 'ESG Technician 1-to-1 · Appraisal evidence report · CONFIDENTIAL' }),
+      h('h1', { text: tech }),
+      h('div', { class: 'rmeta' }, [
+        h('div', null, [h('span', { text: 'Appraisal date' }), h('b', { text: fmtDate(p.apDate) })]),
+        h('div', null, [h('span', { text: 'Period covered' }), h('b', { text: monthLabel(addMonths(p.start, 1)) + ' – ' + monthLabel(p.end > CUR ? CUR : p.end) })]),
+        h('div', null, [h('span', { text: 'Prepared for' }), h('b', { text: aud === 'tl' ? 'Team Leader' : tech + ' (self)' })]),
+        h('div', null, [h('span', { text: 'Generated' }), h('b', { text: fmtDate(TODAY) })]),
+        h('div', null, [h('span', { text: 'Monthly reviews submitted' }), h('b', { text: subs.length + ' (' + ot.onTime + ' of ' + ot.total + ' on time)' })]),
+        h('div', null, [h('span', { text: 'Agreed actions' }), h('b', { text: acts.length + ' (' + acts.filter(function (x) { return x.ac.status === 'Open'; }).length + ' open)' })])
+      ]),
+      rsec('1. Summary', [
+        h('div', { class: 'rsum' }, [
+          h('div', null, [h('span', { text: 'Expected outcome' }), bandChip(o.projected, true)]),
+          h('div', null, [h('span', { text: 'Projected at appraisal' }), h('b', { text: f1(o.projected) + ' / 5' })]),
+          h('div', null, [h('span', { text: 'Current position' }), h('b', { text: f1(o.current) + ' / 5' })]),
+          h('div', null, [h('span', { text: 'Self vs Team Leader' }), h('b', { text: f1(o.selfAvg) + ' vs ' + f1(o.tlAvg) })])
+        ]),
+        h('div', { class: 'fgrid c2', style: 'margin-top:12px' }, [
+          h('div', null, [h('h3', { text: 'Strongest areas' }), h('ul', null, sorted.slice(0, 2).map(function (x) { return h('li', { text: x.e.title + ' (' + x.latest + ' – ' + PROGRESS[x.latest - 1].title + ')' }); }))]),
+          h('div', null, [h('h3', { text: 'Areas to focus on' }), h('ul', null, sorted.slice(-2).reverse().map(function (x) { return h('li', { text: x.e.title + ' (' + x.latest + ' – ' + PROGRESS[x.latest - 1].title + ')' }); }))])
+        ]),
+        h('h3', { text: 'Rating trend' }), trendChart(tech, aud, o, 210)
+      ]),
+      rsec('2. Appraisal expectations', o.perExp.map(function (x) {
+        return h('div', null, [
+          h('div', { class: 'exphead' }, [h('h3', { text: x.e.title }), h('span', { class: 'small', text: 'Latest: self ' + (x.latestSelf || '—') + ' · Team Leader ' + (x.latestTl || '—') })]),
+          h('div', { class: 'small muted', text: 'Measure: ' + x.e.measures }),
+          rtable(['Month', 'Self', 'TL', 'Technician evidence', 'Team Leader feedback'], x.hist.map(function (hh) {
+            return [monthShort(hh.month), hh.self ? String(hh.self) : '', hh.tl ? String(hh.tl) : '', hh.comment, hh.fb];
+          }))
+        ]);
+      })),
+      rsec('3. Achievements', [rtable(['Month', 'Win of the month', 'What went well'], subs.map(function (r) { return [monthLabel(r.month), r.answers.win, r.answers.q1]; }))]),
+      rsec('4. Development and training', [rtable(['Month', 'Requested', 'Why'], subs.filter(function (r) { return r.answers.q6 === 'Yes'; }).map(function (r) { return [monthLabel(r.month), r.answers.q6what, r.answers.q6why]; }))]),
+      rsec('5. Challenges and support', [rtable(['Month', 'Issue', 'Impact', 'Support needed'], subs.filter(function (r) { return r.answers.q2.issue; }).map(function (r) { return [monthLabel(r.month), r.answers.q2.issue, r.answers.q2.impact, r.answers.q2.support]; }))]),
+      rsec('6. Agreed actions', [rtable(['Raised', 'Action', 'Owner', 'Close-out criteria', 'Deadline', 'Status'], acts.map(function (x) {
+        return [monthShort(x.r.month), x.ac.text, x.ac.owner, x.ac.criteria, fmtDate(x.ac.due), x.ac.status === 'Closed' ? 'Closed ' + fmtDate(x.ac.closedOn) : (acOverdue(x.ac) ? 'Open – overdue' : 'Open')];
+      }))]),
+      rsec('7. Line manager feedback', [rtable(['Month', 'Overall feedback'], prs.filter(function (r) { return r.state === 'Completed' && (aud === 'tl' || r.released) && r.fb.overall; }).map(function (r) { return [monthLabel(r.month), r.fb.overall]; }))]),
+      rsec('8. Submission record', [rtable(['Month', 'Status', 'Submitted'], prs.map(function (r) {
+        return [monthLabel(r.month), r.state === 'Closed - Not Submitted' ? 'Not submitted' : r.state === 'Open' ? (isOverdue(r) ? 'Overdue' : 'In progress') : (r.late ? 'Submitted late' : 'Submitted on time'), r.submittedOn ? fmtDate(r.submittedOn) : ''];
+      }))]),
+      h('div', { class: 'note', text: 'Generated from the monthly 1-to-1 records. Wellbeing answers and private notes are deliberately excluded. Expected outcome uses the method shown on the appraisal page and is a guide for the appraisal conversation, not a decision.' })
+    ]);
+    return h('div', { class: 'report-wrap', role: 'dialog', 'aria-label': 'Appraisal report' }, [
+      h('div', { class: 'report-bar' }, [h('strong', { text: 'Appraisal report – ' + tech }), h('div', { class: 'btn-row' }, [
+        h('button', { class: 'btn primary', type: 'button', text: '🖨 Print / Save as PDF', onclick: function () { window.print(); } }),
+        h('button', { class: 'btn', type: 'button', text: 'Close', onclick: function () { state.report = null; render(); } })])]),
+      doc
+    ]);
+  }
+
+  // ======================================================================
+  // shell
+  // ======================================================================
   function render() {
     root.textContent = '';
-    live = h('div', { class: 'sr', 'aria-live': 'polite', style: 'position:absolute;left:-9999px' });
+    live = h('div', { 'aria-live': 'polite', style: 'position:absolute;left:-9999px' });
+    tipEl = h('div', { class: 'tip', role: 'tooltip' });
     function roleBtn(role, label) {
       return h('button', { type: 'button', 'aria-pressed': state.role === role ? 'true' : 'false', text: label, onclick: function () {
-        state.role = role; state.view = role === 'tech' ? 'tech' : 'dash'; state.reviewId = null; render();
+        state.role = role; state.view = role === 'tech' ? 'tech' : 'team'; state.reviewId = null; state.report = null; render();
       } });
     }
     root.appendChild(h('div', { class: 'proto-bar' }, [
       h('span', { text: 'PROTOTYPE – fictional people and data. Not connected to SharePoint; nothing is saved. "Today" is ' + fmtDate(TODAY) + '.' }),
       h('span', { class: 'roles' }, ['View as:', roleBtn('tech', 'Technician (' + ME + ')'), roleBtn('tl', 'Team Leader')])
     ]));
+    var navs = state.role === 'tech'
+      ? [['tech', 'This month'], ['myapp', 'My appraisal']]
+      : [['team', 'Team overview'], ['reviews', 'Monthly reviews'], ['expect', 'Appraisal expectations'], ['actions', 'Actions']];
+    var activeNav = state.view === 'mgr' ? (state.backTo === 'profile' ? 'team' : (state.backTo || 'reviews')) : state.view === 'profile' ? 'team' : state.view;
     root.appendChild(h('header', { class: 'app' }, [
-      h('div', null, [
-        h('h1', { text: 'ESG Technician 1-to-1' }),
-        h('p', { text: state.role === 'tech' ? 'My monthly 1-to-1' : (state.view === 'mgr' ? 'Review and feedback' : 'Team Leader dashboard') })
-      ])
+      h('div', { class: 'brand' }, [h('h1', { text: 'ESG Technician 1-to-1' }), h('span', { text: state.role === 'tech' ? ME : 'Team Leader' })]),
+      h('nav', null, navs.map(function (n) {
+        return h('button', { type: 'button', 'aria-current': activeNav === n[0] ? 'true' : 'false', text: n[1], onclick: function () { go(n[0], { reviewId: n[0] === 'tech' ? state.reviewId : null }); } });
+      }))
     ]));
-    var main = h('main');
-    main.appendChild(state.view === 'tech' ? techView() : state.view === 'mgr' ? managerView() : dashboardView());
+    var main = h('main'), v = state.view;
+    main.appendChild(v === 'tech' ? techView() : v === 'myapp' ? profileView(ME, 'tech') : v === 'team' ? teamView() : v === 'reviews' ? reviewsView()
+      : v === 'expect' ? expectationsView() : v === 'actions' ? actionsView() : v === 'profile' ? profileView(state.profileTech, 'tl') : managerView());
     root.appendChild(main);
+    if (state.report) { root.appendChild(reportView(state.report.tech, state.report.aud)); }
     root.appendChild(live);
-    window.scrollTo(0, 0);
+    root.appendChild(tipEl);
+    if (!state.report) { window.scrollTo(0, 0); }
   }
 
   root = document.getElementById('oto-root');
