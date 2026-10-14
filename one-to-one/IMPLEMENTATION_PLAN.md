@@ -9,7 +9,7 @@
 |---|---|
 | D1 | Flows run under the **TL's own account** |
 | D2 | **Late submissions are accepted** and flagged late, and the TL may close a review that was never submitted |
-| D3 | Retention period: **to be confirmed with HR** |
+| D3 | Retention period: **24 months** (confirmed). Reviews older than 24 months are deleted; mechanism per D.5. |
 | D4 | **No backup owner**, subject to corporate governance |
 
 The system has four lists, three flows, two custom permission levels, and one SharePoint page carrying a custom Welcome layout (the frontend). The flows use standard connectors only.
@@ -316,7 +316,7 @@ Section 4 of `PLAN_REVIEW.md` lists 20 bypass attempts and why each fails.
 
 These are placeholders until HR answers HR-1.
 
-- **Retention period:** HR to set the number of years.
+- **Retention period:** **24 months** (confirmed). A review is deleted once its month is more than 24 months ago.
 - **Purview label available:** apply it as the **default label** on Monthly Reviews and Manager Reviews.
 - **No label:** the TL carries out a documented **annual April deletion**. Filter by MonthKey older than the retention period, delete, record the deletion in a dated note, then empty the site recycle bin and the second-stage recycle bin.
 - **Leavers:** set Active = No in Technicians and keep their records for the retention period.
