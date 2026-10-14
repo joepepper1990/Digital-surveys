@@ -1,0 +1,271 @@
+<!--
+  ESG Monthly Technician 1-to-1 – production layout (v4) for Welcome by Accelerator 365.
+  Upload this file AND one-to-one.js to the "Welcome Web Part - Custom Layouts" library, then choose the
+  layout "ESG 1-to-1" in the Welcome web part on SitePages/OneToOne.aspx (full-width section, all Welcome
+  extras such as greeting, weather, time and search turned OFF).
+  Static markup only. All data is rendered by one-to-one.js with textContent (never as HTML).
+  This file must not contain Handlebars expressions.
+-->
+<template
+    id="metadata"
+    data-name="ESG 1-to-1"
+    data-description="ESG Monthly Technician 1-to-1 (v4)">
+
+    <template id="layout">
+        <style>
+
+  .SCOPE .oto {
+    --navy: #13516b; --navy-2: #1f7190; --ink: #16222c; --muted: #5b6774; --line: #d9dfe5;
+    --bg: #eef2f5; --card: #ffffff; --soft: #f6f8fa;
+    --green: #1b7a45; --green-bg: #e6f3eb; --amber: #8a5a00; --amber-bg: #fff3d6;
+    --red: #a4262c; --red-bg: #fde8e9; --blue-bg: #e7f0f6; --focus: #2b78d0;
+    --accent: #ef7d3a; --accent-bg: #fdeadb; --accent-ink: #b7531a; --purple: #6a4fb0;
+    --self: #2a78d6; --tl: #eb6834;
+    font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif; font-size: 14px;
+    line-height: 1.45; color: var(--ink); background: var(--bg); min-height: 100vh; min-width: 1100px;
+  }
+  .SCOPE .oto * { box-sizing: border-box; }
+  .SCOPE .oto h1, .SCOPE .oto h2, .SCOPE .oto h3 { margin: 0; }
+
+  /* ---------- shell ---------- */
+  .SCOPE .oto .shell { display: grid; grid-template-columns: 216px minmax(0, 1fr); background: linear-gradient(to right, #0e4257 0 216px, transparent 216px); }
+  .SCOPE .oto .nw table.tbl td { white-space: nowrap; }
+  .SCOPE .oto .sidenav { background: linear-gradient(180deg, var(--navy), #0e4257); color: #fff; position: sticky; top: 0; height: 100vh; overflow-y: auto; display: flex; flex-direction: column; padding: 16px 10px 12px; }
+  .SCOPE .oto .sidenav .brand { padding: 0 10px 14px; border-bottom: 1px solid rgba(255,255,255,.14); margin-bottom: 8px; }
+  .SCOPE .oto .sidenav .brand h1 { font-size: 15px; font-weight: 700; }
+  .SCOPE .oto .sidenav .brand span { display: block; font-size: 12px; opacity: .75; margin-top: 2px; }
+  .SCOPE .oto .sidenav .sec { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; opacity: .55; padding: 14px 10px 4px; }
+  .SCOPE .oto .sidenav button.nav { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; font: inherit; font-size: 13px; font-weight: 600; color: rgba(255,255,255,.84); background: none; border: none; border-radius: 6px; padding: 7px 10px; cursor: pointer; }
+  .SCOPE .oto .sidenav button.nav:hover { background: rgba(255,255,255,.08); color: #fff; }
+  .SCOPE .oto .sidenav button.nav[aria-current="true"] { background: rgba(255,255,255,.16); color: #fff; box-shadow: inset 3px 0 0 var(--accent); }
+  .SCOPE .oto .sidenav .ico { width: 18px; text-align: center; flex: none; }
+  .SCOPE .oto .sidenav .badge { margin-left: auto; background: var(--accent); color: #fff; border-radius: 10px; font-size: 11px; padding: 0 7px; line-height: 18px; }
+  .SCOPE .oto .sidenav .flag { margin-left: auto; width: 7px; height: 7px; border-radius: 50%; background: #ff8a80; }
+  .SCOPE .oto .sidenav .tdot { width: 9px; height: 9px; border-radius: 50%; flex: none; box-shadow: 0 0 0 2px rgba(255,255,255,.25); }
+  .SCOPE .oto .sidenav .foot { margin-top: auto; font-size: 12px; padding: 10px; border-top: 1px solid rgba(255,255,255,.14); opacity: .85; }
+  .SCOPE .oto .sidenav .foot b { display: block; font-size: 13px; }
+  .SCOPE .oto .titlebar { background: #fff; border-bottom: 1px solid var(--line); padding: 12px 28px; display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 58px; }
+  .SCOPE .oto .titlebar .crumb { font-size: 12px; color: var(--muted); }
+  .SCOPE .oto .titlebar h1 { font-size: 19px; font-weight: 700; }
+  .SCOPE .oto main { max-width: 1480px; margin: 0 auto; padding: 18px 28px 48px; }
+
+  /* ---------- layout ---------- */
+  .SCOPE .oto .stack { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .SCOPE .oto .layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 14px; align-items: start; margin-top: 14px; }
+  .SCOPE .oto .layout.left { grid-template-columns: 360px minmax(0, 1fr); }
+  .SCOPE .oto .side-sticky { position: sticky; top: 84px; }
+  .SCOPE .oto .list.cols { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .SCOPE .oto .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: stretch; }
+  .SCOPE .oto .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; align-items: stretch; }
+  .SCOPE .oto .tiles { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
+  .SCOPE .oto .tiles.t4 { grid-template-columns: repeat(4, 1fr); }
+  .SCOPE .oto .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; min-width: 0; }
+  .SCOPE .oto .card-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .SCOPE .oto .card-h h2 { font-size: 15px; font-weight: 650; }
+  .SCOPE .oto .card-h .sub { font-size: 12px; color: var(--muted); }
+  .SCOPE .oto .tile { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; min-height: 96px; display: flex; flex-direction: column; justify-content: space-between; gap: 4px; }
+  .SCOPE .oto .tile .tl { font-size: 11px; color: var(--muted); font-weight: 650; text-transform: uppercase; letter-spacing: .04em; }
+  .SCOPE .oto .tile .tv { font-size: 26px; font-weight: 750; line-height: 1.1; }
+  .SCOPE .oto .tile .tv small { font-size: 13px; color: var(--muted); font-weight: 600; }
+  .SCOPE .oto .tile .ts { font-size: 12px; color: var(--muted); }
+  .SCOPE .oto .tile.warn .tv { color: var(--amber); } .SCOPE .oto .tile.bad .tv { color: var(--red); }
+
+  /* ---------- page head ---------- */
+  .SCOPE .oto .pagehead { display: flex; align-items: center; justify-content: space-between; gap: 16px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 18px; }
+  .SCOPE .oto .pagehead .ph-l { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .SCOPE .oto .pagehead h2 { font-size: 17px; font-weight: 650; }
+  .SCOPE .oto .pagehead .meta { font-size: 12px; color: var(--muted); }
+  .SCOPE .oto .sticky { position: sticky; top: 0; z-index: 6; box-shadow: 0 2px 6px rgba(20,40,60,.06); }
+  .SCOPE .oto .meter { height: 6px; border-radius: 4px; background: #e6eaef; overflow: hidden; margin-top: 10px; }
+  .SCOPE .oto .meter > i { display: block; height: 100%; background: var(--green); transition: width .25s ease; }
+
+  /* ---------- controls ---------- */
+  .SCOPE .oto .btn { font: inherit; font-weight: 600; border-radius: 6px; padding: 7px 14px; border: 1px solid var(--navy); background: #fff; color: var(--navy); cursor: pointer; white-space: nowrap; }
+  .SCOPE .oto .btn.primary { background: var(--navy); color: #fff; }
+  .SCOPE .oto .btn.danger { border-color: var(--red); color: var(--red); }
+  .SCOPE .oto .btn.small { padding: 3px 10px; font-size: 12px; }
+  .SCOPE .oto .btn.ghost { border-color: var(--line); color: var(--ink); }
+  .SCOPE .oto .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .SCOPE .oto .btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .SCOPE .oto textarea, .SCOPE .oto select, .SCOPE .oto input[type="date"], .SCOPE .oto input[type="text"], .SCOPE .oto input[type="number"] { width: 100%; font: inherit; color: inherit; border: 1px solid #b9c2cd; border-radius: 6px; padding: 7px 9px; background: #fff; }
+  .SCOPE .oto textarea { resize: vertical; min-height: 64px; }
+  .SCOPE .oto textarea:disabled, .SCOPE .oto select:disabled, .SCOPE .oto input:disabled { background: #f2f4f7; color: #333; border-color: var(--line); }
+  .SCOPE .oto :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .SCOPE .oto label.field { display: block; font-weight: 600; font-size: 13px; margin: 0 0 4px; }
+  .SCOPE .oto .fgrid { display: grid; gap: 12px; }
+  .SCOPE .oto .fgrid.c4 { grid-template-columns: repeat(4, 1fr); }
+  .SCOPE .oto .fgrid.c2 { grid-template-columns: 1fr 1fr; }
+  .SCOPE .oto .seg { display: inline-flex; border: 1px solid #b9c2cd; border-radius: 6px; overflow: hidden; background: #fff; }
+  .SCOPE .oto .seg button { font: inherit; font-weight: 650; border: none; background: none; padding: 5px 0; width: 36px; cursor: pointer; color: var(--ink); border-left: 1px solid #dfe4ea; }
+  .SCOPE .oto .seg button:first-child { border-left: none; }
+  .SCOPE .oto .seg.wide button { width: auto; padding: 5px 16px; }
+  .SCOPE .oto .seg button[aria-pressed="true"] { background: var(--navy); color: #fff; }
+  .SCOPE .oto .seg button:disabled { cursor: default; }
+  .SCOPE .oto .seg button:disabled:not([aria-pressed="true"]) { color: #9aa4ae; }
+  .SCOPE .oto .choices { display: grid; gap: 8px; }
+  .SCOPE .oto .choices.c5 { grid-template-columns: repeat(5, 1fr); }
+  .SCOPE .oto .choices.c3 { grid-template-columns: repeat(3, 1fr); }
+  .SCOPE .oto .choice { display: flex; flex-direction: column; gap: 1px; border: 1px solid #b9c2cd; border-radius: 6px; padding: 8px 11px; cursor: pointer; background: #fff; position: relative; }
+  .SCOPE .oto .choice input { position: absolute; opacity: 0; pointer-events: none; }
+  .SCOPE .oto .choice .ct { font-weight: 650; }
+  .SCOPE .oto .choice .cd { font-size: 12px; color: var(--muted); }
+  .SCOPE .oto .choice:has(input:checked) { border-color: var(--navy); background: var(--blue-bg); box-shadow: inset 0 0 0 1px var(--navy); }
+  .SCOPE .oto .choice:has(input:focus-visible) { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .SCOPE .oto .choice:has(input:disabled) { cursor: default; }
+
+  /* ---------- questions ---------- */
+  .SCOPE .oto .q-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 10px; }
+  .SCOPE .oto .q-head h3 { font-size: 15px; font-weight: 650; display: flex; gap: 10px; align-items: center; }
+  .SCOPE .oto .qnum { flex: none; display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 12px; font-weight: 650; }
+  .SCOPE .oto .q-head.only { margin-bottom: 0; }
+  .SCOPE .oto .q-head > .seg, .SCOPE .oto .q-head > span { flex: none; }
+  .SCOPE .oto .detail { margin-top: 10px; }
+  .SCOPE .oto .answer { white-space: pre-wrap; background: var(--soft); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; min-height: 36px; }
+  .SCOPE .oto .answer.empty { color: var(--muted); font-style: italic; }
+  .SCOPE .oto .feedback { background: #f1f7f3; border-left: 3px solid var(--green); padding: 7px 11px; margin-top: 8px; border-radius: 0 6px 6px 0; white-space: pre-wrap; }
+  .SCOPE .oto .feedback b { display: block; font-size: 11px; color: var(--green); text-transform: uppercase; letter-spacing: .04em; }
+  .SCOPE .oto .missing { border-left: 3px solid var(--red); background: var(--red-bg); padding: 9px 12px; border-radius: 0 6px 6px 0; }
+  .SCOPE .oto .done { border-left: 3px solid var(--green); background: var(--green-bg); padding: 9px 12px; border-radius: 0 6px 6px 0; }
+
+  /* ---------- tables ---------- */
+  .SCOPE .oto table.tbl { width: 100%; border-collapse: collapse; }
+  .SCOPE .oto table.tbl th { text-align: left; font-size: 11px; color: var(--muted); font-weight: 650; text-transform: uppercase; letter-spacing: .04em; padding: 8px 10px; background: var(--soft); border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .SCOPE .oto table.tbl td { padding: 9px 10px; border-bottom: 1px solid #edf0f3; vertical-align: middle; }
+  .SCOPE .oto table.tbl tr:last-child td { border-bottom: none; }
+  .SCOPE .oto table.tbl tr.hl td { background: #fff8e6; }
+  .SCOPE .oto table.tbl tr.grp td { background: var(--soft); font-weight: 650; font-size: 13px; border-top: 1px solid var(--line); }
+  .SCOPE .oto table.tbl tr.retired td { color: #8b949e; }
+  .SCOPE .oto table.tbl td.num { font-variant-numeric: tabular-nums; }
+  .SCOPE .oto table.tbl td.top { vertical-align: top; }
+  .SCOPE .oto table.tbl input, .SCOPE .oto table.tbl select { padding: 5px 7px; }
+  .SCOPE .oto .tbl-wrap { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .SCOPE .oto .filters { display: flex; gap: 12px; align-items: end; margin-bottom: 12px; }
+  .SCOPE .oto .filters > div { width: 200px; }
+  .SCOPE .oto .filters label { font-size: 12px; font-weight: 600; display: block; margin-bottom: 3px; }
+
+  /* ---------- chips, bands, tracks ---------- */
+  .SCOPE .oto .chip { display: inline-block; font-size: 12px; font-weight: 650; padding: 2px 9px; border-radius: 12px; background: #e9ecf0; color: #333; white-space: nowrap; }
+  .SCOPE .oto .chip.green { background: var(--green-bg); color: var(--green); }
+  .SCOPE .oto .chip.amber { background: var(--amber-bg); color: var(--amber); }
+  .SCOPE .oto .chip.red { background: var(--red-bg); color: var(--red); }
+  .SCOPE .oto .chip.blue { background: var(--blue-bg); color: var(--navy); }
+  .SCOPE .oto .chip.orange { background: var(--accent-bg); color: var(--accent-ink); }
+  .SCOPE .oto .band { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 12px; white-space: nowrap; }
+  .SCOPE .oto .band.b0 { background: var(--red-bg); color: var(--red); }
+  .SCOPE .oto .band.b1 { background: var(--amber-bg); color: var(--amber); }
+  .SCOPE .oto .band.b2 { background: var(--green-bg); color: var(--green); }
+  .SCOPE .oto .band.b3 { background: #e1edfb; color: #1659a8; }
+  .SCOPE .oto .band.big { font-size: 15px; padding: 4px 14px; }
+  .SCOPE .oto .track { position: relative; height: 8px; border-radius: 5px; background: linear-gradient(90deg, #f2c2c3 0 12.5%, #f5dc9e 12.5% 31.25%, #bfe2cd 31.25% 75%, #bcd6f3 75% 100%); }
+  .SCOPE .oto .track > i { position: absolute; top: -4px; width: 4px; height: 16px; border-radius: 2px; background: var(--ink); box-shadow: 0 0 0 2px #fff; transform: translateX(-2px); }
+  .SCOPE .oto .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: baseline; }
+  .SCOPE .oto .muted { color: var(--muted); }
+  .SCOPE .oto .small { font-size: 12px; }
+  .SCOPE .oto .overdue { color: var(--red); font-weight: 650; }
+
+  /* ---------- side tiles ---------- */
+  .SCOPE .oto .side-tile h3 { font-size: 13px; font-weight: 650; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+  .SCOPE .oto .mood { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .SCOPE .oto .mood button { font: inherit; cursor: pointer; border: 1px solid #c8d0d8; background: #fff; border-radius: 8px; padding: 5px 0; font-size: 20px; line-height: 1.2; }
+  .SCOPE .oto .mood button[aria-pressed="true"] { border-color: var(--navy); background: var(--blue-bg); box-shadow: inset 0 0 0 1px var(--navy); }
+  .SCOPE .oto .mood button:disabled { cursor: default; }
+  .SCOPE .oto .big-score { font-size: 30px; font-weight: 750; line-height: 1.1; }
+  .SCOPE .oto .big-score small { font-size: 13px; color: var(--muted); font-weight: 600; }
+  .SCOPE .oto .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 12px; margin-top: 10px; }
+  .SCOPE .oto .kv dt { color: var(--muted); } .SCOPE .oto .kv dd { margin: 0; font-weight: 600; text-align: right; }
+  .SCOPE .oto details.how { margin-top: 10px; font-size: 12px; }
+  .SCOPE .oto details.how summary { cursor: pointer; color: var(--navy); font-weight: 650; }
+  .SCOPE .oto details.how ol { margin: 8px 0; padding-left: 18px; }
+  .SCOPE .oto details.how li { margin-bottom: 4px; }
+  .SCOPE .oto .bandtbl { width: 100%; border-collapse: collapse; }
+  .SCOPE .oto .bandtbl td { padding: 4px 6px; border-top: 1px solid #edf0f3; }
+
+  /* ---------- charts ---------- */
+  .SCOPE .oto svg.chart { width: 100%; height: auto; display: block; }
+  .SCOPE .oto svg.chart text { font-family: inherit; font-size: 11px; fill: var(--muted); }
+  .SCOPE .oto .legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); margin-bottom: 6px; flex-wrap: wrap; }
+  .SCOPE .oto .legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  .SCOPE .oto .legend .sw.dash { height: 0; border-top: 2px dashed var(--muted); border-radius: 0; width: 14px; vertical-align: 3px; }
+  .SCOPE .oto .stackbar { display: flex; gap: 2px; height: 22px; border-radius: 5px; overflow: hidden; }
+  .SCOPE .oto .stackbar > div { height: 100%; }
+  .SCOPE .oto .slegend { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; margin-top: 12px; font-size: 13px; }
+  .SCOPE .oto .slegend b { float: right; font-variant-numeric: tabular-nums; }
+  .SCOPE .oto .pairbars { display: flex; flex-direction: column; gap: 10px; }
+  .SCOPE .oto .pairbars .row { display: grid; grid-template-columns: 210px 1fr 34px; gap: 4px 10px; align-items: center; font-size: 13px; }
+  .SCOPE .oto .pairbars .lbl { grid-row: span 2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .SCOPE .oto .pairbars .bar { height: 8px; background: #eef1f4; border-radius: 4px; overflow: hidden; }
+  .SCOPE .oto .pairbars .bar > i { display: block; height: 100%; border-radius: 0 4px 4px 0; }
+  .SCOPE .oto .pairbars .v { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted); text-align: right; }
+  .SCOPE .oto .tip { position: fixed; z-index: 95; pointer-events: none; background: #16222c; color: #fff; font-size: 12px; padding: 6px 9px; border-radius: 6px; white-space: pre-line; display: none; max-width: 260px; }
+
+  /* ---------- misc ---------- */
+  .SCOPE .oto .modal-back { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: grid; place-items: center; z-index: 90; }
+  .SCOPE .oto .modal { background: #fff; border-radius: 10px; padding: 20px; width: 460px; }
+  .SCOPE .oto .modal h3 { margin-bottom: 8px; }
+  .SCOPE .oto .modal.wide { width: 820px; max-height: 88vh; overflow-y: auto; padding: 22px 24px; }
+  .SCOPE .oto .modal.wide h3.sh { font-size: 14px; margin: 18px 0 8px; color: var(--navy); }
+  .SCOPE .oto .acgrid { display: grid; grid-template-columns: 26px minmax(0, 1fr) 150px 130px 96px 34px; gap: 8px; align-items: center; }
+  .SCOPE .oto .achead { font-size: 11px; color: var(--muted); font-weight: 650; text-transform: uppercase; letter-spacing: .04em; padding: 0 10px 6px; }
+  .SCOPE .oto .acrow { padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--soft); margin-bottom: 8px; row-gap: 6px; }
+  .SCOPE .oto .acrow .crit { grid-column: 2 / -1; display: flex; gap: 8px; align-items: center; }
+  .SCOPE .oto .acrow .crit span { font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+  .SCOPE .oto input.datef { width: 130px; font-variant-numeric: tabular-nums; }
+  .SCOPE .oto input.datef.bad { border-color: var(--red); background: var(--red-bg); }
+  .SCOPE .oto .toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); background: #233; color: #fff; padding: 10px 16px; border-radius: 6px; z-index: 96; }
+  .SCOPE .oto .toast.err { background: var(--red); }
+  .SCOPE .oto .banner { padding: 9px 14px; border-radius: 8px; font-weight: 600; }
+  .SCOPE .oto .banner.info { background: var(--blue-bg); color: var(--navy); border: 1px solid #c4d6ee; }
+  .SCOPE .oto .banner.amber { background: var(--amber-bg); color: var(--amber); border: 1px solid #f0d58a; }
+  .SCOPE .oto .list { display: flex; flex-direction: column; gap: 8px; }
+  .SCOPE .oto .list .li { background: var(--soft); border-radius: 6px; padding: 7px 10px; }
+  .SCOPE .oto .list .li b { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .SCOPE .oto .covbar { display: grid; grid-template-columns: 110px 1fr 46px; gap: 10px; align-items: center; font-size: 12px; margin-bottom: 7px; }
+  .SCOPE .oto .covbar .bar { display: flex; gap: 2px; height: 10px; }
+  .SCOPE .oto .covbar .bar > i { flex: 1; border-radius: 2px; background: #e6eaef; }
+  .SCOPE .oto .covbar .bar > i.s { background: var(--navy-2); } .SCOPE .oto .covbar .bar > i.o { background: var(--accent); }
+  .SCOPE .oto .confetti { position: fixed; inset: 0; pointer-events: none; z-index: 97; overflow: hidden; }
+  .SCOPE .oto .confetti i { position: absolute; width: 9px; height: 14px; top: -20px; border-radius: 2px; animation: otofall linear forwards; }
+  @keyframes otofall { to { transform: translateY(105vh) rotate(540deg); opacity: .9; } }
+
+  /* ---------- report ---------- */
+  .SCOPE .oto .report-wrap { position: fixed; inset: 0; background: #dfe5ea; z-index: 80; overflow: auto; }
+  .SCOPE .oto .report-bar { position: sticky; top: 0; z-index: 2; background: var(--navy); color: #fff; display: flex; align-items: center; justify-content: space-between; padding: 10px 28px; }
+  .SCOPE .oto .report-bar .btn { border-color: #fff; }
+  .SCOPE .oto .report-doc { width: 900px; margin: 22px auto 60px; background: #fff; padding: 40px 48px; box-shadow: 0 4px 18px rgba(0,0,0,.12); font-size: 13px; }
+  .SCOPE .oto .report-doc h1 { font-size: 22px; color: var(--navy); }
+  .SCOPE .oto .report-doc h2 { font-size: 15px; color: var(--navy); border-bottom: 2px solid var(--navy); padding-bottom: 4px; margin: 26px 0 10px; }
+  .SCOPE .oto .report-doc h3 { font-size: 13px; margin: 14px 0 4px; }
+  .SCOPE .oto .report-doc .rmeta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 20px; margin-top: 12px; padding: 12px 14px; background: var(--soft); border-radius: 6px; }
+  .SCOPE .oto .report-doc .rmeta div span { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .SCOPE .oto .report-doc .rmeta div b { font-size: 13px; }
+  .SCOPE .oto .report-doc table.rt { width: 100%; border-collapse: collapse; margin-top: 4px; }
+  .SCOPE .oto .report-doc table.rt th { text-align: left; font-size: 11px; color: var(--muted); padding: 5px 7px; border-bottom: 1px solid var(--line); background: var(--soft); }
+  .SCOPE .oto .report-doc table.rt td { padding: 5px 7px; border-bottom: 1px solid #edf0f3; vertical-align: top; }
+  .SCOPE .oto .report-doc .rsum { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .SCOPE .oto .report-doc .rsum > div { border: 1px solid var(--line); border-radius: 6px; padding: 9px 11px; }
+  .SCOPE .oto .report-doc .rsum > div > span:first-child { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .SCOPE .oto .report-doc .rsum b { font-size: 18px; }
+  .SCOPE .oto .report-doc .exphead { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-top: 16px; }
+  .SCOPE .oto .report-doc .note { font-size: 11px; color: var(--muted); margin-top: 24px; border-top: 1px solid var(--line); padding-top: 8px; }
+
+  /* ---------- production additions ---------- */
+  .SCOPE .oto .sr-only { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+  .SCOPE .oto .oto-busy { position: fixed; top: 14px; right: 18px; z-index: 10050; background: var(--navy); color: #fff; padding: 6px 14px; border-radius: 16px; font-size: 13px; font-weight: 600; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
+  .SCOPE .oto .linkbtn { display: block; margin-top: 8px; background: none; border: none; color: rgba(255,255,255,.85); font: inherit; font-size: 12px; cursor: pointer; padding: 0; text-decoration: underline; }
+  .SCOPE .oto .modal-back { z-index: 10010; }
+  .SCOPE .oto .toast { z-index: 10060; }
+  .SCOPE .oto .tip { z-index: 10070; }
+  .SCOPE .oto .confetti { z-index: 10040; }
+  .SCOPE .oto .report-wrap { z-index: 10000; }
+  .SCOPE .oto .sidenav { max-height: 100vh; }
+        </style>
+        <div class="oto" data-oto-root>
+            <p style="padding:24px;font-family:Segoe UI,Arial,sans-serif">Loading the ESG 1-to-1…</p>
+        </div>
+        <script
+            src="one-to-one.js"
+            data-layout
+            data-exports="ESGOneToOne">
+        </script>
+    </template>
+</template>
