@@ -1,0 +1,2433 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_sharepointonline": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "esg_sharedsharepointonline_1to1"
+        },
+        "api": {
+          "name": "shared_sharepointonline"
+        }
+      },
+      "shared_office365": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "esg_sharedoffice365_1to1"
+        },
+        "api": {
+          "name": "shared_office365"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "ESG 1-to-1 Site URL (esg_SiteUrl)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "esg_SiteUrl",
+            "description": "Full address of the private 1-to-1 site, e.g. https://<tenant>.sharepoint.com/sites/<site> (no trailing slash)."
+          }
+        },
+        "ESG 1-to-1 Team Leader email (esg_ManagerEmail)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "esg_ManagerEmail",
+            "description": "The Team Leader's email address. Receives submissions and problem reports."
+          }
+        }
+      },
+      "triggers": {
+        "manual": {
+          "type": "Request",
+          "kind": "Button",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {},
+              "required": []
+            }
+          }
+        }
+      },
+      "actions": {
+        "Initialize_varWarnings": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varWarnings",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {}
+        },
+        "Initialize_varLog": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varLog",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_varWarnings": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Schema": {
+          "type": "Compose",
+          "inputs": [
+            {
+              "key": "techs",
+              "url": "Technicians",
+              "title": "Technicians",
+              "groupRead": false,
+              "description": "ESG 1-to-1: technician roster (Team Leader only).",
+              "fields": [
+                {
+                  "name": "Technician",
+                  "kind": "person",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='User' Name='Technician' StaticName='Technician' DisplayName='Technician' Required='FALSE' List='UserInfo' ShowField='ImnName' UserSelectionMode='PeopleOnly' UserSelectionScope='0' Mult='FALSE' />"
+                },
+                {
+                  "name": "TechnicianAadId",
+                  "kind": "text",
+                  "indexed": true,
+                  "unique": false,
+                  "xml": "<Field Type='Text' Name='TechnicianAadId' StaticName='TechnicianAadId' DisplayName='TechnicianAadId' Required='FALSE' Indexed='TRUE' MaxLength='255' />"
+                },
+                {
+                  "name": "Active",
+                  "kind": "bool",
+                  "indexed": true,
+                  "unique": false,
+                  "default": true,
+                  "xml": "<Field Type='Boolean' Name='Active' StaticName='Active' DisplayName='Active' Required='FALSE' Indexed='TRUE'><Default>1</Default></Field>"
+                },
+                {
+                  "name": "AppraisalDate",
+                  "kind": "date",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='DateTime' Name='AppraisalDate' StaticName='AppraisalDate' DisplayName='AppraisalDate' Required='FALSE' Format='DateOnly' FriendlyDisplayFormat='Disabled' />"
+                }
+              ],
+              "views": []
+            },
+            {
+              "key": "exp",
+              "url": "AppraisalExpectations",
+              "title": "Appraisal Expectations",
+              "groupRead": false,
+              "description": "ESG 1-to-1: appraisal expectations, shared and individual (Team Leader only).",
+              "fields": [
+                {
+                  "name": "Measures",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='Measures' StaticName='Measures' DisplayName='Measures' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "AppraisalYear",
+                  "kind": "text",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Text' Name='AppraisalYear' StaticName='AppraisalYear' DisplayName='AppraisalYear' Required='FALSE' MaxLength='255' />"
+                },
+                {
+                  "name": "AppliesTo",
+                  "kind": "choice",
+                  "indexed": false,
+                  "unique": false,
+                  "choices": [
+                    "Shared",
+                    "Individual"
+                  ],
+                  "default": "Shared",
+                  "xml": "<Field Type='Choice' Name='AppliesTo' StaticName='AppliesTo' DisplayName='AppliesTo' Required='FALSE' Format='Dropdown' FillInChoice='FALSE'><Default>Shared</Default><CHOICES><CHOICE>Shared</CHOICE><CHOICE>Individual</CHOICE></CHOICES></Field>"
+                },
+                {
+                  "name": "Technician",
+                  "kind": "person",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='User' Name='Technician' StaticName='Technician' DisplayName='Technician' Required='FALSE' List='UserInfo' ShowField='ImnName' UserSelectionMode='PeopleOnly' UserSelectionScope='0' Mult='FALSE' />"
+                },
+                {
+                  "name": "SortOrder",
+                  "kind": "num",
+                  "indexed": false,
+                  "unique": false,
+                  "min": null,
+                  "max": null,
+                  "default": 100,
+                  "xml": "<Field Type='Number' Name='SortOrder' StaticName='SortOrder' DisplayName='SortOrder' Required='FALSE' Decimals='0'><Default>100</Default></Field>"
+                },
+                {
+                  "name": "Active",
+                  "kind": "bool",
+                  "indexed": true,
+                  "unique": false,
+                  "default": true,
+                  "xml": "<Field Type='Boolean' Name='Active' StaticName='Active' DisplayName='Active' Required='FALSE' Indexed='TRUE'><Default>1</Default></Field>"
+                }
+              ],
+              "views": [
+                {
+                  "title": "Active",
+                  "fields": [
+                    "LinkTitle",
+                    "AppliesTo",
+                    "Technician",
+                    "AppraisalYear",
+                    "SortOrder"
+                  ],
+                  "query": "<GroupBy Collapse='FALSE' GroupLimit='30'><FieldRef Name='AppliesTo'/></GroupBy><OrderBy><FieldRef Name='SortOrder'/></OrderBy><Where><Eq><FieldRef Name='Active'/><Value Type='Boolean'>1</Value></Eq></Where>",
+                  "rowLimit": 100
+                },
+                {
+                  "title": "Needs attention",
+                  "fields": [
+                    "LinkTitle",
+                    "AppliesTo",
+                    "Technician",
+                    "AppraisalYear"
+                  ],
+                  "query": "<Where><And><Eq><FieldRef Name='AppliesTo'/><Value Type='Choice'>Individual</Value></Eq><IsNull><FieldRef Name='Technician'/></IsNull></And></Where>",
+                  "rowLimit": 100
+                },
+                {
+                  "title": "Retired",
+                  "fields": [
+                    "LinkTitle",
+                    "AppliesTo",
+                    "Technician",
+                    "AppraisalYear"
+                  ],
+                  "query": "<Where><Eq><FieldRef Name='Active'/><Value Type='Boolean'>0</Value></Eq></Where>",
+                  "rowLimit": 100
+                }
+              ]
+            },
+            {
+              "key": "reviews",
+              "url": "MonthlyReviews",
+              "title": "Monthly Reviews",
+              "groupRead": false,
+              "description": "ESG 1-to-1: technicians' monthly answers. Item permissions are set by the flows.",
+              "fields": [
+                {
+                  "name": "Technician",
+                  "kind": "person",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='User' Name='Technician' StaticName='Technician' DisplayName='Technician' Required='FALSE' List='UserInfo' ShowField='ImnName' UserSelectionMode='PeopleOnly' UserSelectionScope='0' Mult='FALSE' />"
+                },
+                {
+                  "name": "MonthKey",
+                  "kind": "text",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Text' Name='MonthKey' StaticName='MonthKey' DisplayName='MonthKey' Required='FALSE' MaxLength='255' />"
+                },
+                {
+                  "name": "MonthStart",
+                  "kind": "date",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='DateTime' Name='MonthStart' StaticName='MonthStart' DisplayName='MonthStart' Required='FALSE' Format='DateOnly' FriendlyDisplayFormat='Disabled' />"
+                },
+                {
+                  "name": "DueDate",
+                  "kind": "datetime",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='DateTime' Name='DueDate' StaticName='DueDate' DisplayName='DueDate' Required='FALSE' Format='DateTime' FriendlyDisplayFormat='Disabled' />"
+                },
+                {
+                  "name": "ReviewStatus",
+                  "kind": "choice",
+                  "indexed": false,
+                  "unique": false,
+                  "choices": [
+                    "Not Started",
+                    "Draft",
+                    "Submitted",
+                    "Completed",
+                    "Closed - Not Submitted"
+                  ],
+                  "default": "Not Started",
+                  "xml": "<Field Type='Choice' Name='ReviewStatus' StaticName='ReviewStatus' DisplayName='ReviewStatus' Required='FALSE' Format='Dropdown' FillInChoice='FALSE'><Default>Not Started</Default><CHOICES><CHOICE>Not Started</CHOICE><CHOICE>Draft</CHOICE><CHOICE>Submitted</CHOICE><CHOICE>Completed</CHOICE><CHOICE>Closed - Not Submitted</CHOICE></CHOICES></Field>"
+                },
+                {
+                  "name": "Q1WentWell",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='Q1WentWell' StaticName='Q1WentWell' DisplayName='Q1WentWell' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "Q2Issue",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='Q2Issue' StaticName='Q2Issue' DisplayName='Q2Issue' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "Q2Impact",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='Q2Impact' StaticName='Q2Impact' DisplayName='Q2Impact' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "Q2Tried",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='Q2Tried' StaticName='Q2Tried' DisplayName='Q2Tried' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "Q2Support",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='Q2Support' StaticName='Q2Support' DisplayName='Q2Support' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "Q3WorkloadRating",
+                  "kind": "num",
+                  "indexed": false,
+                  "unique": false,
+                  "min": 1,
+                  "max": 5,
+                  "default": null,
+                  "xml": "<Field Type='Number' Name='Q3WorkloadRating' StaticName='Q3WorkloadRating' DisplayName='Q3WorkloadRating' Required='FALSE' Decimals='0' Min='1' Max='5'></Field>"
+                },
+                {
+                  "name": "Q3WorkloadComment",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='Q3WorkloadComment' StaticName='Q3WorkloadComment' DisplayName='Q3WorkloadComment' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "Q4WellbeingRaise",
+                  "kind": "choice",
+                  "indexed": false,
+                  "unique": false,
+                  "choices": [
+                    "Yes",
+                    "No"
+                  ],
+                  "default": null,
+                  "xml": "<Field Type='Choice' Name='Q4WellbeingRaise' StaticName='Q4WellbeingRaise' DisplayName='Q4WellbeingRaise' Required='FALSE' Format='Dropdown' FillInChoice='FALSE'><CHOICES><CHOICE>Yes</CHOICE><CHOICE>No</CHOICE></CHOICES></Field>"
+                },
+                {
+                  "name": "Q4WellbeingDetail",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='Q4WellbeingDetail' StaticName='Q4WellbeingDetail' DisplayName='Q4WellbeingDetail' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "Q5PlanningRaise",
+                  "kind": "choice",
+                  "indexed": false,
+                  "unique": false,
+                  "choices": [
+                    "Yes",
+                    "No"
+                  ],
+                  "default": null,
+                  "xml": "<Field Type='Choice' Name='Q5PlanningRaise' StaticName='Q5PlanningRaise' DisplayName='Q5PlanningRaise' Required='FALSE' Format='Dropdown' FillInChoice='FALSE'><CHOICES><CHOICE>Yes</CHOICE><CHOICE>No</CHOICE></CHOICES></Field>"
+                },
+                {
+                  "name": "Q5PlanningDetail",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='Q5PlanningDetail' StaticName='Q5PlanningDetail' DisplayName='Q5PlanningDetail' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "Q6DevRaise",
+                  "kind": "choice",
+                  "indexed": false,
+                  "unique": false,
+                  "choices": [
+                    "Yes",
+                    "No"
+                  ],
+                  "default": null,
+                  "xml": "<Field Type='Choice' Name='Q6DevRaise' StaticName='Q6DevRaise' DisplayName='Q6DevRaise' Required='FALSE' Format='Dropdown' FillInChoice='FALSE'><CHOICES><CHOICE>Yes</CHOICE><CHOICE>No</CHOICE></CHOICES></Field>"
+                },
+                {
+                  "name": "Q6DevWhat",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='Q6DevWhat' StaticName='Q6DevWhat' DisplayName='Q6DevWhat' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "Q6DevWhy",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='Q6DevWhy' StaticName='Q6DevWhy' DisplayName='Q6DevWhy' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "Q7ManagerFeedback",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='Q7ManagerFeedback' StaticName='Q7ManagerFeedback' DisplayName='Q7ManagerFeedback' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "ExpectationsJson",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='ExpectationsJson' StaticName='ExpectationsJson' DisplayName='ExpectationsJson' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "Q9FollowUp",
+                  "kind": "choice",
+                  "indexed": false,
+                  "unique": false,
+                  "choices": [
+                    "Everything has been covered — no further discussion required at present.",
+                    "Quick, informal catch-up in the field.",
+                    "Arrange a dedicated 1-to-1 discussion."
+                  ],
+                  "default": null,
+                  "xml": "<Field Type='Choice' Name='Q9FollowUp' StaticName='Q9FollowUp' DisplayName='Q9FollowUp' Required='FALSE' Format='Dropdown' FillInChoice='FALSE'><CHOICES><CHOICE>Everything has been covered — no further discussion required at present.</CHOICE><CHOICE>Quick, informal catch-up in the field.</CHOICE><CHOICE>Arrange a dedicated 1-to-1 discussion.</CHOICE></CHOICES></Field>"
+                },
+                {
+                  "name": "Mood",
+                  "kind": "num",
+                  "indexed": false,
+                  "unique": false,
+                  "min": 1,
+                  "max": 5,
+                  "default": null,
+                  "xml": "<Field Type='Number' Name='Mood' StaticName='Mood' DisplayName='Mood' Required='FALSE' Decimals='0' Min='1' Max='5'></Field>"
+                },
+                {
+                  "name": "WinOfMonth",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='WinOfMonth' StaticName='WinOfMonth' DisplayName='WinOfMonth' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "AppraisalDate",
+                  "kind": "date",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='DateTime' Name='AppraisalDate' StaticName='AppraisalDate' DisplayName='AppraisalDate' Required='FALSE' Format='DateOnly' FriendlyDisplayFormat='Disabled' />"
+                }
+              ],
+              "views": []
+            },
+            {
+              "key": "mgr",
+              "url": "ManagerReviews",
+              "title": "Manager Reviews",
+              "groupRead": false,
+              "description": "ESG 1-to-1: the authoritative review record, Team Leader feedback and actions.",
+              "fields": [
+                {
+                  "name": "ReviewKey",
+                  "kind": "text",
+                  "indexed": true,
+                  "unique": true,
+                  "xml": "<Field Type='Text' Name='ReviewKey' StaticName='ReviewKey' DisplayName='ReviewKey' Required='FALSE' Indexed='TRUE' EnforceUniqueValues='TRUE' MaxLength='255' />"
+                },
+                {
+                  "name": "ReviewItemId",
+                  "kind": "num",
+                  "indexed": true,
+                  "unique": false,
+                  "min": null,
+                  "max": null,
+                  "default": null,
+                  "xml": "<Field Type='Number' Name='ReviewItemId' StaticName='ReviewItemId' DisplayName='ReviewItemId' Required='FALSE' Decimals='0' Indexed='TRUE'></Field>"
+                },
+                {
+                  "name": "Technician",
+                  "kind": "person",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='User' Name='Technician' StaticName='Technician' DisplayName='Technician' Required='FALSE' List='UserInfo' ShowField='ImnName' UserSelectionMode='PeopleOnly' UserSelectionScope='0' Mult='FALSE' />"
+                },
+                {
+                  "name": "TechnicianAadId",
+                  "kind": "text",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Text' Name='TechnicianAadId' StaticName='TechnicianAadId' DisplayName='TechnicianAadId' Required='FALSE' MaxLength='255' />"
+                },
+                {
+                  "name": "MonthKey",
+                  "kind": "text",
+                  "indexed": true,
+                  "unique": false,
+                  "xml": "<Field Type='Text' Name='MonthKey' StaticName='MonthKey' DisplayName='MonthKey' Required='FALSE' Indexed='TRUE' MaxLength='255' />"
+                },
+                {
+                  "name": "DueDate",
+                  "kind": "datetime",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='DateTime' Name='DueDate' StaticName='DueDate' DisplayName='DueDate' Required='FALSE' Format='DateTime' FriendlyDisplayFormat='Disabled' />"
+                },
+                {
+                  "name": "ReviewState",
+                  "kind": "choice",
+                  "indexed": true,
+                  "unique": false,
+                  "choices": [
+                    "Open",
+                    "Submitted",
+                    "Completed",
+                    "Closed - Not Submitted"
+                  ],
+                  "default": "Open",
+                  "xml": "<Field Type='Choice' Name='ReviewState' StaticName='ReviewState' DisplayName='ReviewState' Required='FALSE' Indexed='TRUE' Format='Dropdown' FillInChoice='FALSE'><Default>Open</Default><CHOICES><CHOICE>Open</CHOICE><CHOICE>Submitted</CHOICE><CHOICE>Completed</CHOICE><CHOICE>Closed - Not Submitted</CHOICE></CHOICES></Field>"
+                },
+                {
+                  "name": "LinkSentOn",
+                  "kind": "datetime",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='DateTime' Name='LinkSentOn' StaticName='LinkSentOn' DisplayName='LinkSentOn' Required='FALSE' Format='DateTime' FriendlyDisplayFormat='Disabled' />"
+                },
+                {
+                  "name": "SubmittedOn",
+                  "kind": "datetime",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='DateTime' Name='SubmittedOn' StaticName='SubmittedOn' DisplayName='SubmittedOn' Required='FALSE' Format='DateTime' FriendlyDisplayFormat='Disabled' />"
+                },
+                {
+                  "name": "SubmittedLate",
+                  "kind": "bool",
+                  "indexed": false,
+                  "unique": false,
+                  "default": false,
+                  "xml": "<Field Type='Boolean' Name='SubmittedLate' StaticName='SubmittedLate' DisplayName='SubmittedLate' Required='FALSE'><Default>0</Default></Field>"
+                },
+                {
+                  "name": "TechFollowUp",
+                  "kind": "text",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Text' Name='TechFollowUp' StaticName='TechFollowUp' DisplayName='TechFollowUp' Required='FALSE' MaxLength='255' />"
+                },
+                {
+                  "name": "ExpectationSnapshotJson",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='ExpectationSnapshotJson' StaticName='ExpectationSnapshotJson' DisplayName='ExpectationSnapshotJson' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "FB_Q1",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='FB_Q1' StaticName='FB_Q1' DisplayName='FB_Q1' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "FB_Q2",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='FB_Q2' StaticName='FB_Q2' DisplayName='FB_Q2' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "FB_Q3",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='FB_Q3' StaticName='FB_Q3' DisplayName='FB_Q3' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "FB_Q4",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='FB_Q4' StaticName='FB_Q4' DisplayName='FB_Q4' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "FB_Q5",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='FB_Q5' StaticName='FB_Q5' DisplayName='FB_Q5' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "FB_Q6",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='FB_Q6' StaticName='FB_Q6' DisplayName='FB_Q6' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "FB_Q7",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='FB_Q7' StaticName='FB_Q7' DisplayName='FB_Q7' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "FB_Q9",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='FB_Q9' StaticName='FB_Q9' DisplayName='FB_Q9' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "FB_Overall",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='FB_Overall' StaticName='FB_Overall' DisplayName='FB_Overall' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "ExpectationFeedbackJson",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='ExpectationFeedbackJson' StaticName='ExpectationFeedbackJson' DisplayName='ExpectationFeedbackJson' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "FollowUpDecision",
+                  "kind": "choice",
+                  "indexed": false,
+                  "unique": false,
+                  "choices": [
+                    "Everything has been covered — no further discussion required at present.",
+                    "Quick, informal catch-up in the field.",
+                    "Arrange a dedicated 1-to-1 discussion."
+                  ],
+                  "default": null,
+                  "xml": "<Field Type='Choice' Name='FollowUpDecision' StaticName='FollowUpDecision' DisplayName='FollowUpDecision' Required='FALSE' Format='Dropdown' FillInChoice='FALSE'><CHOICES><CHOICE>Everything has been covered — no further discussion required at present.</CHOICE><CHOICE>Quick, informal catch-up in the field.</CHOICE><CHOICE>Arrange a dedicated 1-to-1 discussion.</CHOICE></CHOICES></Field>"
+                },
+                {
+                  "name": "MeetingDate",
+                  "kind": "date",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='DateTime' Name='MeetingDate' StaticName='MeetingDate' DisplayName='MeetingDate' Required='FALSE' Format='DateOnly' FriendlyDisplayFormat='Disabled' />"
+                },
+                {
+                  "name": "ActionsJson",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='ActionsJson' StaticName='ActionsJson' DisplayName='ActionsJson' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "ActionsStatus",
+                  "kind": "choice",
+                  "indexed": true,
+                  "unique": false,
+                  "choices": [
+                    "None",
+                    "Open",
+                    "Done"
+                  ],
+                  "default": "None",
+                  "xml": "<Field Type='Choice' Name='ActionsStatus' StaticName='ActionsStatus' DisplayName='ActionsStatus' Required='FALSE' Indexed='TRUE' Format='Dropdown' FillInChoice='FALSE'><Default>None</Default><CHOICES><CHOICE>None</CHOICE><CHOICE>Open</CHOICE><CHOICE>Done</CHOICE></CHOICES></Field>"
+                },
+                {
+                  "name": "NextActionDue",
+                  "kind": "date",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='DateTime' Name='NextActionDue' StaticName='NextActionDue' DisplayName='NextActionDue' Required='FALSE' Format='DateOnly' FriendlyDisplayFormat='Disabled' />"
+                },
+                {
+                  "name": "CompletedOn",
+                  "kind": "datetime",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='DateTime' Name='CompletedOn' StaticName='CompletedOn' DisplayName='CompletedOn' Required='FALSE' Format='DateTime' FriendlyDisplayFormat='Disabled' />"
+                },
+                {
+                  "name": "CompletedBy",
+                  "kind": "text",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Text' Name='CompletedBy' StaticName='CompletedBy' DisplayName='CompletedBy' Required='FALSE' MaxLength='255' />"
+                },
+                {
+                  "name": "ReleasedOn",
+                  "kind": "datetime",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='DateTime' Name='ReleasedOn' StaticName='ReleasedOn' DisplayName='ReleasedOn' Required='FALSE' Format='DateTime' FriendlyDisplayFormat='Disabled' />"
+                },
+                {
+                  "name": "CorrectionLog",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='CorrectionLog' StaticName='CorrectionLog' DisplayName='CorrectionLog' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                }
+              ],
+              "views": [
+                {
+                  "title": "Overdue",
+                  "fields": [
+                    "LinkTitle",
+                    "Technician",
+                    "MonthKey",
+                    "DueDate",
+                    "ReviewState"
+                  ],
+                  "query": "<OrderBy><FieldRef Name='DueDate'/></OrderBy><Where><And><Eq><FieldRef Name='ReviewState'/><Value Type='Choice'>Open</Value></Eq><Lt><FieldRef Name='DueDate'/><Value Type='DateTime'><Today/></Value></Lt></And></Where>",
+                  "rowLimit": 100
+                },
+                {
+                  "title": "Open actions",
+                  "fields": [
+                    "LinkTitle",
+                    "Technician",
+                    "MonthKey",
+                    "ActionsStatus",
+                    "NextActionDue"
+                  ],
+                  "query": "<OrderBy><FieldRef Name='NextActionDue'/></OrderBy><Where><Eq><FieldRef Name='ActionsStatus'/><Value Type='Choice'>Open</Value></Eq></Where>",
+                  "rowLimit": 100
+                }
+              ]
+            },
+            {
+              "key": "settings",
+              "url": "OneToOneSettings",
+              "title": "1-to-1 Settings",
+              "groupRead": true,
+              "description": "ESG 1-to-1: appraisal band thresholds (no personal data). Technicians group: Read.",
+              "fields": [
+                {
+                  "name": "Value",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='Value' StaticName='Value' DisplayName='Value' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                }
+              ],
+              "views": []
+            }
+          ],
+          "runAfter": {
+            "Initialize_varLog": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Role_settings": {
+          "type": "Compose",
+          "inputs": [
+            {
+              "name": "1-to-1 Edit",
+              "high": 432,
+              "low": 205721701,
+              "order": 200,
+              "description": "ESG 1-to-1: technician on their own open review. Copy of Contribute without add, delete, delete versions or personal views/web parts."
+            },
+            {
+              "name": "1-to-1 Read",
+              "high": 48,
+              "low": 138612769,
+              "order": 201,
+              "description": "ESG 1-to-1: technician on a submitted or released review. Copy of Read without View Versions or Create Alerts."
+            }
+          ],
+          "runAfter": {
+            "Schema": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Default_bands": {
+          "type": "Compose",
+          "inputs": "[{\"name\":\"Not met\",\"max\":1.5},{\"name\":\"Partially met\",\"max\":2.25},{\"name\":\"Met\",\"max\":4},{\"name\":\"Exceeded\",\"max\":null}]",
+          "runAfter": {
+            "Role_settings": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Try": {
+          "type": "Scope",
+          "actions": {
+            "Get_web": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web?$select=Title,Url,ServerRelativeUrl",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            },
+            "Get_me": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/currentuser?$select=Id,Title,Email,IsSiteAdmin",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Get_web": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Check_site_admin": {
+              "type": "If",
+              "expression": "@equals(body('Get_me')?['IsSiteAdmin'], true)",
+              "actions": {},
+              "else": {
+                "actions": {
+                  "Warn_not_site_admin": {
+                    "type": "AppendToArrayVariable",
+                    "inputs": {
+                      "name": "varWarnings",
+                      "value": "You are not a Site Collection Administrator of this site. Ask IT to add you (plan D.1, Stage 0B finding B10a) before go-live."
+                    },
+                    "runAfter": {}
+                  }
+                }
+              },
+              "runAfter": {
+                "Get_me": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Check_site_url": {
+              "type": "If",
+              "expression": "@endsWith(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), '/')",
+              "actions": {
+                "Warn_site_url": {
+                  "type": "AppendToArrayVariable",
+                  "inputs": {
+                    "name": "varWarnings",
+                    "value": "The ESG 1-to-1 Site URL environment variable ends with \"/\". Remove the trailing slash (Solutions → Default solution → Environment variables), otherwise flows 2 and 3 cannot find the lists."
+                  },
+                  "runAfter": {}
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {
+                "Check_site_admin": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Get_regional_settings": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/RegionalSettings?$select=LocaleId",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Check_site_url": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Get_time_zone": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/RegionalSettings/TimeZone?$select=Id,Description",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Get_regional_settings": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Check_regional": {
+              "type": "If",
+              "expression": "@and(equals(body('Get_regional_settings')?['LocaleId'], 2057), contains(string(body('Get_time_zone')?['Description']), 'London'))",
+              "actions": {},
+              "else": {
+                "actions": {
+                  "Warn_regional": {
+                    "type": "AppendToArrayVariable",
+                    "inputs": {
+                      "name": "varWarnings",
+                      "value": "@concat('Regional settings are ', string(body('Get_regional_settings')?['LocaleId']), ' / ', string(body('Get_time_zone')?['Description']), '. Set Locale English (United Kingdom) and time zone (UTC) Dublin, Edinburgh, Lisbon, London (plan G Part 1 step 4) – dates depend on it.')"
+                    },
+                    "runAfter": {}
+                  }
+                }
+              },
+              "runAfter": {
+                "Get_time_zone": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Get_roles": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/roledefinitions?$select=Id,Name,RoleTypeKind,BasePermissions",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Check_regional": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Each_role": {
+              "type": "Foreach",
+              "foreach": "@outputs('Role_settings')",
+              "actions": {
+                "Role_existing": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@body('Get_roles')?['value']",
+                    "where": "@equals(item()?['Name'], items('Each_role')?['name'])"
+                  },
+                  "runAfter": {}
+                },
+                "Role_missing": {
+                  "type": "If",
+                  "expression": "@empty(body('Role_existing'))",
+                  "actions": {
+                    "Create_role": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                          "parameters/method": "POST",
+                          "parameters/uri": "_api/web/roledefinitions",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata",
+                            "Content-Type": "application/json;odata=verbose"
+                          },
+                          "parameters/body": "{\"__metadata\":{\"type\":\"SP.RoleDefinition\"},\"BasePermissions\":{\"__metadata\":{\"type\":\"SP.BasePermissions\"},\"High\":\"@{items('Each_role')?['high']}\",\"Low\":\"@{items('Each_role')?['low']}\"},\"Description\":\"@{items('Each_role')?['description']}\",\"Name\":\"@{items('Each_role')?['name']}\",\"Order\":@{items('Each_role')?['order']}}"
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {}
+                    },
+                    "Log_role_created": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "varLog",
+                        "value": "@concat('Created permission level ', items('Each_role')?['name'])"
+                      },
+                      "runAfter": {
+                        "Create_role": [
+                          "Succeeded"
+                        ]
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {
+                      "Role_matches": {
+                        "type": "If",
+                        "expression": "@and(equals(string(first(body('Role_existing'))?['BasePermissions']?['Low']), string(items('Each_role')?['low'])), equals(string(first(body('Role_existing'))?['BasePermissions']?['High']), string(items('Each_role')?['high'])))",
+                        "actions": {
+                          "Log_role_ok": {
+                            "type": "AppendToArrayVariable",
+                            "inputs": {
+                              "name": "varLog",
+                              "value": "@concat('Permission level ', items('Each_role')?['name'], ' already exists with the expected rights')"
+                            },
+                            "runAfter": {}
+                          }
+                        },
+                        "else": {
+                          "actions": {
+                            "Warn_role_differs": {
+                              "type": "AppendToArrayVariable",
+                              "inputs": {
+                                "name": "varWarnings",
+                                "value": "@concat('Permission level ', items('Each_role')?['name'], ' already exists but its rights differ from the plan (D.3). It was NOT changed. Compare it with G Part 2.')"
+                              },
+                              "runAfter": {}
+                            }
+                          }
+                        },
+                        "runAfter": {}
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Role_existing": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "concurrency": {
+                  "repetitions": 1
+                }
+              },
+              "runAfter": {
+                "Get_roles": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Get_groups": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/sitegroups?$select=Id,Title",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Each_role": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Find_group": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Get_groups')?['value']",
+                "where": "@equals(item()?['Title'], '1-to-1 Technicians')"
+              },
+              "runAfter": {
+                "Get_groups": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Group_missing": {
+              "type": "If",
+              "expression": "@empty(body('Find_group'))",
+              "actions": {
+                "Create_group": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/sitegroups",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata",
+                        "Content-Type": "application/json;odata=verbose"
+                      },
+                      "parameters/body": "{\"__metadata\":{\"type\":\"SP.Group\"},\"Title\":\"1-to-1 Technicians\",\"Description\":\"ESG 1-to-1 technicians. Read on the 1-to-1 page, the layouts library, the Welcome Errors list and 1-to-1 Settings only.\",\"OnlyAllowMembersViewMembership\":true,\"AllowMembersEditMembership\":false,\"AllowRequestToJoinLeave\":false,\"AutoAcceptRequestToJoinLeave\":false}"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {}
+                },
+                "Log_group_created": {
+                  "type": "AppendToArrayVariable",
+                  "inputs": {
+                    "name": "varLog",
+                    "value": "Created group 1-to-1 Technicians (no site permissions)"
+                  },
+                  "runAfter": {
+                    "Create_group": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {
+                "Find_group": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Get_groups_again": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/sitegroups?$select=Id,Title",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Group_missing": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Find_group_again": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Get_groups_again')?['value']",
+                "where": "@equals(item()?['Title'], '1-to-1 Technicians')"
+              },
+              "runAfter": {
+                "Get_groups_again": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Get_owners_group": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/associatedownergroup?$select=Id,Title",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Find_group_again": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Get_members_group": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/associatedmembergroup?$select=Id,Title",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Get_owners_group": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Get_visitors_group": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/associatedvisitorgroup?$select=Id,Title",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Get_members_group": [
+                  "Succeeded",
+                  "Failed",
+                  "Skipped",
+                  "TimedOut"
+                ]
+              }
+            },
+            "Get_roles_again": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/roledefinitions?$select=Id,Name,RoleTypeKind",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Get_visitors_group": [
+                  "Succeeded",
+                  "Failed",
+                  "Skipped",
+                  "TimedOut"
+                ]
+              }
+            },
+            "Role_full_control": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Get_roles_again')?['value']",
+                "where": "@equals(item()?['RoleTypeKind'], 5)"
+              },
+              "runAfter": {
+                "Get_roles_again": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Role_read_builtin": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Get_roles_again')?['value']",
+                "where": "@equals(item()?['RoleTypeKind'], 2)"
+              },
+              "runAfter": {
+                "Role_full_control": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Ids": {
+              "type": "Compose",
+              "inputs": {
+                "owners": "@body('Get_owners_group')?['Id']",
+                "fullControl": "@first(body('Role_full_control'))?['Id']",
+                "readBuiltIn": "@first(body('Role_read_builtin'))?['Id']",
+                "members": "@coalesce(body('Get_members_group')?['Id'], -1)",
+                "visitors": "@coalesce(body('Get_visitors_group')?['Id'], -1)",
+                "group": "@first(body('Find_group_again'))?['Id']"
+              },
+              "runAfter": {
+                "Role_read_builtin": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Each_list": {
+              "type": "Foreach",
+              "foreach": "@outputs('Schema')",
+              "actions": {
+                "Get_lists": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                      "parameters/method": "GET",
+                      "parameters/uri": "_api/web/lists?$select=Id,Title,HasUniqueRoleAssignments,ListItemEntityTypeFullName,RootFolder/Name,RootFolder/ServerRelativeUrl&$expand=RootFolder",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata"
+                      }
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {}
+                },
+                "Find_list": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@body('Get_lists')?['value']",
+                    "where": "@or(equals(item()?['Title'], items('Each_list')?['title']), equals(item()?['RootFolder']?['Name'], items('Each_list')?['url']))"
+                  },
+                  "runAfter": {
+                    "Get_lists": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "List_missing": {
+                  "type": "If",
+                  "expression": "@empty(body('Find_list'))",
+                  "actions": {
+                    "Create_list": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                          "parameters/method": "POST",
+                          "parameters/uri": "_api/web/lists",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata",
+                            "Content-Type": "application/json;odata=verbose"
+                          },
+                          "parameters/body": "{\"__metadata\":{\"type\":\"SP.List\"},\"AllowContentTypes\":true,\"BaseTemplate\":100,\"ContentTypesEnabled\":false,\"Description\":\"@{items('Each_list')?['description']}\",\"Title\":\"@{items('Each_list')?['url']}\"}"
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {}
+                    },
+                    "Log_list_created": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "varLog",
+                        "value": "@concat('Created list ', items('Each_list')?['title'])"
+                      },
+                      "runAfter": {
+                        "Create_list": [
+                          "Succeeded"
+                        ]
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {
+                      "Log_list_exists": {
+                        "type": "AppendToArrayVariable",
+                        "inputs": {
+                          "name": "varLog",
+                          "value": "@concat('List ', items('Each_list')?['title'], ' already exists – checked and completed')"
+                        },
+                        "runAfter": {}
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Find_list": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Get_lists_again": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                      "parameters/method": "GET",
+                      "parameters/uri": "_api/web/lists?$select=Id,Title,HasUniqueRoleAssignments,ListItemEntityTypeFullName,RootFolder/Name,RootFolder/ServerRelativeUrl&$expand=RootFolder",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata"
+                      }
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "List_missing": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Find_list_again": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@body('Get_lists_again')?['value']",
+                    "where": "@or(equals(item()?['Title'], items('Each_list')?['title']), equals(item()?['RootFolder']?['Name'], items('Each_list')?['url']))"
+                  },
+                  "runAfter": {
+                    "Get_lists_again": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "List": {
+                  "type": "Compose",
+                  "inputs": "@first(body('Find_list_again'))",
+                  "runAfter": {
+                    "Find_list_again": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Set_list_settings": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/lists(guid'@{outputs('List')?['Id']}')",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata",
+                        "Content-Type": "application/json;odata=verbose",
+                        "X-HTTP-Method": "MERGE",
+                        "IF-MATCH": "*"
+                      },
+                      "parameters/body": "{\"__metadata\":{\"type\":\"SP.List\"},\"Title\":\"@{items('Each_list')?['title']}\",\"Description\":\"@{items('Each_list')?['description']}\",\"EnableVersioning\":true,\"MajorVersionLimit\":100,\"EnableAttachments\":false,\"NoCrawl\":true,\"OnQuickLaunch\":false}"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "List": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Set_offline_off": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/lists(guid'@{outputs('List')?['Id']}')",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata",
+                        "Content-Type": "application/json;odata=verbose",
+                        "X-HTTP-Method": "MERGE",
+                        "IF-MATCH": "*"
+                      },
+                      "parameters/body": "{\"__metadata\":{\"type\":\"SP.List\"},\"ExcludeFromOfflineClient\":true}"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "Set_list_settings": [
+                      "Succeeded",
+                      "Failed",
+                      "Skipped",
+                      "TimedOut"
+                    ]
+                  }
+                },
+                "Warn_settings": {
+                  "type": "AppendToArrayVariable",
+                  "inputs": {
+                    "name": "varWarnings",
+                    "value": "@concat(items('Each_list')?['title'], ': could not apply list settings – set versioning 100, attachments off, search off by hand.')"
+                  },
+                  "runAfter": {
+                    "Set_list_settings": [
+                      "Failed",
+                      "TimedOut"
+                    ]
+                  }
+                },
+                "Warn_offline": {
+                  "type": "AppendToArrayVariable",
+                  "inputs": {
+                    "name": "varWarnings",
+                    "value": "@concat(items('Each_list')?['title'], ': set Advanced settings → Offline client availability = No by hand.')"
+                  },
+                  "runAfter": {
+                    "Set_offline_off": [
+                      "Failed",
+                      "TimedOut"
+                    ]
+                  }
+                },
+                "Get_fields": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                      "parameters/method": "GET",
+                      "parameters/uri": "_api/web/lists(guid'@{outputs('List')?['Id']}')/fields?$select=InternalName",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata"
+                      }
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "Warn_settings": [
+                      "Succeeded",
+                      "Failed",
+                      "Skipped",
+                      "TimedOut"
+                    ],
+                    "Warn_offline": [
+                      "Succeeded",
+                      "Failed",
+                      "Skipped",
+                      "TimedOut"
+                    ]
+                  }
+                },
+                "Field_names": {
+                  "type": "Select",
+                  "inputs": {
+                    "from": "@body('Get_fields')?['value']",
+                    "select": "@item()?['InternalName']"
+                  },
+                  "runAfter": {
+                    "Get_fields": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Missing_fields": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@items('Each_list')?['fields']",
+                    "where": "@not(contains(body('Field_names'), item()?['name']))"
+                  },
+                  "runAfter": {
+                    "Field_names": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Each_field": {
+                  "type": "Foreach",
+                  "foreach": "@body('Missing_fields')",
+                  "actions": {
+                    "Create_field": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                          "parameters/method": "POST",
+                          "parameters/uri": "_api/web/lists(guid'@{outputs('List')?['Id']}')/fields/createfieldasxml",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata",
+                            "Content-Type": "application/json;odata=verbose"
+                          },
+                          "parameters/body": "{\"parameters\":{\"__metadata\":{\"type\":\"SP.XmlSchemaFieldCreationInformation\"},\"SchemaXml\":\"@{items('Each_field')?['xml']}\",\"Options\":28}}"
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {}
+                    },
+                    "Log_field": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "varLog",
+                        "value": "@concat('Added column ', items('Each_field')?['name'], ' to ', items('Each_list')?['title'])"
+                      },
+                      "runAfter": {
+                        "Create_field": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Warn_field": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "varWarnings",
+                        "value": "@concat('Could not add column ', items('Each_field')?['name'], ' to ', items('Each_list')?['title'], ' – add it by hand (01-sharepoint/lists.md).')"
+                      },
+                      "runAfter": {
+                        "Create_field": [
+                          "Failed",
+                          "TimedOut"
+                        ]
+                      }
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "concurrency": {
+                      "repetitions": 1
+                    }
+                  },
+                  "runAfter": {
+                    "Missing_fields": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Indexed_fields": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@items('Each_list')?['fields']",
+                    "where": "@equals(item()?['indexed'], true)"
+                  },
+                  "runAfter": {
+                    "Each_field": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Each_index": {
+                  "type": "Foreach",
+                  "foreach": "@body('Indexed_fields')",
+                  "actions": {
+                    "Set_index": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                          "parameters/method": "POST",
+                          "parameters/uri": "_api/web/lists(guid'@{outputs('List')?['Id']}')/fields/getbyinternalnameortitle('@{items('Each_index')?['name']}')",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata",
+                            "Content-Type": "application/json;odata=verbose",
+                            "X-HTTP-Method": "MERGE",
+                            "IF-MATCH": "*"
+                          },
+                          "parameters/body": "{\"__metadata\":{\"type\":\"SP.Field\"},\"Indexed\":true}"
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {}
+                    },
+                    "Is_unique": {
+                      "type": "If",
+                      "expression": "@equals(items('Each_index')?['unique'], true)",
+                      "actions": {
+                        "Set_unique": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                              "parameters/method": "POST",
+                              "parameters/uri": "_api/web/lists(guid'@{outputs('List')?['Id']}')/fields/getbyinternalnameortitle('@{items('Each_index')?['name']}')",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata",
+                                "Content-Type": "application/json;odata=verbose",
+                                "X-HTTP-Method": "MERGE",
+                                "IF-MATCH": "*"
+                              },
+                              "parameters/body": "{\"__metadata\":{\"type\":\"SP.Field\"},\"EnforceUniqueValues\":true}"
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runAfter": {}
+                        },
+                        "Warn_unique": {
+                          "type": "AppendToArrayVariable",
+                          "inputs": {
+                            "name": "varWarnings",
+                            "value": "@concat('Could not set Enforce unique values on ', items('Each_index')?['name'], ' in ', items('Each_list')?['title'], ' – set it by hand.')"
+                          },
+                          "runAfter": {
+                            "Set_unique": [
+                              "Failed",
+                              "TimedOut"
+                            ]
+                          }
+                        }
+                      },
+                      "else": {
+                        "actions": {}
+                      },
+                      "runAfter": {
+                        "Set_index": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Warn_index": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "varWarnings",
+                        "value": "@concat('Could not index ', items('Each_index')?['name'], ' in ', items('Each_list')?['title'], ' – add the index by hand.')"
+                      },
+                      "runAfter": {
+                        "Set_index": [
+                          "Failed",
+                          "TimedOut"
+                        ]
+                      }
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "concurrency": {
+                      "repetitions": 1
+                    }
+                  },
+                  "runAfter": {
+                    "Indexed_fields": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Get_views": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                      "parameters/method": "GET",
+                      "parameters/uri": "_api/web/lists(guid'@{outputs('List')?['Id']}')/views?$select=Title",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata"
+                      }
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "Each_index": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "View_titles": {
+                  "type": "Select",
+                  "inputs": {
+                    "from": "@body('Get_views')?['value']",
+                    "select": "@item()?['Title']"
+                  },
+                  "runAfter": {
+                    "Get_views": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Missing_views": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@items('Each_list')?['views']",
+                    "where": "@not(contains(body('View_titles'), item()?['title']))"
+                  },
+                  "runAfter": {
+                    "View_titles": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Each_view": {
+                  "type": "Foreach",
+                  "foreach": "@body('Missing_views')",
+                  "actions": {
+                    "Create_view": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                          "parameters/method": "POST",
+                          "parameters/uri": "_api/web/lists(guid'@{outputs('List')?['Id']}')/views/add",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata",
+                            "Content-Type": "application/json;odata=verbose"
+                          },
+                          "parameters/body": "{\"parameters\":{\"__metadata\":{\"type\":\"SP.ViewCreationInformation\"},\"Title\":\"@{items('Each_view')?['title']}\",\"ViewFields\":{\"__metadata\":{\"type\":\"Collection(Edm.String)\"},\"results\":@{string(items('Each_view')?['fields'])}},\"ViewQuery\":\"@{items('Each_view')?['query']}\",\"RowLimit\":@{items('Each_view')?['rowLimit']},\"Paged\":true,\"PersonalView\":false,\"SetAsDefaultView\":false}}"
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {}
+                    },
+                    "Log_view": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "varLog",
+                        "value": "@concat('Created view ', items('Each_view')?['title'], ' on ', items('Each_list')?['title'])"
+                      },
+                      "runAfter": {
+                        "Create_view": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Warn_view": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "varWarnings",
+                        "value": "@concat('Could not create view ', items('Each_view')?['title'], ' on ', items('Each_list')?['title'], ' – create it by hand (01-sharepoint/lists.md).')"
+                      },
+                      "runAfter": {
+                        "Create_view": [
+                          "Failed",
+                          "TimedOut"
+                        ]
+                      }
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "concurrency": {
+                      "repetitions": 1
+                    }
+                  },
+                  "runAfter": {
+                    "Missing_views": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Inherits_permissions": {
+                  "type": "If",
+                  "expression": "@equals(outputs('List')?['HasUniqueRoleAssignments'], false)",
+                  "actions": {
+                    "Break_list_inheritance": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                          "parameters/method": "POST",
+                          "parameters/uri": "_api/web/lists(guid'@{outputs('List')?['Id']}')/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=false)",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata"
+                          }
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {}
+                    },
+                    "Log_break": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "varLog",
+                        "value": "@concat(items('Each_list')?['title'], ': stopped inheriting permissions')"
+                      },
+                      "runAfter": {
+                        "Break_list_inheritance": [
+                          "Succeeded"
+                        ]
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {}
+                  },
+                  "runAfter": {
+                    "Each_view": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Get_role_assignments": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                      "parameters/method": "GET",
+                      "parameters/uri": "_api/web/lists(guid'@{outputs('List')?['Id']}')/roleassignments?$select=PrincipalId",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata"
+                      }
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "Inherits_permissions": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Principals": {
+                  "type": "Select",
+                  "inputs": {
+                    "from": "@body('Get_role_assignments')?['value']",
+                    "select": "@item()?['PrincipalId']"
+                  },
+                  "runAfter": {
+                    "Get_role_assignments": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Members_group_has_access": {
+                  "type": "If",
+                  "expression": "@contains(body('Principals'), outputs('Ids')?['members'])",
+                  "actions": {
+                    "Remove_members_group": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                          "parameters/method": "POST",
+                          "parameters/uri": "_api/web/lists(guid'@{outputs('List')?['Id']}')/roleassignments/getbyprincipalid(@{outputs('Ids')?['members']})/deleteobject()",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata"
+                          }
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {}
+                    },
+                    "Log_members_removed": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "varLog",
+                        "value": "@concat(items('Each_list')?['title'], ': removed the site Members group')"
+                      },
+                      "runAfter": {
+                        "Remove_members_group": [
+                          "Succeeded"
+                        ]
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {}
+                  },
+                  "runAfter": {
+                    "Principals": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Visitors_group_has_access": {
+                  "type": "If",
+                  "expression": "@contains(body('Principals'), outputs('Ids')?['visitors'])",
+                  "actions": {
+                    "Remove_visitors_group": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                          "parameters/method": "POST",
+                          "parameters/uri": "_api/web/lists(guid'@{outputs('List')?['Id']}')/roleassignments/getbyprincipalid(@{outputs('Ids')?['visitors']})/deleteobject()",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata"
+                          }
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {}
+                    },
+                    "Log_visitors_removed": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "varLog",
+                        "value": "@concat(items('Each_list')?['title'], ': removed the site Visitors group')"
+                      },
+                      "runAfter": {
+                        "Remove_visitors_group": [
+                          "Succeeded"
+                        ]
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {}
+                  },
+                  "runAfter": {
+                    "Members_group_has_access": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Add_owners_full_control": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/lists(guid'@{outputs('List')?['Id']}')/roleassignments/addroleassignment(principalid=@{outputs('Ids')?['owners']},roledefid=@{outputs('Ids')?['fullControl']})",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata"
+                      }
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "Visitors_group_has_access": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "I_have_direct_access": {
+                  "type": "If",
+                  "expression": "@contains(body('Principals'), body('Get_me')?['Id'])",
+                  "actions": {
+                    "Remove_my_direct_access": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                          "parameters/method": "POST",
+                          "parameters/uri": "_api/web/lists(guid'@{outputs('List')?['Id']}')/roleassignments/getbyprincipalid(@{body('Get_me')?['Id']})/deleteobject()",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata"
+                          }
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {}
+                    }
+                  },
+                  "else": {
+                    "actions": {}
+                  },
+                  "runAfter": {
+                    "Add_owners_full_control": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Group_needs_read": {
+                  "type": "If",
+                  "expression": "@equals(items('Each_list')?['groupRead'], true)",
+                  "actions": {
+                    "Grant_group_read": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                          "parameters/method": "POST",
+                          "parameters/uri": "_api/web/lists(guid'@{outputs('List')?['Id']}')/roleassignments/addroleassignment(principalid=@{outputs('Ids')?['group']},roledefid=@{outputs('Ids')?['readBuiltIn']})",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata"
+                          }
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {}
+                    },
+                    "Log_group_read": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "varLog",
+                        "value": "@concat(items('Each_list')?['title'], ': 1-to-1 Technicians given Read')"
+                      },
+                      "runAfter": {
+                        "Grant_group_read": [
+                          "Succeeded"
+                        ]
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {}
+                  },
+                  "runAfter": {
+                    "I_have_direct_access": [
+                      "Succeeded",
+                      "Failed",
+                      "Skipped",
+                      "TimedOut"
+                    ]
+                  }
+                }
+              },
+              "runtimeConfiguration": {
+                "concurrency": {
+                  "repetitions": 1
+                }
+              },
+              "runAfter": {
+                "Ids": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Get_lists_final": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/lists?$select=Id,Title,HasUniqueRoleAssignments,ListItemEntityTypeFullName,RootFolder/Name,RootFolder/ServerRelativeUrl&$expand=RootFolder",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Each_list": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Find_settings_list": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Get_lists_final')?['value']",
+                "where": "@equals(item()?['RootFolder']?['Name'], 'OneToOneSettings')"
+              },
+              "runAfter": {
+                "Get_lists_final": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Settings_list": {
+              "type": "Compose",
+              "inputs": "@first(body('Find_settings_list'))",
+              "runAfter": {
+                "Find_settings_list": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Get_settings_items": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/lists(guid'@{outputs('Settings_list')?['Id']}')/items?$select=Id,Title&$top=100",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Settings_list": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Find_bands": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Get_settings_items')?['value']",
+                "where": "@equals(item()?['Title'], 'Bands')"
+              },
+              "runAfter": {
+                "Get_settings_items": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Bands_missing": {
+              "type": "If",
+              "expression": "@empty(body('Find_bands'))",
+              "actions": {
+                "Bands_item": {
+                  "type": "Compose",
+                  "inputs": {
+                    "__metadata": {
+                      "type": "@{outputs('Settings_list')?['ListItemEntityTypeFullName']}"
+                    },
+                    "Title": "Bands",
+                    "Value": "@{outputs('Default_bands')}"
+                  },
+                  "runAfter": {}
+                },
+                "Create_bands_item": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/lists(guid'@{outputs('Settings_list')?['Id']}')/items",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata",
+                        "Content-Type": "application/json;odata=verbose"
+                      },
+                      "parameters/body": "@{string(outputs('Bands_item'))}"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "Bands_item": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Log_bands": {
+                  "type": "AppendToArrayVariable",
+                  "inputs": {
+                    "name": "varLog",
+                    "value": "Added the Bands item to 1-to-1 Settings (default thresholds)"
+                  },
+                  "runAfter": {
+                    "Create_bands_item": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {
+                "Find_bands": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Email_summary": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_office365",
+                  "operationId": "SendEmailV2",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                },
+                "parameters": {
+                  "emailMessage/To": "@parameters('ESG 1-to-1 Team Leader email (esg_ManagerEmail)')",
+                  "emailMessage/Subject": "ESG 1-to-1 setup: @{if(empty(variables('varWarnings')), 'complete', 'complete with items to check')}",
+                  "emailMessage/Body": "<p><b>ESG 1-to-1 setup finished.</b></p><p><b>Problems to fix by hand</b> (empty means none):</p><ul><li>@{join(variables('varWarnings'), '</li><li>')}</li></ul><p><b>What was done:</b></p><ul><li>@{join(variables('varLog'), '</li><li>')}</li></ul><p>Next: turn on flows 1, 2 and 3 (GO_LIVE_RUNBOOK Phase 7) and check each list's permissions page.</p>",
+                  "emailMessage/Importance": "Normal"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              },
+              "runAfter": {
+                "Bands_missing": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Default_bands": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Catch": {
+          "type": "Scope",
+          "actions": {
+            "Email_TL_run_failed": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_office365",
+                  "operationId": "SendEmailV2",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                },
+                "parameters": {
+                  "emailMessage/To": "@parameters('ESG 1-to-1 Team Leader email (esg_ManagerEmail)')",
+                  "emailMessage/Subject": "1-to-1 system: action needed (ESG 1-to-1 | 0 Setup)",
+                  "emailMessage/Body": "<p>The flow <b>ESG 1-to-1 | 0 Setup</b> failed. Nothing further was sent for this run.</p><p><a href=\"@{concat('https://make.powerautomate.com/environments/', workflow()?['tags']?['environmentName'], '/flows/', workflow()?['name'], '/runs/', workflow()?['run']?['name'])}\">Open the failed run</a></p>",
+                  "emailMessage/Importance": "Normal"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              },
+              "runAfter": {}
+            },
+            "Terminate_failed": {
+              "type": "Terminate",
+              "inputs": {
+                "runStatus": "Failed",
+                "runError": {
+                  "code": "ESG1to1",
+                  "message": "The Try scope failed. See the failed action in the run history."
+                }
+              },
+              "runAfter": {
+                "Email_TL_run_failed": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Try": [
+              "Failed",
+              "TimedOut"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "schemaVersion": "1.0.0.0"
+}

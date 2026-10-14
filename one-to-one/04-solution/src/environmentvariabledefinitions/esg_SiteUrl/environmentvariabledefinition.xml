@@ -1,0 +1,13 @@
+<environmentvariabledefinition schemaname="esg_SiteUrl">
+  <description default="Full address of the private 1-to-1 site, e.g. https://&lt;tenant&gt;.sharepoint.com/sites/&lt;site&gt; (no trailing slash).">
+    <label description="Full address of the private 1-to-1 site, e.g. https://&lt;tenant&gt;.sharepoint.com/sites/&lt;site&gt; (no trailing slash)." languagecode="1033" />
+  </description>
+  <displayname default="ESG 1-to-1 Site URL">
+    <label description="ESG 1-to-1 Site URL" languagecode="1033" />
+  </displayname>
+  <introducedversion>1.0.0.0</introducedversion>
+  <iscustomizable>1</iscustomizable>
+  <isrequired>1</isrequired>
+  <secretstore>0</secretstore>
+  <type>100000000</type>
+</environmentvariabledefinition>

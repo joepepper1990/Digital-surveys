@@ -1,0 +1,716 @@
+"""ESG 1-to-1 – the four cloud flows, generated as Power Automate solution flow definitions.
+
+Shape copied from real exported solution flows (Microsoft PnP samples): properties.connectionReferences +
+properties.definition (Logic Apps workflow definition language), OpenApiConnection actions with
+host.connectionName / operationId / apiId, environment variables as definition parameters.
+
+Nothing tenant-specific is in here. The site and the Team Leader's email are environment variables set at
+import; group and permission-level IDs are looked up at run time.
+"""
+import json
+from schema import LISTS, ROLES, GROUP_TITLE, GROUP_DESCRIPTION, DEFAULT_BANDS
+
+# --------------------------------------------------------------------------------------------- constants
+SP_API = '/providers/Microsoft.PowerApps/apis/shared_sharepointonline'
+MAIL_API = '/providers/Microsoft.PowerApps/apis/shared_office365'
+USERS_API = '/providers/Microsoft.PowerApps/apis/shared_office365users'
+CONN = {
+    'shared_sharepointonline': 'esg_sharedsharepointonline_1to1',
+    'shared_office365': 'esg_sharedoffice365_1to1',
+    'shared_office365users': 'esg_sharedoffice365users_1to1',
+}
+ENV_SITE = 'ESG 1-to-1 Site URL (esg_SiteUrl)'
+ENV_MAIL = 'ESG 1-to-1 Team Leader email (esg_ManagerEmail)'
+ENV_VARS = [
+    {'schema': 'esg_SiteUrl', 'param': ENV_SITE, 'display': 'ESG 1-to-1 Site URL',
+     'description': 'Full address of the private 1-to-1 site, e.g. https://<tenant>.sharepoint.com/sites/<site> (no trailing slash).'},
+    {'schema': 'esg_ManagerEmail', 'param': ENV_MAIL, 'display': 'ESG 1-to-1 Team Leader email',
+     'description': "The Team Leader's email address. Receives submissions and problem reports."},
+]
+SITE = "parameters('{0}')".format(ENV_SITE)
+TL_EMAIL = "parameters('{0}')".format(ENV_MAIL)
+PAGE = "concat(if(endsWith({0}, '/'), substring({0}, 0, sub(length({0}), 1)), {0}), '/SitePages/OneToOne.aspx')".format(SITE)
+SECURE = {'secureData': {'properties': ['inputs', 'outputs']}}
+OK = ['Succeeded']
+FAILED = ['Failed', 'TimedOut']
+ANY = ['Succeeded', 'Failed', 'Skipped', 'TimedOut']
+RUN_LINK = ("concat('https://make.powerautomate.com/environments/', workflow()?['tags']?['environmentName'], "
+            "'/flows/', workflow()?['name'], '/runs/', workflow()?['run']?['name'])")
+LIST_TITLE = {l['key']: l['title'] for l in LISTS}
+MR = LIST_TITLE['reviews']
+MGR = LIST_TITLE['mgr']
+
+
+def q(s):
+    """Quote a literal for use inside an expression."""
+    return "'" + s.replace("'", "''") + "'"
+
+
+# --------------------------------------------------------------------------------------------- builders
+def seq(*steps, first_after=None):
+    """Chain (name, action) pairs: each runs after the previous one succeeded (unless runAfter is set)."""
+    out, prev = {}, first_after
+    for name, act in steps:
+        act = dict(act)
+        if 'runAfter' not in act:
+            act['runAfter'] = {prev: OK} if prev else {}
+        out[name] = act
+        prev = name
+    return out
+
+
+def after(act, run_after):
+    act = dict(act)
+    act['runAfter'] = run_after
+    return act
+
+
+def _conn(conn, api, op, params, secure):
+    a = {'type': 'OpenApiConnection',
+         'inputs': {'host': {'connectionName': conn, 'operationId': op, 'apiId': api},
+                    'parameters': params, 'authentication': "@parameters('$authentication')"}}
+    if secure:
+        a['runtimeConfiguration'] = SECURE
+    return a
+
+
+def sp(op, params, secure=True):
+    p = {'dataset': '@' + SITE}
+    p.update(params)
+    return _conn('shared_sharepointonline', SP_API, op, p, secure)
+
+
+def http(method, uri, body=None, verbose=False, headers=None, secure=True):
+    h = {'Accept': 'application/json;odata=nometadata'}
+    if body is not None:
+        h['Content-Type'] = 'application/json;odata=verbose' if verbose else 'application/json;odata=nometadata'
+    h.update(headers or {})
+    p = {'parameters/method': method, 'parameters/uri': uri, 'parameters/headers': h}
+    if body is not None:
+        p['parameters/body'] = body
+    return sp('HttpRequest', p, secure)
+
+
+def merge(uri, body):
+    return http('POST', uri, body, verbose=True, headers={'X-HTTP-Method': 'MERGE', 'IF-MATCH': '*'}, secure=False)
+
+
+def get_items(table, flt=None, top=None, order=None):
+    p = {'table': table}
+    if flt:
+        p['$filter'] = flt
+    if order:
+        p['$orderby'] = order
+    if top:
+        p['$top'] = top
+    return sp('GetItems', p)
+
+
+def patch_item(table, item_id, fields):
+    p = {'table': table, 'id': item_id}
+    p.update({'item/' + k: v for k, v in fields.items()})
+    return sp('PatchItem', p)
+
+
+def post_item(table, fields):
+    p = {'table': table}
+    p.update({'item/' + k: v for k, v in fields.items()})
+    return sp('PostItem', p)
+
+
+def email(to, subject, body):
+    return _conn('shared_office365', MAIL_API, 'SendEmailV2',
+                 {'emailMessage/To': to, 'emailMessage/Subject': subject, 'emailMessage/Body': body,
+                  'emailMessage/Importance': 'Normal'}, True)
+
+
+def user_profile(email_expr):
+    return _conn('shared_office365users', USERS_API, 'UserProfile_V2', {'id': email_expr}, True)
+
+
+def compose(value):
+    return {'type': 'Compose', 'inputs': value}
+
+
+def init_var(name, typ, value=None):
+    v = {'name': name, 'type': typ}
+    if value is not None:
+        v['value'] = value
+    return {'type': 'InitializeVariable', 'inputs': {'variables': [v]}}
+
+
+def set_var(name, value):
+    return {'type': 'SetVariable', 'inputs': {'name': name, 'value': value}}
+
+
+def append(name, value):
+    return {'type': 'AppendToArrayVariable', 'inputs': {'name': name, 'value': value}}
+
+
+def cond(expression, yes=None, no=None):
+    a = {'type': 'If', 'expression': expression, 'actions': yes or {}}
+    a['else'] = {'actions': no or {}}
+    return a
+
+
+def foreach(items, actions):
+    return {'type': 'Foreach', 'foreach': items, 'actions': actions,
+            'runtimeConfiguration': {'concurrency': {'repetitions': 1}}}
+
+
+def scope(actions):
+    return {'type': 'Scope', 'actions': actions}
+
+
+def query(frm, where):
+    return {'type': 'Query', 'inputs': {'from': frm, 'where': where}}
+
+
+def select(frm, mapping):
+    return {'type': 'Select', 'inputs': {'from': frm, 'select': mapping}}
+
+
+def terminate(status, message=None):
+    i = {'runStatus': status}
+    if status == 'Failed':
+        i['runError'] = {'code': 'ESG1to1', 'message': message or 'See the run history.'}
+    return {'type': 'Terminate', 'inputs': i}
+
+
+def catch(flow_name, subject=None):
+    return after(scope(seq(
+        ('Email_TL_run_failed', email('@' + TL_EMAIL,
+                                      subject or '1-to-1 system: action needed ({0})'.format(flow_name),
+                                      '<p>The flow <b>{0}</b> failed. Nothing further was sent for this run.</p>'
+                                      '<p><a href="@{{{1}}}">Open the failed run</a></p>'.format(flow_name, RUN_LINK))),
+        ('Terminate_failed', terminate('Failed', 'The Try scope failed. See the failed action in the run history.')),
+    )), {'Try': FAILED})
+
+
+def definition(triggers, actions):
+    params = {'$connections': {'defaultValue': {}, 'type': 'Object'},
+              '$authentication': {'defaultValue': {}, 'type': 'SecureObject'}}
+    for ev in ENV_VARS:
+        params[ev['param']] = {'defaultValue': '', 'type': 'String',
+                               'metadata': {'schemaName': ev['schema'], 'description': ev['description']}}
+    return {'$schema': 'https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#',
+            'contentVersion': '1.0.0.0', 'parameters': params, 'triggers': triggers, 'actions': actions}
+
+
+def flow_json(defn, connectors):
+    refs = {}
+    for c in connectors:
+        refs[c] = {'runtimeSource': 'embedded', 'connection': {'connectionReferenceLogicalName': CONN[c]},
+                   'api': {'name': c}}
+    return {'properties': {'connectionReferences': refs, 'definition': defn},
+            'schemaVersion': '1.0.0.0'}
+
+
+# --------------------------------------------------------------------------------------------- shared blocks
+def load_ids():
+    """Look up the Owners group and role IDs at run time (no IDs to copy by hand)."""
+    roles = "body('Get_role_definitions')?['value']"
+    return [
+        ('Get_owners_group', http('GET', '_api/web/associatedownergroup?$select=Id,Title', secure=False)),
+        ('Get_role_definitions', http('GET', '_api/web/roledefinitions?$select=Id,Name,RoleTypeKind', secure=False)),
+        ('Role_full_control', query('@' + roles, "@equals(item()?['RoleTypeKind'], 5)")),
+        ('Role_edit', query('@' + roles, "@equals(item()?['Name'], '1-to-1 Edit')")),
+        ('Role_read', query('@' + roles, "@equals(item()?['Name'], '1-to-1 Read')")),
+        ('Get_lists', http('GET', '_api/web/lists?$select=Id,Title,RootFolder/Name&$expand=RootFolder', secure=False)),
+        ('List_monthly_reviews', query("@body('Get_lists')?['value']", "@equals(item()?['RootFolder']?['Name'], 'MonthlyReviews')")),
+        ('List_manager_reviews', query("@body('Get_lists')?['value']", "@equals(item()?['RootFolder']?['Name'], 'ManagerReviews')")),
+        ('Ids', compose({'owners': "@body('Get_owners_group')?['Id']",
+                         'fullControl': "@first(body('Role_full_control'))?['Id']",
+                         'edit': "@first(body('Role_edit'))?['Id']",
+                         'read': "@first(body('Role_read'))?['Id']",
+                         'reviewsList': "@first(body('List_monthly_reviews'))?['Id']",
+                         'mgrList': "@first(body('List_manager_reviews'))?['Id']"})),
+        ('Check_setup_has_run', cond(
+            "@or(equals(outputs('Ids')?['owners'], null), equals(outputs('Ids')?['fullControl'], null), "
+            "equals(outputs('Ids')?['edit'], null), equals(outputs('Ids')?['read'], null), "
+            "equals(outputs('Ids')?['reviewsList'], null), equals(outputs('Ids')?['mgrList'], null))",
+            seq(('STOP_run_the_setup_flow_first',
+                 compose("@int('The 1-to-1 permission levels or Owners group were not found. Run ESG 1-to-1 | 0 Setup first.')"))))),
+    ]
+
+
+def ensure_user(name, claims_expr):
+    return (name, http('POST', '_api/web/ensureuser', '{"logonName":"@{' + claims_expr + '}"}'))
+
+
+def setperm(suffix, list_key, item_expr, role_expr, principal_expr):
+    """list_key: 'reviewsList' or 'mgrList' – the list GUID looked up by load_ids()."""
+    base = "_api/web/lists(guid'@{{outputs('Ids')?['{0}']}}')/items(@{{{1}}})".format(list_key, item_expr)
+    return [
+        ('Reset' + suffix, http('POST', base + '/resetroleinheritance')),
+        ('Break' + suffix, http('POST', base + '/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)')),
+        ('AddOwners' + suffix, http('POST', base + "/roleassignments/addroleassignment(principalid=@{outputs('Ids')?['owners']},"
+                                                   "roledefid=@{outputs('Ids')?['fullControl']})")),
+        ('AddTech' + suffix, http('POST', base + '/roleassignments/addroleassignment(principalid=@{' + principal_expr +
+                                  '},roledefid=@{' + role_expr + '})')),
+    ]
+
+
+def link(review_id_expr):
+    return '@{concat(' + PAGE + ", '?reviewId=', " + review_id_expr + ')}'
+
+
+# --------------------------------------------------------------------------------------------- Flow 0: setup
+def flow_setup():
+    L = "items('Each_list')"
+    LID = "outputs('List')?['Id']"
+    LBASE = "_api/web/lists(guid'@{" + LID + "}')"
+    W = 'varWarnings'
+    G = 'varLog'
+
+    def warn(msg_expr):
+        return append(W, msg_expr)
+
+    # roles
+    role_steps = foreach("@outputs('Role_settings')", seq(
+        ('Role_existing', query("@body('Get_roles')?['value']", "@equals(item()?['Name'], items('Each_role')?['name'])")),
+        ('Role_missing', cond("@empty(body('Role_existing'))",
+            seq(
+                ('Create_role', http('POST', '_api/web/roledefinitions',
+                                     '{"__metadata":{"type":"SP.RoleDefinition"},"BasePermissions":{"__metadata":{"type":"SP.BasePermissions"},'
+                                     '"High":"@{items(\'Each_role\')?[\'high\']}","Low":"@{items(\'Each_role\')?[\'low\']}"},'
+                                     '"Description":"@{items(\'Each_role\')?[\'description\']}","Name":"@{items(\'Each_role\')?[\'name\']}",'
+                                     '"Order":@{items(\'Each_role\')?[\'order\']}}', verbose=True, secure=False)),
+                ('Log_role_created', append(G, "@concat('Created permission level ', items('Each_role')?['name'])")),
+            ),
+            seq(
+                ('Role_matches', cond(
+                    "@and(equals(string(first(body('Role_existing'))?['BasePermissions']?['Low']), string(items('Each_role')?['low'])), "
+                    "equals(string(first(body('Role_existing'))?['BasePermissions']?['High']), string(items('Each_role')?['high'])))",
+                    seq(('Log_role_ok', append(G, "@concat('Permission level ', items('Each_role')?['name'], ' already exists with the expected rights')"))),
+                    seq(('Warn_role_differs', warn("@concat('Permission level ', items('Each_role')?['name'], "
+                                                    "' already exists but its rights differ from the plan (D.3). It was NOT changed. Compare it with G Part 2.')"))))),
+            ))),
+    ))
+
+    # one list
+    each_field = foreach("@body('Missing_fields')", {
+        'Create_field': after(http('POST', LBASE + '/fields/createfieldasxml',
+                                   '{"parameters":{"__metadata":{"type":"SP.XmlSchemaFieldCreationInformation"},'
+                                   '"SchemaXml":"@{items(\'Each_field\')?[\'xml\']}","Options":28}}', verbose=True, secure=False), {}),
+        'Log_field': after(append(G, "@concat('Added column ', items('Each_field')?['name'], ' to ', " + L + "?['title'])"),
+                           {'Create_field': OK}),
+        'Warn_field': after(warn("@concat('Could not add column ', items('Each_field')?['name'], ' to ', " + L + "?['title'], "
+                                 "' – add it by hand (01-sharepoint/lists.md).')"), {'Create_field': FAILED}),
+    })
+    each_index = foreach("@body('Indexed_fields')", {
+        'Set_index': after(merge(LBASE + "/fields/getbyinternalnameortitle('@{items('Each_index')?['name']}')",
+                                 '{"__metadata":{"type":"SP.Field"},"Indexed":true}'), {}),
+        'Is_unique': after(cond("@equals(items('Each_index')?['unique'], true)", {
+            'Set_unique': after(merge(LBASE + "/fields/getbyinternalnameortitle('@{items('Each_index')?['name']}')",
+                                      '{"__metadata":{"type":"SP.Field"},"EnforceUniqueValues":true}'), {}),
+            'Warn_unique': after(warn("@concat('Could not set Enforce unique values on ', items('Each_index')?['name'], "
+                                      "' in ', " + L + "?['title'], ' – set it by hand.')"), {'Set_unique': FAILED}),
+        }), {'Set_index': OK}),
+        'Warn_index': after(warn("@concat('Could not index ', items('Each_index')?['name'], ' in ', " + L + "?['title'], "
+                                 "' – add the index by hand.')"), {'Set_index': FAILED}),
+    })
+    each_view = foreach("@body('Missing_views')", {
+        'Create_view': after(http('POST', LBASE + '/views/add',
+                                  '{"parameters":{"__metadata":{"type":"SP.ViewCreationInformation"},"Title":"@{items(\'Each_view\')?[\'title\']}",'
+                                  '"ViewFields":{"__metadata":{"type":"Collection(Edm.String)"},"results":@{string(items(\'Each_view\')?[\'fields\'])}},'
+                                  '"ViewQuery":"@{items(\'Each_view\')?[\'query\']}","RowLimit":@{items(\'Each_view\')?[\'rowLimit\']},'
+                                  '"Paged":true,"PersonalView":false,"SetAsDefaultView":false}}', verbose=True, secure=False), {}),
+        'Log_view': after(append(G, "@concat('Created view ', items('Each_view')?['title'], ' on ', " + L + "?['title'])"),
+                          {'Create_view': OK}),
+        'Warn_view': after(warn("@concat('Could not create view ', items('Each_view')?['title'], ' on ', " + L + "?['title'], "
+                                "' – create it by hand (01-sharepoint/lists.md).')"), {'Create_view': FAILED}),
+    })
+    lists_uri = ('_api/web/lists?$select=Id,Title,HasUniqueRoleAssignments,ListItemEntityTypeFullName,'
+                 'RootFolder/Name,RootFolder/ServerRelativeUrl&$expand=RootFolder')
+    match = "@or(equals(item()?['Title'], " + L + "?['title']), equals(item()?['RootFolder']?['Name'], " + L + "?['url']))"
+    each_list = foreach("@outputs('Schema')", seq(
+        ('Get_lists', http('GET', lists_uri, secure=False)),
+        ('Find_list', query("@body('Get_lists')?['value']", match)),
+        ('List_missing', cond("@empty(body('Find_list'))", seq(
+            ('Create_list', http('POST', '_api/web/lists',
+                                 '{"__metadata":{"type":"SP.List"},"AllowContentTypes":true,"BaseTemplate":100,"ContentTypesEnabled":false,'
+                                 '"Description":"@{items(\'Each_list\')?[\'description\']}","Title":"@{items(\'Each_list\')?[\'url\']}"}',
+                                 verbose=True, secure=False)),
+            ('Log_list_created', append(G, "@concat('Created list ', " + L + "?['title'])")),
+        ), seq(
+            ('Log_list_exists', append(G, "@concat('List ', " + L + "?['title'], ' already exists – checked and completed')")),
+        ))),
+        ('Get_lists_again', http('GET', lists_uri, secure=False)),
+        ('Find_list_again', query("@body('Get_lists_again')?['value']", match)),
+        ('List', compose("@first(body('Find_list_again'))")),
+        ('Set_list_settings', merge(LBASE,
+                                    '{"__metadata":{"type":"SP.List"},"Title":"@{items(\'Each_list\')?[\'title\']}",'
+                                    '"Description":"@{items(\'Each_list\')?[\'description\']}","EnableVersioning":true,"MajorVersionLimit":100,'
+                                    '"EnableAttachments":false,"NoCrawl":true,"OnQuickLaunch":false}')),
+        ('Set_offline_off', after(merge(LBASE, '{"__metadata":{"type":"SP.List"},"ExcludeFromOfflineClient":true}'),
+                                  {'Set_list_settings': ANY})),
+        ('Warn_settings', after(warn("@concat(" + L + "?['title'], ': could not apply list settings – set versioning 100, attachments off, "
+                                     "search off by hand.')"), {'Set_list_settings': FAILED})),
+        ('Warn_offline', after(warn("@concat(" + L + "?['title'], ': set Advanced settings → Offline client availability = No by hand.')"),
+                               {'Set_offline_off': FAILED})),
+        ('Get_fields', after(http('GET', LBASE + '/fields?$select=InternalName', secure=False),
+                             {'Warn_settings': ANY, 'Warn_offline': ANY})),
+        ('Field_names', select("@body('Get_fields')?['value']", "@item()?['InternalName']")),
+        ('Missing_fields', query('@' + L + "?['fields']", "@not(contains(body('Field_names'), item()?['name']))")),
+        ('Each_field', each_field),
+        ('Indexed_fields', query('@' + L + "?['fields']", "@equals(item()?['indexed'], true)")),
+        ('Each_index', each_index),
+        ('Get_views', http('GET', LBASE + '/views?$select=Title', secure=False)),
+        ('View_titles', select("@body('Get_views')?['value']", "@item()?['Title']")),
+        ('Missing_views', query('@' + L + "?['views']", "@not(contains(body('View_titles'), item()?['title']))")),
+        ('Each_view', each_view),
+        ('Inherits_permissions', cond("@equals(outputs('List')?['HasUniqueRoleAssignments'], false)", seq(
+            ('Break_list_inheritance', http('POST', LBASE + '/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=false)',
+                                            secure=False)),
+            ('Log_break', append(G, "@concat(" + L + "?['title'], ': stopped inheriting permissions')")),
+        ))),
+        ('Get_role_assignments', http('GET', LBASE + '/roleassignments?$select=PrincipalId', secure=False)),
+        ('Principals', select("@body('Get_role_assignments')?['value']", "@item()?['PrincipalId']")),
+        ('Members_group_has_access', cond("@contains(body('Principals'), outputs('Ids')?['members'])", seq(
+            ('Remove_members_group', http('POST', LBASE + "/roleassignments/getbyprincipalid(@{outputs('Ids')?['members']})/deleteobject()",
+                                          secure=False)),
+            ('Log_members_removed', append(G, "@concat(" + L + "?['title'], ': removed the site Members group')")),
+        ))),
+        ('Visitors_group_has_access', cond("@contains(body('Principals'), outputs('Ids')?['visitors'])", seq(
+            ('Remove_visitors_group', http('POST', LBASE + "/roleassignments/getbyprincipalid(@{outputs('Ids')?['visitors']})/deleteobject()",
+                                           secure=False)),
+            ('Log_visitors_removed', append(G, "@concat(" + L + "?['title'], ': removed the site Visitors group')")),
+        ))),
+        ('Add_owners_full_control', http('POST', LBASE + "/roleassignments/addroleassignment(principalid=@{outputs('Ids')?['owners']},"
+                                                         "roledefid=@{outputs('Ids')?['fullControl']})", secure=False)),
+        ('I_have_direct_access', cond("@contains(body('Principals'), body('Get_me')?['Id'])", seq(
+            ('Remove_my_direct_access', http('POST', LBASE + "/roleassignments/getbyprincipalid(@{body('Get_me')?['Id']})/deleteobject()",
+                                             secure=False)),
+        ))),
+        ('Group_needs_read', after(cond("@equals(" + L + "?['groupRead'], true)", seq(
+            ('Grant_group_read', http('POST', LBASE + "/roleassignments/addroleassignment(principalid=@{outputs('Ids')?['group']},"
+                                                      "roledefid=@{outputs('Ids')?['readBuiltIn']})", secure=False)),
+            ('Log_group_read', append(G, "@concat(" + L + "?['title'], ': " + GROUP_TITLE + " given Read')")),
+        )), {'I_have_direct_access': ANY})),
+    ))
+
+    bands_body = {'__metadata': {'type': "@{outputs('Settings_list')?['ListItemEntityTypeFullName']}"},
+                  'Title': 'Bands', 'Value': "@{outputs('Default_bands')}"}
+    summary = ('<p><b>ESG 1-to-1 setup finished.</b></p>'
+               '<p><b>Problems to fix by hand</b> (empty means none):</p><ul><li>@{join(variables(\'varWarnings\'), \'</li><li>\')}</li></ul>'
+               '<p><b>What was done:</b></p><ul><li>@{join(variables(\'varLog\'), \'</li><li>\')}</li></ul>'
+               '<p>Next: turn on flows 1, 2 and 3 (GO_LIVE_RUNBOOK Phase 7) and check each list\'s permissions page.</p>')
+
+    try_actions = seq(
+        ('Get_web', http('GET', '_api/web?$select=Title,Url,ServerRelativeUrl', secure=False)),
+        ('Get_me', http('GET', '_api/web/currentuser?$select=Id,Title,Email,IsSiteAdmin', secure=False)),
+        ('Check_site_admin', cond("@equals(body('Get_me')?['IsSiteAdmin'], true)", None, seq(
+            ('Warn_not_site_admin', warn('You are not a Site Collection Administrator of this site. Ask IT to add you '
+                                         '(plan D.1, Stage 0B finding B10a) before go-live.'))))),
+        ('Check_site_url', cond("@endsWith(" + SITE + ", '/')", seq(
+            ('Warn_site_url', warn('The ESG 1-to-1 Site URL environment variable ends with "/". Remove the trailing slash '
+                                   '(Solutions → Default solution → Environment variables), otherwise flows 2 and 3 cannot find the lists.'))))),
+        ('Get_regional_settings', http('GET', '_api/web/RegionalSettings?$select=LocaleId', secure=False)),
+        ('Get_time_zone', http('GET', '_api/web/RegionalSettings/TimeZone?$select=Id,Description', secure=False)),
+        ('Check_regional', cond("@and(equals(body('Get_regional_settings')?['LocaleId'], 2057), "
+                                "contains(string(body('Get_time_zone')?['Description']), 'London'))", None, seq(
+            ('Warn_regional', warn("@concat('Regional settings are ', string(body('Get_regional_settings')?['LocaleId']), ' / ', "
+                                   "string(body('Get_time_zone')?['Description']), '. Set Locale English (United Kingdom) and time zone "
+                                   "(UTC) Dublin, Edinburgh, Lisbon, London (plan G Part 1 step 4) – dates depend on it.')"))))),
+        ('Get_roles', http('GET', '_api/web/roledefinitions?$select=Id,Name,RoleTypeKind,BasePermissions', secure=False)),
+        ('Each_role', role_steps),
+        ('Get_groups', http('GET', '_api/web/sitegroups?$select=Id,Title', secure=False)),
+        ('Find_group', query("@body('Get_groups')?['value']", "@equals(item()?['Title'], '" + GROUP_TITLE + "')")),
+        ('Group_missing', cond("@empty(body('Find_group'))", seq(
+            ('Create_group', http('POST', '_api/web/sitegroups',
+                                  '{"__metadata":{"type":"SP.Group"},"Title":"' + GROUP_TITLE + '","Description":"' + GROUP_DESCRIPTION + '",'
+                                  '"OnlyAllowMembersViewMembership":true,"AllowMembersEditMembership":false,'
+                                  '"AllowRequestToJoinLeave":false,"AutoAcceptRequestToJoinLeave":false}', verbose=True, secure=False)),
+            ('Log_group_created', append(G, 'Created group ' + GROUP_TITLE + ' (no site permissions)')),
+        ))),
+        ('Get_groups_again', http('GET', '_api/web/sitegroups?$select=Id,Title', secure=False)),
+        ('Find_group_again', query("@body('Get_groups_again')?['value']", "@equals(item()?['Title'], '" + GROUP_TITLE + "')")),
+        ('Get_owners_group', http('GET', '_api/web/associatedownergroup?$select=Id,Title', secure=False)),
+        ('Get_members_group', http('GET', '_api/web/associatedmembergroup?$select=Id,Title', secure=False)),
+        ('Get_visitors_group', after(http('GET', '_api/web/associatedvisitorgroup?$select=Id,Title', secure=False),
+                                     {'Get_members_group': ANY})),
+        ('Get_roles_again', after(http('GET', '_api/web/roledefinitions?$select=Id,Name,RoleTypeKind', secure=False),
+                                  {'Get_visitors_group': ANY})),
+        ('Role_full_control', query("@body('Get_roles_again')?['value']", "@equals(item()?['RoleTypeKind'], 5)")),
+        ('Role_read_builtin', query("@body('Get_roles_again')?['value']", "@equals(item()?['RoleTypeKind'], 2)")),
+        ('Ids', compose({'owners': "@body('Get_owners_group')?['Id']",
+                         'fullControl': "@first(body('Role_full_control'))?['Id']",
+                         'readBuiltIn': "@first(body('Role_read_builtin'))?['Id']",
+                         'members': "@coalesce(body('Get_members_group')?['Id'], -1)",
+                         'visitors': "@coalesce(body('Get_visitors_group')?['Id'], -1)",
+                         'group': "@first(body('Find_group_again'))?['Id']"})),
+        ('Each_list', each_list),
+        ('Get_lists_final', http('GET', lists_uri, secure=False)),
+        ('Find_settings_list', query("@body('Get_lists_final')?['value']", "@equals(item()?['RootFolder']?['Name'], 'OneToOneSettings')")),
+        ('Settings_list', compose("@first(body('Find_settings_list'))")),
+        ('Get_settings_items', http('GET', "_api/web/lists(guid'@{outputs('Settings_list')?['Id']}')/items?$select=Id,Title&$top=100",
+                                    secure=False)),
+        ('Find_bands', query("@body('Get_settings_items')?['value']", "@equals(item()?['Title'], 'Bands')")),
+        ('Bands_missing', cond("@empty(body('Find_bands'))", seq(
+            ('Bands_item', compose(bands_body)),
+            ('Create_bands_item', http('POST', "_api/web/lists(guid'@{outputs('Settings_list')?['Id']}')/items",
+                                       "@{string(outputs('Bands_item'))}", verbose=True, secure=False)),
+            ('Log_bands', append(G, 'Added the Bands item to 1-to-1 Settings (default thresholds)')),
+        ))),
+        ('Email_summary', email('@' + TL_EMAIL, 'ESG 1-to-1 setup: @{if(empty(variables(\'varWarnings\')), \'complete\', '
+                                                '\'complete with items to check\')}', summary)),
+    )
+    actions = seq(
+        ('Initialize_varWarnings', init_var(W, 'array', [])),
+        ('Initialize_varLog', init_var(G, 'array', [])),
+        ('Schema', compose(LISTS)),
+        ('Role_settings', compose(ROLES)),
+        ('Default_bands', compose(DEFAULT_BANDS)),
+    )
+    actions['Try'] = after(scope(try_actions), {'Default_bands': OK})
+    actions['Catch'] = catch('ESG 1-to-1 | 0 Setup')
+    triggers = {'manual': {'type': 'Request', 'kind': 'Button',
+                           'inputs': {'schema': {'type': 'object', 'properties': {}, 'required': []}}}}
+    return definition(triggers, actions)
+
+
+# --------------------------------------------------------------------------------------------- Flow 1
+def flow_daily():
+    T = "items('Each_technician')"
+    MGRO = "outputs('Mgr')"
+    e1 = ('<p>Hi @{first(split(' + MGRO + "?['Technician']?['DisplayName'], ' '))},</p>"
+          '<p>Your monthly 1-to-1 is ready: <a href="' + link("variables('varReviewId')") + '"><b>Open my 1-to-1</b></a></p>'
+          "<p>Deadline: @{outputs('DeadlineText')}.</p>"
+          '<p>You can save and come back as often as you like before you submit.</p>'
+          '<p style="color:#666">This link only works when you\'re signed in with your own company account.</p>')
+    e2 = ("<p>Your 1-to-1 hasn't been submitted yet. Anything you've saved is still there: "
+          '<a href="' + link("items('Each_outstanding')?['ReviewItemId']") + '"><b>Continue</b></a></p>')
+    e7 = ("<p>The daily 1-to-1 run found these problems:</p><p>@{join(variables('varProblems'), '<br>')}</p>"
+          '<p><a href="@{' + RUN_LINK + '}">Open the run</a></p>')
+    snapshot_where = ("@or(equals(item()?['AppliesTo']?['Value'], 'Shared'), equals(toLower(coalesce(item()?['Technician']?['Email'], '')), "
+                      "toLower(" + T + "?['Technician']?['Email'])))")
+    tech_try = seq(
+        ('Set_varTechAad', set_var('varTechAad', "@toLower(coalesce(" + T + "?['TechnicianAadId'], ''))")),
+        ('No_AadId', cond("@empty(variables('varTechAad'))", seq(
+            ('Get_profile', user_profile('@' + T + "?['Technician']?['Email']")),
+            ('Save_AadId', patch_item('Technicians', '@' + T + "?['ID']",
+                                      {'Title': '@' + T + "?['Title']", 'TechnicianAadId': "@toLower(body('Get_profile')?['id'])"})),
+            ('Set_varTechAad_from_profile', set_var('varTechAad', "@toLower(body('Get_profile')?['id'])")),
+        ))),
+        ('ReviewKey', compose("@concat(variables('varTechAad'), '_', outputs('MonthKey'))")),
+        ('Find_mgr', get_items(MGR, "ReviewKey eq '@{outputs('ReviewKey')}'", top=1)),
+        ('Mgr_missing', cond("@equals(length(body('Find_mgr')?['value']), 0)", seq(
+            ('My_expectations', query("@body('Get_expectations')?['value']", snapshot_where)),
+            ('Too_many', cond("@greater(length(body('My_expectations')), 10)", seq(
+                ('Note_too_many', append('varProblems', "@concat(" + T + "?['Title'], ': more than 10 active expectations – only the "
+                                                         "first 10 by SortOrder were used.')"))))),
+            ('Snapshot', select("@take(body('My_expectations'), 10)",
+                                {'id': "@item()?['ID']", 'title': "@item()?['Title']", 'measures': "@item()?['Measures']",
+                                 'year': "@item()?['AppraisalYear']"})),
+            ('Create_manager_review', post_item(MGR, {
+                'Title': "@{" + T + "?['Title']} – @{outputs('MonthKey')}",
+                'ReviewKey': "@outputs('ReviewKey')",
+                'Technician/Claims': '@' + T + "?['Technician']?['Claims']",
+                'TechnicianAadId': "@variables('varTechAad')",
+                'MonthKey': "@outputs('MonthKey')",
+                'DueDate': "@outputs('DueUtc')",
+                'ReviewState/Value': 'Open',
+                'ActionsStatus/Value': 'None',
+                'ExpectationSnapshotJson': "@{string(body('Snapshot'))}",
+                'ExpectationFeedbackJson': '[]',
+                'ActionsJson': '[]',
+            })),
+        ))),
+        ('Get_mgr', get_items(MGR, "ReviewKey eq '@{outputs('ReviewKey')}'", top=1)),
+        ('Mgr', compose("@first(body('Get_mgr')?['value'])")),
+        ('Review_missing', cond("@equals(" + MGRO + "?['ReviewItemId'], null)", seq(
+            ('Tech_copy', select("@json(coalesce(" + MGRO + "?['ExpectationSnapshotJson'], '[]'))",
+                                 {'id': "@item()?['id']", 'title': "@item()?['title']", 'measures': "@item()?['measures']",
+                                  'year': "@item()?['year']", 'comment': ''})),
+            ('Create_review', post_item(MR, {
+                'Title': '@' + MGRO + "?['Title']",
+                'Technician/Claims': '@' + MGRO + "?['Technician']?['Claims']",
+                'MonthKey': '@' + MGRO + "?['MonthKey']",
+                'MonthStart': "@concat(" + MGRO + "?['MonthKey'], '-01')",
+                'DueDate': '@' + MGRO + "?['DueDate']",
+                'ReviewStatus/Value': 'Not Started',
+                'ExpectationsJson': "@{string(body('Tech_copy'))}",
+                'AppraisalDate': '@' + T + "?['AppraisalDate']",
+            })),
+            ('Link_review', patch_item(MGR, '@' + MGRO + "?['ID']",
+                                       {'Title': '@' + MGRO + "?['Title']", 'ReviewItemId': "@body('Create_review')?['ID']"})),
+            ('Set_varReviewId_new', set_var('varReviewId', "@body('Create_review')?['ID']")),
+        ), seq(
+            ('Set_varReviewId_existing', set_var('varReviewId', "@" + MGRO + "?['ReviewItemId']")),
+        ))),
+        ('Needs_link', cond("@and(equals(" + MGRO + "?['ReviewState']?['Value'], 'Open'), empty(" + MGRO + "?['LinkSentOn']))", seq(
+            ensure_user('Ensure_user', MGRO + "?['Technician']?['Claims']"),
+            *setperm('', 'reviewsList', "variables('varReviewId')", "outputs('Ids')?['edit']", "body('Ensure_user')?['Id']"),
+            ('Send_E1', email('@' + MGRO + "?['Technician']?['Email']", "Your 1-to-1 for @{outputs('MonthName')} is ready", e1)),
+            ('Stamp_LinkSentOn', patch_item(MGR, '@' + MGRO + "?['ID']", {'Title': '@' + MGRO + "?['Title']", 'LinkSentOn': '@utcNow()'})),
+        ))),
+    )
+    each_tech = foreach("@body('Get_technicians')?['value']", {
+        'TechTry': after(scope(tech_try), {}),
+        'TechCatch': after(scope(seq(
+            ('Note_failure', append('varProblems', "@concat('FAILED for ', " + T + "?['Title'], ' – no email was sent. Open the run "
+                                                   "history for details.')")))), {'TechTry': FAILED}),
+    })
+    try_actions = seq(
+        *load_ids(),
+        ('Get_technicians', get_items('Technicians', 'Active eq 1')),
+        ('Get_expectations', get_items(LIST_TITLE['exp'], 'Active eq 1', top=500, order='SortOrder asc')),
+        ('Each_technician', each_tech),
+        ('Reminder_day', cond("@or(equals(outputs('Day'), 20), equals(outputs('Day'), 27))", seq(
+            ('Outstanding', get_items(MGR, "MonthKey eq '@{outputs('MonthKey')}' and ReviewState eq 'Open'")),
+            ('Outstanding_linked', query("@body('Outstanding')?['value']", "@not(empty(item()?['LinkSentOn']))")),
+            ('Each_outstanding', foreach("@body('Outstanding_linked')", seq(
+                ('Send_E2', email("@items('Each_outstanding')?['Technician']?['Email']",
+                                  "Reminder: your 1-to-1 for @{outputs('MonthName')} is due @{outputs('DeadlineText')}", e2)),
+            ))),
+        ))),
+        ('Any_problems', cond("@greater(length(variables('varProblems')), 0)", seq(
+            ('Send_E7', email('@' + TL_EMAIL, '1-to-1 system: action needed', e7)),
+        ))),
+    )
+    actions = seq(
+        ('Initialize_varTestDate', dict(init_var('varTestDate', 'string', ''),
+                                        description='Leave empty in production. For a test run, e.g. 2026-11-20T07:00:00')),
+        ('Initialize_varProblems', init_var('varProblems', 'array', [])),
+        ('Initialize_varTechAad', init_var('varTechAad', 'string', '')),
+        ('Initialize_varReviewId', init_var('varReviewId', 'integer', 0)),
+        ('ukNow', compose("@if(empty(variables('varTestDate')), convertFromUtc(utcNow(), 'GMT Standard Time', 'yyyy-MM-ddTHH:mm:ss'), "
+                          "variables('varTestDate'))")),
+        ('MonthKey', compose("@formatDateTime(outputs('ukNow'), 'yyyy-MM')")),
+        ('LastDay', compose("@formatDateTime(addDays(addToTime(startOfMonth(outputs('ukNow')), 1, 'Month'), -1), 'yyyy-MM-dd')")),
+        ('DueUtc', compose("@convertToUtc(concat(outputs('LastDay'), 'T23:59:59'), 'GMT Standard Time')")),
+        ('DeadlineText', compose("@concat('23:59 on ', formatDateTime(outputs('LastDay'), 'dddd dd-MMM-yyyy'))")),
+        ('MonthName', compose("@formatDateTime(outputs('ukNow'), 'MMMM yyyy')")),
+        ('Day', compose("@dayOfMonth(outputs('ukNow'))")),
+    )
+    actions['Try'] = after(scope(try_actions), {'Day': OK})
+    actions['Catch'] = catch('ESG 1-to-1 | 1 Daily scheduler')
+    triggers = {'Recurrence': {'type': 'Recurrence',
+                               'recurrence': {'frequency': 'Day', 'interval': 1, 'startTime': '2026-01-01T07:00:00',
+                                              'timeZone': 'GMT Standard Time', 'schedule': {'hours': [7], 'minutes': [0]}},
+                               'runtimeConfiguration': {'concurrency': {'runs': 1}}}}
+    return definition(triggers, actions)
+
+
+# --------------------------------------------------------------------------------------------- Flow 2
+def flow_submitted():
+    TB = 'triggerBody()'
+    MGRO = "outputs('Mgr')"
+    e3_subject = ("@{if(startsWith(coalesce(" + TB + "?['Q9FollowUp']?['Value'], ''), 'Arrange a dedicated'), '[1-to-1 REQUESTED] ', '')}"
+                  "1-to-1 submitted: @{" + MGRO + "?['Title']}")
+    e3 = ("<p>Submitted @{if(greater(ticks(utcNow()), ticks(" + MGRO + "?['DueDate'])), 'late', 'on time')}. "
+          '<a href="' + link(TB + "?['ID']") + '"><b>Open review</b></a></p>')
+    try_actions = seq(
+        *load_ids(),
+        ('Find_mgr', get_items(MGR, "ReviewItemId eq @{" + TB + "?['ID']}", top=1)),
+        ('Unknown_item', cond("@equals(length(body('Find_mgr')?['value']), 0)", seq(('Not_a_flow_review', terminate('Cancelled'))))),
+        ('Mgr', compose("@first(body('Find_mgr')?['value'])")),
+        ('PrevState', compose('@' + MGRO + "?['ReviewState']?['Value']")),
+        ensure_user('Ensure_user', MGRO + "?['Technician']?['Claims']"),
+        *setperm('', 'reviewsList', TB + "?['ID']", "outputs('Ids')?['read']", "body('Ensure_user')?['Id']"),
+        ('First_submission', cond("@equals(outputs('PrevState'), 'Open')", seq(
+            ('Stamp_submitted', patch_item(MGR, '@' + MGRO + "?['ID']", {
+                'Title': '@' + MGRO + "?['Title']",
+                'ReviewState/Value': 'Submitted',
+                'SubmittedOn': '@utcNow()',
+                'SubmittedLate': "@greater(ticks(utcNow()), ticks(" + MGRO + "?['DueDate']))",
+                'TechFollowUp': "@coalesce(" + TB + "?['Q9FollowUp']?['Value'], '')",
+            })),
+            ('Send_E3', email('@' + TL_EMAIL, e3_subject, e3)),
+        ))),
+        ('Desired', compose("@if(equals(outputs('PrevState'), 'Open'), 'Submitted', outputs('PrevState'))")),
+        ('Status_differs', cond("@not(equals(" + TB + "?['ReviewStatus']?['Value'], outputs('Desired')))", seq(
+            ('Correct_status', patch_item(MR, '@' + TB + "?['ID']",
+                                          {'Title': '@' + MGRO + "?['Title']", 'ReviewStatus/Value': "@outputs('Desired')"})),
+        ))),
+    )
+    actions = {'Try': after(scope(try_actions), {}),
+               'Catch': catch('ESG 1-to-1 | 2 Review submitted',
+                              "@{concat('Submission received but LOCK FAILED – check Monthly Review ', string(triggerBody()?['ID']))}")}
+    triggers = {'When_a_monthly_review_is_created_or_modified': {
+        'type': 'OpenApiConnection',
+        'recurrence': {'frequency': 'Minute', 'interval': 5},
+        'splitOn': "@triggerOutputs()?['body/value']",
+        'conditions': [{'expression': "@not(contains(createArray('Not Started','Draft'), triggerBody()?['ReviewStatus']?['Value']))"}],
+        'runtimeConfiguration': {'concurrency': {'runs': 1}},
+        'inputs': {'host': {'connectionName': 'shared_sharepointonline', 'operationId': 'GetOnUpdatedItems', 'apiId': SP_API},
+                   'parameters': {'dataset': '@' + SITE, 'table': MR},
+                   'authentication': "@parameters('$authentication')"}}}
+    return definition(triggers, actions)
+
+
+# --------------------------------------------------------------------------------------------- Flow 3
+def flow_decision():
+    TB = 'triggerBody()'
+    month = "formatDateTime(concat(" + TB + "?['MonthKey'], '-01'), 'MMMM yyyy')"
+    e4 = ('<p>Your Team Leader has completed your review. <a href="' + link(TB + "?['ReviewItemId']") + '"><b>View feedback</b></a></p>')
+    e5 = ('<p>This review was closed without a submission. <a href="' + link(TB + "?['ReviewItemId']") + '">View</a>. '
+          'Please speak to your Team Leader if this is unexpected.</p>')
+    valid = ("@or(and(equals(outputs('Cmd'), 'Completed'), not(empty(" + TB + "?['SubmittedOn']))), "
+             "and(equals(outputs('Cmd'), 'Closed - Not Submitted'), empty(" + TB + "?['SubmittedOn']), "
+             "less(ticks(" + TB + "?['DueDate']), ticks(utcNow()))))")
+    try_actions = seq(
+        *load_ids(),
+        ('Cmd', compose('@' + TB + "?['ReviewState']?['Value']")),
+        ('Valid', cond(valid, None, seq(
+            ('Revert_state', patch_item(MGR, '@' + TB + "?['ID']", {
+                'Title': '@' + TB + "?['Title']",
+                'ReviewState/Value': "@if(empty(" + TB + "?['SubmittedOn']), 'Open', 'Submitted')"})),
+            ('Email_not_done', email('@' + TL_EMAIL, '1-to-1: not done',
+                                     "<p>You can only complete a submitted review, and only close one that hasn't been submitted "
+                                     "after its deadline. (@{" + TB + "?['Title']})</p>")),
+            ('Stop_invalid', terminate('Cancelled')),
+        ))),
+        ensure_user('Ensure_user', TB + "?['Technician']?['Claims']"),
+        *setperm('_R', 'reviewsList', TB + "?['ReviewItemId']", "outputs('Ids')?['read']", "body('Ensure_user')?['Id']"),
+        *setperm('_M', 'mgrList', TB + "?['ID']", "outputs('Ids')?['read']", "body('Ensure_user')?['Id']"),
+        ('Stamp_released', patch_item(MGR, '@' + TB + "?['ID']", {
+            'Title': '@' + TB + "?['Title']", 'ReleasedOn': '@utcNow()', 'CompletedOn': '@utcNow()',
+            'CompletedBy': '@' + TB + "?['Editor']?['Email']"})),
+        ('Set_review_status', patch_item(MR, '@' + TB + "?['ReviewItemId']",
+                                         {'Title': '@' + TB + "?['Title']", 'ReviewStatus/Value': "@outputs('Cmd')"})),
+        ('Was_completed', cond("@equals(outputs('Cmd'), 'Completed')",
+                               seq(('Send_E4', email('@' + TB + "?['Technician']?['Email']",
+                                                     "Feedback on your 1-to-1 (@{" + month + "}) is ready", e4))),
+                               seq(('Send_E5', email('@' + TB + "?['Technician']?['Email']",
+                                                     "Your 1-to-1 (@{" + month + "}) has been closed", e5))))),
+    )
+    actions = {'Try': after(scope(try_actions), {}), 'Catch': catch('ESG 1-to-1 | 3 Manager decision')}
+    triggers = {'When_a_manager_review_is_created_or_modified': {
+        'type': 'OpenApiConnection',
+        'recurrence': {'frequency': 'Minute', 'interval': 5},
+        'splitOn': "@triggerOutputs()?['body/value']",
+        'conditions': [
+            {'expression': "@contains(createArray('Completed','Closed - Not Submitted'), triggerBody()?['ReviewState']?['Value'])"},
+            {'expression': "@empty(triggerBody()?['ReleasedOn'])"}],
+        'runtimeConfiguration': {'concurrency': {'runs': 1}},
+        'inputs': {'host': {'connectionName': 'shared_sharepointonline', 'operationId': 'GetOnUpdatedItems', 'apiId': SP_API},
+                   'parameters': {'dataset': '@' + SITE, 'table': MGR},
+                   'authentication': "@parameters('$authentication')"}}}
+    return definition(triggers, actions)
+
+
+FLOWS = [
+    {'id': '6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c01', 'name': 'ESG 1-to-1 | 0 Setup (run once)', 'build': flow_setup,
+     'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': True,
+     'description': 'Creates or completes the five lists, columns, indexes, views, permission levels, group and list permissions. Safe to re-run.'},
+    {'id': '6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c02', 'name': 'ESG 1-to-1 | 1 Daily scheduler', 'build': flow_daily,
+     'connectors': ['shared_sharepointonline', 'shared_office365', 'shared_office365users'], 'on': False,
+     'description': 'Daily 07:00 UK: creates each month\'s reviews, makes them private, emails links and reminders.'},
+    {'id': '6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c03', 'name': 'ESG 1-to-1 | 2 Review submitted', 'build': flow_submitted,
+     'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': False,
+     'description': 'Locks a submitted review, stamps the Manager Review and emails the Team Leader.'},
+    {'id': '6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c04', 'name': 'ESG 1-to-1 | 3 Manager decision', 'build': flow_decision,
+     'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': False,
+     'description': 'On Complete / Close: validates, locks the review, releases the feedback and emails the technician.'},
+]
+
+
+def build_all():
+    return [dict(f, json=flow_json(f['build'](), f['connectors'])) for f in FLOWS]
+
+
+if __name__ == '__main__':
+    for f in build_all():
+        print(f['name'], len(json.dumps(f['json'])))

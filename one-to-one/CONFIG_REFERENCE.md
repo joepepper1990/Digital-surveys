@@ -4,7 +4,16 @@ This is the operating manual for the live system. Keep the **filled-in copy** (w
 
 ## 1. Config sheet
 
-Fill this in once, during the build. These values are used only inside the Power Automate flows.
+With the imported solution ([`04-solution/IMPORT_GUIDE.md`](04-solution/IMPORT_GUIDE.md)), only **two values** are needed:
+
+| Environment variable | Value |
+|---|---|
+| **ESG 1-to-1 Site URL** | `https://<tenant>.sharepoint.com/sites/<site>` (no trailing slash) |
+| **ESG 1-to-1 Team Leader email** | the TL mailbox |
+
+You enter both during import. To change them later: **Solutions → Default solution → Environment variables → Current value**.
+
+The group, role and list IDs are looked up by the flows at run time. You need the table below only if you **build the flows by hand** from the build sheets:
 
 | Value | Where it comes from | Used in |
 |---|---|---|
@@ -32,6 +41,8 @@ Renaming any of these silently breaks the app or the flows.
 | Group | `1-to-1 Technicians` |
 | Page | `SitePages/OneToOne.aspx` (links in old emails point at it) |
 | Layout | `ESG 1-to-1` (the `data-name` in `one-to-one.html`) |
+| List URLs | `Lists/Technicians`, `Lists/AppraisalExpectations`, `Lists/MonthlyReviews`, `Lists/ManagerReviews`, `Lists/OneToOneSettings` (the flows find two of them by URL) |
+| Solution | `ESGOneToOne`, flow names `ESG 1-to-1 \| 0…3`, environment variables `esg_SiteUrl` and `esg_ManagerEmail` |
 
 If a list title ever has to change, edit `CONFIG.lists` at the top of `one-to-one.js` and the list chosen in each flow action.
 
@@ -61,7 +72,7 @@ If a list title ever has to change, edit `CONFIG.lists` at the top of `one-to-on
 | **Annual expectation rollover** | Before the new appraisal year starts, add the new year's expectations on the **Expectations** page (or grid view). On the last day of the old year, **Retire** the old ones (Active = No). **Never delete them.** New reviews pick up the new set, and old reviews keep their snapshot. |
 | **Annual retention (April)** | Delete reviews whose month is **more than 24 months** ago, from **both** Monthly Reviews and Manager Reviews (filter by MonthKey). Record the deletion in a dated note, then empty the site recycle bin **and** the second-stage recycle bin. Skip this step if a Purview retention label does it automatically. |
 | **Subject access request** | Export Monthly Reviews and Manager Reviews filtered by the technician (**Export → CSV**). The technician can also use **Appraisal report → Print / Save as PDF** for their own view. |
-| **TL handover** | 1. Make the new TL a site owner **and Site Collection Admin**, and remove the old TL. 2. Re-own the three flows, or rebuild their connections under the new TL. Update `varManagerEmail` in each flow. 3. No frontend change is needed. |
+| **TL handover** | 1. Make the new TL a site owner **and Site Collection Admin**, and remove the old TL. 2. Give the new TL the solution's flows: add them as **co-owner**, then switch the three connection references to the new TL's connections (**Solutions → ESG 1-to-1 → Connection references**). 3. Update the **ESG 1-to-1 Team Leader email** environment variable. 4. No frontend change is needed. |
 
 ## 5. Updating the frontend
 
@@ -86,6 +97,8 @@ Record every change in the change log below.
 | Dates show a day out | Site regional settings not on London time | Part 1, step 4 |
 | Print / Save as PDF does nothing | Browser blocked the pop-up | Allow pop-ups for the SharePoint site |
 | Flow failure emails | See the run link in the email | Fix, then re-run. Flow 1 is safe to re-run. |
+| *"action needed"* naming `STOP_run_the_setup_flow_first` | Setup hasn't run, or a list or permission level was renamed | Run **ESG 1-to-1 \| 0 Setup** (safe to re-run) |
+| A list, column or view went missing | Deleted or renamed by hand | Re-run **ESG 1-to-1 \| 0 Setup**. It re-adds anything missing; renamed columns must be renamed back. |
 
 ## 7. Frontend change log
 

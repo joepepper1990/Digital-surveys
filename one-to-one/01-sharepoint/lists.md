@@ -1,5 +1,7 @@
 # ESG 1-to-1 — list build checklist (v4)
 
+> **You don't have to build these by hand.** The setup flow in the solution creates all of this exactly. See [`../04-solution/IMPORT_GUIDE.md`](../04-solution/IMPORT_GUIDE.md). This page is the specification, and a checklist for verifying the result or building by hand. The automated simulation checks the setup flow against [`lists.csv`](lists.csv).
+
 Build these **five lists** on the private 1-to-1 site. The frontend (`one-to-one.js`) and the three flows use the **internal column names** exactly as written here, so type them exactly, with no spaces. A machine-readable copy is in [`lists.csv`](lists.csv).
 
 **v4 changes from v3.2 (marked 🆕):** `AppraisalDate` on Technicians and Monthly Reviews; `Mood` and `WinOfMonth` on Monthly Reviews; `ActionsJson` and `NextActionDue` replace `AgreedActions` and `ActionsDueBy` on Manager Reviews; and a fifth list, **1-to-1 Settings**.

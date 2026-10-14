@@ -4,6 +4,8 @@ This runbook takes you from where you are now to technicians receiving their fir
 
 **Where to find the detail:**
 
+- **Import and setup: [`04-solution/IMPORT_GUIDE.md`](04-solution/IMPORT_GUIDE.md)**
+
 - Lists: [`01-sharepoint/lists.md`](01-sharepoint/lists.md)
 - Flows: [`03-flows/FLOW_BUILD_SHEETS.md`](03-flows/FLOW_BUILD_SHEETS.md)
 - Emails: [`03-flows/EMAIL_TEMPLATES.md`](03-flows/EMAIL_TEMPLATES.md)
@@ -47,6 +49,7 @@ Stage 0A and 0B passed in the live tenant. Two findings are built into the setup
 
 | File | What it is |
 |---|---|
+| `04-solution/ESGOneToOne_1_0_0_0_unmanaged.zip` | **The four flows as one importable solution**, including the setup flow that creates the lists |
 | `02-frontend/one-to-one.html`, `one-to-one.js` | The app, v4.0.0. **Nothing to edit.** |
 | `01-sharepoint/lists.md`, `lists.csv` | Column-by-column list checklist |
 | `03-flows/FLOW_BUILD_SHEETS.md` | Flows 1–3, step by step |
@@ -56,29 +59,30 @@ Stage 0A and 0B passed in the live tenant. Two findings are built into the setup
 
 ---
 
-## Phase 4 — Build the five production lists 🧑 ⏱ about 2 h
+## Phase 4 — Import the solution and run setup 🧑 ⏱ about 30 min
 
-Follow [`01-sharepoint/lists.md`](01-sharepoint/lists.md) column by column. Create each list **without spaces**, then rename it.
+Follow [`04-solution/IMPORT_GUIDE.md`](04-solution/IMPORT_GUIDE.md) §1–§4.
 
-- [ ] **Technicians.** Includes 🆕 `AppraisalDate`.
-- [ ] **Appraisal Expectations.**
-- [ ] **Monthly Reviews.** Includes 🆕 `Mood`, `WinOfMonth`, `AppraisalDate`.
-- [ ] **Manager Reviews.** Includes 🆕 `ActionsJson` and `NextActionDue`. **Not** `AgreedActions` or `ActionsDueBy`. Enforce unique values on `ReviewKey`.
-- [ ] 🆕 **1-to-1 Settings.** Title + Value, with one `Bands` item.
-- [ ] Every list: versioning on, attachments off, search off, inheritance stopped, Members and Visitors removed.
-- [ ] Indexes and views as listed.
-- [ ] **1-to-1 Settings only:** grant `1-to-1 Technicians` **Read**.
+- [ ] **Solutions → Import solution** → `04-solution/ESGOneToOne_1_0_0_0_unmanaged.zip`.
+  - Pick your three connections.
+  - Enter the **Site URL** (no trailing slash) and **your email**.
+- [ ] Run **ESG 1-to-1 | 0 Setup (run once)**. It creates the five lists exactly as [`01-sharepoint/lists.md`](01-sharepoint/lists.md) describes, the two permission levels, the `1-to-1 Technicians` group (if missing), list permissions and the `Bands` setting.
+- [ ] Read the summary email.
+  - *"complete"*: carry on.
+  - *"complete with items to check"*: fix the listed items, then re-run setup. It's safe to re-run.
 
-**⛔ Gate:**
+> **No Dataverse in your environment?** Use the offline [`04-solution/legacy-package-builder.html`](04-solution/legacy-package-builder.html) instead (IMPORT_GUIDE §6).
+>
+> **Prefer to build by hand?** [`01-sharepoint/lists.md`](01-sharepoint/lists.md) and [`03-flows/FLOW_BUILD_SHEETS.md`](03-flows/FLOW_BUILD_SHEETS.md) describe exactly the same result.
 
-- The four data lists show **only Owners**.
-- 1-to-1 Settings shows Owners plus `1-to-1 Technicians` – Read.
+**⛔ Gate:** check the permissions on each list.
 
-## Phase 5 — Record the IDs 🧑 ⏱ 10 min
+- The four data lists show **only Owners – Full Control**.
+- **1-to-1 Settings** shows Owners plus `1-to-1 Technicians` – Read.
 
-Fill in the Config sheet ([`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) §1): TL email, Owners group ID, the Full Control / 1-to-1 Edit / 1-to-1 Read role IDs, and the page link.
+## Phase 5 — (no longer needed) Record the IDs ✅
 
-Keep the filled-in sheet in the site or your OneDrive, **not in GitHub**.
+The flows look up the group and permission-level IDs themselves. Nothing to copy.
 
 ## Phase 6 — Install the frontend 🧑 ⏱ 30 min
 
@@ -86,22 +90,18 @@ Follow [`02-frontend/README.md`](02-frontend/README.md) §Install.
 
 - [ ] Upload `one-to-one.html` and `one-to-one.js` to **Welcome Web Part - Custom Layouts**.
 - [ ] On `OneToOne`:
-  - put the Welcome web part in a **full-width section**;
+  - put the web part in a **full-width section**;
   - set the layout to **ESG 1-to-1**;
   - turn the extras off;
   - **Republish**.
 - [ ] Make `OneToOne` the home page.
-- [ ] The group has Read on the page, the layouts library, the Welcome Errors list and 1-to-1 Settings.
-- [ ] As TL: **Team overview** opens, the sidebar shows **⚙ Settings**, and the footer shows **v4.0.0**. With no reviews yet, the pages are empty but there are no errors.
+- [ ] The group has Read on the page, the layouts library and the Welcome Errors list. Setup already granted it on 1-to-1 Settings.
+- [ ] As TL: **Team overview** opens, the sidebar shows **⚙ Settings**, and the footer shows **v4.0.0**.
 
-## Phase 7 — Build the three flows 🧑 ⏱ 4–5 h
+## Phase 7 — Turn on flows 1, 2 and 3 🧑 ⏱ 2 min
 
-Follow [`03-flows/FLOW_BUILD_SHEETS.md`](03-flows/FLOW_BUILD_SHEETS.md), with emails from [`EMAIL_TEMPLATES.md`](03-flows/EMAIL_TEMPLATES.md).
-
-- [ ] **Flow 1 — Daily scheduler.** Creates reviews, makes them private, sends E1, sends reminders on the 20th and 27th, and reports problems with E7.
-- [ ] **Flow 2 — Review submitted.** Locks the review, stamps the record, sends E3.
-- [ ] **Flow 3 — Manager decision.** Validates, locks, **releases**, sends E4 or E5.
-- [ ] Secure inputs/outputs, concurrency 1, and Try/Catch on every flow. `varTestDate` is empty.
+- [ ] **Solutions → ESG 1-to-1** → turn on **1 Daily scheduler**, **2 Review submitted** and **3 Manager decision** (IMPORT_GUIDE §5).
+- [ ] Secure inputs/outputs, sequential runs and Try/Catch are already set in the imported flows.
 
 ## Phase 8 — Add technicians and appraisal dates 🧑 ⏱ 30 min
 
@@ -191,10 +191,10 @@ Then clean down:
 | 1 Stage 0 | you | ✅ passed (tidy-up left) |
 | 2 decisions | you | ✅ settled |
 | 3 build files | Claude | ✅ produced |
-| 4 lists | you | **next** |
-| 5 IDs | you | after 4 |
+| 4 import solution + run setup | you | **next** |
+| 5 IDs | – | ✅ not needed |
 | 6 frontend | you | after 4 |
-| 7 flows | you | after 5 |
+| 7 turn flows on | you | after 4 |
 | 8 technicians (test first) | you | after 6 |
 | 9 expectations | you | after 4 |
 | 10 rehearsal | you | after 7–9 |
@@ -205,7 +205,7 @@ Then clean down:
 
 | Phases | Time |
 |---|---|
-| 4–7 | about 7–8 h |
+| 4–7 | about 1–1.5 h |
 | 8–9 | about 1–2 h |
 | 10 | about 6–8 h (testing) |
 | 11 | minutes |

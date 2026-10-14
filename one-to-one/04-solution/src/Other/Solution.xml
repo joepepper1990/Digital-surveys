@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ImportExportXml version="9.2.25093.138" SolutionPackageVersion="9.2" languagecode="1033" generatedBy="CrmLive" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" OrganizationVersion="9.2.25093.138" OrganizationSchemaType="Full" CRMServerServiceabilityVersion="9.2.25095.00139">
+  <SolutionManifest>
+    <UniqueName>ESGOneToOne</UniqueName>
+    <LocalizedNames>
+      <LocalizedName description="ESG 1-to-1" languagecode="1033" />
+    </LocalizedNames>
+    <Descriptions>
+      <Description description="ESG Monthly Technician 1-to-1: setup flow, daily scheduler, submission and manager-decision flows." languagecode="1033" />
+    </Descriptions>
+    <Version>1.0.0.0</Version>
+    <Managed>0</Managed>
+    <Publisher>
+      <UniqueName>ESGOneToOne</UniqueName>
+      <LocalizedNames>
+        <LocalizedName description="ESG 1-to-1" languagecode="1033" />
+      </LocalizedNames>
+      <Descriptions />
+      <EMailAddress xsi:nil="true"></EMailAddress>
+      <SupportingWebsiteUrl xsi:nil="true"></SupportingWebsiteUrl>
+      <CustomizationPrefix>esg</CustomizationPrefix>
+      <CustomizationOptionValuePrefix>41236</CustomizationOptionValuePrefix>
+      <Addresses>
+        <Address>
+          <AddressNumber>1</AddressNumber>
+          <AddressTypeCode>1</AddressTypeCode>
+          <ShippingMethodCode>1</ShippingMethodCode>
+        </Address>
+        <Address>
+          <AddressNumber>2</AddressNumber>
+          <AddressTypeCode>1</AddressTypeCode>
+          <ShippingMethodCode>1</ShippingMethodCode>
+        </Address>
+      </Addresses>
+    </Publisher>
+    <RootComponents>
+      <RootComponent type="29" id="{6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c01}" behavior="0" />
+      <RootComponent type="29" id="{6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c02}" behavior="0" />
+      <RootComponent type="29" id="{6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c03}" behavior="0" />
+      <RootComponent type="29" id="{6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c04}" behavior="0" />
+    </RootComponents>
+    <MissingDependencies />
+  </SolutionManifest>
+</ImportExportXml>

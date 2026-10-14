@@ -20,17 +20,18 @@
   |---|---|
   | [`02-frontend/`](02-frontend/README.md) | Production frontend v4.0.0, local mock, 70 automated checks (all passing) |
   | [`01-sharepoint/lists.md`](01-sharepoint/lists.md) | Five-list build checklist |
-  | [`03-flows/`](03-flows/FLOW_BUILD_SHEETS.md) | Flow build sheets and email templates |
+  | [`04-solution/`](04-solution/IMPORT_GUIDE.md) | **Importable solution**: setup flow (creates the lists exactly) + Flows 1–3; offline legacy builder; validated and simulated end to end |
+  | [`03-flows/`](03-flows/FLOW_BUILD_SHEETS.md) | Flow build sheets and email templates (reference / manual build) |
   | [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) | Operating manual |
 
 ## What you do next
 
 Follow [`GO_LIVE_RUNBOOK.md`](GO_LIVE_RUNBOOK.md) from **Phase 4**:
 
-1. **Build the five lists.** Include the new columns, and the **1-to-1 Settings** list with group Read.
-2. **Record the IDs** in your private Config sheet.
+1. **Import the solution** [`04-solution/ESGOneToOne_1_0_0_0_unmanaged.zip`](04-solution/IMPORT_GUIDE.md): pick your connections, enter the site URL and your email.
+2. **Run *ESG 1-to-1 | 0 Setup*.** It creates the five lists, permission levels, group and list permissions, then emails you a summary.
 3. **Install the frontend.** Upload two files, choose the *ESG 1-to-1* layout in a full-width section. There's nothing to edit.
-4. **Build Flows 1–3** from the build sheets.
+4. **Turn on Flows 1–3.**
 5. **Add Test A and Test B**, set their appraisal dates in ⚙ Settings, and add expectations.
 6. **Rehearse** and run every test in plan section H (F1–F30, P1–P20).
 7. **Clean down and go live.**
@@ -41,6 +42,8 @@ The local mock can't prove these. Check them in your first session after install
 
 | Check | How | If it fails |
 |---|---|---|
+| Solution import | IMPORT_GUIDE §2 | Copy the error from **Solutions → History**; if *Solutions* needs Dataverse, use the legacy builder (§6) |
+| Setup flow | IMPORT_GUIDE §3: the summary email says *complete* | Fix the listed items and re-run; for a red failed step, send its error text |
 | Expectation create (TL) | Expectations → add one | Send the console error. `AddValidateUpdateItemUsingPath` may need a different folder path. |
 | Yes/No and Person writes | Edit an expectation's *Active* and *Applies to: individual* | Send the error text |
 | Full-width section | The sidebar and content fill the page width | Change the section layout to full width |

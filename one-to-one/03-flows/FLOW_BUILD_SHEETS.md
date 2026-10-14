@@ -1,5 +1,11 @@
 # ESG 1-to-1 — Power Automate build sheets (v4)
 
+> **Import instead of building.** These flows (plus a setup flow that creates the lists) are packaged as a ready-made solution: [`../04-solution/IMPORT_GUIDE.md`](../04-solution/IMPORT_GUIDE.md). The imported flows follow these sheets step for step, with two differences:
+> - **IDs are looked up at run time.** The Owners group, Full Control, `1-to-1 Edit`, `1-to-1 Read` and the two list GUIDs are found by name in a `Get_owners_group` / `Get_role_definitions` / `Get_lists` → `Ids` step, so the `var…Id` variables below aren't needed.
+> - **The site and the TL email are environment variables.**
+>
+> Use these sheets to understand the flows, or to build them by hand if you can't import.
+
 Three flows, standard connectors only (SharePoint, Office 365 Outlook, Office 365 Users). Build them **in the TL's own account**. They run as the TL, which is how they can set item permissions.
 
 | Flow | Trigger | Job |

@@ -1,13 +1,14 @@
 # ESG Monthly Technician 1-to-1 — Implementation Plan (v4)
 
-**Status:** v4.0, dated 14-Oct-2026. **Current position and next actions:** [`NEXT_STEPS.md`](NEXT_STEPS.md).
+**Status:** v4.1, dated 14-Oct-2026. **Current position and next actions:** [`NEXT_STEPS.md`](NEXT_STEPS.md).
 
 - **Stages 0A and 0B have passed in the live tenant.** Welcome runs the external script, authenticated REST works, and the item-level security model holds.
 - The visual design was agreed through prototype v7 ([`prototype/prototype.html`](prototype/prototype.html)).
 - **The production build files are produced:**
   - the frontend [`02-frontend/`](02-frontend/README.md), with a local mock and 70 automated checks;
   - the list checklist [`01-sharepoint/lists.md`](01-sharepoint/lists.md);
-  - the flow build sheets and email templates [`03-flows/`](03-flows/FLOW_BUILD_SHEETS.md);
+  - **the importable Power Platform solution** [`04-solution/`](04-solution/IMPORT_GUIDE.md): the three flows plus a setup flow that creates the five lists, permission levels, group and list permissions exactly (v4.1);
+  - the flow build sheets and email templates [`03-flows/`](03-flows/FLOW_BUILD_SHEETS.md), for reference or building by hand;
   - the operating manual [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md).
 - **What remains is the tenant build and go-live** ([`GO_LIVE_RUNBOOK.md`](GO_LIVE_RUNBOOK.md)).
 - Earlier history: v1 → v2 in [`PLAN_REVIEW.md`](PLAN_REVIEW.md); v2 → v3 under *Changes in v3*.
@@ -42,6 +43,7 @@ The system has **five lists** (four data lists plus a small settings list), thre
 | Removed | — | Private notes, ask-for-a-chat, workload trend, the occupational-health text (`eapText`), example text in boxes, and the "how it's worked out" panel for technicians |
 | Flows | — | Flow 1 copies `AppraisalDate` and initialises the two JSON columns. Email dates use `dd-MMM-yyyy`. E3's request tag uses `startsWith`. Flows 2 and 3 are unchanged. |
 | Security model | — | **Unchanged.** No new trust boundary: new technician fields are on the technician's own item; new TL data is on Manager Reviews (released by Flow 3); the Settings list holds no personal data. |
+| Delivery (v4.1) | Lists and flows built by hand from G Parts 3–8 | **Import one solution** ([`04-solution/ESGOneToOne_1_0_0_0_unmanaged.zip`](04-solution/IMPORT_GUIDE.md)), then run **ESG 1-to-1 \| 0 Setup**, which builds everything in C, D.2 and D.3. The flows look up group, role and list IDs at run time, so G Part 4 is no longer needed. The site URL and TL email are environment variables. For environments without Dataverse there is an offline legacy-package builder. Verified locally: a static validator, 17 mutation tests and 101 end-to-end simulations against a fake SharePoint. |
 
 
 ## Changes in v3
@@ -1066,6 +1068,8 @@ The filled-in Config sheet stays in the site or your OneDrive, never in the repo
 
 ### Part 3 — Create the five lists ⏱ about 2 h
 
+> **v4.1: done for you.** Import the solution and run the setup flow ([`04-solution/IMPORT_GUIDE.md`](04-solution/IMPORT_GUIDE.md)), which also covers Part 2. The steps below remain the manual alternative.
+
 **Use the tick-list [`01-sharepoint/lists.md`](01-sharepoint/lists.md).** The steps below are the general method.
 
 **For each list:**
@@ -1109,6 +1113,8 @@ Lists and checks:
 
 ### Part 4 — Record the four IDs ⏱ 10 min
 
+> **v4.1: not needed** with the imported flows. They look up the IDs themselves.
+
 Paste each address into your browser while signed in as the TL. The page shows XML. Use **Ctrl+F** to find the values.
 
 1. [ ] `<Site URL>/_api/web/associatedownergroup`. Find `<d:Id>` and copy the number to **Owners group ID**.
@@ -1128,6 +1134,8 @@ Paste each address into your browser while signed in as the TL. The page shows X
 - **If 0A fails, stop.** Use a fallback from E.0. The site and group are kept either way.
 
 ### Part 6 — Build Flow 1 ⏱ 2–3 h
+
+> **v4.1: imported** as *ESG 1-to-1 \| 1 Daily scheduler*. Turn it on after setup. The steps below remain the manual alternative.
 
 **Tips for the Power Automate designer**
 
@@ -1178,6 +1186,8 @@ You don't build any screens, and **there is nothing to edit in the files**. Full
 **Updating the frontend later:** upload the corrected file over the old one. The library keeps versions, so **… → Version history → Restore** rolls back a bad update. Record every change in [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) §7.
 
 ### Part 8 — Build Flows 2 and 3 ⏱ 2 h
+
+> **v4.1: imported** as *ESG 1-to-1 \| 2 Review submitted* and *3 Manager decision*. Turn them on after setup.
 
 1. [ ] Go to **+ Create**, then **Automated cloud flow**. Name: `1-to-1 | Review submitted`. Trigger: **SharePoint – When an item is created or modified**. Choose your site and **Monthly Reviews**.
    1. In the trigger's **Settings**, add the **Trigger condition** from F.2 and set **Concurrency control** to 1.
@@ -1416,6 +1426,7 @@ All of these are text, contain **no tenant names, credentials or personal data**
 | K3 | [`02-frontend/one-to-one.html`](02-frontend/one-to-one.html) | **Produced (v4.0.0)** |
 | K4 | [`02-frontend/one-to-one.js`](02-frontend/one-to-one.js) | **Produced (v4.0.0)** |
 | K5 | [`03-flows/FLOW_BUILD_SHEETS.md`](03-flows/FLOW_BUILD_SHEETS.md) | **Produced (v4)**: Flows 1–3, SETPERM, Ensure_user, Try/Catch |
+| K5a | [`04-solution/ESGOneToOne_1_0_0_0_unmanaged.zip`](04-solution/IMPORT_GUIDE.md) | **Produced (v4.1)**: importable solution with setup flow + Flows 1–3, connection references, environment variables; legacy-package builder; source, validator and simulation in [`04-solution/tools/`](04-solution/README.md) |
 | K6 | [`03-flows/EMAIL_TEMPLATES.md`](03-flows/EMAIL_TEMPLATES.md) | **Produced (v4)**: E1–E5, E7 |
 | K7 | Test record | Use section H directly (F1–F30, P1–P20); add Pass/Fail, date, tester and screenshot columns |
 | K8 | Privacy notice | **Not needed.** The TL decided it's handled between the TL and each technician. |
@@ -1435,8 +1446,8 @@ All of these are text, contain **no tenant names, credentials or personal data**
    - A desktop frontend with a sidebar menu, in the **Welcome by Accelerator 365** web part on `OneToOne.aspx`.
 2. **Status:** Stage 0A and 0B passed. All build files are produced and tested locally.
 3. **Next (the TL, in the tenant), following [`GO_LIVE_RUNBOOK.md`](GO_LIVE_RUNBOOK.md):**
-   1. Build or update the five lists.
-   2. Build Flows 1–3.
+   1. Import the solution and run the setup flow (creates the five lists).
+   2. Turn on Flows 1–3.
    3. Install the frontend.
    4. Set appraisal dates.
    5. Load expectations.

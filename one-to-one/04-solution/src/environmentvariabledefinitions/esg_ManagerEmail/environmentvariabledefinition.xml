@@ -1,0 +1,13 @@
+<environmentvariabledefinition schemaname="esg_ManagerEmail">
+  <description default="The Team Leader's email address. Receives submissions and problem reports.">
+    <label description="The Team Leader's email address. Receives submissions and problem reports." languagecode="1033" />
+  </description>
+  <displayname default="ESG 1-to-1 Team Leader email">
+    <label description="ESG 1-to-1 Team Leader email" languagecode="1033" />
+  </displayname>
+  <introducedversion>1.0.0.0</introducedversion>
+  <iscustomizable>1</iscustomizable>
+  <isrequired>1</isrequired>
+  <secretstore>0</secretstore>
+  <type>100000000</type>
+</environmentvariabledefinition>
