@@ -2,6 +2,8 @@
 
 This runbook takes you from where you are now to technicians receiving their first monthly email. Work through the phases in order and tick as you go.
 
+**Step-by-step tick-list from where you are now: [`TENANT_WALKTHROUGH.md`](TENANT_WALKTHROUGH.md).**
+
 **Where to find the detail:**
 
 - **Import and setup: [`04-solution/IMPORT_GUIDE.md`](04-solution/IMPORT_GUIDE.md)**

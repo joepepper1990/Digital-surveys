@@ -26,6 +26,8 @@
 
 ## What you do next
 
+**Start here: [`TENANT_WALKTHROUGH.md`](TENANT_WALKTHROUGH.md)** is the complete tick-list from Stage 0B to live: import, see the frontend yourself, test accounts, security tests, clean-down, inviting and go-live. The summary below is the same route in brief.
+
 Follow [`GO_LIVE_RUNBOOK.md`](GO_LIVE_RUNBOOK.md) from **Phase 4**:
 
 1. **Import the solution** [`04-solution/ESGOneToOne_1_0_0_0_unmanaged.zip`](04-solution/IMPORT_GUIDE.md): pick your connections, enter the site URL and your email.
