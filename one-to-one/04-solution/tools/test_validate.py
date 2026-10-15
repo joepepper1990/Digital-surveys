@@ -163,6 +163,18 @@ def new_list_by_connector(fl):
     a['inputs']['parameters'] = {'dataset': a['inputs']['parameters']['dataset'], 'table': 'Wellbeing Assessments'}
 
 
+@mutation
+def unsecured_record_compose(fl):
+    _, a = find(fl[2]['json']['properties']['definition'], 'Mgr')
+    del a['runtimeConfiguration']
+
+
+@mutation
+def new_list_by_url(fl):
+    _, a = find(fl[1]['json']['properties']['definition'], 'Get_technicians')
+    a['inputs']['parameters'] = {'dataset': a['inputs']['parameters']['dataset'], 'table': 'Lists/WellbeingAssessments'}
+
+
 if __name__ == '__main__':
     base = build_all()
     assert validate.validate_all(base) == [], 'baseline must be clean'
@@ -171,7 +183,7 @@ if __name__ == '__main__':
         fl = copy.deepcopy(base)
         m(fl)
         probs = validate.validate_all(fl)
-        ok = bool(probs) and (m.__name__ != 'new_list_by_connector' or any('read it by REST' in p for p in probs))
+        ok = bool(probs) and (m.__name__ not in ('new_list_by_connector', 'new_list_by_url') or any('read it by REST' in p for p in probs))
         failed += not ok
         print(('PASS ' if ok else 'FAIL ') + m.__name__ + ('  → ' + probs[0] if probs else ''))
     print('\n{0} / {1} mutations caught'.format(len(MUTATIONS) - failed, len(MUTATIONS)))

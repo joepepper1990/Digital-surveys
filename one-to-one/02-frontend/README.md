@@ -1,4 +1,4 @@
-# ESG 1-to-1 — frontend (v4.2.1)
+# ESG 1-to-1 — frontend (v4.2.2)
 
 | File | What it is |
 |---|---|
@@ -47,10 +47,10 @@ Steps:
 
 | # | As | Do | Expect |
 |---|---|---|---|
-| 1 | TL | Open the site | **Team overview**. The top menu bar has Team overview, Monthly reviews, Expectations, Actions, **Team ▾** (the team list) and **⚙ Settings**, and shows **v4.2.1** at its right-hand end. |
+| 1 | TL | Open the site | **Team overview**. The top menu bar has Team overview, Monthly reviews, Expectations, Actions, Wellbeing, **Team ▾** (the team list) and **⚙ Settings**, and shows **v4.2.2** at its right-hand end. |
 | 2 | TL | ⚙ Settings → set an appraisal date (e.g. `15-Jul-2027`) → Save → reopen | Same date shown, and the Technicians list shows 15/07/2027 |
 | 3 | TL | Expectations → add a Shared one, then an Individual one, then retire one | Items appear in the list. Retired = Active **No**. |
-| 4 | Test A | Open the E1 link | Their review. The menu bar has only *This month · My appraisal · Appraisal report*. |
+| 4 | Test A | Open the E1 link | Their review. The menu bar has only *This month · My appraisal · Appraisal report · Wellbeing*. |
 | 5 | Test A | Change `?reviewId=` to Test B's ID | "Review not found" |
 | 6 | Test A | Save, reload | Answers kept |
 | 7 | TL | Open Test A's review → add 2 actions → Save | Manager Reviews: `ActionsJson` has 2 rows, `ActionsStatus` = Open, `NextActionDue` set |
@@ -65,7 +65,7 @@ You need Node.js. For the automated tests you also need Playwright with Chromium
 ```bash
 cd one-to-one/02-frontend
 node tools/build-mock.js          # regenerates mock/index.html from one-to-one.html
-node test/run-tests.js            # 156 checks; exits non-zero on any failure
+node test/run-tests.js            # 167 checks; exits non-zero on any failure
 ```
 
 - **Paths:** the test runner looks for Playwright at `/opt/node-tools/node_modules/playwright` and Chromium at `/opt/pw-browsers/…`. Set `PLAYWRIGHT_MODULE` and `CHROMIUM_PATH` to point elsewhere.
@@ -110,12 +110,13 @@ The mock emulates permissions (plan D.4) and the effects of Flows 2 and 3, but i
 | Request digest | `/_api/contextinfo` |
 | Reads | `/_api/web/lists/getbytitle('<list>')/items` |
 | Updates | `…/items(<id>)/validateUpdateListItem` |
-| Creates | `…/AddValidateUpdateItemUsingPath` (TL only, expectations and settings) |
+| Creates | `…/AddValidateUpdateItemUsingPath` (TL only: expectations, settings, team members in the Technicians list, wellbeing assessments) |
+| People search (TL only, ⚙ Settings → Team) | `/_api/SP.UI.ApplicationPages.ClientPeoplePickerWebServiceInterface.clientPeoplePickerSearchUser` – read-only search; adding someone only creates a Technicians item, and Flow 4 grants access |
 | Folder path for creates | `…/RootFolder` |
 
 **What the code never does:**
 
-- call a permission, sharing, user-resolution or delete endpoint;
+- call a permission, sharing, `ensureuser` or delete endpoint (access is only ever changed by the flows);
 - load any external resource;
 - insert data as HTML.
 

@@ -2,7 +2,7 @@
 
 **From the end of Stage 0B to a live system, then running it month to month.** This document is self-contained: you don't need any other file to follow it. Tick each box as you go.
 
-Version: system v4.2.1 (frontend) · solution 1.1.1.0 · guide dated 15-Oct-2026
+Version: system v4.2.2 (frontend) · solution 1.1.2.0 · guide dated 15-Oct-2026
 
 ---
 
@@ -15,9 +15,9 @@ Version: system v4.2.1 (frontend) · solution 1.1.1.0 · guide dated 15-Oct-2026
   - the `1-to-1 Technicians` group exists;
   - the `1-to-1 Edit` and `1-to-1 Read` permission levels exist.
 - **Everything to install is built and verified offline:**
-  - frontend: 156 automated checks;
-  - flows: simulated end to end, 110 checks;
-  - an independent review fixed 17 defects.
+  - frontend: 167 automated checks;
+  - flows: simulated end to end, 149 checks, and 23 deliberately broken copies all caught by the validator;
+  - two independent reviews fixed 29 defects (see VERIFICATION.md).
 
 **Not yet proven:** nothing has run in your tenant yet.
 
@@ -42,7 +42,7 @@ Version: system v4.2.1 (frontend) · solution 1.1.1.0 · guide dated 15-Oct-2026
 
 | File | Goes to |
 |---|---|
-| `ESGOneToOne_1_1_1_0_unmanaged.zip` | Power Automate → **Solutions → Import solution**. Contains the six flows; the setup flow creates the lists. |
+| `ESGOneToOne_1_1_2_0_unmanaged.zip` | Power Automate → **Solutions → Import solution**. Contains the six flows; the setup flow creates the lists. |
 | `one-to-one.html` | SharePoint → *Welcome Web Part - Custom Layouts* library |
 | `one-to-one.js` | Same library, alongside the `.html` |
 
@@ -56,7 +56,7 @@ Version: system v4.2.1 (frontend) · solution 1.1.1.0 · guide dated 15-Oct-2026
 ## 3. Phase 0 — Get and check the files (5 min)
 
 - [ ] **Right zip.** Open the zip, then open `solution.xml` in Notepad. It must contain `<RootComponent type="380" schemaName="esg_SiteUrl"`. If it doesn't, you have an older download: get the latest one.
-- [ ] **Right frontend.** You have `one-to-one.html` and `one-to-one.js` (v4.2.1). After installing, the top menu bar must show **v4.2.1** (right-hand end).
+- [ ] **Right frontend.** You have `one-to-one.html` and `one-to-one.js` (v4.2.2). After installing, the top menu bar must show **v4.2.2** (right-hand end).
 - [ ] **Unchanged files.** Transfer them the usual approved way. Don't open and re-save them in Word.
 
 ---
@@ -74,11 +74,13 @@ Version: system v4.2.1 (frontend) · solution 1.1.1.0 · guide dated 15-Oct-2026
 
 ### 4.2 Import the solution (10 min)
 
+> **Already imported an earlier version?** Import this zip over it the same way: it says it will **upgrade**; leave *"Enable Plugin steps and flows"* unticked and keep your connections and values. Coming from **1.0**, run **0 Setup** again afterwards (4.3: it adds the Wellbeing list and Reminders setting). Then check every flow is On (4.7), upload the new frontend files with **Replace** and **Reset layout cache** (4.5).
+
 1. [ ] Go to **make.powerautomate.com**, signed in as yourself.
 2. [ ] Top right: pick the environment IT named for the flows.
 3. [ ] Left menu: **Solutions**.
    - If it asks to create a **Dataverse database**, or *Solutions* is missing, use §4.8 instead.
-4. [ ] **Import solution → Browse →** `ESGOneToOne_1_1_1_0_unmanaged.zip` → **Next → Next**.
+4. [ ] **Import solution → Browse →** `ESGOneToOne_1_1_2_0_unmanaged.zip` → **Next → Next**.
 5. [ ] **Connections.** For each of the three, pick yours or click **+ New connection**, signed in as you:
 
    | Connection reference | Connector |
@@ -109,19 +111,19 @@ Version: system v4.2.1 (frontend) · solution 1.1.1.0 · guide dated 15-Oct-2026
 |---|---|
 | Permission levels | `1-to-1 Edit` and `1-to-1 Read`, with the exact rights in plan D.3. It creates them if missing. If one already exists with different rights, it **warns and doesn't change it**. |
 | Group | `1-to-1 Technicians`, created if missing. Membership is visible to group members only. SharePoint has no owner-only option, so technicians can see who else is in the group. No join requests. **No site permissions.** |
-| Lists | **Technicians**, **Appraisal Expectations**, **Monthly Reviews**, **Manager Reviews**, **1-to-1 Settings**, matching the agreed list specification exactly: every column type, choice, default, min/max and index, *Enforce unique values* on `ReviewKey`, and the views *Active*, *Needs attention*, *Retired*, *Overdue* and *Open actions*. |
+| Lists | **Technicians**, **Appraisal Expectations**, **Monthly Reviews**, **Manager Reviews**, **Wellbeing Assessments**, **1-to-1 Settings**, matching the agreed list specification exactly: every column type, choice, default, min/max and index, *Enforce unique values* on `ReviewKey`, and the views *Active*, *Needs attention*, *Retired* (Appraisal Expectations), *Overdue*, *Open actions* (Manager Reviews) and *Reviews due* (Wellbeing Assessments). |
 | List settings | Versioning on (100 versions), attachments off, not in search, offline sync off, not on the quick launch |
 | List permissions | Inheritance stopped. **Owners – Full Control only.** **1-to-1 Settings** also gets `1-to-1 Technicians` – Read. |
-| `Bands` setting | The default band thresholds |
+| `Bands` and `Reminders` settings | The default band thresholds, and reminder days 20th and 27th |
 | Checks (warnings only) | You are Site Collection Admin; regional settings are English (UK) and London time; the Site URL has no trailing slash |
 
 ### 4.4 Check the result (5 min)
 
-- [ ] **Site contents** shows: Technicians, Appraisal Expectations, Monthly Reviews, Manager Reviews, 1-to-1 Settings.
+- [ ] **Site contents** shows the six lists: Technicians, Appraisal Expectations, Monthly Reviews, Manager Reviews, **Wellbeing Assessments**, 1-to-1 Settings.
 - [ ] Each list → ⚙ → **List settings → Permissions for this list**:
-  - Technicians, Appraisal Expectations, Monthly Reviews and Manager Reviews show **only** *Owners – Full Control*;
+  - Technicians, Appraisal Expectations, Monthly Reviews, Manager Reviews and **Wellbeing Assessments** (health information) show **only** *Owners – Full Control*;
   - **1-to-1 Settings** shows Owners **and** `1-to-1 Technicians` – Read.
-- [ ] **1-to-1 Settings** contains one item, **Bands**.
+- [ ] **1-to-1 Settings** contains two items, **Bands** and **Reminders**.
 - [ ] Spot check: Monthly Reviews → List settings → click **Q9FollowUp**. The address ends `Field=Q9FollowUp`, and it has three choices.
 
 ### 4.5 Install the frontend (15 min)
@@ -144,10 +146,10 @@ Version: system v4.2.1 (frontend) · solution 1.1.1.0 · guide dated 15-Oct-2026
 
 - [ ] **Version check.** If you replaced `one-to-one.html` / `one-to-one.js` after first choosing the layout: web part settings (pencil) → **Reset layout cache** → **Republish**.
 - [ ] Open the site. You should see:
-  - a dark **top menu bar**: Team overview, Monthly reviews, Expectations and Actions on the left; **Team (0) ▾** and **⚙ Settings** on the right;
-  - the month, deadline, ↻ Refresh and **v4.2.1** at the far right;
+  - a dark **top menu bar**: Team overview, Monthly reviews, Expectations, Actions and Wellbeing on the left; **Team (0) ▾** and **⚙ Settings** on the right;
+  - the month, deadline, ↻ Refresh and **v4.2.2** at the far right;
   - **Team overview** showing six tiles at 0, then *"No technicians yet"* with four numbered getting-started steps.
-- [ ] Click through **Monthly reviews**, **Expectations**, **Actions** and **⚙ Settings**. Expect no errors (empty pages are normal for now).
+- [ ] Click through **Monthly reviews**, **Expectations**, **Actions**, **Wellbeing** and **⚙ Settings**. Expect no errors (empty pages are normal for now).
 - [ ] **Expectations:** add one *Shared* expectation. This proves item creation and the Yes/No column work in your tenant.
   - Leave it Active if it's a real one; otherwise **Retire** it.
   - The *Individual* expectation (Person column) is tested in Phase B: the Technician dropdown is empty until someone is in the Technicians list.
@@ -159,14 +161,13 @@ Version: system v4.2.1 (frontend) · solution 1.1.1.0 · guide dated 15-Oct-2026
 
 ### 4.7 Turn on flows 1 to 5
 
-- [ ] **Solutions → ESG 1-to-1** → select each flow → **Turn on**:
-  - **1 Daily scheduler**
-  - **2 Review submitted**
-  - **3 Manager decision**
-  - **4 Team members** – gives people you add in ⚙ Settings → Team access to the page
-  - **5 Wellbeing** – wellbeing assessments
-
-> **Already imported 1.0?** Upgrade first: import `ESGOneToOne_1_1_1_0_unmanaged.zip` over it, re-run **0 Setup**, turn on flows 4 and 5, upload the v4.2.1 files and **Reset layout cache** (IMPORT_GUIDE §0).
+- [ ] Only after the Setup summary email (4.3). **Solutions → ESG 1-to-1** → select each flow → **Turn on**, in this order:
+  1. **2 Review submitted**
+  2. **3 Manager decision**
+  3. **4 Team members** – gives people you add in ⚙ Settings → Team access to the page
+  4. **5 Wellbeing** – wellbeing assessments
+  5. **1 Daily scheduler** – last, so its first run finds everything ready
+- [ ] **0 Setup** stays On (it only runs when you click Run).
 
 ### 4.8 Fallback: no Dataverse (legacy packages)
 
@@ -423,7 +424,7 @@ Thanks,
 | **Leaver / long absence** | ⚙ **Settings → Team → Deactivate**. Flow 4 removes them from `1-to-1 Technicians` (E8) and no new reviews are created. Keep their records for the retention period. |
 | **Correction after submission** | At the technician's request, edit the item in SharePoint (or in the app, for TL feedback). Add a dated reason to **CorrectionLog** on the Manager Review. Version history records the change. |
 | **Annual expectation rollover** | Before the new appraisal year starts, add the new year's expectations on the **Expectations** page (or grid view). On the last day of the old year, **Retire** the old ones (Active = No). **Never delete them.** New reviews pick up the new set, and old reviews keep their snapshot. |
-| **Annual retention (April)** | Delete reviews whose month is **more than 24 months** ago, from **both** Monthly Reviews and Manager Reviews (filter by MonthKey), and **Wellbeing Assessments completed more than 24 months ago** (keep the latest one for each current person). Record the deletion in a dated note, then empty the site recycle bin **and** the second-stage recycle bin. Skip this step if a Purview retention label does it automatically. |
+| **Monthly retention (first working day)** | Delete reviews whose month is **more than 24 months** ago, from **both** Monthly Reviews and Manager Reviews (filter by MonthKey), and **Wellbeing Assessments completed (or, if never completed, created) more than 24 months ago**. Keeping the latest assessment of a current person for longer is an exception that needs HR's agreement. Record the deletion in a dated note, then empty the site recycle bin **and** the second-stage recycle bin. Skip this step if a Purview retention label does it automatically. |
 | **Subject access request** | Export Monthly Reviews, Manager Reviews and Wellbeing Assessments filtered by the person (**Export → CSV**). The technician can also use **Appraisal report → Print / Save as PDF** for their own view. |
 | **TL handover** | 1. Make the new TL a site owner **and Site Collection Admin**, and remove the old TL. 2. Give the new TL the solution's flows: add them as **co-owner**, then switch the three connection references to the new TL's connections (**Solutions → ESG 1-to-1 → Connection references**). 3. Update the **ESG 1-to-1 Team Leader email** environment variable. 4. No frontend change is needed. |
 
@@ -442,6 +443,7 @@ Thanks,
 | Setup failed (red) | Open the run, find the first red step and read its output. Common causes: you're not a site owner, or the Site URL is wrong. Fix it and re-run. |
 | Flow 1–5 email *"action needed"* naming `STOP_run_the_setup_flow_first` (or `…setup_flow_again`) | Setup hasn't run (or hasn't been re-run after upgrading to 1.1), or the permission levels / lists were renamed. Run setup. |
 | Someone added in ⚙ Settings → Team can't open the page | Flow 4 must be **on**; it runs within about 5 minutes. Check its run history. |
+| A wellbeing assessment was started for the wrong person | Delete that item in **Wellbeing Assessments** (Site contents) and start a new one. Once started, an assessment stays with the person it was shared with – changing the name on it doesn't move it. |
 | A wellbeing assessment didn't reach the person | Flow 5 must be **on**. Check its run history; the person needs a mailbox. |
 | Import: *"flows may not have turned on … List not found"* | Expected only when upgrading before Setup has created a new list. Run **0 Setup**, then turn the flows on (§0 step 3). |
 | Flow 2 / 3 never trigger | They must be **on**. The SharePoint triggers check every 5 minutes. The Site URL must have no trailing slash. |
@@ -461,7 +463,7 @@ Thanks,
 | TL sees the technician view | You're not Site Collection Admin / Owner on this site | Add yourself (Stage 0B finding B10a) |
 | "Couldn't save … (403)" for a technician | Review already submitted (locked) | Expected. Corrections go through the TL. |
 | Complete & release did nothing | Flow 3 rejected it (not submitted, or closing before the deadline) | Read the "not done" email |
-| Dates show a day out | Site regional settings not on London time | Part 1, step 4 |
+| Dates show a day out | Site regional settings not on London time | Site settings → **Regional settings**: Locale English (United Kingdom), time zone (UTC) Dublin, Edinburgh, Lisbon, London |
 | Print / Save as PDF does nothing | Browser blocked the pop-up | Allow pop-ups for the SharePoint site |
 | Flow failure emails | See the run link in the email | Fix, then re-run. Flow 1 is safe to re-run. |
 | *"action needed"* naming `STOP_run_the_setup_flow_first` | Setup hasn't run, or a list or permission level was renamed | Run **ESG 1-to-1 \| 0 Setup** (safe to re-run) |

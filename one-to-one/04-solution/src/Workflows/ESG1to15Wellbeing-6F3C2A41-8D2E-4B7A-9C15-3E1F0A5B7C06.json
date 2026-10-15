@@ -383,6 +383,13 @@
             "Holder": {
               "type": "Compose",
               "inputs": "@first(body('Holders'))",
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              },
               "runAfter": {
                 "Holders": [
                   "Succeeded"

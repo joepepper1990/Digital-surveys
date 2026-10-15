@@ -19,7 +19,7 @@ This runbook takes you from where you are now to technicians receiving their fir
 
 - Site, page, Welcome and the `1-to-1 Technicians` group are built.
 - **Stage 0A and 0B have passed.**
-- **All build files are produced** and tested locally (156 automated checks).
+- **All build files are produced** and tested locally (167 frontend checks, 149 flow simulations).
 
 **Legend:**
 
@@ -51,11 +51,11 @@ Stage 0A and 0B passed in the live tenant. Two findings are built into the setup
 
 | File | What it is |
 |---|---|
-| `04-solution/ESGOneToOne_1_1_1_0_unmanaged.zip` | **The six flows as one importable solution**, including the setup flow that creates the lists |
-| `02-frontend/one-to-one.html`, `one-to-one.js` | The app, v4.2.1. **Nothing to edit.** |
+| `04-solution/ESGOneToOne_1_1_2_0_unmanaged.zip` | **The six flows as one importable solution**, including the setup flow that creates the lists |
+| `02-frontend/one-to-one.html`, `one-to-one.js` | The app, v4.2.2. **Nothing to edit.** |
 | `01-sharepoint/lists.md`, `lists.csv` | Column-by-column list checklist |
 | `03-flows/FLOW_BUILD_SHEETS.md` | Flows 1–3, step by step |
-| `03-flows/EMAIL_TEMPLATES.md` | E1–E5, E7 |
+| `03-flows/EMAIL_TEMPLATES.md` | E1–E5, E7–E12 (there is no E6) |
 | `CONFIG_REFERENCE.md` | Config sheet, do-not-rename list, procedures, troubleshooting |
 | `prototype/prototype.html` | The agreed design, for reference |
 
@@ -65,21 +65,21 @@ Stage 0A and 0B passed in the live tenant. Two findings are built into the setup
 
 Follow [`04-solution/IMPORT_GUIDE.md`](04-solution/IMPORT_GUIDE.md) §1–§4.
 
-- [ ] **Solutions → Import solution** → `04-solution/ESGOneToOne_1_1_1_0_unmanaged.zip`.
+- [ ] **Solutions → Import solution** → `04-solution/ESGOneToOne_1_1_2_0_unmanaged.zip`.
   - Pick your three connections.
   - Enter the **Site URL** (no trailing slash) and **your email**.
-- [ ] Run **ESG 1-to-1 | 0 Setup (run once)**. It creates the six lists exactly as [`01-sharepoint/lists.md`](01-sharepoint/lists.md) describes, the two permission levels, the `1-to-1 Technicians` group (if missing), list permissions and the `Bands` setting.
+- [ ] Run **ESG 1-to-1 | 0 Setup (run once)**. It creates the six lists exactly as [`01-sharepoint/lists.md`](01-sharepoint/lists.md) describes, the two permission levels, the `1-to-1 Technicians` group (if missing), list permissions and the `Bands` and `Reminders` settings.
 - [ ] Read the summary email.
   - *"complete"*: carry on.
   - *"complete with items to check"*: fix the listed items, then re-run setup. It's safe to re-run.
 
 > **No Dataverse in your environment?** Use the offline [`04-solution/legacy-package-builder.html`](04-solution/legacy-package-builder.html) instead (IMPORT_GUIDE §6).
 >
-> **Prefer to build by hand?** [`01-sharepoint/lists.md`](01-sharepoint/lists.md) and [`03-flows/FLOW_BUILD_SHEETS.md`](03-flows/FLOW_BUILD_SHEETS.md) describe exactly the same result.
+> **Prefer to build by hand?** [`01-sharepoint/lists.md`](01-sharepoint/lists.md) describes the lists exactly; [`03-flows/FLOW_BUILD_SHEETS.md`](03-flows/FLOW_BUILD_SHEETS.md) covers Flows 1–3 as they were in 1.0 only (no Flows 4–5, Reminders setting or wellbeing reminders). The solution is the supported route.
 
 **⛔ Gate:** check the permissions on each list.
 
-- The four data lists show **only Owners – Full Control**.
+- The five data lists (including **Wellbeing Assessments**) show **only Owners – Full Control**.
 - **1-to-1 Settings** shows Owners plus `1-to-1 Technicians` – Read.
 
 ## Phase 5 — (no longer needed) Record the IDs ✅
@@ -98,11 +98,11 @@ Follow [`02-frontend/README.md`](02-frontend/README.md) §Install.
   - **Republish**.
 - [ ] Make `OneToOne` the home page.
 - [ ] The group has Read on the page, the layouts library and the Welcome Errors list. Setup already granted it on 1-to-1 Settings.
-- [ ] As TL: **Team overview** opens, the top menu bar shows **Team ▾** and **⚙ Settings**, and its right-hand end shows **v4.2.1**.
+- [ ] As TL: **Team overview** opens, the top menu bar shows **Team ▾** and **⚙ Settings**, and its right-hand end shows **v4.2.2**.
 
 ## Phase 7 — Turn on flows 1 to 5 🧑 ⏱ 2 min
 
-- [ ] **Solutions → ESG 1-to-1** → turn on **1 Daily scheduler**, **2 Review submitted**, **3 Manager decision**, **4 Team members** and **5 Wellbeing** (IMPORT_GUIDE §5).
+- [ ] Only after the Setup summary email: **Solutions → ESG 1-to-1** → turn on **2 Review submitted**, **3 Manager decision**, **4 Team members**, **5 Wellbeing**, and **1 Daily scheduler** last (IMPORT_GUIDE §5).
 - [ ] Secure inputs/outputs, sequential runs and Try/Catch are already set in the imported flows.
 
 ## Phase 8 — Add technicians and appraisal dates 🧑 ⏱ 30 min
@@ -161,7 +161,7 @@ Then clean down:
 ## Phase 11 — Go live 🧑 ⏱ 15 min
 
 - [ ] Add the real technicians (Phase 8), then set their appraisal dates in ⚙ Settings.
-- [ ] Flows 1, 2 and 3 are **On**.
+- [ ] Flows 1–5 are **On**.
 - [ ] **Flow 1 → Run** to start the current month now. Alternatively, wait for 07:00 on the 1st.
 - [ ] Check:
   - each technician has one review and got exactly one email;
@@ -177,8 +177,9 @@ Then clean down:
 | Last day, 23:59 | Deadline. Unsubmitted reviews show as overdue, and you can **Close – not submitted**. |
 | Any time | **Actions** page: close completed actions. **⚙ Settings**: appraisal dates. |
 | Before an appraisal | **Appraisal report** for that technician, to help write the appraisal |
+| Monthly | Retention deletion: anything over 24 months, including wellbeing assessments (CONFIG_REFERENCE §4) |
 | Quarterly | Permission check ([`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) §4) |
-| Annually | Expectation rollover; retention deletion (over 24 months) |
+| Annually | Expectation rollover |
 
 ---
 

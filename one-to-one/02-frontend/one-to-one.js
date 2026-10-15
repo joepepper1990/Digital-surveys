@@ -17,7 +17,7 @@
 window.ESGOneToOne = function (ctx) {
   'use strict';
 
-  var VERSION = '4.2.1';
+  var VERSION = '4.2.2';
 
   // ---------------------------------------------------------------------------------------------
   // CONFIG — normally nothing to change. List titles must match the lists you created.
@@ -226,6 +226,7 @@ window.ESGOneToOne = function (ctx) {
   function longDate(iso) { return iso ? new Date(iso + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }) : ''; }
   function monthLabel(key) { return new Date(key + '-01T12:00:00Z').toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }); }
   function monthShort(key) { return MON[+key.slice(5, 7) - 1]; }
+  function plural(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
   function first(name) { return String(name || '').split(' ')[0]; }
   function f1(v) { return v === null || v === undefined || isNaN(v) ? '—' : v.toFixed(1); }
   // SharePoint returns dates as UTC instants; convert to the site's calendar date.
@@ -233,7 +234,13 @@ window.ESGOneToOne = function (ctx) {
     if (!isoUtc) { return ''; }
     var d = new Date(isoUtc);
     if (isNaN(d.getTime())) { return ''; }
-    try { return d.toLocaleDateString('en-CA', { timeZone: CONFIG.timeZone }); } catch (_) { return d.toISOString().slice(0, 10); }
+    try {
+      // build yyyy-mm-dd from parts rather than relying on a locale's output format
+      var p = {};
+      new Intl.DateTimeFormat('en-GB', { timeZone: CONFIG.timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d)
+        .forEach(function (x) { p[x.type] = x.value; });
+      return p.year + '-' + p.month + '-' + p.day;
+    } catch (_) { return d.toISOString().slice(0, 10); }
   }
   // validateUpdateListItem reads date text using the site's (or the user's) regional settings, so a date
   // is written in the first format SharePoint accepts AND reads back as the same calendar day (writeDates).
@@ -318,7 +325,8 @@ window.ESGOneToOne = function (ctx) {
       if (res.status === 401 || res.status === 403 || res.status === 404) { return rows; }
       if (!res.ok) { throw new Error('Could not read ' + list + ' ' + errText(res)); }
       rows = rows.concat((res.json && res.json.value) || []);
-      path = res.json && res.json['odata.nextLink'] ? res.json['odata.nextLink'] : '';
+      var next = res.json && res.json['odata.nextLink'] ? String(res.json['odata.nextLink']) : '';
+      path = next && next.indexOf(siteUrl + '/') === 0 ? next : '';   // never follow a paging link off this site
     }
     return rows;
   }
@@ -376,8 +384,16 @@ window.ESGOneToOne = function (ctx) {
     for (var i = 0; i < order.length; i++) {
       var fv = {};
       sets.forEach(function (k) { fv[k] = DATE_FORMATS[order[i]](dates[k]); });
-      try { await spUpdate(list, id, fv); } catch (e) { if (/refused|read-only|Invalid item/.test(String(e && e.message))) { throw e; } continue; }
+      // Only a rejected value is a format problem; a server, throttling or network failure is reported as such.
+      var retry = new Error('Couldn\'t reach SharePoint to save the date – please try again.');
+      try { await spUpdate(list, id, fv); } catch (e) {
+        var m = String(e && e.message);
+        if (/refused|read-only|Invalid item/.test(m)) { throw e; }
+        if (e instanceof TypeError || /^Save failed \((?!400\))/.test(m)) { throw retry; }
+        continue;
+      }
       var back = await req('GET', listPath(list) + '/items(' + Number(id) + ')?$select=' + sets.join(','));
+      if (!back.ok) { throw retry; }
       if (back.ok && back.json && sets.every(function (k) { return localDate(back.json[k]) === dates[k]; })) { dateFormat = order[i]; return; }
     }
     throw new Error('SharePoint did not store the date correctly. Check Site settings → Regional settings (Locale English (United Kingdom), ' +
@@ -396,6 +412,8 @@ window.ESGOneToOne = function (ctx) {
     'Q4WellbeingRaise,Q4WellbeingDetail,Q5PlanningRaise,Q5PlanningDetail,Q6DevRaise,Q6DevWhat,Q6DevWhy,Q7ManagerFeedback,ExpectationsJson,Q9FollowUp,' +
     'Mood,WinOfMonth,AppraisalDate,Technician/Id,Technician/Title,Technician/EMail';
 
+  // Ratings are whole numbers 1–5; anything else in an (editable) record is treated as not given.
+  function r15(v) { var n = num(v); return n !== null && n >= 1 && n <= 5 && Math.floor(n) === n ? n : null; }
   function emptyFeedback() {
     return { q1: '', q2: '', q3: '', q4: '', q5: '', q6: '', q7: '', q9: '', overall: '', exp: {}, expRating: {}, followOverride: '', meeting: '', actions: [] };
   }
@@ -422,19 +440,19 @@ window.ESGOneToOne = function (ctx) {
       processing: st === 'Open' && status !== 'Not Started' && status !== 'Draft',
       submittedOn: mr ? localDate(mr.SubmittedOn) : '', late: !!(mr && mr.SubmittedLate),
       snapshot: snap,
-      released: !!(mr && (mr.ReleasedOn || (!IS_TL && mr))),
+      released: !!(mr && (mr.ReleasedOn || str(mr.ReviewState) === 'Completed' || str(mr.ReviewState) === 'Closed - Not Submitted')),
       appraisalDate: localDate(rv.AppraisalDate),
       answers: {
-        mood: num(rv.Mood), win: str(rv.WinOfMonth),
+        mood: r15(rv.Mood), win: str(rv.WinOfMonth),
         q1: str(rv.Q1WentWell), q2: { issue: str(rv.Q2Issue), impact: str(rv.Q2Impact), tried: str(rv.Q2Tried), support: str(rv.Q2Support) },
-        q3: num(rv.Q3WorkloadRating), q3c: str(rv.Q3WorkloadComment),
+        q3: r15(rv.Q3WorkloadRating), q3c: str(rv.Q3WorkloadComment),
         q4: str(rv.Q4WellbeingRaise) || null, q4d: str(rv.Q4WellbeingDetail),
         q5: str(rv.Q5PlanningRaise) || null, q5d: str(rv.Q5PlanningDetail),
         q6: str(rv.Q6DevRaise) || null, q6what: str(rv.Q6DevWhat), q6why: str(rv.Q6DevWhy),
         q7: str(rv.Q7ManagerFeedback),
         q8: snap.map(function (e) {
           var x = expJson.find(function (y) { return String(y.id) === String(e.id); }) || {};
-          return { id: e.id, rating: num(x.rating), comment: str(x.comment) };
+          return { id: e.id, rating: r15(x.rating), comment: str(x.comment) };
         }),
         q9: str(rv.Q9FollowUp) || null
       },
@@ -446,14 +464,13 @@ window.ESGOneToOne = function (ctx) {
       fb.q6 = str(mr.FB_Q6); fb.q7 = str(mr.FB_Q7); fb.q9 = str(mr.FB_Q9); fb.overall = str(mr.FB_Overall);
       fb.followOverride = str(mr.FollowUpDecision); fb.meeting = localDate(mr.MeetingDate);
       var ef = safeJson(mr.ExpectationFeedbackJson, []);
-      (Array.isArray(ef) ? ef : []).forEach(function (x) { fb.exp[x.id] = str(x.feedback); if (num(x.rating)) { fb.expRating[x.id] = num(x.rating); } });
+      (Array.isArray(ef) ? ef : []).forEach(function (x) { fb.exp[x.id] = str(x.feedback); if (r15(x.rating)) { fb.expRating[x.id] = r15(x.rating); } });
       var acts = safeJson(mr.ActionsJson, []);
       fb.actions = (Array.isArray(acts) ? acts : []).map(function (a) {
         return { id: str(a.id) || String(Math.random()).slice(2, 10), text: str(a.text), owner: str(a.owner), criteria: str(a.criteria),
           due: /^\d{4}-\d{2}-\d{2}$/.test(str(a.due)) ? str(a.due) : '', status: str(a.status) === 'Closed' ? 'Closed' : 'Open',
           closedOn: /^\d{4}-\d{2}-\d{2}$/.test(str(a.closedOn)) ? str(a.closedOn) : '' };
       });
-      if (!IS_TL) { r.released = true; }
       r.mrTechFollowUp = str(mr.TechFollowUp);
     }
     return r;
@@ -520,15 +537,25 @@ window.ESGOneToOne = function (ctx) {
           tech: email ? (byEmail[email] || str(e.Technician.Title)) : '', sort: num(e.SortOrder) || 0, active: !!e.Active };
       });
     } else {
-      revs.forEach(function (rv) {
-        var name = str(rv.Technician && rv.Technician.Title) || ME;
-        REVIEWS.push(buildReview(rv, mrByItem[Number(rv.ID)] || null, ME || name));
+      // Defence in depth: SharePoint item permissions keep other people's records away, but if one is ever readable
+      // (a permission step failed or lagged) it is dropped here, never shown or written to.
+      var myId = Number(me.json.Id) || -1, dropped = 0;
+      var isMine = function (x) {
+        var who = x && x.Technician, em = str(who && who.EMail).toLowerCase();
+        var ok = (!!MY_EMAIL && em === MY_EMAIL) || (!!who && Number(who.Id) === myId);
+        if (!ok) { dropped++; }
+        return ok;
+      };
+      Object.keys(mrByItem).forEach(function (k) { if (!isMine(mrByItem[k])) { delete mrByItem[k]; } });
+      revs.filter(isMine).forEach(function (rv) {
+        REVIEWS.push(buildReview(rv, mrByItem[Number(rv.ID)] || null, ME));
       });
       TECHS = [ME];
       var latest = REVIEWS.slice().sort(function (x, y) { return x.month < y.month ? 1 : -1; })[0];
       TECH_INFO[ME] = { appraisal: latest ? latest.appraisalDate : '' };
       WB_AVAILABLE = true;
-      WELLBEING = (await spGetAll(CONFIG.lists.wellbeing, WB_FIELDS, 'Technician')).map(function (w) { return buildWb(w, ME); });
+      WELLBEING = (await spGetAll(CONFIG.lists.wellbeing, WB_FIELDS, 'Technician')).filter(isMine).map(function (w) { return buildWb(w, ME); });
+      if (dropped) { console.warn('ESG 1-to-1: ' + dropped + ' record(s) not belonging to you were readable and have been hidden. Tell the site owner.'); }
     }
     REVIEWS.sort(function (x, y) { return x.month === y.month ? (x.tech < y.tech ? -1 : 1) : (x.month < y.month ? -1 : 1); });
   }
@@ -556,8 +583,11 @@ window.ESGOneToOne = function (ctx) {
   function apStatus(ap) {
     if (!ap) { return null; }
     var days = daysBetween(TODAY, ap), aimMonth = addMonths(ap.slice(0, 7), -1);
-    return { ap: ap, days: days, aimMonth: aimMonth, aimBy: lastDay(aimMonth), state: days < 0 ? 'overdue' : TODAY >= aimMonth + '-01' ? 'aim' : 'ok' };
+    return { ap: ap, days: days, aimMonth: aimMonth, aimBy: lastDay(aimMonth), state: days < 0 ? 'overdue' : TODAY > lastDay(aimMonth) ? 'due' : TODAY >= aimMonth + '-01' ? 'aim' : 'ok' };
   }
+  // states: ok (aim month still ahead) · aim (in the aim month) · due (in the appraisal month, before the date) · overdue
+  function apSoon(s) { return !!s && (s.state === 'aim' || s.state === 'due'); }
+  function aimText(s) { return s.state === 'due' ? 'due this month' : 'aim: in ' + monthName(s.aimMonth); }
   function overdueText(s) { return 'Overdue by ' + (-s.days) + ' day' + (s.days === -1 ? '' : 's'); }
   function daysToGo(s) { return s.days === 0 ? 'Today' : s.days + ' day' + (s.days === 1 ? '' : 's'); }
   // "Days to go" cell: Overdue in red, otherwise days plus a subtle "aim: in December" (amber once that month has started).
@@ -568,7 +598,7 @@ window.ESGOneToOne = function (ctx) {
     if (!s) { td.textContent = '—'; return td; }
     if (s.state === 'overdue') { td.textContent = overdueText(s); return td; }
     td.appendChild(document.createTextNode(daysToGo(s)));
-    td.appendChild(h('div', { class: 'aimnote' + (s.state === 'aim' ? ' now' : ''), text: 'aim: in ' + monthName(s.aimMonth) }));
+    td.appendChild(h('div', { class: 'aimnote' + (apSoon(s) ? ' now' : ''), text: aimText(s) }));
     return td;
   }
   function periodFor(tech) {
@@ -773,11 +803,15 @@ window.ESGOneToOne = function (ctx) {
       if (!e || e.type === 'keydown' || !d.contains(e.target)) { d.removeAttribute('open'); }
     });
   }
+  // Returns false if the person chose to stay. Edits are applied to the in-memory records as they are typed,
+  // so leaving without saving reloads from SharePoint – discarded text can't be saved later by another action.
   function go(view, extra) {
-    if (dirty && !window.confirm('You have unsaved changes. Leave this page without saving?')) { return; }
+    var discard = dirty;
+    if (dirty && !window.confirm('You have unsaved changes. Leave this page without saving?')) { return false; }
     dirty = false;
     state.view = view; Object.keys(extra || {}).forEach(function (k) { state[k] = extra[k]; });
-    render(true);
+    if (discard) { start().catch(loadFailed); } else { render(true); }
+    return true;
   }
   function markDirty() { dirty = true; }
 
@@ -828,7 +862,14 @@ window.ESGOneToOne = function (ctx) {
     var hint = h('span', { class: 'datehint', 'aria-live': 'polite', text: iso ? longDate(iso) : '' });
     var pick = h('input', { type: 'date', class: 'dpick', tabindex: '-1', 'aria-hidden': 'true' });
     pick.value = iso || '';
+    function bad(text) {
+      inp.classList.add('bad'); hint.classList.add('bad');
+      hint.textContent = 'Not recognised – type e.g. 15/07/2027 or use 📅';
+      if (opts.onBad) { opts.onBad(text); }   // lets a caller keep the typed text across a redraw
+    }
+    if (opts.badText) { inp.value = opts.badText; bad(opts.badText); }
     function set(v) {
+      if (opts.onBad) { opts.onBad(''); }
       inp.value = fmtDate(v); pick.value = v || ''; inp.classList.remove('bad');
       hint.textContent = v ? longDate(v) : ''; hint.classList.remove('bad');
       if (!opts.noDirty) { markDirty(); }
@@ -838,8 +879,7 @@ window.ESGOneToOne = function (ctx) {
       if (!inp.value.trim()) { set(''); return; }
       var v = parseDate(inp.value);
       if (v) { set(v); return; }
-      inp.classList.add('bad'); hint.classList.add('bad');
-      hint.textContent = 'Not recognised – type e.g. 15/07/2027 or use 📅';
+      bad(inp.value);
     });
     pick.addEventListener('change', function () { if (pick.value) { set(pick.value); } });
     var btn = h('button', { type: 'button', class: 'calbtn', title: 'Choose from a calendar', 'aria-label': 'Choose ' + (label || 'date') + ' from a calendar', text: '📅', onclick: function () {
@@ -988,7 +1028,7 @@ window.ESGOneToOne = function (ctx) {
   // two bars per person (e.g. self-rating vs line manager rating) on a 1–max scale
   function pairChart(items, max, ca, cb, width) {
     var W = width || 640, H = 170, pl = 30, pr = 10, pt = 14, pb = 22, iw = W - pl - pr, ih = H - pt - pb, n = Math.max(1, items.length);
-    var svg = s('svg', { viewBox: '0 0 ' + W + ' ' + H, class: 'chart', role: 'img', 'aria-label': 'Self vs line manager rating' });
+    var svg = s('svg', { viewBox: '0 0 ' + W + ' ' + H, class: 'chart', role: 'img', 'aria-label': 'Self vs ' + L.mgr + ' rating' });
     for (var v = 1; v <= max; v++) {
       svg.appendChild(s('line', { x1: pl, x2: W - pr, y1: pt + ih - v / max * ih, y2: pt + ih - v / max * ih, stroke: '#edf0f3' }));
       svg.appendChild(s('text', { x: pl - 7, y: pt + ih - v / max * ih + 4, 'text-anchor': 'end', text: String(v) }));
@@ -1065,7 +1105,7 @@ window.ESGOneToOne = function (ctx) {
       missingBox.appendChild(m.length ? h('div', { class: 'missing' }, [h('strong', { text: 'Still to complete: ' }), m.join(' · ')])
         : h('div', { class: 'done', text: 'Everything required is complete – you can submit when ready.' }));
     }
-    var monthSel = h('select', { 'aria-label': 'Choose a month', style: 'width:180px', onchange: function () { go('tech', { reviewId: Number(monthSel.value) }); } },
+    var monthSel = h('select', { 'aria-label': 'Choose a month', style: 'width:180px', onchange: function () { if (!go('tech', { reviewId: Number(monthSel.value) })) { monthSel.value = String(r.id); } } },
       mine.map(function (x) { var o = h('option', { value: String(x.id), text: monthLabel(x.month) }); o.selected = x.id === r.id; return o; }));
     function save() {
       return busy('save', async function () {
@@ -1089,7 +1129,7 @@ window.ESGOneToOne = function (ctx) {
     var head = h('div', { class: 'pagehead sticky', style: 'display:block' }, [
       h('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:16px' }, [
         h('div', { class: 'ph-l' }, [h('h2', { text: 'Monthly 1-to-1' }), monthSel, chipFor(r),
-          editable ? h('span', { class: 'chip ' + (dl < 0 ? 'red' : dl <= 3 ? 'amber' : 'green'), text: dl < 0 ? Math.abs(dl) + ' days overdue – you can still submit' : dl === 0 ? 'Due today' : dl + ' days left' }) : null,
+          editable ? h('span', { class: 'chip ' + (dl < 0 ? 'red' : dl <= 3 ? 'amber' : 'green'), text: dl < 0 ? plural(-dl, 'day') + ' overdue – you can still submit' : dl === 0 ? 'Due today' : plural(dl, 'day') + ' left' }) : null,
           h('span', { class: 'meta', text: 'Deadline 23:59, ' + fmtDate(r.due) })]),
         editable ? h('div', { class: 'btn-row' }, [meterTxt, h('button', { class: 'btn', type: 'button', text: 'Save draft', onclick: function () { save().catch(function () {}); } }),
           h('button', { class: 'btn primary', type: 'button', text: 'Submit', onclick: submit })])
@@ -1186,7 +1226,7 @@ window.ESGOneToOne = function (ctx) {
         h('div', { class: 'big-score' }, [f1(o.projected), h('small', { text: ' / 5 projected' })]), bandChip(o.projected, true)]),
       track(o.projected),
       h('dl', { class: 'kv' }, [h('dt', { text: 'Appraisal date' }), h('dd', { class: p.set && days < 0 ? 'overdue' : null, text: p.set ? fmtDate(p.apDate) + (days < 0 ? ' (overdue)' : ' (' + daysToGo(apStatus(p.apDate)).toLowerCase() + ')') : 'Not set yet' }),
-        p.set && days >= 0 ? h('dt', { text: 'Aim to complete' }) : null, p.set && days >= 0 ? h('dd', { text: 'In ' + monthLabel(apStatus(p.apDate).aimMonth) }) : null,
+        p.set && days >= 0 ? h('dt', { text: 'Aim to complete' }) : null, p.set && days >= 0 ? h('dd', { text: apStatus(p.apDate).state === 'due' ? 'This month – it\'s due ' + fmtDate(p.apDate) : 'In ' + monthLabel(apStatus(p.apDate).aimMonth) }) : null,
         h('dt', { text: 'Current position' }), h('dd', { text: f1(o.current) + ' / 5' }),
         h('dt', { text: 'Trend' }), h('dd', { text: (o.slope >= 0 ? '+' : '') + o.slope.toFixed(2) + ' per month' })])
     ]);
@@ -1235,7 +1275,7 @@ window.ESGOneToOne = function (ctx) {
         var s = p.set ? apStatus(p.apDate) : null;
         if (!s) { return tile('Days to appraisal', '—', 'Not set'); }
         if (s.state === 'overdue') { return tile('Days to appraisal', 'Overdue', fmtDate(s.ap) + ' · ' + (-s.days) + ' day' + (s.days === -1 ? '' : 's') + ' ago', 'bad'); }
-        return tile('Days to appraisal', String(s.days), fmtDate(s.ap) + ' · aim for ' + monthName(s.aimMonth), s.state === 'aim' ? 'warn' : '');
+        return tile('Days to appraisal', s.days === 0 ? 'Today' : String(s.days), fmtDate(s.ap) + ' · ' + (s.state === 'due' ? 'due this month' : 'aim for ' + monthName(s.aimMonth)), apSoon(s) ? 'warn' : '');
       })(),
       tile('On-time submissions', [String(ot.onTime), h('small', { text: ' of ' + ot.total })], 'In the appraisal period'),
       tile('Open actions', String(openActs.length), acts.filter(function (x) { return acOverdue(x.ac); }).length + ' overdue', acts.some(function (x) { return acOverdue(x.ac); }) ? 'bad' : '')
@@ -1285,7 +1325,7 @@ window.ESGOneToOne = function (ctx) {
       else if (isOverdue(r)) { items.push({ pri: 2, ico: '⏰', text: r.tech + ' – ' + monthLabel(r.month) + ' review is overdue (not submitted)', btn: 'Open', fn: open }); }
       if (r.month === CUR && followOf(r) === DEDICATED && r.state !== 'Completed') { items.push({ pri: 1, ico: '🗓', text: r.tech + ' asked for a dedicated 1-to-1', btn: 'Open', fn: open }); }
     });
-    actionsOf(function (ac) { return acOverdue(ac); }, 'tl').forEach(function (x) {
+    actionsOf(function (ac, r) { return acOverdue(ac) && TECH_INFO[r.tech] && TECH_INFO[r.tech].active; }, 'tl').forEach(function (x) {
       items.push({ pri: 2, ico: '✅', text: 'Overdue action for ' + x.r.tech + ': ' + x.ac.text + ' (due ' + fmtDate(x.ac.due) + ')', btn: 'Actions', fn: function () { state.actFilter = 'overdue'; go('actions'); } });
     });
     wellbeingAttention().forEach(function (x) { items.push(x); });
@@ -1295,8 +1335,8 @@ window.ESGOneToOne = function (ctx) {
       else {
         var s = apStatus(ap), report = function () { state.report = { tech: t, aud: 'tl' }; render(false); };
         if (s.state === 'overdue') { items.push({ pri: 2, ico: '⏰', text: t + '\'s appraisal is overdue (' + fmtDate(ap) + ') – once it\'s done, set the next date', btn: 'Set date', fn: function () { openSettings('team'); } }); }
-        else if (s.state === 'aim') {
-          items.push({ pri: 2, ico: '📄', btn: 'Report', fn: report, text: TODAY <= s.aimBy ? 'Aim to complete ' + t + '\'s appraisal by ' + fmtDate(s.aimBy) + ' (due ' + fmtDate(ap) + ')'
+        else if (apSoon(s)) {
+          items.push({ pri: 2, ico: '📄', btn: 'Report', fn: report, text: s.state === 'aim' ? 'Aim to complete ' + t + '\'s appraisal by ' + fmtDate(s.aimBy) + ' (due ' + fmtDate(ap) + ')'
             : t + '\'s appraisal is due ' + (s.days === 0 ? 'today' : 'in ' + daysToGo(s).toLowerCase()) + ' (' + fmtDate(ap) + ')' });
         }
       }
@@ -1306,7 +1346,7 @@ window.ESGOneToOne = function (ctx) {
   function attentionCard() {
     var items = attentionItems();
     var dl = daysBetween(TODAY, lastDay(CUR));
-    var sub = 'Deadline ' + fmtDate(lastDay(CUR)) + (dl >= 0 ? ' (' + dl + ' days)' : '') + ' · reminders ' + (SETTINGS.reminders.length ? 'on the ' + remindersText(SETTINGS.reminders) : 'off');
+    var sub = 'Deadline ' + fmtDate(lastDay(CUR)) + (dl > 0 ? ' (' + plural(dl, 'day') + ')' : dl === 0 ? ' (today)' : '') + ' · reminders ' + (SETTINGS.reminders.length ? 'on the ' + remindersText(SETTINGS.reminders) : 'off');
     return card('Needs your attention', sub, [items.length ? h('div', { class: 'attn' }, items.map(function (x) {
       return h('div', { class: 'attn-row' }, [h('span', { class: 'attn-ico', 'aria-hidden': 'true', text: x.ico }), h('span', { class: 'attn-text', text: x.text }),
         h('button', { class: 'btn small', type: 'button', text: x.btn, onclick: x.fn })]);
@@ -1363,11 +1403,11 @@ window.ESGOneToOne = function (ctx) {
     } else {
       var dvals = TECHS.map(function (t) {
         var ap = apDateOf(t), s = apStatus(ap);
-        return { label: first(t) + (s && s.state === 'overdue' ? ' ⚠' : ''), value: s && s.state !== 'overdue' ? s.days : null, color: s && s.state === 'aim' ? '#d99a12' : '#1f7190',
-          tipText: t + ': ' + (!s ? 'no date set' : s.state === 'overdue' ? overdueText(s).toLowerCase() + ' (' + fmtDate(ap) + ')' : daysToGo(s).toLowerCase() + ' (' + fmtDate(ap) + ') · aim for ' + monthName(s.aimMonth)) };
+        return { label: first(t) + (s && s.state === 'overdue' ? ' ⚠' : ''), value: s && s.state !== 'overdue' ? s.days : null, color: apSoon(s) ? '#d99a12' : '#1f7190',
+          tipText: t + ': ' + (!s ? 'no date set' : s.state === 'overdue' ? overdueText(s).toLowerCase() + ' (' + fmtDate(ap) + ')' : daysToGo(s).toLowerCase() + ' (' + fmtDate(ap) + ') · ' + (s.state === 'due' ? 'due this month' : 'aim for ' + monthName(s.aimMonth))) };
       });
       var mx = Math.max(30, Math.max.apply(null, dvals.map(function (v) { return v.value || 0; })));
-      sub = 'Days until each appraisal · amber = aim to complete this month · ⚠ overdue';
+      sub = 'Days until each appraisal · amber = in the aim month or due this month · ⚠ overdue';
       chart = colChart(dvals, Math.ceil(mx / 30) * 30, '#1f7190', 170, sub, 420, 30);
     }
     return card(null, null, [h('div', { class: 'card-h' }, [h('div', null, [sel, h('div', { class: 'sub', text: sub })])]), chart], 'chartcard');
@@ -1406,7 +1446,7 @@ window.ESGOneToOne = function (ctx) {
         var late = TECHS.filter(function (t) { var s = apStatus(apDateOf(t)); return s && s.state === 'overdue'; });
         if (late.length) { return tile('Appraisals overdue', String(late.length), late.length === 1 ? late[0] + ' · ' + fmtDate(apDateOf(late[0])) : late.map(first).join(', '), 'bad'); }
         var s = nextAp ? apStatus(apDateOf(nextAp)) : null;
-        return tile('Next appraisal', s ? daysToGo(s) : '—', s ? nextAp + ' · ' + fmtDate(s.ap) + ' · aim by ' + fmtDate(s.aimBy).slice(0, 6) : 'Set dates in ⚙ Settings', s && s.state === 'aim' ? 'warn' : '');
+        return tile('Next appraisal', s ? daysToGo(s) : '—', s ? nextAp + ' · ' + fmtDate(s.ap) + (s.state === 'due' ? '' : ' · aim by ' + fmtDate(s.aimBy).slice(0, 6)) : 'Set dates in ⚙ Settings', apSoon(s) ? 'warn' : '');
       })()
     ]);
     var bandCounts = SETTINGS.bands.map(function (b) {
@@ -1709,7 +1749,7 @@ window.ESGOneToOne = function (ctx) {
       card('Agreed actions', 'Add as many as needed – each needs an owner, close-out criteria and a deadline', [actionsEditor(r)]),
       card('Overall feedback', null, [textBox(null, fb.overall, function (v) { fb.overall = v; }, false, 3)])
     ];
-    var canComplete = r.state === 'Submitted', canClose = r.state === 'Open' && TODAY > r.due;
+    var canComplete = r.state === 'Submitted', canClose = r.state === 'Open' && TODAY > r.due && !r.processing;
     function incompleteActions() { return r.fb.actions.filter(function (ac) { return !ac.text.trim() || !ac.criteria.trim() || !ac.due; }).length; }
     function saveFeedback() {
       if (badDates(root)) { toast('A date isn\'t recognised – fix the highlighted date first.', true); return Promise.reject(new Error('bad date')); }
@@ -1763,7 +1803,7 @@ window.ESGOneToOne = function (ctx) {
         h('dl', { class: 'kv' }, [h('dt', { text: 'Appraisal' }), h('dd', { text: o.period.set ? fmtDate(o.period.apDate) : 'Not set' }), h('dt', { text: 'Current' }), h('dd', { text: f1(o.current) })])]));
       var followSel = h('select', { id: nid('s'), onchange: function () { fb.followOverride = followSel.value; markDirty(); } },
         [h('option', { value: '', text: ('Accept ' + lc(L.one) + '\'s preference') })].concat(FOLLOW.map(function (x) { var op = h('option', { value: x, text: x }); op.selected = fb.followOverride === x; return op; })));
-      var mid = nid('d'), meeting = dateField(fb.meeting, function (v) { fb.meeting = v; }, '1-to-1 meeting date', { id: mid });
+      var mid = nid('d'), meeting = dateField(fb.meeting, function (v) { fb.meeting = v; }, '1-to-1 meeting date', { id: mid, badText: fb.meetingRaw, onBad: function (t) { fb.meetingRaw = t; } });
       side.appendChild(h('section', { class: 'card side-tile' }, [h('h3', { text: 'Follow-up decision' }),
         h('div', { class: 'stack', style: 'gap:8px' }, [followSel, h('div', null, [h('label', { class: 'field', for: mid, text: '1-to-1 meeting date (optional)' }), meeting])])]));
     }
@@ -1891,11 +1931,13 @@ window.ESGOneToOne = function (ctx) {
       if (!info || !info.claims) { toast(who + ' has no account set in the ' + L.many + ' list.', true); return; }
       busy('wb', async function () {
         var id = await spCreate(CONFIG.lists.wellbeing, { Title: who + ' – wellbeing assessment', Technician: personValue(info.claims), AssessmentStatus: 'Open' });
-        if (date) { await writeDates(CONFIG.lists.wellbeing, id, { AssessmentDate: date }); }
-        WELLBEING.push(buildWb({ ID: id, AssessmentStatus: 'Open', AssessmentDate: null }, who));
-        WELLBEING[WELLBEING.length - 1].date = date;
+        // keep the new item even if the date then fails, so a retry can't create a duplicate
+        var nw = buildWb({ ID: id, AssessmentStatus: 'Open', AssessmentDate: null }, who), dateOk = true;
+        WELLBEING.push(nw);
+        if (date) { try { await writeDates(CONFIG.lists.wellbeing, id, { AssessmentDate: date }); nw.date = date; } catch (_) { dateOk = false; } }
         back.remove();
-        toast('Started. ' + first(who) + ' gets an email within about 5 minutes with a link to complete their part.');
+        toast(dateOk ? 'Started. ' + first(who) + ' gets an email within about 5 minutes with a link to complete their part.'
+          : 'Started, but the meeting date didn\'t save – set it in the panel below. ' + first(who) + ' still gets the email.', !dateOk);
         go('wb', { wbId: id });
       }).catch(function () {});
     }
@@ -1924,19 +1966,19 @@ window.ESGOneToOne = function (ctx) {
     }
     var submitted = WELLBEING.filter(function (w) { return wbState(w) === 'Submitted'; });
     var withThem = WELLBEING.filter(function (w) { return wbState(w) === 'Open' || wbState(w) === 'Processing'; });
-    var due = TECHS.filter(function (t) { var l = wbLastCompleted(t); return l && l.nextReview && daysBetween(TODAY, l.nextReview) <= 30 && !wbOpenOne(t); });
     var none = TECHS.filter(function (t) { var l = wbLastCompleted(t); return !wbOpenOne(t) && (!l || (l.nextReview ? daysBetween(TODAY, l.nextReview) < 0 : daysBetween(l.completedOn || l.date || TODAY, TODAY) > 365)); });
+    var due = TECHS.filter(function (t) { var l = wbLastCompleted(t); return l && l.nextReview && daysBetween(TODAY, l.nextReview) <= 30 && !wbOpenOne(t) && none.indexOf(t) < 0; });
     var tiles = h('div', { class: 'tiles t4' }, [
       tile('Ready for your review', String(submitted.length), 'Submitted by the person', submitted.length ? 'warn' : ''),
       tile('Being completed', String(withThem.length), 'Waiting for the person'),
-      tile('Reviews due in 30 days', String(due.length), 'Or overdue', due.length ? 'warn' : ''),
-      tile('Due an assessment', String(none.length), 'None in the last 12 months', none.length ? 'bad' : '')
+      tile('Reviews due in 30 days', String(due.length), 'Next review date coming up', due.length ? 'warn' : ''),
+      tile('Due an assessment', String(none.length), 'Review date passed, or none in 12 months', none.length ? 'bad' : '')
     ]);
     var rows = TECHS.map(function (t) {
       var last = wbLastCompleted(t), open = wbOpenOne(t), d = last && last.nextReview ? daysBetween(TODAY, last.nextReview) : null;
       return tr([h('b', { text: t }), last ? fmtDate(last.completedOn || last.date) : 'Never',
         open ? wbChip(open) : h('span', { class: 'muted', text: '—' }),
-        last && last.nextReview ? h('span', { class: d < 0 ? 'overdue' : '', text: fmtDate(last.nextReview) + (d < 0 ? ' – overdue' : d <= 30 ? ' (' + d + ' days)' : '') }) : '—',
+        last && last.nextReview ? h('span', { class: d < 0 ? 'overdue' : '', text: fmtDate(last.nextReview) + (d < 0 ? ' – overdue' : d <= 30 ? ' (' + (d ? plural(d, 'day') : 'today') + ')' : '') }) : '—',
         h('div', { class: 'btn-row', style: 'flex-wrap:nowrap' }, [
           open ? h('button', { class: 'btn small primary', type: 'button', text: 'Open', onclick: function () { go('wb', { wbId: open.id }); } })
             : h('button', { class: 'btn small', type: 'button', text: '+ Start', onclick: function () { startWellbeing(t); } }),
@@ -2237,7 +2279,15 @@ window.ESGOneToOne = function (ctx) {
         tabsBar.appendChild(h('button', { type: 'button', role: 'tab', class: 'stab', 'aria-selected': cur === t[0] ? 'true' : 'false', text: t[1], onclick: function () { cur = t[0]; draw(); } }));
       });
     }
-    function close() { back.remove(); if (teamChanged) { render(false); } }
+    function unsaved() {
+      return memberNames().some(function (t) { return (dates[t] || '') !== (apDateOf(t) || ''); }) || badDates(back) ||
+        JSON.stringify(bands.map(function (b) { return [b.max, b.name]; })) !== JSON.stringify(SETTINGS.bands.map(function (b) { return [b.max, b.name]; })) ||
+        rem.join(',') !== SETTINGS.reminders.join(',') || ['app', 'mgr', 'one', 'many'].some(function (k) { return labels[k] !== L[k]; });
+    }
+    function close() {
+      if (unsaved() && !window.confirm('Close Settings without saving your changes?')) { return; }
+      back.remove(); if (teamChanged) { render(false); }
+    }
     // ---- Team
     function teamTab() {
       var out = [];
@@ -2452,8 +2502,8 @@ window.ESGOneToOne = function (ctx) {
           h('div', null, [h('span', { text: ('Self vs ' + L.mgr) }), h('b', { text: f1(o.selfAvg) + ' vs ' + f1(o.tlAvg) })])
         ]),
         h('div', { class: 'fgrid c2', style: 'margin-top:12px' }, [
-          h('div', null, [h('h3', { text: 'Strongest areas' }), h('ul', null, sorted.slice(0, 2).map(function (x) { return h('li', { text: x.e.title + ' (' + x.latest + ' – ' + PROGRESS[x.latest - 1].title + ')' }); }))]),
-          h('div', null, [h('h3', { text: 'Areas to focus on' }), h('ul', null, sorted.slice(-2).reverse().map(function (x) { return h('li', { text: x.e.title + ' (' + x.latest + ' – ' + PROGRESS[x.latest - 1].title + ')' }); }))])
+          h('div', null, [h('h3', { text: 'Strongest areas' }), h('ul', null, sorted.slice(0, Math.min(2, Math.ceil(sorted.length / 2))).map(function (x) { return h('li', { text: x.e.title + ' (' + x.latest + ' – ' + PROGRESS[x.latest - 1].title + ')' }); }))]),
+          h('div', null, [h('h3', { text: 'Areas to focus on' }), h('ul', null, sorted.slice(Math.min(2, Math.ceil(sorted.length / 2))).slice(-2).reverse().map(function (x) { return h('li', { text: x.e.title + ' (' + x.latest + ' – ' + PROGRESS[x.latest - 1].title + ')' }); }))])
         ]),
         h('h3', { text: 'Rating trend' }), trendChart(tech, o, 210)
       ]),
@@ -2461,7 +2511,7 @@ window.ESGOneToOne = function (ctx) {
         return h('div', null, [
           h('div', { class: 'exphead' }, [h('h3', { text: x.e.title }), h('span', { class: 'small', text: 'Latest: self ' + (x.latestSelf || '—') + (' · ' + L.mgr + ' ') + (x.latestTl || '—') })]),
           h('div', { class: 'small muted', text: 'Measure: ' + x.e.measures }),
-          rtable(['Month', 'Self', 'TL', (L.one + ' evidence'), (L.mgr + ' feedback')], x.hist.map(function (hh) {
+          rtable(['Month', 'Self', L.mgr, (L.one + ' evidence'), (L.mgr + ' feedback')], x.hist.map(function (hh) {
             return [monthShort(hh.month), hh.self ? String(hh.self) : '', hh.tl ? String(hh.tl) : '', hh.comment, hh.fb];
           }))
         ]);
@@ -2474,7 +2524,7 @@ window.ESGOneToOne = function (ctx) {
       }))]),
       rsec('7. Line manager feedback', [rtable(['Month', 'Overall feedback'], prs.filter(function (r) { return r.state === 'Completed' && canSeeTl(r, aud) && r.fb.overall; }).map(function (r) { return [monthLabel(r.month), r.fb.overall]; }))]),
       rsec('8. Submission record', [rtable(['Month', 'Status', 'Submitted'], prs.map(function (r) {
-        return [monthLabel(r.month), r.state === 'Closed - Not Submitted' ? 'Not submitted' : r.state === 'Open' ? (isOverdue(r) ? 'Overdue' : 'In progress') : (r.late ? 'Submitted late' : (r.submittedOn || !IS_TL ? 'Submitted' : 'Submitted')), r.submittedOn ? fmtDate(r.submittedOn) : ''];
+        return [monthLabel(r.month), r.state === 'Closed - Not Submitted' ? 'Not submitted' : r.state === 'Open' ? (isOverdue(r) ? 'Overdue' : 'In progress') : (r.late ? 'Submitted late' : 'Submitted'), r.submittedOn ? fmtDate(r.submittedOn) : ''];
       }))]),
       h('div', { class: 'note', text: 'Generated from the monthly 1-to-1 records. Wellbeing answers are deliberately excluded. The expected outcome is a guide only.' })
     ]);
@@ -2520,6 +2570,8 @@ window.ESGOneToOne = function (ctx) {
   // ---------------------------------------------------------------------------------------------
   function render(scrollTop) {
     if (disposed || !root) { return; }
+    // toasts and confetti outlive a redraw, so a message shown just before render() (e.g. a save error) stays visible
+    var keep = Array.prototype.filter.call(root.children, function (c) { return c.classList.contains('toast') || c.classList.contains('confetti'); });
     root.textContent = '';
     live = h('div', { 'aria-live': 'polite', class: 'sr-only' });
     tipEl = h('div', { class: 'tip', role: 'tooltip' });
@@ -2596,6 +2648,7 @@ window.ESGOneToOne = function (ctx) {
     if (state.report) { root.appendChild(reportView(state.report.tech, state.report.aud)); }
     root.appendChild(live);
     root.appendChild(tipEl);
+    keep.forEach(function (c) { root.appendChild(c); });
     if (busyCount > 0) { renderBusy(); }
     if (scrollTop && root.scrollIntoView) { try { root.scrollIntoView({ block: 'start' }); } catch (_) { /* ignore */ } }
   }
@@ -2642,7 +2695,28 @@ window.ESGOneToOne = function (ctx) {
     siteUrl = String(wp.pageContext.web.absoluteUrl).replace(/\/$/, '');
     window.addEventListener('beforeunload', onBeforeUnload);
     root.addEventListener('click', closeMenus);
-    root.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closeMenus(e); } });
+    root.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') { return; }
+      closeMenus(e);
+      // Escape closes the top dialog through its own Cancel/Close button (so unsaved-change prompts still apply)
+      var dlg = root.querySelectorAll('.modal-back'), top = dlg[dlg.length - 1];
+      if (top) {
+        var btn = Array.prototype.filter.call(top.querySelectorAll('button'), function (b) { return /^(Cancel|Close)$/.test(b.textContent.trim()); }).pop();
+        if (btn) { e.preventDefault(); btn.click(); }
+      }
+    });
+    // Return focus to whatever opened a dialog once it closes.
+    if (window.MutationObserver) {
+      var opener = null;
+      new window.MutationObserver(function (muts) {
+        muts.forEach(function (m) {
+          Array.prototype.forEach.call(m.addedNodes, function (n) { if (n.classList && n.classList.contains('modal-back')) { opener = document.activeElement; } });
+          Array.prototype.forEach.call(m.removedNodes, function (n) {
+            if (n.classList && n.classList.contains('modal-back') && opener && opener.isConnected && !root.querySelector('.modal-back')) { try { opener.focus(); } catch (_) { /* ignore */ } opener = null; }
+          });
+        });
+      }).observe(root, { childList: true });
+    }
     await start();
   }
 

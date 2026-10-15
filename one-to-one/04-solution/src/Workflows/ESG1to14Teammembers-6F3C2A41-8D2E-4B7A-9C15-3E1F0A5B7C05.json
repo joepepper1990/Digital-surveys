@@ -429,6 +429,232 @@
                   "Succeeded"
                 ]
               }
+            },
+            "Get_active": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "GetItems",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                  "table": "Technicians",
+                  "$filter": "Active eq 1",
+                  "$top": 5000
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              },
+              "runAfter": {
+                "Remove_needed": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Active_logins": {
+              "type": "Select",
+              "inputs": {
+                "from": "@body('Get_active')?['value']",
+                "select": "@toLower(coalesce(item()?['Technician']?['Claims'], '#none'))"
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              },
+              "runAfter": {
+                "Get_active": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Active_emails": {
+              "type": "Select",
+              "inputs": {
+                "from": "@body('Get_active')?['value']",
+                "select": "@toLower(coalesce(item()?['Technician']?['Email'], '#none'))"
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              },
+              "runAfter": {
+                "Active_logins": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Get_members_now": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/sitegroups(@{outputs('Group_id')})/users?$select=Id,Title,LoginName,Email,IsSiteAdmin",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              },
+              "runAfter": {
+                "Active_emails": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Strays": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Get_members_now')?['value']",
+                "where": "@and(not(equals(item()?['IsSiteAdmin'], true)), not(contains(body('Active_logins'), toLower(coalesce(item()?['LoginName'], '')))), not(contains(body('Active_emails'), toLower(coalesce(item()?['Email'], '#blank')))))"
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              },
+              "runAfter": {
+                "Get_members_now": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Any_strays": {
+              "type": "If",
+              "expression": "@not(empty(body('Strays')))",
+              "actions": {
+                "Each_stray": {
+                  "type": "Foreach",
+                  "foreach": "@body('Strays')",
+                  "actions": {
+                    "Remove_stray": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                          "parameters/method": "POST",
+                          "parameters/uri": "_api/web/sitegroups(@{outputs('Group_id')})/users/removebyid(@{items('Each_stray')?['Id']})",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata"
+                          }
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runtimeConfiguration": {
+                        "secureData": {
+                          "properties": [
+                            "inputs",
+                            "outputs"
+                          ]
+                        }
+                      },
+                      "runAfter": {}
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "concurrency": {
+                      "repetitions": 1
+                    }
+                  },
+                  "runAfter": {}
+                },
+                "Stray_names": {
+                  "type": "Select",
+                  "inputs": {
+                    "from": "@body('Strays')",
+                    "select": "@coalesce(item()?['Title'], item()?['Email'], 'Unknown')"
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs",
+                        "outputs"
+                      ]
+                    }
+                  },
+                  "runAfter": {
+                    "Each_stray": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Send_E8_sync": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_office365",
+                      "operationId": "SendEmailV2",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                    },
+                    "parameters": {
+                      "emailMessage/To": "@parameters('ESG 1-to-1 Team Leader email (esg_ManagerEmail)')",
+                      "emailMessage/Subject": "1-to-1: access removed for people not active in the team list",
+                      "emailMessage/Body": "<p>These people were in the 1-to-1 group but have no Active row in ⚙ Settings → Team, so they no longer have access to the 1-to-1 page:</p><ul><li>@{join(body('Stray_names'), '</li><li>')}</li></ul><p>If someone should have access, add them (or reactivate them) in ⚙ Settings → Team.</p>",
+                      "emailMessage/Importance": "Normal"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs",
+                        "outputs"
+                      ]
+                    }
+                  },
+                  "runAfter": {
+                    "Stray_names": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {
+                "Strays": [
+                  "Succeeded"
+                ]
+              }
             }
           },
           "runAfter": {}

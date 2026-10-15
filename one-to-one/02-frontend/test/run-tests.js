@@ -638,6 +638,85 @@ async function main() {
   await sweep('TL wellbeing review of hostile answers', { as: 'tl', xss: '1', wbId: String(samXw.ID) });
   await sweep('TL wellbeing list', { as: 'tl', xss: '1' }, async function () { await page.locator('.topbar >> text=Wellbeing').click(); });
 
+  // ---------------------------------------------------------------- 18. independent review fixes (v4.2.2)
+  var c18 = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  var R = await c18.newPage(), dlg18 = [];
+  R.on('dialog', function (d) { dlg18.push(d.message()); d.accept(); });
+  async function save18(fn, arg) {
+    await R.evaluate(function (a) { var d = OTO_MOCK.current.db; (new Function('d', 'arg', a.body))(d, a.arg); sessionStorage.setItem('oto-mock-db-v5', JSON.stringify(d)); }, { body: fn, arg: arg });
+  }
+  await open(R, { as: 'tl' }); await R.evaluate(function () { OTO_MOCK.reset(); });
+  await open(R, { as: 'tl' });
+  // privacy: another person's records that are (wrongly) readable are never shown
+  await save18("var sam = d.lists['Monthly Reviews'].filter(function (x) { return x.Technician.indexOf('sam.') >= 0; }).pop();" +
+    "sam.Q1WentWell = 'SAM-PRIVATE-TEXT'; (d.perms['Monthly Reviews'][sam.ID] = d.perms['Monthly Reviews'][sam.ID] || {})['alex.morgan@example.test'] = 'read';" +
+    "var mr = d.lists['Manager Reviews'].find(function (m) { return m.ReviewItemId === sam.ID; }); if (mr) { mr.FB_Overall = 'SAM-PRIVATE-FB'; (d.perms['Manager Reviews'][mr.ID] = d.perms['Manager Reviews'][mr.ID] || {})['alex.morgan@example.test'] = 'read'; }" +
+    "var w = d.lists['Wellbeing Assessments'].find(function (x) { return x.Technician.indexOf('sam.') >= 0; }); w.Position = 'SAM-WB-PRIVATE'; (d.perms['Wellbeing Assessments'][w.ID] = d.perms['Wellbeing Assessments'][w.ID] || {})['alex.morgan@example.test'] = 'read';" +
+    // and an unreleased Manager Review of Alex's own that Alex can (wrongly) read
+    "var a = d.lists['Manager Reviews'].filter(function (m) { return m.Technician.indexOf('alex.') >= 0 && !m.ReleasedOn; }).pop(); a.FB_Overall = 'UNRELEASED-FB'; (d.perms['Manager Reviews'][a.ID] = d.perms['Manager Reviews'][a.ID] || {})['alex.morgan@example.test'] = 'read';");
+  var errs18 = await open(R, { as: 'alex' });
+  var d18 = await R.evaluate(function () { return JSON.parse(JSON.stringify(OTO_MOCK.current.db)); });
+  var alexCount = d18.lists['Monthly Reviews'].filter(function (x) { return x.Technician.indexOf('alex.') >= 0; }).length;
+  var monthOpts = await R.locator('select[aria-label="Choose a month"] option').count();
+  var t18 = await R.locator('[data-oto-root]').innerText();
+  ok('Privacy: a readable review of someone else is not listed for a technician', monthOpts === alexCount && t18.indexOf('SAM-PRIVATE') < 0 && !errs18.length, monthOpts + ' vs ' + alexCount);
+  await R.locator('.topbar >> text=Wellbeing').click();
+  var t18w = await R.locator('[data-oto-root]').innerText();
+  ok('Privacy: a readable wellbeing assessment of someone else is not shown', t18w.indexOf('SAM-WB-PRIVATE') < 0 && (await R.locator('[data-oto-root] table tbody tr').count()) ===
+    d18.lists['Wellbeing Assessments'].filter(function (x) { return x.Technician.indexOf('alex.') >= 0; }).length);
+  var seenUnreleased = false;
+  for (var mo = 0; mo < monthOpts; mo++) {
+    await R.locator('.topbar >> text=This month').click();
+    var optV = await R.locator('select[aria-label="Choose a month"] option').nth(mo).getAttribute('value');
+    await R.locator('select[aria-label="Choose a month"]').selectOption(optV); await R.waitForTimeout(60);
+    if ((await R.locator('[data-oto-root]').innerText()).indexOf('UNRELEASED-FB') >= 0) { seenUnreleased = true; }
+  }
+  ok('Privacy: unreleased feedback is not shown even if the record is readable', !seenUnreleased);
+  // ratings outside 1–5 (or not whole) in technician-editable fields don't break the TL's pages
+  await R.evaluate(function () { OTO_MOCK.reset(); });
+  await save18("d.lists['Monthly Reviews'].forEach(function (x) { x.Q3WorkloadRating = 2.5; x.Mood = 9; x.ExpectationsJson = JSON.stringify((JSON.parse(x.ExpectationsJson || '[]') || []).map(function (e) { e.rating = 6; return e; })); });");
+  var errsR = await open(R, { as: 'tl' });
+  var tR = await R.locator('[data-oto-root]').innerText();
+  ok('Robustness: out-of-range ratings do not crash Team overview', !errsR.length && tR.indexOf('Team – appraisal outlook') >= 0 && tR.indexOf('could not load') < 0, errsR.join('; '));
+  await openTeam(R, 'Alex Morgan');
+  ok('Robustness: … nor the profile', /days to appraisal/i.test(await R.locator('[data-oto-root]').innerText()));
+  await R.locator('button:has-text("Generate appraisal report")').click();
+  ok('Robustness: … nor the appraisal report', (await R.locator('.report-doc').count()) === 1);
+  // Close – not submitted is not offered while a submission is still being processed
+  await R.evaluate(function () { OTO_MOCK.reset(); });
+  var prev18 = await R.evaluate(function () { var d = OTO_MOCK.current.db, cm = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' }).slice(0, 7);
+    var y = +cm.slice(0, 4), m = +cm.slice(5, 7) - 1; if (m === 0) { y -= 1; m = 12; } var pm = y + '-' + String(m).padStart(2, '0');
+    var rv = d.lists['Monthly Reviews'].find(function (x) { return x.Technician.indexOf('jordan.') >= 0 && x.MonthKey === pm; });
+    var mr = d.lists['Manager Reviews'].find(function (x) { return x.ReviewItemId === rv.ID; });
+    rv.ReviewStatus = 'Submitted'; mr.ReviewState = 'Open'; mr.ReleasedOn = null; mr.SubmittedOn = null;
+    sessionStorage.setItem('oto-mock-db-v5', JSON.stringify(d)); return rv.ID; });
+  await open(R, { as: 'tl', reviewId: String(prev18) });
+  ok('Close – not submitted is disabled while the submission is being processed', await R.locator('button:has-text("Close – not submitted")').isDisabled());
+  // toasts survive the redraw that follows a save
+  await open(R, { as: 'tl' });
+  await R.locator('.topbar >> text=Settings').click(); await R.locator('.modal button:has-text("Save settings")').click(); await R.waitForTimeout(300);
+  ok('Feedback: the "Settings saved." message stays visible after the page redraws', (await R.locator('.toast').allInnerTexts()).some(function (t) { return t.indexOf('Settings saved') >= 0; }));
+  // Escape closes a dialog; closing Settings with unsaved changes asks first
+  await R.locator('.topbar >> text=Settings').click();
+  await R.keyboard.press('Escape'); await R.waitForTimeout(100);
+  ok('Accessibility: Escape closes the Settings dialog', (await R.locator('.modal').count()) === 0);
+  await R.locator('.topbar >> text=Settings').click();
+  var ci18 = R.locator('.modal tr:has-text("Casey Brooks") input.datef');
+  await ci18.fill('01/02/2031'); await ci18.press('Tab');
+  dlg18 = [];
+  await R.locator('.modal button:has-text("Close")').click(); await R.waitForTimeout(100);
+  ok('Settings: closing with an unsaved date asks first', dlg18.some(function (m) { return /without saving/.test(m); }));
+  // leaving without saving really discards the typed text
+  await open(R, { as: 'alex' });
+  var q1 = R.locator('textarea').first();
+  var before18 = await q1.inputValue();
+  await q1.fill('DISCARD-ME-PLEASE');
+  dlg18 = [];
+  await R.locator('.topbar >> text=My appraisal').click(); await R.waitForTimeout(400);
+  await R.locator('.topbar >> text=This month').click(); await R.waitForTimeout(200);
+  ok('Unsaved changes: leaving without saving restores the saved text', dlg18.length === 1 && (await R.locator('textarea').first().inputValue()) === before18);
+  await c18.close();
+
   await browser.close();
   var failed = results.filter(function (r) { return !r.pass; });
   console.log('\n' + (results.length - failed.length) + ' / ' + results.length + ' passed');

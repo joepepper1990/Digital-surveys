@@ -305,6 +305,13 @@
             "Mgr": {
               "type": "Compose",
               "inputs": "@first(body('Find_mgr')?['value'])",
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              },
               "runAfter": {
                 "Unknown_item": [
                   "Succeeded"

@@ -1,6 +1,6 @@
 # ESG 1-to-1 — verification record (15-Oct-2026)
 
-**Scope:** frontend v4.2.1, the importable solution (setup flow + Flows 1–5), the legacy-package builder, the six-list schema and all documents.
+**Scope:** frontend v4.2.2, solution 1.1.2.0, the importable solution (setup flow + Flows 1–5), the legacy-package builder, the six-list schema and all documents.
 
 **What this record can and can't prove.** Everything here ran outside your tenant. It proves the files are well-formed, internally consistent and behave as specified against a strict model of SharePoint that follows Microsoft's documentation. Only the tenant can prove the import and real permissions (§5).
 
@@ -8,12 +8,12 @@
 
 | Check | How | Result |
 |---|---|---|
-| Frontend | `02-frontend`: `node tools/build-mock.js && node test/run-tests.js` (headless Chromium against the local mock) | **156 / 156** |
+| Frontend | `02-frontend`: `node tools/build-mock.js && node test/run-tests.js` (headless Chromium against the local mock) | **167 / 167** |
 | Solution build | `04-solution/tools/build.py`: generate `src/`, validate, pack with Microsoft's Power Platform CLI, unpack again and compare | Packs; round trip identical |
-| Static validator | Expressions, references, scopes, run-after chains, required connector parameters, list/column names, JSON request bodies, field XML / view CAML, schedule time zone, secured run history, no hidden failures | 4 flows clean |
-| Validator proof | `tools/test_validate.py`: deliberately broken copies of the flows | **20 / 20** caught |
-| End-to-end simulation | `tools/simulate.py`: the real flow JSON executed against an in-memory SharePoint | **141 / 141** (solution) and **141 / 141** (legacy form) |
-| Simulation proof | New scenarios run against the previously committed flows / frontend | 18 flow checks and 2 frontend checks fail on the old code, so the tests detect the bugs fixed in §3 |
+| Static validator | Expressions, references, scopes, run-after chains, required connector parameters, list/column names, JSON request bodies, field XML / view CAML, schedule time zone, secured run history, no hidden failures | 6 flows clean |
+| Validator proof | `tools/test_validate.py`: deliberately broken copies of the flows | **23 / 23** caught |
+| End-to-end simulation | `tools/simulate.py`: the real flow JSON executed against an in-memory SharePoint | **149 / 149** (solution) and **149 / 149** (legacy form) |
+| Simulation proof | New scenarios run against the previously committed flows / frontend | 18 flow checks and 2 frontend checks fail on the old code, so the tests detect the bugs fixed in §3. Second review (§3a): 7 new flow checks fail on the 1.1.1.0 flows, and the new frontend checks fail on 4.2.1 (privacy ×3, robustness – the run then stops because the old profile page crashes) |
 | Legacy builder | `tools/test_builder.js` + `check_builder_zips.py` | Rejects bad input; no network requests; zips are standard and exactly as expected |
 | Microsoft schema | Flow definitions checked against Microsoft's published workflow-definition JSON schema | No error class that real exported Microsoft (PnP) flows don't also produce |
 | Determinism | Rebuild twice; compare `src/`, the builder page and the zip's flow JSON | Identical |
@@ -49,6 +49,24 @@ Three separate reviewers re-read the work against the specifications, without se
 | 16 | A submission awaiting Flow 2 showed as "Not started"; a cleared appraisal date didn't reach the technician. | Minor | "Submitted – processing"; the latest review is used | Frontend test |
 | 17 | Environment variables weren't listed in the solution manifest. | Insurance | `RootComponent type="380"` added (seen in other real exports) | Pack round trip |
 | 18 | Documentation drift: group membership visibility, setup wording, `rating: null`, counts, concurrency and accepted risks. | Docs | Corrected; risks R13–R16 added to plan J.3; v4.1 hardening table in the flow sheets | Link and consistency sweep |
+
+### 3a. Second independent review (15-Oct-2026, frontend 4.2.2 / solution 1.1.2.0)
+
+Three fresh reviewers (frontend; flows and package; docs and repository privacy) re-read everything. Fixed:
+
+| # | Defect | Severity | Fix | Test that now covers it |
+|---|---|---|---|---|
+| 19 | The technician view filed every readable record as "mine" and treated any readable Manager Review as released. Only matters if a permission step fails or lags, but then another person's review or wellbeing assessment could show. | High (defence in depth) | Records are kept only if the Technician is the signed-in person; feedback shows only once released (ReleasedOn / Completed / Closed) | Frontend: stray readable review, wellbeing and unreleased feedback are not shown |
+| 20 | Ratings outside 1–5 (or not whole) typed into editable fields crashed the TL's pages. | Medium | Ratings accepted only as whole numbers 1–5 | Frontend: 2.5 / 6 / 9 values |
+| 21 | Edits discarded with "leave without saving" stayed in memory and could be saved later by another action. | Medium | Leaving without saving reloads from SharePoint | Frontend |
+| 22 | Toasts and error messages vanished when the page redrew straight after. | Medium | Kept across redraws | Frontend |
+| 23 | "Close – not submitted" was offered while a submission was still being processed; a failed date after starting a wellbeing assessment allowed a duplicate. | Medium | Disabled while processing; item kept before the date is written | Frontend |
+| 24 | Flow 1: a wellbeing-read failure also suppressed the daily problem email (E7). | Medium | Wellbeing block has its own try/catch and adds a line to E7 | Simulation |
+| 25 | Flow 4 only acted on the changed row: people added by hand, an old person on a changed row, or a deleted row kept access. | Medium | Full sync: anyone in the group without an Active row is removed and listed | Simulation (4 checks) |
+| 26 | E12 trusted the raw status column and fired for inactive people. | Low | Needs Flow 5's CompletedOn stamp and an Active technician | Simulation |
+| 27 | Composes holding a whole record weren't explicitly secured. | Low | Secured; validator rule plus mutation | Mutation |
+| 28 | Smaller UI issues: plurals, "Today", wording in the appraisal month, role labels, overlapping strongest/focus lists, Settings closing without a prompt, a typed meeting date lost on redraw, misleading date-save error, unchecked paging links, Escape to close dialogs. | Low | Fixed | Frontend (prompt, Escape) |
+| 29 | Documentation: the real site name in the plan; inconsistent flow turn-on order; Wellbeing missing from post-setup checks; stale counts, menus and retention text. | High (privacy) / Docs | Site name removed from current files; docs aligned | Consistency sweep |
 
 ## 4. Confirmed against Microsoft documentation
 

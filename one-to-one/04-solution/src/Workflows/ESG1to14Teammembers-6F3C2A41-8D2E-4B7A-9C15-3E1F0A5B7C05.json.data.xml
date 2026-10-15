@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Workflow WorkflowId="{6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c05}" Name="ESG 1-to-1 | 4 Team members" Description="Keeps the 1-to-1 Technicians group in step with the Technicians list (Active = access to the page)." xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+<Workflow WorkflowId="{6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c05}" Name="ESG 1-to-1 | 4 Team members" Description="Keeps the 1-to-1 Technicians group in step with the Technicians list (Active = access to the page); removes anyone in the group without an Active row." xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <JsonFileName>/Workflows/ESG1to14Teammembers-6F3C2A41-8D2E-4B7A-9C15-3E1F0A5B7C05.json</JsonFileName>
   <Type>1</Type>
   <Subprocess>0</Subprocess>
@@ -15,7 +15,7 @@
   <StatusCode>1</StatusCode>
   <RunAs>1</RunAs>
   <IsTransacted>1</IsTransacted>
-  <IntroducedVersion>1.1.1.0</IntroducedVersion>
+  <IntroducedVersion>1.1.2.0</IntroducedVersion>
   <IsCustomizable>1</IsCustomizable>
   <BusinessProcessType>0</BusinessProcessType>
   <IsCustomProcessingStepAllowedForOtherPublishers>1</IsCustomProcessingStepAllowedForOtherPublishers>

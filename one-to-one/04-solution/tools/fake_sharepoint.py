@@ -54,6 +54,7 @@ class FakeSP:
         self.calls = []
         self.ensure_fail = set()
         self.fail_fields = set()        # column names createfieldasxml will refuse (to test warn-and-continue)
+        self.fail_uris = []
         self.dates_as_instants = False  # connector returns date-only values as UTC instants instead of yyyy-MM-dd  # user ids whose account cannot be resolved (left the organisation)
 
     # ------------------------------------------------------------------ model helpers
@@ -253,6 +254,8 @@ class FakeSP:
         if not uri.startswith('_api/'):
             fail(400, 'uri must start with _api/: ' + uri)
         path, _, qs = uri.partition('?')
+        if any(x in uri for x in self.fail_uris):   # test hook: make a REST call fail with a server error
+            fail(500, 'simulated server error')
         verbose = 'odata=verbose' in headers.get('Content-Type', '')
         data = None
         if body is not None:
@@ -309,7 +312,8 @@ class FakeSP:
             if g is None:
                 fail(404, 'group not found')
             if method == 'GET' and not mg.group(2):
-                return {'value': [{'Id': u} for u in sorted(g['members'])]}
+                return {'value': [{'Id': u, 'Title': self.users[u]['Title'], 'LoginName': self.users[u]['Claims'], 'Email': self.users[u]['Email'],
+                                   'IsSiteAdmin': False} for u in sorted(g['members'])]}
             if method == 'POST' and not mg.group(2):
                 need_type('SP.User')
                 u = self.user_by_claims(data['LoginName'])
@@ -412,13 +416,20 @@ class FakeSP:
         if method == 'GET' and rest == '/items':
             args = dict(kv.split('=', 1) for kv in qs.split('&') if '=' in kv)
             sel = [x for x in args.get('$select', 'Id,Title').split(',') if x]
-            rows = self.get_items(lst, args.get('$filter'), None, args.get('$top'))
+            top = int(args.get('$top', '100'))
+            if top > 5000:
+                fail(400, 'The $top value cannot exceed 5000')
+            rows = self.get_items(lst, args.get('$filter'), None, top)
+            zone = 'Europe/London' if 'London' in self.tz else 'UTC'   # the site's regional time zone
             out = []
             for r in rows:
-                o = {'Id': r['ID'], 'ID': r['ID'], 'Title': r.get('Title')}
+                o = {'Id': r['ID'], 'ID': r['ID']}   # like SharePoint: Id/ID always, everything else only when selected
                 for f in sel:
                     name, _, sub = f.partition('/')
-                    if name in ('Id', 'ID', 'Title'):
+                    if name in ('Id', 'ID'):
+                        continue
+                    if name == 'Title':
+                        o['Title'] = r.get('Title')
                         continue
                     if name not in lst['fields']:
                         fail(400, 'column not found ' + name)
@@ -428,11 +439,12 @@ class FakeSP:
                         if '$expand' not in args or name not in args['$expand']:
                             fail(400, 'person column needs $expand ' + name)
                         u = self.users.get(v) if v is not None else None
-                        o[name] = {'Title': u['Title'], 'EMail': u['Email']} if u else None
+                        subs = [x.partition('/')[2] for x in sel if x.partition('/')[0] == name]
+                        o[name] = {k: {'Title': u['Title'], 'EMail': u['Email'], 'Id': u['Id']}[k] for k in subs if k in ('Title', 'EMail', 'Id')} if u else None
                     elif t['Type'] == 'DateTime' and v:
                         from datetime import datetime, timezone
                         from zoneinfo import ZoneInfo
-                        o[name] = v if 'T' in v else datetime.fromisoformat(v[:10]).replace(tzinfo=ZoneInfo('Europe/London')).astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+                        o[name] = v if 'T' in v else datetime.fromisoformat(v[:10]).replace(tzinfo=ZoneInfo(zone)).astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
                     else:
                         o[name] = v
                 out.append(o)

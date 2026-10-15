@@ -127,7 +127,7 @@ E4 and E5 are written in the first person (they come from your mailbox), so they
 
 | # | Flow → to | Subject | Body (summary) |
 |---|---|---|---|
-| E8 | 4 Team members → you | `1-to-1: access given to <name>` / `1-to-1: access removed for <name>` | Confirms the `1-to-1 Technicians` group change after you add or deactivate someone in ⚙ Settings → Team. |
+| E8 | 4 Team members → you | `1-to-1: access given to <name>` / `1-to-1: access removed for <name>` / `1-to-1: access removed for people not active in the team list` | Confirms the `1-to-1 Technicians` group change after you add or deactivate someone in ⚙ Settings → Team. The third lists anyone found in the group without an Active row (added by hand, or the person on a row was changed) who has just been removed. |
 | E9 | 5 Wellbeing → the person | `Your wellbeing assessment is ready to complete` | You've started a wellbeing assessment; please complete their part before you meet (15–20 minutes, can save and come back); link `?wbId=<id>`; only the two of you can see it. |
 | E10 | 5 Wellbeing → you | `Wellbeing assessment submitted: <name>` | Arrange a private, hour-long conversation; link to the assessment. |
 | E11 | 5 Wellbeing → the person | `Your wellbeing assessment record is ready` | Thanks for the conversation; the agreed record (arrangements, review date) is ready to view; link. |

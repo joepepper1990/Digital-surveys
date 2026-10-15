@@ -474,6 +474,24 @@ def team_and_wellbeing_checks():
     sp.write_item(techs, alex['id'], {'item/Active': True})
     fire('4', sp, 'Technicians', alex['id'], T('2026-10-16T11:00:00'))
     ok('Flow 4: reactivating adds them back', 11 in sp.groups[gid]['members'])
+    # full sync: anyone in the group without an Active row is removed, whoever put them there
+    sp.groups[gid]['members'].add(12)
+    n = len(sp.emails)
+    st, eng = fire('4', sp, 'Technicians', alex['id'], T('2026-10-16T12:00:00'))
+    ok('Flow 4 (full sync): someone added to the group by hand with no Active row is removed and listed for the TL', st == 'Succeeded' and
+       12 not in sp.groups[gid]['members'] and 11 in sp.groups[gid]['members'] and len(sp.emails) == n + 1 and
+       'not active in the team list' in sp.emails[-1]['subject'] and 'Sam Patel' in sp.emails[-1]['body'], (st, eng and eng.log))
+    sp.write_item(techs, alex['id'], {'item/Technician/Claims': sp.users[12]['Claims']})
+    st, eng = fire('4', sp, 'Technicians', alex['id'], T('2026-10-16T12:05:00'))
+    ok('Flow 4 (full sync): changing the person on a row gives the new person access and removes the old one', st == 'Succeeded' and
+       12 in sp.groups[gid]['members'] and 11 not in sp.groups[gid]['members'], (st, eng and eng.log, sp.groups[gid]['members']))
+    sp.write_item(techs, alex['id'], {'item/Technician/Claims': sp.users[11]['Claims']})
+    n = len(sp.emails)
+    st, _ = fire('4', sp, 'Technicians', alex['id'], T('2026-10-16T12:10:00'))
+    ok('Flow 4 (full sync): and back again', st == 'Succeeded' and sp.groups[gid]['members'] == {11})
+    n = len(sp.emails)
+    st, _ = fire('4', sp, 'Technicians', alex['id'], T('2026-10-16T12:15:00'))
+    ok('Flow 4 (full sync): nothing to do → no email', st == 'Succeeded' and len(sp.emails) == n and sp.groups[gid]['members'] == {11})
 
     # Flow 5: wellbeing assessment lifecycle
     wb = sp.list_by_title('Wellbeing Assessments')
@@ -546,6 +564,29 @@ def team_and_wellbeing_checks():
     n = len(sp.emails)
     run('1', sp, T('2027-03-05T07:00:00'), overrides={'varTestDate': '2027-03-05T07:00:00'})
     ok('Flow 1: no wellbeing email on other days', not any(e['subject'].startswith('Wellbeing review') for e in sp.emails[n:]))
+    # summer time: a 10 June review date comes back as 2027-06-09T23:00:00Z
+    sp.write_item(wb, it['id'], {'item/NextReviewDate': '2027-06-10'})
+    def e12_on(day):
+        m = len(sp.emails)
+        st_, eng_ = run('1', sp, T(day + 'T07:00:00'), overrides={'varTestDate': day + 'T07:00:00'})
+        return st_, eng_, [e['subject'] for e in sp.emails[m:] if e['subject'].startswith('Wellbeing review')]
+    r3, r9, r10 = e12_on('2027-06-03'), e12_on('2027-06-09'), e12_on('2027-06-10')
+    ok('Flow 1 (BST): a June review date is reminded 7 days before and on the day, not the day before', r3[2] == ['Wellbeing review due in 7 days: Alex Morgan']
+       and r9[2] == [] and r10[2] == ['Wellbeing review due today: Alex Morgan'], (r3[2], r9[2], r10[2]))
+    saved_done = it['fields'].get('CompletedOn')
+    it['fields']['CompletedOn'] = None
+    ok('Flow 1: no reminder for an assessment marked Completed that the flow never completed (no CompletedOn)', e12_on('2027-06-10')[2] == [])
+    it['fields']['CompletedOn'] = saved_done
+    sp.write_item(techs, alex['id'], {'item/Active': False})
+    ok('Flow 1: no wellbeing reminder for someone no longer active', e12_on('2027-06-10')[2] == [])
+    sp.write_item(techs, alex['id'], {'item/Active': True})
+    sp.fail_uris = ['AssessmentStatus eq']
+    m = len(sp.emails)
+    st, eng = run('1', sp, T('2027-06-10T07:00:00'), overrides={'varTestDate': '2027-06-10T07:00:00'})
+    sp.fail_uris = []
+    e7 = [e for e in sp.emails[m:] if e['subject'] == '1-to-1 system: action needed']
+    ok('Flow 1: if the wellbeing check fails, the run still finishes and the daily problem email says so', st == 'Succeeded' and len(e7) == 1 and
+       'Wellbeing review reminders could not be checked' in e7[0]['body'], (st, eng.log[-5:] if eng else None, [e['subject'] for e in sp.emails[m:]]))
 
     # upgrade safety: a site set up with 1.0 (no wellbeing list, no Reminders item) keeps working with 1.1's Flow 1
     sp = fsp.FakeSP()

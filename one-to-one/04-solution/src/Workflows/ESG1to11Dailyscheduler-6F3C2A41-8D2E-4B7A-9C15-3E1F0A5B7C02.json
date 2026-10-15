@@ -739,6 +739,13 @@
                     "Mgr": {
                       "type": "Compose",
                       "inputs": "@first(body('Get_mgr')?['value'])",
+                      "runtimeConfiguration": {
+                        "secureData": {
+                          "properties": [
+                            "inputs"
+                          ]
+                        }
+                      },
                       "runAfter": {
                         "Get_mgr": [
                           "Succeeded"
@@ -1302,89 +1309,24 @@
               "type": "If",
               "expression": "@not(empty(body('List_wellbeing')))",
               "actions": {
-                "Get_wellbeing": {
-                  "type": "OpenApiConnection",
-                  "inputs": {
-                    "host": {
-                      "connectionName": "shared_sharepointonline",
-                      "operationId": "HttpRequest",
-                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                    },
-                    "parameters": {
-                      "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
-                      "parameters/method": "GET",
-                      "parameters/uri": "_api/web/lists(guid'@{first(body('List_wellbeing'))?['Id']}')/items?$select=ID,NextReviewDate,Technician/Title&$expand=Technician&$filter=AssessmentStatus eq 'Completed'&$top=5000",
-                      "parameters/headers": {
-                        "Accept": "application/json;odata=nometadata"
-                      }
-                    },
-                    "authentication": "@parameters('$authentication')"
-                  },
-                  "runtimeConfiguration": {
-                    "secureData": {
-                      "properties": [
-                        "inputs",
-                        "outputs"
-                      ]
-                    }
-                  },
-                  "runAfter": {}
-                },
-                "Today": {
-                  "type": "Compose",
-                  "inputs": "@formatDateTime(outputs('ukNow'), 'yyyy-MM-dd')",
-                  "runAfter": {
-                    "Get_wellbeing": [
-                      "Succeeded"
-                    ]
-                  }
-                },
-                "In7": {
-                  "type": "Compose",
-                  "inputs": "@formatDateTime(addDays(outputs('ukNow'), 7), 'yyyy-MM-dd')",
-                  "runAfter": {
-                    "Today": [
-                      "Succeeded"
-                    ]
-                  }
-                },
-                "Reviews_due": {
-                  "type": "Query",
-                  "inputs": {
-                    "from": "@body('Get_wellbeing')?['value']",
-                    "where": "@contains(createArray(outputs('Today'), outputs('In7')), if(contains(string(coalesce(item()?['NextReviewDate'], '')), 'T'), formatDateTime(convertFromUtc(coalesce(item()?['NextReviewDate'], '2000-01-01T00:00:00Z'), 'GMT Standard Time'), 'yyyy-MM-dd'), coalesce(item()?['NextReviewDate'], '')))"
-                  },
-                  "runtimeConfiguration": {
-                    "secureData": {
-                      "properties": [
-                        "inputs",
-                        "outputs"
-                      ]
-                    }
-                  },
-                  "runAfter": {
-                    "In7": [
-                      "Succeeded"
-                    ]
-                  }
-                },
-                "Each_review_due": {
-                  "type": "Foreach",
-                  "foreach": "@body('Reviews_due')",
+                "WellbeingTry": {
+                  "type": "Scope",
                   "actions": {
-                    "Send_E12": {
+                    "Get_wellbeing": {
                       "type": "OpenApiConnection",
                       "inputs": {
                         "host": {
-                          "connectionName": "shared_office365",
-                          "operationId": "SendEmailV2",
-                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
                         },
                         "parameters": {
-                          "emailMessage/To": "@parameters('ESG 1-to-1 Team Leader email (esg_ManagerEmail)')",
-                          "emailMessage/Subject": "Wellbeing review @{if(equals(if(contains(string(coalesce(items('Each_review_due')?['NextReviewDate'], '')), 'T'), formatDateTime(convertFromUtc(coalesce(items('Each_review_due')?['NextReviewDate'], '2000-01-01T00:00:00Z'), 'GMT Standard Time'), 'yyyy-MM-dd'), coalesce(items('Each_review_due')?['NextReviewDate'], '')), outputs('Today')), 'due today', 'due in 7 days')}: @{items('Each_review_due')?['Technician']?['Title']}",
-                          "emailMessage/Body": "<p>The wellbeing review agreed with @{items('Each_review_due')?['Technician']?['Title']} is due on @{formatDateTime(if(contains(string(coalesce(items('Each_review_due')?['NextReviewDate'], '')), 'T'), formatDateTime(convertFromUtc(coalesce(items('Each_review_due')?['NextReviewDate'], '2000-01-01T00:00:00Z'), 'GMT Standard Time'), 'yyyy-MM-dd'), coalesce(items('Each_review_due')?['NextReviewDate'], '')), 'dd-MMM-yyyy')}. Arrange the review conversation, or start a new assessment if one is needed.</p><p><a href=\"@{concat(concat(if(endsWith(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), '/'), substring(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), 0, sub(length(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), 1)), parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), '/SitePages/OneToOne.aspx'), if(empty(first(split(string(coalesce(items('Each_review_due')?['ID'], '')), '.'))), '', concat('?wbId=', first(split(string(coalesce(items('Each_review_due')?['ID'], '')), '.')))))}\"><b>Open the last assessment</b></a></p>",
-                          "emailMessage/Importance": "Normal"
+                          "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                          "parameters/method": "GET",
+                          "parameters/uri": "_api/web/lists(guid'@{first(body('List_wellbeing'))?['Id']}')/items?$select=ID,NextReviewDate,CompletedOn,Technician/Title,Technician/EMail&$expand=Technician&$filter=AssessmentStatus eq 'Completed'&$top=5000",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata"
+                          }
                         },
                         "authentication": "@parameters('$authentication')"
                       },
@@ -1397,16 +1339,126 @@
                         }
                       },
                       "runAfter": {}
+                    },
+                    "Active_emails": {
+                      "type": "Select",
+                      "inputs": {
+                        "from": "@body('Get_technicians')?['value']",
+                        "select": "@toLower(coalesce(item()?['Technician']?['Email'], ''))"
+                      },
+                      "runtimeConfiguration": {
+                        "secureData": {
+                          "properties": [
+                            "inputs",
+                            "outputs"
+                          ]
+                        }
+                      },
+                      "runAfter": {
+                        "Get_wellbeing": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Today": {
+                      "type": "Compose",
+                      "inputs": "@formatDateTime(outputs('ukNow'), 'yyyy-MM-dd')",
+                      "runAfter": {
+                        "Active_emails": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "In7": {
+                      "type": "Compose",
+                      "inputs": "@formatDateTime(addDays(outputs('ukNow'), 7), 'yyyy-MM-dd')",
+                      "runAfter": {
+                        "Today": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Reviews_due": {
+                      "type": "Query",
+                      "inputs": {
+                        "from": "@body('Get_wellbeing')?['value']",
+                        "where": "@and(contains(createArray(outputs('Today'), outputs('In7')), if(contains(string(coalesce(item()?['NextReviewDate'], '')), 'T'), formatDateTime(convertFromUtc(coalesce(item()?['NextReviewDate'], '2000-01-01T00:00:00Z'), 'GMT Standard Time'), 'yyyy-MM-dd'), coalesce(item()?['NextReviewDate'], ''))), not(empty(item()?['CompletedOn'])), contains(body('Active_emails'), toLower(coalesce(item()?['Technician']?['EMail'], '#none'))))"
+                      },
+                      "runtimeConfiguration": {
+                        "secureData": {
+                          "properties": [
+                            "inputs",
+                            "outputs"
+                          ]
+                        }
+                      },
+                      "runAfter": {
+                        "In7": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Each_review_due": {
+                      "type": "Foreach",
+                      "foreach": "@body('Reviews_due')",
+                      "actions": {
+                        "Send_E12": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_office365",
+                              "operationId": "SendEmailV2",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                            },
+                            "parameters": {
+                              "emailMessage/To": "@parameters('ESG 1-to-1 Team Leader email (esg_ManagerEmail)')",
+                              "emailMessage/Subject": "Wellbeing review @{if(equals(if(contains(string(coalesce(items('Each_review_due')?['NextReviewDate'], '')), 'T'), formatDateTime(convertFromUtc(coalesce(items('Each_review_due')?['NextReviewDate'], '2000-01-01T00:00:00Z'), 'GMT Standard Time'), 'yyyy-MM-dd'), coalesce(items('Each_review_due')?['NextReviewDate'], '')), outputs('Today')), 'due today', 'due in 7 days')}: @{items('Each_review_due')?['Technician']?['Title']}",
+                              "emailMessage/Body": "<p>The wellbeing review agreed with @{items('Each_review_due')?['Technician']?['Title']} is due on @{formatDateTime(if(contains(string(coalesce(items('Each_review_due')?['NextReviewDate'], '')), 'T'), formatDateTime(convertFromUtc(coalesce(items('Each_review_due')?['NextReviewDate'], '2000-01-01T00:00:00Z'), 'GMT Standard Time'), 'yyyy-MM-dd'), coalesce(items('Each_review_due')?['NextReviewDate'], '')), 'dd-MMM-yyyy')}. Arrange the review conversation, or start a new assessment if one is needed.</p><p><a href=\"@{concat(concat(if(endsWith(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), '/'), substring(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), 0, sub(length(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), 1)), parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), '/SitePages/OneToOne.aspx'), if(empty(first(split(string(coalesce(items('Each_review_due')?['ID'], '')), '.'))), '', concat('?wbId=', first(split(string(coalesce(items('Each_review_due')?['ID'], '')), '.')))))}\"><b>Open the last assessment</b></a></p>",
+                              "emailMessage/Importance": "Normal"
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {}
+                        }
+                      },
+                      "runtimeConfiguration": {
+                        "concurrency": {
+                          "repetitions": 1
+                        }
+                      },
+                      "runAfter": {
+                        "Reviews_due": [
+                          "Succeeded"
+                        ]
+                      }
                     }
                   },
-                  "runtimeConfiguration": {
-                    "concurrency": {
-                      "repetitions": 1
+                  "runAfter": {}
+                },
+                "WellbeingCatch": {
+                  "type": "Scope",
+                  "actions": {
+                    "Note_wellbeing_failed": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "varProblems",
+                        "value": "Wellbeing review reminders could not be checked today. Open the run history for details."
+                      },
+                      "runAfter": {}
                     }
                   },
                   "runAfter": {
-                    "Reviews_due": [
-                      "Succeeded"
+                    "WellbeingTry": [
+                      "Failed",
+                      "TimedOut"
                     ]
                   }
                 }

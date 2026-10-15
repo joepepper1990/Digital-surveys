@@ -6,9 +6,9 @@
       <LocalizedName description="ESG 1-to-1" languagecode="1033" />
     </LocalizedNames>
     <Descriptions>
-      <Description description="ESG Monthly Technician 1-to-1: setup flow, daily scheduler, submission and manager-decision flows." languagecode="1033" />
+      <Description description="ESG Monthly Technician 1-to-1: setup flow, daily scheduler, submission, manager-decision, team-members and wellbeing flows." languagecode="1033" />
     </Descriptions>
-    <Version>1.1.1.0</Version>
+    <Version>1.1.2.0</Version>
     <Managed>0</Managed>
     <Publisher>
       <UniqueName>ESGOneToOne</UniqueName>

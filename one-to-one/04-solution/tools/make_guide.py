@@ -79,7 +79,7 @@ GUIDE = r'''# ESG Monthly Technician 1-to-1 — Finalisation Guide
 
 **From the end of Stage 0B to a live system, then running it month to month.** This document is self-contained: you don't need any other file to follow it. Tick each box as you go.
 
-Version: system v4.2.1 (frontend) · solution 1.1.1.0 · guide dated 15-Oct-2026
+Version: system v4.2.2 (frontend) · solution 1.1.2.0 · guide dated 15-Oct-2026
 
 ---
 
@@ -92,9 +92,9 @@ Version: system v4.2.1 (frontend) · solution 1.1.1.0 · guide dated 15-Oct-2026
   - the `1-to-1 Technicians` group exists;
   - the `1-to-1 Edit` and `1-to-1 Read` permission levels exist.
 - **Everything to install is built and verified offline:**
-  - frontend: 156 automated checks;
-  - flows: simulated end to end, 110 checks;
-  - an independent review fixed 17 defects.
+  - frontend: 167 automated checks;
+  - flows: simulated end to end, 149 checks, and 23 deliberately broken copies all caught by the validator;
+  - two independent reviews fixed 29 defects (see VERIFICATION.md).
 
 **Not yet proven:** nothing has run in your tenant yet.
 
@@ -119,7 +119,7 @@ Version: system v4.2.1 (frontend) · solution 1.1.1.0 · guide dated 15-Oct-2026
 
 | File | Goes to |
 |---|---|
-| `ESGOneToOne_1_1_1_0_unmanaged.zip` | Power Automate → **Solutions → Import solution**. Contains the six flows; the setup flow creates the lists. |
+| `ESGOneToOne_1_1_2_0_unmanaged.zip` | Power Automate → **Solutions → Import solution**. Contains the six flows; the setup flow creates the lists. |
 | `one-to-one.html` | SharePoint → *Welcome Web Part - Custom Layouts* library |
 | `one-to-one.js` | Same library, alongside the `.html` |
 
@@ -133,7 +133,7 @@ Version: system v4.2.1 (frontend) · solution 1.1.1.0 · guide dated 15-Oct-2026
 ## Phase 0 — Get and check the files (5 min)
 
 - [ ] **Right zip.** Open the zip, then open `solution.xml` in Notepad. It must contain `<RootComponent type="380" schemaName="esg_SiteUrl"`. If it doesn't, you have an older download: get the latest one.
-- [ ] **Right frontend.** You have `one-to-one.html` and `one-to-one.js` (v4.2.1). After installing, the top menu bar must show **v4.2.1** (right-hand end).
+- [ ] **Right frontend.** You have `one-to-one.html` and `one-to-one.js` (v4.2.2). After installing, the top menu bar must show **v4.2.2** (right-hand end).
 - [ ] **Unchanged files.** Transfer them the usual approved way. Don't open and re-save them in Word.
 
 ---
@@ -151,11 +151,13 @@ Version: system v4.2.1 (frontend) · solution 1.1.1.0 · guide dated 15-Oct-2026
 
 ### 4.2 Import the solution (10 min)
 
+> **Already imported an earlier version?** Import this zip over it the same way: it says it will **upgrade**; leave *"Enable Plugin steps and flows"* unticked and keep your connections and values. Coming from **1.0**, run **0 Setup** again afterwards (4.3: it adds the Wellbeing list and Reminders setting). Then check every flow is On (4.7), upload the new frontend files with **Replace** and **Reset layout cache** (4.5).
+
 1. [ ] Go to **make.powerautomate.com**, signed in as yourself.
 2. [ ] Top right: pick the environment IT named for the flows.
 3. [ ] Left menu: **Solutions**.
    - If it asks to create a **Dataverse database**, or *Solutions* is missing, use §4.8 instead.
-4. [ ] **Import solution → Browse →** `ESGOneToOne_1_1_1_0_unmanaged.zip` → **Next → Next**.
+4. [ ] **Import solution → Browse →** `ESGOneToOne_1_1_2_0_unmanaged.zip` → **Next → Next**.
 5. [ ] **Connections.** For each of the three, pick yours or click **+ New connection**, signed in as you:
 
    | Connection reference | Connector |
@@ -186,11 +188,11 @@ Version: system v4.2.1 (frontend) · solution 1.1.1.0 · guide dated 15-Oct-2026
 
 ### 4.4 Check the result (5 min)
 
-- [ ] **Site contents** shows: Technicians, Appraisal Expectations, Monthly Reviews, Manager Reviews, 1-to-1 Settings.
+- [ ] **Site contents** shows the six lists: Technicians, Appraisal Expectations, Monthly Reviews, Manager Reviews, **Wellbeing Assessments**, 1-to-1 Settings.
 - [ ] Each list → ⚙ → **List settings → Permissions for this list**:
-  - Technicians, Appraisal Expectations, Monthly Reviews and Manager Reviews show **only** *Owners – Full Control*;
+  - Technicians, Appraisal Expectations, Monthly Reviews, Manager Reviews and **Wellbeing Assessments** (health information) show **only** *Owners – Full Control*;
   - **1-to-1 Settings** shows Owners **and** `1-to-1 Technicians` – Read.
-- [ ] **1-to-1 Settings** contains one item, **Bands**.
+- [ ] **1-to-1 Settings** contains two items, **Bands** and **Reminders**.
 - [ ] Spot check: Monthly Reviews → List settings → click **Q9FollowUp**. The address ends `Field=Q9FollowUp`, and it has three choices.
 
 ### 4.5 Install the frontend (15 min)
@@ -213,10 +215,10 @@ Version: system v4.2.1 (frontend) · solution 1.1.1.0 · guide dated 15-Oct-2026
 
 - [ ] **Version check.** If you replaced `one-to-one.html` / `one-to-one.js` after first choosing the layout: web part settings (pencil) → **Reset layout cache** → **Republish**.
 - [ ] Open the site. You should see:
-  - a dark **top menu bar**: Team overview, Monthly reviews, Expectations and Actions on the left; **Team (0) ▾** and **⚙ Settings** on the right;
-  - the month, deadline, ↻ Refresh and **v4.2.1** at the far right;
+  - a dark **top menu bar**: Team overview, Monthly reviews, Expectations, Actions and Wellbeing on the left; **Team (0) ▾** and **⚙ Settings** on the right;
+  - the month, deadline, ↻ Refresh and **v4.2.2** at the far right;
   - **Team overview** showing six tiles at 0, then *"No technicians yet"* with four numbered getting-started steps.
-- [ ] Click through **Monthly reviews**, **Expectations**, **Actions** and **⚙ Settings**. Expect no errors (empty pages are normal for now).
+- [ ] Click through **Monthly reviews**, **Expectations**, **Actions**, **Wellbeing** and **⚙ Settings**. Expect no errors (empty pages are normal for now).
 - [ ] **Expectations:** add one *Shared* expectation. This proves item creation and the Yes/No column work in your tenant.
   - Leave it Active if it's a real one; otherwise **Retire** it.
   - The *Individual* expectation (Person column) is tested in Phase B: the Technician dropdown is empty until someone is in the Technicians list.
@@ -228,14 +230,13 @@ Version: system v4.2.1 (frontend) · solution 1.1.1.0 · guide dated 15-Oct-2026
 
 ### 4.7 Turn on flows 1 to 5
 
-- [ ] **Solutions → ESG 1-to-1** → select each flow → **Turn on**:
-  - **1 Daily scheduler**
-  - **2 Review submitted**
-  - **3 Manager decision**
-  - **4 Team members** – gives people you add in ⚙ Settings → Team access to the page
-  - **5 Wellbeing** – wellbeing assessments
-
-> **Already imported 1.0?** Upgrade first: import `ESGOneToOne_1_1_1_0_unmanaged.zip` over it, re-run **0 Setup**, turn on flows 4 and 5, upload the v4.2.1 files and **Reset layout cache** (IMPORT_GUIDE §0).
+- [ ] Only after the Setup summary email (4.3). **Solutions → ESG 1-to-1** → select each flow → **Turn on**, in this order:
+  1. **2 Review submitted**
+  2. **3 Manager decision**
+  3. **4 Team members** – gives people you add in ⚙ Settings → Team access to the page
+  4. **5 Wellbeing** – wellbeing assessments
+  5. **1 Daily scheduler** – last, so its first run finds everything ready
+- [ ] **0 Setup** stays On (it only runs when you click Run).
 
 ### 4.8 Fallback: no Dataverse (legacy packages)
 

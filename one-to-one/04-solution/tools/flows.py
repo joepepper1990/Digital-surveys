@@ -138,8 +138,11 @@ def user_profile(email_expr):
     return _conn('shared_office365users', USERS_API, 'UserProfile_V2', {'id': email_expr}, True)
 
 
-def compose(value):
-    return {'type': 'Compose', 'inputs': value}
+def compose(value, secure=False):
+    a = {'type': 'Compose', 'inputs': value}
+    if secure:   # a Compose's output is its input, so securing the inputs hides both in run history
+        a['runtimeConfiguration'] = {'secureData': {'properties': ['inputs']}}
+    return a
 
 
 def init_var(name, typ, value=None):
@@ -587,7 +590,7 @@ def flow_daily():
             })),
         ))),
         ('Get_mgr', get_items(MGR, "ReviewKey eq '@{outputs('ReviewKey')}'", top=1)),
-        ('Mgr', compose("@first(body('Get_mgr')?['value'])")),
+        ('Mgr', compose("@first(body('Get_mgr')?['value'])", secure=True)),
         ('Review_missing', cond("@equals(" + MGRO + "?['ReviewItemId'], null)", seq(
             ('Tech_copy', select("@json(coalesce(" + MGRO + "?['ExpectationSnapshotJson'], '[]'))",
                                  {'id': "@item()?['id']", 'title': "@item()?['title']", 'measures': "@item()?['measures']",
@@ -643,20 +646,30 @@ def flow_daily():
             ))),
         ))),
         ('List_wellbeing', query("@body('Get_lists')?['value']", "@equals(item()?['RootFolder']?['Name'], 'WellbeingAssessments')", secure=True)),
-        ('Wellbeing_list_exists', cond("@not(empty(body('List_wellbeing')))", seq(
-            # REST by list GUID, not the connector's Get items: a connector step naming this list would stop the flow
-            # being saved/turned on until setup has created the list (upgrade from 1.0).
-            ('Get_wellbeing', http('GET', "_api/web/lists(guid'@{first(body('List_wellbeing'))?['Id']}')/items?$select=ID,NextReviewDate,"
-                                   "Technician/Title&$expand=Technician&$filter=AssessmentStatus eq 'Completed'&$top=5000")),
-            ('Today', compose("@formatDateTime(outputs('ukNow'), 'yyyy-MM-dd')")),
-            ('In7', compose("@formatDateTime(addDays(outputs('ukNow'), 7), 'yyyy-MM-dd')")),
-            ('Reviews_due', query("@body('Get_wellbeing')?['value']",
-                                  "@contains(createArray(outputs('Today'), outputs('In7')), " + local_date("item()?['NextReviewDate']") + ")", secure=True)),
-            ('Each_review_due', foreach("@body('Reviews_due')", seq(
-                ('Send_E12', email('@' + TL_EMAIL, "Wellbeing review @{if(equals(" + local_date("items('Each_review_due')?['NextReviewDate']") +
-                                   ", outputs('Today')), 'due today', 'due in 7 days')}: @{items('Each_review_due')?['Technician']?['Title']}", e12)),
-            ))),
-        ))),
+        ('Wellbeing_list_exists', cond("@not(empty(body('List_wellbeing')))", {
+            # A failure here must not stop the daily problem email (E7): it is noted and the run carries on.
+            'WellbeingTry': after(scope(seq(
+                # REST by list GUID, not the connector's Get items: a connector step naming this list would stop the flow
+                # being saved/turned on until setup has created the list (upgrade from 1.0).
+                ('Get_wellbeing', http('GET', "_api/web/lists(guid'@{first(body('List_wellbeing'))?['Id']}')/items?$select=ID,NextReviewDate,CompletedOn,"
+                                       "Technician/Title,Technician/EMail&$expand=Technician&$filter=AssessmentStatus eq 'Completed'&$top=5000")),
+                ('Active_emails', select("@body('Get_technicians')?['value']", "@toLower(coalesce(item()?['Technician']?['Email'], ''))", secure=True)),
+                ('Today', compose("@formatDateTime(outputs('ukNow'), 'yyyy-MM-dd')")),
+                ('In7', compose("@formatDateTime(addDays(outputs('ukNow'), 7), 'yyyy-MM-dd')")),
+                # only assessments the flow itself completed (CompletedOn is stamped by Flow 5), for someone still active
+                ('Reviews_due', query("@body('Get_wellbeing')?['value']",
+                                      "@and(contains(createArray(outputs('Today'), outputs('In7')), " + local_date("item()?['NextReviewDate']") + "), "
+                                      "not(empty(item()?['CompletedOn'])), "
+                                      "contains(body('Active_emails'), toLower(coalesce(item()?['Technician']?['EMail'], '#none'))))", secure=True)),
+                ('Each_review_due', foreach("@body('Reviews_due')", seq(
+                    ('Send_E12', email('@' + TL_EMAIL, "Wellbeing review @{if(equals(" + local_date("items('Each_review_due')?['NextReviewDate']") +
+                                       ", outputs('Today')), 'due today', 'due in 7 days')}: @{items('Each_review_due')?['Technician']?['Title']}", e12)),
+                ))),
+            )), {}),
+            'WellbeingCatch': after(scope(seq(
+                ('Note_wellbeing_failed', append('varProblems', 'Wellbeing review reminders could not be checked today. Open the run history for details.')),
+            )), {'WellbeingTry': FAILED}),
+        })),
         ('Any_problems', cond("@greater(length(variables('varProblems')), 0)", seq(
             ('Send_E7', email('@' + TL_EMAIL, '1-to-1 system: action needed', e7)),
         ))),
@@ -700,7 +713,7 @@ def flow_submitted():
         *load_ids(),
         ('Find_mgr', get_items(MGR, "ReviewItemId eq @{" + TB + "?['ID']}", top=1)),
         ('Unknown_item', cond("@equals(length(body('Find_mgr')?['value']), 0)", seq(('Not_a_flow_review', terminate('Cancelled'))))),
-        ('Mgr', compose("@first(body('Find_mgr')?['value'])")),
+        ('Mgr', compose("@first(body('Find_mgr')?['value'])", secure=True)),
         ('PrevState', compose('@' + MGRO + "?['ReviewState']?['Value']")),
         ensure_user('Ensure_user', MGRO + "?['Technician']?['Claims']"),
         *setperm('', 'reviewsList', TB + "?['ID']", "outputs('Ids')?['read']", "body('Ensure_user')?['Id']"),
@@ -824,6 +837,25 @@ def flow_team():
             ('Remove_from_group', http('POST', "_api/web/sitegroups(@{" + gid + "})/users/removebyid(@{body('Ensure_user')?['Id']})")),
             ('Send_E8_removed', email('@' + TL_EMAIL, "1-to-1: access removed for @{" + TB + "?['Title']}", e8_rem)),
         ))),
+        # Full sync: the Technicians list is the single source of truth. Anyone left in the group without an Active row
+        # (added by hand, the person on a row was changed, or a row was deleted) is removed and listed in one email.
+        ('Get_active', get_items(LIST_TITLE['techs'], 'Active eq 1', top=5000)),
+        ('Active_logins', select("@body('Get_active')?['value']", "@toLower(coalesce(item()?['Technician']?['Claims'], '#none'))", secure=True)),
+        ('Active_emails', select("@body('Get_active')?['value']", "@toLower(coalesce(item()?['Technician']?['Email'], '#none'))", secure=True)),
+        ('Get_members_now', http('GET', "_api/web/sitegroups(@{" + gid + "})/users?$select=Id,Title,LoginName,Email,IsSiteAdmin")),
+        ('Strays', query("@body('Get_members_now')?['value']",
+                         "@and(not(equals(item()?['IsSiteAdmin'], true)), not(contains(body('Active_logins'), toLower(coalesce(item()?['LoginName'], '')))), "
+                         "not(contains(body('Active_emails'), toLower(coalesce(item()?['Email'], '#blank')))))", secure=True)),
+        ('Any_strays', cond("@not(empty(body('Strays')))", seq(
+            ('Each_stray', foreach("@body('Strays')", seq(
+                ('Remove_stray', http('POST', "_api/web/sitegroups(@{" + gid + "})/users/removebyid(@{items('Each_stray')?['Id']})")),
+            ))),
+            ('Stray_names', select("@body('Strays')", "@coalesce(item()?['Title'], item()?['Email'], 'Unknown')", secure=True)),
+            ('Send_E8_sync', email('@' + TL_EMAIL, '1-to-1: access removed for people not active in the team list',
+                                   "<p>These people were in the 1-to-1 group but have no Active row in ⚙ Settings → Team, so they no longer have "
+                                   "access to the 1-to-1 page:</p><ul><li>@{join(body('Stray_names'), '</li><li>')}</li></ul>"
+                                   "<p>If someone should have access, add them (or reactivate them) in ⚙ Settings → Team.</p>")),
+        ))),
     )
     actions = {'Try': after(scope(try_actions), {}), 'Catch': catch('ESG 1-to-1 | 4 Team members')}
     triggers = {'When_a_team_member_is_added_or_changed': {
@@ -870,7 +902,7 @@ def flow_wellbeing():
         ('Get_assignments', http('GET', BASE + '/roleassignments?$expand=Member,RoleDefinitionBindings&$select=PrincipalId,Member/Id,'
                                  'Member/Title,Member/LoginName,Member/Email,Member/PrincipalType,RoleDefinitionBindings/Name')),
         ('Holders', query("@body('Get_assignments')?['value']", holders, secure=True)),
-        ('Holder', compose("@first(body('Holders'))")),
+        ('Holder', compose("@first(body('Holders'))", secure=True)),
         ('Status', compose("@coalesce(" + TB + "?['AssessmentStatus']?['Value'], 'Open')")),
         ('New_assessment', cond("@or(equals(body('Get_item_scope')?['HasUniqueRoleAssignments'], false), equals(" + H + ", null))",
             seq(
@@ -936,7 +968,7 @@ FLOWS = [
      'description': 'On Complete / Close: validates, locks the review, releases the feedback and emails the technician.'},
     {'id': '6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c05', 'name': 'ESG 1-to-1 | 4 Team members', 'build': flow_team,
      'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': False,
-     'description': 'Keeps the 1-to-1 Technicians group in step with the Technicians list (Active = access to the page).'},
+     'description': 'Keeps the 1-to-1 Technicians group in step with the Technicians list (Active = access to the page); removes anyone in the group without an Active row.'},
     {'id': '6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c06', 'name': 'ESG 1-to-1 | 5 Wellbeing', 'build': flow_wellbeing,
      'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': False,
      'description': 'Wellbeing assessments: private to the person and the line manager; locks on submit, stamps completion, emails both.'},

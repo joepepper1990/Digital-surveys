@@ -74,7 +74,7 @@ If a list title ever has to change, edit `CONFIG.lists` at the top of `one-to-on
 | **Leaver / long absence** | ⚙ **Settings → Team → Deactivate**. Flow 4 removes them from `1-to-1 Technicians` (E8) and no new reviews are created. Keep their records for the retention period. |
 | **Correction after submission** | At the technician's request, edit the item in SharePoint (or in the app, for TL feedback). Add a dated reason to **CorrectionLog** on the Manager Review. Version history records the change. |
 | **Annual expectation rollover** | Before the new appraisal year starts, add the new year's expectations on the **Expectations** page (or grid view). On the last day of the old year, **Retire** the old ones (Active = No). **Never delete them.** New reviews pick up the new set, and old reviews keep their snapshot. |
-| **Annual retention (April)** | Delete reviews whose month is **more than 24 months** ago, from **both** Monthly Reviews and Manager Reviews (filter by MonthKey), and **Wellbeing Assessments completed more than 24 months ago** (keep the latest one for each current person). Record the deletion in a dated note, then empty the site recycle bin **and** the second-stage recycle bin. Skip this step if a Purview retention label does it automatically. |
+| **Monthly retention (first working day)** | Delete reviews whose month is **more than 24 months** ago, from **both** Monthly Reviews and Manager Reviews (filter by MonthKey), and **Wellbeing Assessments completed (or, if never completed, created) more than 24 months ago**. Keeping the latest assessment of a current person for longer is an exception that needs HR's agreement. Record the deletion in a dated note, then empty the site recycle bin **and** the second-stage recycle bin. Skip this step if a Purview retention label does it automatically. |
 | **Subject access request** | Export Monthly Reviews, Manager Reviews and Wellbeing Assessments filtered by the person (**Export → CSV**). The technician can also use **Appraisal report → Print / Save as PDF** for their own view. |
 | **TL handover** | 1. Make the new TL a site owner **and Site Collection Admin**, and remove the old TL. 2. Give the new TL the solution's flows: add them as **co-owner**, then switch the three connection references to the new TL's connections (**Solutions → ESG 1-to-1 → Connection references**). 3. Update the **ESG 1-to-1 Team Leader email** environment variable. 4. No frontend change is needed. |
 
@@ -103,7 +103,7 @@ Record every change in the change log below.
 | TL sees the technician view | You're not Site Collection Admin / Owner on this site | Add yourself (Stage 0B finding B10a) |
 | "Couldn't save … (403)" for a technician | Review already submitted (locked) | Expected. Corrections go through the TL. |
 | Complete & release did nothing | Flow 3 rejected it (not submitted, or closing before the deadline) | Read the "not done" email |
-| Dates show a day out | Site regional settings not on London time | Part 1, step 4 |
+| Dates show a day out | Site regional settings not on London time | Site settings → **Regional settings**: Locale English (United Kingdom), time zone (UTC) Dublin, Edinburgh, Lisbon, London |
 | Print / Save as PDF does nothing | Browser blocked the pop-up | Allow pop-ups for the SharePoint site |
 | Flow failure emails | See the run link in the email | Fix, then re-run. Flow 1 is safe to re-run. |
 | *"action needed"* naming `STOP_run_the_setup_flow_first` | Setup hasn't run, or a list or permission level was renamed | Run **ESG 1-to-1 \| 0 Setup** (safe to re-run) |
@@ -113,7 +113,8 @@ Record every change in the change log below.
 
 | Date | Version | Change | By |
 |---|---|---|---|
-| DD-MMM-YYYY | 4.0.0 | First production release: sidebar menu, appraisal outlook, multi-row actions, ⚙ Settings, reports | TL |
+| 14-Oct-2026 | 4.0.0 | First production release: sidebar menu, appraisal outlook, multi-row actions, ⚙ Settings, reports | TL |
+| 15-Oct-2026 | 4.1.0 | Top menu bar replaces the sidebar (team list under **Team ▾**); content fills the page width; layout scales up on large screens; page height follows its content; getting-started steps on an empty Team overview | TL |
 | 15-Oct-2026 | 4.2.0 | Calendar date picker and flexible typing with verified saves; Settings tabs (Team: add/deactivate people; Reminders; Names; Bands); drag-to-reorder expectations; Needs your attention; selectable chart; Energy column removed; report footer; **Wellbeing assessments**. Needs solution 1.1.0.0. | TL |
 | 15-Oct-2026 | 4.2.1 | Passed appraisal dates show **Overdue**; subtle "aim for the month before" prompts (team table, Needs your attention, outlook). Solution **1.1.1.0**: Flow 1 no longer fails to turn on after an upgrade from 1.0. | TL |
-| 15-Oct-2026 | 4.1.0 | Top menu bar replaces the sidebar (team list under **Team ▾**); content fills the page width; layout scales up on large screens; page height follows its content; getting-started steps on an empty Team overview | TL |
+| 15-Oct-2026 | 4.2.2 | Independent review fixes: a technician's view hides any record that isn't theirs and shows feedback only once released; out-of-range ratings can't break pages; leaving without saving really discards; messages stay visible; Escape closes dialogs; Settings asks before closing with unsaved changes; wording in the appraisal month ("due this month"). Solution **1.1.2.0**: Flow 4 does a full group sync (removes anyone without an Active row); the daily problem email still goes out if the wellbeing check fails; wellbeing reminders only for completed assessments of active people. | TL |

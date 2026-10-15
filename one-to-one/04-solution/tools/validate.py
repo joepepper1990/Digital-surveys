@@ -315,12 +315,18 @@ def check_secure(f):
     for n, (a, _) in fl.actions.items():
         if a.get('type') in ('OpenApiConnection', 'Query', 'Select') and n not in NO_PERSONAL_DATA and not secured(a):
             probs.append('[{0}] {1} is not secured (inputs and outputs)'.format(f['name'], n))
+        # a Compose holding a whole record (e.g. @first(body('Get_mgr')?['value'])) shows all of it in run history
+        if a.get('type') == 'Compose' and isinstance(a.get('inputs'), str) and \
+                re.match(r"^@first\(body\('[^']+'\)(\?\['value'\])?\)$", a['inputs']) and \
+                'inputs' not in (a.get('runtimeConfiguration') or {}).get('secureData', {}).get('properties', []):
+            probs.append('[{0}] {1} holds a whole record but its inputs are not secured'.format(f['name'], n))
     return probs
 
 
 # Lists added after 1.0. Power Automate checks a connector step's list exists when a flow is saved or turned on, so a
 # flow that is on during an upgrade (flows 1-4) must reach these lists by REST only, never by a connector step.
 NEW_LISTS = {l['title'] for l in LISTS if l['key'] == 'wellbeing'}
+NEW_URLS = {l['url'] for l in LISTS if l['key'] == 'wellbeing'}
 
 
 def check_upgrade_safe(f):
@@ -330,8 +336,10 @@ def check_upgrade_safe(f):
     def walk(o, path):
         if isinstance(o, dict):
             if o.get('type') in ('OpenApiConnection', 'OpenApiConnectionWebhook'):
-                t = ((o.get('inputs') or {}).get('parameters') or {}).get('table')
-                if t in NEW_LISTS:
+                params = (o.get('inputs') or {}).get('parameters') or {}
+                t = params.get('table')
+                # by title, or by its web address anywhere in the step's parameters
+                if t in NEW_LISTS or any(u in json.dumps(params) for u in NEW_URLS):
                     probs.append('[{0}] {1} names the list "{2}" in a connector step – the flow would fail to turn on '
                                  'after an upgrade until Setup has created it; read it by REST instead'.format(f['name'], path, t))
             for k, v in o.items():
