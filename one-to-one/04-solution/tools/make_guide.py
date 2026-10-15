@@ -79,7 +79,7 @@ GUIDE = r'''# ESG Monthly Technician 1-to-1 — Finalisation Guide
 
 **From the end of Stage 0B to a live system, then running it month to month.** This document is self-contained: you don't need any other file to follow it. Tick each box as you go.
 
-Version: system v4.2.2 (frontend) · solution 1.1.2.0 · guide dated 15-Oct-2026
+Version: system v4.3.0 (frontend) · solution 1.2.0.0 · guide dated 15-Oct-2026
 
 ---
 
@@ -93,12 +93,12 @@ Version: system v4.2.2 (frontend) · solution 1.1.2.0 · guide dated 15-Oct-2026
   - the `1-to-1 Edit` and `1-to-1 Read` permission levels exist.
 - **Everything to install is built and verified offline:**
   - frontend: 167 automated checks;
-  - flows: simulated end to end, 149 checks, and 23 deliberately broken copies all caught by the validator;
+  - flows: simulated end to end, 167 checks, and 23 deliberately broken copies all caught by the validator;
   - two independent reviews fixed 29 defects (see VERIFICATION.md).
 
 **Not yet proven:** nothing has run in your tenant yet.
 
-> **The system is fully implemented when Phase F (go-live) is done and every privacy test (P1–P24) in Phase C has passed.**
+> **The system is fully implemented when Phase F (go-live) is done and every privacy test (P1–P25) in Phase C has passed.**
 
 | Phase | What | Who's involved | Time |
 |---|---|---|---|
@@ -119,7 +119,7 @@ Version: system v4.2.2 (frontend) · solution 1.1.2.0 · guide dated 15-Oct-2026
 
 | File | Goes to |
 |---|---|
-| `ESGOneToOne_1_1_2_0_unmanaged.zip` | Power Automate → **Solutions → Import solution**. Contains the six flows; the setup flow creates the lists. |
+| `ESGOneToOne_1_2_0_0_unmanaged.zip` | Power Automate → **Solutions → Import solution**. Contains the seven flows; the setup flow creates the lists. |
 | `one-to-one.html` | SharePoint → *Welcome Web Part - Custom Layouts* library |
 | `one-to-one.js` | Same library, alongside the `.html` |
 
@@ -133,7 +133,7 @@ Version: system v4.2.2 (frontend) · solution 1.1.2.0 · guide dated 15-Oct-2026
 ## Phase 0 — Get and check the files (5 min)
 
 - [ ] **Right zip.** Open the zip, then open `solution.xml` in Notepad. It must contain `<RootComponent type="380" schemaName="esg_SiteUrl"`. If it doesn't, you have an older download: get the latest one.
-- [ ] **Right frontend.** You have `one-to-one.html` and `one-to-one.js` (v4.2.2). After installing, the top menu bar must show **v4.2.2** (right-hand end).
+- [ ] **Right frontend.** You have `one-to-one.html` and `one-to-one.js` (v4.3.0). After installing, the top menu bar must show **v4.3.0** (right-hand end).
 - [ ] **Unchanged files.** Transfer them the usual approved way. Don't open and re-save them in Word.
 
 ---
@@ -151,13 +151,13 @@ Version: system v4.2.2 (frontend) · solution 1.1.2.0 · guide dated 15-Oct-2026
 
 ### 4.2 Import the solution (10 min)
 
-> **Already imported an earlier version?** Import this zip over it the same way: it says it will **upgrade**; leave *"Enable Plugin steps and flows"* unticked and keep your connections and values. Coming from **1.0**, run **0 Setup** again afterwards (4.3: it adds the Wellbeing list and Reminders setting). Then check every flow is On (4.7), upload the new frontend files with **Replace** and **Reset layout cache** (4.5).
+> **Already imported an earlier version?** Import this zip over it the same way: it says it will **upgrade**; leave *"Enable Plugin steps and flows"* unticked and keep your connections and values. Then run **0 Setup** again (4.3): it adds what's missing, such as the 1-to-1 Feedback list (new in 1.2) and, from 1.0, the Wellbeing list and Reminders setting. Then check every flow is On (4.7), upload the new frontend files with **Replace** and **Reset layout cache** (4.5).
 
 1. [ ] Go to **make.powerautomate.com**, signed in as yourself.
 2. [ ] Top right: pick the environment IT named for the flows.
 3. [ ] Left menu: **Solutions**.
    - If it asks to create a **Dataverse database**, or *Solutions* is missing, use §4.8 instead.
-4. [ ] **Import solution → Browse →** `ESGOneToOne_1_1_2_0_unmanaged.zip` → **Next → Next**.
+4. [ ] **Import solution → Browse →** `ESGOneToOne_1_2_0_0_unmanaged.zip` → **Next → Next**.
 5. [ ] **Connections.** For each of the three, pick yours or click **+ New connection**, signed in as you:
 
    | Connection reference | Connector |
@@ -188,10 +188,11 @@ Version: system v4.2.2 (frontend) · solution 1.1.2.0 · guide dated 15-Oct-2026
 
 ### 4.4 Check the result (5 min)
 
-- [ ] **Site contents** shows the six lists: Technicians, Appraisal Expectations, Monthly Reviews, Manager Reviews, **Wellbeing Assessments**, 1-to-1 Settings.
+- [ ] **Site contents** shows the seven lists: Technicians, Appraisal Expectations, Monthly Reviews, Manager Reviews, **Wellbeing Assessments**, 1-to-1 Settings, **1-to-1 Feedback**.
 - [ ] Each list → ⚙ → **List settings → Permissions for this list**:
   - Technicians, Appraisal Expectations, Monthly Reviews, Manager Reviews and **Wellbeing Assessments** (health information) show **only** *Owners – Full Control*;
-  - **1-to-1 Settings** shows Owners **and** `1-to-1 Technicians` – Read.
+  - **1-to-1 Settings** shows Owners **and** `1-to-1 Technicians` – Read;
+  - **1-to-1 Feedback** shows Owners **and** `1-to-1 Technicians` – **Contribute**; its Advanced settings → *Item-level permissions* are "Read items that were created by the user" and "Create items and edit items that were created by the user".
 - [ ] **1-to-1 Settings** contains two items, **Bands** and **Reminders**.
 - [ ] Spot check: Monthly Reviews → List settings → click **Q9FollowUp**. The address ends `Field=Q9FollowUp`, and it has three choices.
 
@@ -216,7 +217,8 @@ Version: system v4.2.2 (frontend) · solution 1.1.2.0 · guide dated 15-Oct-2026
 - [ ] **Version check.** If you replaced `one-to-one.html` / `one-to-one.js` after first choosing the layout: web part settings (pencil) → **Reset layout cache** → **Republish**.
 - [ ] Open the site. You should see:
   - a dark **top menu bar**: Team overview, Monthly reviews, Expectations, Actions and Wellbeing on the left; **Team (0) ▾** and **⚙ Settings** on the right;
-  - the month, deadline, ↻ Refresh and **v4.2.2** at the far right;
+  - the month, deadline, ↻ Refresh and **v4.3.0** at the far right;
+  - a round 💬 **Feedback** button at the bottom-right;
   - **Team overview** showing six tiles at 0, then *"No technicians yet"* with four numbered getting-started steps.
 - [ ] Click through **Monthly reviews**, **Expectations**, **Actions**, **Wellbeing** and **⚙ Settings**. Expect no errors (empty pages are normal for now).
 - [ ] **Expectations:** add one *Shared* expectation. This proves item creation and the Yes/No column work in your tenant.
@@ -228,14 +230,15 @@ Version: system v4.2.2 (frontend) · solution 1.1.2.0 · guide dated 15-Oct-2026
 
 > You can't see the *technician* side with your own account: the page always recognises you as Team Leader. Phase B uses Test A for that.
 
-### 4.7 Turn on flows 1 to 5
+### 4.7 Turn on flows 1 to 6
 
 - [ ] Only after the Setup summary email (4.3). **Solutions → ESG 1-to-1** → select each flow → **Turn on**, in this order:
   1. **2 Review submitted**
   2. **3 Manager decision**
   3. **4 Team members** – gives people you add in ⚙ Settings → Team access to the page
   4. **5 Wellbeing** – wellbeing assessments
-  5. **1 Daily scheduler** – last, so its first run finds everything ready
+  5. **6 Feedback** – emails you what people send with the 💬 Feedback bubble
+  6. **1 Daily scheduler** – last, so its first run finds everything ready
 - [ ] **0 Setup** stays On (it only runs when you click Run).
 
 ### 4.8 Fallback: no Dataverse (legacy packages)
@@ -271,8 +274,11 @@ Only if §4.2 step 3 showed that solutions can't be imported:
   - **As Test A:** *"Your wellbeing assessment is ready to complete"* arrives → open it → work through the steps → **Submit**.
   - **As you:** *"Wellbeing assessment submitted"* arrives → open it → add an arrangement, notes and the next review date (a year on by default) → **Complete**.
   - **As Test A:** *"Your wellbeing assessment record is ready"* arrives; the agreed record shows; **Print / Save as PDF** works.
+- [ ] **Feedback (tests F41, P25):**
+  - **As Test A:** click 💬 **Feedback** (bottom-right) → **Fault** → type a short message → **Send**. It says *"Thank you. Your feedback has been submitted to your Team Leader."*
+  - **As you:** within about 5 minutes *"1-to-1 feedback (Fault): …"* arrives, naming Test A, the page and the version.
 - [ ] **As Test B:**
-  - nothing of Test A's is visible anywhere, including Wellbeing;
+  - nothing of Test A's is visible anywhere, including Wellbeing and Test A's feedback;
   - opening Test A's link (`?reviewId=` with A's number) shows **"Review not found"**, and `?wbId=` with A's assessment number shows **"Assessment not found"**.
 
 ---
@@ -292,11 +298,11 @@ Only if §4.2 step 3 showed that solutions can't be imported:
 
 {H_INTRO}
 
-### 6.1 Functional tests (F1–F40)
+### 6.1 Functional tests (F1–F42)
 
 {F_TABLE}
 
-### 6.2 Privacy and bypass tests (P1–P24) — all mandatory
+### 6.2 Privacy and bypass tests (P1–P25) — all mandatory
 
 {P_TABLE}
 
@@ -347,7 +353,7 @@ Only if §4.2 step 3 showed that solutions can't be imported:
 |---|---|
 | Go-live day | Flow 1 run history is green; nobody is missing from Team overview |
 | As submissions arrive | *"1-to-1 submitted"* email → open the review → feedback, ratings, actions → **Complete & release** |
-| 20th and 27th | Reminders went to anyone who hasn't submitted |
+| Your reminder days (default 20th and 27th) | Reminders went to anyone who hasn't submitted |
 | Next 1st | New month is created; last month's unsubmitted reviews show **Overdue**; use **Close – not submitted** where needed |
 
 ### 10.1 Operating procedures
@@ -382,10 +388,13 @@ Only if §4.2 step 3 showed that solutions can't be imported:
 
 | Flow | Starts | Job |
 |---|---|---|
-| ESG 1-to-1 \| 0 Setup (run once) | by hand | Creates or completes the lists, columns, indexes, views, permission levels, group, list permissions and the Bands setting. Safe to re-run; never deletes data; emails a summary. |
-| ESG 1-to-1 \| 1 Daily scheduler | 07:00 UK daily | Creates each month's reviews, makes them private, emails each technician their own link, sends reminders on the 20th and 27th, and reports problems to you |
+| ESG 1-to-1 \| 0 Setup (run once) | by hand | Creates or completes the lists, columns, indexes, views, permission levels, group, list permissions and the Bands and Reminders settings. Safe to re-run; never deletes data; emails a summary. |
+| ESG 1-to-1 \| 1 Daily scheduler | 07:00 UK daily | Creates each month's reviews, makes them private, emails each technician their own link, sends reminders on your reminder days (default 20th and 27th), emails you before wellbeing reviews are due, and reports problems to you |
 | ESG 1-to-1 \| 2 Review submitted | when a technician submits | Locks the review (read-only), stamps the trusted record, emails you |
 | ESG 1-to-1 \| 3 Manager decision | when you Complete / Close | Validates, locks, releases your feedback to that technician only, emails them |
+| ESG 1-to-1 \| 4 Team members | when you add or deactivate someone (checks every 5 min) | Gives or removes access to the page; removes anyone in the group without an Active row; emails you |
+| ESG 1-to-1 \| 5 Wellbeing | as a wellbeing assessment moves on (checks every 5 min) | Shares it with that person only, locks it when they submit, stamps completion, emails you both |
+| ESG 1-to-1 \| 6 Feedback | when someone uses the 💬 Feedback bubble (checks every 5 min) | Makes the item Owners-only and emails it to you; if that fails, marks it Failed and it shows in *Needs your attention* |
 
 ### 12.3 Accepted risks (from the implementation plan)
 

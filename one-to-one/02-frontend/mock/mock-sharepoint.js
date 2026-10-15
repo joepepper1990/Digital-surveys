@@ -11,7 +11,7 @@
 // State persists in sessionStorage so you can switch user (TL ↔ Test A ↔ Test B) and carry on.
 (function () {
   'use strict';
-  var KEY = 'oto-mock-db-v5';
+  var KEY = 'oto-mock-db-v6';
   var SITE = 'https://contoso.example/sites/esg-1to1';
   var TZ = 'Europe/London';
 
@@ -27,7 +27,9 @@
     Follow: FOLLOW,
     AppliesTo: ['Shared', 'Individual'],
     ActionsStatus: ['None', 'Open', 'Done'],
-    WbStatus: ['Open', 'Submitted', 'Completed']
+    WbStatus: ['Open', 'Submitted', 'Completed'],
+    FbType: ['Fault', 'Improvement', 'Suggestion'],
+    FbStatus: ['Pending', 'Sent', 'Failed', 'Read']
   };
   // ?locale=uk (default) | us | uk-noiso | us-noiso – how this pretend SharePoint reads typed dates
   var LOCALE = (function () { try { return new URL(window.location.href).searchParams.get('locale') || 'uk'; } catch (_) { return 'uk'; } })();
@@ -52,7 +54,10 @@
     '1-to-1 Settings': { Title: F('text'), Value: F('note') },
     'Wellbeing Assessments': { Title: F('text'), Technician: F('person'), AssessmentStatus: F('choice', { c: CHOICES.WbStatus }), AssessmentDate: F('date'),
       Position: F('text'), EmployeeNumber: F('text'), AnswersJson: F('note'), PersonalJson: F('note'), ArrangementsJson: F('note'), ManagerNotes: F('note'),
-      NextReviewDate: F('date'), SubmittedOn: F('datetime'), CompletedOn: F('datetime') }
+      NextReviewDate: F('date'), SubmittedOn: F('datetime'), CompletedOn: F('datetime') },
+    // Created and Author are set by SharePoint itself, not from formValues
+    '1-to-1 Feedback': { Title: F('text'), FeedbackType: F('choice', { c: CHOICES.FbType }), Message: F('note'), PageName: F('text'), AppVersion: F('text'),
+      DeliveryStatus: F('choice', { c: CHOICES.FbStatus }), SentOn: F('datetime'), Created: F('datetime'), Author: F('person') }
   };
 
   // ---------------------------------------------------------------- people (fictional)
@@ -96,7 +101,7 @@
 
   // ---------------------------------------------------------------- seed
   function seed(xss) {
-    var db = { nextId: {}, lists: {}, perms: { 'Monthly Reviews': {}, 'Manager Reviews': {}, 'Wellbeing Assessments': {} }, writes: [], emails: [], group: [], digest: 'MOCKDIGEST-' + Date.now() };
+    var db = { nextId: {}, lists: {}, perms: { 'Monthly Reviews': {}, 'Manager Reviews': {}, 'Wellbeing Assessments': {}, '1-to-1 Feedback': {} }, fbFail: false, writes: [], emails: [], group: [], digest: 'MOCKDIGEST-' + Date.now() };
     Object.keys(SCHEMA).forEach(function (l) { db.lists[l] = []; db.nextId[l] = 1; });
     function add(list, fields) { var id = db.nextId[list]++; var it = { ID: id }; Object.keys(fields).forEach(function (k) { it[k] = fields[k]; }); db.lists[list].push(it); return it; }
     var today = londonToday(), CUR = today.slice(0, 7);
@@ -283,7 +288,7 @@
   // ---------------------------------------------------------------- permission model (D.4)
   function canSeeList(db, list, u) {
     if (u.owner) { return !!db.lists[list]; }
-    if (list === '1-to-1 Settings') { return true; }
+    if (list === '1-to-1 Settings' || list === '1-to-1 Feedback') { return true; }   // group: Read / Contribute (own items only)
     if (db.perms[list]) { return Object.keys(db.perms[list]).some(function (id) { return !!db.perms[list][id][u.email]; }); }
     return false;
   }
@@ -401,6 +406,14 @@
     }
   }
 
+  // Flow 6: lock the feedback item to Owners, email the line manager; on a mail failure mark it Failed and send a short notice.
+  function flow6(db, it, u) {
+    delete db.perms['1-to-1 Feedback'][it.ID];
+    if (db.fbFail) { it.DeliveryStatus = 'Failed'; db.emails.push({ to: 'TL', template: 'E13-notice', fbId: it.ID }); return; }
+    it.DeliveryStatus = 'Sent'; it.SentOn = nowIso();
+    db.emails.push({ to: 'TL', template: 'E13', fbId: it.ID, from: u.email, type: it.FeedbackType, page: it.PageName, message: it.Message });
+  }
+
   // ---------------------------------------------------------------- REST router
   function resp(status, body) {
     var text = body === undefined ? '' : JSON.stringify(body);
@@ -432,7 +445,7 @@
         var rows = db.lists[list].filter(function (it) { return canRead(db, list, it.ID, u); }).map(function (it) { return serialize(list, it); });
         return resp(200, { value: rows });
       }
-      if (method === 'GET' && tail === '/RootFolder') { return u.owner ? resp(200, { ServerRelativeUrl: '/sites/esg-1to1/Lists/' + list.replace(/\W/g, '') }) : spError(403, 'Access denied.'); }
+      if (method === 'GET' && tail === '/RootFolder') { return u.owner || list === '1-to-1 Feedback' ? resp(200, { ServerRelativeUrl: '/sites/esg-1to1/Lists/' + list.replace(/\W/g, '') }) : spError(403, 'Access denied.'); }
       var im = /^\/items\((\d+)\)(\/validateUpdateListItem)?$/.exec(tail);
       if (im) {
         var id = Number(im[1]);
@@ -463,7 +476,7 @@
       }
       if (method === 'POST' && tail === '/AddValidateUpdateItemUsingPath') {
         if (headers['X-RequestDigest'] !== db.digest) { return spError(403, 'The security validation for this page is invalid.'); }
-        if (!u.owner) { return spError(403, 'Access denied.'); }
+        if (!u.owner && list !== '1-to-1 Feedback') { return spError(403, 'Access denied.'); }
         var b = JSON.parse(options.body || '{}');
         if (!b.listItemCreateInfo || !b.listItemCreateInfo.FolderPath || !b.listItemCreateInfo.FolderPath.DecodedUrl) { return spError(400, 'listItemCreateInfo is required'); }
         var item = { ID: db.nextId[list]++ }, res = [], good = true;
@@ -475,6 +488,11 @@
           db.lists[list].push(item); res.push({ FieldName: 'Id', FieldValue: String(item.ID), HasException: false, ErrorMessage: null });
           if (list === 'Technicians') { flow4(db, item); }
           if (list === 'Wellbeing Assessments') { flow5(db, item, true); }
+          if (list === '1-to-1 Feedback') {
+            item.Author = claimsOf(u); item.Created = nowIso(); item.DeliveryStatus = item.DeliveryStatus || 'Pending';
+            db.perms[list][item.ID] = {}; db.perms[list][item.ID][u.email] = 'edit';   // item-level security: own item only
+            flow6(db, item, u);
+          }
           db.writes.push({ as: u.key, list: list, id: item.ID, create: true, fields: (b.formValues || []).map(function (fv) { return fv.FieldName; }), values: (b.formValues || []).reduce(function (o, fv) { o[fv.FieldName] = fv.FieldValue; return o; }, {}) });
           saveDb(db);
         } else { db.nextId[list]--; }

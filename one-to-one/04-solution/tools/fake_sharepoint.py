@@ -55,6 +55,7 @@ class FakeSP:
         self.ensure_fail = set()
         self.fail_fields = set()        # column names createfieldasxml will refuse (to test warn-and-continue)
         self.fail_uris = []
+        self.fail_mail = []
         self.dates_as_instants = False  # connector returns date-only values as UTC instants instead of yyyy-MM-dd  # user ids whose account cannot be resolved (left the organisation)
 
     # ------------------------------------------------------------------ model helpers
@@ -68,7 +69,8 @@ class FakeSP:
         self.lists[lid] = {'Id': lid, 'Title': title, 'url': url, 'Description': desc, 'fields': base,
                            'views': ['All Items'], 'view_defs': {}, 'items': {}, 'next': 1, 'unique': False, 'ra': {},
                            'props': {'EnableVersioning': False, 'MajorVersionLimit': 0, 'EnableAttachments': True,
-                                     'NoCrawl': False, 'OnQuickLaunch': True, 'ExcludeFromOfflineClient': False},
+                                     'NoCrawl': False, 'OnQuickLaunch': True, 'ExcludeFromOfflineClient': False,
+                                     'ReadSecurity': 1, 'WriteSecurity': 1},
                            'entity': entity}
         return self.lists[lid]
 
@@ -108,6 +110,8 @@ class FakeSP:
         self.calls.append((api, op))
         if api == 'shared_office365':
             assert op == 'SendEmailV2', op
+            if any(x in p['emailMessage/Subject'] for x in self.fail_mail):   # test hook: the mail service refuses this email
+                fail(500, 'simulated mail failure')
             self.emails.append({'to': p['emailMessage/To'], 'subject': p['emailMessage/Subject'], 'body': p['emailMessage/Body']})
             return {}
         if api == 'shared_office365users':
@@ -190,7 +194,7 @@ class FakeSP:
                     fields[name] = self.coerce(lst, name, 'Value' if f['Type'] == 'Choice' else None,
                                                {'1': True, '0': False}.get(f['Default'], f['Default'])
                                                if f['Type'] == 'Boolean' else f['Default'])
-            lst['items'][item_id] = {'id': item_id, 'fields': fields, 'unique': False, 'ra': {}}
+            lst['items'][item_id] = {'id': item_id, 'fields': fields, 'unique': False, 'ra': {}, 'author': self.me}
         it = lst['items'].get(item_id)
         if it is None:
             fail(404, 'item not found')
@@ -221,6 +225,8 @@ class FakeSP:
                 o[name] = v
         u = self.users[it.get('editor', 10)]
         o['Editor'] = {'Claims': u['Claims'], 'DisplayName': u['Title'], 'Email': u['Email']}
+        a = self.users[it.get('author', 10)]
+        o['Author'] = {'Claims': a['Claims'], 'DisplayName': a['Title'], 'Email': a['Email']}
         return o
 
     def get_items(self, lst, flt, order, top):

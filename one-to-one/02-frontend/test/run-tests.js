@@ -269,7 +269,7 @@ async function main() {
   await page.evaluate(function (a) {   // what a technician could do to their own open review through REST
     var rv = OTO_MOCK.current.db.lists['Monthly Reviews'].find(function (r) { return r.ID === a.id; });
     rv.MonthKey = '2099-01'; rv.DueDate = '2099-12-31T23:59:59Z'; rv.Technician = a.other;
-    sessionStorage.setItem('oto-mock-db-v5', JSON.stringify(OTO_MOCK.current.db));
+    sessionStorage.setItem('oto-mock-db-v6', JSON.stringify(OTO_MOCK.current.db));
   }, { id: target.ID, other: samClaims });
   errs = await open(page, { as: 'tl' });
   var rowT = await page.locator('.nw tr:has-text("' + tName + '")').innerText();
@@ -278,7 +278,7 @@ async function main() {
   await page.evaluate(function (a) {   // technician has submitted; Flow 2 has not run yet (5-minute polling window)
     var rv = OTO_MOCK.current.db.lists['Monthly Reviews'].find(function (r) { return r.ID === a.id; });
     rv.ReviewStatus = 'Submitted';
-    sessionStorage.setItem('oto-mock-db-v5', JSON.stringify(OTO_MOCK.current.db));
+    sessionStorage.setItem('oto-mock-db-v6', JSON.stringify(OTO_MOCK.current.db));
   }, { id: target.ID });
   errs = await open(page, { as: 'tl' });
   ok('Status: a submission waiting for Flow 2 shows "Submitted – processing", not "Not started"',
@@ -369,7 +369,7 @@ async function main() {
   var L3 = await layoutAt(1440, 900);
   await L3.pg.evaluate(function () {
     var d = OTO_MOCK.current.db; d.lists['Technicians'] = []; d.lists['Monthly Reviews'] = []; d.lists['Manager Reviews'] = [];
-    sessionStorage.setItem('oto-mock-db-v5', JSON.stringify(d));
+    sessionStorage.setItem('oto-mock-db-v6', JSON.stringify(d));
   });
   await open(L3.pg, { as: 'tl' });
   var m3 = await L3.pg.evaluate(function () { var r = document.querySelector('[data-oto-root]'); return { h: r.getBoundingClientRect().height, vh: window.innerHeight, txt: r.innerText }; });
@@ -526,7 +526,7 @@ async function main() {
   ok('Appraisal: dates further out are not flagged yet', tA.indexOf('Aim to complete Alex Morgan') < 0);
   await P.evaluate(function (iso) {
     var d = OTO_MOCK.current.db; d.lists['Technicians'].find(function (t) { return t.Title === 'Alex Morgan'; }).AppraisalDate = iso + 'T12:00:00Z';
-    sessionStorage.setItem('oto-mock-db-v5', JSON.stringify(d));
+    sessionStorage.setItem('oto-mock-db-v6', JSON.stringify(d));
   }, futureIso(-10));
   await o15({ as: 'tl' });
   var tO = await P.locator('[data-oto-root]').innerText();
@@ -643,7 +643,7 @@ async function main() {
   var R = await c18.newPage(), dlg18 = [];
   R.on('dialog', function (d) { dlg18.push(d.message()); d.accept(); });
   async function save18(fn, arg) {
-    await R.evaluate(function (a) { var d = OTO_MOCK.current.db; (new Function('d', 'arg', a.body))(d, a.arg); sessionStorage.setItem('oto-mock-db-v5', JSON.stringify(d)); }, { body: fn, arg: arg });
+    await R.evaluate(function (a) { var d = OTO_MOCK.current.db; (new Function('d', 'arg', a.body))(d, a.arg); sessionStorage.setItem('oto-mock-db-v6', JSON.stringify(d)); }, { body: fn, arg: arg });
   }
   await open(R, { as: 'tl' }); await R.evaluate(function () { OTO_MOCK.reset(); });
   await open(R, { as: 'tl' });
@@ -689,7 +689,7 @@ async function main() {
     var rv = d.lists['Monthly Reviews'].find(function (x) { return x.Technician.indexOf('jordan.') >= 0 && x.MonthKey === pm; });
     var mr = d.lists['Manager Reviews'].find(function (x) { return x.ReviewItemId === rv.ID; });
     rv.ReviewStatus = 'Submitted'; mr.ReviewState = 'Open'; mr.ReleasedOn = null; mr.SubmittedOn = null;
-    sessionStorage.setItem('oto-mock-db-v5', JSON.stringify(d)); return rv.ID; });
+    sessionStorage.setItem('oto-mock-db-v6', JSON.stringify(d)); return rv.ID; });
   await open(R, { as: 'tl', reviewId: String(prev18) });
   ok('Close – not submitted is disabled while the submission is being processed', await R.locator('button:has-text("Close – not submitted")').isDisabled());
   // toasts survive the redraw that follows a save
@@ -716,6 +716,72 @@ async function main() {
   await R.locator('.topbar >> text=This month').click(); await R.waitForTimeout(200);
   ok('Unsaved changes: leaving without saving restores the saved text', dlg18.length === 1 && (await R.locator('textarea').first().inputValue()) === before18);
   await c18.close();
+
+  // ---------------------------------------------------------------- 19. feedback bubble (v4.3)
+  var c19 = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  var B = await c19.newPage();
+  B.on('dialog', function (d) { d.accept(); });
+  await open(B, { as: 'alex' }); await B.evaluate(function () { OTO_MOCK.reset(); });
+  var e19 = await open(B, { as: 'alex' });
+  ok('Feedback: the bubble is shown to a technician', await B.locator('.fbk-bubble').isVisible() && !e19.length);
+  await B.locator('.fbk-bubble').click();
+  ok('Feedback: the panel opens with the three types and Send disabled while empty', (await B.locator('.fbk-types button').count()) === 3 &&
+    await B.locator('.fbk-panel button:has-text("Send")').isDisabled());
+  await B.keyboard.press('Escape'); await B.waitForTimeout(80);
+  ok('Feedback: Escape closes the panel and returns focus to the bubble', (await B.locator('.fbk-panel').count()) === 0 &&
+    await B.evaluate(function () { return document.activeElement && document.activeElement.classList.contains('fbk-bubble'); }));
+  var q1v = await B.locator('textarea').first().inputValue();
+  await B.locator('textarea').first().fill(q1v + ' (still typing)');   // an unsaved answer on the form
+  await B.locator('.fbk-bubble').click();
+  await B.locator('#oto-fbk-text').fill('The 📅 button on the meeting date does nothing.\nWindows laptop.');
+  await B.locator('.fbk-types button:has-text("Fault")').click();
+  await B.locator('.fbk-panel button:has-text("Send")').click(); await B.waitForTimeout(250);
+  var d19 = await B.evaluate(function () { return JSON.parse(JSON.stringify(OTO_MOCK.current.db)); });
+  var fb19 = d19.lists['1-to-1 Feedback'][0];
+  ok('Feedback: sending creates one item with the type, message, page and version', d19.lists['1-to-1 Feedback'].length === 1 && fb19.FeedbackType === 'Fault' &&
+    fb19.Message.indexOf('does nothing.\nWindows laptop.') > 0 && fb19.PageName === 'This month' && fb19.AppVersion === (await B.evaluate(function () { return window.ESGOneToOne()._version; })) &&
+    fb19.Title.indexOf('The 📅 button') === 0, JSON.stringify(fb19));
+  ok('Feedback: the thank-you message reads exactly as agreed', (await B.locator('.fbk-note').innerText()).trim() === 'Thank you. Your feedback has been submitted to your Team Leader.');
+  ok('Feedback: it is emailed to the TL naming the sender, and locked (the sender can no longer read it)', d19.emails.some(function (m) { return m.template === 'E13' && m.from === 'alex.morgan@example.test'; }) &&
+    !d19.perms['1-to-1 Feedback'][fb19.ID] && (await api(B, 'GET', "/_api/web/lists/getbytitle('1-to-1 Feedback')/items")).json.value.length === 0);
+  ok('Feedback: sending does not touch the unsaved form', (await B.locator('textarea').first().inputValue()) === q1v + ' (still typing)');
+  // email fails → the TL sees it in Needs your attention and can read it
+  await B.evaluate(function () { var d = OTO_MOCK.current.db; d.fbFail = true; sessionStorage.setItem('oto-mock-db-v6', JSON.stringify(d)); });
+  await open(B, { as: 'sam' });
+  await B.locator('.fbk-bubble').click(); await B.locator('.fbk-types button:has-text("Suggestion")').click();
+  await B.locator('#oto-fbk-text').fill('Could the report include last year too?'); await B.locator('.fbk-panel button:has-text("Send")').click(); await B.waitForTimeout(250);
+  await open(B, { as: 'tl' });
+  var at19 = await B.locator('.attn').innerText();
+  ok('Feedback (email failed): the TL sees it in Needs your attention', /Feedback from Sam Patel couldn't be emailed – read it here/.test(at19), at19);
+  ok('Feedback: the TL has the bubble too', await B.locator('.fbk-bubble').isVisible());
+  await B.locator('.attn-row:has-text("Feedback from Sam Patel") button').click();
+  ok('Feedback: the TL can read it in full', (await B.locator('.modal .fbk-msg').innerText()) === 'Could the report include last year too?' &&
+    /Could not be delivered/.test(await B.locator('.modal').innerText()));
+  await B.locator('.modal button:has-text("Mark as read")').click(); await B.waitForTimeout(250);
+  var d19b = await B.evaluate(function () { return JSON.parse(JSON.stringify(OTO_MOCK.current.db)); });
+  ok('Feedback: Mark as read removes it from the list and records Read', !/Feedback from Sam Patel/.test(await B.locator('[data-oto-root]').innerText()) &&
+    d19b.lists['1-to-1 Feedback'].find(function (x) { return x.Message.indexOf('last year') >= 0; }).DeliveryStatus === 'Read');
+  // a site where the Feedback list doesn't exist yet (solution not upgraded): a clear message, the text is kept
+  await B.evaluate(function () { var d = OTO_MOCK.current.db; delete d.lists['1-to-1 Feedback']; sessionStorage.setItem('oto-mock-db-v6', JSON.stringify(d)); });
+  var e19c = await open(B, { as: 'tl' });
+  ok('Feedback: the TL page still loads without the Feedback list', !e19c.length && (await B.locator('.attn-card').count()) === 1);
+  await open(B, { as: 'jordan' });
+  await B.locator('.fbk-bubble').click(); await B.locator('#oto-fbk-text').fill('Hello'); await B.locator('.fbk-panel button:has-text("Send")').click(); await B.waitForTimeout(250);
+  ok('Feedback: without the list, a clear message and the text is kept', /isn't switched on yet/.test(await B.locator('.fbk-note').innerText()) &&
+    (await B.locator('#oto-fbk-text').inputValue()) === 'Hello');
+  await c19.close();
+  // XSS: hostile feedback shown to the TL, and typed into the panel
+  await open(page, { as: 'tl', xss: '1' });
+  await page.evaluate(function () {
+    var d = OTO_MOCK.current.db, x = OTO_MOCK.X.join(' ');
+    d.lists['1-to-1 Feedback'].push({ ID: 900, Title: x.slice(0, 60), FeedbackType: 'Fault', Message: x, PageName: x, AppVersion: x, DeliveryStatus: 'Failed',
+      Created: new Date().toISOString(), Author: 'i:0#.f|membership|riley.evans@example.test' });
+    sessionStorage.setItem('oto-mock-db-v6', JSON.stringify(d));
+  });
+  await sweep('TL reading hostile feedback', { as: 'tl', xss: '1' }, async function () { await page.locator('.attn-row:has-text("Feedback from") button').first().click(); });
+  await sweep('Feedback panel with hostile text', { as: 'alex', xss: '1' }, async function () {
+    await page.locator('.fbk-bubble').click(); await page.locator('#oto-fbk-text').fill(await page.evaluate(function () { return OTO_MOCK.X.join(' '); }));
+  });
 
   await browser.close();
   var failed = results.filter(function (r) { return !r.pass; });

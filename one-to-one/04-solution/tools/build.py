@@ -21,7 +21,7 @@ from flows import build_all, CONN, ENV_VARS  # noqa: E402
 import validate  # noqa: E402
 import legacy  # noqa: E402
 
-VERSION = '1.1.2.0'
+VERSION = '1.2.0.0'
 UNIQUE = 'ESGOneToOne'
 DISPLAY = 'ESG 1-to-1'
 PUBLISHER = {'unique': 'ESGOneToOne', 'display': 'ESG 1-to-1', 'prefix': 'esg', 'option': '41236'}
@@ -60,7 +60,7 @@ def solution_xml(flows):
             '    <UniqueName>' + UNIQUE + '</UniqueName>\n'
             '    <LocalizedNames>\n      <LocalizedName description="' + DISPLAY + '" languagecode="1033" />\n    </LocalizedNames>\n'
             '    <Descriptions>\n      <Description description="ESG Monthly Technician 1-to-1: setup flow, daily scheduler, '
-            'submission, manager-decision, team-members and wellbeing flows." languagecode="1033" />\n    </Descriptions>\n'
+            'submission, manager-decision, team-members, wellbeing and feedback flows." languagecode="1033" />\n    </Descriptions>\n'
             '    <Version>' + VERSION + '</Version>\n'
             '    <Managed>0</Managed>\n'
             '    <Publisher>\n'

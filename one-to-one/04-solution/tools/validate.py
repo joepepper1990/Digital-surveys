@@ -325,12 +325,12 @@ def check_secure(f):
 
 # Lists added after 1.0. Power Automate checks a connector step's list exists when a flow is saved or turned on, so a
 # flow that is on during an upgrade (flows 1-4) must reach these lists by REST only, never by a connector step.
-NEW_LISTS = {l['title'] for l in LISTS if l['key'] == 'wellbeing'}
-NEW_URLS = {l['url'] for l in LISTS if l['key'] == 'wellbeing'}
+NEW_LISTS = {l['title'] for l in LISTS if l['key'] in ('wellbeing', 'feedback')}
+NEW_URLS = {l['url'] for l in LISTS if l['key'] in ('wellbeing', 'feedback')}
 
 
 def check_upgrade_safe(f):
-    if '0 Setup' in f['name'] or '5 Wellbeing' in f['name']:
+    if any(x in f['name'] for x in ('0 Setup', '5 Wellbeing', '6 Feedback')):   # imported Off; turned on after setup
         return []
     probs = []
     def walk(o, path):

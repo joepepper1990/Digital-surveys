@@ -43,6 +43,7 @@ LIST_TITLE = {l['key']: l['title'] for l in LISTS}
 MR = LIST_TITLE['reviews']
 MGR = LIST_TITLE['mgr']
 WB = LIST_TITLE['wellbeing']
+FB = LIST_TITLE['feedback']
 SETTINGS = LIST_TITLE['settings']
 
 
@@ -400,7 +401,10 @@ def flow_setup():
                                     '{"__metadata":{"type":"SP.List"},"Title":"@{items(\'Each_list\')?[\'title\']}",'
                                     '"Description":"@{items(\'Each_list\')?[\'description\']}","EnableVersioning":true,'
                                     '"MajorVersionLimit":@{max(100, int(' + idstr("outputs('List')?['MajorVersionLimit']") + '))},'
-                                    '"EnableAttachments":false,"NoCrawl":true,"OnQuickLaunch":false}')),
+                                    '"EnableAttachments":false,"NoCrawl":true,"OnQuickLaunch":false,'
+                                    # item-level security: 2 = only their own items (feedback list); 1 = all items (default)
+                                    '"ReadSecurity":@{coalesce(items(\'Each_list\')?[\'readSecurity\'], 1)},'
+                                    '"WriteSecurity":@{coalesce(items(\'Each_list\')?[\'writeSecurity\'], 1)}}')),
         ('Set_offline_off', after(merge(LBASE, '{"__metadata":{"type":"SP.List"},"ExcludeFromOfflineClient":true}'),
                                   {'Set_list_settings': TOLERANT})),
         ('Warn_settings', after(warn("@concat(" + L + "?['title'], ': could not apply list settings – set versioning 100, attachments off, "
@@ -445,6 +449,11 @@ def flow_setup():
                                                       "roledefid=@{outputs('Ids')?['readBuiltIn']})", secure=False)),
             ('Log_group_read', append(G, "@concat(" + L + "?['title'], ': " + GROUP_TITLE + " given Read')")),
         )), {'I_have_direct_access': TOLERANT})),
+        ('Group_needs_contribute', cond("@equals(" + L + "?['groupContribute'], true)", seq(
+            ('Grant_group_contribute', http('POST', LBASE + "/roleassignments/addroleassignment(principalid=@{outputs('Ids')?['group']},"
+                                                            "roledefid=@{outputs('Ids')?['contributeBuiltIn']})", secure=False)),
+            ('Log_group_contribute', append(G, "@concat(" + L + "?['title'], ': " + GROUP_TITLE + " given Contribute (each person sees only their own items)')")),
+        ))),
     ))
 
     bands_body = {'__metadata': {'type': "@{outputs('Settings_list')?['ListItemEntityTypeFullName']}"},
@@ -452,7 +461,7 @@ def flow_setup():
     summary = ('<p><b>ESG 1-to-1 setup finished.</b></p>'
                '<p><b>Problems to fix by hand</b> (empty means none):</p><ul><li>@{join(variables(\'varWarnings\'), \'</li><li>\')}</li></ul>'
                '<p><b>What was done:</b></p><ul><li>@{join(variables(\'varLog\'), \'</li><li>\')}</li></ul>'
-               '<p>Next: turn on flows 1 to 5 (GO_LIVE_RUNBOOK Phase 7) and check each list\'s permissions page.</p>')
+               '<p>Next: turn on flows 2, 3, 4, 5, 6 and then 1 (GO_LIVE_RUNBOOK Phase 7) and check each list\'s permissions page.</p>')
 
     try_actions = seq(
         ('Get_web', http('GET', '_api/web?$select=Title,Url,ServerRelativeUrl', secure=False)),
@@ -493,9 +502,11 @@ def flow_setup():
                                   {'Get_visitors_group': TOLERANT})),
         ('Role_full_control', query("@body('Get_roles_again')?['value']", "@equals(item()?['RoleTypeKind'], 5)")),
         ('Role_read_builtin', query("@body('Get_roles_again')?['value']", "@equals(item()?['RoleTypeKind'], 2)")),
+        ('Role_contribute_builtin', query("@body('Get_roles_again')?['value']", "@equals(item()?['RoleTypeKind'], 3)")),
         ('Ids', compose({'owners': "@body('Get_owners_group')?['Id']",
                          'fullControl': "@first(body('Role_full_control'))?['Id']",
                          'readBuiltIn': "@first(body('Role_read_builtin'))?['Id']",
+                         'contributeBuiltIn': "@first(body('Role_contribute_builtin'))?['Id']",
                          'members': "@coalesce(body('Get_members_group')?['Id'], -1)",
                          'visitors': "@coalesce(body('Get_visitors_group')?['Id'], -1)",
                          'group': "@first(body('Find_group_again'))?['Id']"})),
@@ -953,10 +964,66 @@ def flow_wellbeing():
     return definition(triggers, actions)
 
 
+# --------------------------------------------------------------------------------------------- Flow 6
+def esc(expr):
+    """HTML-escape text someone typed before it goes into an email body."""
+    return "replace(replace(replace(coalesce(" + expr + ", ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')"
+
+
+def flow_feedback():
+    """Feedback from the page's bubble. Lock the item first (Owners only – the sender can no longer see or change it), then
+    email the line manager (E13) and stamp SentOn. If that email fails: mark the item Failed (the page then shows it in
+    the line manager's 'Needs your attention'), try a short notice without the content, and end the run Failed."""
+    TB = 'triggerBody()'
+    BASE = "_api/web/lists(guid'@{outputs('FbIds')?['fbList']}')/items(@{" + TB + "?['ID']})"
+    e13 = ('<p><b>@{' + esc(TB + "?['Author']?['DisplayName']") + '}</b> (@{' + esc(TB + "?['Author']?['Email']") + '}) sent this from the 1-to-1 page.</p>'
+           '<table cellpadding="4" style="border-collapse:collapse">'
+           '<tr><td><b>Type</b></td><td>@{' + esc(TB + "?['FeedbackType']?['Value']") + '}</td></tr>'
+           '<tr><td><b>Page</b></td><td>@{' + esc(TB + "?['PageName']") + '} (version @{' + esc(TB + "?['AppVersion']") + '})</td></tr>'
+           "<tr><td><b>Sent</b></td><td>@{convertFromUtc(utcNow(), 'GMT Standard Time', 'dd-MMM-yyyy HH:mm')}</td></tr></table>"
+           '<div style="white-space:pre-wrap;border-left:3px solid #ccc;padding:6px 10px;margin-top:8px">@{' + esc(TB + "?['Message']") + '}</div>'
+           '<p style="color:#666">Kept in the 1-to-1 Feedback list (Owners only).</p>')
+    notice = ('<p>A message sent with the 1-to-1 feedback button could not be emailed to you. Open the <b>1-to-1 Feedback</b> list '
+              '(Site contents), or <b>Needs your attention</b> on the 1-to-1 page, to read it.</p>')
+    try_actions = seq(
+        *load_ids(),
+        ('List_feedback', query("@body('Get_lists')?['value']", "@equals(item()?['RootFolder']?['Name'], 'OneToOneFeedback')", secure=True)),
+        ('FbIds', compose({'fbList': "@first(body('List_feedback'))?['Id']"})),
+        ('Check_feedback_list', cond("@equals(outputs('FbIds')?['fbList'], null)", seq(
+            ('STOP_run_the_setup_flow_again', compose("@int('The 1-to-1 Feedback list was not found. Run ESG 1-to-1 | 0 Setup again.')"))))),
+        # lock first: whatever happens to the email, the item is no longer visible to the sender (or anyone but Owners)
+        ('Lock_reset', http('POST', BASE + '/resetroleinheritance')),
+        ('Lock_break', http('POST', BASE + '/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)')),
+        ('Lock_owners', http('POST', BASE + "/roleassignments/addroleassignment(principalid=@{outputs('Ids')?['owners']},"
+                                            "roledefid=@{outputs('Ids')?['fullControl']})")),
+        ('Send_E13', email('@' + TL_EMAIL, "1-to-1 feedback (@{" + TB + "?['FeedbackType']?['Value']}): @{" + TB + "?['Title']}", e13)),
+        ('Stamp_sent', patch_item(FB, '@' + TB + "?['ID']", {'Title': '@' + TB + "?['Title']", 'SentOn': '@utcNow()',
+                                                                'DeliveryStatus/Value': 'Sent'})),
+    )
+    try_actions['Mark_failed'] = after(patch_item(FB, '@' + TB + "?['ID']", {'Title': '@' + TB + "?['Title']", 'DeliveryStatus/Value': 'Failed'}),
+                                       {'Send_E13': FAILED})
+    try_actions['Send_E13_notice'] = after(email('@' + TL_EMAIL, '1-to-1 feedback could not be delivered – please read it in the list', notice),
+                                           {'Mark_failed': TOLERANT})
+    try_actions['Delivery_failed'] = after(terminate('Failed', 'The feedback email (E13) could not be sent. The item is marked Failed.'),
+                                           {'Send_E13_notice': TOLERANT})
+    actions = {'Try': after(scope(try_actions), {}), 'Catch': catch('ESG 1-to-1 | 6 Feedback')}
+    triggers = {'When_feedback_is_sent': {
+        'type': 'OpenApiConnection',
+        'recurrence': {'frequency': 'Minute', 'interval': 5},
+        'splitOn': "@triggerOutputs()?['body/value']",
+        # only items not yet handled: the flow's own updates (Sent / Failed) and 'Read' set on the page don't run it again
+        'conditions': [{'expression': "@and(empty(triggerBody()?['SentOn']), equals(coalesce(triggerBody()?['DeliveryStatus']?['Value'], 'Pending'), 'Pending'))"}],
+        'runtimeConfiguration': {'secureData': {'properties': ['inputs', 'outputs']}},
+        'inputs': {'host': {'connectionName': 'shared_sharepointonline', 'operationId': 'GetOnUpdatedItems', 'apiId': SP_API},
+                   'parameters': {'dataset': '@' + SITE, 'table': FB},
+                   'authentication': "@parameters('$authentication')"}}}
+    return definition(triggers, actions)
+
+
 FLOWS = [
     {'id': '6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c01', 'name': 'ESG 1-to-1 | 0 Setup (run once)', 'build': flow_setup,
      'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': True,
-     'description': 'Creates or completes the six lists, columns, indexes, views, permission levels, group and list permissions. Safe to re-run.'},
+     'description': 'Creates or completes the seven lists, columns, indexes, views, permission levels, group and list permissions. Safe to re-run.'},
     {'id': '6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c02', 'name': 'ESG 1-to-1 | 1 Daily scheduler', 'build': flow_daily,
      'connectors': ['shared_sharepointonline', 'shared_office365', 'shared_office365users'], 'on': False,
      'description': 'Daily 07:00 UK: creates each month\'s reviews, makes them private, emails links and reminders.'},
@@ -972,6 +1039,9 @@ FLOWS = [
     {'id': '6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c06', 'name': 'ESG 1-to-1 | 5 Wellbeing', 'build': flow_wellbeing,
      'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': False,
      'description': 'Wellbeing assessments: private to the person and the line manager; locks on submit, stamps completion, emails both.'},
+    {'id': '6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c07', 'name': 'ESG 1-to-1 | 6 Feedback', 'build': flow_feedback,
+     'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': False,
+     'description': 'Feedback from the page: makes each item Owners-only, emails it to the line manager, and flags it if the email fails.'},
 ]
 
 

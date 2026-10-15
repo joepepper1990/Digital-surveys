@@ -6,9 +6,9 @@
       <LocalizedName description="ESG 1-to-1" languagecode="1033" />
     </LocalizedNames>
     <Descriptions>
-      <Description description="ESG Monthly Technician 1-to-1: setup flow, daily scheduler, submission, manager-decision, team-members and wellbeing flows." languagecode="1033" />
+      <Description description="ESG Monthly Technician 1-to-1: setup flow, daily scheduler, submission, manager-decision, team-members, wellbeing and feedback flows." languagecode="1033" />
     </Descriptions>
-    <Version>1.1.2.0</Version>
+    <Version>1.2.0.0</Version>
     <Managed>0</Managed>
     <Publisher>
       <UniqueName>ESGOneToOne</UniqueName>
@@ -40,6 +40,7 @@
       <RootComponent type="29" id="{6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c04}" behavior="0" />
       <RootComponent type="29" id="{6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c05}" behavior="0" />
       <RootComponent type="29" id="{6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c06}" behavior="0" />
+      <RootComponent type="29" id="{6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c07}" behavior="0" />
       <RootComponent type="380" schemaName="esg_SiteUrl" behavior="0" />
       <RootComponent type="380" schemaName="esg_ManagerEmail" behavior="0" />
     </RootComponents>

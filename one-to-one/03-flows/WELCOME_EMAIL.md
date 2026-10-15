@@ -16,7 +16,7 @@ From **[month]**, our monthly 1-to-1 check-in moves to a short online form on a 
 
 - On the 1st of each month you'll get an email from me: *"Your 1-to-1 for [month] is ready"*. The link in it opens **your** form.
 - It takes about 10–15 minutes. You can save and come back as often as you like.
-- The deadline is the **last day of the month at 23:59**. If you haven't submitted, you'll get reminders on the 20th and 27th.
+- The deadline is the **last day of the month at 23:59**. If you haven't submitted, you'll get reminders on the reminder days (normally the 20th and 27th).
 - Once you submit, the form is locked. I'll read it, add my feedback and any agreed actions, and you'll get an email when the feedback is ready to view.
 - **My appraisal** shows how you're tracking against your appraisal expectations. **Appraisal report** pulls the year together to help with your appraisal.
 

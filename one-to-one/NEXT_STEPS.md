@@ -18,9 +18,9 @@
 
   | File | What it is |
   |---|---|
-  | [`02-frontend/`](02-frontend/README.md) | Production frontend v4.2.2, local mock, 167 automated checks (all passing) |
-  | [`01-sharepoint/lists.md`](01-sharepoint/lists.md) | Six-list build checklist |
-  | [`04-solution/`](04-solution/IMPORT_GUIDE.md) | **Importable solution**: setup flow (creates the lists exactly) + Flows 1–5; offline legacy builder; validated and simulated end to end |
+  | [`02-frontend/`](02-frontend/README.md) | Production frontend v4.3.0, local mock, 167 automated checks (all passing) |
+  | [`01-sharepoint/lists.md`](01-sharepoint/lists.md) | Seven-list build checklist |
+  | [`04-solution/`](04-solution/IMPORT_GUIDE.md) | **Importable solution**: setup flow (creates the lists exactly) + Flows 1–6; offline legacy builder; validated and simulated end to end |
   | [`03-flows/`](03-flows/FLOW_BUILD_SHEETS.md) | Flow build sheets and email templates (reference / manual build) |
   | [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) | Operating manual |
 
@@ -32,12 +32,12 @@
 
 Follow [`GO_LIVE_RUNBOOK.md`](GO_LIVE_RUNBOOK.md) from **Phase 4**:
 
-1. **Import the solution** [`04-solution/ESGOneToOne_1_1_2_0_unmanaged.zip`](04-solution/IMPORT_GUIDE.md): pick your connections, enter the site URL and your email.
-2. **Run *ESG 1-to-1 | 0 Setup*.** It creates the six lists, permission levels, group and list permissions, then emails you a summary.
+1. **Import the solution** [`04-solution/ESGOneToOne_1_2_0_0_unmanaged.zip`](04-solution/IMPORT_GUIDE.md): pick your connections, enter the site URL and your email.
+2. **Run *ESG 1-to-1 | 0 Setup*.** It creates the seven lists, permission levels, group and list permissions, then emails you a summary.
 3. **Install the frontend.** Upload two files, choose the *ESG 1-to-1* layout in a full-width section. There's nothing to edit.
-4. **Turn on the flows** once the Setup email has arrived: 2, 3, 4, 5, then 1 last.
+4. **Turn on the flows** once the Setup email has arrived: 2, 3, 4, 5, 6, then 1 last.
 5. **Add Test A and Test B**, set their appraisal dates in ⚙ Settings, and add expectations.
-6. **Rehearse** and run every test in plan section H (F1–F40, P1–P24).
+6. **Rehearse** and run every test in plan section H (F1–F42, P1–P25).
 7. **Clean down and go live.**
 
 ## Things to verify early in the tenant

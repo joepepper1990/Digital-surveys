@@ -840,6 +840,74 @@
               ]
             },
             {
+              "key": "feedback",
+              "url": "OneToOneFeedback",
+              "title": "1-to-1 Feedback",
+              "groupRead": false,
+              "groupContribute": true,
+              "readSecurity": 2,
+              "writeSecurity": 2,
+              "description": "ESG 1-to-1: faults and suggestions sent from the page. Each person sees only their own until Flow 6 emails it and makes it Owners-only.",
+              "fields": [
+                {
+                  "name": "FeedbackType",
+                  "kind": "choice",
+                  "indexed": false,
+                  "unique": false,
+                  "choices": [
+                    "Fault",
+                    "Improvement",
+                    "Suggestion"
+                  ],
+                  "default": "Suggestion",
+                  "xml": "<Field Type='Choice' Name='FeedbackType' StaticName='FeedbackType' DisplayName='FeedbackType' Required='FALSE' Format='Dropdown' FillInChoice='FALSE'><Default>Suggestion</Default><CHOICES><CHOICE>Fault</CHOICE><CHOICE>Improvement</CHOICE><CHOICE>Suggestion</CHOICE></CHOICES></Field>"
+                },
+                {
+                  "name": "Message",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='Message' StaticName='Message' DisplayName='Message' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "PageName",
+                  "kind": "text",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Text' Name='PageName' StaticName='PageName' DisplayName='PageName' Required='FALSE' MaxLength='255' />"
+                },
+                {
+                  "name": "AppVersion",
+                  "kind": "text",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Text' Name='AppVersion' StaticName='AppVersion' DisplayName='AppVersion' Required='FALSE' MaxLength='255' />"
+                },
+                {
+                  "name": "DeliveryStatus",
+                  "kind": "choice",
+                  "indexed": false,
+                  "unique": false,
+                  "choices": [
+                    "Pending",
+                    "Sent",
+                    "Failed",
+                    "Read"
+                  ],
+                  "default": "Pending",
+                  "xml": "<Field Type='Choice' Name='DeliveryStatus' StaticName='DeliveryStatus' DisplayName='DeliveryStatus' Required='FALSE' Format='Dropdown' FillInChoice='FALSE'><Default>Pending</Default><CHOICES><CHOICE>Pending</CHOICE><CHOICE>Sent</CHOICE><CHOICE>Failed</CHOICE><CHOICE>Read</CHOICE></CHOICES></Field>"
+                },
+                {
+                  "name": "SentOn",
+                  "kind": "datetime",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='DateTime' Name='SentOn' StaticName='SentOn' DisplayName='SentOn' Required='FALSE' Format='DateTime' FriendlyDisplayFormat='Disabled' />"
+                }
+              ],
+              "views": []
+            },
+            {
               "key": "settings",
               "url": "OneToOneSettings",
               "title": "1-to-1 Settings",
@@ -1461,18 +1529,31 @@
                 ]
               }
             },
+            "Role_contribute_builtin": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Get_roles_again')?['value']",
+                "where": "@equals(item()?['RoleTypeKind'], 3)"
+              },
+              "runAfter": {
+                "Role_read_builtin": [
+                  "Succeeded"
+                ]
+              }
+            },
             "Ids": {
               "type": "Compose",
               "inputs": {
                 "owners": "@body('Get_owners_group')?['Id']",
                 "fullControl": "@first(body('Role_full_control'))?['Id']",
                 "readBuiltIn": "@first(body('Role_read_builtin'))?['Id']",
+                "contributeBuiltIn": "@first(body('Role_contribute_builtin'))?['Id']",
                 "members": "@coalesce(body('Get_members_group')?['Id'], -1)",
                 "visitors": "@coalesce(body('Get_visitors_group')?['Id'], -1)",
                 "group": "@first(body('Find_group_again'))?['Id']"
               },
               "runAfter": {
-                "Role_read_builtin": [
+                "Role_contribute_builtin": [
                   "Succeeded"
                 ]
               }
@@ -1667,7 +1748,7 @@
                         "X-HTTP-Method": "MERGE",
                         "IF-MATCH": "*"
                       },
-                      "parameters/body": "{\"__metadata\":{\"type\":\"SP.List\"},\"Title\":\"@{items('Each_list')?['title']}\",\"Description\":\"@{items('Each_list')?['description']}\",\"EnableVersioning\":true,\"MajorVersionLimit\":@{max(100, int(first(split(string(coalesce(outputs('List')?['MajorVersionLimit'], '')), '.'))))},\"EnableAttachments\":false,\"NoCrawl\":true,\"OnQuickLaunch\":false}"
+                      "parameters/body": "{\"__metadata\":{\"type\":\"SP.List\"},\"Title\":\"@{items('Each_list')?['title']}\",\"Description\":\"@{items('Each_list')?['description']}\",\"EnableVersioning\":true,\"MajorVersionLimit\":@{max(100, int(first(split(string(coalesce(outputs('List')?['MajorVersionLimit'], '')), '.'))))},\"EnableAttachments\":false,\"NoCrawl\":true,\"OnQuickLaunch\":false,\"ReadSecurity\":@{coalesce(items('Each_list')?['readSecurity'], 1)},\"WriteSecurity\":@{coalesce(items('Each_list')?['writeSecurity'], 1)}}"
                     },
                     "authentication": "@parameters('$authentication')"
                   },
@@ -2408,6 +2489,52 @@
                       "TimedOut"
                     ]
                   }
+                },
+                "Group_needs_contribute": {
+                  "type": "If",
+                  "expression": "@equals(items('Each_list')?['groupContribute'], true)",
+                  "actions": {
+                    "Grant_group_contribute": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                          "parameters/method": "POST",
+                          "parameters/uri": "_api/web/lists(guid'@{outputs('List')?['Id']}')/roleassignments/addroleassignment(principalid=@{outputs('Ids')?['group']},roledefid=@{outputs('Ids')?['contributeBuiltIn']})",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata"
+                          }
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {}
+                    },
+                    "Log_group_contribute": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "varLog",
+                        "value": "@concat(items('Each_list')?['title'], ': 1-to-1 Technicians given Contribute (each person sees only their own items)')"
+                      },
+                      "runAfter": {
+                        "Grant_group_contribute": [
+                          "Succeeded"
+                        ]
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {}
+                  },
+                  "runAfter": {
+                    "Group_needs_read": [
+                      "Succeeded"
+                    ]
+                  }
                 }
               },
               "runtimeConfiguration": {
@@ -2651,7 +2778,7 @@
                 "parameters": {
                   "emailMessage/To": "@parameters('ESG 1-to-1 Team Leader email (esg_ManagerEmail)')",
                   "emailMessage/Subject": "ESG 1-to-1 setup: @{if(empty(variables('varWarnings')), 'complete', 'complete with items to check')}",
-                  "emailMessage/Body": "<p><b>ESG 1-to-1 setup finished.</b></p><p><b>Problems to fix by hand</b> (empty means none):</p><ul><li>@{join(variables('varWarnings'), '</li><li>')}</li></ul><p><b>What was done:</b></p><ul><li>@{join(variables('varLog'), '</li><li>')}</li></ul><p>Next: turn on flows 1 to 5 (GO_LIVE_RUNBOOK Phase 7) and check each list's permissions page.</p>",
+                  "emailMessage/Body": "<p><b>ESG 1-to-1 setup finished.</b></p><p><b>Problems to fix by hand</b> (empty means none):</p><ul><li>@{join(variables('varWarnings'), '</li><li>')}</li></ul><p><b>What was done:</b></p><ul><li>@{join(variables('varLog'), '</li><li>')}</li></ul><p>Next: turn on flows 2, 3, 4, 5, 6 and then 1 (GO_LIVE_RUNBOOK Phase 7) and check each list's permissions page.</p>",
                   "emailMessage/Importance": "Normal"
                 },
                 "authentication": "@parameters('$authentication')"

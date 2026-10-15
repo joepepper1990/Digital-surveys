@@ -19,6 +19,8 @@ ACTIONS_STATUS = ['None', 'Open', 'Done']
 YES_NO = ['Yes', 'No']
 APPLIES_TO = ['Shared', 'Individual']
 WB_STATUS = ['Open', 'Submitted', 'Completed']
+FEEDBACK_TYPES = ['Fault', 'Improvement', 'Suggestion']
+DELIVERY_STATUS = ['Pending', 'Sent', 'Failed', 'Read']
 DEFAULT_REMINDERS = '[20,27]'
 
 DEFAULT_BANDS = ('[{"name":"Not met","max":1.5},{"name":"Partially met","max":2.25},'
@@ -220,6 +222,22 @@ LISTS = [
             view('Reviews due', ['LinkTitle', 'Technician', 'AssessmentStatus', 'CompletedOn', 'NextReviewDate'],
                  "<OrderBy><FieldRef Name='NextReviewDate'/></OrderBy><Where>" + _eq_choice('AssessmentStatus', 'Completed') + "</Where>"),
         ],
+    },
+    {
+        # Anyone in the group may add an item (Contribute) but, with item-level security, sees and edits only their own;
+        # Flow 6 then makes each item Owners-only and emails the line manager.
+        'key': 'feedback', 'url': 'OneToOneFeedback', 'title': '1-to-1 Feedback', 'groupRead': False,
+        'groupContribute': True, 'readSecurity': 2, 'writeSecurity': 2,
+        'description': 'ESG 1-to-1: faults and suggestions sent from the page. Each person sees only their own until Flow 6 emails it and makes it Owners-only.',
+        'fields': [
+            choice('FeedbackType', FEEDBACK_TYPES, default='Suggestion'),
+            note('Message'),
+            text('PageName'),
+            text('AppVersion'),
+            choice('DeliveryStatus', DELIVERY_STATUS, default='Pending'),
+            date('SentOn', with_time=True),
+        ],
+        'views': [],
     },
     {
         'key': 'settings', 'url': 'OneToOneSettings', 'title': '1-to-1 Settings', 'groupRead': True,

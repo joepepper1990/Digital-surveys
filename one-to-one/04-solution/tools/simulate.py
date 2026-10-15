@@ -87,6 +87,7 @@ def frontend_fields():
         'Appraisal Expectations': names(re.search(r"spGetAll\(CONFIG\.lists\.exp, '([^']+)'", js).group(1)),
         '1-to-1 Settings': names(re.search(r"spGetAll\(CONFIG\.lists\.settings, '([^']+)'", js).group(1)),
         'Wellbeing Assessments': names(strings_after(js, 'var WB_FIELDS')),
+        '1-to-1 Feedback': names(strings_after(js, 'var FB_FIELDS')),
     }
     need['Monthly Reviews'] |= set(re.findall(r"'([^']+)'", strings_after(tests, 'var TECH_ALLOWED', ']')))
     need['Manager Reviews'] |= set(re.findall(r"'([^']+)'", strings_after(tests, 'var MGR_ALLOWED', ']')))
@@ -123,7 +124,8 @@ def setup_checks():
         ok('Setup: {0} display name'.format(spec['title']), l['Title'] == spec['title'], l['Title'])
         ok('Setup: {0} settings (versioning 100, no attachments, not in search, offline off, not on quick launch)'.format(spec['title']),
            l['props'] == {'EnableVersioning': True, 'MajorVersionLimit': 100, 'EnableAttachments': False, 'NoCrawl': True,
-                          'OnQuickLaunch': False, 'ExcludeFromOfflineClient': True}, l['props'])
+                          'OnQuickLaunch': False, 'ExcludeFromOfflineClient': True,
+                          'ReadSecurity': spec.get('readSecurity', 1), 'WriteSecurity': spec.get('writeSecurity', 1)}, l['props'])
         csvl = ref[spec['title']]
         made = {n: f for n, f in l['fields'].items() if n not in ('ID', 'Created', 'Modified', 'Author', 'Editor', 'Attachments',
                                                                   'ContentType', 'LinkTitle')}
@@ -161,10 +163,13 @@ def setup_checks():
         ok('Setup: {0} has every column the frontend reads and writes'.format(spec['title']), not missing, missing)
         ok('Setup: {0} views'.format(spec['title']), set(v['title'] for v in spec['views']) <= set(l['views']), l['views'])
         want_ra = {3: {fsp.FULL}}
+        gid = next(g for g, d in sp.groups.items() if d['Title'] == '1-to-1 Technicians')
         if spec['groupRead']:
-            gid = next(g for g, d in sp.groups.items() if d['Title'] == '1-to-1 Technicians')
             want_ra[gid] = {fsp.READ}
-        ok('Setup: {0} permissions are exactly {1}'.format(spec['title'], 'Owners FC + technicians Read' if spec['groupRead'] else 'Owners FC'),
+        if spec.get('groupContribute'):
+            want_ra[gid] = {fsp.CONTRIB}
+        ok('Setup: {0} permissions are exactly {1}'.format(spec['title'], 'Owners FC + technicians Read' if spec['groupRead'] else
+                                                         'Owners FC + technicians Contribute (own items only)' if spec.get('groupContribute') else 'Owners FC'),
            l['unique'] and l['ra'] == want_ra, l['ra'])
     for r in ROLES:
         got = next((x for x in sp.roles if x['Name'] == r['name']), None)
@@ -605,6 +610,61 @@ def team_and_wellbeing_checks():
        any(e['subject'].startswith('Reminder:') for e in sp.emails[n:]), eng.log)
 
 
+
+def feedback_checks():
+    sp = fsp.FakeSP()
+    run('0', sp, T('2026-10-14T09:00:00'))
+    fb = sp.list_by_title('1-to-1 Feedback')
+    # Alex sends a fault from the page (item created as Alex; inherits the list: group Contribute, own items only)
+    sp.me = 11
+    it = sp.write_item(fb, None, {'item/Title': 'Date box <b>rejects</b> 31/12', 'item/FeedbackType/Value': 'Fault',
+                                  'item/Message': 'Typing 31/12/2026 <script>alert(1)</script> & pressing Tab\nclears it',
+                                  'item/PageName': 'This month', 'item/AppVersion': '4.3.0'})
+    sp.me = 10
+    ok('Fake: a new feedback item is Pending', it['fields'].get('DeliveryStatus') == 'Pending')
+    n = len(sp.emails)
+    st, eng = fire('6', sp, '1-to-1 Feedback', it['id'], T('2026-10-20T09:00:00'))
+    e = sp.emails[-1] if len(sp.emails) > n else {}
+    ok('Flow 6: the item is locked to Owners only (the sender can no longer see or change it)', st == 'Succeeded' and it['unique'] and
+       it['ra'].get(3) == {fsp.FULL} and 11 not in it['ra'] and not any(k not in (3, 10) for k in it['ra']), (st, eng and eng.log, it['ra']))
+    ok('Flow 6: E13 to the TL names the sender, type, page and version', len(sp.emails) == n + 1 and e.get('to') == 'team.leader@example.test' and
+       e['subject'].startswith('1-to-1 feedback (Fault): ') and 'Alex Morgan' in e['body'] and 'alex.morgan@example.test' in e['body'] and
+       'This month' in e['body'] and '4.3.0' in e['body'], e)
+    ok('Flow 6: what they typed is HTML-escaped in the email', '&lt;script&gt;' in e.get('body', '') and '<script>' not in e.get('body', '') and
+       '&amp; pressing' in e.get('body', ''), e.get('body'))
+    ok('Flow 6: SentOn stamped and DeliveryStatus = Sent', it['fields'].get('SentOn') and it['fields'].get('DeliveryStatus') == 'Sent', it['fields'])
+    n = len(sp.emails)
+    st, _ = fire('6', sp, '1-to-1 Feedback', it['id'], T('2026-10-20T09:05:00'))
+    ok('Flow 6: its own update does not run it again (no second email)', st == 'NotTriggered' and len(sp.emails) == n, st)
+    # the mail service refuses the email
+    sp.me = 12
+    it2 = sp.write_item(fb, None, {'item/Title': 'Idea', 'item/FeedbackType/Value': 'Suggestion', 'item/Message': 'Dark mode please',
+                                   'item/PageName': 'My appraisal', 'item/AppVersion': '4.3.0'})
+    sp.me = 10
+    sp.fail_mail = ['1-to-1 feedback (']
+    n = len(sp.emails)
+    st, eng = fire('6', sp, '1-to-1 Feedback', it2['id'], T('2026-10-21T09:00:00'))
+    sp.fail_mail = []
+    new = sp.emails[n:]
+    ok('Flow 6 (email fails): the item is still locked and marked Failed', it2['unique'] and 12 not in it2['ra'] and
+       it2['fields'].get('DeliveryStatus') == 'Failed' and not it2['fields'].get('SentOn'), it2['fields'])
+    ok('Flow 6 (email fails): the TL gets a short notice without the content, and the run ends Failed', st == 'Failed' and len(new) == 1 and
+       new[0]['to'] == 'team.leader@example.test' and 'could not be delivered' in new[0]['subject'] and 'Dark mode' not in new[0]['body'],
+       (st, new))
+    n = len(sp.emails)
+    st, _ = fire('6', sp, '1-to-1 Feedback', it2['id'], T('2026-10-21T09:05:00'))
+    ok('Flow 6 (email fails): marking it Failed does not set off a retry loop', st == 'NotTriggered' and len(sp.emails) == n, st)
+    # nothing at all can be emailed: the run still ends Failed (Power Automate's own failure notice) and the item says Failed
+    sp.me = 11
+    it3 = sp.write_item(fb, None, {'item/Title': 'x', 'item/FeedbackType/Value': 'Improvement', 'item/Message': 'x', 'item/PageName': 'p', 'item/AppVersion': 'v'})
+    sp.me = 10
+    sp.fail_mail = ['1-to-1 feedback']
+    st, _ = fire('6', sp, '1-to-1 Feedback', it3['id'], T('2026-10-22T09:00:00'))
+    sp.fail_mail = []
+    ok('Flow 6 (mail service down): run Failed, item Failed, still locked', st == 'Failed' and it3['fields'].get('DeliveryStatus') == 'Failed' and
+       11 not in it3['ra'], (st, it3['fields']))
+
+
 if __name__ == '__main__':
     site = setup_checks()
     partial_site_checks()
@@ -613,6 +673,7 @@ if __name__ == '__main__':
     failure_checks()
     extra_checks()
     team_and_wellbeing_checks()
+    feedback_checks()
     passed = sum(1 for _, p in RESULTS if p)
     print('\n[{2}] {0} / {1} passed'.format(passed, len(RESULTS), MODE))
     sys.exit(0 if passed == len(RESULTS) else 1)

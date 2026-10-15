@@ -2,13 +2,13 @@
 
 > **You don't have to build these by hand.** The setup flow in the solution creates all of this exactly. See [`../04-solution/IMPORT_GUIDE.md`](../04-solution/IMPORT_GUIDE.md). This page is the specification, and a checklist for verifying the result or building by hand. The automated simulation checks the setup flow against [`lists.csv`](lists.csv).
 
-Build these **six lists** on the private 1-to-1 site. The frontend (`one-to-one.js`) and the flows use the **internal column names** exactly as written here, so type them exactly, with no spaces. A machine-readable copy is in [`lists.csv`](lists.csv).
+Build these **seven lists** on the private 1-to-1 site. The frontend (`one-to-one.js`) and the flows use the **internal column names** exactly as written here, so type them exactly, with no spaces. A machine-readable copy is in [`lists.csv`](lists.csv).
 
 **v4 changes from v3.2 (marked 🆕):** `AppraisalDate` on Technicians and Monthly Reviews; `Mood` and `WinOfMonth` on Monthly Reviews; `ActionsJson` and `NextActionDue` replace `AgreedActions` and `ActionsDueBy` on Manager Reviews; and a fifth list, **1-to-1 Settings**.
 
 ## Rules for every list
 
-- **Create with the internal name, then rename.** Create the list as `MonthlyReviews` (no space), then rename it to `Monthly Reviews` in List settings. The frontend and flows use the **display names**: `Technicians`, `Appraisal Expectations`, `Monthly Reviews`, `Manager Reviews`, `Wellbeing Assessments`, `1-to-1 Settings`.
+- **Create with the internal name, then rename.** Create the list as `MonthlyReviews` (no space), then rename it to `Monthly Reviews` in List settings. The frontend and flows use the **display names**: `Technicians`, `Appraisal Expectations`, `Monthly Reviews`, `Manager Reviews`, `Wellbeing Assessments`, `1-to-1 Settings`, `1-to-1 Feedback`.
 - **Columns:** type the name exactly as shown (that becomes the permanent internal name). Leave every column **not required**, apart from Title.
 - **Choice columns:** one choice per line, exactly as written (including dashes). Turn **Can add values manually** off. Where the default is *(none)*, delete the default value.
 - **Multiple lines of text:** **plain text** (turn **Use enhanced rich text** off) and turn **Append changes to existing text** off.
@@ -178,10 +178,30 @@ Created by the setup flow (solution 1.1) at `Lists/WellbeingAssessments`, displa
 
 ---
 
+## 7. 1-to-1 Feedback 🆕 v4.3 (everyone adds; each sees only their own until Flow 6 locks it)
+
+Created by the setup flow (solution 1.2) at `Lists/OneToOneFeedback`, display name **1-to-1 Feedback**. One item per message sent from the page's 💬 **Feedback** bubble.
+
+| Column | Type | Notes |
+|---|---|---|
+| Title | (built-in) | First 60 characters of the message |
+| FeedbackType | Choice: Fault / Improvement / Suggestion (default Suggestion) | Chosen in the bubble |
+| Message | Multiple lines (plain) | What they wrote (2,000 characters at most) |
+| PageName | Single line of text | The page they were on |
+| AppVersion | Single line of text | Frontend version |
+| DeliveryStatus | Choice: Pending / Sent / Failed / Read (default Pending) | **Flow 6:** Sent, or Failed if the email didn't go. **You:** Read, from *Needs your attention*. |
+| SentOn | Date and time | **Flow 6 only** |
+
+- [ ] Advanced settings → **Item-level permissions:** *Read items that were created by the user*; *Create items and edit items that were created by the user*.
+- [ ] Permissions: **Owners – Full Control** and `1-to-1 Technicians` – **Contribute** (this list only). Flow 6 makes each item Owners-only straight after it's sent.
+
+---
+
 ## Final checks
 
-- [ ] Site contents shows the six lists (plus the Welcome libraries/lists).
+- [ ] Site contents shows the seven lists (plus the Welcome libraries/lists).
 - [ ] **Technicians, Appraisal Expectations, Monthly Reviews, Manager Reviews, Wellbeing Assessments:** permissions page shows **only Owners – Full Control**.
 - [ ] **1-to-1 Settings:** Owners – Full Control **and** `1-to-1 Technicians` – Read. Nothing else.
+- [ ] **1-to-1 Feedback:** Owners – Full Control **and** `1-to-1 Technicians` – Contribute, with item-level permissions set to their own items only.
 - [ ] Versioning on, attachments off, search off, on every list.
 - [ ] Spot-check three internal names: open List settings → click the column → the URL ends `Field=Q9FollowUp` (etc.).

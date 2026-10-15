@@ -324,6 +324,27 @@ body { margin: 0; background: #eef2f5; }
   .oto-scope .oto .tip { z-index: 10070; }
   .oto-scope .oto .confetti { z-index: 10040; }
   .oto-scope .oto .report-wrap { z-index: 10000; }
+  /* ---------- v4.3 feedback bubble (bottom-right, above the page, below dialogs) ---------- */
+  .oto-scope .oto .fbk { position: fixed; right: 20px; bottom: 20px; z-index: 10005; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+  .oto-scope .oto .fbk-bubble { display: inline-flex; align-items: center; gap: 8px; border: 0; border-radius: 999px; padding: 11px 16px 11px 14px; background: var(--navy); color: #fff; font: inherit; font-weight: 650; font-size: 14px; cursor: pointer; box-shadow: 0 6px 18px rgba(14,66,87,.35); }
+  .oto-scope .oto .fbk-bubble span[aria-hidden] { font-size: 18px; line-height: 1; }
+  .oto-scope .oto .fbk-bubble:hover { background: var(--navy-2); }
+  .oto-scope .oto .fbk-bubble:focus-visible { outline: 3px solid #ef7d3a; outline-offset: 2px; }
+  .oto-scope .oto .fbk-bubble[aria-expanded="true"] { background: #0e4257; }
+  .oto-scope .oto .fbk-panel { width: 380px; max-width: calc(100vw - 40px); background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 14px 36px rgba(0,0,0,.22); padding: 16px; }
+  .oto-scope .oto .fbk-panel h3 { font-size: 15px; margin: 0 0 10px; }
+  .oto-scope .oto .fbk-panel textarea { width: 100%; box-sizing: border-box; resize: vertical; min-height: 96px; }
+  .oto-scope .oto .fbk-types { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .oto-scope .oto .fbk-types button { border: 1px solid var(--line); background: var(--soft); border-radius: 999px; padding: 5px 11px; font: inherit; font-size: 13px; cursor: pointer; }
+  .oto-scope .oto .fbk-types button.on { background: var(--navy); border-color: var(--navy); color: #fff; }
+  .oto-scope .oto .fbk-meta { display: flex; justify-content: space-between; gap: 10px; margin: 6px 0 10px; align-items: flex-start; }
+  .oto-scope .oto .fbk-meta > span:last-child { white-space: nowrap; }
+  .oto-scope .oto .shell { padding-bottom: 64px; }   /* room so the bubble never hides the end of a page */
+  .oto-scope .oto .fbk-note { border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; font-size: 13px; }
+  .oto-scope .oto .fbk-note.good { background: var(--green-bg); color: var(--green); }
+  .oto-scope .oto .fbk-note.bad { background: #fde8e9; color: var(--red); }
+  .oto-scope .oto .fbk-msg { white-space: pre-wrap; background: var(--soft); border-left: 3px solid var(--navy-2); padding: 10px 12px; margin-top: 12px; border-radius: 0 6px 6px 0; max-height: 40vh; overflow: auto; }
+  @media print { .oto-scope .oto .fbk { display: none !important; } }
         
 </style>
 </head>

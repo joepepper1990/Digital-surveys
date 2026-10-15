@@ -6,11 +6,11 @@
 
 | Path | What it is |
 |---|---|
-| `ESGOneToOne_1_1_2_0_unmanaged.zip` | **The importable solution**, packed by Microsoft's Power Platform CLI (`pac solution pack`) |
+| `ESGOneToOne_1_2_0_0_unmanaged.zip` | **The importable solution**, packed by Microsoft's Power Platform CLI (`pac solution pack`) |
 | `legacy-package-builder.html` | Offline page that makes legacy (non-solution) packages, for environments without Dataverse |
 | `src/` | The unpacked solution, in the same layout `pac solution unpack` produces. **Generated – do not edit by hand.** |
 | `tools/schema.py` | **The SharePoint schema, defined once:** lists, columns (field XML), indexes, views, permission levels |
-| `tools/flows.py` | **The six flows**, as Power Automate flow definitions |
+| `tools/flows.py` | **The seven flows**, as Power Automate flow definitions |
 | `tools/legacy.py` | Legacy package templates and the builder page |
 | `tools/build.py` | Generates `src/`, validates, packs the zip, unpacks it again to prove the round trip |
 | `tools/validate.py` | Static checks for every flow |
@@ -32,10 +32,10 @@ tools/run_all.sh
 |---|---|
 | `build.py` | **Generates the files:** `src/` and the builder page. **Validates every flow:** expressions parse and use real functions; every reference points at an existing action, variable, parameter or enclosing loop; `runAfter` chains are complete; SharePoint/Outlook actions have their required parameters; list and column names exist in the schema; REST bodies are valid JSON; field XML and view CAML are well-formed; a time-zoned schedule has a start time. **Packs** with `pac` and **unpacks** again; the flow JSON must survive the round trip unchanged. |
 | `test_validate.py` | 23 deliberately broken copies of the flows; the validator must reject every one |
-| `simulate.py` (solution and legacy) | 149 end-to-end checks against the fake SharePoint, grouped below |
+| `simulate.py` (solution and legacy) | 167 end-to-end checks against the fake SharePoint, grouped below |
 | `test_builder.js` + `check_builder_zips.py` | The builder rejects bad input, makes no network requests, and produces standard zips whose contents are exactly the templates with the values filled in |
 
-**The 149 simulation checks** cover:
+**The 167 simulation checks** cover:
 
 - **Setup builds exactly the lists in [`../01-sharepoint/lists.csv`](../01-sharepoint/lists.csv):** column types, choices, defaults, ranges, indexes, unique key, views, settings and permissions.
 - **The lists hold every column the frontend reads or writes.**
@@ -44,6 +44,9 @@ tools/run_all.sh
 - **Submit → lock.** Forced status values are normalised and lateness comes from the trusted record.
 - **Complete → release.** Invalid decisions are reverted.
 - **Failures** are reported, and one technician's failure doesn't block the others.
+- **Team members (Flow 4):** access follows the Technicians list, including a full sync that removes anyone without an Active row.
+- **Wellbeing (Flow 5) and its reminders:** private to one person, locked on submit, manager fields protected; E12 7 days before and on the day (also in summer time).
+- **Feedback (Flow 6):** each item is locked to Owners before anything is emailed; the message is HTML-escaped; if the email fails the item is marked Failed, a short notice is tried and the run ends Failed; the flow's own updates never re-run it.
 
 **What the fake can't prove.** It follows SharePoint Online's documented behaviour, but it is not SharePoint. The import (§2) and the setup run (§3) in [`IMPORT_GUIDE.md`](IMPORT_GUIDE.md), plus plan section H, are the real tests.
 

@@ -82,5 +82,12 @@ Wellbeing Assessments,ManagerNotes,Multiple lines (plain),,,,Line manager
 Wellbeing Assessments,NextReviewDate,Date only,,,,Line manager; yearly by default
 Wellbeing Assessments,SubmittedOn,Date and time,,,,Flow 5
 Wellbeing Assessments,CompletedOn,Date and time,,,,Flow 5
+1-to-1 Feedback,Title,Built-in,,,,First 60 characters of the message
+1-to-1 Feedback,FeedbackType,Choice,Fault|Improvement|Suggestion,Suggestion,,From the feedback bubble
+1-to-1 Feedback,Message,Multiple lines (plain),,,,What the person wrote
+1-to-1 Feedback,PageName,Single line of text,,,,The page they were on
+1-to-1 Feedback,AppVersion,Single line of text,,,,Frontend version
+1-to-1 Feedback,DeliveryStatus,Choice,Pending|Sent|Failed|Read,Pending,,Flow 6 (Read = opened on the page after a failed email)
+1-to-1 Feedback,SentOn,Date and time,,,,Flow 6
 1-to-1 Settings,Title,Built-in,,,,Items: Bands; Reminders; Labels
 1-to-1 Settings,Value,Multiple lines (plain),,,,JSON

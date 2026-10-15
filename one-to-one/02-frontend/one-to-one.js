@@ -17,7 +17,7 @@
 window.ESGOneToOne = function (ctx) {
   'use strict';
 
-  var VERSION = '4.2.2';
+  var VERSION = '4.3.0';
 
   // ---------------------------------------------------------------------------------------------
   // CONFIG — normally nothing to change. List titles must match the lists you created.
@@ -29,7 +29,8 @@ window.ESGOneToOne = function (ctx) {
       techs: 'Technicians',
       exp: 'Appraisal Expectations',
       settings: '1-to-1 Settings',
-      wellbeing: 'Wellbeing Assessments'
+      wellbeing: 'Wellbeing Assessments',
+      feedback: '1-to-1 Feedback'
     },
     timeZone: 'Europe/London',     // must match the site's regional settings
     maxExpectations: 10
@@ -184,6 +185,8 @@ window.ESGOneToOne = function (ctx) {
   var TECH_INFO = {};           // name -> { appraisal: 'yyyy-mm-dd', itemId, email, claims }
   var MASTER_EXPECTATIONS = []; // TL only
   var WELLBEING = [], WB_AVAILABLE = false;   // wellbeing assessments the viewer can read
+  var FEEDBACK_ISSUES = [];     // line manager only: feedback that Flow 6 couldn't email (or hasn't yet)
+  var FBK = { open: false, type: 'Fault', text: '', note: '', err: false, busy: false };   // the feedback bubble
   var REVIEWS = [];             // one object per Monthly Review item the viewer can read
   var SETTINGS = { bands: defaultBands(), itemId: 0, reminders: defaultReminders(), remindersId: 0, labelsId: 0 };
 
@@ -357,7 +360,8 @@ window.ESGOneToOne = function (ctx) {
     checkFieldErrors(res, 'Save');
   }
   var rootFolders = {};
-  // The ONLY create function – Team Leader only (expectations, settings).
+  // The ONLY create function. Line manager: expectations, settings, team members, wellbeing assessments.
+  // Everyone: feedback from the bubble (1-to-1 Feedback list, own items only until Flow 6 locks them).
   async function spCreate(list, fields) {
     if (!rootFolders[list]) {
       var rf = await req('GET', listPath(list) + '/RootFolder?$select=ServerRelativeUrl');
@@ -408,6 +412,8 @@ window.ESGOneToOne = function (ctx) {
     'ReleasedOn,TechnicianAadId,Technician/Id,Technician/Title,Technician/EMail';
   var WB_FIELDS = 'ID,Title,AssessmentStatus,AssessmentDate,Position,EmployeeNumber,AnswersJson,PersonalJson,ArrangementsJson,ManagerNotes,NextReviewDate,' +
     'SubmittedOn,CompletedOn,Technician/Id,Technician/Title,Technician/EMail';
+  // Feedback list: only failed / undelivered items are read (line manager only), to show in Needs your attention.
+  var FB_FIELDS = 'ID,Title,FeedbackType,Message,PageName,AppVersion,DeliveryStatus,SentOn,Created,Author/Title,Author/EMail';
   var REV_FIELDS = 'ID,Title,MonthKey,DueDate,ReviewStatus,Q1WentWell,Q2Issue,Q2Impact,Q2Tried,Q2Support,Q3WorkloadRating,Q3WorkloadComment,' +
     'Q4WellbeingRaise,Q4WellbeingDetail,Q5PlanningRaise,Q5PlanningDetail,Q6DevRaise,Q6DevWhat,Q6DevWhy,Q7ManagerFeedback,ExpectationsJson,Q9FollowUp,' +
     'Mood,WinOfMonth,AppraisalDate,Technician/Id,Technician/Title,Technician/EMail';
@@ -504,7 +510,7 @@ window.ESGOneToOne = function (ctx) {
     var mrByItem = {};
     mrs.forEach(function (m) { if (m.ReviewItemId) { mrByItem[Number(m.ReviewItemId)] = m; } });
 
-    REVIEWS = []; TECHS = []; TECH_INFO = {}; MASTER_EXPECTATIONS = [];
+    REVIEWS = []; TECHS = []; TECH_INFO = {}; MASTER_EXPECTATIONS = []; FEEDBACK_ISSUES = [];
     if (IS_TL) {
       var techs = await spGetAll(CONFIG.lists.techs, 'ID,Title,Active,AppraisalDate,TechnicianAadId,Technician/Id,Technician/Title,Technician/EMail,Technician/Name', 'Technician');
       var byEmail = {};
@@ -523,6 +529,11 @@ window.ESGOneToOne = function (ctx) {
         var name = byEmail[email] || str(who && who.Title) || 'Unknown';
         if (!TECH_INFO[name]) { TECH_INFO[name] = { appraisal: '', itemId: 0, email: email, claims: '', active: false }; }
         REVIEWS.push(buildReview(rv, mr, name));
+      });
+      // feedback the line manager hasn't received by email: Failed, or still Pending after an hour (Flow 6 off?)
+      FEEDBACK_ISSUES = (await spGetAll(CONFIG.lists.feedback, FB_FIELDS, 'Author')).filter(function (f) {
+        var st = str(f.DeliveryStatus) || 'Pending', age = Date.now() - new Date(f.Created).getTime();
+        return st === 'Failed' || (st === 'Pending' && age > 3600000);
       });
       var exps = await spGetAll(CONFIG.lists.exp, 'ID,Title,Measures,AppraisalYear,AppliesTo,SortOrder,Active,Technician/Id,Technician/Title,Technician/EMail,Technician/Name', 'Technician');
       var wbChk = await req('GET', listPath(CONFIG.lists.wellbeing) + '?$select=Id');
@@ -1329,6 +1340,11 @@ window.ESGOneToOne = function (ctx) {
       items.push({ pri: 2, ico: '✅', text: 'Overdue action for ' + x.r.tech + ': ' + x.ac.text + ' (due ' + fmtDate(x.ac.due) + ')', btn: 'Actions', fn: function () { state.actFilter = 'overdue'; go('actions'); } });
     });
     wellbeingAttention().forEach(function (x) { items.push(x); });
+    FEEDBACK_ISSUES.forEach(function (f) {
+      var who = str(f.Author && f.Author.Title) || 'someone';
+      items.push({ pri: str(f.DeliveryStatus) === 'Failed' ? 1 : 2, ico: '💬', btn: 'Read', fn: function () { openFeedbackItem(f); },
+        text: 'Feedback from ' + who + (str(f.DeliveryStatus) === 'Failed' ? ' couldn\'t be emailed' : ' hasn\'t been emailed yet') + ' – read it here' });
+    });
     TECHS.forEach(function (t) {
       var ap = apDateOf(t);
       if (!ap) { items.push({ pri: 3, ico: '📅', text: 'No appraisal date set for ' + t, btn: 'Set date', fn: function () { openSettings('team'); } }); }
@@ -2566,6 +2582,99 @@ window.ESGOneToOne = function (ctx) {
   }
 
   // ---------------------------------------------------------------------------------------------
+  // FEEDBACK BUBBLE – anyone can report a fault or suggest an improvement. It creates an item in 1-to-1 Feedback;
+  // Flow 6 makes it Owners-only and emails it to the line manager. Drawn in place, so it never disturbs the page.
+  // ---------------------------------------------------------------------------------------------
+  var FBK_TYPES = [['Fault', '🐞 Fault'], ['Improvement', '💡 Improvement'], ['Suggestion', '💬 Suggestion']];
+  var FBK_MAX = 2000;
+  function feedbackWidget(pageLabel) {
+    var wrap = h('div', { class: 'fbk' });
+    function draw(focusBox) {
+      wrap.textContent = '';
+      var bubble = h('button', { class: 'fbk-bubble', type: 'button', 'aria-expanded': FBK.open ? 'true' : 'false', 'aria-controls': 'oto-fbk',
+        title: 'Report a fault or suggest an improvement', onclick: function () { FBK.open = !FBK.open; FBK.note = FBK.open ? FBK.note : ''; draw(FBK.open); } },
+        [h('span', { 'aria-hidden': 'true', text: '💬' }), h('span', { class: 'fbk-lbl', text: 'Feedback' })]);
+      var box = null;
+      if (FBK.open) {
+        box = h('textarea', { id: 'oto-fbk-text', rows: '5', maxlength: String(FBK_MAX), 'aria-label': 'Your feedback',
+          placeholder: 'What went wrong, or what would make this better?' });
+        box.value = FBK.text;
+        var count = h('span', { class: 'small muted', text: FBK.text.length + ' / ' + FBK_MAX });
+        var send = h('button', { class: 'btn primary', type: 'button', text: FBK.busy ? 'Sending…' : 'Send' });
+        send.disabled = FBK.busy || !FBK.text.trim();
+        box.addEventListener('input', function () {
+          FBK.text = box.value; count.textContent = box.value.length + ' / ' + FBK_MAX; send.disabled = FBK.busy || !box.value.trim();
+        });
+        var types = h('div', { class: 'fbk-types', role: 'radiogroup', 'aria-label': 'Type' }, FBK_TYPES.map(function (t) {
+          return h('button', { type: 'button', role: 'radio', 'aria-checked': FBK.type === t[0] ? 'true' : 'false', class: FBK.type === t[0] ? 'on' : '',
+            text: t[1], onclick: function () { FBK.type = t[0]; draw(); } });
+        }));
+        send.addEventListener('click', function () {
+          var text = FBK.text.trim();
+          if (!text || FBK.busy) { return; }
+          FBK.busy = true; FBK.note = ''; draw();
+          spCreate(CONFIG.lists.feedback, { Title: text.replace(/\s+/g, ' ').slice(0, 60), FeedbackType: FBK.type, Message: text,
+            PageName: pageLabel, AppVersion: VERSION }).then(function () {
+            FBK.busy = false; FBK.text = ''; FBK.err = false;
+            FBK.note = 'Thank you. Your feedback has been submitted to your ' + L.mgr + '.';
+            redrawFeedback(); if (live) { live.textContent = FBK.note; }
+          }).catch(function (e) {
+            var m = String(e && e.message ? e.message : e);
+            FBK.busy = false; FBK.err = true;   // the text stays in the box
+            FBK.note = /\((403|404)\)|does not exist/.test(m) ? 'Feedback isn\'t switched on yet – please tell your ' + L.mgr + '.'
+              : 'Your feedback couldn\'t be sent – please try again. ' + m;
+            redrawFeedback();
+          });
+        });
+        wrap.appendChild(h('section', { class: 'fbk-panel', id: 'oto-fbk', role: 'dialog', 'aria-label': 'Report a fault or suggest an improvement' }, [
+          h('h3', { text: 'Report a fault or suggest an improvement' }), types, box,
+          h('div', { class: 'fbk-meta' }, [h('span', { class: 'small muted', text: 'Sent to your ' + L.mgr + ' with your name, this page (' + pageLabel + ') and the version.' }), count]),
+          FBK.note ? h('div', { class: 'fbk-note' + (FBK.err ? ' bad' : ' good'), role: 'status', text: FBK.note }) : null,
+          h('div', { class: 'btn-row' }, [send, h('button', { class: 'btn', type: 'button', text: 'Close', onclick: function () { closeFeedback(); } })])
+        ]));
+      }
+      wrap.appendChild(bubble);
+      // redrawing replaced the button that had focus: move focus now (not later), so Escape still reaches the page
+      if (focusBox && box) { try { box.focus(); } catch (_) { /* ignore */ } }
+    }
+    wrap.redraw = draw;
+    draw();
+    return wrap;
+  }
+  // the page may have been redrawn while sending, so redraw whichever bubble is on screen now
+  function redrawFeedback() { var w = root && root.querySelector('.fbk'); if (w && w.redraw) { w.redraw(); } }
+  function closeFeedback() {
+    FBK.open = false; FBK.note = '';
+    var w = root && root.querySelector('.fbk');
+    if (w && w.redraw) { w.redraw(); var b = w.querySelector('.fbk-bubble'); if (b) { b.focus(); } }
+  }
+  // Line manager: read feedback that wasn't emailed, and mark it read.
+  function openFeedbackItem(f) {
+    var back = h('div', { class: 'modal-back' });
+    function row(k, v) { return h('tr', null, [h('th', { text: k }), h('td', { text: v })]); }
+    var created = f.Created ? new Date(f.Created) : null;
+    back.appendChild(h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Feedback' }, [
+      h('h3', { text: 'Feedback – ' + (str(f.FeedbackType) || 'Suggestion') }),
+      h('table', { class: 'tbl' }, [h('tbody', null, [
+        row('From', str(f.Author && f.Author.Title) + (f.Author && f.Author.EMail ? ' (' + str(f.Author.EMail) + ')' : '')),
+        row('Sent', created && !isNaN(created) ? fmtDate(localDate(f.Created)) + ' ' + created.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: CONFIG.timeZone }) : ''),
+        row('Page', str(f.PageName) + (f.AppVersion ? ' (version ' + str(f.AppVersion) + ')' : '')),
+        row('Email', str(f.DeliveryStatus) === 'Failed' ? 'Could not be delivered' : 'Not sent yet – check ESG 1-to-1 | 6 Feedback is On')])]),
+      h('div', { class: 'fbk-msg', text: str(f.Message) }),
+      h('div', { class: 'btn-row', style: 'margin-top:14px' }, [
+        h('button', { class: 'btn primary', type: 'button', text: 'Mark as read', onclick: function () {
+          busy('fb', async function () {
+            await spUpdate(CONFIG.lists.feedback, f.ID, { DeliveryStatus: 'Read' });
+            FEEDBACK_ISSUES = FEEDBACK_ISSUES.filter(function (x) { return x.ID !== f.ID; });
+            back.remove(); toast('Marked as read. It stays in the 1-to-1 Feedback list.'); render(false);
+          }).catch(function () {});
+        } }),
+        h('button', { class: 'btn', type: 'button', text: 'Close', onclick: function () { back.remove(); } })])
+    ]));
+    root.appendChild(back);
+  }
+
+  // ---------------------------------------------------------------------------------------------
   // shell
   // ---------------------------------------------------------------------------------------------
   function render(scrollTop) {
@@ -2645,6 +2754,7 @@ window.ESGOneToOne = function (ctx) {
       if (window.console) { window.console.error('ESG 1-to-1 render error', e); }
     }
     root.appendChild(h('div', { class: 'shell' }, [topbar, h('div', { class: 'content' }, [titlebar, main])]));
+    if (!state.report) { root.appendChild(feedbackWidget(tt[1] || v)); }
     if (state.report) { root.appendChild(reportView(state.report.tech, state.report.aud)); }
     root.appendChild(live);
     root.appendChild(tipEl);
@@ -2703,7 +2813,7 @@ window.ESGOneToOne = function (ctx) {
       if (top) {
         var btn = Array.prototype.filter.call(top.querySelectorAll('button'), function (b) { return /^(Cancel|Close)$/.test(b.textContent.trim()); }).pop();
         if (btn) { e.preventDefault(); btn.click(); }
-      }
+      } else if (FBK.open) { e.preventDefault(); closeFeedback(); }
     });
     // Return focus to whatever opened a dialog once it closes.
     if (window.MutationObserver) {

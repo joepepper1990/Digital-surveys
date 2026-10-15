@@ -30,8 +30,8 @@ One tick-list from where you are now to a running system. For a single printable
 
 - [ ] **Solution zip.** The verification pass replaced it under the same file name. Open your zip, then open `solution.xml` in Notepad.
   - The correct version contains `<RootComponent type="380" schemaName="esg_SiteUrl"`.
-  - If yours doesn't, re-download [`04-solution/ESGOneToOne_1_1_2_0_unmanaged.zip`](04-solution/ESGOneToOne_1_1_2_0_unmanaged.zip).
-- [ ] **Frontend.** Download the latest [`02-frontend/one-to-one.html`](02-frontend/one-to-one.html) and [`02-frontend/one-to-one.js`](02-frontend/one-to-one.js) (v4.2.2).
+  - If yours doesn't, re-download [`04-solution/ESGOneToOne_1_2_0_0_unmanaged.zip`](04-solution/ESGOneToOne_1_2_0_0_unmanaged.zip).
+- [ ] **Frontend.** Download the latest [`02-frontend/one-to-one.html`](02-frontend/one-to-one.html) and [`02-frontend/one-to-one.js`](02-frontend/one-to-one.js) (v4.3.0).
 - [ ] **Approved route.** Transfer the files the usual approved way.
 
 ## Phase A — See the system yourself (nobody else involved)
@@ -53,9 +53,10 @@ One tick-list from where you are now to a running system. For a single printable
 **A3. Run setup** ([IMPORT_GUIDE §3–4](04-solution/IMPORT_GUIDE.md))
 - [ ] Run **ESG 1-to-1 | 0 Setup (run once)**.
 - [ ] Wait for the summary email **"ESG 1-to-1 setup: complete"**. If it says *"complete with items to check"*, fix what it lists and run setup again; it's safe to re-run.
-- [ ] **Site contents:** the six lists are there (Technicians, Appraisal Expectations, Monthly Reviews, Manager Reviews, Wellbeing Assessments, 1-to-1 Settings).
+- [ ] **Site contents:** the seven lists are there (Technicians, Appraisal Expectations, Monthly Reviews, Manager Reviews, Wellbeing Assessments, 1-to-1 Settings).
 - [ ] **Permissions on each list:**
   - the five data lists (including **Wellbeing Assessments**) show **Owners – Full Control only**;
+  - **1-to-1 Feedback** shows Owners plus `1-to-1 Technicians` – **Contribute** (each person sees only their own items);
   - **1-to-1 Settings** also shows `1-to-1 Technicians` – Read.
 
 > Setup reuses your existing group and permission levels. If a level's rights differ from the plan, it tells you and changes nothing.
@@ -74,13 +75,14 @@ One tick-list from where you are now to a running system. For a single printable
 - [ ] Open the site. You see:
   - the dark top menu bar (Team overview, Monthly reviews, Expectations, Actions, Wellbeing, Team ▾, ⚙ Settings);
   - **"No technicians yet"** on Team overview;
-  - **v4.2.2** at the right-hand end of the top menu bar.
+  - **v4.3.0** at the right-hand end of the top menu bar;
+  - the 💬 **Feedback** button bottom-right.
 - [ ] Click through **Monthly reviews**, **Expectations**, **Actions** and **⚙ Settings**.
 - [ ] **Expectations:** add one *Shared* expectation. This proves item creation and Yes/No columns in your tenant. (The *Individual* one needs a technician in the list, so it moves to Phase B.)
 - [ ] Check the menu bar and content fill the width of the page.
 
 **A6. Turn the flows on**
-- [ ] After the Setup summary email: Solutions → **ESG 1-to-1** → turn on **2 Review submitted**, **3 Manager decision**, **4 Team members**, **5 Wellbeing**, and **1 Daily scheduler** last.
+- [ ] After the Setup summary email: Solutions → **ESG 1-to-1** → turn on **2 Review submitted**, **3 Manager decision**, **4 Team members**, **5 Wellbeing**, **6 Feedback**, and **1 Daily scheduler** last.
 
 ## Phase B — See it as a technician (test accounts only)
 
@@ -94,6 +96,7 @@ One tick-list from where you are now to a running system. For a single printable
   - open the email link: their form opens, with only *This month / My appraisal / Appraisal report / Wellbeing* in the top menu bar;
   - fill in a few answers → **Save** → reload: answers are kept;
   - complete it → **Submit**. Within about 5 minutes it's read-only.
+- [ ] **As Test A:** 💬 **Feedback** → Fault → a short message → **Send** → *"Thank you. Your feedback has been submitted to your Team Leader."* **As you:** *"1-to-1 feedback (Fault): …"* arrives within about 5 minutes (F41).
 - [ ] **As you:** the *"1-to-1 submitted"* email arrives.
   - Open the review.
   - Add feedback and ratings, plus **two actions**, each with close-out criteria and a deadline.
@@ -108,13 +111,13 @@ One tick-list from where you are now to a running system. For a single printable
 
 Work through [plan section H](IMPLEMENTATION_PLAN.md#h-testing) and record each result: Pass/Fail, date, tester, screenshot.
 
-- [ ] **Every privacy test P1–P24.** These are mandatory: **any failure blocks go-live**. They include:
+- [ ] **Every privacy test P1–P25.** These are mandatory: **any failure blocks go-live**. They include:
   - P15 script injection;
   - P16 code integrity;
   - P18 Settings read-only;
   - P19 TL ratings and actions;
   - P20 appraisal-date tampering.
-- [ ] **Functional tests F1–F40.**
+- [ ] **Functional tests F1–F42.**
   - Date tests F13–F20 use flow 1's `varTestDate`: Edit → *Initialize varTestDate* → set → Save → Run.
   - **Clear it afterwards.**
 - [ ] **Ask IT:**
@@ -149,6 +152,6 @@ Work through [plan section H](IMPLEMENTATION_PLAN.md#h-testing) and record each 
 |---|---|
 | Go-live day | Flow 1 run history is green; nobody is missing |
 | As submissions arrive | Review → feedback, ratings, actions → **Complete & release** |
-| 20th and 27th | Reminders went to those who haven't submitted |
+| Your reminder days (default 20th and 27th) | Reminders went to those who haven't submitted |
 | Next 1st | New month created; last month's unsubmitted reviews show **Overdue**; use **Close – not submitted** where needed |
 | Ongoing | [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) §4: quarterly permission check, starters and leavers, annual expectation rollover, monthly 24-month retention deletion, TL handover |
