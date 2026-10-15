@@ -2,26 +2,40 @@
 
 You don't build the flows or the lists by hand any more:
 
-- **Import one solution file.** It contains all four flows.
-- **Run the setup flow once.** It creates the five lists exactly as specified, plus the permission levels, the technicians group and the list permissions.
+- **Import one solution file.** It contains all six flows.
+- **Run the setup flow once.** It creates the six lists exactly as specified, plus the permission levels, the technicians group and the list permissions.
 
 | File | What it is |
 |---|---|
-| [`ESGOneToOne_1_0_0_0_unmanaged.zip`](ESGOneToOne_1_0_0_0_unmanaged.zip) | **The solution.** Four flows, three connection references, two environment variables. |
+| [`ESGOneToOne_1_1_0_0_unmanaged.zip`](ESGOneToOne_1_1_0_0_unmanaged.zip) | **The solution (1.1.0.0).** Six flows, three connection references, two environment variables. |
 | [`legacy-package-builder.html`](legacy-package-builder.html) | **Fallback only**, if your environment can't import solutions (§6). |
 
-The four flows:
+The six flows:
 
 | Flow | Starts | Job |
 |---|---|---|
 | **ESG 1-to-1 \| 0 Setup (run once)** | On | Run by hand. Creates or completes the lists, columns, indexes, views, permission levels, group and list permissions, and the `Bands` setting. **Safe to re-run:** it adds what's missing and brings settings up to the specification. It never deletes a list, column or item, and never lowers version history. Then it emails you a summary. |
-| **ESG 1-to-1 \| 1 Daily scheduler** | Off | 07:00 UK daily: creates each month's reviews, makes them private, emails links, sends reminders on the 20th and 27th. |
+| **ESG 1-to-1 \| 1 Daily scheduler** | Off | 07:00 UK daily: creates each month's reviews, makes them private, emails links, sends reminders on the days set in ⚙ Settings → Reminders (20th and 27th by default), and emails you a week before (and on the day) a wellbeing review is due. |
 | **ESG 1-to-1 \| 2 Review submitted** | Off | Locks a submitted review, stamps the Manager Review, emails you. |
 | **ESG 1-to-1 \| 3 Manager decision** | Off | On Complete / Close: validates, locks, releases the feedback, emails the technician. |
+| **ESG 1-to-1 \| 4 Team members** 🆕 1.1 | Off | Keeps the `1-to-1 Technicians` group in step with the Technicians list: someone you add in ⚙ Settings → Team gets access to the page; someone you deactivate loses it. Emails you each change. |
+| **ESG 1-to-1 \| 5 Wellbeing** 🆕 1.1 | Off | Wellbeing assessments: makes each one private to you and that person, emails them the link, locks it when they submit (and wipes anything they typed in your part), stamps completion and emails them the agreed record. |
 
-Flows 1–3 are imported **off**, because the lists don't exist until the setup flow has run.
+Flows 1–5 are imported **off**, because the lists don't exist until the setup flow has run.
 
 ---
+
+## 0. Already imported 1.0? Upgrade to 1.1 (10 min)
+
+Do this instead of §1–§3 if **ESG 1-to-1** (1.0.0.0) is already in your environment.
+
+1. **Solutions → Import solution → Browse** → `ESGOneToOne_1_1_0_0_unmanaged.zip` → **Next**.
+   - It says it will **upgrade** the existing solution. Keep the defaults and leave *"Enable Plugin steps and flows included in the solution"* **unticked**.
+   - Connections and environment variables keep their current values; just click **Next / Import**.
+2. Run **ESG 1-to-1 | 0 Setup (run once)** again. It adds the **Wellbeing Assessments** list and the **Reminders** setting, and changes nothing that already exists. Wait for the summary email.
+3. Turn on **4 Team members** and **5 Wellbeing** (Flows 1–3 stay as they were). If the import turned flows 1–3 off, turn them back on.
+4. Upload the new `one-to-one.html` and `one-to-one.js` (v4.2.0) with **Replace**, then web part settings → **Reset layout cache** → **Republish**. The top bar shows **v4.2.0** and a **Wellbeing** tab.
+5. Check: Site contents → **Wellbeing Assessments** → Permissions: **Owners – Full Control only**.
 
 ## 1. Before you start (5 min)
 
@@ -42,7 +56,7 @@ Flows 1–3 are imported **off**, because the lists don't exist until the setup 
 
 ## 2. Import the solution (10 min)
 
-1. **Solutions → Import solution → Browse** → choose `ESGOneToOne_1_0_0_0_unmanaged.zip` → **Next** → **Next**.
+1. **Solutions → Import solution → Browse** → choose `ESGOneToOne_1_1_0_0_unmanaged.zip` → **Next** → **Next**.
 2. **Connections.** For each of the three connection references, pick an existing connection or click **+ New connection**, signed in as **you**:
 
    | Connection reference | Connector |
@@ -86,7 +100,7 @@ Flows 1–3 are imported **off**, because the lists don't exist until the setup 
 - grant the group Read on the page, the layouts library and the Welcome Errors list;
 - add people to the group.
 
-**Existing lists.** Setup recognises the five lists by their **web address** (`Lists/Technicians`, `Lists/AppraisalExpectations`, `Lists/MonthlyReviews`, `Lists/ManagerReviews`, `Lists/OneToOneSettings`). If one already exists (for example, you started building it by hand), setup **keeps it**:
+**Existing lists.** Setup recognises the six lists by their **web address** (`Lists/Technicians`, `Lists/AppraisalExpectations`, `Lists/MonthlyReviews`, `Lists/ManagerReviews`, `Lists/OneToOneSettings`). If one already exists (for example, you started building it by hand), setup **keeps it**:
 
 - it adds only the missing columns, indexes and views;
 - it sets the display name and list settings, raising the version limit to at least 100 and never lowering it;
@@ -96,16 +110,16 @@ It removes your own direct entry only if you are Site Collection Admin or in the
 
 ## 4. Check the result (5 min)
 
-- [ ] **Site contents** shows the five lists.
+- [ ] **Site contents** shows the six lists.
 - [ ] Open each list → **Settings → Permissions for this list**:
   - **Owners – Full Control** only;
   - **1-to-1 Settings** also has `1-to-1 Technicians` – Read.
-- [ ] **1-to-1 Settings** has one item, `Bands`.
+- [ ] **1-to-1 Settings** has two items, `Bands` and `Reminders` (a third, `Labels`, appears if you rename roles in ⚙ Settings → Names).
 - [ ] Spot-check one column: Monthly Reviews → List settings → **Q9FollowUp**. The address bar ends `Field=Q9FollowUp`, and there are three choices.
 
-## 5. Turn on flows 1, 2 and 3
+## 5. Turn on flows 1 to 5
 
-1. **Solutions → ESG 1-to-1** → select **ESG 1-to-1 | 1 Daily scheduler** → **Turn on**. Repeat for **2** and **3**.
+1. **Solutions → ESG 1-to-1** → select **ESG 1-to-1 | 1 Daily scheduler** → **Turn on**. Repeat for **2**, **3**, **4** and **5**.
 2. Continue with the runbook:
    - [`../GO_LIVE_RUNBOOK.md`](../GO_LIVE_RUNBOOK.md) **Phase 6**: install the frontend.
    - **Phase 8**: Test A and Test B first.
@@ -113,7 +127,7 @@ It removes your own direct entry only if you are Site Collection Admin or in the
 
 > **Testing a different date (plan H tests F13–F20).** Open flow 1 → **Edit** → **Initialize varTestDate** → type a date such as `2026-11-20T07:00:00` → **Save** → **Run**. **Clear it afterwards and save.** Leave it empty in production.
 
-**Secure inputs/outputs** are already on for the SharePoint triggers and every data, Filter array, Select and email action in flows 1–3. Steps that use their outputs are hidden automatically, so answers and feedback don't appear in run history. Only the steps that look up role, group and list IDs stay visible. The setup flow's history shows only list and column names; it handles no personal data.
+**Secure inputs/outputs** are already on for the SharePoint triggers and every data, Filter array, Select and email action in flows 1–5. Steps that use their outputs are hidden automatically, so answers and feedback don't appear in run history. Only the steps that look up role, group and list IDs stay visible. The setup flow's history shows only list and column names; it handles no personal data.
 
 ---
 
@@ -122,8 +136,8 @@ It removes your own direct entry only if you are Site Collection Admin or in the
 Use this only if §1 showed that solutions can't be imported.
 
 1. Open [`legacy-package-builder.html`](legacy-package-builder.html) in Edge or Chrome (double-click the file). It works offline.
-2. Enter the **site URL** and **your email**, then click **Create the four packages**. Four zips download: `ESG-1to1-0-legacy.zip` to `ESG-1to1-3-legacy.zip`.
-3. For each zip, in order 0, 1, 2, 3:
+2. Enter the **site URL** and **your email**, then click **Create the six packages**. Six zips download: `ESG-1to1-0-legacy.zip` to `ESG-1to1-5-legacy.zip`.
+3. For each zip, in order 0 to 5:
    1. Power Automate → **My flows → Import → Import Package (Legacy)** → **Upload**.
    2. Under **Related resources**, click each connection (spanner icon), pick your own connection, and click **Save**.
    3. Under *Import setup*, keep **Create as new**.
@@ -133,7 +147,7 @@ Use this only if §1 showed that solutions can't be imported.
 **Differences in legacy mode:**
 
 - The site URL and email are written into the flows. To change them later, re-run the builder and re-import (*Update*), or edit the flows.
-- Legacy flows may import **On**. Make sure flows 1–3 are **off** until setup has run, or let them fail harmlessly. Each failure emails you *"action needed"*, naming the step `STOP_run_the_setup_flow_first`.
+- Legacy flows may import **On**. Make sure flows 1–5 are **off** until setup has run, or let them fail harmlessly. Each failure emails you *"action needed"*, naming the step `STOP_run_the_setup_flow_first`.
 
 ## 7. Troubleshooting
 
@@ -144,7 +158,9 @@ Use this only if §1 showed that solutions can't be imported.
 | Setup email lists *Regional settings* | Site settings → Regional settings → Locale **English (United Kingdom)**, time zone **(UTC) Dublin, Edinburgh, Lisbon, London**. Re-run setup. |
 | Setup email: *permission level … differs* | Compare with plan G Part 2. Either fix it by hand to match, or delete it and re-run setup (only if no items use it yet). |
 | Setup failed (red) | Open the run, find the first red step and read its output. Common causes: you're not a site owner, or the Site URL is wrong. Fix it and re-run. |
-| Flow 1–3 email *"action needed"* naming `STOP_run_the_setup_flow_first` | Setup hasn't run, or the permission levels / lists were renamed. Run setup. |
+| Flow 1–5 email *"action needed"* naming `STOP_run_the_setup_flow_first` (or `…setup_flow_again`) | Setup hasn't run (or hasn't been re-run after upgrading to 1.1), or the permission levels / lists were renamed. Run setup. |
+| Someone added in ⚙ Settings → Team can't open the page | Flow 4 must be **on**; it runs within about 5 minutes. Check its run history. |
+| A wellbeing assessment didn't reach the person | Flow 5 must be **on**. Check its run history; the person needs a mailbox. |
 | Flow 2 / 3 never trigger | They must be **on**. The SharePoint triggers check every 5 minutes. The Site URL must have no trailing slash. |
 | Need to change the TL email or site later | **Solutions → Default solution → Environment variables** → edit **Current value** |
 

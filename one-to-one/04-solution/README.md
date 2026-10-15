@@ -6,11 +6,11 @@
 
 | Path | What it is |
 |---|---|
-| `ESGOneToOne_1_0_0_0_unmanaged.zip` | **The importable solution**, packed by Microsoft's Power Platform CLI (`pac solution pack`) |
+| `ESGOneToOne_1_1_0_0_unmanaged.zip` | **The importable solution**, packed by Microsoft's Power Platform CLI (`pac solution pack`) |
 | `legacy-package-builder.html` | Offline page that makes legacy (non-solution) packages, for environments without Dataverse |
 | `src/` | The unpacked solution, in the same layout `pac solution unpack` produces. **Generated – do not edit by hand.** |
 | `tools/schema.py` | **The SharePoint schema, defined once:** lists, columns (field XML), indexes, views, permission levels |
-| `tools/flows.py` | **The four flows**, as Power Automate flow definitions |
+| `tools/flows.py` | **The six flows**, as Power Automate flow definitions |
 | `tools/legacy.py` | Legacy package templates and the builder page |
 | `tools/build.py` | Generates `src/`, validates, packs the zip, unpacks it again to prove the round trip |
 | `tools/validate.py` | Static checks for every flow |
@@ -65,6 +65,8 @@ tools/run_all.sh
 - Group and permission-level IDs, and the two list GUIDs used for item permissions, are looked up by name each run. There is no Config sheet of IDs to copy.
 
 **Setup only adds.** It never deletes a list, column or item. It never changes an existing permission level; it warns instead. On lists it removes only the site Members/Visitors groups and your own direct entry, so that Owners stays the only entry, as plan D.2 requires.
+
+**Flows 4 (Team members) and 5 (Wellbeing)** are new in 1.1 and exist only in the solution (`flow_team`, `flow_wellbeing` in `tools/flows.py`); they are covered by `tools/simulate.py`.
 
 **Flows 1–3 match** [`../03-flows/FLOW_BUILD_SHEETS.md`](../03-flows/FLOW_BUILD_SHEETS.md) step for step, with two improvements:
 

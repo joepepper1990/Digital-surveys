@@ -38,7 +38,9 @@ Your 1-to-1 for @{outputs('MonthName')} is ready
 <p style="color:#666">This link only works when you're signed in with your own company account.</p>
 ```
 
-## E2 — reminder on the 20th and 27th (Flow 1 → technician)
+## E2 — reminder on the reminder days (Flow 1 → technician)
+
+> v4.2: the days come from ⚙ Settings → Reminders (the `Reminders` item in 1-to-1 Settings, default `[20,27]`).
 
 **Subject**
 
@@ -79,7 +81,7 @@ Feedback on your 1-to-1 (@{formatDateTime(concat(triggerBody()?['MonthKey'], '-0
 **Body**
 
 ```html
-<p>Your Team Leader has completed your review.
+<p>I've completed your review – feedback, ratings and any agreed actions are ready.
 <a href="@{concat(variables('varPageLink'), '?reviewId=', triggerBody()?['ReviewItemId'])}"><b>View feedback</b></a></p>
 ```
 
@@ -96,7 +98,7 @@ Your 1-to-1 (@{formatDateTime(concat(triggerBody()?['MonthKey'], '-01'), 'MMMM y
 ```html
 <p>This review was closed without a submission.
 <a href="@{concat(variables('varPageLink'), '?reviewId=', triggerBody()?['ReviewItemId'])}">View</a>.
-Please speak to your Team Leader if this is unexpected.</p>
+Please speak to me if this is unexpected.</p>
 ```
 
 ## E7 — problems found by the daily run (Flow 1 → TL)
@@ -116,3 +118,20 @@ Please speak to your Team Leader if this is unexpected.</p>
 ```
 
 > There is no E6 (the numbering is kept from the plan so references stay valid).
+
+---
+
+## v4.2 / solution 1.1 – new emails (sent from the line manager's mailbox)
+
+E4 and E5 are written in the first person (they come from your mailbox), so they no longer name a role.
+
+| # | Flow → to | Subject | Body (summary) |
+|---|---|---|---|
+| E8 | 4 Team members → you | `1-to-1: access given to <name>` / `1-to-1: access removed for <name>` | Confirms the `1-to-1 Technicians` group change after you add or deactivate someone in ⚙ Settings → Team. |
+| E9 | 5 Wellbeing → the person | `Your wellbeing assessment is ready to complete` | You've started a wellbeing assessment; please complete their part before you meet (15–20 minutes, can save and come back); link `?wbId=<id>`; only the two of you can see it. |
+| E10 | 5 Wellbeing → you | `Wellbeing assessment submitted: <name>` | Arrange a private, hour-long conversation; link to the assessment. |
+| E11 | 5 Wellbeing → the person | `Your wellbeing assessment record is ready` | Thanks for the conversation; the agreed record (arrangements, review date) is ready to view; link. |
+| E12 | 1 Daily scheduler → you | `Wellbeing review due in 7 days: <name>` / `Wellbeing review due today: <name>` | The review agreed with that person is due on DD-MMM-YYYY; link to the last assessment. |
+
+The exact HTML is in [`../04-solution/tools/flows.py`](../04-solution/tools/flows.py) (`flow_team`, `flow_wellbeing`, `flow_daily`).
+

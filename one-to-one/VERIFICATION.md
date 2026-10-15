@@ -1,6 +1,6 @@
 # ESG 1-to-1 — verification record (15-Oct-2026)
 
-**Scope:** frontend v4.1.0, the importable solution (setup flow + Flows 1–3), the legacy-package builder, the five-list schema and all documents.
+**Scope:** frontend v4.2.0, the importable solution (setup flow + Flows 1–5), the legacy-package builder, the six-list schema and all documents.
 
 **What this record can and can't prove.** Everything here ran outside your tenant. It proves the files are well-formed, internally consistent and behave as specified against a strict model of SharePoint that follows Microsoft's documentation. Only the tenant can prove the import and real permissions (§5).
 
@@ -8,11 +8,11 @@
 
 | Check | How | Result |
 |---|---|---|
-| Frontend | `02-frontend`: `node tools/build-mock.js && node test/run-tests.js` (headless Chromium against the local mock) | **89 / 89** |
+| Frontend | `02-frontend`: `node tools/build-mock.js && node test/run-tests.js` (headless Chromium against the local mock) | **148 / 148** |
 | Solution build | `04-solution/tools/build.py`: generate `src/`, validate, pack with Microsoft's Power Platform CLI, unpack again and compare | Packs; round trip identical |
 | Static validator | Expressions, references, scopes, run-after chains, required connector parameters, list/column names, JSON request bodies, field XML / view CAML, schedule time zone, secured run history, no hidden failures | 4 flows clean |
 | Validator proof | `tools/test_validate.py`: deliberately broken copies of the flows | **20 / 20** caught |
-| End-to-end simulation | `tools/simulate.py`: the real flow JSON executed against an in-memory SharePoint | **110 / 110** (solution) and **110 / 110** (legacy form) |
+| End-to-end simulation | `tools/simulate.py`: the real flow JSON executed against an in-memory SharePoint | **141 / 141** (solution) and **141 / 141** (legacy form) |
 | Simulation proof | New scenarios run against the previously committed flows / frontend | 18 flow checks and 2 frontend checks fail on the old code, so the tests detect the bugs fixed in §3 |
 | Legacy builder | `tools/test_builder.js` + `check_builder_zips.py` | Rejects bad input; no network requests; zips are standard and exactly as expected |
 | Microsoft schema | Flow definitions checked against Microsoft's published workflow-definition JSON schema | No error class that real exported Microsoft (PnP) flows don't also produce |
@@ -76,7 +76,7 @@ From the platform audit, with sources in the audit notes:
 |---|---|
 | Solution imports, connections bind, environment variables accepted | IMPORT_GUIDE §2 |
 | Setup run: lists, views, permission levels, group, permissions as the summary says | IMPORT_GUIDE §3–§4 |
-| Real item permissions, emails and timings | Plan section H (F1–F30, P1–P20), with Test A / Test B |
+| Real item permissions, emails and timings | Plan section H (F1–F40, P1–P24), with Test A / Test B |
 | Personal-regional-settings date round trip (R16) | Test F27 |
 | Limited-access lockdown mode not active | NEXT_STEPS "Things to verify early" |
 

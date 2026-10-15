@@ -2,7 +2,7 @@
 
 > **You don't have to build these by hand.** The setup flow in the solution creates all of this exactly. See [`../04-solution/IMPORT_GUIDE.md`](../04-solution/IMPORT_GUIDE.md). This page is the specification, and a checklist for verifying the result or building by hand. The automated simulation checks the setup flow against [`lists.csv`](lists.csv).
 
-Build these **five lists** on the private 1-to-1 site. The frontend (`one-to-one.js`) and the three flows use the **internal column names** exactly as written here, so type them exactly, with no spaces. A machine-readable copy is in [`lists.csv`](lists.csv).
+Build these **six lists** on the private 1-to-1 site. The frontend (`one-to-one.js`) and the three flows use the **internal column names** exactly as written here, so type them exactly, with no spaces. A machine-readable copy is in [`lists.csv`](lists.csv).
 
 **v4 changes from v3.2 (marked 🆕):** `AppraisalDate` on Technicians and Monthly Reviews; `Mood` and `WinOfMonth` on Monthly Reviews; `ActionsJson` and `NextActionDue` replace `AgreedActions` and `ActionsDueBy` on Manager Reviews; and a fifth list, **1-to-1 Settings**.
 
@@ -153,12 +153,35 @@ Create as `OneToOneSettings`, rename to **1-to-1 Settings**. It holds **no perso
   (If you skip this, the app uses these defaults and creates the item the first time you save ⚙ Settings.)
 - [ ] Permissions: **Stop inheriting**, remove Members/Visitors, then **Grant Permissions → `1-to-1 Technicians` → Read** (untick the email invitation). Owners keep Full Control.
 
+- [ ] v4.2: setup also adds a `Reminders` item (Value `[20,27]` – the reminder days). If you rename roles in ⚙ Settings → Names, the app adds a `Labels` item. Both hold no personal data.
+
+## 6. Wellbeing Assessments 🆕 v4.2 (Owners only; Flow 5 shares each item with one person)
+
+Created by the setup flow (solution 1.1) at `Lists/WellbeingAssessments`, display name **Wellbeing Assessments**. One item per assessment.
+
+| Column | Type | Notes |
+|---|---|---|
+| Title | (built-in) | e.g. *Name – wellbeing assessment* |
+| Technician | Person (single, people only) | The person. Flow 5 grants **them** access to this item only and, when they submit, restores this column from that permission. |
+| AssessmentStatus | Choice: Open / Submitted / Completed (default Open, indexed) | The person sets Submitted; Flow 5 locks it. You set Completed. |
+| AssessmentDate | Date only | Meeting date (you) |
+| Position, EmployeeNumber | Single line of text | The person (employee number optional) |
+| AnswersJson | Multiple lines (plain) | The 32 HSE questions: applies? / an issue? / what would help |
+| PersonalJson | Multiple lines (plain) | Personal input (circumstances, mental health, support, anything else) |
+| ArrangementsJson | Multiple lines (plain) | **You:** agreed arrangements, each with a review date and whether it was effective |
+| ManagerNotes | Multiple lines (plain) | **You:** notes from the meeting (seen by both) |
+| NextReviewDate | Date only | **You:** yearly by default, earlier if needed. Flow 1 emails you 7 days before and on the day. |
+| SubmittedOn, CompletedOn | Date and time | **Flow 5 only** – the trusted record of when it was submitted and completed |
+
+- [ ] View **Reviews due**: completed assessments by next review date.
+- [ ] Permissions: **Owners – Full Control only** at list level. Never share an item by hand – Flow 5 does it.
+
 ---
 
 ## Final checks
 
-- [ ] Site contents shows the five lists (plus the Welcome libraries/lists).
-- [ ] **Technicians, Appraisal Expectations, Monthly Reviews, Manager Reviews:** permissions page shows **only Owners – Full Control**.
+- [ ] Site contents shows the six lists (plus the Welcome libraries/lists).
+- [ ] **Technicians, Appraisal Expectations, Monthly Reviews, Manager Reviews, Wellbeing Assessments:** permissions page shows **only Owners – Full Control**.
 - [ ] **1-to-1 Settings:** Owners – Full Control **and** `1-to-1 Technicians` – Read. Nothing else.
 - [ ] Versioning on, attachments off, search off, on every list.
 - [ ] Spot-check three internal names: open List settings → click the column → the URL ends `Field=Q9FollowUp` (etc.).

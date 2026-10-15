@@ -79,7 +79,7 @@ GUIDE = r'''# ESG Monthly Technician 1-to-1 — Finalisation Guide
 
 **From the end of Stage 0B to a live system, then running it month to month.** This document is self-contained: you don't need any other file to follow it. Tick each box as you go.
 
-Version: system v4.1.0 (frontend) · solution 1.0.0.0 · guide dated 15-Oct-2026
+Version: system v4.1.0 (frontend) · solution 1.1.0.0 · guide dated 15-Oct-2026
 
 ---
 
@@ -92,13 +92,13 @@ Version: system v4.1.0 (frontend) · solution 1.0.0.0 · guide dated 15-Oct-2026
   - the `1-to-1 Technicians` group exists;
   - the `1-to-1 Edit` and `1-to-1 Read` permission levels exist.
 - **Everything to install is built and verified offline:**
-  - frontend: 89 automated checks;
+  - frontend: 148 automated checks;
   - flows: simulated end to end, 110 checks;
   - an independent review fixed 17 defects.
 
 **Not yet proven:** nothing has run in your tenant yet.
 
-> **The system is fully implemented when Phase F (go-live) is done and every privacy test (P1–P20) in Phase C has passed.**
+> **The system is fully implemented when Phase F (go-live) is done and every privacy test (P1–P24) in Phase C has passed.**
 
 | Phase | What | Who's involved | Time |
 |---|---|---|---|
@@ -119,7 +119,7 @@ Version: system v4.1.0 (frontend) · solution 1.0.0.0 · guide dated 15-Oct-2026
 
 | File | Goes to |
 |---|---|
-| `ESGOneToOne_1_0_0_0_unmanaged.zip` | Power Automate → **Solutions → Import solution**. Contains the four flows; the setup flow creates the lists. |
+| `ESGOneToOne_1_1_0_0_unmanaged.zip` | Power Automate → **Solutions → Import solution**. Contains the six flows; the setup flow creates the lists. |
 | `one-to-one.html` | SharePoint → *Welcome Web Part - Custom Layouts* library |
 | `one-to-one.js` | Same library, alongside the `.html` |
 
@@ -133,7 +133,7 @@ Version: system v4.1.0 (frontend) · solution 1.0.0.0 · guide dated 15-Oct-2026
 ## Phase 0 — Get and check the files (5 min)
 
 - [ ] **Right zip.** Open the zip, then open `solution.xml` in Notepad. It must contain `<RootComponent type="380" schemaName="esg_SiteUrl"`. If it doesn't, you have an older download: get the latest one.
-- [ ] **Right frontend.** You have `one-to-one.html` and `one-to-one.js` (v4.1.0). After installing, the top menu bar must show **v4.1.0** (right-hand end).
+- [ ] **Right frontend.** You have `one-to-one.html` and `one-to-one.js` (v4.2.0). After installing, the top menu bar must show **v4.2.0** (right-hand end).
 - [ ] **Unchanged files.** Transfer them the usual approved way. Don't open and re-save them in Word.
 
 ---
@@ -155,7 +155,7 @@ Version: system v4.1.0 (frontend) · solution 1.0.0.0 · guide dated 15-Oct-2026
 2. [ ] Top right: pick the environment IT named for the flows.
 3. [ ] Left menu: **Solutions**.
    - If it asks to create a **Dataverse database**, or *Solutions* is missing, use §4.8 instead.
-4. [ ] **Import solution → Browse →** `ESGOneToOne_1_0_0_0_unmanaged.zip` → **Next → Next**.
+4. [ ] **Import solution → Browse →** `ESGOneToOne_1_1_0_0_unmanaged.zip` → **Next → Next**.
 5. [ ] **Connections.** For each of the three, pick yours or click **+ New connection**, signed in as you:
 
    | Connection reference | Connector |
@@ -214,7 +214,7 @@ Version: system v4.1.0 (frontend) · solution 1.0.0.0 · guide dated 15-Oct-2026
 - [ ] **Version check.** If you replaced `one-to-one.html` / `one-to-one.js` after first choosing the layout: web part settings (pencil) → **Reset layout cache** → **Republish**.
 - [ ] Open the site. You should see:
   - a dark **top menu bar**: Team overview, Monthly reviews, Expectations and Actions on the left; **Team (0) ▾** and **⚙ Settings** on the right;
-  - the month, deadline, ↻ Refresh and **v4.1.0** at the far right;
+  - the month, deadline, ↻ Refresh and **v4.2.0** at the far right;
   - **Team overview** showing six tiles at 0, then *"No technicians yet"* with four numbered getting-started steps.
 - [ ] Click through **Monthly reviews**, **Expectations**, **Actions** and **⚙ Settings**. Expect no errors (empty pages are normal for now).
 - [ ] **Expectations:** add one *Shared* expectation. This proves item creation and the Yes/No column work in your tenant.
@@ -226,12 +226,16 @@ Version: system v4.1.0 (frontend) · solution 1.0.0.0 · guide dated 15-Oct-2026
 
 > You can't see the *technician* side with your own account: the page always recognises you as Team Leader. Phase B uses Test A for that.
 
-### 4.7 Turn on flows 1, 2 and 3
+### 4.7 Turn on flows 1 to 5
 
 - [ ] **Solutions → ESG 1-to-1** → select each flow → **Turn on**:
   - **1 Daily scheduler**
   - **2 Review submitted**
   - **3 Manager decision**
+  - **4 Team members** – gives people you add in ⚙ Settings → Team access to the page
+  - **5 Wellbeing** – wellbeing assessments
+
+> **Already imported 1.0?** Upgrade first: import `ESGOneToOne_1_1_0_0_unmanaged.zip` over it, re-run **0 Setup**, turn on flows 4 and 5, upload the v4.2.0 files and **Reset layout cache** (IMPORT_GUIDE §0).
 
 ### 4.8 Fallback: no Dataverse (legacy packages)
 
@@ -243,20 +247,16 @@ Only if §4.2 step 3 showed that solutions can't be imported:
 
 ## 5. Phase B — Walk through it as a technician (test accounts only, 1–2 h)
 
-- [ ] **Technicians list → + New** for **Test A**, then again for **Test B**:
-  - Title = name;
-  - Technician = their account;
-  - **Active = Yes**;
-  - leave TechnicianAadId blank.
-- [ ] **Site permissions → `1-to-1 Technicians` → New → Add users:** Test A and Test B. **Untick "Send an email invitation".**
+- [ ] **⚙ Settings → Team → + Add a person:** search for **Test A** → **Add**, then the same for **Test B**. No SharePoint lists or groups to edit by hand.
+  - Within about 5 minutes Flow 4 adds each to the `1-to-1 Technicians` group and emails you *"1-to-1: access given to …"* (test F32).
 - [ ] **Reload the page.** The top bar shows **Team (2) ▾**, and opening it lists Test A and Test B.
-- [ ] **⚙ Settings:** give each an appraisal date. Use a summer date, e.g. `15-Jul-2027`. Save, reopen, and check it **still shows the same day** (tests F27 and R16).
+- [ ] **⚙ Settings → Team:** give each an appraisal date – type it (e.g. `15/07/2027`) or pick it with 📅. Use a summer date. Save, reopen, and check it **still shows the same day** (tests F27, F31 and R16).
 - [ ] **Expectations:** add one **Individual** expectation for Test A. This proves the Person column works; *Expectations per technician* shows Test A with one more than Test B.
 - [ ] **Power Automate → Flow 1 → Run.** Test A and Test B each get *"Your 1-to-1 for … is ready"*.
   - **Run it again:** no new items, no second email.
 - [ ] **As you:** Team overview lists Test A and Test B.
 - [ ] **As Test A** (InPrivate window):
-  - Open the email link. Their form opens. The top menu bar has only *This month · My appraisal · Appraisal report*, with no Team menu or Settings.
+  - Open the email link. Their form opens. The top menu bar has only *This month · My appraisal · Wellbeing · Appraisal report*, with no Team menu or Settings.
   - Fill in a few answers → **Save** → reload. The answers are kept.
   - Complete everything → **Submit**. Within about 5 minutes the review becomes read-only.
 - [ ] **As you:** *"1-to-1 submitted"* arrives. Monthly reviews shows a badge, and **Team ▾** shows a red dot next to Test A.
@@ -265,9 +265,14 @@ Only if §4.2 step 3 showed that solutions can't be imported:
   - Click **Complete & release**.
 - [ ] **As you:** Team ▾ → Test A → **Generate appraisal report** → **Print / Save as PDF**. A print window opens. If not, allow pop-ups for the SharePoint site.
 - [ ] **As Test A:** *"Feedback … is ready"* arrives. Feedback, ratings and actions are visible; **My appraisal** and **Appraisal report** work.
+- [ ] **Wellbeing (tests F37–F39):**
+  - **As you:** **Wellbeing → + Start** for Test A, with a meeting date.
+  - **As Test A:** *"Your wellbeing assessment is ready to complete"* arrives → open it → work through the steps → **Submit**.
+  - **As you:** *"Wellbeing assessment submitted"* arrives → open it → add an arrangement, notes and the next review date (a year on by default) → **Complete**.
+  - **As Test A:** *"Your wellbeing assessment record is ready"* arrives; the agreed record shows; **Print / Save as PDF** works.
 - [ ] **As Test B:**
-  - nothing of Test A's is visible anywhere;
-  - opening Test A's link (`?reviewId=` with A's number) shows **"Review not found"**.
+  - nothing of Test A's is visible anywhere, including Wellbeing;
+  - opening Test A's link (`?reviewId=` with A's number) shows **"Review not found"**, and `?wbId=` with A's assessment number shows **"Assessment not found"**.
 
 ---
 
@@ -286,11 +291,11 @@ Only if §4.2 step 3 showed that solutions can't be imported:
 
 {H_INTRO}
 
-### 6.1 Functional tests (F1–F30)
+### 6.1 Functional tests (F1–F40)
 
 {F_TABLE}
 
-### 6.2 Privacy and bypass tests (P1–P20) — all mandatory
+### 6.2 Privacy and bypass tests (P1–P24) — all mandatory
 
 {P_TABLE}
 
@@ -305,19 +310,15 @@ Only if §4.2 step 3 showed that solutions can't be imported:
 
 ## 7. Phase D — Clean down (30 min)
 
-- [ ] Delete every **test item** in Monthly Reviews and Manager Reviews, and the test expectations.
+- [ ] Delete every **test item** in Monthly Reviews, Manager Reviews and Wellbeing Assessments, and the test expectations.
 - [ ] Empty the **site recycle bin**, then the **second-stage recycle bin**.
-- [ ] Remove Test A and Test B from the **Technicians** list **and** from the **`1-to-1 Technicians`** group. Team ▾ goes back to Team (0).
+- [ ] **⚙ Settings → Team → Deactivate** Test A and Test B (Flow 4 removes them from the group), then delete their two items from the **Technicians** list. Team ▾ goes back to Team (0).
 - [ ] Flow 1: **Initialize varTestDate** is **empty** (Save).
 
 ## 8. Phase E — Prepare and invite the real team (1–2 h)
 
-- [ ] **Technicians list:** add each technician:
-  - Title;
-  - Technician (their account);
-  - Active = Yes.
-- [ ] **`1-to-1 Technicians` group:** add the same people, with **"Send an email invitation" unticked**.
-- [ ] **⚙ Settings:** enter each **appraisal date** (DD-MMM-YYYY) → Save.
+- [ ] **⚙ Settings → Team → + Add a person** for each technician (Flow 4 gives them access; no invitation email is sent by SharePoint).
+- [ ] **⚙ Settings → Team:** enter each **appraisal date** → Save. Optionally **⚙ Settings → Reminders / Names** to change the reminder days or the on-screen role words.
 - [ ] **Expectations page:** enter the real **Shared** expectations and each person's **Individual** ones for **2026/27**. Do this after the Technicians list, so people appear in the Technician dropdown.
   - **Maximum 10 per person**; the page shows the count.
   - Expectations entered early for next year are ignored until that appraisal year starts (1 April).

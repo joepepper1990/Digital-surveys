@@ -30,8 +30,8 @@ One tick-list from where you are now to a running system. For a single printable
 
 - [ ] **Solution zip.** The verification pass replaced it under the same file name. Open your zip, then open `solution.xml` in Notepad.
   - The correct version contains `<RootComponent type="380" schemaName="esg_SiteUrl"`.
-  - If yours doesn't, re-download [`04-solution/ESGOneToOne_1_0_0_0_unmanaged.zip`](04-solution/ESGOneToOne_1_0_0_0_unmanaged.zip).
-- [ ] **Frontend.** Download the latest [`02-frontend/one-to-one.html`](02-frontend/one-to-one.html) and [`02-frontend/one-to-one.js`](02-frontend/one-to-one.js) (v4.1.0).
+  - If yours doesn't, re-download [`04-solution/ESGOneToOne_1_1_0_0_unmanaged.zip`](04-solution/ESGOneToOne_1_1_0_0_unmanaged.zip).
+- [ ] **Frontend.** Download the latest [`02-frontend/one-to-one.html`](02-frontend/one-to-one.html) and [`02-frontend/one-to-one.js`](02-frontend/one-to-one.js) (v4.2.0).
 - [ ] **Approved route.** Transfer the files the usual approved way.
 
 ## Phase A — See the system yourself (nobody else involved)
@@ -53,7 +53,7 @@ One tick-list from where you are now to a running system. For a single printable
 **A3. Run setup** ([IMPORT_GUIDE §3–4](04-solution/IMPORT_GUIDE.md))
 - [ ] Run **ESG 1-to-1 | 0 Setup (run once)**.
 - [ ] Wait for the summary email **"ESG 1-to-1 setup: complete"**. If it says *"complete with items to check"*, fix what it lists and run setup again; it's safe to re-run.
-- [ ] **Site contents:** the five lists are there (Technicians, Appraisal Expectations, Monthly Reviews, Manager Reviews, 1-to-1 Settings).
+- [ ] **Site contents:** the six lists are there (Technicians, Appraisal Expectations, Monthly Reviews, Manager Reviews, 1-to-1 Settings).
 - [ ] **Permissions on each list:**
   - the four data lists show **Owners – Full Control only**;
   - **1-to-1 Settings** also shows `1-to-1 Technicians` – Read.
@@ -74,24 +74,20 @@ One tick-list from where you are now to a running system. For a single printable
 - [ ] Open the site. You see:
   - the dark top menu bar (Team overview, Monthly reviews, Expectations, Actions, Team ▾, ⚙ Settings);
   - **"No technicians yet"** on Team overview;
-  - **v4.1.0** at the right-hand end of the top menu bar.
+  - **v4.2.0** at the right-hand end of the top menu bar.
 - [ ] Click through **Monthly reviews**, **Expectations**, **Actions** and **⚙ Settings**.
 - [ ] **Expectations:** add one *Shared* expectation. This proves item creation and Yes/No columns in your tenant. (The *Individual* one needs a technician in the list, so it moves to Phase B.)
 - [ ] Check the menu bar and content fill the width of the page.
 
 **A6. Turn the flows on**
-- [ ] Solutions → **ESG 1-to-1** → turn on **1 Daily scheduler**, **2 Review submitted** and **3 Manager decision**.
+- [ ] Solutions → **ESG 1-to-1** → turn on **1 Daily scheduler**, **2 Review submitted**, **3 Manager decision**, **4 Team members** and **5 Wellbeing**.
+- [ ] Already imported 1.0? Upgrade first: [IMPORT_GUIDE §0](04-solution/IMPORT_GUIDE.md) (import 1.1 over it, re-run setup, upload v4.2.0, Reset layout cache).
 
 ## Phase B — See it as a technician (test accounts only)
 
-- [ ] **Technicians list → + New** for Test A, then again for Test B:
-  - **Title** = name;
-  - **Technician** = their account;
-  - **Active** = Yes;
-  - leave TechnicianAadId blank.
-- [ ] Add Test A and Test B to the **`1-to-1 Technicians`** group: Site permissions → the group → New → Add users. **Untick "Send an email invitation".**
+- [ ] **⚙ Settings → Team → + Add a person** → search for Test A → **Add**; then Test B. Flow 4 adds them to the `1-to-1 Technicians` group within about 5 minutes and emails you.
 - [ ] Reload: the top bar shows **Team (2) ▾** listing Test A and Test B.
-- [ ] **⚙ Settings:** give each an appraisal date. Use a summer date such as `15-Jul-2027`. Save, reopen, and check it still shows the same day (test F27).
+- [ ] **⚙ Settings → Team:** give each an appraisal date (type `15/07/2027` or pick with 📅). Save, reopen, and check it still shows the same day (tests F27, F31).
 - [ ] **Expectations:** add one *Individual* expectation for Test A (proves the Person column).
 - [ ] **Flow 1 → Run.** Test A and Test B each get **"Your 1-to-1 for … is ready"**. Run it again: no new items and no second email.
 - [ ] **As you:** Team overview now lists Test A and Test B.
@@ -113,13 +109,13 @@ One tick-list from where you are now to a running system. For a single printable
 
 Work through [plan section H](IMPLEMENTATION_PLAN.md#h-testing) and record each result: Pass/Fail, date, tester, screenshot.
 
-- [ ] **Every privacy test P1–P20.** These are mandatory: **any failure blocks go-live**. They include:
+- [ ] **Every privacy test P1–P24.** These are mandatory: **any failure blocks go-live**. They include:
   - P15 script injection;
   - P16 code integrity;
   - P18 Settings read-only;
   - P19 TL ratings and actions;
   - P20 appraisal-date tampering.
-- [ ] **Functional tests F1–F30.**
+- [ ] **Functional tests F1–F40.**
   - Date tests F13–F20 use flow 1's `varTestDate`: Edit → *Initialize varTestDate* → set → Save → Run.
   - **Clear it afterwards.**
 - [ ] **Ask IT:**
@@ -131,7 +127,7 @@ Work through [plan section H](IMPLEMENTATION_PLAN.md#h-testing) and record each 
 
 - [ ] Delete all test items in **Monthly Reviews** and **Manager Reviews**, plus the test expectations.
 - [ ] Empty the **site recycle bin**, then the **second-stage recycle bin**.
-- [ ] Remove Test A and Test B from the **Technicians** list and from the **`1-to-1 Technicians`** group.
+- [ ] **⚙ Settings → Team → Deactivate** Test A and Test B (Flow 4 removes them from the group), then delete their Technicians items; delete their Wellbeing Assessments items too.
 - [ ] Flow 1: `varTestDate` is **empty**.
 
 ## Phase E — Prepare and invite the real team

@@ -19,7 +19,7 @@ This runbook takes you from where you are now to technicians receiving their fir
 
 - Site, page, Welcome and the `1-to-1 Technicians` group are built.
 - **Stage 0A and 0B have passed.**
-- **All build files are produced** and tested locally (89 automated checks).
+- **All build files are produced** and tested locally (148 automated checks).
 
 **Legend:**
 
@@ -51,8 +51,8 @@ Stage 0A and 0B passed in the live tenant. Two findings are built into the setup
 
 | File | What it is |
 |---|---|
-| `04-solution/ESGOneToOne_1_0_0_0_unmanaged.zip` | **The four flows as one importable solution**, including the setup flow that creates the lists |
-| `02-frontend/one-to-one.html`, `one-to-one.js` | The app, v4.1.0. **Nothing to edit.** |
+| `04-solution/ESGOneToOne_1_1_0_0_unmanaged.zip` | **The six flows as one importable solution**, including the setup flow that creates the lists |
+| `02-frontend/one-to-one.html`, `one-to-one.js` | The app, v4.2.0. **Nothing to edit.** |
 | `01-sharepoint/lists.md`, `lists.csv` | Column-by-column list checklist |
 | `03-flows/FLOW_BUILD_SHEETS.md` | Flows 1–3, step by step |
 | `03-flows/EMAIL_TEMPLATES.md` | E1–E5, E7 |
@@ -65,10 +65,10 @@ Stage 0A and 0B passed in the live tenant. Two findings are built into the setup
 
 Follow [`04-solution/IMPORT_GUIDE.md`](04-solution/IMPORT_GUIDE.md) §1–§4.
 
-- [ ] **Solutions → Import solution** → `04-solution/ESGOneToOne_1_0_0_0_unmanaged.zip`.
+- [ ] **Solutions → Import solution** → `04-solution/ESGOneToOne_1_1_0_0_unmanaged.zip`.
   - Pick your three connections.
   - Enter the **Site URL** (no trailing slash) and **your email**.
-- [ ] Run **ESG 1-to-1 | 0 Setup (run once)**. It creates the five lists exactly as [`01-sharepoint/lists.md`](01-sharepoint/lists.md) describes, the two permission levels, the `1-to-1 Technicians` group (if missing), list permissions and the `Bands` setting.
+- [ ] Run **ESG 1-to-1 | 0 Setup (run once)**. It creates the six lists exactly as [`01-sharepoint/lists.md`](01-sharepoint/lists.md) describes, the two permission levels, the `1-to-1 Technicians` group (if missing), list permissions and the `Bands` setting.
 - [ ] Read the summary email.
   - *"complete"*: carry on.
   - *"complete with items to check"*: fix the listed items, then re-run setup. It's safe to re-run.
@@ -98,23 +98,19 @@ Follow [`02-frontend/README.md`](02-frontend/README.md) §Install.
   - **Republish**.
 - [ ] Make `OneToOne` the home page.
 - [ ] The group has Read on the page, the layouts library and the Welcome Errors list. Setup already granted it on 1-to-1 Settings.
-- [ ] As TL: **Team overview** opens, the top menu bar shows **Team ▾** and **⚙ Settings**, and its right-hand end shows **v4.1.0**.
+- [ ] As TL: **Team overview** opens, the top menu bar shows **Team ▾** and **⚙ Settings**, and its right-hand end shows **v4.2.0**.
 
-## Phase 7 — Turn on flows 1, 2 and 3 🧑 ⏱ 2 min
+## Phase 7 — Turn on flows 1 to 5 🧑 ⏱ 2 min
 
-- [ ] **Solutions → ESG 1-to-1** → turn on **1 Daily scheduler**, **2 Review submitted** and **3 Manager decision** (IMPORT_GUIDE §5).
+- [ ] **Solutions → ESG 1-to-1** → turn on **1 Daily scheduler**, **2 Review submitted**, **3 Manager decision**, **4 Team members** and **5 Wellbeing** (IMPORT_GUIDE §5).
 - [ ] Secure inputs/outputs, sequential runs and Try/Catch are already set in the imported flows.
 
 ## Phase 8 — Add technicians and appraisal dates 🧑 ⏱ 30 min
 
 For each technician:
 
-1. [ ] **Technicians → + New.**
-   - **Title** = name.
-   - **Technician** = their account.
-   - Leave **TechnicianAadId** blank.
-   - **Active** = Yes.
-2. [ ] Add them to the **`1-to-1 Technicians`** group, with the email invitation unticked.
+1. [ ] **⚙ Settings → Team → + Add a person** → search → **Add**.
+2. [ ] Flow 4 adds them to the **`1-to-1 Technicians`** group within about 5 minutes and emails you (no SharePoint invitation is sent).
 
 Then:
 
@@ -153,14 +149,14 @@ With **only Test A and Test B** in Technicians:
   - The **Actions** page closes an action.
   - The **Appraisal report** for A prints or saves as PDF.
 - [ ] **As Test B:** throughout, B never sees anything of A's.
-- [ ] Run plan **section H**: F1–F30 and **every P test (P1–P20)**. The XSS test P15 is release-blocking.
+- [ ] Run plan **section H**: F1–F40 and **every P test (P1–P24)**. The XSS test P15 is release-blocking.
 
 **⛔ Gate:** every P test passes and the journey works end to end.
 
 Then clean down:
 
 1. Delete the test reviews from both lists, then empty both recycle bins.
-2. Remove Test A and Test B from Technicians and from the group.
+2. ⚙ Settings → Team → **Deactivate** Test A and Test B (Flow 4 removes them from the group), then delete their Technicians and Wellbeing Assessments items.
 
 ## Phase 11 — Go live 🧑 ⏱ 15 min
 

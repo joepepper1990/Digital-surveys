@@ -1,13 +1,13 @@
 # ESG Monthly Technician 1-to-1 — Implementation Plan (v4)
 
-**Status:** v4.1, dated 14-Oct-2026. **Current position and next actions:** [`NEXT_STEPS.md`](NEXT_STEPS.md).
+**Status:** v4.2, dated 15-Oct-2026 (frontend 4.2.0, solution 1.1.0.0 – see *v4.2 additions* below). **Current position and next actions:** [`NEXT_STEPS.md`](NEXT_STEPS.md).
 
 - **Stages 0A and 0B have passed in the live tenant.** Welcome runs the external script, authenticated REST works, and the item-level security model holds.
 - The visual design was agreed through prototype v7 ([`prototype/prototype.html`](prototype/prototype.html)).
 - **The production build files are produced:**
-  - the frontend [`02-frontend/`](02-frontend/README.md), with a local mock and 89 automated checks;
+  - the frontend [`02-frontend/`](02-frontend/README.md), with a local mock and 148 automated checks;
   - the list checklist [`01-sharepoint/lists.md`](01-sharepoint/lists.md);
-  - **the importable Power Platform solution** [`04-solution/`](04-solution/IMPORT_GUIDE.md): the three flows plus a setup flow that creates the five lists, permission levels, group and list permissions exactly (v4.1);
+  - **the importable Power Platform solution** [`04-solution/`](04-solution/IMPORT_GUIDE.md): five flows plus a setup flow that creates the six lists, permission levels, group and list permissions exactly (v4.1);
   - the flow build sheets and email templates [`03-flows/`](03-flows/FLOW_BUILD_SHEETS.md), for reference or building by hand;
   - the operating manual [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md).
 - **What remains is the tenant build and go-live** ([`GO_LIVE_RUNBOOK.md`](GO_LIVE_RUNBOOK.md)).
@@ -26,7 +26,7 @@
 | D6 | **No "ask for a chat" button.** A technician uses Q9 or simply talks to the TL. (v4) |
 | D7 | The **TL sets each technician's appraisal date** and the appraisal band thresholds in ⚙ Settings, visible only to line managers. Dates are shown as **DD-MMM-YYYY**. (v4) |
 
-The system has **five lists** (four data lists plus a small settings list), three flows, two custom permission levels, and one SharePoint page carrying a custom Welcome layout (the frontend). The flows use standard connectors only.
+The system has **six lists** (five data lists, including Wellbeing Assessments from v4.2, plus a small settings list), five flows plus a setup flow, two custom permission levels, and one SharePoint page carrying a custom Welcome layout (the frontend). The flows use standard connectors only.
 
 ## Changes in v4
 
@@ -43,7 +43,7 @@ The system has **five lists** (four data lists plus a small settings list), thre
 | Removed | — | Private notes, ask-for-a-chat, workload trend, the occupational-health text (`eapText`), example text in boxes, and the "how it's worked out" panel for technicians |
 | Flows | — | Flow 1 copies `AppraisalDate` and initialises the two JSON columns. Email dates use `dd-MMM-yyyy`. E3's request tag uses `startsWith`. Flows 2 and 3 are unchanged. |
 | Security model | — | **Unchanged.** No new trust boundary: new technician fields are on the technician's own item; new TL data is on Manager Reviews (released by Flow 3); the Settings list holds no personal data. |
-| Delivery (v4.1) | Lists and flows built by hand from G Parts 3–8 | **Import one solution** ([`04-solution/ESGOneToOne_1_0_0_0_unmanaged.zip`](04-solution/IMPORT_GUIDE.md)), then run **ESG 1-to-1 \| 0 Setup**, which builds everything in C, D.2 and D.3. The flows look up group, role and list IDs at run time, so G Part 4 is no longer needed. The site URL and TL email are environment variables. For environments without Dataverse there is an offline legacy-package builder. Verified locally: a static validator, 20 mutation tests and 110 end-to-end simulations against a fake SharePoint. |
+| Delivery (v4.1) | Lists and flows built by hand from G Parts 3–8 | **Import one solution** ([`04-solution/ESGOneToOne_1_1_0_0_unmanaged.zip`](04-solution/IMPORT_GUIDE.md)), then run **ESG 1-to-1 \| 0 Setup**, which builds everything in C, D.2 and D.3. The flows look up group, role and list IDs at run time, so G Part 4 is no longer needed. The site URL and TL email are environment variables. For environments without Dataverse there is an offline legacy-package builder. Verified locally: a static validator, 20 mutation tests and 110 end-to-end simulations against a fake SharePoint. |
 
 
 ## Changes in v3
@@ -314,7 +314,7 @@ The 1-to-1 Settings list is standalone. There are no lookup columns, so nothing 
 
 ### D.2 Lists
 
-Break inheritance on all five lists so that only **Owners (Full Control)** remains. Then add **`1-to-1 Technicians` – Read** on **1-to-1 Settings** only.
+Break inheritance on all six lists so that only **Owners (Full Control)** remains. Then add **`1-to-1 Technicians` – Read** on **1-to-1 Settings** only.
 
 ### D.3 Custom permission levels
 
@@ -626,7 +626,7 @@ It opens in an in-page overlay with **Print / Save as PDF**. That opens a clean 
 
 **Layout**
 
-- Built for desktop: a top menu bar plus a full-width content area that scales up on large screens, with no large blank regions (v4.1.0).
+- Built for desktop: a top menu bar plus a full-width content area that scales up on large screens, with no large blank regions (v4.2.0).
 - Colours: navy UI; self ratings blue `#2a78d6`; TL ratings orange `#eb6834`; band colours red/amber/green/blue.
 - Overlays use z-index 10000+ so they sit above SharePoint's chrome.
 
@@ -644,7 +644,7 @@ It opens in an in-page overlay with **Print / Save as PDF**. That opens a clean 
   - Flow 2 and Flow 3 effects emulated.
   - A switch for attack-string (XSS) data.
 - **`mock/index.html`:** generated from the production CSS by `tools/build-mock.js`. You can click through every view as any user.
-- **`test/run-tests.js`** (headless Chromium, 89 checks):
+- **`test/run-tests.js`** (headless Chromium, 148 checks):
   - static rules S1, S2, S4 and S5;
   - isolation for Test A and Test B, including direct REST attempts;
   - draft payload allow-list;
@@ -1068,7 +1068,7 @@ The filled-in Config sheet stays in the site or your OneDrive, never in the repo
    4. Click **Create**.
    - If you can't create permission levels (IT-4), see the fallback in J.
 
-### Part 3 — Create the five lists ⏱ about 2 h
+### Part 3 — Create the six lists ⏱ about 2 h
 
 > **v4.1: done for you.** Import the solution and run the setup flow ([`04-solution/IMPORT_GUIDE.md`](04-solution/IMPORT_GUIDE.md)), which also covers Part 2. The steps below remain the manual alternative.
 
@@ -1111,7 +1111,7 @@ Lists and checks:
 - [ ] **Monthly Reviews** (C.3)
 - [ ] **Manager Reviews** (C.4)
 - [ ] **1-to-1 Settings** (C.4a)
-- [ ] **Check:** Site contents shows five lists. The four data lists' permissions pages show only Owners. 1-to-1 Settings shows Owners plus `1-to-1 Technicians` – Read.
+- [ ] **Check:** Site contents shows six lists. The four data lists' permissions pages show only Owners. 1-to-1 Settings shows Owners plus `1-to-1 Technicians` – Read.
 
 ### Part 4 — Record the four IDs ⏱ 10 min
 
@@ -1181,7 +1181,7 @@ You don't build any screens, and **there is nothing to edit in the files**. Full
 4. [ ] **Site Pages:** `OneToOne` → **… → Make homepage**.
 5. [ ] Permissions check (D.6): `1-to-1 Technicians` has **Read** on the page, the layouts library, the Welcome Errors list and **1-to-1 Settings**.
 6. [ ] Check that `varPageLink` in the flows matches the page link.
-7. [ ] **Check as the TL:** the site opens on **Team overview**, with the top menu bar showing Team ▾ and ⚙ Settings. The menu bar shows **v4.1.0** at its right-hand end.
+7. [ ] **Check as the TL:** the site opens on **Team overview**, with the top menu bar showing Team ▾ and ⚙ Settings. The menu bar shows **v4.2.0** at its right-hand end.
 8. [ ] **Check as the TL:** open ⚙ **Settings**, enter each test technician's appraisal date (DD-MMM-YYYY), and save.
 9. [ ] **Check as Test A:** the E1 link opens **their** review. The menu bar shows only *This month · My appraisal · Appraisal report*.
 
@@ -1254,6 +1254,17 @@ These are in [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) §4:
 
 ---
 
+## v4.2 additions (tenant feedback round 1, 15-Oct-2026)
+
+| Area | What changed | Security notes |
+|---|---|---|
+| Dates | Every date box: type it any common UK way (15/07/2027, 15 Jul 27, ISO) or pick it from a 📅 calendar; the day is shown in words. Every date write is read back and retried in the format the site accepts (ISO, dd/MM, MM/dd), so a regional-settings mismatch can no longer save a wrong day silently (fixes the "date reverts" report). Dialogs no longer leave an "unsaved changes" prompt behind. | Writes still only through `validateUpdateListItem` (S6). |
+| ⚙ Settings | Tabs: **Team** (search people, add, deactivate, appraisal dates), **Reminders** (days), **Names** (app name, manager and team-member role words), **Bands**. | The page never changes permissions: adding someone creates a Technicians item; **Flow 4** puts them in the group. Names are labels only. |
+| Expectations | Drag (or ▲▼) to reorder; Order box removed. Shared = 10, 20…; individual = 1010, 1020…, so shared come first on forms. | – |
+| Team overview | *Needs your attention* replaces the duplicate status card; third chart selectable (workload, energy, actions, self vs you, outcome, on-time, days to appraisal); Energy column removed from the outlook table. | Chart choice stored in the viewer's browser only. |
+| Reminders | Days set in Settings (`Reminders` item); Flow 1 reads them daily without JSON parsing, so a hand-edited value can't fail the run. | – |
+| Wellbeing | New list **Wellbeing Assessments**, TL and technician **Wellbeing** tabs, step-by-step form (HSE management standards, personal input, support), TL review panel (arrangements, notes, yearly review date – brought forward when needed), print with signature lines. **Flow 5** shares each item with that person only, locks it when they submit, wipes anything they typed in the TL fields, restores the owner from the item permission, stamps SubmittedOn / CompletedOn. Flow 1 emails the TL 7 days before and on the review date. | Trusted person = holder of the item permission (set by Flow 5), never the editable column (D.7). Wellbeing never appears in reports, charts or the outlook. |
+
 ## H. Testing
 
 **How to record results.** For each test, record Pass or Fail, the date, the tester and a screenshot.
@@ -1316,6 +1327,16 @@ These are in [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) §4:
 | F28 (v4) | ⚙ Settings: change the *Met* threshold, then save | The 1-to-1 Settings `Bands` item updates. **A's** outlook uses the new thresholds. |
 | F29 (v4) | Expectations page: add an Individual expectation for A, edit a Shared one, retire one | List items are created or changed (retired = Active No, not deleted). The next month's snapshot reflects them, and past months don't change. |
 | F30 (v4) | Appraisal report as the TL (for A) and as A, then **Print / Save as PDF** | 8 sections. **No Q4 wellbeing text.** A's report shows TL content only from released months. The print window opens (allow pop-ups if asked). |
+| F31 (v4.2) | ⚙ Settings → Team: type A's appraisal date as `5/11/2027`, save, reload; then pick a date with 📅 | Shows **05-Nov-2027** (5 November) after reload, and the picked date is kept. No "unsaved changes" prompt when you then change tab. |
+| F32 (v4.2) | ⚙ Settings → Team → + Add a person: add a third test account, then Deactivate it | Technicians item created / Active = No. Within about 5 minutes Flow 4 adds / removes them in `1-to-1 Technicians` and emails you (E8). |
+| F33 (v4.2) | ⚙ Settings → Names: Manager role = *Line Manager*, member role = *Engineer(s)*; check as TL and as A | Both pages use the new words; nothing else changes. Reset afterwards. |
+| F34 (v4.2) | ⚙ Settings → Reminders: set a day = today; run Flow 1 | Only people who haven't submitted get E2. Set it back to 20 and 27. |
+| F35 (v4.2) | Expectations: drag the 4th shared expectation to the top; add an individual one | List order changes; next month's snapshot follows it; the new individual one appears after the shared ones. |
+| F36 (v4.2) | Team overview: switch the third chart through every option; reload | Each draws; the choice is remembered. *Needs your attention* lists waiting reviews, overdue actions, wellbeing items. |
+| F37 (v4.2) | Wellbeing: TL starts one for A | A gets E9 within about 5 minutes; the item's *Manage access* shows Owners + A (1-to-1 Edit) only. |
+| F38 (v4.2) | A completes every step and submits | Flow 5 locks it (A: 1-to-1 Read), stamps SubmittedOn, TL gets E10. A sees it read-only. |
+| F39 (v4.2) | TL adds an arrangement, notes, next review date (defaults to a year on), then Complete | A gets E11 and sees the agreed record; Print shows the form with signature lines. |
+| F40 (v4.2) | Set the next review date to 7 days ahead; run Flow 1 | TL gets E12 with a link; nothing goes to A. |
 
 ### Privacy and bypass tests
 
@@ -1340,6 +1361,10 @@ These are in [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) §4:
 | P18 🔒 (v4) | **Settings list is read-only** | POST `_api/web/lists/getbytitle('1-to-1%20Settings')/items(1)/validateUpdateListItem`, body `{"formValues":[{"FieldName":"Value","FieldValue":"[]"}],"bNewDocumentUpdate":false}`. Also try `AddValidateUpdateItemUsingPath` on the same list. | Both denied. GET on the list succeeds (Read). |
 | P19 🔒 (v4) | **TL ratings and actions** | Before release: GET `…getbytitle('Manager%20Reviews')/items?$select=ExpectationFeedbackJson,ActionsJson`. After release: POST `…items({MA})/validateUpdateListItem` setting `ActionsJson` to `[]`. | Before release: empty. After release: the write is denied and the data is unchanged. |
 | P20 🔒 (v4) | **Appraisal date tampering** | On A's **draft**, write `AppraisalDate` = `01/01/2030` through `validateUpdateListItem` | Allowed (it's A's own display copy), but **only A's own view** changes. The TL's outlook and ⚙ Settings still show the Technicians list date. |
+| P21 🔒 (v4.2) | **Read someone else's wellbeing** | B: GET `…getbytitle('Wellbeing%20Assessments')/items`, and `items({A's wellbeing id})`; open `?wbId={A's id}` | Only B's own items; A's item 404 / "not found". |
+| P22 🔒 (v4.2) | **Forge the manager's part** | A, on their own *open* assessment: one `validateUpdateListItem` setting AssessmentStatus = Completed, ArrangementsJson, ManagerNotes, NextReviewDate, CompletedOn and Technician = B | Within about 5 minutes Flow 5 treats it as a submission: A is set to Read, status Submitted, the TL fields and CompletedOn are **cleared**, Technician is restored to A, B gains nothing. |
+| P23 🔒 (v4.2) | **Change after submitting** | A: write to their submitted assessment | Denied (403). |
+| P24 🔒 (v4.2) | **Join the group / see the roster** | A: GET `…getbytitle('Technicians')/items`; POST `_api/web/sitegroups(<id>)/users` | Both denied. (Only Flow 4, as the TL, changes the group.) |
 | P17 🔒 | **No data leaves the tenant** | As the TL, open each view with F12 → **Network** recording (ask IT if developer tools are blocked) | Every request carrying list data goes to `<tenant>.sharepoint.com`. Record any other host contacted (for example the web part's own code CDN) for IT-11. None of them may receive review content. |
 
 ---
@@ -1416,6 +1441,9 @@ v4 reduces Part 7 to about 30 minutes, because there is no CONFIG to edit. Allow
 | R13 (v4.1) | Technicians can see who else is in `1-to-1 Technicians` | SharePoint has no owner-only visibility; membership reveals names only, no review data |
 | R14 (v4.1) | A submission made in the same 5-minute polling window as the TL's *Close – not submitted* ends up Closed | Closing is only possible after the deadline. The answers are kept and the TL can correct it (as R5). The TL view shows *Submitted – processing* while Flow 2 hasn't run yet. |
 | R15 (v4.1) | Saving ⚙ Settings writes the appraisal date onto a submitted current review, which re-runs Flow 2 | Flow 2 only re-applies Read, so nothing changes (harmless extra run) |
+| R17 (v4.2) | Before Flow 5's first lock (≤ 5 min after submitting), the TL screen could show a person's own "Submitted" stamp | Complete is only offered for a submitted assessment; if anything was forged, Flow 5 re-locks it and wipes the TL fields (P22), and the TL simply re-enters them. |
+| R18 (v4.2) | Wellbeing data is health-related (special category) | Separate list, item-level permissions per person, never in reports/charts, secure run history, 24-month retention (CONFIG_REFERENCE §4). Confirm with HR/IT that this matches the paper form's handling. |
+| R19 (v4.2) | Adding someone in Settings depends on Flow 4 running | Settings says access follows within about 5 minutes; E8 confirms each change; troubleshooting row in CONFIG_REFERENCE §6. |
 | R16 (v4.1) | `validateUpdateListItem` might read dd/MM/yyyy using the TL's *personal* regional settings rather than the site's | Tenant test F27 checks the round trip. If it fails, set your personal region to English (UK). |
 
 ---
@@ -1429,15 +1457,15 @@ All of these are text, contain **no tenant names, credentials or personal data**
 | K0 / K0B | `02-frontend/probe/` | **Produced and run.** Stage 0A and 0B passed. |
 | K1 | [`01-sharepoint/lists.md`](01-sharepoint/lists.md) + [`lists.csv`](01-sharepoint/lists.csv) | **Produced (v4)** |
 | K2 | Site security tick-list | Covered by G Parts 1–2 and D.6, plus the quarterly check in CONFIG_REFERENCE §4 |
-| K3 | [`02-frontend/one-to-one.html`](02-frontend/one-to-one.html) | **Produced (v4.1.0)** |
-| K4 | [`02-frontend/one-to-one.js`](02-frontend/one-to-one.js) | **Produced (v4.1.0)** |
+| K3 | [`02-frontend/one-to-one.html`](02-frontend/one-to-one.html) | **Produced (v4.2.0)** |
+| K4 | [`02-frontend/one-to-one.js`](02-frontend/one-to-one.js) | **Produced (v4.2.0)** |
 | K5 | [`03-flows/FLOW_BUILD_SHEETS.md`](03-flows/FLOW_BUILD_SHEETS.md) | **Produced (v4)**: Flows 1–3, SETPERM, Ensure_user, Try/Catch |
-| K5a | [`04-solution/ESGOneToOne_1_0_0_0_unmanaged.zip`](04-solution/IMPORT_GUIDE.md) | **Produced (v4.1)**: importable solution with setup flow + Flows 1–3, connection references, environment variables; legacy-package builder; source, validator and simulation in [`04-solution/tools/`](04-solution/README.md) |
+| K5a | [`04-solution/ESGOneToOne_1_1_0_0_unmanaged.zip`](04-solution/IMPORT_GUIDE.md) | **Produced (v4.1)**: importable solution with setup flow + Flows 1–5, connection references, environment variables; legacy-package builder; source, validator and simulation in [`04-solution/tools/`](04-solution/README.md) |
 | K6 | [`03-flows/EMAIL_TEMPLATES.md`](03-flows/EMAIL_TEMPLATES.md) | **Produced (v4)**: E1–E5, E7 |
-| K7 | Test record | Use section H directly (F1–F30, P1–P20); add Pass/Fail, date, tester and screenshot columns |
+| K7 | Test record | Use section H directly (F1–F40, P1–P24); add Pass/Fail, date, tester and screenshot columns |
 | K8 | Privacy notice | **Not needed.** The TL decided it's handled between the TL and each technician. |
 | K9 | [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) | **Produced (v4)** |
-| K10 | [`02-frontend/mock/`](02-frontend/mock/), [`02-frontend/test/`](02-frontend/test/), [`02-frontend/tools/`](02-frontend/tools/) | **Produced.** 89 checks passing. |
+| K10 | [`02-frontend/mock/`](02-frontend/mock/), [`02-frontend/test/`](02-frontend/test/), [`02-frontend/tools/`](02-frontend/tools/) | **Produced.** 148 checks passing. |
 | K11 | Frontend security notes for IT-13 | Section E.3–E.4 plus [`02-frontend/README.md`](02-frontend/README.md) (endpoints, rules, test evidence) |
 | — | [`prototype/prototype.html`](prototype/prototype.html) | Design baseline (prototype v7) |
 
@@ -1446,14 +1474,14 @@ All of these are text, contain **no tenant names, credentials or personal data**
 ## Summary and next step
 
 1. **Build approach (unchanged security model):**
-   - A private SharePoint communication site with **five lists**.
+   - A private SharePoint communication site with **six lists**.
    - **Manager Reviews is the authoritative, tamper-proof record**, now holding TL ratings and multi-row actions. Monthly Reviews holds only the technician's answers. 1-to-1 Settings holds the band thresholds.
    - Two custom permission levels, applied per item by **three** standard-connector flows.
    - A desktop frontend with a top menu bar, in the **Welcome by Accelerator 365** web part on `OneToOne.aspx`.
 2. **Status:** Stage 0A and 0B passed. All build files are produced and tested locally.
 3. **Next (the TL, in the tenant), following [`GO_LIVE_RUNBOOK.md`](GO_LIVE_RUNBOOK.md):**
-   1. Import the solution and run the setup flow (creates the five lists).
-   2. Turn on Flows 1–3.
+   1. Import the solution and run the setup flow (creates the six lists).
+   2. Turn on Flows 1–5.
    3. Install the frontend.
    4. Set appraisal dates.
    5. Load expectations.

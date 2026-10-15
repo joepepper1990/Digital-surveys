@@ -534,6 +534,10 @@ async function main() {
   await W.locator('.topbar >> text=Wellbeing').click();
   await W.locator('button:has-text("Continue")').click();
   ok('Wellbeing: the form opens as steps (Start, 6 HSE areas, About you, Finish)', (await W.locator('.wbstep').count()) === 9);
+  await W.locator('.wbstep').nth(1).click(); await W.waitForTimeout(120);
+  ok('Wellbeing: "Is it an issue?" only shows once a question applies', !(await W.locator('.wbq').nth(4).locator('.wbq-a .wbcol').nth(1).isVisible()) &&
+    await W.locator('.wbq').nth(1).locator('.wbq-a .wbcol').nth(1).isVisible());
+  await W.locator('.wbstep').nth(0).click(); await W.waitForTimeout(120);
   await W.locator('#oto-wb-pos').fill('Instrument Technician');
   for (var stp = 1; stp <= 6; stp++) {
     await W.locator('.wbstep').nth(stp).click(); await W.waitForTimeout(120);

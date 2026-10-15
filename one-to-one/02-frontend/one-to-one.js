@@ -159,7 +159,7 @@ window.ESGOneToOne = function (ctx) {
     return d;
   }
   // lower-case the first letter for use mid-sentence, but leave acronyms (e.g. "SQEP") alone
-  function lc(x) { x = String(x || ''); return x.length > 1 && x.charAt(1) === x.charAt(1).toLowerCase() ? x.charAt(0).toLowerCase() + x.slice(1) : x; }
+  function lc(x) { return String(x || '').split(' ').map(function (w) { return w.length > 1 && w.charAt(1) === w.charAt(1).toLowerCase() ? w.charAt(0).toLowerCase() + w.slice(1) : w; }).join(' '); }
   function defaultReminders() { return [20, 27]; }
   function parseReminders(json) {
     var v = safeJson(json, null);
@@ -2533,7 +2533,7 @@ window.ESGOneToOne = function (ctx) {
     var dl = daysBetween(TODAY, lastDay(CUR));
     right.push(h('div', { class: 'status' }, [h('b', { text: monthLabel(CUR) }), h('br'),
       h('span', { text: dl >= 0 ? 'Deadline ' + fmtDate(lastDay(CUR)) + ' · ' + dl + (dl === 1 ? ' day' : ' days') : 'Deadline passed' }), h('br'),
-      h('button', { class: 'linkbtn', type: 'button', text: '↻ Refresh', onclick: function () { if (dirty && !window.confirm('Discard unsaved changes and reload?')) { return; } dirty = false; start(); } }),
+      h('button', { class: 'linkbtn', type: 'button', text: '↻ Refresh', onclick: function () { if (dirty && !window.confirm('Discard unsaved changes and reload?')) { return; } dirty = false; start().catch(loadFailed); } }),
       h('span', { class: 'ver', style: 'margin-left:8px;opacity:.7', text: 'v' + VERSION })]));
     var topbar = h('header', { class: 'topbar' }, [brand, h('nav', { class: 'tabs', 'aria-label': 'Main menu' }, tabs), h('div', { class: 'right' }, right)]);
 
@@ -2550,7 +2550,7 @@ window.ESGOneToOne = function (ctx) {
         : v === 'expect' ? expectationsView() : v === 'actions' ? actionsView() : v === 'profile' ? profileView(state.profileTech, 'tl')
         : v === 'wellbeing' ? wellbeingView() : v === 'wb' ? wbView() : managerView());
     } catch (e) {
-      main.appendChild(card('Something went wrong', null, [h('p', { text: 'This page could not be shown: ' + (e && e.message ? e.message : e) }), h('p', { class: 'small muted', text: ('Use ↻ Refresh data. If it keeps happening, tell your ' + L.mgr + ' (version ') + VERSION + ').' })]));
+      main.appendChild(card('Something went wrong', null, [h('p', { text: 'This page could not be shown: ' + (e && e.message ? e.message : e) }), h('p', { class: 'small muted', text: ('Use ↻ Refresh. If it keeps happening, tell your ' + lc(L.mgr) + ' (version ') + VERSION + ').' })]));
       if (window.console) { window.console.error('ESG 1-to-1 render error', e); }
     }
     root.appendChild(h('div', { class: 'shell' }, [topbar, h('div', { class: 'content' }, [titlebar, main])]));
@@ -2564,6 +2564,10 @@ window.ESGOneToOne = function (ctx) {
     if (!root) { return; }
     root.textContent = '';
     root.appendChild(h('div', { class: 'card', style: 'margin:24px;max-width:720px' }, [h('h2', { style: 'font-size:17px;margin-bottom:8px', text: title }), h('p', { text: text })]));
+  }
+  function loadFailed(error) {
+    message('The 1-to-1 could not load', String(error && error.message ? error.message : error) + ' — try refreshing the page. If it keeps happening, tell your ' + lc(L.mgr) + '.');
+    if (window.console) { window.console.error('ESG 1-to-1 load error', error); }
   }
   function findRoot() { return document.querySelector('[data-oto-root]'); }
   function queryParam(name) {
@@ -2612,10 +2616,7 @@ window.ESGOneToOne = function (ctx) {
         root = findRoot();
         if (!root && tries++ < 50) { setTimeout(wait, 100); return; }
         if (!root) { return; }
-        init().catch(function (error) {
-          message('The 1-to-1 could not load', String(error && error.message ? error.message : error) + (' — try refreshing the page. If it keeps happening, tell your ' + L.mgr + '.'));
-          if (window.console) { window.console.error('ESG 1-to-1 load error', error); }
-        });
+        init().catch(loadFailed);
       })();
     },
     onError: function (error) {

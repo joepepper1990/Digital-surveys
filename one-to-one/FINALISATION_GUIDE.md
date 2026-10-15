@@ -2,7 +2,7 @@
 
 **From the end of Stage 0B to a live system, then running it month to month.** This document is self-contained: you don't need any other file to follow it. Tick each box as you go.
 
-Version: system v4.1.0 (frontend) · solution 1.0.0.0 · guide dated 15-Oct-2026
+Version: system v4.1.0 (frontend) · solution 1.1.0.0 · guide dated 15-Oct-2026
 
 ---
 
@@ -15,13 +15,13 @@ Version: system v4.1.0 (frontend) · solution 1.0.0.0 · guide dated 15-Oct-2026
   - the `1-to-1 Technicians` group exists;
   - the `1-to-1 Edit` and `1-to-1 Read` permission levels exist.
 - **Everything to install is built and verified offline:**
-  - frontend: 89 automated checks;
+  - frontend: 148 automated checks;
   - flows: simulated end to end, 110 checks;
   - an independent review fixed 17 defects.
 
 **Not yet proven:** nothing has run in your tenant yet.
 
-> **The system is fully implemented when Phase F (go-live) is done and every privacy test (P1–P20) in Phase C has passed.**
+> **The system is fully implemented when Phase F (go-live) is done and every privacy test (P1–P24) in Phase C has passed.**
 
 | Phase | What | Who's involved | Time |
 |---|---|---|---|
@@ -42,7 +42,7 @@ Version: system v4.1.0 (frontend) · solution 1.0.0.0 · guide dated 15-Oct-2026
 
 | File | Goes to |
 |---|---|
-| `ESGOneToOne_1_0_0_0_unmanaged.zip` | Power Automate → **Solutions → Import solution**. Contains the four flows; the setup flow creates the lists. |
+| `ESGOneToOne_1_1_0_0_unmanaged.zip` | Power Automate → **Solutions → Import solution**. Contains the six flows; the setup flow creates the lists. |
 | `one-to-one.html` | SharePoint → *Welcome Web Part - Custom Layouts* library |
 | `one-to-one.js` | Same library, alongside the `.html` |
 
@@ -56,7 +56,7 @@ Version: system v4.1.0 (frontend) · solution 1.0.0.0 · guide dated 15-Oct-2026
 ## 3. Phase 0 — Get and check the files (5 min)
 
 - [ ] **Right zip.** Open the zip, then open `solution.xml` in Notepad. It must contain `<RootComponent type="380" schemaName="esg_SiteUrl"`. If it doesn't, you have an older download: get the latest one.
-- [ ] **Right frontend.** You have `one-to-one.html` and `one-to-one.js` (v4.1.0). After installing, the top menu bar must show **v4.1.0** (right-hand end).
+- [ ] **Right frontend.** You have `one-to-one.html` and `one-to-one.js` (v4.2.0). After installing, the top menu bar must show **v4.2.0** (right-hand end).
 - [ ] **Unchanged files.** Transfer them the usual approved way. Don't open and re-save them in Word.
 
 ---
@@ -78,7 +78,7 @@ Version: system v4.1.0 (frontend) · solution 1.0.0.0 · guide dated 15-Oct-2026
 2. [ ] Top right: pick the environment IT named for the flows.
 3. [ ] Left menu: **Solutions**.
    - If it asks to create a **Dataverse database**, or *Solutions* is missing, use §4.8 instead.
-4. [ ] **Import solution → Browse →** `ESGOneToOne_1_0_0_0_unmanaged.zip` → **Next → Next**.
+4. [ ] **Import solution → Browse →** `ESGOneToOne_1_1_0_0_unmanaged.zip` → **Next → Next**.
 5. [ ] **Connections.** For each of the three, pick yours or click **+ New connection**, signed in as you:
 
    | Connection reference | Connector |
@@ -145,7 +145,7 @@ Version: system v4.1.0 (frontend) · solution 1.0.0.0 · guide dated 15-Oct-2026
 - [ ] **Version check.** If you replaced `one-to-one.html` / `one-to-one.js` after first choosing the layout: web part settings (pencil) → **Reset layout cache** → **Republish**.
 - [ ] Open the site. You should see:
   - a dark **top menu bar**: Team overview, Monthly reviews, Expectations and Actions on the left; **Team (0) ▾** and **⚙ Settings** on the right;
-  - the month, deadline, ↻ Refresh and **v4.1.0** at the far right;
+  - the month, deadline, ↻ Refresh and **v4.2.0** at the far right;
   - **Team overview** showing six tiles at 0, then *"No technicians yet"* with four numbered getting-started steps.
 - [ ] Click through **Monthly reviews**, **Expectations**, **Actions** and **⚙ Settings**. Expect no errors (empty pages are normal for now).
 - [ ] **Expectations:** add one *Shared* expectation. This proves item creation and the Yes/No column work in your tenant.
@@ -157,20 +157,24 @@ Version: system v4.1.0 (frontend) · solution 1.0.0.0 · guide dated 15-Oct-2026
 
 > You can't see the *technician* side with your own account: the page always recognises you as Team Leader. Phase B uses Test A for that.
 
-### 4.7 Turn on flows 1, 2 and 3
+### 4.7 Turn on flows 1 to 5
 
 - [ ] **Solutions → ESG 1-to-1** → select each flow → **Turn on**:
   - **1 Daily scheduler**
   - **2 Review submitted**
   - **3 Manager decision**
+  - **4 Team members** – gives people you add in ⚙ Settings → Team access to the page
+  - **5 Wellbeing** – wellbeing assessments
+
+> **Already imported 1.0?** Upgrade first: import `ESGOneToOne_1_1_0_0_unmanaged.zip` over it, re-run **0 Setup**, turn on flows 4 and 5, upload the v4.2.0 files and **Reset layout cache** (IMPORT_GUIDE §0).
 
 ### 4.8 Fallback: no Dataverse (legacy packages)
 
 Only if §4.2 step 3 showed that solutions can't be imported:
 
 1. Open `legacy-package-builder.html` in Edge or Chrome (double-click the file). It works offline.
-2. Enter the **site URL** and **your email**, then click **Create the four packages**. Four zips download: `ESG-1to1-0-legacy.zip` to `ESG-1to1-3-legacy.zip`.
-3. For each zip, in order 0, 1, 2, 3:
+2. Enter the **site URL** and **your email**, then click **Create the six packages**. Six zips download: `ESG-1to1-0-legacy.zip` to `ESG-1to1-5-legacy.zip`.
+3. For each zip, in order 0 to 5:
    1. Power Automate → **My flows → Import → Import Package (Legacy)** → **Upload**.
    2. Under **Related resources**, click each connection (spanner icon), pick your own connection, and click **Save**.
    3. Under *Import setup*, keep **Create as new**.
@@ -180,26 +184,22 @@ Only if §4.2 step 3 showed that solutions can't be imported:
 **Differences in legacy mode:**
 
 - The site URL and email are written into the flows. To change them later, re-run the builder and re-import (*Update*), or edit the flows.
-- Legacy flows may import **On**. Make sure flows 1–3 are **off** until setup has run, or let them fail harmlessly. Each failure emails you *"action needed"*, naming the step `STOP_run_the_setup_flow_first`.
+- Legacy flows may import **On**. Make sure flows 1–5 are **off** until setup has run, or let them fail harmlessly. Each failure emails you *"action needed"*, naming the step `STOP_run_the_setup_flow_first`.
 
 ---
 
 ## 5. Phase B — Walk through it as a technician (test accounts only, 1–2 h)
 
-- [ ] **Technicians list → + New** for **Test A**, then again for **Test B**:
-  - Title = name;
-  - Technician = their account;
-  - **Active = Yes**;
-  - leave TechnicianAadId blank.
-- [ ] **Site permissions → `1-to-1 Technicians` → New → Add users:** Test A and Test B. **Untick "Send an email invitation".**
+- [ ] **⚙ Settings → Team → + Add a person:** search for **Test A** → **Add**, then the same for **Test B**. No SharePoint lists or groups to edit by hand.
+  - Within about 5 minutes Flow 4 adds each to the `1-to-1 Technicians` group and emails you *"1-to-1: access given to …"* (test F32).
 - [ ] **Reload the page.** The top bar shows **Team (2) ▾**, and opening it lists Test A and Test B.
-- [ ] **⚙ Settings:** give each an appraisal date. Use a summer date, e.g. `15-Jul-2027`. Save, reopen, and check it **still shows the same day** (tests F27 and R16).
+- [ ] **⚙ Settings → Team:** give each an appraisal date – type it (e.g. `15/07/2027`) or pick it with 📅. Use a summer date. Save, reopen, and check it **still shows the same day** (tests F27, F31 and R16).
 - [ ] **Expectations:** add one **Individual** expectation for Test A. This proves the Person column works; *Expectations per technician* shows Test A with one more than Test B.
 - [ ] **Power Automate → Flow 1 → Run.** Test A and Test B each get *"Your 1-to-1 for … is ready"*.
   - **Run it again:** no new items, no second email.
 - [ ] **As you:** Team overview lists Test A and Test B.
 - [ ] **As Test A** (InPrivate window):
-  - Open the email link. Their form opens. The top menu bar has only *This month · My appraisal · Appraisal report*, with no Team menu or Settings.
+  - Open the email link. Their form opens. The top menu bar has only *This month · My appraisal · Wellbeing · Appraisal report*, with no Team menu or Settings.
   - Fill in a few answers → **Save** → reload. The answers are kept.
   - Complete everything → **Submit**. Within about 5 minutes the review becomes read-only.
 - [ ] **As you:** *"1-to-1 submitted"* arrives. Monthly reviews shows a badge, and **Team ▾** shows a red dot next to Test A.
@@ -208,9 +208,14 @@ Only if §4.2 step 3 showed that solutions can't be imported:
   - Click **Complete & release**.
 - [ ] **As you:** Team ▾ → Test A → **Generate appraisal report** → **Print / Save as PDF**. A print window opens. If not, allow pop-ups for the SharePoint site.
 - [ ] **As Test A:** *"Feedback … is ready"* arrives. Feedback, ratings and actions are visible; **My appraisal** and **Appraisal report** work.
+- [ ] **Wellbeing (tests F37–F39):**
+  - **As you:** **Wellbeing → + Start** for Test A, with a meeting date.
+  - **As Test A:** *"Your wellbeing assessment is ready to complete"* arrives → open it → work through the steps → **Submit**.
+  - **As you:** *"Wellbeing assessment submitted"* arrives → open it → add an arrangement, notes and the next review date (a year on by default) → **Complete**.
+  - **As Test A:** *"Your wellbeing assessment record is ready"* arrives; the agreed record shows; **Print / Save as PDF** works.
 - [ ] **As Test B:**
-  - nothing of Test A's is visible anywhere;
-  - opening Test A's link (`?reviewId=` with A's number) shows **"Review not found"**.
+  - nothing of Test A's is visible anywhere, including Wellbeing;
+  - opening Test A's link (`?reviewId=` with A's number) shows **"Review not found"**, and `?wbId=` with A's assessment number shows **"Assessment not found"**.
 
 ---
 
@@ -253,7 +258,7 @@ Only if §4.2 step 3 showed that solutions can't be imported:
 | `Accept` | `application/json;odata=nometadata` |
 | `Content-Type` | `application/json;odata=nometadata` |
 
-### 6.1 Functional tests (F1–F30)
+### 6.1 Functional tests (F1–F40)
 
 | # | Test | Expected | Result | Date | Initials |
 |---|---|---|---|---|---|
@@ -287,8 +292,18 @@ Only if §4.2 step 3 showed that solutions can't be imported:
 | F28 (v4) | ⚙ Settings: change the *Met* threshold, then save | The 1-to-1 Settings `Bands` item updates. **A's** outlook uses the new thresholds. |  |  |  |
 | F29 (v4) | Expectations page: add an Individual expectation for A, edit a Shared one, retire one | List items are created or changed (retired = Active No, not deleted). The next month's snapshot reflects them, and past months don't change. |  |  |  |
 | F30 (v4) | Appraisal report as the TL (for A) and as A, then **Print / Save as PDF** | 8 sections. **No Q4 wellbeing text.** A's report shows TL content only from released months. The print window opens (allow pop-ups if asked). |  |  |  |
+| F31 (v4.2) | ⚙ Settings → Team: type A's appraisal date as `5/11/2027`, save, reload; then pick a date with 📅 | Shows **05-Nov-2027** (5 November) after reload, and the picked date is kept. No "unsaved changes" prompt when you then change tab. |  |  |  |
+| F32 (v4.2) | ⚙ Settings → Team → + Add a person: add a third test account, then Deactivate it | Technicians item created / Active = No. Within about 5 minutes Flow 4 adds / removes them in `1-to-1 Technicians` and emails you (E8). |  |  |  |
+| F33 (v4.2) | ⚙ Settings → Names: Manager role = *Line Manager*, member role = *Engineer(s)*; check as TL and as A | Both pages use the new words; nothing else changes. Reset afterwards. |  |  |  |
+| F34 (v4.2) | ⚙ Settings → Reminders: set a day = today; run Flow 1 | Only people who haven't submitted get E2. Set it back to 20 and 27. |  |  |  |
+| F35 (v4.2) | Expectations: drag the 4th shared expectation to the top; add an individual one | List order changes; next month's snapshot follows it; the new individual one appears after the shared ones. |  |  |  |
+| F36 (v4.2) | Team overview: switch the third chart through every option; reload | Each draws; the choice is remembered. *Needs your attention* lists waiting reviews, overdue actions, wellbeing items. |  |  |  |
+| F37 (v4.2) | Wellbeing: TL starts one for A | A gets E9 within about 5 minutes; the item's *Manage access* shows Owners + A (1-to-1 Edit) only. |  |  |  |
+| F38 (v4.2) | A completes every step and submits | Flow 5 locks it (A: 1-to-1 Read), stamps SubmittedOn, TL gets E10. A sees it read-only. |  |  |  |
+| F39 (v4.2) | TL adds an arrangement, notes, next review date (defaults to a year on), then Complete | A gets E11 and sees the agreed record; Print shows the form with signature lines. |  |  |  |
+| F40 (v4.2) | Set the next review date to 7 days ahead; run Flow 1 | TL gets E12 with a link; nothing goes to A. |  |  |  |
 
-### 6.2 Privacy and bypass tests (P1–P20) — all mandatory
+### 6.2 Privacy and bypass tests (P1–P24) — all mandatory
 
 | # | Attempt by Test A | Request | Expected | Result | Date | Initials |
 |---|---|---|---|---|---|---|
@@ -311,6 +326,10 @@ Only if §4.2 step 3 showed that solutions can't be imported:
 | P18 (v4) | **Settings list is read-only** | POST `_api/web/lists/getbytitle('1-to-1%20Settings')/items(1)/validateUpdateListItem`, body `{"formValues":[{"FieldName":"Value","FieldValue":"[]"}],"bNewDocumentUpdate":false}`. Also try `AddValidateUpdateItemUsingPath` on the same list. | Both denied. GET on the list succeeds (Read). |  |  |  |
 | P19 (v4) | **TL ratings and actions** | Before release: GET `…getbytitle('Manager%20Reviews')/items?$select=ExpectationFeedbackJson,ActionsJson`. After release: POST `…items({MA})/validateUpdateListItem` setting `ActionsJson` to `[]`. | Before release: empty. After release: the write is denied and the data is unchanged. |  |  |  |
 | P20 (v4) | **Appraisal date tampering** | On A's **draft**, write `AppraisalDate` = `01/01/2030` through `validateUpdateListItem` | Allowed (it's A's own display copy), but **only A's own view** changes. The TL's outlook and ⚙ Settings still show the Technicians list date. |  |  |  |
+| P21 (v4.2) | **Read someone else's wellbeing** | B: GET `…getbytitle('Wellbeing%20Assessments')/items`, and `items({A's wellbeing id})`; open `?wbId={A's id}` | Only B's own items; A's item 404 / "not found". |  |  |  |
+| P22 (v4.2) | **Forge the manager's part** | A, on their own *open* assessment: one `validateUpdateListItem` setting AssessmentStatus = Completed, ArrangementsJson, ManagerNotes, NextReviewDate, CompletedOn and Technician = B | Within about 5 minutes Flow 5 treats it as a submission: A is set to Read, status Submitted, the TL fields and CompletedOn are **cleared**, Technician is restored to A, B gains nothing. |  |  |  |
+| P23 (v4.2) | **Change after submitting** | A: write to their submitted assessment | Denied (403). |  |  |  |
+| P24 (v4.2) | **Join the group / see the roster** | A: GET `…getbytitle('Technicians')/items`; POST `_api/web/sitegroups(<id>)/users` | Both denied. (Only Flow 4, as the TL, changes the group.) |  |  |  |
 | P17 | **No data leaves the tenant** | As the TL, open each view with F12 → **Network** recording (ask IT if developer tools are blocked) | Every request carrying list data goes to `<tenant>.sharepoint.com`. Record any other host contacted (for example the web part's own code CDN) for IT-11. None of them may receive review content. |  |  |  |
 
 ### 6.3 Questions for IT (record the answers)
@@ -324,19 +343,15 @@ Only if §4.2 step 3 showed that solutions can't be imported:
 
 ## 7. Phase D — Clean down (30 min)
 
-- [ ] Delete every **test item** in Monthly Reviews and Manager Reviews, and the test expectations.
+- [ ] Delete every **test item** in Monthly Reviews, Manager Reviews and Wellbeing Assessments, and the test expectations.
 - [ ] Empty the **site recycle bin**, then the **second-stage recycle bin**.
-- [ ] Remove Test A and Test B from the **Technicians** list **and** from the **`1-to-1 Technicians`** group. Team ▾ goes back to Team (0).
+- [ ] **⚙ Settings → Team → Deactivate** Test A and Test B (Flow 4 removes them from the group), then delete their two items from the **Technicians** list. Team ▾ goes back to Team (0).
 - [ ] Flow 1: **Initialize varTestDate** is **empty** (Save).
 
 ## 8. Phase E — Prepare and invite the real team (1–2 h)
 
-- [ ] **Technicians list:** add each technician:
-  - Title;
-  - Technician (their account);
-  - Active = Yes.
-- [ ] **`1-to-1 Technicians` group:** add the same people, with **"Send an email invitation" unticked**.
-- [ ] **⚙ Settings:** enter each **appraisal date** (DD-MMM-YYYY) → Save.
+- [ ] **⚙ Settings → Team → + Add a person** for each technician (Flow 4 gives them access; no invitation email is sent by SharePoint).
+- [ ] **⚙ Settings → Team:** enter each **appraisal date** → Save. Optionally **⚙ Settings → Reminders / Names** to change the reminder days or the on-screen role words.
 - [ ] **Expectations page:** enter the real **Shared** expectations and each person's **Individual** ones for **2026/27**. Do this after the Technicians list, so people appear in the Technician dropdown.
   - **Maximum 10 per person**; the page shows the count.
   - Expectations entered early for next year are ignored until that appraisal year starts (1 April).
@@ -400,14 +415,16 @@ Thanks,
 |---|---|
 | **Monthly, from the 1st** | Flow 1 creates the reviews at 07:00. Check **Team overview** shows everyone. Review submissions as E3 emails arrive: open the review, write feedback, rate expectations, add actions (close-out criteria and deadline), then **Complete & release**. After the deadline, use **Close – not submitted** for any review that wasn't submitted. |
 | **Monthly, any time** | **Actions** page: close actions that are done, and agree new deadlines for overdue ones. |
-| **When an appraisal date is set or changes** | ⚙ **Settings** → enter the date (DD-MMM-YYYY) → **Save settings**. This updates the Technicians list and the technician's current review. |
+| **When an appraisal date is set or changes** | ⚙ **Settings → Team** → type the date (e.g. 15/07/2027) or pick it with 📅 → **Save settings**. This updates the Technicians list and the person's current review; each date is read back to prove it saved as the same day. |
+| **Reminder days or names** | ⚙ **Settings → Reminders** (up to three days, 1–28) or **→ Names** (app name and role words). Labels only – permissions never change. |
+| **Wellbeing – at least yearly** | **Wellbeing → + Start** for the person (or from *Needs your attention*). They complete their part (E9); when they submit (E10) hold a private, hour-long conversation, record agreed arrangements, notes and the next review date (12 months on by default – bring it forward if needed), then **Complete** (E11). Flow 1 emails you 7 days before and on the review date (E12). You can start a new assessment at any time, e.g. after a return from absence. |
 | **Quarterly (5 min)** | 1. **Site permissions:** Owners = only you; Members and Visitors empty. 2. `1-to-1 Technicians` contains only current technicians and has Read only on: the page, the layouts library, the Welcome Errors list and `1-to-1 Settings`. 3. In the layouts library, version history of `one-to-one.html` / `.js` shows only your uploads. 4. Spot-check one Monthly Review's *Manage access*: only Owners plus that technician. |
-| **New starter** | Add them to **Technicians** (Person, Active = Yes) and to the `1-to-1 Technicians` group. Set their appraisal date in ⚙ Settings. Their review appears the next morning. |
-| **Leaver / long absence** | Technicians → **Active = No**. Remove a leaver from `1-to-1 Technicians`. Keep their records for the retention period. |
+| **New starter** | ⚙ **Settings → Team → + Add a person** → search → **Add**. Flow 4 gives them access to the page within about 5 minutes (E8). Set their appraisal date and add any individual expectations. Their review appears the next morning (or run Flow 1). |
+| **Leaver / long absence** | ⚙ **Settings → Team → Deactivate**. Flow 4 removes them from `1-to-1 Technicians` (E8) and no new reviews are created. Keep their records for the retention period. |
 | **Correction after submission** | At the technician's request, edit the item in SharePoint (or in the app, for TL feedback). Add a dated reason to **CorrectionLog** on the Manager Review. Version history records the change. |
 | **Annual expectation rollover** | Before the new appraisal year starts, add the new year's expectations on the **Expectations** page (or grid view). On the last day of the old year, **Retire** the old ones (Active = No). **Never delete them.** New reviews pick up the new set, and old reviews keep their snapshot. |
-| **Annual retention (April)** | Delete reviews whose month is **more than 24 months** ago, from **both** Monthly Reviews and Manager Reviews (filter by MonthKey). Record the deletion in a dated note, then empty the site recycle bin **and** the second-stage recycle bin. Skip this step if a Purview retention label does it automatically. |
-| **Subject access request** | Export Monthly Reviews and Manager Reviews filtered by the technician (**Export → CSV**). The technician can also use **Appraisal report → Print / Save as PDF** for their own view. |
+| **Annual retention (April)** | Delete reviews whose month is **more than 24 months** ago, from **both** Monthly Reviews and Manager Reviews (filter by MonthKey), and **Wellbeing Assessments completed more than 24 months ago** (keep the latest one for each current person). Record the deletion in a dated note, then empty the site recycle bin **and** the second-stage recycle bin. Skip this step if a Purview retention label does it automatically. |
+| **Subject access request** | Export Monthly Reviews, Manager Reviews and Wellbeing Assessments filtered by the person (**Export → CSV**). The technician can also use **Appraisal report → Print / Save as PDF** for their own view. |
 | **TL handover** | 1. Make the new TL a site owner **and Site Collection Admin**, and remove the old TL. 2. Give the new TL the solution's flows: add them as **co-owner**, then switch the three connection references to the new TL's connections (**Solutions → ESG 1-to-1 → Connection references**). 3. Update the **ESG 1-to-1 Team Leader email** environment variable. 4. No frontend change is needed. |
 
 ---
@@ -423,7 +440,9 @@ Thanks,
 | Setup email lists *Regional settings* | Site settings → Regional settings → Locale **English (United Kingdom)**, time zone **(UTC) Dublin, Edinburgh, Lisbon, London**. Re-run setup. |
 | Setup email: *permission level … differs* | Compare with plan G Part 2. Either fix it by hand to match, or delete it and re-run setup (only if no items use it yet). |
 | Setup failed (red) | Open the run, find the first red step and read its output. Common causes: you're not a site owner, or the Site URL is wrong. Fix it and re-run. |
-| Flow 1–3 email *"action needed"* naming `STOP_run_the_setup_flow_first` | Setup hasn't run, or the permission levels / lists were renamed. Run setup. |
+| Flow 1–5 email *"action needed"* naming `STOP_run_the_setup_flow_first` (or `…setup_flow_again`) | Setup hasn't run (or hasn't been re-run after upgrading to 1.1), or the permission levels / lists were renamed. Run setup. |
+| Someone added in ⚙ Settings → Team can't open the page | Flow 4 must be **on**; it runs within about 5 minutes. Check its run history. |
+| A wellbeing assessment didn't reach the person | Flow 5 must be **on**. Check its run history; the person needs a mailbox. |
 | Flow 2 / 3 never trigger | They must be **on**. The SharePoint triggers check every 5 minutes. The Site URL must have no trailing slash. |
 | Need to change the TL email or site later | **Solutions → Default solution → Environment variables** → edit **Current value** |
 
@@ -431,6 +450,9 @@ Thanks,
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
+| A saved date "goes back" or shows a different day | SharePoint read the date in another format (site or personal regional settings) | v4.2 verifies every date write and shows an error naming the fix. Set the site Locale to English (United Kingdom) and your own Microsoft 365 region to English (UK). |
+| Someone added in ⚙ Settings → Team can't open the page | Flow 4 off or failed | Turn on **4 Team members**; check its run history |
+| Wellbeing tab says "not set up yet" | Solution 1.1 not imported or setup not re-run | IMPORT_GUIDE §0 |
 | Page still shows the old look, or the wrong version in the top menu bar | Welcome is serving its cached copy of the layout | Edit the page → web part settings → **Reset layout cache** → Republish, then Ctrl+F5 |
 | Technician sees a blank page or an "access request" | Group missing Read on the page, the layouts library or the Welcome Errors list | Grant `1-to-1 Technicians` Read (plan D.6) |
 | Technician's outlook uses default bands after you changed them | Group missing Read on `1-to-1 Settings` | Grant Read on that list |
@@ -464,16 +486,16 @@ Renaming any of these silently breaks the app or the flows.
 
 | Kind | Names |
 |---|---|
-| Lists (display names) | `Technicians`, `Appraisal Expectations`, `Monthly Reviews`, `Manager Reviews`, `1-to-1 Settings` |
+| Lists (display names) | `Technicians`, `Appraisal Expectations`, `Monthly Reviews`, `Manager Reviews`, `Wellbeing Assessments`, `1-to-1 Settings` |
 | Columns | Every column name the setup flow created (List settings shows them) |
-| Choice values | ReviewStatus, ReviewState, ActionsStatus, AppliesTo, Q4–Q6 Yes/No, and the three Q9 / FollowUpDecision sentences (the first has an em dash —) |
-| Settings item | Title `Bands` in `1-to-1 Settings` |
+| Choice values | ReviewStatus, ReviewState, ActionsStatus, AppliesTo, AssessmentStatus, Q4–Q6 Yes/No, and the three Q9 / FollowUpDecision sentences (the first has an em dash —) |
+| Settings items | Titles `Bands`, `Reminders` and `Labels` in `1-to-1 Settings` |
 | Permission levels | `1-to-1 Edit`, `1-to-1 Read` |
 | Group | `1-to-1 Technicians` |
 | Page | `SitePages/OneToOne.aspx` (links in old emails point at it) |
 | Layout | `ESG 1-to-1` (the `data-name` in `one-to-one.html`) |
-| List URLs | `Lists/Technicians`, `Lists/AppraisalExpectations`, `Lists/MonthlyReviews`, `Lists/ManagerReviews`, `Lists/OneToOneSettings` (the flows find two of them by URL) |
-| Solution | `ESGOneToOne`, flow names `ESG 1-to-1 \| 0…3`, environment variables `esg_SiteUrl` and `esg_ManagerEmail` |
+| List URLs | `Lists/Technicians`, `Lists/AppraisalExpectations`, `Lists/MonthlyReviews`, `Lists/ManagerReviews`, `Lists/WellbeingAssessments`, `Lists/OneToOneSettings` (the flows find three of them by URL) |
+| Solution | `ESGOneToOne`, flow names `ESG 1-to-1 \| 0…5`, environment variables `esg_SiteUrl` and `esg_ManagerEmail` |
 
 If a list title ever has to change, edit `CONFIG.lists` at the top of `one-to-one.js` and the list chosen in each flow action.
 
@@ -505,4 +527,7 @@ If a list title ever has to change, edit `CONFIG.lists` at the top of `one-to-on
 | R13 (v4.1) | Technicians can see who else is in `1-to-1 Technicians` | SharePoint has no owner-only visibility; membership reveals names only, no review data |
 | R14 (v4.1) | A submission made in the same 5-minute polling window as the TL's *Close – not submitted* ends up Closed | Closing is only possible after the deadline. The answers are kept and the TL can correct it (as R5). The TL view shows *Submitted – processing* while Flow 2 hasn't run yet. |
 | R15 (v4.1) | Saving ⚙ Settings writes the appraisal date onto a submitted current review, which re-runs Flow 2 | Flow 2 only re-applies Read, so nothing changes (harmless extra run) |
+| R17 (v4.2) | Before Flow 5's first lock (≤ 5 min after submitting), the TL screen could show a person's own "Submitted" stamp | Complete is only offered for a submitted assessment; if anything was forged, Flow 5 re-locks it and wipes the TL fields (P22), and the TL simply re-enters them. |
+| R18 (v4.2) | Wellbeing data is health-related (special category) | Separate list, item-level permissions per person, never in reports/charts, secure run history, 24-month retention (CONFIG_REFERENCE §4). Confirm with HR/IT that this matches the paper form's handling. |
+| R19 (v4.2) | Adding someone in Settings depends on Flow 4 running | Settings says access follows within about 5 minutes; E8 confirms each change; troubleshooting row in CONFIG_REFERENCE §6. |
 | R16 (v4.1) | `validateUpdateListItem` might read dd/MM/yyyy using the TL's *personal* regional settings rather than the site's | Tenant test F27 checks the round trip. If it fails, set your personal region to English (UK). |
