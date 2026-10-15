@@ -211,16 +211,18 @@ Version: system v4.1.0 (frontend) · solution 1.0.0.0 · guide dated 15-Oct-2026
 
 ### 4.6 Your first look
 
+- [ ] **Version check.** If you replaced `one-to-one.html` / `one-to-one.js` after first choosing the layout: web part settings (pencil) → **Reset layout cache** → **Republish**.
 - [ ] Open the site. You should see:
-  - a dark **top menu bar** with Team overview, Monthly reviews, Expectations, Actions, **Team (0) ▾** and ⚙ Settings;
-  - **Team overview** showing *"No technicians yet"*;
-  - **v4.1.0** at the right-hand end of the top menu bar.
+  - a dark **top menu bar**: Team overview, Monthly reviews, Expectations and Actions on the left; **Team (0) ▾** and **⚙ Settings** on the right;
+  - the month, deadline, ↻ Refresh and **v4.1.0** at the far right;
+  - **Team overview** showing six tiles at 0, then *"No technicians yet"* with four numbered getting-started steps.
 - [ ] Click through **Monthly reviews**, **Expectations**, **Actions** and **⚙ Settings**. Expect no errors (empty pages are normal for now).
-- [ ] **Expectations:**
-  - Add one *Shared* expectation and one *Individual* expectation for yourself. This proves item creation, Yes/No and Person columns work in your tenant.
-  - Then **Retire** the Individual one.
-- [ ] The menu bar and content fill the page width.
-- [ ] **Print / Save as PDF** on a report opens a print window. If not, allow pop-ups for the SharePoint site.
+- [ ] **Expectations:** add one *Shared* expectation. This proves item creation and the Yes/No column work in your tenant.
+  - Leave it Active if it's a real one; otherwise **Retire** it.
+  - The *Individual* expectation (Person column) is tested in Phase B: the Technician dropdown is empty until someone is in the Technicians list.
+- [ ] **Width and size:** the menu bar and content fill the page width, and the page ends where its content ends.
+  - On a large monitor the layout scales itself up.
+  - Ctrl + / Ctrl − still adjusts it per person.
 
 > You can't see the *technician* side with your own account: the page always recognises you as Team Leader. Phase B uses Test A for that.
 
@@ -247,18 +249,21 @@ Only if §4.2 step 3 showed that solutions can't be imported:
   - **Active = Yes**;
   - leave TechnicianAadId blank.
 - [ ] **Site permissions → `1-to-1 Technicians` → New → Add users:** Test A and Test B. **Untick "Send an email invitation".**
+- [ ] **Reload the page.** The top bar shows **Team (2) ▾**, and opening it lists Test A and Test B.
 - [ ] **⚙ Settings:** give each an appraisal date. Use a summer date, e.g. `15-Jul-2027`. Save, reopen, and check it **still shows the same day** (tests F27 and R16).
+- [ ] **Expectations:** add one **Individual** expectation for Test A. This proves the Person column works; *Expectations per technician* shows Test A with one more than Test B.
 - [ ] **Power Automate → Flow 1 → Run.** Test A and Test B each get *"Your 1-to-1 for … is ready"*.
   - **Run it again:** no new items, no second email.
 - [ ] **As you:** Team overview lists Test A and Test B.
 - [ ] **As Test A** (InPrivate window):
-  - Open the email link. Their form opens, with only *This month · My appraisal · Appraisal report* in the top menu bar.
+  - Open the email link. Their form opens. The top menu bar has only *This month · My appraisal · Appraisal report*, with no Team menu or Settings.
   - Fill in a few answers → **Save** → reload. The answers are kept.
   - Complete everything → **Submit**. Within about 5 minutes the review becomes read-only.
-- [ ] **As you:** *"1-to-1 submitted"* arrives.
+- [ ] **As you:** *"1-to-1 submitted"* arrives. Monthly reviews shows a badge, and **Team ▾** shows a red dot next to Test A.
   - Open the review. Add feedback per question and a 1–5 rating per expectation.
   - Add **two actions**, each with owner, close-out criteria and deadline.
   - Click **Complete & release**.
+- [ ] **As you:** Team ▾ → Test A → **Generate appraisal report** → **Print / Save as PDF**. A print window opens. If not, allow pop-ups for the SharePoint site.
 - [ ] **As Test A:** *"Feedback … is ready"* arrives. Feedback, ratings and actions are visible; **My appraisal** and **Appraisal report** work.
 - [ ] **As Test B:**
   - nothing of Test A's is visible anywhere;
@@ -302,20 +307,20 @@ Only if §4.2 step 3 showed that solutions can't be imported:
 
 - [ ] Delete every **test item** in Monthly Reviews and Manager Reviews, and the test expectations.
 - [ ] Empty the **site recycle bin**, then the **second-stage recycle bin**.
-- [ ] Remove Test A and Test B from the **Technicians** list **and** from the **`1-to-1 Technicians`** group.
+- [ ] Remove Test A and Test B from the **Technicians** list **and** from the **`1-to-1 Technicians`** group. Team ▾ goes back to Team (0).
 - [ ] Flow 1: **Initialize varTestDate** is **empty** (Save).
 
 ## 8. Phase E — Prepare and invite the real team (1–2 h)
 
-- [ ] **Expectations page:** enter the real **Shared** expectations and each person's **Individual** ones for **2026/27**.
-  - **Maximum 10 per person**; the page shows the count.
-  - Expectations entered early for next year are ignored until that appraisal year starts (1 April).
 - [ ] **Technicians list:** add each technician:
   - Title;
   - Technician (their account);
   - Active = Yes.
 - [ ] **`1-to-1 Technicians` group:** add the same people, with **"Send an email invitation" unticked**.
 - [ ] **⚙ Settings:** enter each **appraisal date** (DD-MMM-YYYY) → Save.
+- [ ] **Expectations page:** enter the real **Shared** expectations and each person's **Individual** ones for **2026/27**. Do this after the Technicians list, so people appear in the Technician dropdown.
+  - **Maximum 10 per person**; the page shows the count.
+  - Expectations entered early for next year are ignored until that appraisal year starts (1 April).
 - [ ] **Invite.** Send the welcome email below from your own mailbox, or brief the team in person.
   - It only tells them what's coming.
   - Access comes solely through each person's own monthly link, which works only for them.

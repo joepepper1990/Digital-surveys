@@ -450,7 +450,7 @@ Fallbacks are no longer expected, but if they're ever needed:
 | File | Where it goes | Contents |
 |---|---|---|
 | `one-to-one.html` | *Welcome Web Part - Custom Layouts* library | Welcome metadata (`data-name="ESG 1-to-1"`), all CSS (scoped to the web part), an empty root element, and the script tag. No Handlebars expressions. |
-| `one-to-one.js` | Same library | All behaviour. About 1,750 lines of plain JavaScript, with **no libraries, no CDNs and no external calls**. |
+| `one-to-one.js` | Same library | All behaviour. About 1,800 lines of plain JavaScript, with **no libraries, no CDNs and no external calls**. |
 | `OneToOne.aspx` | Site Pages, **site home page**, **full-width section** | One Welcome web part using the *ESG 1-to-1* layout. Greeting, time, weather and search are off. |
 
 **One page for everyone**, with a **top menu bar** (v4.1.0; the team list is in its **Team ▾** menu). Opening a link with `?reviewId=` selects that review.
@@ -571,7 +571,7 @@ There is **no "how it's worked out" panel** for technicians.
 | **Manager review** (`?reviewId=`) | The technician's answers, read-only. TL feedback per question. Q8 shows the trusted `ExpectationSnapshotJson` wording, the technician's rating and comment, **TL feedback and TL rating (1–5)**. Follow-up override, meeting date, overall feedback. **Actions table** (add rows: action, owner, close-out criteria, deadline, status). | Manager Reviews: FB_Q1–FB_Q7, FB_Q9, FB_Overall, ExpectationFeedbackJson `[{id,feedback,rating}]`, FollowUpDecision, MeetingDate, ActionsJson, ActionsStatus, NextActionDue. Then, **as a separate write**, ReviewState = `Completed` or `Closed - Not Submitted`. |
 | **Expectations** | Grouped by Shared / per technician, with add, edit and retire (never delete). A "Show retired" toggle. | Appraisal Expectations: Title, Measures, AppraisalYear, AppliesTo, Technician (person), SortOrder, Active |
 | **Actions** | Every action across all reviews, grouped open/overdue/done, with close and reopen | Manager Reviews: ActionsJson, ActionsStatus, NextActionDue |
-| **Technician profile** (from the team list) | Outlook, trend chart, expectations, actions and history for one person; report button | — |
+| **Technician profile** (from the **Team ▾** menu or the outlook table) | Outlook, trend chart, expectations, actions and history for one person; report button | — |
 | **⚙ Settings** (modal, TL only) | Appraisal date per technician (DD-MMM-YYYY); the four band names and thresholds; how the outlook is worked out | Technicians.AppraisalDate, **plus** the technician's current Monthly Review AppraisalDate (display copy). 1-to-1 Settings `Bands` item (created if missing). |
 
 **Complete & release rules.**
@@ -1302,7 +1302,7 @@ These are in [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) §4:
 | F14 | A submitted, B in draft. `varTestDate` = this month's 20th. Run Flow 1. | Only B receives E2 |
 | F15 | `varTestDate` = next month's 1st. Run Flow 1. | B's old review shows **Overdue** in Monthly reviews and in the *Overdue* view. B can still open and submit it, and it's marked "(late)". |
 | F16 | After the deadline, the TL clicks **Close – not submitted** on another open review | It becomes read-only to the technician, who gets E5 |
-| F17 | A chooses "Arrange a dedicated 1-to-1" | E3's subject is prefixed **[1-to-1 REQUESTED]**. The Team overview tile counts it and the team list flags A. A TL override replaces it. |
+| F17 | A chooses "Arrange a dedicated 1-to-1" | E3's subject is prefixed **[1-to-1 REQUESTED]**. The Team overview tile counts it and the **Team ▾** menu flags A with a red dot. A TL override replaces it. |
 | F18 | Repeat F1, F2, F8 and F11 using **only** the Test A account (no TL shortcuts) | All pass |
 | F19 | `varTestDate` = `2028-02-01T07:00:00` (test month only) | Manager Review DueDate = `2028-02-29T23:59:59Z` |
 | F20 | `varTestDate` = `2027-03-01T07:00:00`, then `2026-10-01T07:00:00` | DueDate = `2027-03-31T22:59:59Z` (BST) and `2026-10-31T23:59:59Z` (GMT) |
@@ -1361,7 +1361,7 @@ These are hands-on hours for a first-time builder following section G. Calendar 
 
 That's **about 26–35 hours hands-on**. That's similar to v2: less clicking in Power Apps Studio, but more testing and the correction rounds.
 
-**Claude's preparation is complete (v4).** The frontend (about 1,750 lines), local mock and tests, list checklist, flow sheets, email templates and configuration reference are produced. Remaining Claude work is only fixes found during tenant testing. Generating files is not deployment: nothing is live until Part 12 is done and every test in H passes.
+**Claude's preparation is complete (v4).** The frontend (about 1,800 lines), local mock and tests, list checklist, flow sheets, email templates and configuration reference are produced. Remaining Claude work is only fixes found during tenant testing. Generating files is not deployment: nothing is live until Part 12 is done and every test in H passes.
 
 v4 reduces Part 7 to about 30 minutes, because there is no CONFIG to edit. Allow about 1 h more in Part 9 and Part 12 for tests F24–F30 and P18–P20.
 
@@ -1409,7 +1409,7 @@ v4 reduces Part 7 to about 30 minutes, because there is no CONFIG to edit. Allow
 | R6 | Anyone added to the Owners group sees everything | Quarterly 2-minute check |
 | R7 | Renaming lists or columns breaks the frontend and flows | A "do not rename" list goes in the configuration reference |
 | R8 | A Welcome update changes how custom layouts run scripts, and the frontend stops working | Data and permissions are unaffected, and the TL can still work in the lists directly. Check Welcome's release notes. The fallbacks in E.0 remain available. |
-| R9 | About 1,750 lines of custom code, owned by the TL | Plain JavaScript with no dependencies, commented, with a local mock and automated tests (K10). Changes go through Claude and the approved transfer route. |
+| R9 | About 1,800 lines of custom code, owned by the TL | Plain JavaScript with no dependencies, commented, with a local mock and automated tests (K10). Changes go through Claude and the approved transfer route. |
 | R10 | A coding mistake can't bypass SharePoint permissions, but an injection bug would act **as the viewer**, including the TL | Code rules S1–S7 (E.4), an automated attack-string test (K10), release-blocking P15 |
 | R11 (v4) | The expected appraisal outcome could be read as a decision | Labelled as a guide everywhere. The method is shown to the TL. The TL's judgement decides. Wellbeing is never included. |
 | R12 (v4) | A technician can see the band thresholds (Settings list Read) | Not personal data, and needed so their outlook matches the TL's |

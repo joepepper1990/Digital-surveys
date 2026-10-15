@@ -70,12 +70,13 @@ One tick-list from where you are now to a running system. For a single printable
 - [ ] Site Pages → `OneToOne` → **… → Make homepage**.
 
 **A5. Your first look**
+- [ ] If you replaced the two files after choosing the layout: web part settings → **Reset layout cache** → **Republish**.
 - [ ] Open the site. You see:
   - the dark top menu bar (Team overview, Monthly reviews, Expectations, Actions, Team ▾, ⚙ Settings);
   - **"No technicians yet"** on Team overview;
   - **v4.1.0** at the right-hand end of the top menu bar.
 - [ ] Click through **Monthly reviews**, **Expectations**, **Actions** and **⚙ Settings**.
-- [ ] **Expectations:** add one *Shared* expectation and one *Individual* one (for yourself is fine for now). This proves item creation, Yes/No and Person columns in your tenant. Retire the Individual one afterwards.
+- [ ] **Expectations:** add one *Shared* expectation. This proves item creation and Yes/No columns in your tenant. (The *Individual* one needs a technician in the list, so it moves to Phase B.)
 - [ ] Check the menu bar and content fill the width of the page.
 
 **A6. Turn the flows on**
@@ -89,7 +90,9 @@ One tick-list from where you are now to a running system. For a single printable
   - **Active** = Yes;
   - leave TechnicianAadId blank.
 - [ ] Add Test A and Test B to the **`1-to-1 Technicians`** group: Site permissions → the group → New → Add users. **Untick "Send an email invitation".**
+- [ ] Reload: the top bar shows **Team (2) ▾** listing Test A and Test B.
 - [ ] **⚙ Settings:** give each an appraisal date. Use a summer date such as `15-Jul-2027`. Save, reopen, and check it still shows the same day (test F27).
+- [ ] **Expectations:** add one *Individual* expectation for Test A (proves the Person column).
 - [ ] **Flow 1 → Run.** Test A and Test B each get **"Your 1-to-1 for … is ready"**. Run it again: no new items and no second email.
 - [ ] **As you:** Team overview now lists Test A and Test B.
 - [ ] **As Test A** (InPrivate window):
@@ -100,6 +103,7 @@ One tick-list from where you are now to a running system. For a single printable
   - Open the review.
   - Add feedback and ratings, plus **two actions**, each with close-out criteria and a deadline.
   - **Complete & release.**
+- [ ] **As you:** Team ▾ → Test A → **Generate appraisal report** → **Print / Save as PDF** opens a print window (allow pop-ups if asked).
 - [ ] **As Test A:** the *"Feedback … is ready"* email arrives. Feedback, ratings and actions show; **My appraisal** and **Appraisal report** work.
 - [ ] **As Test B:**
   - nothing of Test A's is visible;
