@@ -727,11 +727,124 @@
               ]
             },
             {
+              "key": "wellbeing",
+              "url": "WellbeingAssessments",
+              "title": "Wellbeing Assessments",
+              "groupRead": false,
+              "description": "ESG 1-to-1: wellbeing assessments. Each item is visible only to the line manager and that person (Flow 5).",
+              "fields": [
+                {
+                  "name": "Technician",
+                  "kind": "person",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='User' Name='Technician' StaticName='Technician' DisplayName='Technician' Required='FALSE' List='UserInfo' ShowField='ImnName' UserSelectionMode='PeopleOnly' UserSelectionScope='0' Mult='FALSE' />"
+                },
+                {
+                  "name": "AssessmentStatus",
+                  "kind": "choice",
+                  "indexed": true,
+                  "unique": false,
+                  "choices": [
+                    "Open",
+                    "Submitted",
+                    "Completed"
+                  ],
+                  "default": "Open",
+                  "xml": "<Field Type='Choice' Name='AssessmentStatus' StaticName='AssessmentStatus' DisplayName='AssessmentStatus' Required='FALSE' Indexed='TRUE' Format='Dropdown' FillInChoice='FALSE'><Default>Open</Default><CHOICES><CHOICE>Open</CHOICE><CHOICE>Submitted</CHOICE><CHOICE>Completed</CHOICE></CHOICES></Field>"
+                },
+                {
+                  "name": "AssessmentDate",
+                  "kind": "date",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='DateTime' Name='AssessmentDate' StaticName='AssessmentDate' DisplayName='AssessmentDate' Required='FALSE' Format='DateOnly' FriendlyDisplayFormat='Disabled' />"
+                },
+                {
+                  "name": "Position",
+                  "kind": "text",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Text' Name='Position' StaticName='Position' DisplayName='Position' Required='FALSE' MaxLength='255' />"
+                },
+                {
+                  "name": "EmployeeNumber",
+                  "kind": "text",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Text' Name='EmployeeNumber' StaticName='EmployeeNumber' DisplayName='EmployeeNumber' Required='FALSE' MaxLength='255' />"
+                },
+                {
+                  "name": "AnswersJson",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='AnswersJson' StaticName='AnswersJson' DisplayName='AnswersJson' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "PersonalJson",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='PersonalJson' StaticName='PersonalJson' DisplayName='PersonalJson' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "ArrangementsJson",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='ArrangementsJson' StaticName='ArrangementsJson' DisplayName='ArrangementsJson' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "ManagerNotes",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='ManagerNotes' StaticName='ManagerNotes' DisplayName='ManagerNotes' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "NextReviewDate",
+                  "kind": "date",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='DateTime' Name='NextReviewDate' StaticName='NextReviewDate' DisplayName='NextReviewDate' Required='FALSE' Format='DateOnly' FriendlyDisplayFormat='Disabled' />"
+                },
+                {
+                  "name": "SubmittedOn",
+                  "kind": "datetime",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='DateTime' Name='SubmittedOn' StaticName='SubmittedOn' DisplayName='SubmittedOn' Required='FALSE' Format='DateTime' FriendlyDisplayFormat='Disabled' />"
+                },
+                {
+                  "name": "CompletedOn",
+                  "kind": "datetime",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='DateTime' Name='CompletedOn' StaticName='CompletedOn' DisplayName='CompletedOn' Required='FALSE' Format='DateTime' FriendlyDisplayFormat='Disabled' />"
+                }
+              ],
+              "views": [
+                {
+                  "title": "Reviews due",
+                  "fields": [
+                    "LinkTitle",
+                    "Technician",
+                    "AssessmentStatus",
+                    "CompletedOn",
+                    "NextReviewDate"
+                  ],
+                  "query": "<OrderBy><FieldRef Name='NextReviewDate'/></OrderBy><Where><Eq><FieldRef Name='AssessmentStatus'/><Value Type='Choice'>Completed</Value></Eq></Where>",
+                  "rowLimit": 100
+                }
+              ]
+            },
+            {
               "key": "settings",
               "url": "OneToOneSettings",
               "title": "1-to-1 Settings",
               "groupRead": true,
-              "description": "ESG 1-to-1: appraisal band thresholds (no personal data). Technicians group: Read.",
+              "description": "ESG 1-to-1: bands, reminder days and on-screen names (no personal data). Technicians group: Read.",
               "fields": [
                 {
                   "name": "Value",
@@ -2452,6 +2565,81 @@
                 ]
               }
             },
+            "Find_reminders": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Get_settings_items')?['value']",
+                "where": "@equals(item()?['Title'], 'Reminders')"
+              },
+              "runAfter": {
+                "Bands_missing": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Reminders_missing": {
+              "type": "If",
+              "expression": "@empty(body('Find_reminders'))",
+              "actions": {
+                "Reminders_item": {
+                  "type": "Compose",
+                  "inputs": {
+                    "__metadata": {
+                      "type": "@{outputs('Settings_list')?['ListItemEntityTypeFullName']}"
+                    },
+                    "Title": "Reminders",
+                    "Value": "[20,27]"
+                  },
+                  "runAfter": {}
+                },
+                "Create_reminders_item": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/lists(guid'@{outputs('Settings_list')?['Id']}')/items",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata",
+                        "Content-Type": "application/json;odata=verbose"
+                      },
+                      "parameters/body": "@{string(outputs('Reminders_item'))}"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "Reminders_item": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Log_reminders": {
+                  "type": "AppendToArrayVariable",
+                  "inputs": {
+                    "name": "varLog",
+                    "value": "Added the Reminders item to 1-to-1 Settings (20th and 27th)"
+                  },
+                  "runAfter": {
+                    "Create_reminders_item": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {
+                "Find_reminders": [
+                  "Succeeded"
+                ]
+              }
+            },
             "Email_summary": {
               "type": "OpenApiConnection",
               "inputs": {
@@ -2463,7 +2651,7 @@
                 "parameters": {
                   "emailMessage/To": "@parameters('ESG 1-to-1 Team Leader email (esg_ManagerEmail)')",
                   "emailMessage/Subject": "ESG 1-to-1 setup: @{if(empty(variables('varWarnings')), 'complete', 'complete with items to check')}",
-                  "emailMessage/Body": "<p><b>ESG 1-to-1 setup finished.</b></p><p><b>Problems to fix by hand</b> (empty means none):</p><ul><li>@{join(variables('varWarnings'), '</li><li>')}</li></ul><p><b>What was done:</b></p><ul><li>@{join(variables('varLog'), '</li><li>')}</li></ul><p>Next: turn on flows 1, 2 and 3 (GO_LIVE_RUNBOOK Phase 7) and check each list's permissions page.</p>",
+                  "emailMessage/Body": "<p><b>ESG 1-to-1 setup finished.</b></p><p><b>Problems to fix by hand</b> (empty means none):</p><ul><li>@{join(variables('varWarnings'), '</li><li>')}</li></ul><p><b>What was done:</b></p><ul><li>@{join(variables('varLog'), '</li><li>')}</li></ul><p>Next: turn on flows 1 to 5 (GO_LIVE_RUNBOOK Phase 7) and check each list's permissions page.</p>",
                   "emailMessage/Importance": "Normal"
                 },
                 "authentication": "@parameters('$authentication')"
@@ -2477,7 +2665,7 @@
                 }
               },
               "runAfter": {
-                "Bands_missing": [
+                "Reminders_missing": [
                   "Succeeded"
                 ]
               }

@@ -294,6 +294,10 @@ def call(name, a, ctx):
             return json.loads(a[0])
         except (TypeError, ValueError):
             raise ExprError('json() failed')
+    if name == 'replace':
+        if not all(isinstance(x, str) for x in a[:3]):
+            raise ExprError('replace() expects strings, got {0!r}'.format(a))
+        return a[0].replace(a[1], a[2])
     if name == 'toLower':
         return to_str(a[0]).lower()
     if name == 'startsWith':

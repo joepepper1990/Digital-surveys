@@ -1,4 +1,4 @@
-// Headless test of legacy-package-builder.html: rejects bad input, makes no network requests, and produces four
+// Headless test of legacy-package-builder.html: rejects bad input, makes no network requests, and produces six
 // standard zip files whose contents are exactly the legacy templates with the values filled in.
 // Run from 04-solution:  node tools/test_builder.js   (then python3 tools/check_builder_zips.py checks the zips)
 'use strict';
@@ -32,9 +32,9 @@ var OUT = path.join(ROOT, '.builder-test');
   page.on('download', function (d) { downloads.push(d); });
   await page.click('#go');
   await page.waitForTimeout(1500);
-  ok('Builder: four downloads', downloads.length === 4, downloads.length);
+  ok('Builder: six downloads', downloads.length === 6, downloads.length);
   for (var i = 0; i < downloads.length; i++) { await downloads[i].saveAs(path.join(OUT, downloads[i].suggestedFilename())); }
-  ok('Builder: four links listed', (await page.$$('#files a')).length === 4);
+  ok('Builder: six links listed', (await page.$$('#files a')).length === 6);
   ok('Builder: no network requests', external.length === 0, external.join(', '));
   ok('Builder: no page errors', errors.length === 0, errors.join(' | '));
   await browser.close();

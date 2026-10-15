@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Workflow WorkflowId="{6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c06}" Name="ESG 1-to-1 | 5 Wellbeing" Description="Wellbeing assessments: private to the person and the line manager; locks on submit, stamps completion, emails both." xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <JsonFileName>/Workflows/ESG1to15Wellbeing-6F3C2A41-8D2E-4B7A-9C15-3E1F0A5B7C06.json</JsonFileName>
+  <Type>1</Type>
+  <Subprocess>0</Subprocess>
+  <Category>5</Category>
+  <Mode>0</Mode>
+  <Scope>4</Scope>
+  <OnDemand>0</OnDemand>
+  <TriggerOnCreate>0</TriggerOnCreate>
+  <TriggerOnDelete>0</TriggerOnDelete>
+  <AsyncAutodelete>0</AsyncAutodelete>
+  <SyncWorkflowLogOnFailure>0</SyncWorkflowLogOnFailure>
+  <StateCode>0</StateCode>
+  <StatusCode>1</StatusCode>
+  <RunAs>1</RunAs>
+  <IsTransacted>1</IsTransacted>
+  <IntroducedVersion>1.1.0.0</IntroducedVersion>
+  <IsCustomizable>1</IsCustomizable>
+  <BusinessProcessType>0</BusinessProcessType>
+  <IsCustomProcessingStepAllowedForOtherPublishers>1</IsCustomProcessingStepAllowedForOtherPublishers>
+  <ModernFlowType>0</ModernFlowType>
+  <PrimaryEntity>none</PrimaryEntity>
+  <LocalizedNames>
+    <LocalizedName languagecode="1033" description="ESG 1-to-1 | 5 Wellbeing" />
+  </LocalizedNames>
+</Workflow>

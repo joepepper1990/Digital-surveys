@@ -785,7 +785,7 @@
                     "parameters": {
                       "emailMessage/To": "@triggerBody()?['Technician']?['Email']",
                       "emailMessage/Subject": "Feedback on your 1-to-1 (@{formatDateTime(concat(triggerBody()?['MonthKey'], '-01'), 'MMMM yyyy')}) is ready",
-                      "emailMessage/Body": "<p>Your Team Leader has completed your review. <a href=\"@{concat(concat(if(endsWith(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), '/'), substring(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), 0, sub(length(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), 1)), parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), '/SitePages/OneToOne.aspx'), if(empty(first(split(string(coalesce(triggerBody()?['ReviewItemId'], '')), '.'))), '', concat('?reviewId=', first(split(string(coalesce(triggerBody()?['ReviewItemId'], '')), '.')))))}\"><b>View feedback</b></a></p>",
+                      "emailMessage/Body": "<p>I've completed your review – feedback, ratings and any agreed actions are ready. <a href=\"@{concat(concat(if(endsWith(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), '/'), substring(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), 0, sub(length(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), 1)), parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), '/SitePages/OneToOne.aspx'), if(empty(first(split(string(coalesce(triggerBody()?['ReviewItemId'], '')), '.'))), '', concat('?reviewId=', first(split(string(coalesce(triggerBody()?['ReviewItemId'], '')), '.')))))}\"><b>View feedback</b></a></p>",
                       "emailMessage/Importance": "Normal"
                     },
                     "authentication": "@parameters('$authentication')"
@@ -814,7 +814,7 @@
                       "parameters": {
                         "emailMessage/To": "@triggerBody()?['Technician']?['Email']",
                         "emailMessage/Subject": "Your 1-to-1 (@{formatDateTime(concat(triggerBody()?['MonthKey'], '-01'), 'MMMM yyyy')}) has been closed",
-                        "emailMessage/Body": "<p>This review was closed without a submission. <a href=\"@{concat(concat(if(endsWith(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), '/'), substring(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), 0, sub(length(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), 1)), parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), '/SitePages/OneToOne.aspx'), if(empty(first(split(string(coalesce(triggerBody()?['ReviewItemId'], '')), '.'))), '', concat('?reviewId=', first(split(string(coalesce(triggerBody()?['ReviewItemId'], '')), '.')))))}\">View</a>. Please speak to your Team Leader if this is unexpected.</p>",
+                        "emailMessage/Body": "<p>This review was closed without a submission. <a href=\"@{concat(concat(if(endsWith(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), '/'), substring(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), 0, sub(length(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), 1)), parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), '/SitePages/OneToOne.aspx'), if(empty(first(split(string(coalesce(triggerBody()?['ReviewItemId'], '')), '.'))), '', concat('?reviewId=', first(split(string(coalesce(triggerBody()?['ReviewItemId'], '')), '.')))))}\">View</a>. Please speak to me if this is unexpected.</p>",
                         "emailMessage/Importance": "Normal"
                       },
                       "authentication": "@parameters('$authentication')"

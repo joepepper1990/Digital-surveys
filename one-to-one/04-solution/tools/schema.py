@@ -18,6 +18,8 @@ REVIEW_STATE = ['Open', 'Submitted', 'Completed', 'Closed - Not Submitted']
 ACTIONS_STATUS = ['None', 'Open', 'Done']
 YES_NO = ['Yes', 'No']
 APPLIES_TO = ['Shared', 'Individual']
+WB_STATUS = ['Open', 'Submitted', 'Completed']
+DEFAULT_REMINDERS = '[20,27]'
 
 DEFAULT_BANDS = ('[{"name":"Not met","max":1.5},{"name":"Partially met","max":2.25},'
                  '{"name":"Met","max":4},{"name":"Exceeded","max":null}]')
@@ -198,8 +200,30 @@ LISTS = [
         ],
     },
     {
+        'key': 'wellbeing', 'url': 'WellbeingAssessments', 'title': 'Wellbeing Assessments', 'groupRead': False,
+        'description': 'ESG 1-to-1: wellbeing assessments. Each item is visible only to the line manager and that person (Flow 5).',
+        'fields': [
+            person('Technician'),
+            choice('AssessmentStatus', WB_STATUS, default='Open', indexed=True),
+            date('AssessmentDate'),
+            text('Position'),
+            text('EmployeeNumber'),
+            note('AnswersJson'),
+            note('PersonalJson'),
+            note('ArrangementsJson'),
+            note('ManagerNotes'),
+            date('NextReviewDate'),
+            date('SubmittedOn', with_time=True),
+            date('CompletedOn', with_time=True),
+        ],
+        'views': [
+            view('Reviews due', ['LinkTitle', 'Technician', 'AssessmentStatus', 'CompletedOn', 'NextReviewDate'],
+                 "<OrderBy><FieldRef Name='NextReviewDate'/></OrderBy><Where>" + _eq_choice('AssessmentStatus', 'Completed') + "</Where>"),
+        ],
+    },
+    {
         'key': 'settings', 'url': 'OneToOneSettings', 'title': '1-to-1 Settings', 'groupRead': True,
-        'description': 'ESG 1-to-1: appraisal band thresholds (no personal data). Technicians group: Read.',
+        'description': 'ESG 1-to-1: bands, reminder days and on-screen names (no personal data). Technicians group: Read.',
         'fields': [note('Value')],
         'views': [],
     },

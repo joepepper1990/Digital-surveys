@@ -86,6 +86,7 @@ def frontend_fields():
         'Technicians': names(re.search(r"spGetAll\(CONFIG\.lists\.techs, '([^']+)'", js).group(1)),
         'Appraisal Expectations': names(re.search(r"spGetAll\(CONFIG\.lists\.exp, '([^']+)'", js).group(1)),
         '1-to-1 Settings': names(re.search(r"spGetAll\(CONFIG\.lists\.settings, '([^']+)'", js).group(1)),
+        'Wellbeing Assessments': names(strings_after(js, 'var WB_FIELDS')),
     }
     need['Monthly Reviews'] |= set(re.findall(r"'([^']+)'", strings_after(tests, 'var TECH_ALLOWED', ']')))
     need['Manager Reviews'] |= set(re.findall(r"'([^']+)'", strings_after(tests, 'var MGR_ALLOWED', ']')))
@@ -176,6 +177,8 @@ def setup_checks():
     settings = by_url['OneToOneSettings']
     bands = [i for i in settings['items'].values() if i['fields'].get('Title') == 'Bands']
     ok('Setup: Bands item created with the default thresholds', len(bands) == 1 and bands[0]['fields']['Value'] == DEFAULT_BANDS)
+    rem = [i for i in settings['items'].values() if i['fields'].get('Title') == 'Reminders']
+    ok('Setup: Reminders item created (20th and 27th)', len(rem) == 1 and rem[0]['fields']['Value'] == '[20,27]', rem)
     ok('Setup: summary email sent to the TL', sp.emails and sp.emails[-1]['to'] == 'team.leader@example.test' and
        sp.emails[-1]['subject'] == 'ESG 1-to-1 setup: complete', sp.emails[-1:])
     snapshot = json.dumps({u: (l['Title'], sorted(l['fields']), l['views'], {k: sorted(v) for k, v in l['ra'].items()}, len(l['items']))
@@ -449,6 +452,118 @@ def failure_checks():
        e7 and 'FAILED for Ghost' in e7[-1]['body'] and not any(e['to'] == 'ghost@example.test' for e in sp.emails), (e7, eng.log))
 
 
+def team_and_wellbeing_checks():
+    sp = fsp.FakeSP()
+    run('0', sp, T('2026-10-14T09:00:00'))
+    techs = sp.list_by_title('Technicians')
+    gid = next(g for g, d in sp.groups.items() if d['Title'] == '1-to-1 Technicians')
+    # Flow 4: the group follows the Technicians list
+    alex = sp.write_item(techs, None, {'item/Title': 'Alex Morgan', 'item/Technician/Claims': sp.users[11]['Claims']})
+    n = len(sp.emails)
+    st, eng = fire('4', sp, 'Technicians', alex['id'], T('2026-10-15T10:00:00'))
+    ok('Flow 4: a new active team member is added to the 1-to-1 group and the TL is told', st == 'Succeeded' and
+       11 in sp.groups[gid]['members'] and len(sp.emails) == n + 1 and sp.emails[-1]['subject'] == '1-to-1: access given to Alex Morgan', (st, eng and eng.log))
+    n = len(sp.emails)
+    st, _ = fire('4', sp, 'Technicians', alex['id'], T('2026-10-15T10:05:00'))
+    ok('Flow 4: a later edit (e.g. appraisal date) changes nothing and sends nothing', st == 'Succeeded' and len(sp.emails) == n)
+    ok('Flow 4: the group still has no site-level permission', gid not in sp.web_ra)
+    sp.write_item(techs, alex['id'], {'item/Active': False})
+    st, eng = fire('4', sp, 'Technicians', alex['id'], T('2026-10-16T10:00:00'))
+    ok('Flow 4: deactivating removes them from the group and tells the TL', st == 'Succeeded' and 11 not in sp.groups[gid]['members'] and
+       sp.emails[-1]['subject'] == '1-to-1: access removed for Alex Morgan', (st, eng and eng.log))
+    sp.write_item(techs, alex['id'], {'item/Active': True})
+    fire('4', sp, 'Technicians', alex['id'], T('2026-10-16T11:00:00'))
+    ok('Flow 4: reactivating adds them back', 11 in sp.groups[gid]['members'])
+
+    # Flow 5: wellbeing assessment lifecycle
+    wb = sp.list_by_title('Wellbeing Assessments')
+    it = sp.write_item(wb, None, {'item/Title': 'Alex Morgan – wellbeing assessment', 'item/Technician/Claims': sp.users[11]['Claims'],
+                                  'item/AssessmentDate': '2026-11-02'})
+    ok('Fake: AssessmentStatus defaults to Open', it['fields'].get('AssessmentStatus') == 'Open')
+    n = len(sp.emails)
+    st, eng = fire('5', sp, 'Wellbeing Assessments', it['id'], T('2026-10-20T09:00:00'))
+    edit, read = sp.role_id('1-to-1 Edit'), sp.role_id('1-to-1 Read')
+    ok('Flow 5: new assessment → private (Owners FC + only that person with 1-to-1 Edit) and E9 with a ?wbId link', st == 'Succeeded' and
+       it['unique'] and it['ra'].get(3) == {fsp.FULL} and it['ra'].get(11) == {edit} and 12 not in it['ra'] and
+       sp.emails[-1]['to'] == 'alex.morgan@example.test' and '?wbId={0}"'.format(it['id']) in sp.emails[-1]['body'], (st, eng and eng.log, it['ra']))
+    ok('Flow 5: the list itself stays Owners-only', wb['ra'] == {3: {fsp.FULL}}, wb['ra'])
+    n = len(sp.emails)
+    st, _ = fire('5', sp, 'Wellbeing Assessments', it['id'], T('2026-10-20T09:10:00'))
+    ok('Flow 5: draft saves by the person change nothing', st == 'Succeeded' and len(sp.emails) == n and it['ra'].get(11) == {edit})
+    # the person submits – and also tries to pre-fill the manager's part, mark it Completed and give it to someone else
+    sp.me = 11
+    sp.write_item(wb, it['id'], {'item/AnswersJson': '{"d1":{"app":"Y","issue":"Y","help":"x"}}', 'item/AssessmentStatus/Value': 'Completed',
+                                 'item/ArrangementsJson': '[{"text":"fake"}]', 'item/ManagerNotes': 'approved', 'item/NextReviewDate': '2030-01-01',
+                                 'item/CompletedOn': '2026-10-21T09:00:00Z', 'item/Technician/Claims': sp.users[12]['Claims']})
+    sp.me = 10
+    st, eng = fire('5', sp, 'Wellbeing Assessments', it['id'], T('2026-10-21T09:05:00'))
+    f = it['fields']
+    ok('Flow 5: submission locks it (1-to-1 Read) whatever status was set', st == 'Succeeded' and it['ra'].get(11) == {read} and
+       f['AssessmentStatus'] == 'Submitted' and f.get('SubmittedOn'), (st, eng and eng.log, it['ra'], f.get('AssessmentStatus')))
+    ok('Flow 5 (D.7): anything the person wrote in the manager\'s fields is wiped and the owner restored',
+       not f.get('ArrangementsJson') and not f.get('ManagerNotes') and not f.get('NextReviewDate') and not f.get('CompletedOn') and
+       f['Technician'] == 11 and 12 not in it['ra'], f)
+    ok('Flow 5: answers kept', 'd1' in f['AnswersJson'])
+    ok('Flow 5: E10 to the TL', sp.emails[-1]['to'] == 'team.leader@example.test' and sp.emails[-1]['subject'] == 'Wellbeing assessment submitted: Alex Morgan')
+    n = len(sp.emails)
+    st, _ = fire('5', sp, 'Wellbeing Assessments', it['id'], T('2026-10-21T09:10:00'))
+    ok('Flow 5: its own update re-triggers harmlessly', st == 'Succeeded' and len(sp.emails) == n and f['AssessmentStatus'] == 'Submitted')
+    # the TL completes it
+    sp.write_item(wb, it['id'], {'item/ArrangementsJson': '[{"text":"Call cut-off 20:00"}]', 'item/NextReviewDate': '2027-03-10',
+                                 'item/AssessmentStatus/Value': 'Completed'})
+    st, eng = fire('5', sp, 'Wellbeing Assessments', it['id'], T('2026-11-02T15:00:00'))
+    ok('Flow 5: completion stamps CompletedOn, keeps the arrangements and emails the person (E11)', st == 'Succeeded' and f.get('CompletedOn') and
+       'Call cut-off' in f['ArrangementsJson'] and sp.emails[-1]['to'] == 'alex.morgan@example.test' and it['ra'].get(11) == {read}, (st, eng and eng.log))
+    n = len(sp.emails)
+    st, _ = fire('5', sp, 'Wellbeing Assessments', it['id'], T('2026-11-02T15:05:00'))
+    ok('Flow 5: no second completion email', st == 'Succeeded' and len(sp.emails) == n)
+    # Flow 1: reminder days from Settings, wellbeing review reminders
+    settings = sp.list_by_title('1-to-1 Settings')
+    rid = next(i['id'] for i in settings['items'].values() if i['fields'].get('Title') == 'Reminders')
+    sp.write_item(settings, rid, {'item/Value': '[15]'})
+    st1, eng1 = run('1', sp, T('2026-11-01T07:00:00'), overrides={'varTestDate': '2026-11-01T07:00:00'})
+    n = len(sp.emails)
+    run('1', sp, T('2026-11-20T07:00:00'), overrides={'varTestDate': '2026-11-20T07:00:00'})
+    none20 = not any(e['subject'].startswith('Reminder:') for e in sp.emails[n:])
+    n = len(sp.emails)
+    run('1', sp, T('2026-11-15T07:00:00'), overrides={'varTestDate': '2026-11-15T07:00:00'})
+    ok('Flow 1: reminder days come from 1-to-1 Settings (15th, not the 20th)', st1 == 'Succeeded' and none20 and
+       any(e['subject'].startswith('Reminder:') and e['to'] == 'alex.morgan@example.test' for e in sp.emails[n:]), eng1.log)
+    sp.write_item(settings, rid, {'item/Value': 'nonsense'})
+    st, eng = run('1', sp, T('2026-11-16T07:00:00'), overrides={'varTestDate': '2026-11-16T07:00:00'})
+    ok('Flow 1: a hand-edited, invalid reminder value never fails the run', st == 'Succeeded', eng.log)
+    n = len(sp.emails)
+    run('1', sp, T('2027-03-03T07:00:00'), overrides={'varTestDate': '2027-03-03T07:00:00'})
+    e12 = [e for e in sp.emails[n:] if e['subject'].startswith('Wellbeing review')]
+    ok('Flow 1: TL emailed 7 days before a wellbeing review is due, with a link', len(e12) == 1 and e12[0]['to'] == 'team.leader@example.test' and
+       'due in 7 days: Alex Morgan' in e12[0]['subject'] and '?wbId={0}"'.format(it['id']) in e12[0]['body'] and '10-Mar-2027' in e12[0]['body'], e12)
+    sp.dates_as_instants = True
+    n = len(sp.emails)
+    run('1', sp, T('2027-03-10T07:00:00'), overrides={'varTestDate': '2027-03-10T07:00:00'})
+    sp.dates_as_instants = False
+    ok('Flow 1: and on the day (date returned as a UTC instant)', any(e['subject'].startswith('Wellbeing review due today') for e in sp.emails[n:]),
+       [e['subject'] for e in sp.emails[n:]])
+    n = len(sp.emails)
+    run('1', sp, T('2027-03-05T07:00:00'), overrides={'varTestDate': '2027-03-05T07:00:00'})
+    ok('Flow 1: no wellbeing email on other days', not any(e['subject'].startswith('Wellbeing review') for e in sp.emails[n:]))
+
+    # upgrade safety: a site set up with 1.0 (no wellbeing list, no Reminders item) keeps working with 1.1's Flow 1
+    sp = fsp.FakeSP()
+    run('0', sp, T('2026-10-14T09:00:00'))
+    for lid in [k for k, l in sp.lists.items() if l['url'] == 'WellbeingAssessments']:
+        del sp.lists[lid]
+    st_l = sp.list_by_title('1-to-1 Settings')
+    for iid in [k for k, i in st_l['items'].items() if i['fields'].get('Title') == 'Reminders']:
+        del st_l['items'][iid]
+    techs = sp.list_by_title('Technicians')
+    sp.write_item(techs, None, {'item/Title': 'Sam Patel', 'item/Technician/Claims': sp.users[12]['Claims'], 'item/TechnicianAadId': 'aad-sam'})
+    run('1', sp, T('2026-11-01T07:00:00'), overrides={'varTestDate': '2026-11-01T07:00:00'})
+    n = len(sp.emails)
+    st, eng = run('1', sp, T('2026-11-27T07:00:00'), overrides={'varTestDate': '2026-11-27T07:00:00'})
+    ok('Upgrade: before setup is re-run, Flow 1 still works and reminds on the default 27th', st == 'Succeeded' and
+       any(e['subject'].startswith('Reminder:') for e in sp.emails[n:]), eng.log)
+
+
 if __name__ == '__main__':
     site = setup_checks()
     partial_site_checks()
@@ -456,6 +571,7 @@ if __name__ == '__main__':
     month_two_checks(sp, mgr, mr)
     failure_checks()
     extra_checks()
+    team_and_wellbeing_checks()
     passed = sum(1 for _, p in RESULTS if p)
     print('\n[{2}] {0} / {1} passed'.format(passed, len(RESULTS), MODE))
     sys.exit(0 if passed == len(RESULTS) else 1)

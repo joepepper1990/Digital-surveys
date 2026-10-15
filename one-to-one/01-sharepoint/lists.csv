@@ -69,5 +69,18 @@ Manager Reviews,CompletedOn,Date and time,,,,
 Manager Reviews,CompletedBy,Single line of text,,,,
 Manager Reviews,ReleasedOn,Date and time,,,,
 Manager Reviews,CorrectionLog,Multiple lines (plain),,,,
-1-to-1 Settings,Title,Built-in,,,,Item: Bands
+Wellbeing Assessments,Title,Built-in,,,,e.g. Name – wellbeing assessment
+Wellbeing Assessments,Technician,"Person (single, people only)",,,,The person (Flow 5 grants them access)
+Wellbeing Assessments,AssessmentStatus,Choice,Open|Submitted|Completed,Open,Yes,
+Wellbeing Assessments,AssessmentDate,Date only,,,,Meeting date
+Wellbeing Assessments,Position,Single line of text,,,,
+Wellbeing Assessments,EmployeeNumber,Single line of text,,,,Optional
+Wellbeing Assessments,AnswersJson,Multiple lines (plain),,,,JSON – the 32 HSE questions
+Wellbeing Assessments,PersonalJson,Multiple lines (plain),,,,JSON – personal input
+Wellbeing Assessments,ArrangementsJson,Multiple lines (plain),,,,JSON – agreed arrangements (line manager)
+Wellbeing Assessments,ManagerNotes,Multiple lines (plain),,,,Line manager
+Wellbeing Assessments,NextReviewDate,Date only,,,,Line manager; yearly by default
+Wellbeing Assessments,SubmittedOn,Date and time,,,,Flow 5
+Wellbeing Assessments,CompletedOn,Date and time,,,,Flow 5
+1-to-1 Settings,Title,Built-in,,,,Items: Bands; Reminders; Labels
 1-to-1 Settings,Value,Multiple lines (plain),,,,JSON

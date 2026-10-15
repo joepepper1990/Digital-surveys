@@ -5,7 +5,7 @@
   <displayname default="ESG 1-to-1 Site URL">
     <label description="ESG 1-to-1 Site URL" languagecode="1033" />
   </displayname>
-  <introducedversion>1.0.0.0</introducedversion>
+  <introducedversion>1.1.0.0</introducedversion>
   <iscustomizable>1</iscustomizable>
   <isrequired>1</isrequired>
   <secretstore>0</secretstore>

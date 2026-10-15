@@ -3,7 +3,7 @@
 Legacy packages cannot carry environment variables, so the site URL and Team Leader email have to be written into
 the flows as literal values. To keep tenant details out of the repository, build.py only produces *templates*
 (with __ESG_SITE_URL__ / __ESG_TL_EMAIL__ tokens) inside legacy-package-builder.html; that page fills them in and
-zips the four packages in the browser, offline.
+zips the six packages in the browser, offline.
 
 Package layout copied from real exported legacy packages (Microsoft PnP samples):
   manifest.json
@@ -132,18 +132,18 @@ BUILDER_HTML = r'''<!doctype html>
 <body>
 <main>
   <h1>ESG 1-to-1 – legacy flow packages</h1>
-  <p class="lead">Use this only if <b>Solutions</b> can't be imported in your environment (no Dataverse). It writes your site address and email into the four flows and saves four <code>.zip</code> packages for <b>My flows → Import → Import Package (Legacy)</b>. It works offline; nothing leaves this page.</p>
+  <p class="lead">Use this only if <b>Solutions</b> can't be imported in your environment (no Dataverse). It writes your site address and email into the six flows and saves six <code>.zip</code> packages for <b>My flows → Import → Import Package (Legacy)</b>. It works offline; nothing leaves this page.</p>
   <label for="site">1-to-1 site address</label>
   <input id="site" type="url" autocomplete="off" spellcheck="false" placeholder="https://yourtenant.sharepoint.com/sites/yoursite">
   <div class="hint">The full address of the private 1-to-1 site, without a trailing slash.</div>
   <label for="mail">Team Leader email</label>
   <input id="mail" type="email" autocomplete="off" spellcheck="false" placeholder="firstname.lastname@yourcompany.com">
   <div class="hint">Receives submissions, problem reports and the setup summary.</div>
-  <button id="go" type="button">Create the four packages</button>
+  <button id="go" type="button">Create the six packages</button>
   <div id="msg" role="status" aria-live="polite"></div>
   <ul id="files"></ul>
   <div class="box">
-    <b>Then, for each package (0, 1, 2, 3, in order):</b>
+    <b>Then, for each package (0 to 5, in order):</b>
     <ol>
       <li>Power Automate → <b>My flows → Import → Import Package (Legacy)</b> → upload the zip.</li>
       <li>Under <b>Related resources</b>, click each connection and pick (or create) your own SharePoint / Outlook / Office 365 Users connection.</li>

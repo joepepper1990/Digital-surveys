@@ -8,7 +8,7 @@ Nothing tenant-specific is in here. The site and the Team Leader's email are env
 import; group and permission-level IDs are looked up at run time.
 """
 import json
-from schema import LISTS, ROLES, GROUP_TITLE, GROUP_DESCRIPTION, DEFAULT_BANDS
+from schema import LISTS, ROLES, GROUP_TITLE, GROUP_DESCRIPTION, DEFAULT_BANDS, DEFAULT_REMINDERS
 
 # --------------------------------------------------------------------------------------------- constants
 SP_API = '/providers/Microsoft.PowerApps/apis/shared_sharepointonline'
@@ -42,6 +42,8 @@ RUN_LINK = ("concat('https://make.powerautomate.com/environments/', workflow()?[
 LIST_TITLE = {l['key']: l['title'] for l in LISTS}
 MR = LIST_TITLE['reviews']
 MGR = LIST_TITLE['mgr']
+WB = LIST_TITLE['wellbeing']
+SETTINGS = LIST_TITLE['settings']
 
 
 def q(s):
@@ -267,9 +269,9 @@ def ensure_user(name, claims_expr):
     return (name, http('POST', '_api/web/ensureuser', '{"logonName":"@{' + claims_expr + '}"}'))
 
 
-def setperm(suffix, list_key, item_expr, role_expr, principal_expr):
-    """list_key: 'reviewsList' or 'mgrList' – the list GUID looked up by load_ids()."""
-    base = "_api/web/lists(guid'@{{outputs('Ids')?['{0}']}}')/items(@{{{1}}})".format(list_key, item_expr)
+def setperm(suffix, list_key, item_expr, role_expr, principal_expr, ids='Ids'):
+    """list_key: 'reviewsList' or 'mgrList' – the list GUID looked up by load_ids() (or 'wbList' in WbIds)."""
+    base = "_api/web/lists(guid'@{{outputs('{2}')?['{0}']}}')/items(@{{{1}}})".format(list_key, item_expr, ids)
     return [
         ('Reset' + suffix, http('POST', base + '/resetroleinheritance')),
         ('Break' + suffix, http('POST', base + '/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)')),
@@ -278,6 +280,18 @@ def setperm(suffix, list_key, item_expr, role_expr, principal_expr):
         ('AddTech' + suffix, http('POST', base + '/roleassignments/addroleassignment(principalid=@{' + principal_expr +
                                   '},roledefid=@{' + role_expr + '})')),
     ]
+
+
+def wblink(item_id_expr):
+    """Page link that opens a wellbeing assessment (?wbId=)."""
+    i = idstr(item_id_expr)
+    return '@{concat(' + PAGE + ", if(empty(" + i + "), '', concat('?wbId=', " + i + ')))}'
+
+
+def local_date(expr):
+    """A date-only column as yyyy-MM-dd, whether the connector returns 'yyyy-MM-dd' or a UTC instant."""
+    return ("if(contains(string(coalesce(" + expr + ", '')), 'T'), formatDateTime(convertFromUtc(coalesce(" + expr +
+            ", '2000-01-01T00:00:00Z'), 'GMT Standard Time'), 'yyyy-MM-dd'), coalesce(" + expr + ", ''))")
 
 
 def link(review_id_expr):
@@ -435,7 +449,7 @@ def flow_setup():
     summary = ('<p><b>ESG 1-to-1 setup finished.</b></p>'
                '<p><b>Problems to fix by hand</b> (empty means none):</p><ul><li>@{join(variables(\'varWarnings\'), \'</li><li>\')}</li></ul>'
                '<p><b>What was done:</b></p><ul><li>@{join(variables(\'varLog\'), \'</li><li>\')}</li></ul>'
-               '<p>Next: turn on flows 1, 2 and 3 (GO_LIVE_RUNBOOK Phase 7) and check each list\'s permissions page.</p>')
+               '<p>Next: turn on flows 1 to 5 (GO_LIVE_RUNBOOK Phase 7) and check each list\'s permissions page.</p>')
 
     try_actions = seq(
         ('Get_web', http('GET', '_api/web?$select=Title,Url,ServerRelativeUrl', secure=False)),
@@ -495,6 +509,14 @@ def flow_setup():
                                        "@{string(outputs('Bands_item'))}", verbose=True, secure=False)),
             ('Log_bands', append(G, 'Added the Bands item to 1-to-1 Settings (default thresholds)')),
         ))),
+        ('Find_reminders', query("@body('Get_settings_items')?['value']", "@equals(item()?['Title'], 'Reminders')")),
+        ('Reminders_missing', cond("@empty(body('Find_reminders'))", seq(
+            ('Reminders_item', compose({'__metadata': {'type': "@{outputs('Settings_list')?['ListItemEntityTypeFullName']}"},
+                                        'Title': 'Reminders', 'Value': DEFAULT_REMINDERS})),
+            ('Create_reminders_item', http('POST', "_api/web/lists(guid'@{outputs('Settings_list')?['Id']}')/items",
+                                           "@{string(outputs('Reminders_item'))}", verbose=True, secure=False)),
+            ('Log_reminders', append(G, 'Added the Reminders item to 1-to-1 Settings (20th and 27th)')),
+        ))),
         ('Email_summary', email('@' + TL_EMAIL, 'ESG 1-to-1 setup: @{if(empty(variables(\'varWarnings\')), \'complete\', '
                                                 '\'complete with items to check\')}', summary)),
     )
@@ -523,6 +545,10 @@ def flow_daily():
           '<p style="color:#666">This link only works when you\'re signed in with your own company account.</p>')
     e2 = ("<p>Your 1-to-1 hasn't been submitted yet. Anything you've saved is still there: "
           '<a href="' + link("items('Each_outstanding')?['ReviewItemId']") + '"><b>Continue</b></a></p>')
+    e12 = ("<p>The wellbeing review agreed with @{items('Each_review_due')?['Technician']?['DisplayName']} is due on "
+           "@{formatDateTime(" + local_date("items('Each_review_due')?['NextReviewDate']") + ", 'dd-MMM-yyyy')}. Arrange the review "
+           "conversation, or start a new assessment if one is needed.</p>"
+           '<p><a href="' + wblink("items('Each_review_due')?['ID']") + '"><b>Open the last assessment</b></a></p>')
     e7 = ("<p>The daily 1-to-1 run found these problems:</p><p>@{join(variables('varProblems'), '<br>')}</p>"
           '<p><a href="@{' + RUN_LINK + '}">Open the run</a></p>')
     snapshot_where = ("@and(or(empty(trim(coalesce(item()?['AppraisalYear'], ''))), equals(trim(coalesce(item()?['AppraisalYear'], '')), "
@@ -603,12 +629,29 @@ def flow_daily():
         ('Get_technicians', get_items('Technicians', 'Active eq 1', top=5000)),
         ('Get_expectations', get_items(LIST_TITLE['exp'], 'Active eq 1', top=500, order='SortOrder asc')),
         ('Each_technician', each_tech),
-        ('Reminder_day', cond("@or(equals(outputs('Day'), 20), equals(outputs('Day'), 27))", seq(
+        ('Get_reminder_setting', get_items(SETTINGS, "Title eq 'Reminders'", top=1)),
+        ('Reminder_days', compose("@if(empty(body('Get_reminder_setting')?['value']), '" + DEFAULT_REMINDERS + "', "
+                                  "coalesce(first(body('Get_reminder_setting')?['value'])?['Value'], ''))")),
+        # "[20,27]" -> ",20,27," and look for ",<day>," (no JSON parsing, so a hand-edited value can never fail the run)
+        ('Reminder_day', cond("@contains(concat(',', replace(replace(replace(string(outputs('Reminder_days')), '[', ''), ']', ''), ' ', ''), ','), "
+                              "concat(',', string(outputs('Day')), ','))", seq(
             ('Outstanding', get_items(MGR, "MonthKey eq '@{outputs('MonthKey')}' and ReviewState eq 'Open'", top=5000)),
             ('Outstanding_linked', query("@body('Outstanding')?['value']", "@not(empty(item()?['LinkSentOn']))", secure=True)),
             ('Each_outstanding', foreach("@body('Outstanding_linked')", seq(
                 ('Send_E2', email("@items('Each_outstanding')?['Technician']?['Email']",
                                   "Reminder: your 1-to-1 for @{outputs('MonthName')} is due @{outputs('DeadlineText')}", e2)),
+            ))),
+        ))),
+        ('List_wellbeing', query("@body('Get_lists')?['value']", "@equals(item()?['RootFolder']?['Name'], 'WellbeingAssessments')", secure=True)),
+        ('Wellbeing_list_exists', cond("@not(empty(body('List_wellbeing')))", seq(
+            ('Get_wellbeing', get_items(WB, "AssessmentStatus eq 'Completed'", top=5000)),
+            ('Today', compose("@formatDateTime(outputs('ukNow'), 'yyyy-MM-dd')")),
+            ('In7', compose("@formatDateTime(addDays(outputs('ukNow'), 7), 'yyyy-MM-dd')")),
+            ('Reviews_due', query("@body('Get_wellbeing')?['value']",
+                                  "@contains(createArray(outputs('Today'), outputs('In7')), " + local_date("item()?['NextReviewDate']") + ")", secure=True)),
+            ('Each_review_due', foreach("@body('Reviews_due')", seq(
+                ('Send_E12', email('@' + TL_EMAIL, "Wellbeing review @{if(equals(" + local_date("items('Each_review_due')?['NextReviewDate']") +
+                                   ", outputs('Today')), 'due today', 'due in 7 days')}: @{items('Each_review_due')?['Technician']?['DisplayName']}", e12)),
             ))),
         ))),
         ('Any_problems', cond("@greater(length(variables('varProblems')), 0)", seq(
@@ -693,9 +736,9 @@ def flow_submitted():
 def flow_decision():
     TB = 'triggerBody()'
     month = "formatDateTime(concat(" + TB + "?['MonthKey'], '-01'), 'MMMM yyyy')"
-    e4 = ('<p>Your Team Leader has completed your review. <a href="' + link(TB + "?['ReviewItemId']") + '"><b>View feedback</b></a></p>')
+    e4 = ('<p>I\'ve completed your review – feedback, ratings and any agreed actions are ready. <a href="' + link(TB + "?['ReviewItemId']") + '"><b>View feedback</b></a></p>')
     e5 = ('<p>This review was closed without a submission. <a href="' + link(TB + "?['ReviewItemId']") + '">View</a>. '
-          'Please speak to your Team Leader if this is unexpected.</p>')
+          'Please speak to me if this is unexpected.</p>')
     valid = ("@or(and(equals(outputs('Cmd'), 'Completed'), not(empty(" + TB + "?['SubmittedOn']))), "
              "and(equals(outputs('Cmd'), 'Closed - Not Submitted'), empty(" + TB + "?['SubmittedOn']), "
              "less(ticks(" + TB + "?['DueDate']), ticks(utcNow()))))")
@@ -747,10 +790,138 @@ def flow_decision():
     return definition(triggers, actions)
 
 
+# --------------------------------------------------------------------------------------------- Flow 4
+def flow_team():
+    """The 1-to-1 group follows the Technicians list: Active = in the group (access to the page), not Active = removed.
+    The page never changes permissions itself; the line manager adds or deactivates people in ⚙ Settings → Team."""
+    TB = 'triggerBody()'
+    e8_add = ('<p>@{' + TB + "?['Title']} now has access to the 1-to-1 page. Their first review is created at 07:00 tomorrow "
+              "(or run ESG 1-to-1 | 1 Daily scheduler now).</p>")
+    e8_rem = ('<p>@{' + TB + "?['Title']} has been removed from the 1-to-1 group and no longer gets monthly reviews. "
+              "Their past records are kept.</p>")
+    gid = "outputs('Group_id')"
+    try_actions = seq(
+        ('Get_groups', http('GET', '_api/web/sitegroups?$select=Id,Title')),
+        ('Find_group', query("@body('Get_groups')?['value']", "@equals(item()?['Title'], '" + GROUP_TITLE + "')", secure=True)),
+        ('Check_group', cond("@empty(body('Find_group'))", seq(
+            ('STOP_run_the_setup_flow_first', compose("@int('The " + GROUP_TITLE + " group was not found. Run ESG 1-to-1 | 0 Setup first.')"))))),
+        ('Group_id', compose("@first(body('Find_group'))?['Id']")),
+        ('No_person', cond("@empty(coalesce(" + TB + "?['Technician']?['Claims'], ''))", seq(('No_person_set', terminate('Cancelled'))))),
+        ensure_user('Ensure_user', TB + "?['Technician']?['Claims']"),
+        ('Get_members', http('GET', "_api/web/sitegroups(@{" + gid + "})/users?$select=Id")),
+        ('Member_ids', select("@body('Get_members')?['value']", "@item()?['Id']", secure=True)),
+        ('Is_member', compose("@contains(body('Member_ids'), body('Ensure_user')?['Id'])")),
+        ('Should_be_member', compose("@equals(" + TB + "?['Active'], true)")),
+        ('Add_needed', cond("@and(outputs('Should_be_member'), not(outputs('Is_member')))", seq(
+            ('Add_to_group', http('POST', "_api/web/sitegroups(@{" + gid + "})/users",
+                                  '{"__metadata":{"type":"SP.User"},"LoginName":"@{' + TB + "?['Technician']?['Claims']}" + '"}', verbose=True)),
+            ('Send_E8_added', email('@' + TL_EMAIL, "1-to-1: access given to @{" + TB + "?['Title']}", e8_add)),
+        ))),
+        ('Remove_needed', cond("@and(not(outputs('Should_be_member')), outputs('Is_member'))", seq(
+            ('Remove_from_group', http('POST', "_api/web/sitegroups(@{" + gid + "})/users/removebyid(@{body('Ensure_user')?['Id']})")),
+            ('Send_E8_removed', email('@' + TL_EMAIL, "1-to-1: access removed for @{" + TB + "?['Title']}", e8_rem)),
+        ))),
+    )
+    actions = {'Try': after(scope(try_actions), {}), 'Catch': catch('ESG 1-to-1 | 4 Team members')}
+    triggers = {'When_a_team_member_is_added_or_changed': {
+        'type': 'OpenApiConnection',
+        'recurrence': {'frequency': 'Minute', 'interval': 5},
+        'splitOn': "@triggerOutputs()?['body/value']",
+        'runtimeConfiguration': {'secureData': {'properties': ['inputs', 'outputs']}},
+        'inputs': {'host': {'connectionName': 'shared_sharepointonline', 'operationId': 'GetOnUpdatedItems', 'apiId': SP_API},
+                   'parameters': {'dataset': '@' + SITE, 'table': LIST_TITLE['techs']},
+                   'authentication': "@parameters('$authentication')"}}}
+    return definition(triggers, actions)
+
+
+# --------------------------------------------------------------------------------------------- Flow 5
+def flow_wellbeing():
+    """Wellbeing assessment permissions and trusted stamps (plan D.7).
+    The trusted person is whoever holds the 1-to-1 Edit / Read permission on the item – set by this flow, and not
+    changeable by them – never the editable Technician column. New item: grant that person Edit and email them.
+    While they hold Edit, any status other than Open = they submitted: lock to Read, stamp SubmittedOn, wipe the
+    line-manager fields (they could have pre-filled them) and restore the Technician column. Once locked, Completed
+    with no CompletedOn = the line manager completed it: stamp CompletedOn and email the person."""
+    TB = 'triggerBody()'
+    BASE = "_api/web/lists(guid'@{outputs('WbIds')?['wbList']}')/items(@{" + TB + "?['ID']})"
+    H = "outputs('Holder')"
+    e9 = ("<p>Your line manager has started a wellbeing assessment with you. Please complete your part before you meet – "
+          "about 15–20 minutes, and you can save and come back.</p>"
+          '<p><a href="' + wblink(TB + "?['ID']") + '"><b>Open my wellbeing assessment</b></a></p>'
+          '<p style="color:#666">Only you and your line manager can see it. The link only works when you\'re signed in with your own '
+          'company account.</p>')
+    e10 = ("<p>@{" + H + "?['Member']?['Title']} has submitted their wellbeing assessment. Arrange a private, hour-long conversation.</p>"
+           '<p><a href="' + wblink(TB + "?['ID']") + '"><b>Open the assessment</b></a></p>')
+    e11 = ("<p>Thank you for our wellbeing conversation. The agreed record, including any arrangements and the review date, "
+           "is ready to view.</p>"
+           '<p><a href="' + wblink(TB + "?['ID']") + '"><b>View my wellbeing assessment</b></a></p>')
+    holders = ("@and(equals(item()?['Member']?['PrincipalType'], 1), or(contains(string(item()?['RoleDefinitionBindings']), '1-to-1 Edit'), "
+               "contains(string(item()?['RoleDefinitionBindings']), '1-to-1 Read')))")
+    try_actions = seq(
+        *load_ids(),
+        ('List_wellbeing', query("@body('Get_lists')?['value']", "@equals(item()?['RootFolder']?['Name'], 'WellbeingAssessments')", secure=True)),
+        ('WbIds', compose({'wbList': "@first(body('List_wellbeing'))?['Id']"})),
+        ('Check_wellbeing_list', cond("@equals(outputs('WbIds')?['wbList'], null)", seq(
+            ('STOP_run_the_setup_flow_again', compose("@int('The Wellbeing Assessments list was not found. Run ESG 1-to-1 | 0 Setup again.')"))))),
+        ('Get_item_scope', http('GET', BASE + '?$select=HasUniqueRoleAssignments')),
+        ('Get_assignments', http('GET', BASE + '/roleassignments?$expand=Member,RoleDefinitionBindings&$select=PrincipalId,Member/Id,'
+                                 'Member/Title,Member/LoginName,Member/Email,Member/PrincipalType,RoleDefinitionBindings/Name')),
+        ('Holders', query("@body('Get_assignments')?['value']", holders, secure=True)),
+        ('Holder', compose("@first(body('Holders'))")),
+        ('Status', compose("@coalesce(" + TB + "?['AssessmentStatus']?['Value'], 'Open')")),
+        ('New_assessment', cond("@or(equals(body('Get_item_scope')?['HasUniqueRoleAssignments'], false), equals(" + H + ", null))",
+            seq(
+                ('No_person', cond("@empty(coalesce(" + TB + "?['Technician']?['Claims'], ''))", seq(('No_person_set', terminate('Cancelled'))))),
+                ensure_user('Ensure_user', TB + "?['Technician']?['Claims']"),
+                *setperm('', 'wbList', TB + "?['ID']", "outputs('Ids')?['edit']", "body('Ensure_user')?['Id']", ids='WbIds'),
+                ('Not_open', cond("@not(equals(outputs('Status'), 'Open'))", seq(
+                    ('Reset_to_open', patch_item(WB, '@' + TB + "?['ID']", {'Title': '@' + TB + "?['Title']", 'AssessmentStatus/Value': 'Open'})),
+                ))),
+                ('Send_E9', email('@' + TB + "?['Technician']?['Email']", 'Your wellbeing assessment is ready to complete', e9)),
+            ),
+            seq(
+                ('Holder_can_edit', compose("@contains(string(" + H + "?['RoleDefinitionBindings']), '1-to-1 Edit')")),
+                ('Submitted_by_person', cond("@and(outputs('Holder_can_edit'), not(equals(outputs('Status'), 'Open')))",
+                    seq(
+                        *setperm('_L', 'wbList', TB + "?['ID']", "outputs('Ids')?['read']", H + "?['Member']?['Id']", ids='WbIds'),
+                        ('Stamp_submitted', patch_item(WB, '@' + TB + "?['ID']", {
+                            'Title': '@' + TB + "?['Title']",
+                            'AssessmentStatus/Value': 'Submitted',
+                            'SubmittedOn': '@utcNow()',
+                            'ArrangementsJson': '',
+                            'ManagerNotes': '',
+                            'NextReviewDate': None,
+                            'CompletedOn': None,
+                            'Technician/Claims': '@' + H + "?['Member']?['LoginName']",
+                        })),
+                        ('Send_E10', email('@' + TL_EMAIL, "Wellbeing assessment submitted: @{" + H + "?['Member']?['Title']}", e10)),
+                    ),
+                    seq(
+                        ('Completed_by_manager', cond(
+                            "@and(not(outputs('Holder_can_edit')), equals(outputs('Status'), 'Completed'), empty(" + TB + "?['CompletedOn']), "
+                            "not(empty(" + TB + "?['SubmittedOn'])))", seq(
+                                ('Stamp_completed', patch_item(WB, '@' + TB + "?['ID']", {'Title': '@' + TB + "?['Title']", 'CompletedOn': '@utcNow()'})),
+                                ('Send_E11', email('@' + H + "?['Member']?['Email']", 'Your wellbeing assessment record is ready', e11)),
+                            ))),
+                    ))),
+            ))),
+    )
+    actions = {'Try': after(scope(try_actions), {}), 'Catch': catch('ESG 1-to-1 | 5 Wellbeing')}
+    triggers = {'When_a_wellbeing_assessment_is_created_or_modified': {
+        'type': 'OpenApiConnection',
+        'recurrence': {'frequency': 'Minute', 'interval': 5},
+        'splitOn': "@triggerOutputs()?['body/value']",
+        'runtimeConfiguration': {'secureData': {'properties': ['inputs', 'outputs']}},
+        'inputs': {'host': {'connectionName': 'shared_sharepointonline', 'operationId': 'GetOnUpdatedItems', 'apiId': SP_API},
+                   'parameters': {'dataset': '@' + SITE, 'table': WB},
+                   'authentication': "@parameters('$authentication')"}}}
+    return definition(triggers, actions)
+
+
 FLOWS = [
     {'id': '6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c01', 'name': 'ESG 1-to-1 | 0 Setup (run once)', 'build': flow_setup,
      'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': True,
-     'description': 'Creates or completes the five lists, columns, indexes, views, permission levels, group and list permissions. Safe to re-run.'},
+     'description': 'Creates or completes the six lists, columns, indexes, views, permission levels, group and list permissions. Safe to re-run.'},
     {'id': '6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c02', 'name': 'ESG 1-to-1 | 1 Daily scheduler', 'build': flow_daily,
      'connectors': ['shared_sharepointonline', 'shared_office365', 'shared_office365users'], 'on': False,
      'description': 'Daily 07:00 UK: creates each month\'s reviews, makes them private, emails links and reminders.'},
@@ -760,6 +931,12 @@ FLOWS = [
     {'id': '6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c04', 'name': 'ESG 1-to-1 | 3 Manager decision', 'build': flow_decision,
      'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': False,
      'description': 'On Complete / Close: validates, locks the review, releases the feedback and emails the technician.'},
+    {'id': '6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c05', 'name': 'ESG 1-to-1 | 4 Team members', 'build': flow_team,
+     'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': False,
+     'description': 'Keeps the 1-to-1 Technicians group in step with the Technicians list (Active = access to the page).'},
+    {'id': '6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c06', 'name': 'ESG 1-to-1 | 5 Wellbeing', 'build': flow_wellbeing,
+     'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': False,
+     'description': 'Wellbeing assessments: private to the person and the line manager; locks on submit, stamps completion, emails both.'},
 ]
 
 

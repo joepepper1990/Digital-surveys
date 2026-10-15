@@ -303,6 +303,23 @@ class FakeSP:
             gid = max(self.groups) + 1
             self.groups[gid] = {'Id': gid, 'Title': data['Title'], 'members': set(), 'props': data}
             return {'Id': gid}
+        mg = re.match(r'^_api/web/sitegroups\((\d+)\)/users(?:/removebyid\((\d+)\))?$', path)
+        if mg:
+            g = self.groups.get(int(mg.group(1)))
+            if g is None:
+                fail(404, 'group not found')
+            if method == 'GET' and not mg.group(2):
+                return {'value': [{'Id': u} for u in sorted(g['members'])]}
+            if method == 'POST' and not mg.group(2):
+                need_type('SP.User')
+                u = self.user_by_claims(data['LoginName'])
+                g['members'].add(u['Id'])
+                return {'Id': u['Id']}
+            if method == 'POST' and mg.group(2):
+                if int(mg.group(2)) not in g['members']:
+                    fail(404, 'user is not in the group')
+                g['members'].discard(int(mg.group(2)))
+                return {}
         if method == 'GET' and path == '_api/web/associatedownergroup':
             return {'Id': 3, 'Title': self.groups[3]['Title']}
         if method == 'GET' and path == '_api/web/associatedownergroup/users':
@@ -399,6 +416,26 @@ class FakeSP:
                 fail(400, 'item type must be ' + lst['entity'])
             p = {'item/' + k: v for k, v in data.items() if k != '__metadata'}
             return {'Id': self.write_item(lst, None, p)['id']}
+        mg2 = re.match(r'^/items\((\d+)\)(/roleassignments)?$', rest)
+        if method == 'GET' and mg2:
+            it = lst['items'].get(int(mg2.group(1)))
+            if it is None:
+                fail(404, 'item')
+            if not mg2.group(2):
+                return {'HasUniqueRoleAssignments': bool(it['unique'])}
+            if 'Member' not in qs or 'RoleDefinitionBindings' not in qs:
+                fail(400, 'roleassignments needs $expand=Member,RoleDefinitionBindings')
+            ra = it['ra'] if it['unique'] else (lst['ra'] if lst['unique'] else self.web_ra)
+            out = []
+            for pid, rids in ra.items():
+                if pid in self.users:
+                    u = self.users[pid]
+                    member = {'Id': pid, 'Title': u['Title'], 'LoginName': u['Claims'], 'Email': u['Email'], 'PrincipalType': 1}
+                else:
+                    member = {'Id': pid, 'Title': self.groups[pid]['Title'], 'LoginName': self.groups[pid]['Title'], 'Email': '', 'PrincipalType': 8}
+                out.append({'PrincipalId': pid, 'Member': member,
+                            'RoleDefinitionBindings': [{'Name': r['Name']} for r in self.roles if r['Id'] in rids]})
+            return {'value': out}
         mi = re.match(r'^/items\((\d+)\)(/.*)$', rest)
         if method == 'POST' and mi:
             it = lst['items'].get(int(mi.group(1)))

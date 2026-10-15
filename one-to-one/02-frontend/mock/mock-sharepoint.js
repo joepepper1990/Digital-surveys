@@ -11,7 +11,7 @@
 // State persists in sessionStorage so you can switch user (TL ↔ Test A ↔ Test B) and carry on.
 (function () {
   'use strict';
-  var KEY = 'oto-mock-db-v4';
+  var KEY = 'oto-mock-db-v5';
   var SITE = 'https://contoso.example/sites/esg-1to1';
   var TZ = 'Europe/London';
 
@@ -26,8 +26,11 @@
     YesNo: ['Yes', 'No'],
     Follow: FOLLOW,
     AppliesTo: ['Shared', 'Individual'],
-    ActionsStatus: ['None', 'Open', 'Done']
+    ActionsStatus: ['None', 'Open', 'Done'],
+    WbStatus: ['Open', 'Submitted', 'Completed']
   };
+  // ?locale=uk (default) | us | uk-noiso | us-noiso – how this pretend SharePoint reads typed dates
+  var LOCALE = (function () { try { return new URL(window.location.href).searchParams.get('locale') || 'uk'; } catch (_) { return 'uk'; } })();
   // field schemas: t = text | note | num | choice | date | datetime | bool | person
   function F(t, extra) { var f = { t: t }; Object.keys(extra || {}).forEach(function (k) { f[k] = extra[k]; }); return f; }
   var SCHEMA = {
@@ -46,7 +49,10 @@
       FB_Q6: F('note'), FB_Q7: F('note'), FB_Q9: F('note'), FB_Overall: F('note'), ExpectationFeedbackJson: F('note'), FollowUpDecision: F('choice', { c: CHOICES.Follow }),
       MeetingDate: F('date'), ActionsJson: F('note'), ActionsStatus: F('choice', { c: CHOICES.ActionsStatus }), NextActionDue: F('date'), CompletedOn: F('datetime'),
       CompletedBy: F('text'), ReleasedOn: F('datetime'), CorrectionLog: F('note') },
-    '1-to-1 Settings': { Title: F('text'), Value: F('note') }
+    '1-to-1 Settings': { Title: F('text'), Value: F('note') },
+    'Wellbeing Assessments': { Title: F('text'), Technician: F('person'), AssessmentStatus: F('choice', { c: CHOICES.WbStatus }), AssessmentDate: F('date'),
+      Position: F('text'), EmployeeNumber: F('text'), AnswersJson: F('note'), PersonalJson: F('note'), ArrangementsJson: F('note'), ManagerNotes: F('note'),
+      NextReviewDate: F('date'), SubmittedOn: F('datetime'), CompletedOn: F('datetime') }
   };
 
   // ---------------------------------------------------------------- people (fictional)
@@ -57,7 +63,9 @@
     { key: 'jordan', id: 13, title: 'Jordan Lee', email: 'jordan.lee@example.test' },
     { key: 'casey', id: 14, title: 'Casey Brooks', email: 'casey.brooks@example.test' },
     { key: 'riley', id: 15, title: 'Riley Evans', email: 'riley.evans@example.test' },
-    { key: 'taylor', id: 16, title: 'Taylor Reed', email: 'taylor.reed@example.test' }
+    { key: 'taylor', id: 16, title: 'Taylor Reed', email: 'taylor.reed@example.test' },
+    { key: 'drew', id: 17, title: 'Drew Collins', email: 'drew.collins@example.test', extra: true, job: 'Technician' },
+    { key: 'morgan', id: 18, title: 'Morgan Shaw', email: 'morgan.shaw@example.test', extra: true, job: 'Senior Technician' }
   ];
   function claimsOf(u) { return 'i:0#.f|membership|' + u.email; }
   function userByEmail(e) { return USERS.find(function (u) { return u.email === String(e || '').toLowerCase(); }) || null; }
@@ -88,11 +96,12 @@
 
   // ---------------------------------------------------------------- seed
   function seed(xss) {
-    var db = { nextId: {}, lists: {}, perms: { 'Monthly Reviews': {}, 'Manager Reviews': {} }, writes: [], emails: [], digest: 'MOCKDIGEST-' + Date.now() };
+    var db = { nextId: {}, lists: {}, perms: { 'Monthly Reviews': {}, 'Manager Reviews': {}, 'Wellbeing Assessments': {} }, writes: [], emails: [], group: [], digest: 'MOCKDIGEST-' + Date.now() };
     Object.keys(SCHEMA).forEach(function (l) { db.lists[l] = []; db.nextId[l] = 1; });
     function add(list, fields) { var id = db.nextId[list]++; var it = { ID: id }; Object.keys(fields).forEach(function (k) { it[k] = fields[k]; }); db.lists[list].push(it); return it; }
     var today = londonToday(), CUR = today.slice(0, 7);
-    var techUsers = USERS.filter(function (u) { return !u.owner; });
+    var techUsers = USERS.filter(function (u) { return !u.owner && !u.extra; });
+    techUsers.forEach(function (u) { db.group.push(u.email); });
     var apOffsets = { alex: [4, '12'], sam: [3, '05'], jordan: [2, '22'], casey: [1, '18'], riley: [5, '09'], taylor: [4, '26'] };
     var yearStart = (+CUR.slice(5, 7) >= 4 ? +CUR.slice(0, 4) : +CUR.slice(0, 4) - 1);
     var YEAR = yearStart + '/' + String(yearStart + 1).slice(2);
@@ -230,6 +239,28 @@
         var ej = JSON.parse(c.rv.ExpectationsJson); ej.forEach(function (x) { x.comment = X[2]; x.title = x.title + X[0]; }); c.rv.ExpectationsJson = JSON.stringify(ej);
       }
     });
+    // wellbeing assessments (Flow 5 effects applied)
+    function wbAns(issues, help) {
+      var a = {}, ids = ['d1', 'd2', 'd3', 'd4', 'd5', 'd6', 'd7', 'd8', 'd9', 'c1', 'c2', 'c3', 's1', 's2', 's3', 'r1', 'r2', 'r3', 'r4', 'r5', 'ro1', 'ro2', 'ro3', 'ro4', 'ro5', 'ro6', 'ro7', 'ro8', 'ro9', 'ch1', 'ch2', 'ch3'];
+      ids.forEach(function (id, i) { var iss = issues.indexOf(id) >= 0; a[id] = { app: iss || i % 3 !== 2 ? 'Y' : 'NA', issue: iss ? 'Y' : (i % 3 !== 2 ? 'N' : 'NA'), help: iss ? help : '' }; });
+      return JSON.stringify(a);
+    }
+    function wbPer(extra) {
+      var p = { circ: 'No', mhBest: 'I have clear priorities and time to plan the week.', mhSigns: 'I go quiet and stop joining in at breaks.', supMgr: 'Check in when the workload spikes.', supOwn: 'Walk at lunchtime; switch off my phone after 8pm.', other: '' };
+      Object.keys(extra || {}).forEach(function (k) { p[k] = extra[k]; }); return JSON.stringify(p);
+    }
+    function addWb(uk, f, perm) { var u = USERS.find(function (x) { return x.key === uk; }); f.Title = u.title + ' – wellbeing assessment'; f.Technician = claimsOf(u); var it = add('Wellbeing Assessments', f); db.perms['Wellbeing Assessments'][it.ID] = {}; db.perms['Wellbeing Assessments'][it.ID][u.email] = perm; return it; }
+    var past = addMonths(CUR, -13) + '-10', soon = new Date(Date.parse(today + 'T12:00:00Z') + 10 * 86400000).toISOString().slice(0, 10);
+    addWb('alex', { AssessmentStatus: 'Completed', AssessmentDate: dateOnlyUtc(past), Position: 'Technician', EmployeeNumber: '100231', AnswersJson: wbAns(['d1', 'd8'], 'Agree a cut-off for out-of-hours calls.'),
+      PersonalJson: wbPer(), ArrangementsJson: JSON.stringify([{ id: 'w1', text: 'No routine work calls after 20:00 unless on call.', review: addMonths(CUR, -10) + '-10', effective: 'Yes', next: '' }]),
+      ManagerNotes: 'Good conversation. Call cut-off agreed with the shift team.', NextReviewDate: dateOnlyUtc(soon), SubmittedOn: dateOnlyUtc(addMonths(CUR, -13) + '-08'), CompletedOn: dateOnlyUtc(past) }, 'read');
+    addWb('alex', { AssessmentStatus: 'Open', AssessmentDate: dateOnlyUtc(soon), Position: 'Technician', AnswersJson: xss ? JSON.stringify({ d1: { app: 'Y', issue: 'Y', help: X.join(' ') } }) : JSON.stringify({ d1: { app: 'Y', issue: 'N', help: '' }, d2: { app: 'Y', issue: 'Y', help: 'Help to prioritise the backlog when outages overlap.' } }),
+      PersonalJson: xss ? wbPer({ mhBest: X[0], other: X[2] }) : '{}' }, 'edit');
+    addWb('sam', { AssessmentStatus: 'Submitted', AssessmentDate: dateOnlyUtc(soon), Position: 'Technician', EmployeeNumber: '100318',
+      AnswersJson: wbAns(['d2', 'd6', 'ro2'], xss ? X[1] : 'More notice of lone-working jobs and a check-in call.'), PersonalJson: wbPer({ circ: 'Yes', circKnow: xss ? X[3] : 'I am a carer for a parent.', circImpact: 'Occasional short-notice absence.', circNotice: 'I may be distracted or late.' }),
+      SubmittedOn: dateOnlyUtc(today) }, 'read');
+    addWb('jordan', { AssessmentStatus: 'Completed', AssessmentDate: dateOnlyUtc(addMonths(CUR, -3) + '-12'), Position: 'Senior Technician', AnswersJson: wbAns([], ''), PersonalJson: wbPer(),
+      ArrangementsJson: '[]', ManagerNotes: 'No concerns raised.', NextReviewDate: dateOnlyUtc(addMonths(CUR, 9) + '-12'), SubmittedOn: dateOnlyUtc(addMonths(CUR, -3) + '-10'), CompletedOn: dateOnlyUtc(addMonths(CUR, -3) + '-12') }, 'read');
     if (xss) {
       var t = db.lists['Technicians'].find(function (x) { return x.Technician === claimsOf(USERS[5]); });
       t.Title = 'Riley ' + X[0];
@@ -298,9 +329,10 @@
         return { err: 'Invalid yes/no value' };
       case 'date': case 'datetime':
         if (v === '') { return { v: null }; }
-        var m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(v);
-        if (!m) { return { err: 'You must specify a valid date within the range of 01/01/1900 and 31/12/8900.' }; }
-        var iso = m[3] + '-' + m[2] + '-' + m[1];
+        var iso = null, mi = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v), m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(v);
+        if (mi && LOCALE.indexOf('noiso') < 0) { iso = v; }
+        else if (m) { iso = LOCALE.indexOf('us') === 0 ? m[3] + '-' + m[1] + '-' + m[2] : m[3] + '-' + m[2] + '-' + m[1]; }
+        if (!iso) { return { err: 'You must specify a valid date within the range of 01/01/1900 and 31/12/8900.' }; }
         var d = new Date(iso + 'T12:00:00Z');
         if (isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== iso) { return { err: 'You must specify a valid date.' }; }
         return { v: dateOnlyUtc(iso) };
@@ -343,6 +375,32 @@
     db.emails.push({ to: u.email, template: mr.ReviewState === 'Completed' ? 'E4' : 'E5', reviewId: mr.ReviewItemId });
   }
 
+  // Flow 4: the 1-to-1 group follows the Technicians list (Active = in the group)
+  function flow4(db, it) {
+    var u = userByClaims(it.Technician); if (!u) { return; }
+    var i = db.group.indexOf(u.email);
+    if (it.Active && i < 0) { db.group.push(u.email); db.emails.push({ to: 'TL', template: 'E8', who: u.email }); }
+    if (!it.Active && i >= 0) { db.group.splice(i, 1); db.emails.push({ to: 'TL', template: 'E8', who: u.email }); }
+  }
+  // Flow 5: wellbeing item permissions and the trusted stamps. The trusted person is the one holding a
+  // permission on the item (set by the flow), never the editable Technician column.
+  function flow5(db, it, created) {
+    var P = db.perms['Wellbeing Assessments'];
+    if (created || !P[it.ID]) {
+      var u0 = userByClaims(it.Technician); if (!u0) { return; }
+      P[it.ID] = {}; P[it.ID][u0.email] = 'edit'; db.emails.push({ to: u0.email, template: 'E9', wbId: it.ID }); return;
+    }
+    var email = Object.keys(P[it.ID])[0], role = P[it.ID][email], u = userByEmail(email);
+    if (role === 'edit' && it.AssessmentStatus !== 'Open') {
+      P[it.ID][email] = 'read'; it.Technician = claimsOf(u);
+      it.AssessmentStatus = 'Submitted'; it.SubmittedOn = nowIso(); it.ArrangementsJson = ''; it.ManagerNotes = ''; it.NextReviewDate = null; it.CompletedOn = null;
+      db.emails.push({ to: 'TL', template: 'E10', wbId: it.ID }); return;
+    }
+    if (role === 'read' && it.AssessmentStatus === 'Completed' && !it.CompletedOn && it.SubmittedOn) {
+      it.CompletedOn = nowIso(); db.emails.push({ to: email, template: 'E11', wbId: it.ID });
+    }
+  }
+
   // ---------------------------------------------------------------- REST router
   function resp(status, body) {
     var text = body === undefined ? '' : JSON.stringify(body);
@@ -358,11 +416,18 @@
       if (method === 'GET' && rest === '/_api/web/currentuser') { return resp(200, { Id: u.id, Title: u.title, Email: u.email, LoginName: claimsOf(u) }); }
       if (method === 'GET' && rest === '/_api/web/effectiveBasePermissions') { return resp(200, u.owner ? { High: '2147483647', Low: '4294967295' } : { High: '176', Low: '138612833' }); }
       if (method === 'POST' && rest === '/_api/contextinfo') { return resp(200, { FormDigestValue: db.digest, FormDigestTimeoutSeconds: 1800, WebFullUrl: SITE }); }
+      if (method === 'POST' && rest === '/_api/SP.UI.ApplicationPages.ClientPeoplePickerWebServiceInterface.clientPeoplePickerSearchUser') {
+        if (headers['X-RequestDigest'] !== db.digest) { return spError(403, 'The security validation for this page is invalid.'); }
+        var qp = (JSON.parse(options.body || '{}').queryParams || {}), term = String(qp.QueryString || '').toLowerCase();
+        var hits = USERS.filter(function (x) { return term && (x.title.toLowerCase().indexOf(term) >= 0 || x.email.indexOf(term) >= 0); }).slice(0, qp.MaximumEntitySuggestions || 8);
+        return resp(200, { value: JSON.stringify(hits.map(function (x) { return { Key: claimsOf(x), DisplayText: x.title, IsResolved: true, EntityType: 'User', EntityData: { Email: x.email, Title: x.job || '' } }; })) });
+      }
       var m = /^\/_api\/web\/lists\/getbytitle\('([^']*(?:''[^']*)*)'\)(\/.*)?$/.exec(rest);
       if (!m) { return spError(404, 'Not found: ' + rest); }
       var list = decodeURIComponent(m[1]).replace(/''/g, "'"), tail = m[2] || '';
       if (!db.lists[list]) { return spError(404, 'List \'' + list + '\' does not exist at site with URL \'' + SITE + '\'.'); }
       if (!canSeeList(db, list, u)) { return spError(404, 'List \'' + list + '\' does not exist at site with URL \'' + SITE + '\'.'); }
+      if (method === 'GET' && tail === '') { return u.owner ? resp(200, { Id: 'list-' + list.replace(/\W/g, '') }) : spError(403, 'Access denied.'); }
       if (method === 'GET' && tail === '/items') {
         var rows = db.lists[list].filter(function (it) { return canRead(db, list, it.ID, u); }).map(function (it) { return serialize(list, it); });
         return resp(200, { value: rows });
@@ -389,6 +454,8 @@
             db.writes.push({ as: u.key, list: list, id: id, fields: Object.keys(pending), values: (body.formValues || []).reduce(function (o, fv) { o[fv.FieldName] = fv.FieldValue; return o; }, {}) });
             if (list === 'Monthly Reviews' && 'ReviewStatus' in pending) { flow2(db, it); }
             if (list === 'Manager Reviews' && 'ReviewState' in pending) { flow3(db, it); }
+            if (list === 'Technicians' && 'Active' in pending) { flow4(db, it); }
+            if (list === 'Wellbeing Assessments') { flow5(db, it, false); }
             saveDb(db);
           }
           return resp(200, { value: results });
@@ -406,6 +473,8 @@
         });
         if (good) {
           db.lists[list].push(item); res.push({ FieldName: 'Id', FieldValue: String(item.ID), HasException: false, ErrorMessage: null });
+          if (list === 'Technicians') { flow4(db, item); }
+          if (list === 'Wellbeing Assessments') { flow5(db, item, true); }
           db.writes.push({ as: u.key, list: list, id: item.ID, create: true, fields: (b.formValues || []).map(function (fv) { return fv.FieldName; }), values: (b.formValues || []).reduce(function (o, fv) { o[fv.FieldName] = fv.FieldValue; return o; }, {}) });
           saveDb(db);
         } else { db.nextId[list]--; }
