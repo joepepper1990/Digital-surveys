@@ -17,7 +17,7 @@
 window.ESGOneToOne = function (ctx) {
   'use strict';
 
-  var VERSION = '4.2.0';
+  var VERSION = '4.2.1';
 
   // ---------------------------------------------------------------------------------------------
   // CONFIG — normally nothing to change. List titles must match the lists you created.
@@ -551,6 +551,26 @@ window.ESGOneToOne = function (ctx) {
     return SETTINGS.bands[SETTINGS.bands.length - 1];
   }
   function apDateOf(tech) { return (TECH_INFO[tech] && TECH_INFO[tech].appraisal) || ''; }
+  // The appraisal date is the deadline, but it is best done in the calendar month before ("aim" from the 1st of that month).
+  function monthName(key) { return new Date(key + '-01T12:00:00Z').toLocaleDateString('en-GB', { month: 'long', timeZone: 'UTC' }); }
+  function apStatus(ap) {
+    if (!ap) { return null; }
+    var days = daysBetween(TODAY, ap), aimMonth = addMonths(ap.slice(0, 7), -1);
+    return { ap: ap, days: days, aimMonth: aimMonth, aimBy: lastDay(aimMonth), state: days < 0 ? 'overdue' : TODAY >= aimMonth + '-01' ? 'aim' : 'ok' };
+  }
+  function overdueText(s) { return 'Overdue by ' + (-s.days) + ' day' + (s.days === -1 ? '' : 's'); }
+  function daysToGo(s) { return s.days === 0 ? 'Today' : s.days + ' day' + (s.days === 1 ? '' : 's'); }
+  // "Days to go" cell: Overdue in red, otherwise days plus a subtle "aim: in December" (amber once that month has started).
+  function apDaysCell(td, ap) {
+    var s = apStatus(ap);
+    while (td.firstChild) { td.removeChild(td.firstChild); }
+    td.className = 'num' + (s && s.state === 'overdue' ? ' overdue' : '');
+    if (!s) { td.textContent = '—'; return td; }
+    if (s.state === 'overdue') { td.textContent = overdueText(s); return td; }
+    td.appendChild(document.createTextNode(daysToGo(s)));
+    td.appendChild(h('div', { class: 'aimnote' + (s.state === 'aim' ? ' now' : ''), text: 'aim: in ' + monthName(s.aimMonth) }));
+    return td;
+  }
   function periodFor(tech) {
     var ap = apDateOf(tech) || addDays(TODAY, 180);   // no date yet: assume six months ahead (shown as "not set")
     var end = ap.slice(0, 7);
@@ -1165,7 +1185,8 @@ window.ESGOneToOne = function (ctx) {
       h('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px' }, [
         h('div', { class: 'big-score' }, [f1(o.projected), h('small', { text: ' / 5 projected' })]), bandChip(o.projected, true)]),
       track(o.projected),
-      h('dl', { class: 'kv' }, [h('dt', { text: 'Appraisal date' }), h('dd', { text: p.set ? fmtDate(p.apDate) + ' (' + days + ' days)' : 'Not set yet' }),
+      h('dl', { class: 'kv' }, [h('dt', { text: 'Appraisal date' }), h('dd', { class: p.set && days < 0 ? 'overdue' : null, text: p.set ? fmtDate(p.apDate) + (days < 0 ? ' (overdue)' : ' (' + daysToGo(apStatus(p.apDate)).toLowerCase() + ')') : 'Not set yet' }),
+        p.set && days >= 0 ? h('dt', { text: 'Aim to complete' }) : null, p.set && days >= 0 ? h('dd', { text: 'In ' + monthLabel(apStatus(p.apDate).aimMonth) }) : null,
         h('dt', { text: 'Current position' }), h('dd', { text: f1(o.current) + ' / 5' }),
         h('dt', { text: 'Trend' }), h('dd', { text: (o.slope >= 0 ? '+' : '') + o.slope.toFixed(2) + ' per month' })])
     ]);
@@ -1194,7 +1215,7 @@ window.ESGOneToOne = function (ctx) {
   // PROFILE / MY APPRAISAL (technician sees their own; TL sees any technician)
   // ---------------------------------------------------------------------------------------------
   function profileView(tech, aud) {
-    var o = expectedOutcome(tech, aud), p = o.period, days = daysBetween(TODAY, p.apDate);
+    var o = expectedOutcome(tech, aud), p = o.period;
     var ot = onTimeOf(tech), acts = actionsOf(function (ac, r) { return r.tech === tech; }, aud);
     var openActs = acts.filter(function (x) { return x.ac.status === 'Open'; });
     var head = h('div', { class: 'pagehead' }, [
@@ -1210,7 +1231,12 @@ window.ESGOneToOne = function (ctx) {
       tile('Expected outcome', [bandChip(o.projected, true)], 'Projected at appraisal'),
       tile('Projected score', [f1(o.projected), h('small', { text: ' / 5' })], 'Trend ' + (o.slope >= 0 ? '+' : '') + o.slope.toFixed(2) + ' per month'),
       tile('Current position', [f1(o.current), h('small', { text: ' / 5' })], 'Self ' + f1(o.selfAvg) + (' · ' + L.mgr + ' ') + f1(o.tlAvg)),
-      tile('Days to appraisal', p.set ? String(Math.max(0, days)) : '—', p.set ? fmtDate(p.apDate) : 'Not set', p.set && days <= 30 ? 'warn' : ''),
+      (function () {
+        var s = p.set ? apStatus(p.apDate) : null;
+        if (!s) { return tile('Days to appraisal', '—', 'Not set'); }
+        if (s.state === 'overdue') { return tile('Days to appraisal', 'Overdue', fmtDate(s.ap) + ' · ' + (-s.days) + ' day' + (s.days === -1 ? '' : 's') + ' ago', 'bad'); }
+        return tile('Days to appraisal', String(s.days), fmtDate(s.ap) + ' · aim for ' + monthName(s.aimMonth), s.state === 'aim' ? 'warn' : '');
+      })(),
       tile('On-time submissions', [String(ot.onTime), h('small', { text: ' of ' + ot.total })], 'In the appraisal period'),
       tile('Open actions', String(openActs.length), acts.filter(function (x) { return acOverdue(x.ac); }).length + ' overdue', acts.some(function (x) { return acOverdue(x.ac); }) ? 'bad' : '')
     ]);
@@ -1266,7 +1292,14 @@ window.ESGOneToOne = function (ctx) {
     TECHS.forEach(function (t) {
       var ap = apDateOf(t);
       if (!ap) { items.push({ pri: 3, ico: '📅', text: 'No appraisal date set for ' + t, btn: 'Set date', fn: function () { openSettings('team'); } }); }
-      else { var d = daysBetween(TODAY, ap); if (d >= 0 && d <= 30) { items.push({ pri: 2, ico: '📄', text: t + '\'s appraisal is in ' + d + ' day' + (d === 1 ? '' : 's') + ' (' + fmtDate(ap) + ')', btn: 'Report', fn: function () { state.report = { tech: t, aud: 'tl' }; render(false); } }); } }
+      else {
+        var s = apStatus(ap), report = function () { state.report = { tech: t, aud: 'tl' }; render(false); };
+        if (s.state === 'overdue') { items.push({ pri: 2, ico: '⏰', text: t + '\'s appraisal is overdue (' + fmtDate(ap) + ') – once it\'s done, set the next date', btn: 'Set date', fn: function () { openSettings('team'); } }); }
+        else if (s.state === 'aim') {
+          items.push({ pri: 2, ico: '📄', btn: 'Report', fn: report, text: TODAY <= s.aimBy ? 'Aim to complete ' + t + '\'s appraisal by ' + fmtDate(s.aimBy) + ' (due ' + fmtDate(ap) + ')'
+            : t + '\'s appraisal is due ' + (s.days === 0 ? 'today' : 'in ' + daysToGo(s).toLowerCase()) + ' (' + fmtDate(ap) + ')' });
+        }
+      }
     });
     return items.sort(function (x, y) { return x.pri - y.pri; });
   }
@@ -1329,11 +1362,12 @@ window.ESGOneToOne = function (ctx) {
       }), 6, '#2f9a63', 170, sub, 420);
     } else {
       var dvals = TECHS.map(function (t) {
-        var ap = apDateOf(t), d = ap ? daysBetween(TODAY, ap) : null;
-        return { label: first(t), value: d !== null && d >= 0 ? d : null, color: d !== null && d <= 30 ? '#d99a12' : '#1f7190', tipText: t + ': ' + (ap ? (d >= 0 ? d + ' days (' + fmtDate(ap) + ')' : 'passed') : 'no date set') };
+        var ap = apDateOf(t), s = apStatus(ap);
+        return { label: first(t) + (s && s.state === 'overdue' ? ' ⚠' : ''), value: s && s.state !== 'overdue' ? s.days : null, color: s && s.state === 'aim' ? '#d99a12' : '#1f7190',
+          tipText: t + ': ' + (!s ? 'no date set' : s.state === 'overdue' ? overdueText(s).toLowerCase() + ' (' + fmtDate(ap) + ')' : daysToGo(s).toLowerCase() + ' (' + fmtDate(ap) + ') · aim for ' + monthName(s.aimMonth)) };
       });
       var mx = Math.max(30, Math.max.apply(null, dvals.map(function (v) { return v.value || 0; })));
-      sub = 'Days until each appraisal · amber = within 30 days';
+      sub = 'Days until each appraisal · amber = aim to complete this month · ⚠ overdue';
       chart = colChart(dvals, Math.ceil(mx / 30) * 30, '#1f7190', 170, sub, 420, 30);
     }
     return card(null, null, [h('div', { class: 'card-h' }, [h('div', null, [sel, h('div', { class: 'sub', text: sub })])]), chart], 'chartcard');
@@ -1368,7 +1402,12 @@ window.ESGOneToOne = function (ctx) {
       tile('Not yet submitted', String(cnt(function (r) { return r.state === 'Open'; })), cnt(isOverdue) + ' overdue · due ' + fmtDate(lastDay(CUR)), cnt(isOverdue) ? 'bad' : ''),
       tile('Dedicated 1-to-1s requested', String(cnt(function (r) { return followOf(r) === DEDICATED; })), 'From this month\'s follow-up answers', cnt(function (r) { return followOf(r) === DEDICATED; }) ? 'warn' : ''),
       tile('Open actions', String(openA.length), openA.filter(function (x) { return acOverdue(x.ac); }).length + ' overdue', openA.some(function (x) { return acOverdue(x.ac); }) ? 'bad' : ''),
-      tile('Next appraisal', nextAp ? String(daysBetween(TODAY, apDateOf(nextAp))) + ' days' : '—', nextAp ? nextAp + ' · ' + fmtDate(apDateOf(nextAp)) : 'Set dates in ⚙ Settings', nextAp && daysBetween(TODAY, apDateOf(nextAp)) <= 30 ? 'warn' : '')
+      (function () {
+        var late = TECHS.filter(function (t) { var s = apStatus(apDateOf(t)); return s && s.state === 'overdue'; });
+        if (late.length) { return tile('Appraisals overdue', String(late.length), late.length === 1 ? late[0] + ' · ' + fmtDate(apDateOf(late[0])) : late.map(first).join(', '), 'bad'); }
+        var s = nextAp ? apStatus(apDateOf(nextAp)) : null;
+        return tile('Next appraisal', s ? daysToGo(s) : '—', s ? nextAp + ' · ' + fmtDate(s.ap) + ' · aim by ' + fmtDate(s.aimBy).slice(0, 6) : 'Set dates in ⚙ Settings', s && s.state === 'aim' ? 'warn' : '');
+      })()
     ]);
     var bandCounts = SETTINGS.bands.map(function (b) {
       var who = TECHS.filter(function (t) { return outs[t].band && outs[t].band.cls === b.cls; });
@@ -1380,14 +1419,14 @@ window.ESGOneToOne = function (ctx) {
       teamChartCard(outs)
     ]);
     var rows = TECHS.map(function (t) {
-      var o = outs[t], r = currentOf(t), ap = apDateOf(t), days = ap ? daysBetween(TODAY, ap) : null;
+      var o = outs[t], r = currentOf(t), ap = apDateOf(t);
       var oa = actionsOf(function (ac, rr) { return rr.tech === t && ac.status === 'Open'; }, 'tl');
       var od = oa.filter(function (x) { return acOverdue(x.ac); }).length;
       return h('tr', { class: r && followOf(r) === DEDICATED ? 'hl' : null }, [
         h('td', null, [h('a', { href: '#', style: 'font-weight:650;color:var(--navy)', text: t, onclick: function (e) { e.preventDefault(); go('profile', { profileTech: t }); } }),
           r && followOf(r) === DEDICATED ? tip(h('span', { text: ' 🗓' }), 'Dedicated 1-to-1 requested') : null]),
         h('td', { class: 'num', text: ap ? fmtDate(ap) : 'Not set' }),
-        h('td', { class: 'num ' + (days !== null && days <= 30 ? 'overdue' : ''), text: days === null ? '—' : days >= 0 ? days + ' days' : 'Passed' }),
+        apDaysCell(h('td'), ap),
         h('td', { style: 'width:170px' }, [h('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:5px' }, [bandChip(o.projected), h('b', { class: 'num', text: f1(o.projected) })]), track(o.projected)]),
         h('td', { class: 'num' }, [h('span', null, [h('i', { class: 'dot', style: 'background:' + C_SELF }), f1(o.selfAvg)]), h('br'), h('span', null, [h('i', { class: 'dot', style: 'background:' + C_TL }), f1(o.tlAvg)])]),
         h('td', null, tip(h('span', null, sparkline(o.pts.map(function (pt) { return pt.used; }), '#13516b')), 'Monthly score, oldest → newest\n' + o.pts.map(function (pt) { return monthShort(pt.month) + ' ' + pt.used.toFixed(1); }).join('  '))),
@@ -2206,11 +2245,11 @@ window.ESGOneToOne = function (ctx) {
       var names = memberNames();
       out.push(table([L.one, 'Email', 'Status', 'Appraisal date', 'Days to go', 'Period covered', ''], names.map(function (t) {
         var info = TECH_INFO[t];
-        var daysTd = h('td', { class: 'num' }), perTd = h('td', { class: 'small muted' });
+        var daysTd = h('td'), perTd = h('td', { class: 'small muted' });
         function upd() {
-          if (!dates[t]) { daysTd.textContent = '—'; perTd.textContent = info.active ? 'Enter a date' : ''; return; }
-          var end = dates[t].slice(0, 7), d = daysBetween(TODAY, dates[t]);
-          daysTd.textContent = d >= 0 ? d + ' days' : 'Passed';
+          if (!dates[t]) { apDaysCell(daysTd, ''); perTd.textContent = info.active ? 'Enter a date' : ''; return; }
+          var end = dates[t].slice(0, 7);
+          apDaysCell(daysTd, dates[t]);
           perTd.textContent = monthLabel(addMonths(end, -11)) + ' – ' + monthLabel(end);
         }
         upd();

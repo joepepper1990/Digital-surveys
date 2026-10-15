@@ -318,11 +318,37 @@ def check_secure(f):
     return probs
 
 
+# Lists added after 1.0. Power Automate checks a connector step's list exists when a flow is saved or turned on, so a
+# flow that is on during an upgrade (flows 1-4) must reach these lists by REST only, never by a connector step.
+NEW_LISTS = {l['title'] for l in LISTS if l['key'] == 'wellbeing'}
+
+
+def check_upgrade_safe(f):
+    if '0 Setup' in f['name'] or '5 Wellbeing' in f['name']:
+        return []
+    probs = []
+    def walk(o, path):
+        if isinstance(o, dict):
+            if o.get('type') in ('OpenApiConnection', 'OpenApiConnectionWebhook'):
+                t = ((o.get('inputs') or {}).get('parameters') or {}).get('table')
+                if t in NEW_LISTS:
+                    probs.append('[{0}] {1} names the list "{2}" in a connector step – the flow would fail to turn on '
+                                 'after an upgrade until Setup has created it; read it by REST instead'.format(f['name'], path, t))
+            for k, v in o.items():
+                walk(v, k)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v, path)
+    walk(f['json']['properties']['definition'], 'definition')
+    return probs
+
+
 def validate_all(flows):
     probs = check_schema()
     for f in flows:
         probs += Flow(f['name'], f['json']['properties']['definition']).run()
         probs += check_secure(f)
+        probs += check_upgrade_safe(f)
         refs = f['json']['properties']['connectionReferences']
         used = set(re.findall(r'"connectionName": "([^"]+)"', json.dumps(f['json'])))
         if used - set(refs):

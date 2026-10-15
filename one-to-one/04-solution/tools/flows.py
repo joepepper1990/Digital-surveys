@@ -545,7 +545,7 @@ def flow_daily():
           '<p style="color:#666">This link only works when you\'re signed in with your own company account.</p>')
     e2 = ("<p>Your 1-to-1 hasn't been submitted yet. Anything you've saved is still there: "
           '<a href="' + link("items('Each_outstanding')?['ReviewItemId']") + '"><b>Continue</b></a></p>')
-    e12 = ("<p>The wellbeing review agreed with @{items('Each_review_due')?['Technician']?['DisplayName']} is due on "
+    e12 = ("<p>The wellbeing review agreed with @{items('Each_review_due')?['Technician']?['Title']} is due on "
            "@{formatDateTime(" + local_date("items('Each_review_due')?['NextReviewDate']") + ", 'dd-MMM-yyyy')}. Arrange the review "
            "conversation, or start a new assessment if one is needed.</p>"
            '<p><a href="' + wblink("items('Each_review_due')?['ID']") + '"><b>Open the last assessment</b></a></p>')
@@ -644,14 +644,17 @@ def flow_daily():
         ))),
         ('List_wellbeing', query("@body('Get_lists')?['value']", "@equals(item()?['RootFolder']?['Name'], 'WellbeingAssessments')", secure=True)),
         ('Wellbeing_list_exists', cond("@not(empty(body('List_wellbeing')))", seq(
-            ('Get_wellbeing', get_items(WB, "AssessmentStatus eq 'Completed'", top=5000)),
+            # REST by list GUID, not the connector's Get items: a connector step naming this list would stop the flow
+            # being saved/turned on until setup has created the list (upgrade from 1.0).
+            ('Get_wellbeing', http('GET', "_api/web/lists(guid'@{first(body('List_wellbeing'))?['Id']}')/items?$select=ID,NextReviewDate,"
+                                   "Technician/Title&$expand=Technician&$filter=AssessmentStatus eq 'Completed'&$top=5000")),
             ('Today', compose("@formatDateTime(outputs('ukNow'), 'yyyy-MM-dd')")),
             ('In7', compose("@formatDateTime(addDays(outputs('ukNow'), 7), 'yyyy-MM-dd')")),
             ('Reviews_due', query("@body('Get_wellbeing')?['value']",
                                   "@contains(createArray(outputs('Today'), outputs('In7')), " + local_date("item()?['NextReviewDate']") + ")", secure=True)),
             ('Each_review_due', foreach("@body('Reviews_due')", seq(
                 ('Send_E12', email('@' + TL_EMAIL, "Wellbeing review @{if(equals(" + local_date("items('Each_review_due')?['NextReviewDate']") +
-                                   ", outputs('Today')), 'due today', 'due in 7 days')}: @{items('Each_review_due')?['Technician']?['DisplayName']}", e12)),
+                                   ", outputs('Today')), 'due today', 'due in 7 days')}: @{items('Each_review_due')?['Technician']?['Title']}", e12)),
             ))),
         ))),
         ('Any_problems', cond("@greater(length(variables('varProblems')), 0)", seq(

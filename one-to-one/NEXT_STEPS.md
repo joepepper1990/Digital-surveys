@@ -18,7 +18,7 @@
 
   | File | What it is |
   |---|---|
-  | [`02-frontend/`](02-frontend/README.md) | Production frontend v4.2.0, local mock, 148 automated checks (all passing) |
+  | [`02-frontend/`](02-frontend/README.md) | Production frontend v4.2.1, local mock, 156 automated checks (all passing) |
   | [`01-sharepoint/lists.md`](01-sharepoint/lists.md) | Five-list build checklist |
   | [`04-solution/`](04-solution/IMPORT_GUIDE.md) | **Importable solution**: setup flow (creates the lists exactly) + Flows 1–5; offline legacy builder; validated and simulated end to end |
   | [`03-flows/`](03-flows/FLOW_BUILD_SHEETS.md) | Flow build sheets and email templates (reference / manual build) |
@@ -32,7 +32,7 @@
 
 Follow [`GO_LIVE_RUNBOOK.md`](GO_LIVE_RUNBOOK.md) from **Phase 4**:
 
-1. **Import the solution** [`04-solution/ESGOneToOne_1_1_0_0_unmanaged.zip`](04-solution/IMPORT_GUIDE.md): pick your connections, enter the site URL and your email.
+1. **Import the solution** [`04-solution/ESGOneToOne_1_1_1_0_unmanaged.zip`](04-solution/IMPORT_GUIDE.md): pick your connections, enter the site URL and your email.
 2. **Run *ESG 1-to-1 | 0 Setup*.** It creates the six lists, permission levels, group and list permissions, then emails you a summary.
 3. **Install the frontend.** Upload two files, choose the *ESG 1-to-1* layout in a full-width section. There's nothing to edit.
 4. **Turn on Flows 1–5.**

@@ -1307,14 +1307,16 @@
                   "inputs": {
                     "host": {
                       "connectionName": "shared_sharepointonline",
-                      "operationId": "GetItems",
+                      "operationId": "HttpRequest",
                       "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
                     },
                     "parameters": {
                       "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
-                      "table": "Wellbeing Assessments",
-                      "$filter": "AssessmentStatus eq 'Completed'",
-                      "$top": 5000
+                      "parameters/method": "GET",
+                      "parameters/uri": "_api/web/lists(guid'@{first(body('List_wellbeing'))?['Id']}')/items?$select=ID,NextReviewDate,Technician/Title&$expand=Technician&$filter=AssessmentStatus eq 'Completed'&$top=5000",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata"
+                      }
                     },
                     "authentication": "@parameters('$authentication')"
                   },
@@ -1380,8 +1382,8 @@
                         },
                         "parameters": {
                           "emailMessage/To": "@parameters('ESG 1-to-1 Team Leader email (esg_ManagerEmail)')",
-                          "emailMessage/Subject": "Wellbeing review @{if(equals(if(contains(string(coalesce(items('Each_review_due')?['NextReviewDate'], '')), 'T'), formatDateTime(convertFromUtc(coalesce(items('Each_review_due')?['NextReviewDate'], '2000-01-01T00:00:00Z'), 'GMT Standard Time'), 'yyyy-MM-dd'), coalesce(items('Each_review_due')?['NextReviewDate'], '')), outputs('Today')), 'due today', 'due in 7 days')}: @{items('Each_review_due')?['Technician']?['DisplayName']}",
-                          "emailMessage/Body": "<p>The wellbeing review agreed with @{items('Each_review_due')?['Technician']?['DisplayName']} is due on @{formatDateTime(if(contains(string(coalesce(items('Each_review_due')?['NextReviewDate'], '')), 'T'), formatDateTime(convertFromUtc(coalesce(items('Each_review_due')?['NextReviewDate'], '2000-01-01T00:00:00Z'), 'GMT Standard Time'), 'yyyy-MM-dd'), coalesce(items('Each_review_due')?['NextReviewDate'], '')), 'dd-MMM-yyyy')}. Arrange the review conversation, or start a new assessment if one is needed.</p><p><a href=\"@{concat(concat(if(endsWith(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), '/'), substring(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), 0, sub(length(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), 1)), parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), '/SitePages/OneToOne.aspx'), if(empty(first(split(string(coalesce(items('Each_review_due')?['ID'], '')), '.'))), '', concat('?wbId=', first(split(string(coalesce(items('Each_review_due')?['ID'], '')), '.')))))}\"><b>Open the last assessment</b></a></p>",
+                          "emailMessage/Subject": "Wellbeing review @{if(equals(if(contains(string(coalesce(items('Each_review_due')?['NextReviewDate'], '')), 'T'), formatDateTime(convertFromUtc(coalesce(items('Each_review_due')?['NextReviewDate'], '2000-01-01T00:00:00Z'), 'GMT Standard Time'), 'yyyy-MM-dd'), coalesce(items('Each_review_due')?['NextReviewDate'], '')), outputs('Today')), 'due today', 'due in 7 days')}: @{items('Each_review_due')?['Technician']?['Title']}",
+                          "emailMessage/Body": "<p>The wellbeing review agreed with @{items('Each_review_due')?['Technician']?['Title']} is due on @{formatDateTime(if(contains(string(coalesce(items('Each_review_due')?['NextReviewDate'], '')), 'T'), formatDateTime(convertFromUtc(coalesce(items('Each_review_due')?['NextReviewDate'], '2000-01-01T00:00:00Z'), 'GMT Standard Time'), 'yyyy-MM-dd'), coalesce(items('Each_review_due')?['NextReviewDate'], '')), 'dd-MMM-yyyy')}. Arrange the review conversation, or start a new assessment if one is needed.</p><p><a href=\"@{concat(concat(if(endsWith(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), '/'), substring(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), 0, sub(length(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), 1)), parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), '/SitePages/OneToOne.aspx'), if(empty(first(split(string(coalesce(items('Each_review_due')?['ID'], '')), '.'))), '', concat('?wbId=', first(split(string(coalesce(items('Each_review_due')?['ID'], '')), '.')))))}\"><b>Open the last assessment</b></a></p>",
                           "emailMessage/Importance": "Normal"
                         },
                         "authentication": "@parameters('$authentication')"

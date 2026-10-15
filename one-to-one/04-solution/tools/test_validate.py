@@ -156,6 +156,13 @@ def unsecured_filter(fl):
     del a['runtimeConfiguration']
 
 
+@mutation
+def new_list_by_connector(fl):
+    # 1.1.0.0's Flow 1 failed to turn on after an upgrade from 1.0 because of a step like this
+    _, a = find(fl[1]['json']['properties']['definition'], 'Get_technicians')
+    a['inputs']['parameters'] = {'dataset': a['inputs']['parameters']['dataset'], 'table': 'Wellbeing Assessments'}
+
+
 if __name__ == '__main__':
     base = build_all()
     assert validate.validate_all(base) == [], 'baseline must be clean'
@@ -164,7 +171,7 @@ if __name__ == '__main__':
         fl = copy.deepcopy(base)
         m(fl)
         probs = validate.validate_all(fl)
-        ok = bool(probs)
+        ok = bool(probs) and (m.__name__ != 'new_list_by_connector' or any('read it by REST' in p for p in probs))
         failed += not ok
         print(('PASS ' if ok else 'FAIL ') + m.__name__ + ('  → ' + probs[0] if probs else ''))
     print('\n{0} / {1} mutations caught'.format(len(MUTATIONS) - failed, len(MUTATIONS)))

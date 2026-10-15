@@ -30,8 +30,8 @@ One tick-list from where you are now to a running system. For a single printable
 
 - [ ] **Solution zip.** The verification pass replaced it under the same file name. Open your zip, then open `solution.xml` in Notepad.
   - The correct version contains `<RootComponent type="380" schemaName="esg_SiteUrl"`.
-  - If yours doesn't, re-download [`04-solution/ESGOneToOne_1_1_0_0_unmanaged.zip`](04-solution/ESGOneToOne_1_1_0_0_unmanaged.zip).
-- [ ] **Frontend.** Download the latest [`02-frontend/one-to-one.html`](02-frontend/one-to-one.html) and [`02-frontend/one-to-one.js`](02-frontend/one-to-one.js) (v4.2.0).
+  - If yours doesn't, re-download [`04-solution/ESGOneToOne_1_1_1_0_unmanaged.zip`](04-solution/ESGOneToOne_1_1_1_0_unmanaged.zip).
+- [ ] **Frontend.** Download the latest [`02-frontend/one-to-one.html`](02-frontend/one-to-one.html) and [`02-frontend/one-to-one.js`](02-frontend/one-to-one.js) (v4.2.1).
 - [ ] **Approved route.** Transfer the files the usual approved way.
 
 ## Phase A — See the system yourself (nobody else involved)
@@ -74,14 +74,14 @@ One tick-list from where you are now to a running system. For a single printable
 - [ ] Open the site. You see:
   - the dark top menu bar (Team overview, Monthly reviews, Expectations, Actions, Team ▾, ⚙ Settings);
   - **"No technicians yet"** on Team overview;
-  - **v4.2.0** at the right-hand end of the top menu bar.
+  - **v4.2.1** at the right-hand end of the top menu bar.
 - [ ] Click through **Monthly reviews**, **Expectations**, **Actions** and **⚙ Settings**.
 - [ ] **Expectations:** add one *Shared* expectation. This proves item creation and Yes/No columns in your tenant. (The *Individual* one needs a technician in the list, so it moves to Phase B.)
 - [ ] Check the menu bar and content fill the width of the page.
 
 **A6. Turn the flows on**
 - [ ] Solutions → **ESG 1-to-1** → turn on **1 Daily scheduler**, **2 Review submitted**, **3 Manager decision**, **4 Team members** and **5 Wellbeing**.
-- [ ] Already imported 1.0? Upgrade first: [IMPORT_GUIDE §0](04-solution/IMPORT_GUIDE.md) (import 1.1 over it, re-run setup, upload v4.2.0, Reset layout cache).
+- [ ] Already imported 1.0? Upgrade first: [IMPORT_GUIDE §0](04-solution/IMPORT_GUIDE.md) (import 1.1 over it, re-run setup, upload v4.2.1, Reset layout cache).
 
 ## Phase B — See it as a technician (test accounts only)
 

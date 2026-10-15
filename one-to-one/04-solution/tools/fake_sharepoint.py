@@ -410,7 +410,33 @@ class FakeSP:
             del lst['ra'][int(mdel.group(1))]
             return {}
         if method == 'GET' and rest == '/items':
-            return {'value': [{'Id': i['id'], 'Title': i['fields'].get('Title')} for i in lst['items'].values()]}
+            args = dict(kv.split('=', 1) for kv in qs.split('&') if '=' in kv)
+            sel = [x for x in args.get('$select', 'Id,Title').split(',') if x]
+            rows = self.get_items(lst, args.get('$filter'), None, args.get('$top'))
+            out = []
+            for r in rows:
+                o = {'Id': r['ID'], 'ID': r['ID'], 'Title': r.get('Title')}
+                for f in sel:
+                    name, _, sub = f.partition('/')
+                    if name in ('Id', 'ID', 'Title'):
+                        continue
+                    if name not in lst['fields']:
+                        fail(400, 'column not found ' + name)
+                    t = lst['fields'][name]
+                    v = lst['items'][r['ID']]['fields'].get(name)
+                    if t['Type'] == 'User':
+                        if '$expand' not in args or name not in args['$expand']:
+                            fail(400, 'person column needs $expand ' + name)
+                        u = self.users.get(v) if v is not None else None
+                        o[name] = {'Title': u['Title'], 'EMail': u['Email']} if u else None
+                    elif t['Type'] == 'DateTime' and v:
+                        from datetime import datetime, timezone
+                        from zoneinfo import ZoneInfo
+                        o[name] = v if 'T' in v else datetime.fromisoformat(v[:10]).replace(tzinfo=ZoneInfo('Europe/London')).astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+                    else:
+                        o[name] = v
+                out.append(o)
+            return {'value': out}
         if method == 'POST' and rest == '/items':
             if not verbose or data.get('__metadata', {}).get('type') != lst['entity']:
                 fail(400, 'item type must be ' + lst['entity'])

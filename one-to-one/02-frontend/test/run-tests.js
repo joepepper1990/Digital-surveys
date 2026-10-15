@@ -516,6 +516,28 @@ async function main() {
   await P.locator('select.chartsel').selectOption('workload');
   await openTeam(P, 'Jordan Lee'); await P.locator('button:has-text("Generate appraisal report")').click();
   ok('Report: new footer wording', (await P.locator('.report-doc .note').innerText()) === 'Generated from the monthly 1-to-1 records. Wellbeing answers are deliberately excluded. The expected outcome is a guide only.');
+  // appraisal timing (v4.2.1): best done in the calendar month before; a passed date is Overdue
+  var cm = curMonth(), lastCm = cm + '-' + String(new Date(Date.UTC(+cm.slice(0, 4), +cm.slice(5, 7), 0)).getUTCDate());
+  var aimName = new Date(cm + '-01T12:00:00Z').toLocaleDateString('en-GB', { month: 'long', timeZone: 'UTC' });
+  await o15({ as: 'tl' });
+  var tA = await P.locator('[data-oto-root]').innerText();
+  ok('Appraisal: due next month → "Aim to complete … by" the end of this month', tA.indexOf('Aim to complete Casey Brooks\'s appraisal by ' + fmt(lastCm)) >= 0, tA.slice(0, 600));
+  ok('Appraisal: team table shows the aim month under Days to go', tA.indexOf('aim: in ' + aimName) >= 0 && (await P.locator('.aimnote.now').count()) >= 1);
+  ok('Appraisal: dates further out are not flagged yet', tA.indexOf('Aim to complete Alex Morgan') < 0);
+  await P.evaluate(function (iso) {
+    var d = OTO_MOCK.current.db; d.lists['Technicians'].find(function (t) { return t.Title === 'Alex Morgan'; }).AppraisalDate = iso + 'T12:00:00Z';
+    sessionStorage.setItem('oto-mock-db-v5', JSON.stringify(d));
+  }, futureIso(-10));
+  await o15({ as: 'tl' });
+  var tO = await P.locator('[data-oto-root]').innerText();
+  ok('Appraisal: a passed date says "Overdue by N days", never "Passed"', /Overdue by \d+ days/.test(tO) && tO.indexOf('Passed') < 0);
+  ok('Appraisal: Needs your attention says it is overdue and to set the next date', /Alex Morgan's appraisal is overdue \(.*\) – once it's done, set the next date/.test(tO));
+  ok('Appraisal: overdue tile replaces Next appraisal', /Appraisals overdue\s*1\s*Alex Morgan/i.test(tO), tO.slice(0, 500));
+  await P.locator('.topbar >> text=Settings').click();
+  ok('Appraisal: Settings → Team says Overdue too', /Overdue by \d+ days/.test(await P.locator('.modal').innerText()));
+  await P.locator('.modal button:has-text("Cancel"), .modal button:has-text("Close")').first().click();
+  await openTeam(P, 'Alex Morgan');
+  ok('Appraisal: profile tile shows Overdue', /Days to appraisal\s*Overdue/i.test(await P.locator('.tiles').innerText()));
   await c15.close();
 
   // ---------------------------------------------------------------- 16. wellbeing assessments

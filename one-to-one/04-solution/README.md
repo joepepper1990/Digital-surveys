@@ -6,7 +6,7 @@
 
 | Path | What it is |
 |---|---|
-| `ESGOneToOne_1_1_0_0_unmanaged.zip` | **The importable solution**, packed by Microsoft's Power Platform CLI (`pac solution pack`) |
+| `ESGOneToOne_1_1_1_0_unmanaged.zip` | **The importable solution**, packed by Microsoft's Power Platform CLI (`pac solution pack`) |
 | `legacy-package-builder.html` | Offline page that makes legacy (non-solution) packages, for environments without Dataverse |
 | `src/` | The unpacked solution, in the same layout `pac solution unpack` produces. **Generated – do not edit by hand.** |
 | `tools/schema.py` | **The SharePoint schema, defined once:** lists, columns (field XML), indexes, views, permission levels |

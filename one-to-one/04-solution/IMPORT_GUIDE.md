@@ -7,7 +7,7 @@ You don't build the flows or the lists by hand any more:
 
 | File | What it is |
 |---|---|
-| [`ESGOneToOne_1_1_0_0_unmanaged.zip`](ESGOneToOne_1_1_0_0_unmanaged.zip) | **The solution (1.1.0.0).** Six flows, three connection references, two environment variables. |
+| [`ESGOneToOne_1_1_1_0_unmanaged.zip`](ESGOneToOne_1_1_1_0_unmanaged.zip) | **The solution (1.1.1.0).** Six flows, three connection references, two environment variables. |
 | [`legacy-package-builder.html`](legacy-package-builder.html) | **Fallback only**, if your environment can't import solutions (§6). |
 
 The six flows:
@@ -29,12 +29,15 @@ Flows 1–5 are imported **off**, because the lists don't exist until the setup 
 
 Do this instead of §1–§3 if **ESG 1-to-1** (1.0.0.0) is already in your environment.
 
-1. **Solutions → Import solution → Browse** → `ESGOneToOne_1_1_0_0_unmanaged.zip` → **Next**.
+> **Already on 1.1.0.0?** Import 1.1.1.0 over it the same way (step 1). If you have already run Setup after 1.1.0.0, skip step 2; just check flows 1–5 are **On** afterwards.
+
+1. **Solutions → Import solution → Browse** → `ESGOneToOne_1_1_1_0_unmanaged.zip` → **Next**.
    - It says it will **upgrade** the existing solution. Keep the defaults and leave *"Enable Plugin steps and flows included in the solution"* **unticked**.
    - Connections and environment variables keep their current values; just click **Next / Import**.
 2. Run **ESG 1-to-1 | 0 Setup (run once)** again. It adds the **Wellbeing Assessments** list and the **Reminders** setting, and changes nothing that already exists. Wait for the summary email.
 3. Turn on **4 Team members** and **5 Wellbeing** (Flows 1–3 stay as they were). If the import turned flows 1–3 off, turn them back on.
-4. Upload the new `one-to-one.html` and `one-to-one.js` (v4.2.0) with **Replace**, then web part settings → **Reset layout cache** → **Republish**. The top bar shows **v4.2.0** and a **Wellbeing** tab.
+   - Import message *"one or more flows may not have turned on … GetTable … List not found"*: this was 1.1.0.0's Flow 1 looking for the Wellbeing list before Setup had created it. 1.1.1.0 fixes it. If you still see it, it is harmless: finish step 2 (Setup), then turn the flow on here.
+4. Upload the new `one-to-one.html` and `one-to-one.js` (v4.2.1) with **Replace**, then web part settings → **Reset layout cache** → **Republish**. The top bar shows **v4.2.1** and a **Wellbeing** tab.
 5. Check: Site contents → **Wellbeing Assessments** → Permissions: **Owners – Full Control only**.
 
 ## 1. Before you start (5 min)
@@ -56,7 +59,7 @@ Do this instead of §1–§3 if **ESG 1-to-1** (1.0.0.0) is already in your envi
 
 ## 2. Import the solution (10 min)
 
-1. **Solutions → Import solution → Browse** → choose `ESGOneToOne_1_1_0_0_unmanaged.zip` → **Next** → **Next**.
+1. **Solutions → Import solution → Browse** → choose `ESGOneToOne_1_1_1_0_unmanaged.zip` → **Next** → **Next**.
 2. **Connections.** For each of the three connection references, pick an existing connection or click **+ New connection**, signed in as **you**:
 
    | Connection reference | Connector |
@@ -161,6 +164,7 @@ Use this only if §1 showed that solutions can't be imported.
 | Flow 1–5 email *"action needed"* naming `STOP_run_the_setup_flow_first` (or `…setup_flow_again`) | Setup hasn't run (or hasn't been re-run after upgrading to 1.1), or the permission levels / lists were renamed. Run setup. |
 | Someone added in ⚙ Settings → Team can't open the page | Flow 4 must be **on**; it runs within about 5 minutes. Check its run history. |
 | A wellbeing assessment didn't reach the person | Flow 5 must be **on**. Check its run history; the person needs a mailbox. |
+| Import: *"flows may not have turned on … List not found"* | Expected only when upgrading before Setup has created a new list. Run **0 Setup**, then turn the flows on (§0 step 3). |
 | Flow 2 / 3 never trigger | They must be **on**. The SharePoint triggers check every 5 minutes. The Site URL must have no trailing slash. |
 | Need to change the TL email or site later | **Solutions → Default solution → Environment variables** → edit **Current value** |
 

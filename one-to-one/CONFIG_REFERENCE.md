@@ -115,4 +115,5 @@ Record every change in the change log below.
 |---|---|---|---|
 | DD-MMM-YYYY | 4.0.0 | First production release: sidebar menu, appraisal outlook, multi-row actions, ⚙ Settings, reports | TL |
 | 15-Oct-2026 | 4.2.0 | Calendar date picker and flexible typing with verified saves; Settings tabs (Team: add/deactivate people; Reminders; Names; Bands); drag-to-reorder expectations; Needs your attention; selectable chart; Energy column removed; report footer; **Wellbeing assessments**. Needs solution 1.1.0.0. | TL |
+| 15-Oct-2026 | 4.2.1 | Passed appraisal dates show **Overdue**; subtle "aim for the month before" prompts (team table, Needs your attention, outlook). Solution **1.1.1.0**: Flow 1 no longer fails to turn on after an upgrade from 1.0. | TL |
 | 15-Oct-2026 | 4.1.0 | Top menu bar replaces the sidebar (team list under **Team ▾**); content fills the page width; layout scales up on large screens; page height follows its content; getting-started steps on an empty Team overview | TL |

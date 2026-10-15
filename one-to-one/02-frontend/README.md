@@ -1,4 +1,4 @@
-# ESG 1-to-1 — frontend (v4.2.0)
+# ESG 1-to-1 — frontend (v4.2.1)
 
 | File | What it is |
 |---|---|
@@ -47,7 +47,7 @@ Steps:
 
 | # | As | Do | Expect |
 |---|---|---|---|
-| 1 | TL | Open the site | **Team overview**. The top menu bar has Team overview, Monthly reviews, Expectations, Actions, **Team ▾** (the team list) and **⚙ Settings**, and shows **v4.2.0** at its right-hand end. |
+| 1 | TL | Open the site | **Team overview**. The top menu bar has Team overview, Monthly reviews, Expectations, Actions, **Team ▾** (the team list) and **⚙ Settings**, and shows **v4.2.1** at its right-hand end. |
 | 2 | TL | ⚙ Settings → set an appraisal date (e.g. `15-Jul-2027`) → Save → reopen | Same date shown, and the Technicians list shows 15/07/2027 |
 | 3 | TL | Expectations → add a Shared one, then an Individual one, then retire one | Items appear in the list. Retired = Active **No**. |
 | 4 | Test A | Open the E1 link | Their review. The menu bar has only *This month · My appraisal · Appraisal report*. |
@@ -65,7 +65,7 @@ You need Node.js. For the automated tests you also need Playwright with Chromium
 ```bash
 cd one-to-one/02-frontend
 node tools/build-mock.js          # regenerates mock/index.html from one-to-one.html
-node test/run-tests.js            # 148 checks; exits non-zero on any failure
+node test/run-tests.js            # 156 checks; exits non-zero on any failure
 ```
 
 - **Paths:** the test runner looks for Playwright at `/opt/node-tools/node_modules/playwright` and Chromium at `/opt/pw-browsers/…`. Set `PLAYWRIGHT_MODULE` and `CHROMIUM_PATH` to point elsewhere.
