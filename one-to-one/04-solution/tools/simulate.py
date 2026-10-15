@@ -230,6 +230,7 @@ def monthly_checks(sp):
     sp.write_item(exp, None, {'item/Title': 'Alex: RP supervisor module', 'item/Measures': 'Module 2', 'item/AppraisalYear': '2026/27',
                               'item/AppliesTo/Value': 'Individual', 'item/Technician/Claims': sp.users[11]['Claims'], 'item/SortOrder': 20})
     sp.write_item(exp, None, {'item/Title': 'Retired one', 'item/AppraisalYear': '2025/26', 'item/Active': False})
+    sp.write_item(exp, None, {'item/Title': 'Next year, entered early', 'item/AppraisalYear': '2027/28', 'item/SortOrder': 5})
     ok('Fake: Active defaults to Yes and AppliesTo to Shared', alex['fields']['Active'] is True and
        exp['items'][1]['fields']['AppliesTo'] == 'Shared')
 
@@ -244,7 +245,7 @@ def monthly_checks(sp):
        f['ReviewKey'] == 'aad-alex_2026-11' and f['MonthKey'] == '2026-11' and f['DueDate'].startswith('2026-11-30T23:59:59') and
        f['ReviewState'] == 'Open' and f['ActionsStatus'] == 'None' and f['ActionsJson'] == '[]' and f['ExpectationFeedbackJson'] == '[]', f)
     snap = json.loads(f['ExpectationSnapshotJson'])
-    ok('Flow 1: snapshot = shared + own individual expectations, in SortOrder, active only',
+    ok('Flow 1: snapshot = this appraisal year\'s shared + own individual expectations, in SortOrder, active only',
        [s['title'] for s in snap] == ['Shared safety refresher', 'Alex: RP supervisor module'], snap)
     m_sam = next(i for i in mgr['items'].values() if i['fields']['Technician'] == 12)
     ok('Flow 1: another technician gets only the shared expectation',
@@ -253,7 +254,7 @@ def monthly_checks(sp):
     ok('Flow 1: Monthly Review fields (status Not Started, month start, appraisal date copied, technician copy of expectations)',
        rf['ReviewStatus'] == 'Not Started' and rf['MonthStart'] == '2026-11-01' and rf['AppraisalDate'] == '2027-02-12' and
        [e['id'] for e in json.loads(rf['ExpectationsJson'])] == [s['id'] for s in snap] and
-       all(e['comment'] == '' and 'rating' not in e for e in json.loads(rf['ExpectationsJson'])), rf)
+       all(e['comment'] == '' and 'rating' in e and e['rating'] is None for e in json.loads(rf['ExpectationsJson'])), rf)
     ok('Flow 1: missing Entra ID looked up and saved on Technicians', alex['fields']['TechnicianAadId'] == 'aad-alex')
     ok('Flow 1: review private – Owners Full Control + only that technician with 1-to-1 Edit',
        r_alex['unique'] and r_alex['ra'].get(3) == {fsp.FULL} and r_alex['ra'].get(11) == {sp.role_id('1-to-1 Edit')} and
@@ -364,6 +365,67 @@ def month_two_checks(sp, mgr, mr):
         ok('Flow 1: DueDate for {0} is {1}Z'.format(when[:7], due), got and all(g.startswith(due) for g in got), got)
 
 
+def extra_checks():
+    # setup: a refused column becomes a warning, not a failed run; version history limit never lowered;
+    # a clashing title is reported; the runner keeps access when not SCA and not in Owners
+    sp = fsp.FakeSP(site_admin=False)
+    sp.groups[3]['members'] = set()
+    sp.fail_fields = {'WinOfMonth'}
+    t = sp._new_list('Technicians', 'Technicians', '')
+    t['props']['EnableVersioning'], t['props']['MajorVersionLimit'] = True, 500
+    sp._new_list('Manager Reviews', 'OldManagerReviews', '')
+    status, eng = run('0', sp, T('2026-10-14T09:00:00'))
+    w = ' | '.join(eng.vars['varWarnings'])
+    ok('Setup: a column SharePoint refuses is reported and the run still succeeds', status == 'Succeeded' and
+       'Could not add column WinOfMonth' in w, (status, eng.log))
+    ok('Setup: never lowers an existing version-history limit', t['props']['MajorVersionLimit'] == 500, t['props'])
+    ok('Setup: warns when another list already has a target title', 'is already called "Manager Reviews"' in w, w)
+    by_url = {l['url']: l for l in sp.lists.values()}
+    ok('Setup: creates the real list at its own URL despite the clash', 'ManagerReviews' in by_url)
+    ok('Setup: keeps the runner\'s own access when they are neither Site Collection Admin nor in Owners',
+       all(10 in by_url[u]['ra'] for u in ('Technicians', 'MonthlyReviews')), {u: by_url[u]['ra'] for u in ('Technicians',)})
+
+    # setup: an essential permission step that fails must fail the run (not be hidden by a later tolerant step)
+    sp = fsp.FakeSP()
+    sp.fail_break = True
+    status, eng = run('0', sp, T('2026-10-14T09:00:00'))
+    ok('Setup: a failed permission step fails the run and emails the TL (never reported as complete)',
+       status == 'Failed' and sp.emails and 'action needed' in sp.emails[-1]['subject'] and
+       not any('setup: complete' in e['subject'] for e in sp.emails), (status, [e['subject'] for e in sp.emails]))
+
+    # Flow 1: appraisal date arriving as a UTC instant (BST) is stored as the same calendar day
+    sp = fsp.FakeSP()
+    run('0', sp, T('2026-10-14T09:00:00'))
+    techs = sp.list_by_title('Technicians')
+    sp.write_item(techs, None, {'item/Title': 'Alex Morgan', 'item/Technician/Claims': sp.users[11]['Claims'],
+                                'item/TechnicianAadId': 'aad-alex', 'item/AppraisalDate': '2027-07-15'})
+    sp.dates_as_instants = True
+    status, eng = run('1', sp, T('2026-11-01T07:00:00'), overrides={'varTestDate': '2026-11-01T07:00:00'})
+    rv = list(sp.list_by_title('Monthly Reviews')['items'].values())
+    ok('Flow 1: a summer appraisal date returned as a UTC instant is copied as the same day', status == 'Succeeded' and
+       rv and rv[0]['fields']['AppraisalDate'] == '2027-07-15', (eng.log, rv and rv[0]['fields'].get('AppraisalDate')))
+    sp.dates_as_instants = False
+
+    # Flow 3: a second, stale trigger after release does nothing; closing a review that was never created
+    mgr = sp.list_by_title('Manager Reviews')
+    m = next(iter(mgr['items'].values()))
+    sp.write_item(mgr, m['id'], {'item/ReviewState/Value': 'Closed - Not Submitted'})
+    stale = sp.item_out(mgr, m)
+    st, eng = fire('3', sp, 'Manager Reviews', m['id'], T('2026-12-02T09:00:00'))
+    n = len(sp.emails)
+    eng2 = Engine(FLOWS['3']['json']['properties']['definition'], sp, PARAMS, T('2026-12-02T09:01:00'), stale)
+    st2 = eng2.run()
+    ok('Flow 3: a stale second trigger after release is cancelled and sends nothing', st == 'Succeeded' and st2 == 'Cancelled' and
+       len(sp.emails) == n, (st, st2, eng2.log))
+    orphan = sp.write_item(mgr, None, {'item/Title': 'Alex Morgan – 2026-10', 'item/ReviewKey': 'aad-alex_2026-10',
+                                       'item/Technician/Claims': sp.users[11]['Claims'], 'item/MonthKey': '2026-10',
+                                       'item/DueDate': '2026-10-31T23:59:59Z', 'item/ReviewState/Value': 'Closed - Not Submitted'})
+    st, eng = fire('3', sp, 'Manager Reviews', orphan['id'], T('2026-11-02T09:00:00'))
+    ok('Flow 3: closing a Manager Review whose Monthly Review was never created still releases it and sends E5',
+       st == 'Succeeded' and orphan['ra'].get(11) == {sp.role_id('1-to-1 Read')} and
+       sp.emails[-1]['subject'].endswith('has been closed') and 'OneToOne.aspx"' in sp.emails[-1]['body'], (st, eng and eng.log))
+
+
 def failure_checks():
     sp = fsp.FakeSP()
     n = len(sp.emails)
@@ -393,6 +455,7 @@ if __name__ == '__main__':
     sp, mgr, mr = monthly_checks(site)
     month_two_checks(sp, mgr, mr)
     failure_checks()
+    extra_checks()
     passed = sum(1 for _, p in RESULTS if p)
     print('\n[{2}] {0} / {1} passed'.format(passed, len(RESULTS), MODE))
     sys.exit(0 if passed == len(RESULTS) else 1)

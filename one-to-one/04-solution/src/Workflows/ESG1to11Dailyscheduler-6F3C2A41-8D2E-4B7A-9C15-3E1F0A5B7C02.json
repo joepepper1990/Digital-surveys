@@ -211,6 +211,24 @@
             ]
           }
         },
+        "YearStart": {
+          "type": "Compose",
+          "inputs": "@if(greater(int(formatDateTime(outputs('ukNow'), 'MM')), 3), int(formatDateTime(outputs('ukNow'), 'yyyy')), sub(int(formatDateTime(outputs('ukNow'), 'yyyy')), 1))",
+          "runAfter": {
+            "Day": [
+              "Succeeded"
+            ]
+          }
+        },
+        "AppraisalYear": {
+          "type": "Compose",
+          "inputs": "@concat(string(outputs('YearStart')), '/', substring(string(add(outputs('YearStart'), 1)), 2, 2))",
+          "runAfter": {
+            "YearStart": [
+              "Succeeded"
+            ]
+          }
+        },
         "Try": {
           "type": "Scope",
           "actions": {
@@ -388,7 +406,8 @@
                 "parameters": {
                   "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
                   "table": "Technicians",
-                  "$filter": "Active eq 1"
+                  "$filter": "Active eq 1",
+                  "$top": 5000
                 },
                 "authentication": "@parameters('$authentication')"
               },
@@ -465,7 +484,7 @@
                               "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365users"
                             },
                             "parameters": {
-                              "id": "@items('Each_technician')?['Technician']?['Email']"
+                              "id": "@last(split(items('Each_technician')?['Technician']?['Claims'], '|'))"
                             },
                             "authentication": "@parameters('$authentication')"
                           },
@@ -579,7 +598,15 @@
                           "type": "Query",
                           "inputs": {
                             "from": "@body('Get_expectations')?['value']",
-                            "where": "@or(equals(item()?['AppliesTo']?['Value'], 'Shared'), equals(toLower(coalesce(item()?['Technician']?['Email'], '')), toLower(items('Each_technician')?['Technician']?['Email'])))"
+                            "where": "@and(or(empty(trim(coalesce(item()?['AppraisalYear'], ''))), equals(trim(coalesce(item()?['AppraisalYear'], '')), outputs('AppraisalYear'))), or(equals(item()?['AppliesTo']?['Value'], 'Shared'), equals(toLower(coalesce(item()?['Technician']?['Email'], '')), toLower(items('Each_technician')?['Technician']?['Email']))))"
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
                           },
                           "runAfter": {}
                         },
@@ -614,6 +641,14 @@
                               "title": "@item()?['Title']",
                               "measures": "@item()?['Measures']",
                               "year": "@item()?['AppraisalYear']"
+                            }
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
                             }
                           },
                           "runAfter": {
@@ -723,7 +758,16 @@
                               "title": "@item()?['title']",
                               "measures": "@item()?['measures']",
                               "year": "@item()?['year']",
+                              "rating": null,
                               "comment": ""
+                            }
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
                             }
                           },
                           "runAfter": {}
@@ -746,7 +790,7 @@
                               "item/DueDate": "@outputs('Mgr')?['DueDate']",
                               "item/ReviewStatus/Value": "Not Started",
                               "item/ExpectationsJson": "@{string(body('Tech_copy'))}",
-                              "item/AppraisalDate": "@items('Each_technician')?['AppraisalDate']"
+                              "item/AppraisalDate": "@if(contains(string(coalesce(items('Each_technician')?['AppraisalDate'], '')), 'T'), formatDateTime(convertFromUtc(coalesce(items('Each_technician')?['AppraisalDate'], '2000-01-01T00:00:00Z'), 'GMT Standard Time'), 'yyyy-MM-dd'), if(empty(items('Each_technician')?['AppraisalDate']), null, items('Each_technician')?['AppraisalDate']))"
                             },
                             "authentication": "@parameters('$authentication')"
                           },
@@ -814,7 +858,7 @@
                             "type": "SetVariable",
                             "inputs": {
                               "name": "varReviewId",
-                              "value": "@outputs('Mgr')?['ReviewItemId']"
+                              "value": "@int(first(split(string(coalesce(outputs('Mgr')?['ReviewItemId'], '')), '.')))"
                             },
                             "runAfter": {}
                           }
@@ -999,7 +1043,7 @@
                             "parameters": {
                               "emailMessage/To": "@outputs('Mgr')?['Technician']?['Email']",
                               "emailMessage/Subject": "Your 1-to-1 for @{outputs('MonthName')} is ready",
-                              "emailMessage/Body": "<p>Hi @{first(split(outputs('Mgr')?['Technician']?['DisplayName'], ' '))},</p><p>Your monthly 1-to-1 is ready: <a href=\"@{concat(concat(if(endsWith(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), '/'), substring(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), 0, sub(length(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), 1)), parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), '/SitePages/OneToOne.aspx'), '?reviewId=', variables('varReviewId'))}\"><b>Open my 1-to-1</b></a></p><p>Deadline: @{outputs('DeadlineText')}.</p><p>You can save and come back as often as you like before you submit.</p><p style=\"color:#666\">This link only works when you're signed in with your own company account.</p>",
+                              "emailMessage/Body": "<p>Hi @{first(split(outputs('Mgr')?['Technician']?['DisplayName'], ' '))},</p><p>Your monthly 1-to-1 is ready: <a href=\"@{concat(concat(if(endsWith(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), '/'), substring(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), 0, sub(length(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), 1)), parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), '/SitePages/OneToOne.aspx'), if(empty(first(split(string(coalesce(variables('varReviewId'), '')), '.'))), '', concat('?reviewId=', first(split(string(coalesce(variables('varReviewId'), '')), '.')))))}\"><b>Open my 1-to-1</b></a></p><p>Deadline: @{outputs('DeadlineText')}.</p><p>You can save and come back as often as you like before you submit.</p><p style=\"color:#666\">This link only works when you're signed in with your own company account.</p>",
                               "emailMessage/Importance": "Normal"
                             },
                             "authentication": "@parameters('$authentication')"
@@ -1108,7 +1152,8 @@
                     "parameters": {
                       "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
                       "table": "Manager Reviews",
-                      "$filter": "MonthKey eq '@{outputs('MonthKey')}' and ReviewState eq 'Open'"
+                      "$filter": "MonthKey eq '@{outputs('MonthKey')}' and ReviewState eq 'Open'",
+                      "$top": 5000
                     },
                     "authentication": "@parameters('$authentication')"
                   },
@@ -1127,6 +1172,14 @@
                   "inputs": {
                     "from": "@body('Outstanding')?['value']",
                     "where": "@not(empty(item()?['LinkSentOn']))"
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs",
+                        "outputs"
+                      ]
+                    }
                   },
                   "runAfter": {
                     "Outstanding": [
@@ -1149,7 +1202,7 @@
                         "parameters": {
                           "emailMessage/To": "@items('Each_outstanding')?['Technician']?['Email']",
                           "emailMessage/Subject": "Reminder: your 1-to-1 for @{outputs('MonthName')} is due @{outputs('DeadlineText')}",
-                          "emailMessage/Body": "<p>Your 1-to-1 hasn't been submitted yet. Anything you've saved is still there: <a href=\"@{concat(concat(if(endsWith(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), '/'), substring(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), 0, sub(length(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), 1)), parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), '/SitePages/OneToOne.aspx'), '?reviewId=', items('Each_outstanding')?['ReviewItemId'])}\"><b>Continue</b></a></p>",
+                          "emailMessage/Body": "<p>Your 1-to-1 hasn't been submitted yet. Anything you've saved is still there: <a href=\"@{concat(concat(if(endsWith(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), '/'), substring(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), 0, sub(length(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), 1)), parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), '/SitePages/OneToOne.aspx'), if(empty(first(split(string(coalesce(items('Each_outstanding')?['ReviewItemId'], '')), '.'))), '', concat('?reviewId=', first(split(string(coalesce(items('Each_outstanding')?['ReviewItemId'], '')), '.')))))}\"><b>Continue</b></a></p>",
                           "emailMessage/Importance": "Normal"
                         },
                         "authentication": "@parameters('$authentication')"
@@ -1228,7 +1281,7 @@
             }
           },
           "runAfter": {
-            "Day": [
+            "AppraisalYear": [
               "Succeeded"
             ]
           }

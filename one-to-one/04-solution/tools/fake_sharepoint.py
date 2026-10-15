@@ -52,7 +52,9 @@ class FakeSP:
             self._new_list(title, url, '')
         self.emails = []
         self.calls = []
-        self.ensure_fail = set()  # user ids whose account cannot be resolved (left the organisation)
+        self.ensure_fail = set()
+        self.fail_fields = set()        # column names createfieldasxml will refuse (to test warn-and-continue)
+        self.dates_as_instants = False  # connector returns date-only values as UTC instants instead of yyyy-MM-dd  # user ids whose account cannot be resolved (left the organisation)
 
     # ------------------------------------------------------------------ model helpers
     def _new_list(self, title, url, desc):
@@ -109,7 +111,11 @@ class FakeSP:
             return {}
         if api == 'shared_office365users':
             assert op == 'UserProfile_V2', op
-            u = next(u for u in self.users.values() if u['Email'] == p['id'])
+            if '@' not in p['id'] or p['id'].startswith('i:0'):
+                fail(400, 'UserProfile_V2 expects a UPN or object id, got ' + p['id'])
+            u = next((u for u in self.users.values() if u['Email'] == p['id']), None)   # fake UPN = email
+            if u is None:
+                fail(404, 'user not found')
             return {'id': u['aad'], 'mail': u['Email'], 'displayName': u['Title']}
         assert api == 'shared_sharepointonline', api
         if p.get('dataset') != SITE:
@@ -153,7 +159,7 @@ class FakeSP:
             v = float(value)
             if f.get('Min') is not None and v < float(f['Min']) or f.get('Max') is not None and v > float(f['Max']):
                 fail(400, 'number out of range for ' + name)
-            return int(v) if v.is_integer() else v
+            return v   # the SharePoint connector returns Number columns as doubles (12.0)
         if t == 'DateTime':
             s = str(value)
             if not re.match(r'^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d+)?Z?)?$', s):
@@ -203,7 +209,13 @@ class FakeSP:
             elif f['Type'] == 'Choice':
                 o[name] = {'Value': v}
             elif f['Type'] == 'DateTime' and f.get('Format') != 'DateTime':
-                o[name] = v[:10]
+                if self.dates_as_instants:   # midnight UK time as UTC: 23:00Z the day before in summer
+                    from datetime import datetime, timezone
+                    from zoneinfo import ZoneInfo
+                    d = datetime.fromisoformat(v[:10]).replace(tzinfo=ZoneInfo('Europe/London')).astimezone(timezone.utc)
+                    o[name] = d.strftime('%Y-%m-%dT%H:%M:%SZ')
+                else:
+                    o[name] = v[:10]
             else:
                 o[name] = v
         u = self.users[it.get('editor', 10)]
@@ -218,6 +230,9 @@ class FakeSP:
                 if not m:
                     fail(400, 'filter not supported by the fake: ' + clause)
                 col = m.group(1)
+                if col == 'ID':
+                    rows = [r for r in rows if r['id'] == int(float(m.group(3)))]
+                    continue
                 if col not in lst['fields']:
                     fail(400, 'column in filter does not exist: ' + col)
                 f = lst['fields'][col]
@@ -246,6 +261,8 @@ class FakeSP:
             except ValueError:
                 fail(400, 'request body is not JSON: ' + body[:80])
         if method == 'POST' and headers.get('X-HTTP-Method') == 'MERGE':
+            if path.startswith('_api/web/lists') and '/fields/' in path and verbose:
+                pass  # verbose SP.Field bodies are also accepted; the flows send nometadata
             if headers.get('IF-MATCH') != '*':
                 fail(412, 'IF-MATCH required')
             return self.merge(path, data)
@@ -288,6 +305,8 @@ class FakeSP:
             return {'Id': gid}
         if method == 'GET' and path == '_api/web/associatedownergroup':
             return {'Id': 3, 'Title': self.groups[3]['Title']}
+        if method == 'GET' and path == '_api/web/associatedownergroup/users':
+            return {'value': [{'Id': u} for u in sorted(self.groups[3]['members'])]}
         if method == 'GET' and path == '_api/web/associatedmembergroup':
             return {'Id': 4, 'Title': self.groups[4]['Title']}
         if method == 'GET' and path == '_api/web/associatedvisitorgroup':
@@ -303,6 +322,7 @@ class FakeSP:
             if '$expand=RootFolder' not in qs:
                 fail(400, 'RootFolder/... needs $expand=RootFolder')
             return {'value': [{'Id': l['Id'], 'Title': l['Title'], 'HasUniqueRoleAssignments': l['unique'],
+                               'MajorVersionLimit': l['props']['MajorVersionLimit'],
                                'ListItemEntityTypeFullName': l['entity'],
                                'RootFolder': {'Name': l['url'], 'ServerRelativeUrl': SITE_REL + '/Lists/' + l['url']}}
                               for l in self.lists.values()]}
@@ -341,8 +361,10 @@ class FakeSP:
             for fname in prm['ViewFields']['results']:
                 if fname not in lst['fields']:
                     fail(400, 'view field missing ' + fname)
-            xml.dom.minidom.parseString('<Q>' + prm['ViewQuery'] + '</Q>')
-            for fr in re.findall(r"FieldRef Name='([^']+)'", prm['ViewQuery']):
+            if 'ViewQuery' in prm or 'Query' not in prm:
+                fail(400, 'The property ViewQuery does not exist on type SP.ViewCreationInformation (use Query)')
+            xml.dom.minidom.parseString('<Q>' + prm['Query'] + '</Q>')
+            for fr in re.findall(r"FieldRef Name='([^']+)'", prm['Query']):
                 if fr not in lst['fields']:
                     fail(400, 'CAML field missing ' + fr)
             if prm['Title'] in lst['views']:
@@ -351,6 +373,8 @@ class FakeSP:
             lst['view_defs'][prm['Title']] = prm
             return {'Title': prm['Title']}
         if method == 'POST' and rest == '/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=false)':
+            if getattr(self, 'fail_break', False):
+                fail(403, 'simulated: breaking inheritance refused')
             if not lst['unique']:
                 lst['unique'], lst['ra'] = True, {self.me: {FULL}}
             return {}
@@ -360,8 +384,8 @@ class FakeSP:
         if method == 'GET' and rest == '/roleassignments':
             ra = lst['ra'] if lst['unique'] else self.web_ra
             return {'value': [{'PrincipalId': pid} for pid in ra]}
-        mdel = re.match(r'^/roleassignments/getbyprincipalid\((-?\d+)\)/deleteobject\(\)$', rest)
-        if method == 'POST' and mdel:
+        mdel = re.match(r'^/roleassignments/getbyprincipalid\((-?\d+)\)$', rest)
+        if method == 'POST' and mdel and headers.get('X-HTTP-Method') == 'DELETE':
             if not lst['unique']:
                 fail(400, 'list inherits permissions')
             if int(mdel.group(1)) not in lst['ra']:
@@ -416,6 +440,8 @@ class FakeSP:
         doc = xml.dom.minidom.parseString(schema_xml)
         el = doc.documentElement
         name = el.getAttribute('Name')
+        if name in self.fail_fields:
+            fail(400, 'simulated refusal for column ' + name)
         if name in lst['fields']:
             fail(400, 'A duplicate field name "{0}" was found.'.format(name))
         f = {k: el.getAttribute(k) for k in el.attributes.keys()}
@@ -444,6 +470,8 @@ class FakeSP:
                 if k == '__metadata':
                     continue
                 if k == 'Title':
+                    if any(o is not lst and o['Title'] == v for o in self.lists.values()):
+                        fail(400, 'A list, survey, discussion board, or document library with the specified title already exists')
                     lst['Title'] = v
                 elif k == 'Description':
                     lst['Description'] = v
@@ -454,7 +482,7 @@ class FakeSP:
             return {}
         mf = re.match(r"^/fields/getbyinternalnameortitle\('([^']+)'\)$", rest)
         if mf:
-            if data.get('__metadata', {}).get('type') != 'SP.Field':
+            if '__metadata' in data and data['__metadata'].get('type') != 'SP.Field':
                 fail(400, 'SP.Field type')
             f = lst['fields'].get(unquote(mf.group(1)))
             if f is None:

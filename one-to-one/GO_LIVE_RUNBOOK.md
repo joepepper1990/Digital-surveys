@@ -17,7 +17,7 @@ This runbook takes you from where you are now to technicians receiving their fir
 
 - Site, page, Welcome and the `1-to-1 Technicians` group are built.
 - **Stage 0A and 0B have passed.**
-- **All build files are produced** and tested locally (70 automated checks).
+- **All build files are produced** and tested locally (72 automated checks).
 
 **Legend:**
 

@@ -121,9 +121,15 @@ class Flow:
             if n in self.actions:
                 self.p('duplicate action name ' + n)
             self.actions[n] = (a, list(path))
-            for dep in (a.get('runAfter') or {}):
+            for dep, sts in (a.get('runAfter') or {}).items():
                 if dep not in names:
                     self.p('{0} runs after {1}, which is not in the same container'.format(n, dep))
+            ra = a.get('runAfter') or {}
+            # An upstream failure skips every predecessor. If ALL predecessors may be Skipped, this action would still
+            # run and hide that failure – except a join() after a Log_/Warn_ pair, one of which always runs.
+            if ra and all('Skipped' in v for v in ra.values()) and \
+                    not all(d.startswith(('Log_', 'Warn_', 'Is_')) for d in ra):
+                self.p('{0} runs even when all its predecessors were skipped – an upstream failure would be hidden'.format(n))
             t = a.get('type')
             if t in ('Scope', 'Foreach'):
                 self.collect(a.get('actions', {}), path + [(n, t)])
@@ -289,10 +295,34 @@ def check_schema():
     return probs
 
 
+# Steps in flows 1-3 that handle no personal data (role/list/group IDs) and may stay visible in run history.
+NO_PERSONAL_DATA = {'Get_owners_group', 'Get_role_definitions', 'Get_lists', 'Role_full_control', 'Role_edit', 'Role_read',
+                    'List_monthly_reviews', 'List_manager_reviews'}
+
+
+def check_secure(f):
+    """Plan D.4 'Run history': in flows 1-3 the triggers and every connector / Filter array / Select step are secured."""
+    if '0 Setup' in f['name']:
+        return []
+    probs, defn = [], f['json']['properties']['definition']
+    def secured(a):
+        return set((a.get('runtimeConfiguration') or {}).get('secureData', {}).get('properties', [])) >= {'inputs', 'outputs'}
+    for n, t in defn['triggers'].items():
+        if t.get('type') == 'OpenApiConnection' and not secured(t):
+            probs.append('[{0}] trigger {1} is not secured – review content would show in run history'.format(f['name'], n))
+    fl = Flow(f['name'], defn)
+    fl.collect(defn['actions'], [])
+    for n, (a, _) in fl.actions.items():
+        if a.get('type') in ('OpenApiConnection', 'Query', 'Select') and n not in NO_PERSONAL_DATA and not secured(a):
+            probs.append('[{0}] {1} is not secured (inputs and outputs)'.format(f['name'], n))
+    return probs
+
+
 def validate_all(flows):
     probs = check_schema()
     for f in flows:
         probs += Flow(f['name'], f['json']['properties']['definition']).run()
+        probs += check_secure(f)
         refs = f['json']['properties']['connectionReferences']
         used = set(re.findall(r'"connectionName": "([^"]+)"', json.dumps(f['json'])))
         if used - set(refs):

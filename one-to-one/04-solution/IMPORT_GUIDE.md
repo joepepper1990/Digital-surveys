@@ -14,7 +14,7 @@ The four flows:
 
 | Flow | Starts | Job |
 |---|---|---|
-| **ESG 1-to-1 \| 0 Setup (run once)** | On | Run by hand. Creates or completes the lists, columns, indexes, views, permission levels, group and list permissions, and the `Bands` setting. **Safe to re-run:** it only adds what's missing, then emails you a summary. |
+| **ESG 1-to-1 \| 0 Setup (run once)** | On | Run by hand. Creates or completes the lists, columns, indexes, views, permission levels, group and list permissions, and the `Bands` setting. **Safe to re-run:** it adds what's missing and brings settings up to the specification. It never deletes a list, column or item, and never lowers version history. Then it emails you a summary. |
 | **ESG 1-to-1 \| 1 Daily scheduler** | Off | 07:00 UK daily: creates each month's reviews, makes them private, emails links, sends reminders on the 20th and 27th. |
 | **ESG 1-to-1 \| 2 Review submitted** | Off | Locks a submitted review, stamps the Manager Review, emails you. |
 | **ESG 1-to-1 \| 3 Manager decision** | Off | On Complete / Close: validates, locks, releases the feedback, emails the technician. |
@@ -26,6 +26,7 @@ Flows 1–3 are imported **off**, because the lists don't exist until the setup 
 ## 1. Before you start (5 min)
 
 - [ ] The private 1-to-1 site exists, and you are its **owner and Site Collection Administrator** (Stage 0B finding B10a).
+- [ ] It is a **site collection of its own**, not a subsite that inherits permission levels. Setup creates the `1-to-1 Edit` and `1-to-1 Read` permission levels, which SharePoint only allows on a site with its own permission levels. The communication site created in plan G Part 1 qualifies.
 - [ ] Have these two values ready:
 
   | Value | Example (yours will differ) |
@@ -71,7 +72,7 @@ Flows 1–3 are imported **off**, because the lists don't exist until the setup 
 | Item | Result |
 |---|---|
 | Permission levels | `1-to-1 Edit` and `1-to-1 Read`, with the exact rights in plan D.3. It creates them if missing. If one already exists with different rights, it **warns and doesn't change it**. |
-| Group | `1-to-1 Technicians`, created if missing. Members only see their own membership. No join requests. **No site permissions.** |
+| Group | `1-to-1 Technicians`, created if missing. Membership is visible to group members only. SharePoint has no owner-only option, so technicians can see who else is in the group. No join requests. **No site permissions.** |
 | Lists | **Technicians**, **Appraisal Expectations**, **Monthly Reviews**, **Manager Reviews**, **1-to-1 Settings**, matching [`../01-sharepoint/lists.md`](../01-sharepoint/lists.md) exactly: every column type, choice, default, min/max and index, *Enforce unique values* on `ReviewKey`, and the views *Active*, *Needs attention*, *Retired*, *Overdue* and *Open actions*. |
 | List settings | Versioning on (100 versions), attachments off, not in search, offline sync off, not on the quick launch |
 | List permissions | Inheritance stopped. **Owners – Full Control only.** **1-to-1 Settings** also gets `1-to-1 Technicians` – Read. |
@@ -85,7 +86,13 @@ Flows 1–3 are imported **off**, because the lists don't exist until the setup 
 - grant the group Read on the page, the layouts library and the Welcome Errors list;
 - add people to the group.
 
-If a list already exists (for example, you started building it by hand), setup **keeps it**. It adds only the missing columns, indexes and views, and tidies the permissions.
+**Existing lists.** Setup recognises the five lists by their **web address** (`Lists/Technicians`, `Lists/AppraisalExpectations`, `Lists/MonthlyReviews`, `Lists/ManagerReviews`, `Lists/OneToOneSettings`). If one already exists (for example, you started building it by hand), setup **keeps it**:
+
+- it adds only the missing columns, indexes and views;
+- it sets the display name and list settings, raising the version limit to at least 100 and never lowering it;
+- it tidies the permissions.
+
+It removes your own direct entry only if you are Site Collection Admin or in the Owners group, so you can't be locked out. If a *different* list already uses one of the five names, the summary email tells you to rename it.
 
 ## 4. Check the result (5 min)
 
@@ -106,7 +113,7 @@ If a list already exists (for example, you started building it by hand), setup *
 
 > **Testing a different date (plan H tests F13–F20).** Open flow 1 → **Edit** → **Initialize varTestDate** → type a date such as `2026-11-20T07:00:00` → **Save** → **Run**. **Clear it afterwards and save.** Leave it empty in production.
 
-**Secure inputs/outputs** are already on for every data and email action in flows 1–3, so answers never appear in run history. The setup flow's history shows only list and column names; it handles no personal data.
+**Secure inputs/outputs** are already on for the SharePoint triggers and every data, Filter array, Select and email action in flows 1–3. Steps that use their outputs are hidden automatically, so answers and feedback don't appear in run history. Only the steps that look up role, group and list IDs stay visible. The setup flow's history shows only list and column names; it handles no personal data.
 
 ---
 
@@ -144,5 +151,5 @@ Use this only if §1 showed that solutions can't be imported.
 ## 8. Updating later
 
 - **New version of this solution:** Solutions → **Import solution** → the new zip → **Upgrade**.
-- **Lists** are never deleted or changed by setup. A new version only adds what's missing.
+- **Lists:** setup never deletes a list, column or item. A new version only adds what's missing and re-applies the specified settings and permissions.
 - To rebuild the zip from source, see [`README.md`](README.md).

@@ -63,8 +63,11 @@
             }
           ],
           "runtimeConfiguration": {
-            "concurrency": {
-              "runs": 1
+            "secureData": {
+              "properties": [
+                "inputs",
+                "outputs"
+              ]
             }
           },
           "inputs": {
@@ -524,7 +527,7 @@
                     "parameters": {
                       "emailMessage/To": "@parameters('ESG 1-to-1 Team Leader email (esg_ManagerEmail)')",
                       "emailMessage/Subject": "@{if(startsWith(coalesce(triggerBody()?['Q9FollowUp']?['Value'], ''), 'Arrange a dedicated'), '[1-to-1 REQUESTED] ', '')}1-to-1 submitted: @{outputs('Mgr')?['Title']}",
-                      "emailMessage/Body": "<p>Submitted @{if(greater(ticks(utcNow()), ticks(outputs('Mgr')?['DueDate'])), 'late', 'on time')}. <a href=\"@{concat(concat(if(endsWith(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), '/'), substring(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), 0, sub(length(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), 1)), parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), '/SitePages/OneToOne.aspx'), '?reviewId=', triggerBody()?['ID'])}\"><b>Open review</b></a></p>",
+                      "emailMessage/Body": "<p>Submitted @{if(greater(ticks(utcNow()), ticks(outputs('Mgr')?['DueDate'])), 'late', 'on time')}. <a href=\"@{concat(concat(if(endsWith(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), '/'), substring(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), 0, sub(length(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), 1)), parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), '/SitePages/OneToOne.aspx'), if(empty(first(split(string(coalesce(triggerBody()?['ID'], '')), '.'))), '', concat('?reviewId=', first(split(string(coalesce(triggerBody()?['ID'], '')), '.')))))}\"><b>Open review</b></a></p>",
                       "emailMessage/Importance": "Normal"
                     },
                     "authentication": "@parameters('$authentication')"

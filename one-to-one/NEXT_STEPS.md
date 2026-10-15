@@ -18,7 +18,7 @@
 
   | File | What it is |
   |---|---|
-  | [`02-frontend/`](02-frontend/README.md) | Production frontend v4.0.0, local mock, 70 automated checks (all passing) |
+  | [`02-frontend/`](02-frontend/README.md) | Production frontend v4.0.0, local mock, 72 automated checks (all passing) |
   | [`01-sharepoint/lists.md`](01-sharepoint/lists.md) | Five-list build checklist |
   | [`04-solution/`](04-solution/IMPORT_GUIDE.md) | **Importable solution**: setup flow (creates the lists exactly) + Flows 1–3; offline legacy builder; validated and simulated end to end |
   | [`03-flows/`](03-flows/FLOW_BUILD_SHEETS.md) | Flow build sheets and email templates (reference / manual build) |
@@ -49,6 +49,8 @@ The local mock can't prove these. Check them in your first session after install
 | Full-width section | The sidebar and content fill the page width | Change the section layout to full width |
 | Dates | Set an appraisal date in a summer month, reopen ⚙ Settings | It must show the same day. Check the site's regional settings (London). |
 | Print / Save as PDF | Open a report and click Print | Allow pop-ups for the SharePoint site |
+| Limited-access lockdown | Ask IT whether *limited-access user permission lockdown mode* is on for the site. Stage 0B's technician REST calls passing suggests not. | If it's on, technicians' page calls can fail; IT can turn the feature off for this site |
+| Personal regional settings (R16) | Plan test F27: an appraisal date saved in ⚙ Settings reads back as the same day | Set your personal region to English (UK) |
 
 ## If something fails
 

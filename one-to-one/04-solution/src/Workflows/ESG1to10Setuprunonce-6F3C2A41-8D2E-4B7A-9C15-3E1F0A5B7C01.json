@@ -1212,6 +1212,42 @@
                 ]
               }
             },
+            "Get_owner_members": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/associatedownergroup/users?$select=Id",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Get_owners_group": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Owner_member_ids": {
+              "type": "Select",
+              "inputs": {
+                "from": "@body('Get_owner_members')?['value']",
+                "select": "@item()?['Id']"
+              },
+              "runAfter": {
+                "Get_owner_members": [
+                  "Succeeded"
+                ]
+              }
+            },
             "Get_members_group": {
               "type": "OpenApiConnection",
               "inputs": {
@@ -1231,7 +1267,7 @@
                 "authentication": "@parameters('$authentication')"
               },
               "runAfter": {
-                "Get_owners_group": [
+                "Owner_member_ids": [
                   "Succeeded"
                 ]
               }
@@ -1258,7 +1294,6 @@
                 "Get_members_group": [
                   "Succeeded",
                   "Failed",
-                  "Skipped",
                   "TimedOut"
                 ]
               }
@@ -1285,7 +1320,6 @@
                 "Get_visitors_group": [
                   "Succeeded",
                   "Failed",
-                  "Skipped",
                   "TimedOut"
                 ]
               }
@@ -1345,7 +1379,7 @@
                     "parameters": {
                       "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
                       "parameters/method": "GET",
-                      "parameters/uri": "_api/web/lists?$select=Id,Title,HasUniqueRoleAssignments,ListItemEntityTypeFullName,RootFolder/Name,RootFolder/ServerRelativeUrl&$expand=RootFolder",
+                      "parameters/uri": "_api/web/lists?$select=Id,Title,HasUniqueRoleAssignments,ListItemEntityTypeFullName,MajorVersionLimit,RootFolder/Name,RootFolder/ServerRelativeUrl&$expand=RootFolder",
                       "parameters/headers": {
                         "Accept": "application/json;odata=nometadata"
                       }
@@ -1358,10 +1392,44 @@
                   "type": "Query",
                   "inputs": {
                     "from": "@body('Get_lists')?['value']",
-                    "where": "@or(equals(item()?['Title'], items('Each_list')?['title']), equals(item()?['RootFolder']?['Name'], items('Each_list')?['url']))"
+                    "where": "@equals(item()?['RootFolder']?['Name'], items('Each_list')?['url'])"
                   },
                   "runAfter": {
                     "Get_lists": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Title_clash": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@body('Get_lists')?['value']",
+                    "where": "@and(equals(item()?['Title'], items('Each_list')?['title']), not(equals(item()?['RootFolder']?['Name'], items('Each_list')?['url'])))"
+                  },
+                  "runAfter": {
+                    "Find_list": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Title_in_use": {
+                  "type": "If",
+                  "expression": "@not(empty(body('Title_clash')))",
+                  "actions": {
+                    "Warn_title_clash": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "varWarnings",
+                        "value": "@concat('Another list at /Lists/', first(body('Title_clash'))?['RootFolder']?['Name'], ' is already called \"', items('Each_list')?['title'], '\". Rename or delete it, then re-run setup.')"
+                      },
+                      "runAfter": {}
+                    }
+                  },
+                  "else": {
+                    "actions": {}
+                  },
+                  "runAfter": {
+                    "Title_clash": [
                       "Succeeded"
                     ]
                   }
@@ -1418,7 +1486,7 @@
                     }
                   },
                   "runAfter": {
-                    "Find_list": [
+                    "Title_in_use": [
                       "Succeeded"
                     ]
                   }
@@ -1434,7 +1502,7 @@
                     "parameters": {
                       "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
                       "parameters/method": "GET",
-                      "parameters/uri": "_api/web/lists?$select=Id,Title,HasUniqueRoleAssignments,ListItemEntityTypeFullName,RootFolder/Name,RootFolder/ServerRelativeUrl&$expand=RootFolder",
+                      "parameters/uri": "_api/web/lists?$select=Id,Title,HasUniqueRoleAssignments,ListItemEntityTypeFullName,MajorVersionLimit,RootFolder/Name,RootFolder/ServerRelativeUrl&$expand=RootFolder",
                       "parameters/headers": {
                         "Accept": "application/json;odata=nometadata"
                       }
@@ -1451,7 +1519,7 @@
                   "type": "Query",
                   "inputs": {
                     "from": "@body('Get_lists_again')?['value']",
-                    "where": "@or(equals(item()?['Title'], items('Each_list')?['title']), equals(item()?['RootFolder']?['Name'], items('Each_list')?['url']))"
+                    "where": "@equals(item()?['RootFolder']?['Name'], items('Each_list')?['url'])"
                   },
                   "runAfter": {
                     "Get_lists_again": [
@@ -1486,7 +1554,7 @@
                         "X-HTTP-Method": "MERGE",
                         "IF-MATCH": "*"
                       },
-                      "parameters/body": "{\"__metadata\":{\"type\":\"SP.List\"},\"Title\":\"@{items('Each_list')?['title']}\",\"Description\":\"@{items('Each_list')?['description']}\",\"EnableVersioning\":true,\"MajorVersionLimit\":100,\"EnableAttachments\":false,\"NoCrawl\":true,\"OnQuickLaunch\":false}"
+                      "parameters/body": "{\"__metadata\":{\"type\":\"SP.List\"},\"Title\":\"@{items('Each_list')?['title']}\",\"Description\":\"@{items('Each_list')?['description']}\",\"EnableVersioning\":true,\"MajorVersionLimit\":@{max(100, int(first(split(string(coalesce(outputs('List')?['MajorVersionLimit'], '')), '.'))))},\"EnableAttachments\":false,\"NoCrawl\":true,\"OnQuickLaunch\":false}"
                     },
                     "authentication": "@parameters('$authentication')"
                   },
@@ -1522,7 +1590,6 @@
                     "Set_list_settings": [
                       "Succeeded",
                       "Failed",
-                      "Skipped",
                       "TimedOut"
                     ]
                   }
@@ -1572,17 +1639,18 @@
                     "authentication": "@parameters('$authentication')"
                   },
                   "runAfter": {
-                    "Warn_settings": [
+                    "Set_offline_off": [
                       "Succeeded",
                       "Failed",
-                      "Skipped",
                       "TimedOut"
+                    ],
+                    "Warn_settings": [
+                      "Succeeded",
+                      "Skipped"
                     ],
                     "Warn_offline": [
                       "Succeeded",
-                      "Failed",
-                      "Skipped",
-                      "TimedOut"
+                      "Skipped"
                     ]
                   }
                 },
@@ -1660,6 +1728,20 @@
                           "TimedOut"
                         ]
                       }
+                    },
+                    "Field_done": {
+                      "type": "Compose",
+                      "inputs": "done",
+                      "runAfter": {
+                        "Log_field": [
+                          "Succeeded",
+                          "Skipped"
+                        ],
+                        "Warn_field": [
+                          "Succeeded",
+                          "Skipped"
+                        ]
+                      }
                     }
                   },
                   "runtimeConfiguration": {
@@ -1703,11 +1785,11 @@
                           "parameters/uri": "_api/web/lists(guid'@{outputs('List')?['Id']}')/fields/getbyinternalnameortitle('@{items('Each_index')?['name']}')",
                           "parameters/headers": {
                             "Accept": "application/json;odata=nometadata",
-                            "Content-Type": "application/json;odata=verbose",
+                            "Content-Type": "application/json;odata=nometadata",
                             "X-HTTP-Method": "MERGE",
                             "IF-MATCH": "*"
                           },
-                          "parameters/body": "{\"__metadata\":{\"type\":\"SP.Field\"},\"Indexed\":true}"
+                          "parameters/body": "{\"Indexed\":true}"
                         },
                         "authentication": "@parameters('$authentication')"
                       },
@@ -1731,11 +1813,11 @@
                               "parameters/uri": "_api/web/lists(guid'@{outputs('List')?['Id']}')/fields/getbyinternalnameortitle('@{items('Each_index')?['name']}')",
                               "parameters/headers": {
                                 "Accept": "application/json;odata=nometadata",
-                                "Content-Type": "application/json;odata=verbose",
+                                "Content-Type": "application/json;odata=nometadata",
                                 "X-HTTP-Method": "MERGE",
                                 "IF-MATCH": "*"
                               },
-                              "parameters/body": "{\"__metadata\":{\"type\":\"SP.Field\"},\"EnforceUniqueValues\":true}"
+                              "parameters/body": "{\"EnforceUniqueValues\":true}"
                             },
                             "authentication": "@parameters('$authentication')"
                           },
@@ -1774,6 +1856,20 @@
                         "Set_index": [
                           "Failed",
                           "TimedOut"
+                        ]
+                      }
+                    },
+                    "Index_done": {
+                      "type": "Compose",
+                      "inputs": "done",
+                      "runAfter": {
+                        "Is_unique": [
+                          "Succeeded",
+                          "Skipped"
+                        ],
+                        "Warn_index": [
+                          "Succeeded",
+                          "Skipped"
                         ]
                       }
                     }
@@ -1857,7 +1953,7 @@
                             "Accept": "application/json;odata=nometadata",
                             "Content-Type": "application/json;odata=verbose"
                           },
-                          "parameters/body": "{\"parameters\":{\"__metadata\":{\"type\":\"SP.ViewCreationInformation\"},\"Title\":\"@{items('Each_view')?['title']}\",\"ViewFields\":{\"__metadata\":{\"type\":\"Collection(Edm.String)\"},\"results\":@{string(items('Each_view')?['fields'])}},\"ViewQuery\":\"@{items('Each_view')?['query']}\",\"RowLimit\":@{items('Each_view')?['rowLimit']},\"Paged\":true,\"PersonalView\":false,\"SetAsDefaultView\":false}}"
+                          "parameters/body": "{\"parameters\":{\"__metadata\":{\"type\":\"SP.ViewCreationInformation\"},\"Title\":\"@{items('Each_view')?['title']}\",\"ViewFields\":{\"__metadata\":{\"type\":\"Collection(Edm.String)\"},\"results\":@{string(items('Each_view')?['fields'])}},\"Query\":\"@{items('Each_view')?['query']}\",\"RowLimit\":@{items('Each_view')?['rowLimit']},\"Paged\":true,\"PersonalView\":false,\"SetAsDefaultView\":false}}"
                         },
                         "authentication": "@parameters('$authentication')"
                       },
@@ -1885,6 +1981,20 @@
                         "Create_view": [
                           "Failed",
                           "TimedOut"
+                        ]
+                      }
+                    },
+                    "View_done": {
+                      "type": "Compose",
+                      "inputs": "done",
+                      "runAfter": {
+                        "Log_view": [
+                          "Succeeded",
+                          "Skipped"
+                        ],
+                        "Warn_view": [
+                          "Succeeded",
+                          "Skipped"
                         ]
                       }
                     }
@@ -1997,9 +2107,11 @@
                         "parameters": {
                           "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
                           "parameters/method": "POST",
-                          "parameters/uri": "_api/web/lists(guid'@{outputs('List')?['Id']}')/roleassignments/getbyprincipalid(@{outputs('Ids')?['members']})/deleteobject()",
+                          "parameters/uri": "_api/web/lists(guid'@{outputs('List')?['Id']}')/roleassignments/getbyprincipalid(@{outputs('Ids')?['members']})",
                           "parameters/headers": {
-                            "Accept": "application/json;odata=nometadata"
+                            "Accept": "application/json;odata=nometadata",
+                            "X-HTTP-Method": "DELETE",
+                            "IF-MATCH": "*"
                           }
                         },
                         "authentication": "@parameters('$authentication')"
@@ -2043,9 +2155,11 @@
                         "parameters": {
                           "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
                           "parameters/method": "POST",
-                          "parameters/uri": "_api/web/lists(guid'@{outputs('List')?['Id']}')/roleassignments/getbyprincipalid(@{outputs('Ids')?['visitors']})/deleteobject()",
+                          "parameters/uri": "_api/web/lists(guid'@{outputs('List')?['Id']}')/roleassignments/getbyprincipalid(@{outputs('Ids')?['visitors']})",
                           "parameters/headers": {
-                            "Accept": "application/json;odata=nometadata"
+                            "Accept": "application/json;odata=nometadata",
+                            "X-HTTP-Method": "DELETE",
+                            "IF-MATCH": "*"
                           }
                         },
                         "authentication": "@parameters('$authentication')"
@@ -2100,7 +2214,7 @@
                 },
                 "I_have_direct_access": {
                   "type": "If",
-                  "expression": "@contains(body('Principals'), body('Get_me')?['Id'])",
+                  "expression": "@and(contains(body('Principals'), body('Get_me')?['Id']), or(equals(body('Get_me')?['IsSiteAdmin'], true), contains(body('Owner_member_ids'), body('Get_me')?['Id'])))",
                   "actions": {
                     "Remove_my_direct_access": {
                       "type": "OpenApiConnection",
@@ -2113,9 +2227,11 @@
                         "parameters": {
                           "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
                           "parameters/method": "POST",
-                          "parameters/uri": "_api/web/lists(guid'@{outputs('List')?['Id']}')/roleassignments/getbyprincipalid(@{body('Get_me')?['Id']})/deleteobject()",
+                          "parameters/uri": "_api/web/lists(guid'@{outputs('List')?['Id']}')/roleassignments/getbyprincipalid(@{body('Get_me')?['Id']})",
                           "parameters/headers": {
-                            "Accept": "application/json;odata=nometadata"
+                            "Accept": "application/json;odata=nometadata",
+                            "X-HTTP-Method": "DELETE",
+                            "IF-MATCH": "*"
                           }
                         },
                         "authentication": "@parameters('$authentication')"
@@ -2176,7 +2292,6 @@
                     "I_have_direct_access": [
                       "Succeeded",
                       "Failed",
-                      "Skipped",
                       "TimedOut"
                     ]
                   }
@@ -2204,7 +2319,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/lists?$select=Id,Title,HasUniqueRoleAssignments,ListItemEntityTypeFullName,RootFolder/Name,RootFolder/ServerRelativeUrl&$expand=RootFolder",
+                  "parameters/uri": "_api/web/lists?$select=Id,Title,HasUniqueRoleAssignments,ListItemEntityTypeFullName,MajorVersionLimit,RootFolder/Name,RootFolder/ServerRelativeUrl&$expand=RootFolder",
                   "parameters/headers": {
                     "Accept": "application/json;odata=nometadata"
                   }

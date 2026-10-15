@@ -66,8 +66,11 @@
             }
           ],
           "runtimeConfiguration": {
-            "concurrency": {
-              "runs": 1
+            "secureData": {
+              "properties": [
+                "inputs",
+                "outputs"
+              ]
             }
           },
           "inputs": {
@@ -251,11 +254,62 @@
                 ]
               }
             },
+            "Get_current": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "GetItems",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                  "table": "Manager Reviews",
+                  "$filter": "ID eq @{triggerBody()?['ID']}",
+                  "$top": 1
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              },
+              "runAfter": {
+                "Check_setup_has_run": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Already_released": {
+              "type": "If",
+              "expression": "@not(empty(first(body('Get_current')?['value'])?['ReleasedOn']))",
+              "actions": {
+                "Released_by_an_earlier_run": {
+                  "type": "Terminate",
+                  "inputs": {
+                    "runStatus": "Cancelled"
+                  },
+                  "runAfter": {}
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {
+                "Get_current": [
+                  "Succeeded"
+                ]
+              }
+            },
             "Cmd": {
               "type": "Compose",
               "inputs": "@triggerBody()?['ReviewState']?['Value']",
               "runAfter": {
-                "Check_setup_has_run": [
+                "Already_released": [
                   "Succeeded"
                 ]
               }
@@ -376,130 +430,140 @@
                 ]
               }
             },
-            "Reset_R": {
-              "type": "OpenApiConnection",
-              "inputs": {
-                "host": {
-                  "connectionName": "shared_sharepointonline",
-                  "operationId": "HttpRequest",
-                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+            "Has_monthly_review": {
+              "type": "If",
+              "expression": "@not(equals(triggerBody()?['ReviewItemId'], null))",
+              "actions": {
+                "Reset_R": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/lists(guid'@{outputs('Ids')?['reviewsList']}')/items(@{int(first(split(string(coalesce(triggerBody()?['ReviewItemId'], '')), '.')))})/resetroleinheritance",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata"
+                      }
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs",
+                        "outputs"
+                      ]
+                    }
+                  },
+                  "runAfter": {}
                 },
-                "parameters": {
-                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
-                  "parameters/method": "POST",
-                  "parameters/uri": "_api/web/lists(guid'@{outputs('Ids')?['reviewsList']}')/items(@{triggerBody()?['ReviewItemId']})/resetroleinheritance",
-                  "parameters/headers": {
-                    "Accept": "application/json;odata=nometadata"
+                "Break_R": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/lists(guid'@{outputs('Ids')?['reviewsList']}')/items(@{int(first(split(string(coalesce(triggerBody()?['ReviewItemId'], '')), '.')))})/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata"
+                      }
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs",
+                        "outputs"
+                      ]
+                    }
+                  },
+                  "runAfter": {
+                    "Reset_R": [
+                      "Succeeded"
+                    ]
                   }
                 },
-                "authentication": "@parameters('$authentication')"
-              },
-              "runtimeConfiguration": {
-                "secureData": {
-                  "properties": [
-                    "inputs",
-                    "outputs"
-                  ]
+                "AddOwners_R": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/lists(guid'@{outputs('Ids')?['reviewsList']}')/items(@{int(first(split(string(coalesce(triggerBody()?['ReviewItemId'], '')), '.')))})/roleassignments/addroleassignment(principalid=@{outputs('Ids')?['owners']},roledefid=@{outputs('Ids')?['fullControl']})",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata"
+                      }
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs",
+                        "outputs"
+                      ]
+                    }
+                  },
+                  "runAfter": {
+                    "Break_R": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "AddTech_R": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/lists(guid'@{outputs('Ids')?['reviewsList']}')/items(@{int(first(split(string(coalesce(triggerBody()?['ReviewItemId'], '')), '.')))})/roleassignments/addroleassignment(principalid=@{body('Ensure_user')?['Id']},roledefid=@{outputs('Ids')?['read']})",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata"
+                      }
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs",
+                        "outputs"
+                      ]
+                    }
+                  },
+                  "runAfter": {
+                    "AddOwners_R": [
+                      "Succeeded"
+                    ]
+                  }
                 }
+              },
+              "else": {
+                "actions": {}
               },
               "runAfter": {
                 "Ensure_user": [
-                  "Succeeded"
-                ]
-              }
-            },
-            "Break_R": {
-              "type": "OpenApiConnection",
-              "inputs": {
-                "host": {
-                  "connectionName": "shared_sharepointonline",
-                  "operationId": "HttpRequest",
-                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                },
-                "parameters": {
-                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
-                  "parameters/method": "POST",
-                  "parameters/uri": "_api/web/lists(guid'@{outputs('Ids')?['reviewsList']}')/items(@{triggerBody()?['ReviewItemId']})/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)",
-                  "parameters/headers": {
-                    "Accept": "application/json;odata=nometadata"
-                  }
-                },
-                "authentication": "@parameters('$authentication')"
-              },
-              "runtimeConfiguration": {
-                "secureData": {
-                  "properties": [
-                    "inputs",
-                    "outputs"
-                  ]
-                }
-              },
-              "runAfter": {
-                "Reset_R": [
-                  "Succeeded"
-                ]
-              }
-            },
-            "AddOwners_R": {
-              "type": "OpenApiConnection",
-              "inputs": {
-                "host": {
-                  "connectionName": "shared_sharepointonline",
-                  "operationId": "HttpRequest",
-                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                },
-                "parameters": {
-                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
-                  "parameters/method": "POST",
-                  "parameters/uri": "_api/web/lists(guid'@{outputs('Ids')?['reviewsList']}')/items(@{triggerBody()?['ReviewItemId']})/roleassignments/addroleassignment(principalid=@{outputs('Ids')?['owners']},roledefid=@{outputs('Ids')?['fullControl']})",
-                  "parameters/headers": {
-                    "Accept": "application/json;odata=nometadata"
-                  }
-                },
-                "authentication": "@parameters('$authentication')"
-              },
-              "runtimeConfiguration": {
-                "secureData": {
-                  "properties": [
-                    "inputs",
-                    "outputs"
-                  ]
-                }
-              },
-              "runAfter": {
-                "Break_R": [
-                  "Succeeded"
-                ]
-              }
-            },
-            "AddTech_R": {
-              "type": "OpenApiConnection",
-              "inputs": {
-                "host": {
-                  "connectionName": "shared_sharepointonline",
-                  "operationId": "HttpRequest",
-                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                },
-                "parameters": {
-                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
-                  "parameters/method": "POST",
-                  "parameters/uri": "_api/web/lists(guid'@{outputs('Ids')?['reviewsList']}')/items(@{triggerBody()?['ReviewItemId']})/roleassignments/addroleassignment(principalid=@{body('Ensure_user')?['Id']},roledefid=@{outputs('Ids')?['read']})",
-                  "parameters/headers": {
-                    "Accept": "application/json;odata=nometadata"
-                  }
-                },
-                "authentication": "@parameters('$authentication')"
-              },
-              "runtimeConfiguration": {
-                "secureData": {
-                  "properties": [
-                    "inputs",
-                    "outputs"
-                  ]
-                }
-              },
-              "runAfter": {
-                "AddOwners_R": [
                   "Succeeded"
                 ]
               }
@@ -531,7 +595,7 @@
                 }
               },
               "runAfter": {
-                "AddTech_R": [
+                "Has_monthly_review": [
                   "Succeeded"
                 ]
               }
@@ -665,30 +729,40 @@
                 ]
               }
             },
-            "Set_review_status": {
-              "type": "OpenApiConnection",
-              "inputs": {
-                "host": {
-                  "connectionName": "shared_sharepointonline",
-                  "operationId": "PatchItem",
-                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                },
-                "parameters": {
-                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
-                  "table": "Monthly Reviews",
-                  "id": "@triggerBody()?['ReviewItemId']",
-                  "item/Title": "@triggerBody()?['Title']",
-                  "item/ReviewStatus/Value": "@outputs('Cmd')"
-                },
-                "authentication": "@parameters('$authentication')"
-              },
-              "runtimeConfiguration": {
-                "secureData": {
-                  "properties": [
-                    "inputs",
-                    "outputs"
-                  ]
+            "Review_exists": {
+              "type": "If",
+              "expression": "@not(equals(triggerBody()?['ReviewItemId'], null))",
+              "actions": {
+                "Set_review_status": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "PatchItem",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                      "table": "Monthly Reviews",
+                      "id": "@int(first(split(string(coalesce(triggerBody()?['ReviewItemId'], '')), '.')))",
+                      "item/Title": "@triggerBody()?['Title']",
+                      "item/ReviewStatus/Value": "@outputs('Cmd')"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs",
+                        "outputs"
+                      ]
+                    }
+                  },
+                  "runAfter": {}
                 }
+              },
+              "else": {
+                "actions": {}
               },
               "runAfter": {
                 "Stamp_released": [
@@ -711,7 +785,7 @@
                     "parameters": {
                       "emailMessage/To": "@triggerBody()?['Technician']?['Email']",
                       "emailMessage/Subject": "Feedback on your 1-to-1 (@{formatDateTime(concat(triggerBody()?['MonthKey'], '-01'), 'MMMM yyyy')}) is ready",
-                      "emailMessage/Body": "<p>Your Team Leader has completed your review. <a href=\"@{concat(concat(if(endsWith(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), '/'), substring(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), 0, sub(length(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), 1)), parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), '/SitePages/OneToOne.aspx'), '?reviewId=', triggerBody()?['ReviewItemId'])}\"><b>View feedback</b></a></p>",
+                      "emailMessage/Body": "<p>Your Team Leader has completed your review. <a href=\"@{concat(concat(if(endsWith(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), '/'), substring(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), 0, sub(length(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), 1)), parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), '/SitePages/OneToOne.aspx'), if(empty(first(split(string(coalesce(triggerBody()?['ReviewItemId'], '')), '.'))), '', concat('?reviewId=', first(split(string(coalesce(triggerBody()?['ReviewItemId'], '')), '.')))))}\"><b>View feedback</b></a></p>",
                       "emailMessage/Importance": "Normal"
                     },
                     "authentication": "@parameters('$authentication')"
@@ -740,7 +814,7 @@
                       "parameters": {
                         "emailMessage/To": "@triggerBody()?['Technician']?['Email']",
                         "emailMessage/Subject": "Your 1-to-1 (@{formatDateTime(concat(triggerBody()?['MonthKey'], '-01'), 'MMMM yyyy')}) has been closed",
-                        "emailMessage/Body": "<p>This review was closed without a submission. <a href=\"@{concat(concat(if(endsWith(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), '/'), substring(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), 0, sub(length(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), 1)), parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), '/SitePages/OneToOne.aspx'), '?reviewId=', triggerBody()?['ReviewItemId'])}\">View</a>. Please speak to your Team Leader if this is unexpected.</p>",
+                        "emailMessage/Body": "<p>This review was closed without a submission. <a href=\"@{concat(concat(if(endsWith(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), '/'), substring(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), 0, sub(length(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), 1)), parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), '/SitePages/OneToOne.aspx'), if(empty(first(split(string(coalesce(triggerBody()?['ReviewItemId'], '')), '.'))), '', concat('?reviewId=', first(split(string(coalesce(triggerBody()?['ReviewItemId'], '')), '.')))))}\">View</a>. Please speak to your Team Leader if this is unexpected.</p>",
                         "emailMessage/Importance": "Normal"
                       },
                       "authentication": "@parameters('$authentication')"
@@ -758,7 +832,7 @@
                 }
               },
               "runAfter": {
-                "Set_review_status": [
+                "Review_exists": [
                   "Succeeded"
                 ]
               }

@@ -110,8 +110,8 @@ def to_str(v):
         return 'True' if v else 'False'
     if isinstance(v, (dict, list)):
         return json.dumps(v, separators=(',', ':'), ensure_ascii=False)
-    if isinstance(v, float) and v.is_integer():
-        return str(int(v))
+    if isinstance(v, float):
+        return repr(v)   # strict: SharePoint Number columns arrive as doubles; 12.0 must not silently become '12'
     return str(v)
 
 
@@ -194,20 +194,17 @@ def evaluate(node, ctx):
             return base[key] if key < len(base) else (None if node[3] else (_ for _ in ()).throw(ExprError('index')))
         raise ExprError('cannot index {0} with {1}'.format(type(base).__name__, key))
     name, args = node[1], node[2]
-    lazy = {'if', 'and', 'or', 'coalesce'}
+    # Conservative: every argument is evaluated, even for if/and/or, so an expression is only accepted if it is
+    # safe whether or not the real engine short-circuits.
+    vals = [evaluate(a, ctx) for a in args]
     if name == 'if':
-        return evaluate(args[1], ctx) if truthy(evaluate(args[0], ctx)) else evaluate(args[2], ctx)
+        return vals[1] if truthy(vals[0]) else vals[2]
     if name == 'and':
-        return all(truthy(evaluate(a, ctx)) for a in args)
+        return all([truthy(v) for v in vals])
     if name == 'or':
-        return any(truthy(evaluate(a, ctx)) for a in args)
+        return any([truthy(v) for v in vals])
     if name == 'coalesce':
-        for a in args:
-            v = evaluate(a, ctx)
-            if v is not None:
-                return v
-        return None
-    vals = [evaluate(a, ctx) for a in args] if name not in lazy else []
+        return next((v for v in vals if v is not None), None)
     return call(name, vals, ctx)
 
 
@@ -275,6 +272,10 @@ def call(name, a, ctx):
         if isinstance(a[0], (list, str)):
             return a[0][0] if a[0] else None
         raise ExprError('first() on {0!r}'.format(a[0]))
+    if name == 'last':
+        if isinstance(a[0], (list, str)):
+            return a[0][-1] if a[0] else None
+        raise ExprError('last() on {0!r}'.format(a[0]))
     if name == 'take':
         return a[0][:a[1]]
     if name == 'length':
@@ -303,6 +304,14 @@ def call(name, a, ctx):
         return to_str(a[0])[a[1]:a[1] + (a[2] if len(a) > 2 else len(to_str(a[0])))]
     if name == 'sub':
         return a[0] - a[1]
+    if name == 'add':
+        return a[0] + a[1]
+    if name == 'max':
+        if not all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in a):
+            raise ExprError('max needs numbers')
+        return max(a)
+    if name == 'trim':
+        return to_str(a[0]).strip()
     if name == 'split':
         return to_str(a[0]).split(a[1])
     if name == 'join':
@@ -376,8 +385,17 @@ class Engine:
     def __init__(self, definition, connectors, params, now, trigger_body=None, var_overrides=None):
         self.defn, self.connectors, self.params = definition, connectors, params
         self.now, self.trigger_body = now, trigger_body
-        self.vars, self.results, self.var_overrides = {}, {}, var_overrides or {}
+        self.vars, self.results, self.var_overrides, self.var_types = {}, {}, var_overrides or {}, {}
         self.log = []
+
+    def typed(self, name, val):
+        t = self.var_types.get(name)
+        ok = {'integer': lambda x: isinstance(x, int) and not isinstance(x, bool), 'string': lambda x: isinstance(x, str),
+              'array': lambda x: isinstance(x, list), 'boolean': lambda x: isinstance(x, bool), 'object': lambda x: isinstance(x, dict),
+              'float': lambda x: isinstance(x, (int, float))}.get(t)
+        if ok and val is not None and not ok(val):
+            raise ExprError("variable '{0}' of type '{1}' cannot be set to {2!r}".format(name, t, val))
+        return val
 
     def result(self, name):
         if name not in self.results:
@@ -409,12 +427,21 @@ class Engine:
                     self.results[name] = {'status': 'Skipped', 'outputs': None}
             if not progressed:
                 raise ExprError('runAfter deadlock in container')
-        # a failure counts unless an action that ran after it (on failure) handled it
-        for name, st in status.items():
-            if st == 'Failed':
-                handled = any(name in (a.get('runAfter') or {}) and status[n] != 'Skipped' for n, a in actions.items())
-                if not handled:
-                    return 'Failed'
+        # Documented Logic Apps rule (error-exception-handling): the container's status comes from its branch ends
+        # (actions nothing else runs after). A branch ending in a Skipped action takes that action's predecessor
+        # status; if any branch ends in failure, the container is Failed.
+        def end_status(n, seen=()):
+            st = status[n]
+            if st != 'Skipped':
+                return st
+            preds = list((actions[n].get('runAfter') or {}).keys())
+            if not preds or n in seen:
+                return 'Succeeded'
+            sts = [end_status(p, seen + (n,)) for p in preds]
+            return 'Failed' if any(x in ('Failed', 'TimedOut') for x in sts) else 'Succeeded'
+        ends = [n for n in actions if not any(n in (a.get('runAfter') or {}) for a in actions.values())]
+        if any(end_status(n) in ('Failed', 'TimedOut') for n in ends):
+            return 'Failed'
         return 'Succeeded'
 
     def run_action(self, name, act, ctx):
@@ -458,10 +485,11 @@ class Engine:
         if t == 'InitializeVariable':
             for v in act['inputs']['variables']:
                 val = self.var_overrides.get(v['name'], resolve(v.get('value'), ctx))
-                self.vars[v['name']] = val
+                self.var_types[v['name']] = v['type']
+                self.vars[v['name']] = self.typed(v['name'], val)
             return None
         if t == 'SetVariable':
-            self.vars[act['inputs']['name']] = resolve(act['inputs']['value'], ctx)
+            self.vars[act['inputs']['name']] = self.typed(act['inputs']['name'], resolve(act['inputs']['value'], ctx))
             return None
         if t == 'AppendToArrayVariable':
             self.vars[act['inputs']['name']].append(resolve(act['inputs']['value'], ctx))

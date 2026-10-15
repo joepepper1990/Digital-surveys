@@ -38,6 +38,8 @@
       <RootComponent type="29" id="{6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c02}" behavior="0" />
       <RootComponent type="29" id="{6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c03}" behavior="0" />
       <RootComponent type="29" id="{6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c04}" behavior="0" />
+      <RootComponent type="380" schemaName="esg_SiteUrl" behavior="0" />
+      <RootComponent type="380" schemaName="esg_ManagerEmail" behavior="0" />
     </RootComponents>
     <MissingDependencies />
   </SolutionManifest>

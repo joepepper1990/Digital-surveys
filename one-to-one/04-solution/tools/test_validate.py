@@ -138,6 +138,24 @@ def time_zone_without_start(fl):
     del fl[1]['json']['properties']['definition']['triggers']['Recurrence']['recurrence']['startTime']
 
 
+@mutation
+def continue_after_skipped(fl):
+    c, a = find(fl[0]['json']['properties']['definition'], 'Group_needs_read')
+    a['runAfter'] = {'I_have_direct_access': ['Succeeded', 'Failed', 'Skipped', 'TimedOut']}
+
+
+@mutation
+def unsecured_trigger(fl):
+    t = list(fl[2]['json']['properties']['definition']['triggers'].values())[0]
+    del t['runtimeConfiguration']['secureData']
+
+
+@mutation
+def unsecured_filter(fl):
+    _, a = find(fl[1]['json']['properties']['definition'], 'Outstanding_linked')
+    del a['runtimeConfiguration']
+
+
 if __name__ == '__main__':
     base = build_all()
     assert validate.validate_all(base) == [], 'baseline must be clean'

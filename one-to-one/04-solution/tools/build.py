@@ -54,6 +54,7 @@ def solution_xml(flows):
         '        <Address>\n          <AddressNumber>{0}</AddressNumber>\n          <AddressTypeCode>1</AddressTypeCode>\n'
         '          <ShippingMethodCode>1</ShippingMethodCode>\n        </Address>\n'.format(n) for n in (1, 2))
     roots = ''.join('      <RootComponent type="29" id="{{{0}}}" behavior="0" />\n'.format(f['id']) for f in flows)
+    roots += ''.join('      <RootComponent type="380" schemaName="{0}" behavior="0" />\n'.format(ev['schema']) for ev in ENV_VARS)
     return ('<?xml version="1.0" encoding="utf-8"?>\n' + HEAD + '\n'
             '  <SolutionManifest>\n'
             '    <UniqueName>' + UNIQUE + '</UniqueName>\n'

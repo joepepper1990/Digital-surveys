@@ -6,6 +6,25 @@
 >
 > Use these sheets to understand the flows, or to build them by hand if you can't import.
 
+### v4.1 hardening (in the imported flows; apply the same if building by hand)
+
+Found in the verification pass. Each item has an automated test in `04-solution/tools/`.
+
+| Where | Change | Why |
+|---|---|---|
+| All flows: every use of `ReviewItemId` (Flow 1 `Set_varReviewId_existing`, E2 link; Flow 3 SETPERM `_R`, `Set_review_status`, E4/E5 links) | Use the whole number: `int(first(split(string(<value>), '.')))` for ids, or the same without `int()` for links | SharePoint Number columns come back as doubles (`12.0`). Setting an integer variable fails, and `items(12.0)` is not a valid address. |
+| Flow 1, compose before `Try` | `YearStart` = `if(greater(int(formatDateTime(outputs('ukNow'),'MM')),3), int(formatDateTime(outputs('ukNow'),'yyyy')), sub(int(formatDateTime(outputs('ukNow'),'yyyy')),1))`; `AppraisalYear` = `concat(string(outputs('YearStart')),'/',substring(string(add(outputs('YearStart'),1)),2,2))` | The appraisal year starts in April, as in the app |
+| Flow 1, `My_expectations` | Also require `AppraisalYear` empty or equal to `outputs('AppraisalYear')` | Next year's expectations, entered early, must not leak into this year's reviews |
+| Flow 1, `Tech_copy` | Add `rating` = `null` | Matches the shape the app writes back |
+| Flow 1, `Create_review` → `AppraisalDate` | `if(contains(string(coalesce(x,'')),'T'), formatDateTime(convertFromUtc(coalesce(x,'2000-01-01T00:00:00Z'),'GMT Standard Time'),'yyyy-MM-dd'), if(empty(x), null, x))`, where `x` = `items('Each_technician')?['AppraisalDate']` | Keeps the same calendar day if SharePoint returns the date as a UTC instant in summer time |
+| Flows 2 and 3, triggers; Flow 1 `My_expectations`, `Snapshot`, `Tech_copy`, `Outstanding_linked` | **Secure inputs and outputs** on | The trigger output is the whole review or feedback record |
+| Flow 3, first steps in `Try` | **Get items** `Get_current` (Manager Reviews, `ID eq <trigger ID>`, top 1). If `ReleasedOn` is not empty, **Terminate – Cancelled**. | A second, stale trigger can't release or email twice |
+| Flow 3, `_R` block and `Set_review_status` | Only if `ReviewItemId` is not null. The E5 link then falls back to the page. | Closing a Manager Review whose Monthly Review was never created still releases and emails |
+| Flows 2 and 3, trigger settings | **Concurrency control off** (not 1) | Microsoft: with concurrency on, triggers that arrive while the waiting-runs limit is met may be dropped. Each run handles one item and is safe to repeat (Flow 2 re-reads the Manager Review; Flow 3 re-reads `ReleasedOn`). |
+| Flow 1, `Get_profile` | User = `last(split(items('Each_technician')?['Technician']?['Claims'], '|'))` (the UPN), not the email | Get user profile (V2) takes a UPN or object id; email and UPN can differ |
+| Flow 1, `Get_technicians`, `Outstanding` | Top Count `5000` | Get items returns 100 rows by default |
+| All flows, error handling | A "log on success / warn on failure" pair must be followed by a step that runs after both with *Succeeded, Skipped*. A tolerant step must never run after *Skipped*. | Logic Apps scores a branch that ends in a Skipped step by the step before it, so otherwise a handled failure fails the run, or a real failure is hidden |
+
 Three flows, standard connectors only (SharePoint, Office 365 Outlook, Office 365 Users). Build them **in the TL's own account**. They run as the TL, which is how they can set item permissions.
 
 | Flow | Trigger | Job |
@@ -32,7 +51,7 @@ Nothing else changes. The frontend writes the new v4 columns directly, and the f
 Do these on every flow:
 
 - [ ] **Secure inputs and Secure outputs**: turn both **On** for every *Get items*, *Create item*, *Update item*, *Send an HTTP request to SharePoint* and *Send an email* action (⋯ → Settings). This keeps answers out of the run history.
-- [ ] Trigger **Concurrency control**: On, degree of parallelism **1**.
+- [ ] Trigger **Concurrency control**: Flow 1 (Recurrence) On, degree **1**; Flows 2 and 3 (SharePoint) **Off** (v4.1).
 - [ ] Rename every action exactly as written below. Expressions refer to actions by name.
 - [ ] Connection references: one SharePoint connection, one Outlook connection, one Office 365 Users connection, all as the TL.
 
@@ -270,7 +289,7 @@ As §0.4.
 | Setting | Value |
 |---|---|
 | Trigger condition | `@not(contains(createArray('Not Started','Draft'), triggerBody()?['ReviewStatus']?['Value']))` |
-| Concurrency | On, 1 |
+| Concurrency | **Off** (v4.1 – see the hardening table) |
 
 Deliberately there is **no "Modified By" condition**. Every column on this list is treated as untrusted.
 
@@ -330,7 +349,7 @@ Trigger conditions (two lines, both must be true):
 @empty(triggerBody()?['ReleasedOn'])
 ```
 
-Concurrency: On, 1.
+Concurrency: **Off** (v4.1 – see the hardening table).
 
 > **v4 note:** after release, `ReleasedOn` is set. Later edits by the TL (closing actions, correcting feedback) don't re-trigger this flow. They are visible to the technician straight away, and the app warns the TL about this.
 
@@ -385,7 +404,7 @@ As §0.4.
 ## Build checks (tick before going live)
 
 - [ ] Secure inputs/outputs on every data and email action (open a test run: the inputs show *"Content not shown due to security configuration"*).
-- [ ] All three triggers have concurrency 1.
+- [ ] Flow 1's trigger has concurrency 1; Flows 2 and 3 have concurrency control off.
 - [ ] `varTestDate` is **empty** in Flow 1.
 - [ ] Every flow has `Try` and `Catch`, and `Catch` runs after *has failed* and *has timed out* only.
 - [ ] Flow 1 test run creates one Manager Review and one Monthly Review per active technician. Running it again creates nothing new.

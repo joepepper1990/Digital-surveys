@@ -145,7 +145,7 @@
     var exps = db.lists['Appraisal Expectations'];
     function snapFor(u) {
       return exps.filter(function (e) { return e.Active && e.AppraisalYear === YEAR && (e.AppliesTo === 'Shared' || e.Technician === claimsOf(u)); })
-        .sort(function (a, b) { return a.AppliesTo !== b.AppliesTo ? (a.AppliesTo === 'Shared' ? -1 : 1) : a.SortOrder - b.SortOrder; })
+        .sort(function (a, b) { return a.SortOrder - b.SortOrder; })   // same as Flow 1: Active, this appraisal year, by SortOrder
         .map(function (e) { return { id: e.ID, title: e.Title, measures: e.Measures, year: e.AppraisalYear }; });
     }
     var hist = [];

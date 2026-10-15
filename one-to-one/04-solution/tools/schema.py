@@ -1,7 +1,7 @@
 """ESG 1-to-1 – the SharePoint schema, defined once.
 
 Everything the setup flow creates comes from here: lists, columns (as SharePoint field XML), indexes,
-views, list settings and list permissions. tools/check_schema.py proves this matches
+views, list settings and list permissions. tools/simulate.py proves this matches
 01-sharepoint/lists.csv and the frontend's field lists, so the flow, the docs and the app cannot drift.
 
 Field XML uses single-quoted attributes on purpose: the flow inserts it into a JSON request body.

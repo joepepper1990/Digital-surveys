@@ -279,9 +279,14 @@ window.ESGOneToOne = function (ctx) {
     var status = str(rv.ReviewStatus) || 'Not Started';
     var st = mr && mr.ReviewState ? str(mr.ReviewState)
       : (status === 'Not Started' || status === 'Draft' ? 'Open' : status);
+    // Plan D.7: Monthly Review columns are technician-editable, so month and due date come from the
+    // trusted Manager Review whenever it is readable (always for the TL; after release for a technician).
+    var month = str(mr && mr.MonthKey) || str(rv.MonthKey);
+    var due = (mr && localDate(mr.DueDate)) || localDate(rv.DueDate) || lastDay(month);
     var r = {
-      id: rv.ID, mrId: mr ? mr.ID : 0, tech: techName, month: str(rv.MonthKey), due: localDate(rv.DueDate) || lastDay(str(rv.MonthKey)),
+      id: rv.ID, mrId: mr ? mr.ID : 0, tech: techName, month: month, due: due,
       state: st, draft: status === 'Draft', status: status,
+      processing: st === 'Open' && status !== 'Not Started' && status !== 'Draft',
       submittedOn: mr ? localDate(mr.SubmittedOn) : '', late: !!(mr && mr.SubmittedLate),
       snapshot: snap,
       released: !!(mr && (mr.ReleasedOn || (!IS_TL && mr))),
@@ -359,10 +364,12 @@ window.ESGOneToOne = function (ctx) {
       });
       TECHS.sort();
       revs.forEach(function (rv) {
-        var email = str(rv.Technician && rv.Technician.EMail).toLowerCase();
-        var name = byEmail[email] || str(rv.Technician && rv.Technician.Title) || 'Unknown';
+        var mr = mrByItem[Number(rv.ID)] || null;
+        var who = (mr && mr.Technician) || rv.Technician;   // owner from the trusted record (plan D.7)
+        var email = str(who && who.EMail).toLowerCase();
+        var name = byEmail[email] || str(who && who.Title) || 'Unknown';
         if (!TECH_INFO[name]) { TECH_INFO[name] = { appraisal: '', itemId: 0, email: email, claims: '', active: false }; }
-        REVIEWS.push(buildReview(rv, mrByItem[Number(rv.ID)] || null, name));
+        REVIEWS.push(buildReview(rv, mr, name));
       });
       var exps = await spGetAll(CONFIG.lists.exp, 'ID,Title,Measures,AppraisalYear,AppliesTo,SortOrder,Active,Technician/Id,Technician/Title,Technician/EMail,Technician/Name', 'Technician');
       MASTER_EXPECTATIONS = exps.map(function (e) {
@@ -376,7 +383,7 @@ window.ESGOneToOne = function (ctx) {
         REVIEWS.push(buildReview(rv, mrByItem[Number(rv.ID)] || null, ME || name));
       });
       TECHS = [ME];
-      var latest = REVIEWS.slice().sort(function (x, y) { return x.month < y.month ? 1 : -1; }).find(function (r) { return r.appraisalDate; });
+      var latest = REVIEWS.slice().sort(function (x, y) { return x.month < y.month ? 1 : -1; })[0];
       TECH_INFO[ME] = { appraisal: latest ? latest.appraisalDate : '' };
     }
     REVIEWS.sort(function (x, y) { return x.month === y.month ? (x.tech < y.tech ? -1 : 1) : (x.month < y.month ? -1 : 1); });
@@ -385,7 +392,7 @@ window.ESGOneToOne = function (ctx) {
   // ---------------------------------------------------------------------------------------------
   // calculations
   // ---------------------------------------------------------------------------------------------
-  function isOverdue(r) { return r.state === 'Open' && TODAY > r.due; }
+  function isOverdue(r) { return r.state === 'Open' && !r.processing && TODAY > r.due; }
   function followOf(r) { return r.fb.followOverride || (r.state === 'Open' ? '' : (r.answers.q9 || r.mrTechFollowUp)) || ''; }
   function daysLeft(r) { return daysBetween(TODAY, r.due); }
   function reviewsOf(tech) { return REVIEWS.filter(function (r) { return r.tech === tech; }).sort(function (x, y) { return x.month < y.month ? -1 : 1; }); }
@@ -623,6 +630,7 @@ window.ESGOneToOne = function (ctx) {
     if (r.state === 'Completed') { return h('span', { class: 'chip green', text: 'Completed' + (r.late ? ' (late)' : '') }); }
     if (r.state === 'Submitted') { return h('span', { class: 'chip blue', text: (IS_TL ? 'Awaiting review' : 'Submitted') + (r.late ? ' (late)' : '') }); }
     if (r.state === 'Closed - Not Submitted') { return h('span', { class: 'chip', text: 'Closed – not submitted' }); }
+    if (r.processing) { return h('span', { class: 'chip blue', text: 'Submitted – processing' }); }
     if (isOverdue(r)) { return h('span', { class: 'chip red', text: 'Overdue' }); }
     return h('span', { class: 'chip', text: r.draft ? 'Draft' : 'Not started' });
   }
@@ -1063,9 +1071,9 @@ window.ESGOneToOne = function (ctx) {
     ]);
     var statusSegs = [
       { label: 'Completed', count: cnt(function (r) { return r.state === 'Completed'; }), color: '#2f9a63' },
-      { label: 'Awaiting review', count: cnt(function (r) { return r.state === 'Submitted'; }), color: '#2a78d6' },
+      { label: 'Awaiting review', count: cnt(function (r) { return r.state === 'Submitted' || r.processing; }), color: '#2a78d6' },
       { label: 'Draft', count: cnt(function (r) { return r.state === 'Open' && r.draft && !isOverdue(r); }), color: '#d99a12' },
-      { label: 'Not started', count: cnt(function (r) { return r.state === 'Open' && !r.draft && !isOverdue(r); }), color: '#b8c1ca' },
+      { label: 'Not started', count: cnt(function (r) { return r.state === 'Open' && !r.draft && !r.processing && !isOverdue(r); }), color: '#b8c1ca' },
       { label: 'Overdue', count: cnt(isOverdue), color: '#d14b4b' }
     ];
     var bandCounts = SETTINGS.bands.map(function (b) {

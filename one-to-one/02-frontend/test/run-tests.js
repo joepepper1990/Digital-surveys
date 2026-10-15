@@ -251,6 +251,32 @@ async function main() {
   await popup.close();
   await page.locator('.report-bar button:has-text("Close")').click();
 
+  // ---------------------------------------------------------------- 12b. plan D.7: TL views ignore technician-editable copies; "processing" state
+  await open(page, { as: 'tl' });
+  var dt = await db(page);
+  var target = dt.lists['Monthly Reviews'].find(function (r) {
+    var m = dt.lists['Manager Reviews'].find(function (x) { return x.ReviewItemId === r.ID; });
+    return r.MonthKey === CUR && m && m.ReviewState === 'Open' && r.Technician !== samClaims && r.Technician.indexOf('alex.') < 0;
+  });
+  var tName = await page.evaluate(function (c) { return OTO_MOCK.USERS.find(function (u) { return 'i:0#.f|membership|' + u.email === c; }).title; }, target.Technician);
+  await page.evaluate(function (a) {   // what a technician could do to their own open review through REST
+    var rv = OTO_MOCK.current.db.lists['Monthly Reviews'].find(function (r) { return r.ID === a.id; });
+    rv.MonthKey = '2099-01'; rv.DueDate = '2099-12-31T23:59:59Z'; rv.Technician = a.other;
+    sessionStorage.setItem('oto-mock-db-v4', JSON.stringify(OTO_MOCK.current.db));
+  }, { id: target.ID, other: samClaims });
+  errs = await open(page, { as: 'tl' });
+  var rowT = await page.locator('.nw tr:has-text("' + tName + '")').innerText();
+  ok('D.7: tampered month/due/owner on a Monthly Review do not move or hide it in the TL view',
+    rowT.indexOf('No review yet') < 0 && (await page.locator('body').innerText()).indexOf('2099') < 0, rowT);
+  await page.evaluate(function (a) {   // technician has submitted; Flow 2 has not run yet (5-minute polling window)
+    var rv = OTO_MOCK.current.db.lists['Monthly Reviews'].find(function (r) { return r.ID === a.id; });
+    rv.ReviewStatus = 'Submitted';
+    sessionStorage.setItem('oto-mock-db-v4', JSON.stringify(OTO_MOCK.current.db));
+  }, { id: target.ID });
+  errs = await open(page, { as: 'tl' });
+  ok('Status: a submission waiting for Flow 2 shows "Submitted – processing", not "Not started"',
+    (await page.locator('.nw tr:has-text("' + tName + '")').innerText()).indexOf('Submitted – processing') >= 0, errs.join('|'));
+
   // ---------------------------------------------------------------- 13. XSS sweep (attack strings in every field)
   await page.evaluate(function () { OTO_MOCK.reset(); });
   async function sweep(label, params, steps) {

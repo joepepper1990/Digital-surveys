@@ -5,7 +5,7 @@
 - **Stages 0A and 0B have passed in the live tenant.** Welcome runs the external script, authenticated REST works, and the item-level security model holds.
 - The visual design was agreed through prototype v7 ([`prototype/prototype.html`](prototype/prototype.html)).
 - **The production build files are produced:**
-  - the frontend [`02-frontend/`](02-frontend/README.md), with a local mock and 70 automated checks;
+  - the frontend [`02-frontend/`](02-frontend/README.md), with a local mock and 72 automated checks;
   - the list checklist [`01-sharepoint/lists.md`](01-sharepoint/lists.md);
   - **the importable Power Platform solution** [`04-solution/`](04-solution/IMPORT_GUIDE.md): the three flows plus a setup flow that creates the five lists, permission levels, group and list permissions exactly (v4.1);
   - the flow build sheets and email templates [`03-flows/`](03-flows/FLOW_BUILD_SHEETS.md), for reference or building by hand;
@@ -43,7 +43,7 @@ The system has **five lists** (four data lists plus a small settings list), thre
 | Removed | — | Private notes, ask-for-a-chat, workload trend, the occupational-health text (`eapText`), example text in boxes, and the "how it's worked out" panel for technicians |
 | Flows | — | Flow 1 copies `AppraisalDate` and initialises the two JSON columns. Email dates use `dd-MMM-yyyy`. E3's request tag uses `startsWith`. Flows 2 and 3 are unchanged. |
 | Security model | — | **Unchanged.** No new trust boundary: new technician fields are on the technician's own item; new TL data is on Manager Reviews (released by Flow 3); the Settings list holds no personal data. |
-| Delivery (v4.1) | Lists and flows built by hand from G Parts 3–8 | **Import one solution** ([`04-solution/ESGOneToOne_1_0_0_0_unmanaged.zip`](04-solution/IMPORT_GUIDE.md)), then run **ESG 1-to-1 \| 0 Setup**, which builds everything in C, D.2 and D.3. The flows look up group, role and list IDs at run time, so G Part 4 is no longer needed. The site URL and TL email are environment variables. For environments without Dataverse there is an offline legacy-package builder. Verified locally: a static validator, 17 mutation tests and 101 end-to-end simulations against a fake SharePoint. |
+| Delivery (v4.1) | Lists and flows built by hand from G Parts 3–8 | **Import one solution** ([`04-solution/ESGOneToOne_1_0_0_0_unmanaged.zip`](04-solution/IMPORT_GUIDE.md)), then run **ESG 1-to-1 \| 0 Setup**, which builds everything in C, D.2 and D.3. The flows look up group, role and list IDs at run time, so G Part 4 is no longer needed. The site URL and TL email are environment variables. For environments without Dataverse there is an offline legacy-package builder. Verified locally: a static validator, 20 mutation tests and 110 end-to-end simulations against a fake SharePoint. |
 
 
 ## Changes in v3
@@ -380,7 +380,7 @@ Technicians now need to open one SharePoint page. That's set up without making t
 
 | Step | Setting |
 |---|---|
-| Group | **Site permissions → Advanced → Create Group** named `1-to-1 Technicians`. Owner: the Owners group. Who can view membership: **Group Owner**, so technicians can't list each other. Who can edit membership: **Group Owner**. Allow requests to join: **No**. **Give the group no permission on the site itself** (untick everything on the create page). |
+| Group | **Site permissions → Advanced → Create Group** named `1-to-1 Technicians`. Owner: the Owners group. Who can view membership: **Group Members**. SharePoint offers no owner-only option, so technicians in the group can see each other's names (accepted, R13). Who can edit membership: **Group Owner**. Allow requests to join: **No**. **Give the group no permission on the site itself** (untick everything on the create page). |
 | Page | `SitePages/OneToOne.aspx` → **Manage access → Advanced → Stop inheriting** → grant `1-to-1 Technicians` **Read**. That's this page only. The rest of Site Pages stays Owners only. |
 | Layout library | `Welcome Web Part - Custom Layouts` → **Stop inheriting** → grant `1-to-1 Technicians` **Read**. It holds code only, never data. |
 | Welcome configuration | Any list Welcome creates for its own settings (identified in Stage 0) gets **Read** for the group, and only if the page won't render without it |
@@ -507,7 +507,7 @@ Calls go through `ctx.getWebPart().spHttpClient` with `configurations.v1`. They 
 | Who | Lists read | What SharePoint returns |
 |---|---|---|
 | TL | Technicians, Appraisal Expectations, Monthly Reviews, Manager Reviews, 1-to-1 Settings | Everything |
-| Technician | Monthly Reviews, Manager Reviews, 1-to-1 Settings. The Technicians and Expectations reads return nothing (403). | Only their own Monthly Reviews, their **released** Manager Reviews, and the band thresholds |
+| Technician | Monthly Reviews, Manager Reviews, 1-to-1 Settings. The frontend never requests Technicians or Appraisal Expectations for a technician; a forced request returns 403/404. | Only their own Monthly Reviews, their **released** Manager Reviews, and the band thresholds |
 
 The frontend **never calls a permission endpoint** (no `roleassignments`, `breakroleinheritance` or `ensureuser`). The test suite checks this.
 
@@ -644,7 +644,7 @@ It opens in an in-page overlay with **Print / Save as PDF**. That opens a clean 
   - Flow 2 and Flow 3 effects emulated.
   - A switch for attack-string (XSS) data.
 - **`mock/index.html`:** generated from the production CSS by `tools/build-mock.js`. You can click through every view as any user.
-- **`test/run-tests.js`** (headless Chromium, 70 checks):
+- **`test/run-tests.js`** (headless Chromium, 72 checks):
   - static rules S1, S2, S4 and S5;
   - isolation for Test A and Test B, including direct REST attempts;
   - draft payload allow-list;
@@ -1413,6 +1413,10 @@ v4 reduces Part 7 to about 30 minutes, because there is no CONFIG to edit. Allow
 | R10 | A coding mistake can't bypass SharePoint permissions, but an injection bug would act **as the viewer**, including the TL | Code rules S1–S7 (E.4), an automated attack-string test (K10), release-blocking P15 |
 | R11 (v4) | The expected appraisal outcome could be read as a decision | Labelled as a guide everywhere. The method is shown to the TL. The TL's judgement decides. Wellbeing is never included. |
 | R12 (v4) | A technician can see the band thresholds (Settings list Read) | Not personal data, and needed so their outlook matches the TL's |
+| R13 (v4.1) | Technicians can see who else is in `1-to-1 Technicians` | SharePoint has no owner-only visibility; membership reveals names only, no review data |
+| R14 (v4.1) | A submission made in the same 5-minute polling window as the TL's *Close – not submitted* ends up Closed | Closing is only possible after the deadline. The answers are kept and the TL can correct it (as R5). The TL view shows *Submitted – processing* while Flow 2 hasn't run yet. |
+| R15 (v4.1) | Saving ⚙ Settings writes the appraisal date onto a submitted current review, which re-runs Flow 2 | Flow 2 only re-applies Read, so nothing changes (harmless extra run) |
+| R16 (v4.1) | `validateUpdateListItem` might read dd/MM/yyyy using the TL's *personal* regional settings rather than the site's | Tenant test F27 checks the round trip. If it fails, set your personal region to English (UK). |
 
 ---
 
@@ -1433,7 +1437,7 @@ All of these are text, contain **no tenant names, credentials or personal data**
 | K7 | Test record | Use section H directly (F1–F30, P1–P20); add Pass/Fail, date, tester and screenshot columns |
 | K8 | Privacy notice | **Not needed.** The TL decided it's handled between the TL and each technician. |
 | K9 | [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) | **Produced (v4)** |
-| K10 | [`02-frontend/mock/`](02-frontend/mock/), [`02-frontend/test/`](02-frontend/test/), [`02-frontend/tools/`](02-frontend/tools/) | **Produced.** 70 checks passing. |
+| K10 | [`02-frontend/mock/`](02-frontend/mock/), [`02-frontend/test/`](02-frontend/test/), [`02-frontend/tools/`](02-frontend/tools/) | **Produced.** 72 checks passing. |
 | K11 | Frontend security notes for IT-13 | Section E.3–E.4 plus [`02-frontend/README.md`](02-frontend/README.md) (endpoints, rules, test evidence) |
 | — | [`prototype/prototype.html`](prototype/prototype.html) | Design baseline (prototype v7) |
 
