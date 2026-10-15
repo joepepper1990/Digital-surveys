@@ -1014,6 +1014,8 @@ Work through the parts in order and tick each box. ⏱ shows typical time. You n
 
 - [ ] Send IT the questions **IT-1 to IT-13** and HR the questions **HR-1 to HR-5** from section J. **IT-10 (is Welcome available?) comes first.** You can build Stage 0 while you wait, but **don't put real technician data in** until IT-2, IT-10, IT-11, IT-13 and HR-2 are answered.
 
+> **v4.1:** with the imported solution you need only the **Site URL** and **TL email** (entered at import); the IDs below are only for building the flows by hand.
+
 Create the **Config sheet** with these lines:
 
 ```

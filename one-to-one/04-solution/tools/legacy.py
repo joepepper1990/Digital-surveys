@@ -20,8 +20,8 @@ SITE_TOKEN = '__ESG_SITE_URL__'
 MAIL_TOKEN = '__ESG_TL_EMAIL__'
 API = {
     'shared_sharepointonline': ('SharePoint', 'https://connectoricons-prod.azureedge.net/releases/v1.0.1578/1.0.1578.2813/sharepointonline/icon.png'),
-    'shared_office365': ('Office 365 Outlook', 'https://connectoricons-prod.azureedge.net/releases/v1.0.1580/1.0.1580.2832/office365/icon.png'),
-    'shared_office365users': ('Office 365 Users', 'https://connectoricons-prod.azureedge.net/releases/v1.0.1580/1.0.1580.2832/office365users/icon.png'),
+    'shared_office365': ('Office 365 Outlook', 'https://connectoricons-prod.azureedge.net/releases/v1.0.1464/1.0.1464.2404/office365/icon.png'),
+    'shared_office365users': ('Office 365 Users', 'https://connectoricons-prod.azureedge.net/releases/v1.0.1464/1.0.1464.2404/office365users/icon.png'),
 }
 NS = uuid.UUID('9b3f6a1e-3c1d-4f65-8f0a-1e2d3c4b5a69')
 
