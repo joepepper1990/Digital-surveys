@@ -26,6 +26,8 @@
 
 ## What you do next
 
+**Printable, self-contained version: [`ESG-1to1-Finalisation-Guide.docx`](ESG-1to1-Finalisation-Guide.docx)** (same content as [`FINALISATION_GUIDE.md`](FINALISATION_GUIDE.md), including the full test record and welcome email).
+
 **Start here: [`TENANT_WALKTHROUGH.md`](TENANT_WALKTHROUGH.md)** is the complete tick-list from Stage 0B to live: import, see the frontend yourself, test accounts, security tests, clean-down, inviting and go-live. The summary below is the same route in brief.
 
 Follow [`GO_LIVE_RUNBOOK.md`](GO_LIVE_RUNBOOK.md) from **Phase 4**:

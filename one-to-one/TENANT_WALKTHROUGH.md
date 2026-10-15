@@ -1,6 +1,6 @@
 # ESG 1-to-1 — tenant walkthrough: from Stage 0B to live
 
-One tick-list from where you are now to a running system. Each step links to the detailed guide.
+One tick-list from where you are now to a running system. For a single printable document with everything in it (including the full test record), use [`ESG-1to1-Finalisation-Guide.docx`](ESG-1to1-Finalisation-Guide.docx). Each step links to the detailed guide.
 
 **Current status:**
 
