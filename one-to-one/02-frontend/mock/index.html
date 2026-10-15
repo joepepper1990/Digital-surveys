@@ -21,33 +21,52 @@ body { margin: 0; background: #eef2f5; }
     --accent: #ef7d3a; --accent-bg: #fdeadb; --accent-ink: #b7531a; --purple: #6a4fb0;
     --self: #2a78d6; --tl: #eb6834;
     font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif; font-size: 14px;
-    line-height: 1.45; color: var(--ink); background: var(--bg); min-height: 100vh; min-width: 1100px;
+    line-height: 1.45; color: var(--ink); background: var(--bg); min-width: 1100px;
+    --z: 1; zoom: var(--z);
   }
+  /* Large screens: scale the whole layout up so text is readable and the page width is used (v4.1). */
+  @media (min-width: 1700px) { .oto-scope .oto { --z: 1.1; } }
+  @media (min-width: 1950px) { .oto-scope .oto { --z: 1.2; } }
+  @media (min-width: 2200px) { .oto-scope .oto { --z: 1.3; } }
+  @media (min-width: 2450px) { .oto-scope .oto { --z: 1.4; } }
+  @media (min-width: 2800px) { .oto-scope .oto { --z: 1.55; } }
   .oto-scope .oto * { box-sizing: border-box; }
   .oto-scope .oto h1, .oto-scope .oto h2, .oto-scope .oto h3 { margin: 0; }
 
-  /* ---------- shell ---------- */
-  .oto-scope .oto .shell { display: grid; grid-template-columns: 216px minmax(0, 1fr); background: linear-gradient(to right, #0e4257 0 216px, transparent 216px); }
+  /* ---------- shell: top menu bar ---------- */
   .oto-scope .oto .nw table.tbl td { white-space: nowrap; }
   .oto-scope .oto .nw table.tbl td, .oto-scope .oto .nw table.tbl th { padding-left: 8px; padding-right: 8px; }
-  .oto-scope .oto .sidenav { background: linear-gradient(180deg, var(--navy), #0e4257); color: #fff; position: sticky; top: 0; height: 100vh; overflow-y: auto; display: flex; flex-direction: column; padding: 16px 10px 12px; }
-  .oto-scope .oto .sidenav .brand { padding: 0 10px 14px; border-bottom: 1px solid rgba(255,255,255,.14); margin-bottom: 8px; }
-  .oto-scope .oto .sidenav .brand h1 { font-size: 15px; font-weight: 700; }
-  .oto-scope .oto .sidenav .brand span { display: block; font-size: 12px; opacity: .75; margin-top: 2px; }
-  .oto-scope .oto .sidenav .sec { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; opacity: .55; padding: 14px 10px 4px; }
-  .oto-scope .oto .sidenav button.nav { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; font: inherit; font-size: 13px; font-weight: 600; color: rgba(255,255,255,.84); background: none; border: none; border-radius: 6px; padding: 7px 10px; cursor: pointer; }
-  .oto-scope .oto .sidenav button.nav:hover { background: rgba(255,255,255,.08); color: #fff; }
-  .oto-scope .oto .sidenav button.nav[aria-current="true"] { background: rgba(255,255,255,.16); color: #fff; box-shadow: inset 3px 0 0 var(--accent); }
-  .oto-scope .oto .sidenav .ico { width: 18px; text-align: center; flex: none; }
-  .oto-scope .oto .sidenav .badge { margin-left: auto; background: var(--accent); color: #fff; border-radius: 10px; font-size: 11px; padding: 0 7px; line-height: 18px; }
-  .oto-scope .oto .sidenav .flag { margin-left: auto; width: 7px; height: 7px; border-radius: 50%; background: #ff8a80; }
-  .oto-scope .oto .sidenav .tdot { width: 9px; height: 9px; border-radius: 50%; flex: none; box-shadow: 0 0 0 2px rgba(255,255,255,.25); }
-  .oto-scope .oto .sidenav .foot { margin-top: auto; font-size: 12px; padding: 10px; border-top: 1px solid rgba(255,255,255,.14); opacity: .85; }
-  .oto-scope .oto .sidenav .foot b { display: block; font-size: 13px; }
+  .oto-scope .oto .topbar { background: linear-gradient(90deg, #0e4257, var(--navy)); color: #fff; display: flex; align-items: center; gap: 6px 22px; flex-wrap: wrap; padding: 0 28px; min-height: 56px; position: relative; z-index: 5; }
+  .oto-scope .oto .topbar .brand { padding: 8px 18px 8px 0; border-right: 1px solid rgba(255,255,255,.18); }
+  .oto-scope .oto .topbar .brand h1 { font-size: 16px; font-weight: 700; white-space: nowrap; }
+  .oto-scope .oto .topbar .brand span { display: block; font-size: 12px; opacity: .75; margin-top: 1px; white-space: nowrap; }
+  .oto-scope .oto .topbar .tabs { display: flex; align-items: stretch; gap: 2px; flex-wrap: wrap; align-self: stretch; }
+  .oto-scope .oto .topbar .right { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 0; }
+  .oto-scope .oto .topbar button.nav { display: inline-flex; align-items: center; gap: 8px; font: inherit; font-size: 14px; font-weight: 600; color: rgba(255,255,255,.84); background: none; border: none; padding: 0 14px; min-height: 56px; cursor: pointer; white-space: nowrap; box-shadow: inset 0 -3px 0 transparent; }
+  .oto-scope .oto .topbar button.nav:hover { background: rgba(255,255,255,.08); color: #fff; }
+  .oto-scope .oto .topbar button.nav[aria-current="true"] { background: rgba(255,255,255,.12); color: #fff; box-shadow: inset 0 -3px 0 var(--accent); }
+  .oto-scope .oto .topbar .right button.nav, .oto-scope .oto .teammenu > summary { min-height: 36px; border-radius: 6px; border: 1px solid rgba(255,255,255,.28); padding: 0 12px; }
+  .oto-scope .oto .topbar .ico { text-align: center; flex: none; }
+  .oto-scope .oto .badge { background: var(--accent); color: #fff; border-radius: 10px; font-size: 11px; padding: 0 7px; line-height: 18px; }
+  .oto-scope .oto .flag { margin-left: auto; width: 8px; height: 8px; border-radius: 50%; background: #e0534a; flex: none; }
+  .oto-scope .oto .tdot { width: 10px; height: 10px; border-radius: 50%; flex: none; display: inline-block; box-shadow: 0 0 0 2px rgba(0,0,0,.06); }
+  .oto-scope .oto .teammenu { position: relative; }
+  .oto-scope .oto .teammenu > summary { list-style: none; display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: rgba(255,255,255,.9); cursor: pointer; white-space: nowrap; user-select: none; }
+  .oto-scope .oto .teammenu > summary::-webkit-details-marker { display: none; }
+  .oto-scope .oto .teammenu > summary:hover, .oto-scope .oto .teammenu[open] > summary { background: rgba(255,255,255,.12); color: #fff; }
+  .oto-scope .oto .teammenu.cur > summary { background: rgba(255,255,255,.16); color: #fff; box-shadow: inset 0 -3px 0 var(--accent); }
+  .oto-scope .oto .teammenu.empty > summary { opacity: .6; cursor: default; }
+  .oto-scope .oto .teammenu .menu { position: absolute; right: 0; top: calc(100% + 6px); min-width: 280px; max-height: 60vh; overflow-y: auto; background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 28px rgba(0,0,0,.18); padding: 6px; z-index: 20; }
+  .oto-scope .oto .teammenu .menu .mh { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 6px 10px 4px; }
+  .oto-scope .oto .teammenu .menu button.nav { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; font: inherit; font-weight: 600; color: var(--ink); background: none; border: none; border-radius: 6px; padding: 8px 10px; cursor: pointer; }
+  .oto-scope .oto .teammenu .menu button.nav:hover { background: var(--blue-bg); }
+  .oto-scope .oto .teammenu .menu button.nav[aria-current="true"] { background: var(--blue-bg); box-shadow: inset 3px 0 0 var(--accent); }
+  .oto-scope .oto .topbar .status { font-size: 12px; line-height: 1.3; text-align: right; opacity: .9; white-space: nowrap; }
+  .oto-scope .oto .topbar .status b { font-size: 13px; }
   .oto-scope .oto .titlebar { background: #fff; border-bottom: 1px solid var(--line); padding: 12px 28px; display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 58px; }
   .oto-scope .oto .titlebar .crumb { font-size: 12px; color: var(--muted); }
   .oto-scope .oto .titlebar h1 { font-size: 19px; font-weight: 700; }
-  .oto-scope .oto main { max-width: 1480px; margin: 0 auto; padding: 18px 28px 48px; }
+  .oto-scope .oto main { padding: 18px 28px 40px; }
 
   /* ---------- layout ---------- */
   .oto-scope .oto .stack { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
@@ -202,7 +221,7 @@ body { margin: 0; background: #eef2f5; }
   .oto-scope .oto .modal-back { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: grid; place-items: center; z-index: 90; }
   .oto-scope .oto .modal { background: #fff; border-radius: 10px; padding: 20px; width: 460px; }
   .oto-scope .oto .modal h3 { margin-bottom: 8px; }
-  .oto-scope .oto .modal.wide { width: 820px; max-height: 88vh; overflow-y: auto; padding: 22px 24px; }
+  .oto-scope .oto .modal.wide { width: 820px; max-height: calc(88vh / var(--z)); overflow-y: auto; padding: 22px 24px; }
   .oto-scope .oto .modal.wide h3.sh { font-size: 14px; margin: 18px 0 8px; color: var(--navy); }
   .oto-scope .oto .acgrid { display: grid; grid-template-columns: 26px minmax(0, 1fr) 150px 130px 96px 34px; gap: 8px; align-items: center; }
   .oto-scope .oto .achead { font-size: 11px; color: var(--muted); font-weight: 650; text-transform: uppercase; letter-spacing: .04em; padding: 0 10px 6px; }
@@ -225,7 +244,7 @@ body { margin: 0; background: #eef2f5; }
   .oto-scope .oto .covbar .bar > i.s { background: var(--navy-2); } .oto-scope .oto .covbar .bar > i.o { background: var(--accent); }
   .oto-scope .oto .confetti { position: fixed; inset: 0; pointer-events: none; z-index: 97; overflow: hidden; }
   .oto-scope .oto .confetti i { position: absolute; width: 9px; height: 14px; top: -20px; border-radius: 2px; animation: otofall linear forwards; }
-  @keyframes otofall { to { transform: translateY(105vh) rotate(540deg); opacity: .9; } }
+  @keyframes otofall { to { transform: translateY(calc(105vh / var(--z))) rotate(540deg); opacity: .9; } }
 
   /* ---------- report ---------- */
   .oto-scope .oto .report-wrap { position: fixed; inset: 0; background: #dfe5ea; z-index: 80; overflow: auto; }
@@ -251,13 +270,12 @@ body { margin: 0; background: #eef2f5; }
   /* ---------- production additions ---------- */
   .oto-scope .oto .sr-only { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
   .oto-scope .oto .oto-busy { position: fixed; top: 14px; right: 18px; z-index: 10050; background: var(--navy); color: #fff; padding: 6px 14px; border-radius: 16px; font-size: 13px; font-weight: 600; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
-  .oto-scope .oto .linkbtn { display: block; margin-top: 8px; background: none; border: none; color: rgba(255,255,255,.85); font: inherit; font-size: 12px; cursor: pointer; padding: 0; text-decoration: underline; }
+  .oto-scope .oto .linkbtn { background: none; border: none; color: rgba(255,255,255,.9); font: inherit; font-size: 12px; cursor: pointer; padding: 0; text-decoration: underline; }
   .oto-scope .oto .modal-back { z-index: 10010; }
   .oto-scope .oto .toast { z-index: 10060; }
   .oto-scope .oto .tip { z-index: 10070; }
   .oto-scope .oto .confetti { z-index: 10040; }
   .oto-scope .oto .report-wrap { z-index: 10000; }
-  .oto-scope .oto .sidenav { max-height: 100vh; }
         
 </style>
 </head>

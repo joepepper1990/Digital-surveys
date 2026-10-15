@@ -1,4 +1,4 @@
-# ESG 1-to-1 — frontend (v4.0.0)
+# ESG 1-to-1 — frontend (v4.1.0)
 
 | File | What it is |
 |---|---|
@@ -28,8 +28,11 @@ Steps:
 2. **Page:** open `SitePages/OneToOne.aspx` → **Edit**.
    1. The Welcome web part must sit in a **full-width section**. If it doesn't, add a full-width section and move the web part into it.
    2. Web part settings (pencil) → **Layout = ESG 1-to-1**.
-   3. Greeting, time, weather and search **off**.
+   3. Content tab: News posts and Slides **off** (the layout doesn't use them). Background, Search, Greeting, **Weather** (it calls an outside service) and Time and date **off**.
    4. **Republish.**
+   5. **Updating to a new version later:** upload with **Replace**, then web part settings → **Reset layout cache** → **Republish**, and check the version at the right-hand end of the top menu bar.
+
+   The layout fills the page width and scales itself up on large screens (CSS zoom 1.1–1.55 above 1,700 px wide). Anyone who wants it bigger or smaller can still use the browser's Ctrl + / Ctrl −.
 3. **Home page:** Site Pages → `OneToOne` → … → **Make homepage**.
 4. **Permissions for the `1-to-1 Technicians` group: Read on exactly these:**
    - the `OneToOne` page (unique permissions)
@@ -44,10 +47,10 @@ Steps:
 
 | # | As | Do | Expect |
 |---|---|---|---|
-| 1 | TL | Open the site | **Team overview**. Sidebar has Team overview, Monthly reviews, Expectations, Actions, the team list and **⚙ Settings**. The footer shows **v4.0.0**. |
+| 1 | TL | Open the site | **Team overview**. The top menu bar has Team overview, Monthly reviews, Expectations, Actions, **Team ▾** (the team list) and **⚙ Settings**, and shows **v4.1.0** at its right-hand end. |
 | 2 | TL | ⚙ Settings → set an appraisal date (e.g. `15-Jul-2027`) → Save → reopen | Same date shown, and the Technicians list shows 15/07/2027 |
 | 3 | TL | Expectations → add a Shared one, then an Individual one, then retire one | Items appear in the list. Retired = Active **No**. |
-| 4 | Test A | Open the E1 link | Their review. The sidebar has only *This month · My appraisal · Appraisal report*. |
+| 4 | Test A | Open the E1 link | Their review. The menu bar has only *This month · My appraisal · Appraisal report*. |
 | 5 | Test A | Change `?reviewId=` to Test B's ID | "Review not found" |
 | 6 | Test A | Save, reload | Answers kept |
 | 7 | TL | Open Test A's review → add 2 actions → Save | Manager Reviews: `ActionsJson` has 2 rows, `ActionsStatus` = Open, `NextActionDue` set |
@@ -62,7 +65,7 @@ You need Node.js. For the automated tests you also need Playwright with Chromium
 ```bash
 cd one-to-one/02-frontend
 node tools/build-mock.js          # regenerates mock/index.html from one-to-one.html
-node test/run-tests.js            # 72 checks; exits non-zero on any failure
+node test/run-tests.js            # 89 checks; exits non-zero on any failure
 ```
 
 - **Paths:** the test runner looks for Playwright at `/opt/node-tools/node_modules/playwright` and Chromium at `/opt/pw-browsers/…`. Set `PLAYWRIGHT_MODULE` and `CHROMIUM_PATH` to point elsewhere.

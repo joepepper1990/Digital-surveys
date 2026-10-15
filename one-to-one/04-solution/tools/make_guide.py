@@ -79,7 +79,7 @@ GUIDE = r'''# ESG Monthly Technician 1-to-1 — Finalisation Guide
 
 **From the end of Stage 0B to a live system, then running it month to month.** This document is self-contained: you don't need any other file to follow it. Tick each box as you go.
 
-Version: system v4.0.0 (frontend) · solution 1.0.0.0 · guide dated 15-Oct-2026
+Version: system v4.1.0 (frontend) · solution 1.0.0.0 · guide dated 15-Oct-2026
 
 ---
 
@@ -92,7 +92,7 @@ Version: system v4.0.0 (frontend) · solution 1.0.0.0 · guide dated 15-Oct-2026
   - the `1-to-1 Technicians` group exists;
   - the `1-to-1 Edit` and `1-to-1 Read` permission levels exist.
 - **Everything to install is built and verified offline:**
-  - frontend: 72 automated checks;
+  - frontend: 89 automated checks;
   - flows: simulated end to end, 110 checks;
   - an independent review fixed 17 defects.
 
@@ -133,7 +133,7 @@ Version: system v4.0.0 (frontend) · solution 1.0.0.0 · guide dated 15-Oct-2026
 ## Phase 0 — Get and check the files (5 min)
 
 - [ ] **Right zip.** Open the zip, then open `solution.xml` in Notepad. It must contain `<RootComponent type="380" schemaName="esg_SiteUrl"`. If it doesn't, you have an older download: get the latest one.
-- [ ] **Right frontend.** You have `one-to-one.html` and `one-to-one.js` (v4.0.0). After installing, the sidebar footer must show **v4.0.0**.
+- [ ] **Right frontend.** You have `one-to-one.html` and `one-to-one.js` (v4.1.0). After installing, the top menu bar must show **v4.1.0** (right-hand end).
 - [ ] **Unchanged files.** Transfer them the usual approved way. Don't open and re-save them in Word.
 
 ---
@@ -199,7 +199,8 @@ Version: system v4.0.0 (frontend) · solution 1.0.0.0 · guide dated 15-Oct-2026
 2. [ ] Open the **OneToOne** page → **Edit**.
    - If the Welcome web part isn't already in a **full-width section**, add one and move the web part into it.
    - Web part **pencil** → **Layout = ESG 1-to-1**. This replaces the probe layout.
-   - Greeting, time, weather and search: **off**.
+   - Greeting, time, weather and search: **off**; on the Content tab, News posts and Slides **off**.
+   - If you upload a newer version later: **Reset layout cache** in the web part settings, then republish.
    - **Republish.**
 3. [ ] **Site Pages → OneToOne → … → Make homepage.**
 4. [ ] **Group permissions.** `1-to-1 Technicians` has **Read on exactly these, nothing more** (set in Stage 0; setup did the last one):
@@ -211,14 +212,14 @@ Version: system v4.0.0 (frontend) · solution 1.0.0.0 · guide dated 15-Oct-2026
 ### 4.6 Your first look
 
 - [ ] Open the site. You should see:
-  - a dark **sidebar** with Team overview, Monthly reviews, Expectations, Actions and ⚙ Settings;
+  - a dark **top menu bar** with Team overview, Monthly reviews, Expectations, Actions, **Team (0) ▾** and ⚙ Settings;
   - **Team overview** showing *"No technicians yet"*;
-  - **v4.0.0** at the bottom of the sidebar.
+  - **v4.1.0** at the right-hand end of the top menu bar.
 - [ ] Click through **Monthly reviews**, **Expectations**, **Actions** and **⚙ Settings**. Expect no errors (empty pages are normal for now).
 - [ ] **Expectations:**
   - Add one *Shared* expectation and one *Individual* expectation for yourself. This proves item creation, Yes/No and Person columns work in your tenant.
   - Then **Retire** the Individual one.
-- [ ] The sidebar and content fill the page width.
+- [ ] The menu bar and content fill the page width.
 - [ ] **Print / Save as PDF** on a report opens a print window. If not, allow pop-ups for the SharePoint site.
 
 > You can't see the *technician* side with your own account: the page always recognises you as Team Leader. Phase B uses Test A for that.
@@ -251,7 +252,7 @@ Only if §4.2 step 3 showed that solutions can't be imported:
   - **Run it again:** no new items, no second email.
 - [ ] **As you:** Team overview lists Test A and Test B.
 - [ ] **As Test A** (InPrivate window):
-  - Open the email link. Their form opens, with only *This month · My appraisal · Appraisal report* in the sidebar.
+  - Open the email link. Their form opens, with only *This month · My appraisal · Appraisal report* in the top menu bar.
   - Fill in a few answers → **Save** → reload. The answers are kept.
   - Complete everything → **Submit**. Within about 5 minutes the review becomes read-only.
 - [ ] **As you:** *"1-to-1 submitted"* arrives.

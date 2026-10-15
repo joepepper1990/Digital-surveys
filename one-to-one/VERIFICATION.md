@@ -1,6 +1,6 @@
 # ESG 1-to-1 — verification record (15-Oct-2026)
 
-**Scope:** frontend v4.0.0, the importable solution (setup flow + Flows 1–3), the legacy-package builder, the five-list schema and all documents.
+**Scope:** frontend v4.1.0, the importable solution (setup flow + Flows 1–3), the legacy-package builder, the five-list schema and all documents.
 
 **What this record can and can't prove.** Everything here ran outside your tenant. It proves the files are well-formed, internally consistent and behave as specified against a strict model of SharePoint that follows Microsoft's documentation. Only the tenant can prove the import and real permissions (§5).
 
@@ -8,7 +8,7 @@
 
 | Check | How | Result |
 |---|---|---|
-| Frontend | `02-frontend`: `node tools/build-mock.js && node test/run-tests.js` (headless Chromium against the local mock) | **72 / 72** |
+| Frontend | `02-frontend`: `node tools/build-mock.js && node test/run-tests.js` (headless Chromium against the local mock) | **89 / 89** |
 | Solution build | `04-solution/tools/build.py`: generate `src/`, validate, pack with Microsoft's Power Platform CLI, unpack again and compare | Packs; round trip identical |
 | Static validator | Expressions, references, scopes, run-after chains, required connector parameters, list/column names, JSON request bodies, field XML / view CAML, schedule time zone, secured run history, no hidden failures | 4 flows clean |
 | Validator proof | `tools/test_validate.py`: deliberately broken copies of the flows | **20 / 20** caught |

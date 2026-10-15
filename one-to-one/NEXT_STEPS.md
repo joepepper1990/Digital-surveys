@@ -7,7 +7,7 @@
   1. The `1-to-1 Technicians` group needs **Read on the Welcome Errors list** (`WMW_WMReplyWelcomeWebPartErrors`), as well as on the page and the layouts library.
   2. **B10a:** the **TL must be Site Collection Administrator**, so a technician can never hide a record from the TL.
 - **Design agreed:** prototype v7 ([`prototype/prototype.html`](prototype/prototype.html)). The changes it brought in:
-  - a desktop layout with a sidebar menu;
+  - a desktop layout with a menu (a top menu bar since v4.1.0);
   - the appraisal outlook;
   - multi-row actions with close-out criteria and deadlines;
   - TL-only ⚙ Settings (appraisal dates, bands);
@@ -18,7 +18,7 @@
 
   | File | What it is |
   |---|---|
-  | [`02-frontend/`](02-frontend/README.md) | Production frontend v4.0.0, local mock, 72 automated checks (all passing) |
+  | [`02-frontend/`](02-frontend/README.md) | Production frontend v4.1.0, local mock, 89 automated checks (all passing) |
   | [`01-sharepoint/lists.md`](01-sharepoint/lists.md) | Five-list build checklist |
   | [`04-solution/`](04-solution/IMPORT_GUIDE.md) | **Importable solution**: setup flow (creates the lists exactly) + Flows 1–3; offline legacy builder; validated and simulated end to end |
   | [`03-flows/`](03-flows/FLOW_BUILD_SHEETS.md) | Flow build sheets and email templates (reference / manual build) |
@@ -50,7 +50,7 @@ The local mock can't prove these. Check them in your first session after install
 | Setup flow | IMPORT_GUIDE §3: the summary email says *complete* | Fix the listed items and re-run; for a red failed step, send its error text |
 | Expectation create (TL) | Expectations → add one | Send the console error. `AddValidateUpdateItemUsingPath` may need a different folder path. |
 | Yes/No and Person writes | Edit an expectation's *Active* and *Applies to: individual* | Send the error text |
-| Full-width section | The sidebar and content fill the page width | Change the section layout to full width |
+| Full-width section | The menu bar and content fill the page width | Change the section layout to full width |
 | Dates | Set an appraisal date in a summer month, reopen ⚙ Settings | It must show the same day. Check the site's regional settings (London). |
 | Print / Save as PDF | Open a report and click Print | Allow pop-ups for the SharePoint site |
 | Limited-access lockdown | Ask IT whether *limited-access user permission lockdown mode* is on for the site. Stage 0B's technician REST calls passing suggests not. | If it's on, technicians' page calls can fail; IT can turn the feature off for this site |

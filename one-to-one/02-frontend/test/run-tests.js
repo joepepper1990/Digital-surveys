@@ -50,6 +50,10 @@ async function open(page, params) {
   await page.waitForTimeout(150);
   return errs;
 }
+async function openTeam(page, name) {
+  await page.locator('.teammenu > summary').click();
+  await page.locator('.teammenu button.nav:has-text("' + name + '")').click();
+}
 async function db(page) { return page.evaluate(function () { return JSON.parse(JSON.stringify(OTO_MOCK.current.db)); }); }
 async function api(page, method, p, body) {
   return page.evaluate(async function (a) {
@@ -78,7 +82,7 @@ async function main() {
   errs = await open(page, { as: 'tl' });
   ok('TL: dashboard loads without errors', errs.length === 0, errs.join(' | '));
   ok('TL: Team overview shows 6 technicians', (await page.locator('.nw tbody tr').count()) === 6);
-  ok('TL: sidebar lists the team and Settings', (await page.locator('.sidenav >> text=Settings').count()) === 1 && (await page.locator('.sidenav >> text=Sam Patel').count()) === 1);
+  ok('TL: top bar has Settings and the Team menu lists the team', (await page.locator('.topbar >> text=Settings').count()) === 1 && (await page.locator('.teammenu button.nav:has-text("Sam Patel")').count()) === 1);
   var d0 = await db(page);
   var alexClaims = claims('alex.morgan@example.test'), samClaims = claims('sam.patel@example.test');
   var alexCur = d0.lists['Monthly Reviews'].find(function (r) { return r.Technician === alexClaims && r.MonthKey === CUR; });
@@ -93,7 +97,7 @@ async function main() {
   ok('Test A: month picker lists only own reviews (' + alexCount + ')', (await page.locator('select[aria-label="Choose a month"] option').count()) === alexCount);
   var bodyText = await page.locator('[data-oto-root]').innerText();
   ok('Test A: no other technician names on the page', ['Sam Patel', 'Jordan Lee', 'Casey Brooks', 'Riley Evans', 'Taylor Reed'].every(function (n) { return bodyText.indexOf(n) < 0; }));
-  ok('Test A: no Team Leader menu or Settings', (await page.locator('.sidenav >> text=Settings').count()) === 0 && (await page.locator('.sidenav >> text=Team overview').count()) === 0);
+  ok('Test A: no Team Leader menu or Settings', (await page.locator('.topbar >> text=Settings').count()) === 0 && (await page.locator('.topbar >> text=Team overview').count()) === 0);
   var r1 = await api(page, 'GET', "/_api/web/lists/getbytitle('Monthly%20Reviews')/items");
   ok('Test A: REST returns only own Monthly Reviews', r1.status === 200 && r1.json.value.every(function (x) { return x.Technician && x.Technician.EMail === 'alex.morgan@example.test'; }));
   var r2 = await api(page, 'GET', "/_api/web/lists/getbytitle('Manager%20Reviews')/items");
@@ -192,7 +196,7 @@ async function main() {
 
   // ---------------------------------------------------------------- 9. settings (dates + bands) and BST-safe dates
   await open(page, { as: 'tl' });
-  await page.locator('.sidenav >> text=Settings').click();
+  await page.locator('.topbar >> text=Settings').click();
   var caseyIn = page.locator('.modal tr:has-text("Casey Brooks") input.datef');
   await caseyIn.fill('31-Feb-2027'); await caseyIn.press('Tab');
   ok('Settings: impossible date is flagged', await caseyIn.evaluate(function (e) { return e.classList.contains('bad'); }));
@@ -213,7 +217,7 @@ async function main() {
   ok('Dates: a BST date reloads as the same calendar day', (await page.locator('.nw tr:has-text("Casey Brooks")').innerText()).indexOf(fmt(summer)) >= 0);
 
   // ---------------------------------------------------------------- 10. expectations editor
-  await page.locator('.sidenav >> text=Expectations').click();
+  await page.locator('.topbar >> text=Expectations').click();
   await page.locator('#oto-x-title').fill('Complete confined space refresher');
   await page.locator('#oto-x-meas').fill('Course passed and recorded');
   await page.locator('#oto-x-scope').selectOption('Individual');
@@ -230,7 +234,7 @@ async function main() {
   ok('Expectations: retire writes Active = 0', d10b.writes[d10b.writes.length - 1].values.Active === '0');
 
   // ---------------------------------------------------------------- 11. actions page close-out
-  await page.locator('.sidenav >> text=Actions').click();
+  await page.locator('.topbar >> text=Actions').click();
   var before = (await db(page)).writes.length;
   await page.locator('button:has-text("Close out")').first().click();
   await page.locator('.modal button:has-text("Close out")').click();
@@ -240,7 +244,7 @@ async function main() {
   ok('Actions: close-out writes ActionsJson on the Manager Review', d11.writes.length === before + 1 && aw.list === 'Manager Reviews' && /"status":"Closed"/.test(aw.values.ActionsJson));
 
   // ---------------------------------------------------------------- 12. report + print window
-  await page.locator('.sidenav >> text=Jordan Lee').click();
+  await openTeam(page, 'Jordan Lee');
   await page.locator('button:has-text("Generate appraisal report")').click();
   ok('Report: opens with all eight sections', (await page.locator('.report-doc h2').count()) === 8);
   var popupP = page.waitForEvent('popup');
@@ -292,22 +296,90 @@ async function main() {
       JSON.stringify(bad) + ' ' + e.join('|'));
   }
   await sweep('TL team overview', { as: 'tl', xss: '1' });
-  await sweep('TL monthly reviews', { as: 'tl', xss: '1' }, async function () { await page.locator('.sidenav >> text=Monthly reviews').click(); await page.locator('#oto-f-month').selectOption(''); });
+  await sweep('TL monthly reviews', { as: 'tl', xss: '1' }, async function () { await page.locator('.topbar >> text=Monthly reviews').click(); await page.locator('#oto-f-month').selectOption(''); });
   var dx = await db(page);
   var samX = dx.lists['Monthly Reviews'].find(function (r) { return r.Technician === samClaims && r.MonthKey === CUR; });
   await sweep('TL review of attacker\'s answers', { as: 'tl', xss: '1', reviewId: String(samX.ID) });
-  await sweep('TL profile with hostile name', { as: 'tl', xss: '1' }, async function () { await page.locator('.sidenav button.nav:has-text("Riley")').click(); });
-  await sweep('TL expectations page', { as: 'tl', xss: '1' }, async function () { await page.locator('.sidenav >> text=Expectations').click(); });
-  await sweep('TL actions page', { as: 'tl', xss: '1' }, async function () { await page.locator('.sidenav >> text=Actions').click(); await page.locator('#oto-a-st').selectOption('all'); });
-  await sweep('TL settings panel', { as: 'tl', xss: '1' }, async function () { await page.locator('.sidenav >> text=Settings').click(); });
-  await sweep('TL report for technician', { as: 'tl', xss: '1' }, async function () { await page.locator('.sidenav button.nav:has-text("Alex Morgan")').click(); await page.locator('button:has-text("Generate appraisal report")').click(); });
+  await sweep('TL profile with hostile name', { as: 'tl', xss: '1' }, async function () { await openTeam(page, 'Riley'); });
+  await sweep('TL expectations page', { as: 'tl', xss: '1' }, async function () { await page.locator('.topbar >> text=Expectations').click(); });
+  await sweep('TL actions page', { as: 'tl', xss: '1' }, async function () { await page.locator('.topbar >> text=Actions').click(); await page.locator('#oto-a-st').selectOption('all'); });
+  await sweep('TL settings panel', { as: 'tl', xss: '1' }, async function () { await page.locator('.topbar >> text=Settings').click(); });
+  await sweep('TL report for technician', { as: 'tl', xss: '1' }, async function () { await openTeam(page, 'Alex Morgan'); await page.locator('button:has-text("Generate appraisal report")').click(); });
   await sweep('Technician form (own hostile draft)', { as: 'alex', xss: '1' });
   await sweep('Technician released review', { as: 'alex', xss: '1' }, async function () {
     var opts = await page.locator('select[aria-label="Choose a month"] option').allTextContents();
     await page.locator('select[aria-label="Choose a month"]').selectOption({ index: 1 });
     return opts;
   });
-  await sweep('Technician my appraisal + report', { as: 'alex', xss: '1' }, async function () { await page.locator('.sidenav >> text=My appraisal').click(); await page.locator('button:has-text("Generate appraisal report")').click(); });
+  await sweep('Technician my appraisal + report', { as: 'alex', xss: '1' }, async function () { await page.locator('.topbar >> text=My appraisal').click(); await page.locator('button:has-text("Generate appraisal report")').click(); });
+
+
+  // ---------------------------------------------------------------- 14. layout: top bar, Team menu, width, scaling, dynamic height (v4.1)
+  async function layoutAt(w, hgt, params) {
+    var c = await browser.newContext({ viewport: { width: w, height: hgt } });
+    var pg = await c.newPage(); pg.on('dialog', function (d) { d.accept(); });
+    var e = await open(pg, params || { as: 'tl' });
+    var m = await pg.evaluate(function () {
+      var r = document.querySelector('[data-oto-root]'), main = r.querySelector('main'), z = parseFloat(getComputedStyle(r).zoom) || 1;
+      return { z: z, docW: document.documentElement.scrollWidth, vw: window.innerWidth, mainW: main.getBoundingClientRect().width, rootW: r.getBoundingClientRect().width,
+        rootH: r.getBoundingClientRect().height, vh: window.innerHeight, sidenav: !!r.querySelector('.sidenav') };
+    });
+    return { c: c, pg: pg, m: m, e: e };
+  }
+  await page.evaluate(function () { OTO_MOCK.reset(); });
+  var L1 = await layoutAt(1440, 900);
+  ok('Layout 1440: no sidebar, top bar with 4 TL tabs + Team + Settings', !L1.m.sidenav && (await L1.pg.locator('.topbar .tabs button.nav').count()) === 4 &&
+    (await L1.pg.locator('.teammenu > summary').count()) === 1 && (await L1.pg.locator('.topbar .right >> text=Settings').count()) === 1);
+  ok('Layout 1440: zoom 1, no horizontal scroll', L1.m.z === 1 && L1.m.docW <= L1.m.vw, JSON.stringify(L1.m));
+  ok('Layout 1440: content fills the width (no 1480px cap)', L1.m.mainW >= L1.m.rootW * 0.99, JSON.stringify(L1.m));
+  ok('Team menu: closed by default', (await L1.pg.locator('.teammenu[open]').count()) === 0 && !(await L1.pg.locator('.teammenu button.nav:has-text("Sam Patel")').isVisible()));
+  await L1.pg.locator('.teammenu > summary').click();
+  ok('Team menu: opens and lists 6 technicians', (await L1.pg.locator('.teammenu[open] .menu button.nav').count()) === 6 && await L1.pg.locator('.teammenu button.nav:has-text("Sam Patel")').isVisible());
+  await L1.pg.locator('.titlebar h1').click();
+  ok('Team menu: closes on an outside click', (await L1.pg.locator('.teammenu[open]').count()) === 0);
+  await L1.pg.locator('.teammenu > summary').click(); await L1.pg.keyboard.press('Escape');
+  ok('Team menu: closes on Escape', (await L1.pg.locator('.teammenu[open]').count()) === 0);
+  await openTeam(L1.pg, 'Sam Patel');
+  ok('Team menu: opens the profile and marks Team as current', (await L1.pg.locator('.titlebar h1').innerText()) === 'Sam Patel' && (await L1.pg.locator('.teammenu.cur').count()) === 1);
+  await L1.c.close();
+
+  var L2 = await layoutAt(2560, 1440);
+  ok('Layout 2560: scaled up (zoom 1.4) with no horizontal scroll', L2.m.z === 1.4 && L2.m.docW <= L2.m.vw, JSON.stringify(L2.m));
+  ok('Layout 2560: content fills the width', L2.m.rootW >= L2.m.vw * 0.98 && L2.m.mainW >= L2.m.rootW * 0.95, JSON.stringify(L2.m));
+  var tipOk = await (async function () {
+    var dot = L2.pg.locator('.teammenu > summary'); await dot.click();
+    var b = L2.pg.locator('.teammenu .menu button.nav').first(); var bb = await b.boundingBox();
+    await L2.pg.mouse.move(bb.x + 20, bb.y + bb.height / 2);
+    await L2.pg.waitForTimeout(100);
+    var tb = await L2.pg.locator('.tip').boundingBox();
+    return tb && Math.abs(tb.x - (bb.x + 20)) < 40 && Math.abs(tb.y - (bb.y + bb.height / 2)) < 40 ? true : JSON.stringify({ tip: tb, mouse: [bb.x + 20, bb.y + bb.height / 2] });
+  })();
+  ok('Layout 2560: tooltip appears next to the cursor under zoom', tipOk === true, String(tipOk));
+  await L2.pg.keyboard.press('Escape');
+  await L2.pg.locator('.topbar >> text=Settings').click();
+  var mb = await L2.pg.locator('.modal').boundingBox();
+  ok('Layout 2560: Settings dialog fits on screen', mb && mb.y >= 0 && mb.y + mb.height <= 1440 + 1, JSON.stringify(mb));
+  await L2.pg.locator('.modal button:has-text("Cancel"), .modal button:has-text("Close")').first().click().catch(function () { /* ignore */ });
+  await L2.c.close();
+
+  // dynamic height: with no technicians the page ends where the content ends
+  var L3 = await layoutAt(1440, 900);
+  await L3.pg.evaluate(function () {
+    var d = OTO_MOCK.current.db; d.lists['Technicians'] = []; d.lists['Monthly Reviews'] = []; d.lists['Manager Reviews'] = [];
+    sessionStorage.setItem('oto-mock-db-v4', JSON.stringify(d));
+  });
+  await open(L3.pg, { as: 'tl' });
+  var m3 = await L3.pg.evaluate(function () { var r = document.querySelector('[data-oto-root]'); return { h: r.getBoundingClientRect().height, vh: window.innerHeight, txt: r.innerText }; });
+  ok('Layout: empty Team overview shows the getting-started steps', /No technicians yet/.test(m3.txt) && /Add your technicians/.test(m3.txt) && /Start the month/.test(m3.txt));
+  ok('Layout: dynamic height (empty page is shorter than the screen)', m3.h < m3.vh, JSON.stringify({ h: m3.h, vh: m3.vh }));
+  ok('Layout: Team menu shows Team (0) and stays closed when empty', /Team \(0\)/.test(m3.txt) && await (async function () { await L3.pg.locator('.teammenu > summary').click(); return (await L3.pg.locator('.teammenu[open]').count()) === 0; })());
+  await L3.c.close();
+
+  var L4 = await layoutAt(1440, 900, { as: 'alex' });
+  ok('Layout: technician top bar has 3 tabs, no Team menu or Settings', (await L4.pg.locator('.topbar .tabs button.nav').count()) === 3 &&
+    (await L4.pg.locator('.teammenu').count()) === 0 && (await L4.pg.locator('.topbar >> text=Settings').count()) === 0);
+  ok('Layout: version shown in the top bar', (await L4.pg.locator('.topbar .ver').innerText()) === 'v' + (await L4.pg.evaluate(function () { return window.ESGOneToOne ? window.ESGOneToOne()._version : ''; })));
+  await L4.c.close();
 
   await browser.close();
   var failed = results.filter(function (r) { return !r.pass; });

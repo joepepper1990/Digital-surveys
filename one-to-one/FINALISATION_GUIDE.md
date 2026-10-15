@@ -2,7 +2,7 @@
 
 **From the end of Stage 0B to a live system, then running it month to month.** This document is self-contained: you don't need any other file to follow it. Tick each box as you go.
 
-Version: system v4.0.0 (frontend) · solution 1.0.0.0 · guide dated 15-Oct-2026
+Version: system v4.1.0 (frontend) · solution 1.0.0.0 · guide dated 15-Oct-2026
 
 ---
 
@@ -15,7 +15,7 @@ Version: system v4.0.0 (frontend) · solution 1.0.0.0 · guide dated 15-Oct-2026
   - the `1-to-1 Technicians` group exists;
   - the `1-to-1 Edit` and `1-to-1 Read` permission levels exist.
 - **Everything to install is built and verified offline:**
-  - frontend: 72 automated checks;
+  - frontend: 89 automated checks;
   - flows: simulated end to end, 110 checks;
   - an independent review fixed 17 defects.
 
@@ -56,7 +56,7 @@ Version: system v4.0.0 (frontend) · solution 1.0.0.0 · guide dated 15-Oct-2026
 ## 3. Phase 0 — Get and check the files (5 min)
 
 - [ ] **Right zip.** Open the zip, then open `solution.xml` in Notepad. It must contain `<RootComponent type="380" schemaName="esg_SiteUrl"`. If it doesn't, you have an older download: get the latest one.
-- [ ] **Right frontend.** You have `one-to-one.html` and `one-to-one.js` (v4.0.0). After installing, the sidebar footer must show **v4.0.0**.
+- [ ] **Right frontend.** You have `one-to-one.html` and `one-to-one.js` (v4.1.0). After installing, the top menu bar must show **v4.1.0** (right-hand end).
 - [ ] **Unchanged files.** Transfer them the usual approved way. Don't open and re-save them in Word.
 
 ---
@@ -130,7 +130,8 @@ Version: system v4.0.0 (frontend) · solution 1.0.0.0 · guide dated 15-Oct-2026
 2. [ ] Open the **OneToOne** page → **Edit**.
    - If the Welcome web part isn't already in a **full-width section**, add one and move the web part into it.
    - Web part **pencil** → **Layout = ESG 1-to-1**. This replaces the probe layout.
-   - Greeting, time, weather and search: **off**.
+   - Greeting, time, weather and search: **off**; on the Content tab, News posts and Slides **off**.
+   - If you upload a newer version later: **Reset layout cache** in the web part settings, then republish.
    - **Republish.**
 3. [ ] **Site Pages → OneToOne → … → Make homepage.**
 4. [ ] **Group permissions.** `1-to-1 Technicians` has **Read on exactly these, nothing more** (set in Stage 0; setup did the last one):
@@ -142,14 +143,14 @@ Version: system v4.0.0 (frontend) · solution 1.0.0.0 · guide dated 15-Oct-2026
 ### 4.6 Your first look
 
 - [ ] Open the site. You should see:
-  - a dark **sidebar** with Team overview, Monthly reviews, Expectations, Actions and ⚙ Settings;
+  - a dark **top menu bar** with Team overview, Monthly reviews, Expectations, Actions, **Team (0) ▾** and ⚙ Settings;
   - **Team overview** showing *"No technicians yet"*;
-  - **v4.0.0** at the bottom of the sidebar.
+  - **v4.1.0** at the right-hand end of the top menu bar.
 - [ ] Click through **Monthly reviews**, **Expectations**, **Actions** and **⚙ Settings**. Expect no errors (empty pages are normal for now).
 - [ ] **Expectations:**
   - Add one *Shared* expectation and one *Individual* expectation for yourself. This proves item creation, Yes/No and Person columns work in your tenant.
   - Then **Retire** the Individual one.
-- [ ] The sidebar and content fill the page width.
+- [ ] The menu bar and content fill the page width.
 - [ ] **Print / Save as PDF** on a report opens a print window. If not, allow pop-ups for the SharePoint site.
 
 > You can't see the *technician* side with your own account: the page always recognises you as Team Leader. Phase B uses Test A for that.
@@ -194,7 +195,7 @@ Only if §4.2 step 3 showed that solutions can't be imported:
   - **Run it again:** no new items, no second email.
 - [ ] **As you:** Team overview lists Test A and Test B.
 - [ ] **As Test A** (InPrivate window):
-  - Open the email link. Their form opens, with only *This month · My appraisal · Appraisal report* in the sidebar.
+  - Open the email link. Their form opens, with only *This month · My appraisal · Appraisal report* in the top menu bar.
   - Fill in a few answers → **Save** → reload. The answers are kept.
   - Complete everything → **Submit**. Within about 5 minutes the review becomes read-only.
 - [ ] **As you:** *"1-to-1 submitted"* arrives.
@@ -298,7 +299,7 @@ Only if §4.2 step 3 showed that solutions can't be imported:
 | P10 | Tamper with own draft | On a fresh draft: one `validateUpdateListItem` with DueDate `2099-12-31T00:00:00Z`, Technician `[{'Key':'i:0#.f\|membership\|<TestB email>'}]`, ReviewStatus `Completed`, and ExpectationsJson with a changed title | Within about 10 minutes: A's item is read-only, and its status shows *Submitted*. The Manager Review is *Submitted*, with SubmittedLate correct against the **real** due date. **B can't see A's item** (B runs P2). The TL screen shows the **original** expectation titles. |  |  |  |
 | P11 | Grant access or share own item | POST `…items({A})/roleassignments/addroleassignment(principalid=<any number>,roledefid=1073741826)`. In the SharePoint UI, use **Share** on A's item. | Both denied |  |  |  |
 | P12 | Delete own draft | POST `…items({A})/recycle()`. In the SharePoint UI, use **Delete**. | Denied. The item is still there. |  |  |  |
-| P13 | Reach the TL's data through the frontend | A opens `OneToOne.aspx` with no `reviewId`, then with `?reviewId={B}` | Lands on own review, or "Review not found". The sidebar never shows TL items, because the role comes from SharePoint permissions. Even if the TL view were forced, every figure would come only from A's own items. |  |  |  |
+| P13 | Reach the TL's data through the frontend | A opens `OneToOne.aspx` with no `reviewId`, then with `?reviewId={B}` | Lands on own review, or "Review not found". The menu bar never shows TL items, because the role comes from SharePoint permissions. Even if the TL view were forced, every figure would come only from A's own items. |  |  |  |
 | P14 | Rest of the site and search | A opens **Site contents**, `/Lists/MonthlyReviews/AllItems.aspx`, Site Pages and Site Assets, then searches Microsoft 365 for a phrase from B's answers | Access denied (or only A's own item in the list view), and no search results |  |  |  |
 | P15 | **Script injection (XSS).** This is the attack that matters most for v3. | A types each of these into **every** text field (Q1, Q2 ×4, Q3 comment, Q4–Q6 details, Q7, every Q8 comment, Win of the month), saves, and submits: `<img src=x onerror=alert('A1')>` · `<script>alert('A2')</script>` · `"><svg onload=alert('A3')>` · `{{constructor.constructor('alert(4)')()}}` · `javascript:alert('A5')`. The TL then puts the same strings into every feedback field, the action rows (action, owner, criteria) and an expectation title, and completes the review. | When the TL opens Team overview, Monthly reviews, A's review, Actions, Expectations, A's profile and A's report, and when A opens the released review, My appraisal and their report: every string is shown **as plain text**. **No alert box ever appears**, no new link appears, and the browser console (F12) shows no errors from the layout. |  |  |  |
 | P16 | **Code integrity** | In the UI, A tries to **Edit** `OneToOne.aspx` and to upload or replace a file in *Welcome Web Part - Custom Layouts*. Through the API: POST `_api/web/getfolderbyserverrelativeurl('<library server-relative URL>')/files/add(url='one-to-one.js',overwrite=true)` | Every attempt is denied. The library's version history shows only the TL. |  |  |  |

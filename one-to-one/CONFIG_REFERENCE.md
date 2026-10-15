@@ -79,8 +79,9 @@ If a list title ever has to change, edit `CONFIG.lists` at the top of `one-to-on
 1. Get the corrected `one-to-one.html` / `one-to-one.js`.
 2. Run the local tests: `node tools/build-mock.js && node test/run-tests.js` (see [`02-frontend/README.md`](02-frontend/README.md)).
 3. Transfer the files through the approved route and upload them to **Welcome Web Part - Custom Layouts**, choosing **Replace**.
-4. Hard-refresh the page (Ctrl+F5). The footer of the sidebar shows the version.
-5. To roll back: library → file → **Version history → Restore**.
+4. Edit the `OneToOne` page → Welcome web part settings (pencil) → **Reset layout cache** → **Republish**. Welcome otherwise keeps serving the old version for a while.
+5. Hard-refresh the page (Ctrl+F5). The right-hand end of the top menu bar shows the version.
+6. To roll back: library → file → **Version history → Restore**, then reset the layout cache again.
 
 Record every change in the change log below.
 
@@ -105,3 +106,4 @@ Record every change in the change log below.
 | Date | Version | Change | By |
 |---|---|---|---|
 | DD-MMM-YYYY | 4.0.0 | First production release: sidebar menu, appraisal outlook, multi-row actions, ⚙ Settings, reports | TL |
+| 15-Oct-2026 | 4.1.0 | Top menu bar replaces the sidebar (team list under **Team ▾**); content fills the page width; layout scales up on large screens; page height follows its content; getting-started steps on an empty Team overview | TL |

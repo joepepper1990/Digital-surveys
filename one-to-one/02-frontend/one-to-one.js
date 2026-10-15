@@ -17,7 +17,7 @@
 window.ESGOneToOne = function (ctx) {
   'use strict';
 
-  var VERSION = '4.0.0';
+  var VERSION = '4.1.0';
 
   // ---------------------------------------------------------------------------------------------
   // CONFIG — normally nothing to change. List titles must match the lists you created.
@@ -596,7 +596,16 @@ window.ESGOneToOne = function (ctx) {
     el.addEventListener('mouseleave', function () { if (tipEl) { tipEl.style.display = 'none'; } });
     return el;
   }
-  function moveTip(e) { if (tipEl) { tipEl.style.left = (e.clientX + 14) + 'px'; tipEl.style.top = (e.clientY + 14) + 'px'; } }
+  // The layout is scaled with CSS zoom on large screens; fixed-position offsets are in zoomed px, so divide the mouse position by it.
+  function zoomOf() { var z = root ? parseFloat(window.getComputedStyle(root).zoom) : 1; return z > 0 ? z : 1; }
+  function moveTip(e) { if (tipEl) { var z = zoomOf(); tipEl.style.left = (e.clientX / z + 14) + 'px'; tipEl.style.top = (e.clientY / z + 14) + 'px'; } }
+  // Close the Team menu on a click outside it or on Escape (listeners added once, on the layout root).
+  function closeMenus(e) {
+    if (!root) { return; }
+    Array.prototype.forEach.call(root.querySelectorAll('details.teammenu[open]'), function (d) {
+      if (!e || e.type === 'keydown' || !d.contains(e.target)) { d.removeAttribute('open'); }
+    });
+  }
   function go(view, extra) {
     if (dirty && !window.confirm('You have unsaved changes. Leave this page without saving?')) { return; }
     dirty = false;
@@ -1053,7 +1062,21 @@ window.ESGOneToOne = function (ctx) {
   // ---------------------------------------------------------------------------------------------
   function teamView() {
     if (!TECHS.length) {
-      return card('No technicians yet', null, [h('p', { text: 'Add your technicians to the Technicians list (Active = Yes), then set their appraisal dates in ⚙ Settings. Flow 1 creates their reviews on its next run.' })]);
+      var steps = [
+        ['Add your technicians', 'Technicians list → + New: Title = name, Technician = their account, Active = Yes. Also add them to the 1-to-1 Technicians group (untick the email invitation).'],
+        ['Set appraisal dates', '⚙ Settings → each technician\'s appraisal date (DD-MMM-YYYY) → Save settings.'],
+        ['Add expectations', 'Expectations → Shared ones for everyone and Individual ones per person (10 at most each).'],
+        ['Start the month', 'Flow 1 creates each review and emails the link at 07:00 on the 1st – or run it now from Power Automate.']
+      ];
+      return h('div', { class: 'stack' }, [
+        h('div', { class: 'tiles' }, [tile('Submitted – ' + monthShort(CUR), '0', 'of 0 technicians'), tile('Awaiting your review', '0', 'Submitted, not yet released'),
+          tile('Not yet submitted', '0', 'Due ' + fmtDate(lastDay(CUR))), tile('Dedicated 1-to-1s requested', '0', 'From follow-up answers'),
+          tile('Open actions', '0', 'Across the team'), tile('Next appraisal', '—', 'Set dates in ⚙ Settings')]),
+        card('No technicians yet', 'Four steps to get the team started', [h('div', { class: 'grid2', style: 'grid-template-columns:repeat(4,1fr);margin-top:6px' }, steps.map(function (st, i) {
+          return h('div', { class: 'li', style: 'background:var(--soft);border-radius:8px;padding:12px 14px' }, [h('div', { style: 'display:flex;gap:10px;align-items:center;margin-bottom:6px' },
+            [h('span', { class: 'qnum', text: String(i + 1) }), h('b', { text: st[0] })]), h('div', { class: 'small', text: st[1] })]);
+        }))])
+      ]);
     }
     var cur = TECHS.map(currentOf).filter(Boolean);
     var outs = {};
@@ -1637,38 +1660,47 @@ window.ESGOneToOne = function (ctx) {
       return h('button', { class: 'nav', type: 'button', 'aria-current': cur ? 'true' : 'false', onclick: onclick || function () { go(id, { reviewId: id === 'tech' ? state.reviewId : null }); } },
         [h('span', { class: 'ico', 'aria-hidden': 'true', text: ico }), h('span', { text: label }), extra || null]);
     }
-    var nav = [h('div', { class: 'brand' }, [h('h1', { text: 'ESG Technician 1-to-1' }), h('span', { text: IS_TL ? 'Team Leader' : ME + ' · Technician' })])];
+    var brand = h('div', { class: 'brand' }, [h('h1', { text: 'ESG Technician 1-to-1' }), h('span', { text: IS_TL ? 'Team Leader' : ME + ' · Technician' })]);
+    var tabs = [], right = [];
     if (!IS_TL) {
-      nav.push(navBtn('tech', '📝', 'This month'));
-      nav.push(navBtn('myapp', '📈', 'My appraisal'));
-      nav.push(navBtn('report', '📄', 'Appraisal report', function () { state.report = { tech: ME, aud: 'tech' }; render(false); }, null, false));
+      tabs.push(navBtn('tech', '📝', 'This month'));
+      tabs.push(navBtn('myapp', '📈', 'My appraisal'));
+      tabs.push(navBtn('report', '📄', 'Appraisal report', function () { state.report = { tech: ME, aud: 'tech' }; render(false); }, null, false));
     } else {
       var awaiting = TECHS.filter(function (t) { var c = currentOf(t); return c && c.state === 'Submitted'; }).length
         + REVIEWS.filter(function (r) { return r.state === 'Submitted' && r.month !== CUR; }).length;
       var overdueA = actionsOf(function (ac) { return acOverdue(ac); }, 'tl').length;
-      nav.push(h('div', { class: 'sec', text: 'Manage' }));
-      nav.push(navBtn('team', '🏠', 'Team overview'));
-      nav.push(navBtn('reviews', '🗂', 'Monthly reviews', null, awaiting ? h('span', { class: 'badge', title: 'Awaiting your review', text: String(awaiting) }) : null));
-      nav.push(navBtn('expect', '🎯', 'Expectations'));
-      nav.push(navBtn('actions', '✅', 'Actions', null, overdueA ? h('span', { class: 'badge', title: 'Overdue', text: String(overdueA) }) : null));
-      nav.push(h('div', { class: 'sec', text: 'Team' }));
-      TECHS.forEach(function (t) {
+      tabs.push(navBtn('team', '🏠', 'Team overview'));
+      tabs.push(navBtn('reviews', '🗂', 'Monthly reviews', null, awaiting ? h('span', { class: 'badge', title: 'Awaiting your review', text: String(awaiting) }) : null));
+      tabs.push(navBtn('expect', '🎯', 'Expectations'));
+      tabs.push(navBtn('actions', '✅', 'Actions', null, overdueA ? h('span', { class: 'badge', title: 'Overdue', text: String(overdueA) }) : null));
+      var anyCur = false, anyFlag = false;
+      var members = TECHS.map(function (t) {
         var o = expectedOutcome(t, 'tl'), r = currentOf(t);
         var needs = r && (r.state === 'Submitted' || isOverdue(r) || followOf(r) === DEDICATED);
         var cur = (v === 'profile' && state.profileTech === t) || (v === 'mgr' && state.backTo === 'profile' && REVIEWS.some(function (x) { return x.id === state.reviewId && x.tech === t; }));
-        var b = navBtn('p-' + t, '', t, function () { go('profile', { profileTech: t }); }, needs ? h('span', { class: 'flag' }) : null, cur);
-        b.querySelector('.ico').appendChild(h('i', { class: 'tdot', style: 'display:inline-block;background:' + (o.band ? BAND_COL[o.band.cls] : '#9aa4ae') }));
-        nav.push(tip(b, t + '\nExpected: ' + (o.band ? o.band.name + ' (' + o.projected.toFixed(1) + ')' : '—') + '\n' + monthShort(CUR) + ': ' +
+        if (cur) { anyCur = true; }
+        if (needs) { anyFlag = true; }
+        var b = navBtn('p-' + t, '', t, function () { go('profile', { profileTech: t }); }, needs ? h('span', { class: 'flag', title: 'Needs attention' }) : null, cur);
+        b.querySelector('.ico').appendChild(h('i', { class: 'tdot', style: 'background:' + (o.band ? BAND_COL[o.band.cls] : '#9aa4ae') }));
+        return tip(b, t + '\nExpected: ' + (o.band ? o.band.name + ' (' + o.projected.toFixed(1) + ')' : '—') + '\n' + monthShort(CUR) + ': ' +
           (!r ? 'no review yet' : r.state === 'Submitted' ? 'awaiting your review' : r.state === 'Open' ? (r.draft ? 'draft' : 'not started') : r.state.toLowerCase()) +
-          (r && followOf(r) === DEDICATED ? '\nDedicated 1-to-1 requested' : '')));
+          (r && followOf(r) === DEDICATED ? '\nDedicated 1-to-1 requested' : ''));
       });
-      nav.push(h('div', { class: 'sec', text: 'Admin' }));
-      nav.push(navBtn('settings', '⚙', 'Settings', function () { openSettings(); }, null, false));
+      var summary = h('summary', { 'aria-label': 'Team members' }, [h('span', { 'aria-hidden': 'true', text: '👥' }), h('span', { text: 'Team (' + TECHS.length + ')' }),
+        anyFlag ? h('span', { class: 'flag', title: 'Someone needs attention' }) : null, h('span', { 'aria-hidden': 'true', text: '▾' })]);
+      var menu = h('details', { class: 'teammenu' + (anyCur ? ' cur' : '') + (TECHS.length ? '' : ' empty') }, [summary,
+        h('div', { class: 'menu', role: 'menu' }, [h('div', { class: 'mh', text: 'Open a technician' })].concat(members.length ? members : [h('p', { class: 'small muted', style: 'padding:6px 10px', text: 'No technicians yet.' })]))]);
+      if (!TECHS.length) { summary.addEventListener('click', function (e) { e.preventDefault(); }); }
+      right.push(menu);
+      right.push(navBtn('settings', '⚙', 'Settings', function () { openSettings(); }, null, false));
     }
     var dl = daysBetween(TODAY, lastDay(CUR));
-    nav.push(h('div', { class: 'foot' }, [h('b', { text: monthLabel(CUR) }), dl >= 0 ? 'Deadline ' + fmtDate(lastDay(CUR)) + ' · ' + dl + ' days' : 'Deadline passed',
-      h('button', { class: 'linkbtn', type: 'button', text: '↻ Refresh data', onclick: function () { if (dirty && !window.confirm('Discard unsaved changes and reload?')) { return; } dirty = false; start(); } }),
-      h('span', { style: 'display:block;margin-top:4px;opacity:.7', text: 'v' + VERSION })]));
+    right.push(h('div', { class: 'status' }, [h('b', { text: monthLabel(CUR) }), h('br'),
+      h('span', { text: dl >= 0 ? 'Deadline ' + fmtDate(lastDay(CUR)) + ' · ' + dl + (dl === 1 ? ' day' : ' days') : 'Deadline passed' }), h('br'),
+      h('button', { class: 'linkbtn', type: 'button', text: '↻ Refresh', onclick: function () { if (dirty && !window.confirm('Discard unsaved changes and reload?')) { return; } dirty = false; start(); } }),
+      h('span', { class: 'ver', style: 'margin-left:8px;opacity:.7', text: 'v' + VERSION })]));
+    var topbar = h('header', { class: 'topbar' }, [brand, h('nav', { class: 'tabs', 'aria-label': 'Main menu' }, tabs), h('div', { class: 'right' }, right)]);
 
     var titles = { tech: ['My 1-to-1', 'This month'], myapp: ['', 'My appraisal'], team: ['', 'Team overview'], reviews: ['', 'Monthly reviews'],
       expect: ['', 'Appraisal expectations'], actions: ['', 'Actions'] };
@@ -1685,7 +1717,7 @@ window.ESGOneToOne = function (ctx) {
       main.appendChild(card('Something went wrong', null, [h('p', { text: 'This page could not be shown: ' + (e && e.message ? e.message : e) }), h('p', { class: 'small muted', text: 'Use ↻ Refresh data. If it keeps happening, tell your Team Leader (version ' + VERSION + ').' })]));
       if (window.console) { window.console.error('ESG 1-to-1 render error', e); }
     }
-    root.appendChild(h('div', { class: 'shell' }, [h('nav', { class: 'sidenav', 'aria-label': 'Main menu' }, nav), h('div', { class: 'content' }, [titlebar, main])]));
+    root.appendChild(h('div', { class: 'shell' }, [topbar, h('div', { class: 'content' }, [titlebar, main])]));
     if (state.report) { root.appendChild(reportView(state.report.tech, state.report.aud)); }
     root.appendChild(live);
     root.appendChild(tipEl);
@@ -1728,6 +1760,8 @@ window.ESGOneToOne = function (ctx) {
     httpConfig = http.constructor.configurations.v1;
     siteUrl = String(wp.pageContext.web.absoluteUrl).replace(/\/$/, '');
     window.addEventListener('beforeunload', onBeforeUnload);
+    root.addEventListener('click', closeMenus);
+    root.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closeMenus(e); } });
     await start();
   }
 

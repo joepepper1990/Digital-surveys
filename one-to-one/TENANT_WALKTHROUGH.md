@@ -31,7 +31,7 @@ One tick-list from where you are now to a running system. For a single printable
 - [ ] **Solution zip.** The verification pass replaced it under the same file name. Open your zip, then open `solution.xml` in Notepad.
   - The correct version contains `<RootComponent type="380" schemaName="esg_SiteUrl"`.
   - If yours doesn't, re-download [`04-solution/ESGOneToOne_1_0_0_0_unmanaged.zip`](04-solution/ESGOneToOne_1_0_0_0_unmanaged.zip).
-- [ ] **Frontend.** Download the latest [`02-frontend/one-to-one.html`](02-frontend/one-to-one.html) and [`02-frontend/one-to-one.js`](02-frontend/one-to-one.js) (v4.0.0).
+- [ ] **Frontend.** Download the latest [`02-frontend/one-to-one.html`](02-frontend/one-to-one.html) and [`02-frontend/one-to-one.js`](02-frontend/one-to-one.js) (v4.1.0).
 - [ ] **Approved route.** Transfer the files the usual approved way.
 
 ## Phase A — See the system yourself (nobody else involved)
@@ -71,12 +71,12 @@ One tick-list from where you are now to a running system. For a single printable
 
 **A5. Your first look**
 - [ ] Open the site. You see:
-  - the dark sidebar (Team overview, Monthly reviews, Expectations, Actions, ⚙ Settings);
+  - the dark top menu bar (Team overview, Monthly reviews, Expectations, Actions, Team ▾, ⚙ Settings);
   - **"No technicians yet"** on Team overview;
-  - **v4.0.0** at the bottom of the sidebar.
+  - **v4.1.0** at the right-hand end of the top menu bar.
 - [ ] Click through **Monthly reviews**, **Expectations**, **Actions** and **⚙ Settings**.
 - [ ] **Expectations:** add one *Shared* expectation and one *Individual* one (for yourself is fine for now). This proves item creation, Yes/No and Person columns in your tenant. Retire the Individual one afterwards.
-- [ ] Check the sidebar and content fill the width of the page.
+- [ ] Check the menu bar and content fill the width of the page.
 
 **A6. Turn the flows on**
 - [ ] Solutions → **ESG 1-to-1** → turn on **1 Daily scheduler**, **2 Review submitted** and **3 Manager decision**.
@@ -93,7 +93,7 @@ One tick-list from where you are now to a running system. For a single printable
 - [ ] **Flow 1 → Run.** Test A and Test B each get **"Your 1-to-1 for … is ready"**. Run it again: no new items and no second email.
 - [ ] **As you:** Team overview now lists Test A and Test B.
 - [ ] **As Test A** (InPrivate window):
-  - open the email link: their form opens, with only *This month / My appraisal / Appraisal report* in the sidebar;
+  - open the email link: their form opens, with only *This month / My appraisal / Appraisal report* in the top menu bar;
   - fill in a few answers → **Save** → reload: answers are kept;
   - complete it → **Submit**. Within about 5 minutes it's read-only.
 - [ ] **As you:** the *"1-to-1 submitted"* email arrives.

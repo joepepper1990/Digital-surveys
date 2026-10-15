@@ -5,7 +5,7 @@
 - **Stages 0A and 0B have passed in the live tenant.** Welcome runs the external script, authenticated REST works, and the item-level security model holds.
 - The visual design was agreed through prototype v7 ([`prototype/prototype.html`](prototype/prototype.html)).
 - **The production build files are produced:**
-  - the frontend [`02-frontend/`](02-frontend/README.md), with a local mock and 72 automated checks;
+  - the frontend [`02-frontend/`](02-frontend/README.md), with a local mock and 89 automated checks;
   - the list checklist [`01-sharepoint/lists.md`](01-sharepoint/lists.md);
   - **the importable Power Platform solution** [`04-solution/`](04-solution/IMPORT_GUIDE.md): the three flows plus a setup flow that creates the five lists, permission levels, group and list permissions exactly (v4.1);
   - the flow build sheets and email templates [`03-flows/`](03-flows/FLOW_BUILD_SHEETS.md), for reference or building by hand;
@@ -32,7 +32,7 @@ The system has **five lists** (four data lists plus a small settings list), thre
 
 | Area | v3.2 | v4 |
 |---|---|---|
-| Design | Single-column questionnaire, dashboard and review screens | Desktop layout with a **narrow sidebar menu**, uniform cards, charts and an appraisal outlook (agreed via prototype v7) |
+| Design | Single-column questionnaire, dashboard and review screens | Desktop layout with a **top menu bar** (a narrow sidebar until v4.1.0), uniform cards, charts and an appraisal outlook (agreed via prototype v7) |
 | Technician | Questionnaire only | Adds an **energy check-in** and **win of the month** (`Mood`, `WinOfMonth` on Monthly Reviews), **My appraisal** (expected outcome, trend), and an **Appraisal report** |
 | TL ratings | Feedback text per expectation | Feedback **plus a 1–5 TL rating** per expectation, in `ExpectationFeedbackJson` |
 | Actions | One free-text box plus one due date | **Any number of action rows**, each with owner, **close-out criteria and a deadline**, in `ActionsJson`. `NextActionDue` feeds the *Open actions* view. There is a TL **Actions** page to close or reopen them. `AgreedActions` and `ActionsDueBy` are dropped. |
@@ -427,7 +427,7 @@ The TL views (Team overview, Monthly reviews, manager review) take status **only
 
 ## E. Frontend specification (Welcome custom layout)
 
-The frontend is a custom HTML/CSS/JavaScript layout inside the **Welcome by Accelerator 365** web part. **v4 is built**: [`02-frontend/one-to-one.html`](02-frontend/one-to-one.html) and [`02-frontend/one-to-one.js`](02-frontend/one-to-one.js) (version 4.0.0). The approved design baseline is [`prototype/prototype.html`](prototype/prototype.html) (prototype v7). The lists, permission model and flows are as in C, D and F.
+The frontend is a custom HTML/CSS/JavaScript layout inside the **Welcome by Accelerator 365** web part. **v4 is built**: [`02-frontend/one-to-one.html`](02-frontend/one-to-one.html) and [`02-frontend/one-to-one.js`](02-frontend/one-to-one.js) (version 4.1.0). The approved design baseline is [`prototype/prototype.html`](prototype/prototype.html) (prototype v7). The lists, permission model and flows are as in C, D and F.
 
 ### E.0 Feasibility gate — passed
 
@@ -453,9 +453,9 @@ Fallbacks are no longer expected, but if they're ever needed:
 | `one-to-one.js` | Same library | All behaviour. About 1,750 lines of plain JavaScript, with **no libraries, no CDNs and no external calls**. |
 | `OneToOne.aspx` | Site Pages, **site home page**, **full-width section** | One Welcome web part using the *ESG 1-to-1* layout. Greeting, time, weather and search are off. |
 
-**One page for everyone**, with a narrow **sidebar menu**. Opening a link with `?reviewId=` selects that review.
+**One page for everyone**, with a **top menu bar** (v4.1.0; the team list is in its **Team ▾** menu). Opening a link with `?reviewId=` selects that review.
 
-| Who | Sidebar | Default view |
+| Who | Menu bar | Default view |
 |---|---|---|
 | Technician | This month · My appraisal · Appraisal report | *This month* (their latest review, or the one in `?reviewId=`) |
 | TL | Team overview · Monthly reviews (badge: awaiting review) · Expectations · Actions (badge: overdue) · team list (band dot and attention flag per technician) · ⚙ Settings | *Team overview*, or the manager review when `?reviewId=` is given |
@@ -626,7 +626,7 @@ It opens in an in-page overlay with **Print / Save as PDF**. That opens a clean 
 
 **Layout**
 
-- Built for desktop: the sidebar plus a wide content area, with no large blank regions.
+- Built for desktop: a top menu bar plus a full-width content area that scales up on large screens, with no large blank regions (v4.1.0).
 - Colours: navy UI; self ratings blue `#2a78d6`; TL ratings orange `#eb6834`; band colours red/amber/green/blue.
 - Overlays use z-index 10000+ so they sit above SharePoint's chrome.
 
@@ -644,7 +644,7 @@ It opens in an in-page overlay with **Print / Save as PDF**. That opens a clean 
   - Flow 2 and Flow 3 effects emulated.
   - A switch for attack-string (XSS) data.
 - **`mock/index.html`:** generated from the production CSS by `tools/build-mock.js`. You can click through every view as any user.
-- **`test/run-tests.js`** (headless Chromium, 72 checks):
+- **`test/run-tests.js`** (headless Chromium, 89 checks):
   - static rules S1, S2, S4 and S5;
   - isolation for Test A and Test B, including direct REST attempts;
   - draft payload allow-list;
@@ -1181,9 +1181,9 @@ You don't build any screens, and **there is nothing to edit in the files**. Full
 4. [ ] **Site Pages:** `OneToOne` → **… → Make homepage**.
 5. [ ] Permissions check (D.6): `1-to-1 Technicians` has **Read** on the page, the layouts library, the Welcome Errors list and **1-to-1 Settings**.
 6. [ ] Check that `varPageLink` in the flows matches the page link.
-7. [ ] **Check as the TL:** the site opens on **Team overview**, with the sidebar showing ⚙ Settings. The sidebar footer shows **v4.0.0**.
+7. [ ] **Check as the TL:** the site opens on **Team overview**, with the top menu bar showing Team ▾ and ⚙ Settings. The menu bar shows **v4.1.0** at its right-hand end.
 8. [ ] **Check as the TL:** open ⚙ **Settings**, enter each test technician's appraisal date (DD-MMM-YYYY), and save.
-9. [ ] **Check as Test A:** the E1 link opens **their** review. The sidebar shows only *This month · My appraisal · Appraisal report*.
+9. [ ] **Check as Test A:** the E1 link opens **their** review. The menu bar shows only *This month · My appraisal · Appraisal report*.
 
 **Updating the frontend later:** upload the corrected file over the old one. The library keeps versions, so **… → Version history → Restore** rolls back a bad update. Record every change in [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) §7.
 
@@ -1333,7 +1333,7 @@ These are in [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) §4:
 | P10 🔒 | Tamper with own draft | On a fresh draft: one `validateUpdateListItem` with DueDate `2099-12-31T00:00:00Z`, Technician `[{'Key':'i:0#.f\|membership\|<TestB email>'}]`, ReviewStatus `Completed`, and ExpectationsJson with a changed title | Within about 10 minutes: A's item is read-only, and its status shows *Submitted*. The Manager Review is *Submitted*, with SubmittedLate correct against the **real** due date. **B can't see A's item** (B runs P2). The TL screen shows the **original** expectation titles. |
 | P11 🔒 | Grant access or share own item | POST `…items({A})/roleassignments/addroleassignment(principalid=<any number>,roledefid=1073741826)`. In the SharePoint UI, use **Share** on A's item. | Both denied |
 | P12 🔒 | Delete own draft | POST `…items({A})/recycle()`. In the SharePoint UI, use **Delete**. | Denied. The item is still there. |
-| P13 🔒 | Reach the TL's data through the frontend | A opens `OneToOne.aspx` with no `reviewId`, then with `?reviewId={B}` | Lands on own review, or "Review not found". The sidebar never shows TL items, because the role comes from SharePoint permissions. Even if the TL view were forced, every figure would come only from A's own items. |
+| P13 🔒 | Reach the TL's data through the frontend | A opens `OneToOne.aspx` with no `reviewId`, then with `?reviewId={B}` | Lands on own review, or "Review not found". The menu bar never shows TL items, because the role comes from SharePoint permissions. Even if the TL view were forced, every figure would come only from A's own items. |
 | P14 🔒 | Rest of the site and search | A opens **Site contents**, `/Lists/MonthlyReviews/AllItems.aspx`, Site Pages and Site Assets, then searches Microsoft 365 for a phrase from B's answers | Access denied (or only A's own item in the list view), and no search results |
 | P15 🔒 | **Script injection (XSS).** This is the attack that matters most for v3. | A types each of these into **every** text field (Q1, Q2 ×4, Q3 comment, Q4–Q6 details, Q7, every Q8 comment, Win of the month), saves, and submits: `<img src=x onerror=alert('A1')>` · `<script>alert('A2')</script>` · `"><svg onload=alert('A3')>` · `{{constructor.constructor('alert(4)')()}}` · `javascript:alert('A5')`. The TL then puts the same strings into every feedback field, the action rows (action, owner, criteria) and an expectation title, and completes the review. | When the TL opens Team overview, Monthly reviews, A's review, Actions, Expectations, A's profile and A's report, and when A opens the released review, My appraisal and their report: every string is shown **as plain text**. **No alert box ever appears**, no new link appears, and the browser console (F12) shows no errors from the layout. |
 | P16 🔒 | **Code integrity** | In the UI, A tries to **Edit** `OneToOne.aspx` and to upload or replace a file in *Welcome Web Part - Custom Layouts*. Through the API: POST `_api/web/getfolderbyserverrelativeurl('<library server-relative URL>')/files/add(url='one-to-one.js',overwrite=true)` | Every attempt is denied. The library's version history shows only the TL. |
@@ -1429,15 +1429,15 @@ All of these are text, contain **no tenant names, credentials or personal data**
 | K0 / K0B | `02-frontend/probe/` | **Produced and run.** Stage 0A and 0B passed. |
 | K1 | [`01-sharepoint/lists.md`](01-sharepoint/lists.md) + [`lists.csv`](01-sharepoint/lists.csv) | **Produced (v4)** |
 | K2 | Site security tick-list | Covered by G Parts 1–2 and D.6, plus the quarterly check in CONFIG_REFERENCE §4 |
-| K3 | [`02-frontend/one-to-one.html`](02-frontend/one-to-one.html) | **Produced (v4.0.0)** |
-| K4 | [`02-frontend/one-to-one.js`](02-frontend/one-to-one.js) | **Produced (v4.0.0)** |
+| K3 | [`02-frontend/one-to-one.html`](02-frontend/one-to-one.html) | **Produced (v4.1.0)** |
+| K4 | [`02-frontend/one-to-one.js`](02-frontend/one-to-one.js) | **Produced (v4.1.0)** |
 | K5 | [`03-flows/FLOW_BUILD_SHEETS.md`](03-flows/FLOW_BUILD_SHEETS.md) | **Produced (v4)**: Flows 1–3, SETPERM, Ensure_user, Try/Catch |
 | K5a | [`04-solution/ESGOneToOne_1_0_0_0_unmanaged.zip`](04-solution/IMPORT_GUIDE.md) | **Produced (v4.1)**: importable solution with setup flow + Flows 1–3, connection references, environment variables; legacy-package builder; source, validator and simulation in [`04-solution/tools/`](04-solution/README.md) |
 | K6 | [`03-flows/EMAIL_TEMPLATES.md`](03-flows/EMAIL_TEMPLATES.md) | **Produced (v4)**: E1–E5, E7 |
 | K7 | Test record | Use section H directly (F1–F30, P1–P20); add Pass/Fail, date, tester and screenshot columns |
 | K8 | Privacy notice | **Not needed.** The TL decided it's handled between the TL and each technician. |
 | K9 | [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) | **Produced (v4)** |
-| K10 | [`02-frontend/mock/`](02-frontend/mock/), [`02-frontend/test/`](02-frontend/test/), [`02-frontend/tools/`](02-frontend/tools/) | **Produced.** 72 checks passing. |
+| K10 | [`02-frontend/mock/`](02-frontend/mock/), [`02-frontend/test/`](02-frontend/test/), [`02-frontend/tools/`](02-frontend/tools/) | **Produced.** 89 checks passing. |
 | K11 | Frontend security notes for IT-13 | Section E.3–E.4 plus [`02-frontend/README.md`](02-frontend/README.md) (endpoints, rules, test evidence) |
 | — | [`prototype/prototype.html`](prototype/prototype.html) | Design baseline (prototype v7) |
 
@@ -1449,7 +1449,7 @@ All of these are text, contain **no tenant names, credentials or personal data**
    - A private SharePoint communication site with **five lists**.
    - **Manager Reviews is the authoritative, tamper-proof record**, now holding TL ratings and multi-row actions. Monthly Reviews holds only the technician's answers. 1-to-1 Settings holds the band thresholds.
    - Two custom permission levels, applied per item by **three** standard-connector flows.
-   - A desktop frontend with a sidebar menu, in the **Welcome by Accelerator 365** web part on `OneToOne.aspx`.
+   - A desktop frontend with a top menu bar, in the **Welcome by Accelerator 365** web part on `OneToOne.aspx`.
 2. **Status:** Stage 0A and 0B passed. All build files are produced and tested locally.
 3. **Next (the TL, in the tenant), following [`GO_LIVE_RUNBOOK.md`](GO_LIVE_RUNBOOK.md):**
    1. Import the solution and run the setup flow (creates the five lists).

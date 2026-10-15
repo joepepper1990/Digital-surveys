@@ -19,7 +19,7 @@ This runbook takes you from where you are now to technicians receiving their fir
 
 - Site, page, Welcome and the `1-to-1 Technicians` group are built.
 - **Stage 0A and 0B have passed.**
-- **All build files are produced** and tested locally (72 automated checks).
+- **All build files are produced** and tested locally (89 automated checks).
 
 **Legend:**
 
@@ -52,7 +52,7 @@ Stage 0A and 0B passed in the live tenant. Two findings are built into the setup
 | File | What it is |
 |---|---|
 | `04-solution/ESGOneToOne_1_0_0_0_unmanaged.zip` | **The four flows as one importable solution**, including the setup flow that creates the lists |
-| `02-frontend/one-to-one.html`, `one-to-one.js` | The app, v4.0.0. **Nothing to edit.** |
+| `02-frontend/one-to-one.html`, `one-to-one.js` | The app, v4.1.0. **Nothing to edit.** |
 | `01-sharepoint/lists.md`, `lists.csv` | Column-by-column list checklist |
 | `03-flows/FLOW_BUILD_SHEETS.md` | Flows 1–3, step by step |
 | `03-flows/EMAIL_TEMPLATES.md` | E1–E5, E7 |
@@ -98,7 +98,7 @@ Follow [`02-frontend/README.md`](02-frontend/README.md) §Install.
   - **Republish**.
 - [ ] Make `OneToOne` the home page.
 - [ ] The group has Read on the page, the layouts library and the Welcome Errors list. Setup already granted it on 1-to-1 Settings.
-- [ ] As TL: **Team overview** opens, the sidebar shows **⚙ Settings**, and the footer shows **v4.0.0**.
+- [ ] As TL: **Team overview** opens, the top menu bar shows **Team ▾** and **⚙ Settings**, and its right-hand end shows **v4.1.0**.
 
 ## Phase 7 — Turn on flows 1, 2 and 3 🧑 ⏱ 2 min
 
