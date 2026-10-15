@@ -15,7 +15,7 @@ Version: system v4.3.0 (frontend) · solution 1.2.0.0 · guide dated 15-Oct-2026
   - the `1-to-1 Technicians` group exists;
   - the `1-to-1 Edit` and `1-to-1 Read` permission levels exist.
 - **Everything to install is built and verified offline:**
-  - frontend: 167 automated checks;
+  - frontend: 182 automated checks;
   - flows: simulated end to end, 167 checks, and 23 deliberately broken copies all caught by the validator;
   - two independent reviews fixed 29 defects (see VERIFICATION.md).
 
