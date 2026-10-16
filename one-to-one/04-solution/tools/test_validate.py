@@ -175,6 +175,19 @@ def new_list_by_url(fl):
     a['inputs']['parameters'] = {'dataset': a['inputs']['parameters']['dataset'], 'table': 'Lists/WellbeingAssessments'}
 
 
+
+@mutation
+def new_column_by_connector_in_daily(fl):
+    # Flow 1 is on during an upgrade: writing a 1.3 column with a connector step would break it until Setup has run
+    _, a = find(fl[1]['json']['properties']['definition'], 'Stamp_LinkSentOn')
+    a['inputs']['parameters']['item/ChallengeState/Value'] = 'Open'
+
+
+@mutation
+def unsecured_challenge_review(fl):
+    _, a = find(fl[7]['json']['properties']['definition'], 'Mr')
+    a.pop('runtimeConfiguration', None)
+
 if __name__ == '__main__':
     base = build_all()
     assert validate.validate_all(base) == [], 'baseline must be clean'

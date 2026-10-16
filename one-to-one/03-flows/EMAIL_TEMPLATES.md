@@ -134,5 +134,14 @@ E4 and E5 are written in the first person (they come from your mailbox), so they
 | E12 | 1 Daily scheduler → you | `Wellbeing review due in 7 days: <name>` / `Wellbeing review due today: <name>` | The review agreed with that person is due on DD-MMM-YYYY; link to the last assessment. |
 | E13 | 6 Feedback → you | `1-to-1 feedback (<Fault / Improvement / Suggestion>): <first 60 characters>` | Who sent it (name and email), the type, the page and version, the time, and their message (HTML-escaped, line breaks kept). If it can't be sent you get `1-to-1 feedback could not be delivered – please read it in the list` instead, with no content, and the item shows in *Needs your attention*. More than 10 from one person in 24 hours are kept but not emailed one by one (*Held*); they show as one row in *Needs your attention*. |
 
-The exact HTML is in [`../04-solution/tools/flows.py`](../04-solution/tools/flows.py) (`flow_team`, `flow_wellbeing`, `flow_daily`).
+## Solution 1.3 – challenge emails (Flow 7)
+
+Neither email contains the challenged parts or the technician's notes; they are read on the page.
+
+| # | Flow → to | Subject | Body (summary) |
+|---|---|---|---|
+| E14 | 7 Challenge → you | `1-to-1 feedback challenged: <name>, <Month yyyy>` | **<name>** has challenged part of your feedback on their <Month yyyy> 1-to-1; talk it through with them – the challenged parts are the topics for that conversation. Link **Open the review** (`?reviewId=<id>`). It closes when you have both agreed, or as *Not agreed* on DD-MMM-YYYY (it stays flagged, and you can reopen it at any time). |
+| E15 | 7 Challenge → the person | `Your 1-to-1 challenge has been reopened` | Your line manager has reopened the challenge on your <Month yyyy> 1-to-1 feedback; have a look and agree it when you are happy. Link **Open my review** (`?reviewId=<id>`). |
+
+The exact HTML is in [`../04-solution/tools/flows.py`](../04-solution/tools/flows.py) (`flow_team`, `flow_wellbeing`, `flow_daily`, `flow_challenge`).
 

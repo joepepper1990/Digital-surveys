@@ -2,13 +2,13 @@
 
 > **You don't have to build these by hand.** The setup flow in the solution creates all of this exactly. See [`../04-solution/IMPORT_GUIDE.md`](../04-solution/IMPORT_GUIDE.md). This page is the specification, and a checklist for verifying the result or building by hand. The automated simulation checks the setup flow against [`lists.csv`](lists.csv).
 
-Build these **seven lists** on the private 1-to-1 site. The frontend (`one-to-one.js`) and the flows use the **internal column names** exactly as written here, so type them exactly, with no spaces. A machine-readable copy is in [`lists.csv`](lists.csv).
+Build these **eight lists** on the private 1-to-1 site. The frontend (`one-to-one.js`) and the flows use the **internal column names** exactly as written here, so type them exactly, with no spaces. A machine-readable copy is in [`lists.csv`](lists.csv).
 
 **v4 changes from v3.2 (marked 🆕):** `AppraisalDate` on Technicians and Monthly Reviews; `Mood` and `WinOfMonth` on Monthly Reviews; `ActionsJson` and `NextActionDue` replace `AgreedActions` and `ActionsDueBy` on Manager Reviews; and a fifth list, **1-to-1 Settings**.
 
 ## Rules for every list
 
-- **Create with the internal name, then rename.** Create the list as `MonthlyReviews` (no space), then rename it to `Monthly Reviews` in List settings. The frontend and flows use the **display names**: `Technicians`, `Appraisal Expectations`, `Monthly Reviews`, `Manager Reviews`, `Wellbeing Assessments`, `1-to-1 Settings`, `1-to-1 Feedback`.
+- **Create with the internal name, then rename.** Create the list as `MonthlyReviews` (no space), then rename it to `Monthly Reviews` in List settings. The frontend and flows use the **display names**: `Technicians`, `Appraisal Expectations`, `Monthly Reviews`, `Manager Reviews`, `Wellbeing Assessments`, `1-to-1 Settings`, `1-to-1 Feedback`, `1-to-1 Challenges`.
 - **Columns:** type the name exactly as shown (that becomes the permanent internal name). Leave every column **not required**, apart from Title.
 - **Choice columns:** one choice per line, exactly as written (including dashes). Turn **Can add values manually** off. Where the default is *(none)*, delete the default value.
 - **Multiple lines of text:** **plain text** (turn **Use enhanced rich text** off) and turn **Append changes to existing text** off.
@@ -128,10 +128,20 @@ Create as `ManagerReviews`, rename to **Manager Reviews**.
 | CompletedBy | Single line of text | — | Flow 3 | |
 | ReleasedOn | **Date and time** | — | Flow 3 | |
 | CorrectionLog | Multiple lines (plain) | — | TL | Reason for any change after submission |
+| ChallengeState 🆕 v4.5 | Choice: `Open`, `Agreed`, `Not agreed` | *(none)* | Flow 7, Flow 1 + TL | **Indexed.** Empty = never challenged. Flow 7 opens it and closes it as Agreed; Flow 1 closes it as Not agreed after the close-by date; the TL can set it back to Open (reopen). |
+| ChallengeSectionsJson 🆕 v4.5 | Multiple lines (plain) | — | Flow 7 | The challenged parts and the technician's notes, copied from their challenge |
+| ChallengeItemId 🆕 v4.5 | Number | — | Flow 7 | The *1-to-1 Challenges* item |
+| ChallengeOpenedOn 🆕 v4.5 | **Date and time** | — | Flow 7 | |
+| ChallengeCloseBy 🆕 v4.5 | Date only | — | Flow 7 + TL | End of the UK month it was raised (end of the next month if fewer than 7 days are left); reset when the TL reopens it |
+| ChallengeTlAgreedOn 🆕 v4.5 | **Date and time** | — | TL (app) | The TL's agreement – recorded **only** here |
+| ChallengeTechAgreedOn 🆕 v4.5 | **Date and time** | — | Flow 7 | The technician's agreement, copied from their challenge |
+| ChallengeClosedOn 🆕 v4.5 | **Date and time** | — | Flow 7, Flow 1 | |
 
 > **Not in v4:** `AgreedActions` and `ActionsDueBy` (replaced by `ActionsJson` and `NextActionDue`). Don't create them.
+>
+> **v4.5:** the `Challenge*` columns are the trusted record of a challenge. The technician can only **read** their Manager Review, so they can never write these; their own input goes on the *1-to-1 Challenges* list and Flow 7 copies it here.
 
-- [ ] Indexes: `ReviewKey` (then Enforce unique values = Yes), `ReviewItemId`, `MonthKey`, `ReviewState`, `ActionsStatus`
+- [ ] Indexes: `ReviewKey` (then Enforce unique values = Yes), `ReviewItemId`, `MonthKey`, `ReviewState`, `ActionsStatus`, `ChallengeState`
 - [ ] Views: *Overdue* (ReviewState = Open **and** DueDate < `[Today]`) · *Open actions* (ActionsStatus = Open, sorted by NextActionDue) · *All*
 - [ ] Permissions: Owners only at list level
 
@@ -197,11 +207,30 @@ Created by the setup flow (solution 1.2) at `Lists/OneToOneFeedback`, display na
 
 ---
 
+## 8. 1-to-1 Challenges 🆕 v4.5 (same access as Feedback; Flow 7 makes each item private)
+
+Created by the setup flow (solution 1.3) at `Lists/OneToOneChallenges`, display name **1-to-1 Challenges**. One item per challenge, sent from the technician's **latest released** review (⚑ **Challenge** → **Send challenge**). Only the TL's judgement can be challenged: each expectation rating, the overall feedback and the agreed actions.
+
+| Column | Type | Notes |
+|---|---|---|
+| Title | (built-in) | e.g. *Name – month* |
+| ManagerReviewId | Number | **Indexed.** The Manager Review being challenged |
+| MonthKey | Single line of text | **Flow 7** sets it from the Manager Review |
+| SectionsJson | Multiple lines (plain) | The challenged parts and an optional note on each (20,000 characters at most) |
+| TechAgreedOn | Date and time | The technician agreed it's resolved. **Not trusted** until Flow 7 copies it to the Manager Review. |
+| TlPing | Date and time | Set by the TL's page (agree / reopen) to wake Flow 7 |
+| ChallengeStatus | Choice: Open / Agreed / Not agreed / Rejected (default Open) | **Display only** – the trusted state is `ChallengeState` on the Manager Review. *Rejected* = Flow 7 refused it (not their latest released review, already challenged, sent by someone else, or empty). |
+
+- [ ] Advanced settings → **Item-level permissions:** *Read items that were created by the user*; *Create items and edit items that were created by the user*.
+- [ ] Permissions: **Owners – Full Control** and `1-to-1 Technicians` – **1-to-1 Submit** (as on 1-to-1 Feedback). Flow 7 makes each accepted item private to **Owners (Full Control)** and **that technician (1-to-1 Edit)**, and drops them to **1-to-1 Read** once it is closed. A rejected item becomes Owners-only.
+
+---
+
 ## Final checks
 
-- [ ] Site contents shows the seven lists (plus the Welcome libraries/lists).
+- [ ] Site contents shows the eight lists (plus the Welcome libraries/lists).
 - [ ] **Technicians, Appraisal Expectations, Monthly Reviews, Manager Reviews, Wellbeing Assessments:** permissions page shows **only Owners – Full Control**.
 - [ ] **1-to-1 Settings:** Owners – Full Control **and** `1-to-1 Technicians` – Read. Nothing else.
-- [ ] **1-to-1 Feedback:** Owners – Full Control **and** `1-to-1 Technicians` – 1-to-1 Submit, with item-level permissions set to their own items only.
+- [ ] **1-to-1 Feedback** and **1-to-1 Challenges:** Owners – Full Control **and** `1-to-1 Technicians` – 1-to-1 Submit, with item-level permissions set to their own items only.
 - [ ] Versioning on, attachments off, search off, on every list.
 - [ ] Spot-check three internal names: open List settings → click the column → the URL ends `Field=Q9FollowUp` (etc.).

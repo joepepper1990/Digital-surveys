@@ -325,12 +325,14 @@ def check_secure(f):
 
 # Lists added after 1.0. Power Automate checks a connector step's list exists when a flow is saved or turned on, so a
 # flow that is on during an upgrade (flows 1-4) must reach these lists by REST only, never by a connector step.
-NEW_LISTS = {l['title'] for l in LISTS if l['key'] in ('wellbeing', 'feedback')}
-NEW_URLS = {l['url'] for l in LISTS if l['key'] in ('wellbeing', 'feedback')}
+NEW_LISTS = {l['title'] for l in LISTS if l['key'] in ('wellbeing', 'feedback', 'challenges')}
+NEW_URLS = {l['url'] for l in LISTS if l['key'] in ('wellbeing', 'feedback', 'challenges')}
+# Columns added to an existing list after 1.2 – a connector step in a flow that is on during the upgrade must not use them
+NEW_COLUMNS = [f['name'] for l in LISTS if l['key'] == 'mgr' for f in l['fields'] if f['name'].startswith('Challenge')]
 
 
 def check_upgrade_safe(f):
-    if any(x in f['name'] for x in ('0 Setup', '5 Wellbeing', '6 Feedback')):   # imported Off; turned on after setup
+    if any(x in f['name'] for x in ('0 Setup', '5 Wellbeing', '6 Feedback', '7 Challenge')):   # imported Off; turned on after setup
         return []
     probs = []
     def walk(o, path):
@@ -342,6 +344,8 @@ def check_upgrade_safe(f):
                 if t in NEW_LISTS or any(u in json.dumps(params) for u in NEW_URLS):
                     probs.append('[{0}] {1} names the list "{2}" in a connector step – the flow would fail to turn on '
                                  'after an upgrade until Setup has created it; read it by REST instead'.format(f['name'], path, t))
+                if any(('item/' + c) in k for k in params for c in NEW_COLUMNS):
+                    probs.append('[{0}] {1} writes a column added in 1.3 with a connector step – use REST, as for a new list'.format(f['name'], path))
             for k, v in o.items():
                 walk(v, k)
         elif isinstance(o, list):

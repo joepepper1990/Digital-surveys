@@ -1486,6 +1486,353 @@
                 ]
               }
             },
+            "List_challenges": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Get_lists')?['value']",
+                "where": "@equals(item()?['RootFolder']?['Name'], 'OneToOneChallenges')"
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              },
+              "runAfter": {
+                "Wellbeing_list_exists": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Challenges_list_exists": {
+              "type": "If",
+              "expression": "@not(empty(body('List_challenges')))",
+              "actions": {
+                "ChallengeTry": {
+                  "type": "Scope",
+                  "actions": {
+                    "Open_challenges": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                          "parameters/method": "GET",
+                          "parameters/uri": "_api/web/lists(guid'@{outputs('Ids')?['mgrList']}')/items?$select=ID,Title,ChallengeCloseBy,ChallengeItemId,Technician/Name&$expand=Technician&$filter=ChallengeState eq 'Open'&$top=5000",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata"
+                          }
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runtimeConfiguration": {
+                        "secureData": {
+                          "properties": [
+                            "inputs",
+                            "outputs"
+                          ]
+                        }
+                      },
+                      "runAfter": {}
+                    },
+                    "ChToday": {
+                      "type": "Compose",
+                      "inputs": "@formatDateTime(outputs('ukNow'), 'yyyy-MM-dd')",
+                      "runAfter": {
+                        "Open_challenges": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Past_close_by": {
+                      "type": "Query",
+                      "inputs": {
+                        "from": "@body('Open_challenges')?['value']",
+                        "where": "@and(not(empty(item()?['ChallengeCloseBy'])), less(ticks(concat(if(contains(string(coalesce(item()?['ChallengeCloseBy'], '')), 'T'), formatDateTime(convertFromUtc(coalesce(item()?['ChallengeCloseBy'], '2000-01-01T00:00:00Z'), 'GMT Standard Time'), 'yyyy-MM-dd'), coalesce(item()?['ChallengeCloseBy'], '')), 'T00:00:00Z')), ticks(concat(outputs('ChToday'), 'T00:00:00Z'))))"
+                      },
+                      "runtimeConfiguration": {
+                        "secureData": {
+                          "properties": [
+                            "inputs",
+                            "outputs"
+                          ]
+                        }
+                      },
+                      "runAfter": {
+                        "ChToday": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Each_past_close_by": {
+                      "type": "Foreach",
+                      "foreach": "@body('Past_close_by')",
+                      "actions": {
+                        "Close_not_agreed": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                              "parameters/method": "POST",
+                              "parameters/uri": "_api/web/lists(guid'@{outputs('Ids')?['mgrList']}')/items(@{items('Each_past_close_by')?['ID']})",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata",
+                                "Content-Type": "application/json;odata=nometadata",
+                                "X-HTTP-Method": "MERGE",
+                                "IF-MATCH": "*"
+                              },
+                              "parameters/body": "{\"ChallengeState\":\"Not agreed\",\"ChallengeClosedOn\":\"@{utcNow()}\"}"
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {}
+                        },
+                        "Has_item": {
+                          "type": "If",
+                          "expression": "@not(empty(first(split(string(coalesce(items('Each_past_close_by')?['ChallengeItemId'], '')), '.'))))",
+                          "actions": {
+                            "Ensure_challenger": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "connectionName": "shared_sharepointonline",
+                                  "operationId": "HttpRequest",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                },
+                                "parameters": {
+                                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                                  "parameters/method": "POST",
+                                  "parameters/uri": "_api/web/ensureuser",
+                                  "parameters/headers": {
+                                    "Accept": "application/json;odata=nometadata",
+                                    "Content-Type": "application/json;odata=nometadata"
+                                  },
+                                  "parameters/body": "{\"logonName\":\"@{items('Each_past_close_by')?['Technician']?['Name']}\"}"
+                                },
+                                "authentication": "@parameters('$authentication')"
+                              },
+                              "runtimeConfiguration": {
+                                "secureData": {
+                                  "properties": [
+                                    "inputs",
+                                    "outputs"
+                                  ]
+                                }
+                              },
+                              "runAfter": {}
+                            },
+                            "ChIds": {
+                              "type": "Compose",
+                              "inputs": {
+                                "chList": "@first(body('List_challenges'))?['Id']"
+                              },
+                              "runAfter": {
+                                "Ensure_challenger": [
+                                  "Succeeded"
+                                ]
+                              }
+                            },
+                            "Reset_X": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "connectionName": "shared_sharepointonline",
+                                  "operationId": "HttpRequest",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                },
+                                "parameters": {
+                                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                                  "parameters/method": "POST",
+                                  "parameters/uri": "_api/web/lists(guid'@{outputs('ChIds')?['chList']}')/items(@{int(first(split(string(coalesce(items('Each_past_close_by')?['ChallengeItemId'], '')), '.')))})/resetroleinheritance",
+                                  "parameters/headers": {
+                                    "Accept": "application/json;odata=nometadata"
+                                  }
+                                },
+                                "authentication": "@parameters('$authentication')"
+                              },
+                              "runtimeConfiguration": {
+                                "secureData": {
+                                  "properties": [
+                                    "inputs",
+                                    "outputs"
+                                  ]
+                                }
+                              },
+                              "runAfter": {
+                                "ChIds": [
+                                  "Succeeded"
+                                ]
+                              }
+                            },
+                            "Break_X": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "connectionName": "shared_sharepointonline",
+                                  "operationId": "HttpRequest",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                },
+                                "parameters": {
+                                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                                  "parameters/method": "POST",
+                                  "parameters/uri": "_api/web/lists(guid'@{outputs('ChIds')?['chList']}')/items(@{int(first(split(string(coalesce(items('Each_past_close_by')?['ChallengeItemId'], '')), '.')))})/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)",
+                                  "parameters/headers": {
+                                    "Accept": "application/json;odata=nometadata"
+                                  }
+                                },
+                                "authentication": "@parameters('$authentication')"
+                              },
+                              "runtimeConfiguration": {
+                                "secureData": {
+                                  "properties": [
+                                    "inputs",
+                                    "outputs"
+                                  ]
+                                }
+                              },
+                              "runAfter": {
+                                "Reset_X": [
+                                  "Succeeded"
+                                ]
+                              }
+                            },
+                            "AddOwners_X": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "connectionName": "shared_sharepointonline",
+                                  "operationId": "HttpRequest",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                },
+                                "parameters": {
+                                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                                  "parameters/method": "POST",
+                                  "parameters/uri": "_api/web/lists(guid'@{outputs('ChIds')?['chList']}')/items(@{int(first(split(string(coalesce(items('Each_past_close_by')?['ChallengeItemId'], '')), '.')))})/roleassignments/addroleassignment(principalid=@{outputs('Ids')?['owners']},roledefid=@{outputs('Ids')?['fullControl']})",
+                                  "parameters/headers": {
+                                    "Accept": "application/json;odata=nometadata"
+                                  }
+                                },
+                                "authentication": "@parameters('$authentication')"
+                              },
+                              "runtimeConfiguration": {
+                                "secureData": {
+                                  "properties": [
+                                    "inputs",
+                                    "outputs"
+                                  ]
+                                }
+                              },
+                              "runAfter": {
+                                "Break_X": [
+                                  "Succeeded"
+                                ]
+                              }
+                            },
+                            "AddTech_X": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "connectionName": "shared_sharepointonline",
+                                  "operationId": "HttpRequest",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                },
+                                "parameters": {
+                                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                                  "parameters/method": "POST",
+                                  "parameters/uri": "_api/web/lists(guid'@{outputs('ChIds')?['chList']}')/items(@{int(first(split(string(coalesce(items('Each_past_close_by')?['ChallengeItemId'], '')), '.')))})/roleassignments/addroleassignment(principalid=@{body('Ensure_challenger')?['Id']},roledefid=@{outputs('Ids')?['read']})",
+                                  "parameters/headers": {
+                                    "Accept": "application/json;odata=nometadata"
+                                  }
+                                },
+                                "authentication": "@parameters('$authentication')"
+                              },
+                              "runtimeConfiguration": {
+                                "secureData": {
+                                  "properties": [
+                                    "inputs",
+                                    "outputs"
+                                  ]
+                                }
+                              },
+                              "runAfter": {
+                                "AddOwners_X": [
+                                  "Succeeded"
+                                ]
+                              }
+                            }
+                          },
+                          "else": {
+                            "actions": {}
+                          },
+                          "runAfter": {
+                            "Close_not_agreed": [
+                              "Succeeded"
+                            ]
+                          }
+                        }
+                      },
+                      "runtimeConfiguration": {
+                        "concurrency": {
+                          "repetitions": 1
+                        }
+                      },
+                      "runAfter": {
+                        "Past_close_by": [
+                          "Succeeded"
+                        ]
+                      }
+                    }
+                  },
+                  "runAfter": {}
+                },
+                "ChallengeCatch": {
+                  "type": "Scope",
+                  "actions": {
+                    "Note_challenges_failed": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "varProblems",
+                        "value": "Challenges past their close-by date could not be closed today. Open the run history for details."
+                      },
+                      "runAfter": {}
+                    }
+                  },
+                  "runAfter": {
+                    "ChallengeTry": [
+                      "Failed",
+                      "TimedOut"
+                    ]
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {
+                "List_challenges": [
+                  "Succeeded"
+                ]
+              }
+            },
             "Any_problems": {
               "type": "If",
               "expression": "@greater(length(variables('varProblems')), 0)",
@@ -1521,7 +1868,7 @@
                 "actions": {}
               },
               "runAfter": {
-                "Wellbeing_list_exists": [
+                "Challenges_list_exists": [
                   "Succeeded"
                 ]
               }

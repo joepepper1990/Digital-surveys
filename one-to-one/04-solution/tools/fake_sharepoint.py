@@ -451,7 +451,8 @@ class FakeSP:
                             fail(400, 'person column needs $expand ' + name)
                         u = self.users.get(v) if v is not None else None
                         subs = [x.partition('/')[2] for x in sel if x.partition('/')[0] == name]
-                        o[name] = {k: {'Title': u['Title'], 'EMail': u['Email'], 'Id': u['Id']}[k] for k in subs if k in ('Title', 'EMail', 'Id')} if u else None
+                        o[name] = {k: {'Title': u['Title'], 'EMail': u['Email'], 'Id': u['Id'], 'Name': u['Claims']}[k] for k in subs
+                                   if k in ('Title', 'EMail', 'Id', 'Name')} if u else None
                     elif t['Type'] == 'DateTime' and v:
                         from datetime import datetime, timezone
                         from zoneinfo import ZoneInfo
@@ -565,6 +566,20 @@ class FakeSP:
                     lst['props'][k] = v
                 else:
                     fail(400, 'The property {0} does not exist on type SP.List'.format(k))
+            return {}
+        mi = re.match(r"^/items\((\d+)\)$", rest)
+        if mi:   # item update by REST (nometadata body: choice columns as plain text)
+            if '__metadata' in data:
+                fail(400, 'the flows send item updates without __metadata')
+            p = {}
+            for k, v in data.items():
+                f = lst['fields'].get(k)
+                if f is None:
+                    fail(400, 'The property {0} does not exist on type SP.Data.ListItem'.format(k))
+                p['item/' + k + ('/Value' if f['Type'] == 'Choice' else '')] = v
+            if int(mi.group(1)) not in lst['items']:
+                fail(404, 'item')
+            self.write_item(lst, int(mi.group(1)), p)
             return {}
         mf = re.match(r"^/fields/getbyinternalnameortitle\('([^']+)'\)$", rest)
         if mf:

@@ -17,7 +17,7 @@
 window.ESGOneToOne = function (ctx) {
   'use strict';
 
-  var VERSION = '4.4.0';
+  var VERSION = '4.5.0';
 
   // ---------------------------------------------------------------------------------------------
   // CONFIG — normally nothing to change. List titles must match the lists you created.
@@ -30,7 +30,8 @@ window.ESGOneToOne = function (ctx) {
       exp: 'Appraisal Expectations',
       settings: '1-to-1 Settings',
       wellbeing: 'Wellbeing Assessments',
-      feedback: '1-to-1 Feedback'
+      feedback: '1-to-1 Feedback',
+      challenges: '1-to-1 Challenges'
     },
     timeZone: 'Europe/London',     // must match the site's regional settings
     maxExpectations: 10
@@ -194,6 +195,7 @@ window.ESGOneToOne = function (ctx) {
 
   var state = { view: '', reviewId: null, profileTech: null, backTo: '', month: '', techFilter: '', actFilter: 'open', actTech: '',
     expYear: '', showRetired: false, expEdit: null, report: null };
+  var CH_AVAILABLE = false, CHALLENGES = [];
   var root = null, live = null, tipEl = null, http = null, httpConfig = null, siteUrl = '';
   var started = false, disposed = false, dirty = false, busyCount = 0;
 
@@ -418,6 +420,10 @@ window.ESGOneToOne = function (ctx) {
     'SubmittedOn,CompletedOn,Technician/Id,Technician/Title,Technician/EMail';
   // Feedback list: only failed / undelivered items are read (line manager only), to show in Needs your attention.
   var FB_FIELDS = 'ID,Title,FeedbackType,Message,PageName,AppVersion,DeliveryStatus,SentOn,Created,HasUniqueRoleAssignments,Author/Title,Author/EMail';
+  // Challenge columns (solution 1.3): read only once Setup has created the Challenges list, so the page keeps working
+  // if it is uploaded before the solution upgrade
+  var MR_CH_FIELDS = ',ChallengeState,ChallengeSectionsJson,ChallengeItemId,ChallengeOpenedOn,ChallengeCloseBy,ChallengeTlAgreedOn,ChallengeTechAgreedOn,ChallengeClosedOn';
+  var CH_FIELDS = 'ID,Title,ManagerReviewId,MonthKey,SectionsJson,TechAgreedOn,ChallengeStatus,Created';
   var REV_FIELDS = 'ID,Title,MonthKey,DueDate,ReviewStatus,Q1WentWell,Q2Issue,Q2Impact,Q2Tried,Q2Support,Q3WorkloadRating,Q3WorkloadComment,' +
     'Q4WellbeingRaise,Q4WellbeingDetail,Q5PlanningRaise,Q5PlanningDetail,Q6DevRaise,Q6DevWhat,Q6DevWhy,Q7ManagerFeedback,ExpectationsJson,Q9FollowUp,' +
     'Mood,WinOfMonth,AppraisalDate,Technician/Id,Technician/Title,Technician/EMail';
@@ -479,8 +485,45 @@ window.ESGOneToOne = function (ctx) {
           closedOn: /^\d{4}-\d{2}-\d{2}$/.test(str(a.closedOn)) ? str(a.closedOn) : '' };
       });
       r.mrTechFollowUp = str(mr.TechFollowUp);
+      var cs = str(mr.ChallengeState);
+      if (CHALLENGE_STATES.indexOf(cs) >= 0) {
+        r.ch = { state: cs, sections: parseSections(mr.ChallengeSectionsJson, r), itemId: Number(idOf(mr.ChallengeItemId)) || 0,
+          openedOn: localDate(mr.ChallengeOpenedOn), closeBy: localDate(mr.ChallengeCloseBy), closedOn: localDate(mr.ChallengeClosedOn),
+          tlAgreed: !!mr.ChallengeTlAgreedOn, techAgreed: !!mr.ChallengeTechAgreedOn };
+      }
     }
     return r;
+  }
+  // ---- challenges: only the parts that are the line manager's judgement – expectation ratings, overall feedback, actions
+  var CHALLENGE_STATES = ['Open', 'Agreed', 'Not agreed'];
+  function idOf(v) { var n = num(v); return n === null ? '' : String(Math.floor(n)); }
+  function sectionOk(key, r) {
+    if (key === 'overall' || key === 'actions') { return true; }
+    return /^exp:/.test(key) && r.snapshot.some(function (e) { return 'exp:' + e.id === key; });
+  }
+  function parseSections(json, r) {
+    var seen = {};
+    return jsonList(json).filter(function (x) {
+      var k = str(x.key);
+      if (seen[k] || !sectionOk(k, r)) { return false; }
+      seen[k] = true; return true;
+    }).slice(0, 20).map(function (x) { return { key: str(x.key), note: str(x.note).slice(0, 500) }; });
+  }
+  function sectionName(r, key) {
+    if (key === 'overall') { return 'Overall feedback'; }
+    if (key === 'actions') { return 'Agreed actions'; }
+    var e = r.snapshot.find(function (x) { return 'exp:' + x.id === key; });
+    return e ? e.title + ' (rating)' : 'An expectation';
+  }
+  function challenged(r, key) { return !!(r.ch && r.ch.sections.some(function (x) { return x.key === key; })); }
+  // End of this month; if fewer than 7 days are left, the end of next month (same rule as Flow 7)
+  function closeByFrom(d) { var m = d.slice(0, 7), last = lastDay(m); return daysBetween(d, last) < 7 ? lastDay(addMonths(m, 1)) : last; }
+  function latestReleased(tech) { return reviewsOf(tech).filter(function (x) { return x.released; }).pop() || null; }
+  function canChallenge(r) {
+    return CH_AVAILABLE && !IS_TL && r.released && r.state === 'Completed' && !r.ch && !pendingChallenge(r) && latestReleased(r.tech) === r;
+  }
+  function pendingChallenge(r) {
+    return CHALLENGES.find(function (c) { return Number(idOf(c.ManagerReviewId)) === r.mrId && r.mrId; }) || null;
   }
   function parseBands(json) {
     var b = safeJson(json, null);
@@ -508,7 +551,9 @@ window.ESGOneToOne = function (ctx) {
     L = labRow ? parseLabels(labRow.Value) : defaultLabels();
 
     var revs = await spGetAll(CONFIG.lists.reviews, REV_FIELDS, 'Technician');
-    var mrs = await spGetAll(CONFIG.lists.mgr, MR_FIELDS, 'Technician');
+    CH_AVAILABLE = (await req('GET', listPath(CONFIG.lists.challenges) + '/items?$select=Id&$top=1')).ok;
+    var mrs = await spGetAll(CONFIG.lists.mgr, MR_FIELDS + (CH_AVAILABLE ? MR_CH_FIELDS : ''), 'Technician');
+    CHALLENGES = CH_AVAILABLE ? await spGetAll(CONFIG.lists.challenges, CH_FIELDS) : [];
     var mrByItem = {};
     mrs.forEach(function (m) { if (m.ReviewItemId) { mrByItem[Number(m.ReviewItemId)] = m; } });
 
@@ -675,6 +720,21 @@ window.ESGOneToOne = function (ctx) {
     return { period: p, pts: pts, current: current, projected: projected, slope: slope, band: bandFor(projected), perExp: perExp,
       selfAvg: avg(pts.filter(function (x) { return x.self !== null; }).map(function (x) { return x.self; })), tlAvg: tlv.length ? avg(tlv) : null };
   }
+  // The 3 expectations with the lowest average rating across the appraisal period (the ratings this audience can see),
+  // shown as what to work on to reach the next band. null when there is nothing to go on.
+  function focusAreas(o) {
+    if (!o.band) { return null; }
+    var rows = o.perExp.map(function (x, i) {
+      var vals = x.hist.map(function (hh) { return hh.tl !== null ? hh.tl : hh.self; }).filter(function (v) { return v; });
+      return { e: x.e, i: i, avg: vals.length ? avg(vals) : null };
+    }).filter(function (x) { return x.avg !== null; });
+    if (!rows.length) { return null; }
+    rows.sort(function (x, y) { return x.avg - y.avg || x.i - y.i; });
+    var bi = SETTINGS.bands.findIndex(function (b) { return b.name === o.band.name; });
+    return { band: o.band, next: bi >= 0 ? SETTINGS.bands[bi + 1] || null : null, items: rows.slice(0, 3) };
+  }
+  function trendWord(o) { return o.pts.length < 3 ? 'Too early to tell' : o.slope > 0.05 ? 'Improving ↗' : o.slope < -0.05 ? 'Dipping ↘' : 'Steady →'; }
+  function progressWord(v) { return v ? PROGRESS[clamp(Math.round(v), 1, 5) - 1].title : 'not rated yet'; }
   function streakOf(tech) {
     var ms = reviewsOf(tech).reverse(), n = 0;
     for (var i = 0; i < ms.length; i++) {
@@ -707,16 +767,45 @@ window.ESGOneToOne = function (ctx) {
     var done = items.filter(Boolean).length;
     return { total: items.length, done: done, pct: Math.round(done / items.length * 100) };
   }
+  // Required items still to answer, as keys (q8:<id> per expectation) – used to mark the controls themselves
+  function missingKeys(a) {
+    var k = [];
+    if (!a.q1.trim()) { k.push('q1'); }
+    if (!a.q3) { k.push('q3'); }
+    [['q4', 'q4d'], ['q5', 'q5d'], ['q6', 'q6what']].forEach(function (p) {
+      if (!a[p[0]]) { k.push(p[0]); } else if (a[p[0]] === 'Yes' && !a[p[1]].trim()) { k.push(p[1]); }
+    });
+    a.q8.forEach(function (x) { if (!x.rating) { k.push('q8:' + x.id); } });
+    if (!a.q9) { k.push('q9'); }
+    return k;
+  }
+  var MISSING_LABEL = { q1: 'Q1 What has gone well', q3: 'Q3 Workload', q4: 'Q4 Yes/No', q4d: 'Q4 details', q5: 'Q5 Yes/No', q5d: 'Q5 details',
+    q6: 'Q6 Yes/No', q6what: 'Q6 details', q9: 'Q9 Follow-up' };
   function missingItems(a) {
     var m = [];
-    if (!a.q1.trim()) { m.push('Q1 What has gone well'); }
-    if (!a.q3) { m.push('Q3 Workload'); }
-    if (!a.q4) { m.push('Q4 Yes/No'); } else if (a.q4 === 'Yes' && !a.q4d.trim()) { m.push('Q4 details'); }
-    if (!a.q5) { m.push('Q5 Yes/No'); } else if (a.q5 === 'Yes' && !a.q5d.trim()) { m.push('Q5 details'); }
-    if (!a.q6) { m.push('Q6 Yes/No'); } else if (a.q6 === 'Yes' && !a.q6what.trim()) { m.push('Q6 details'); }
-    if (a.q8.some(function (x) { return !x.rating; })) { m.push('Q8 a rating for each expectation'); }
-    if (!a.q9) { m.push('Q9 Follow-up'); }
+    missingKeys(a).forEach(function (k) {
+      var l = k.indexOf('q8:') === 0 ? 'Q8 a rating for each expectation' : MISSING_LABEL[k];
+      if (m.indexOf(l) < 0) { m.push(l); }
+    });
     return m;
+  }
+  // Orange = still to answer; red = Submit was pressed while it was still missing. Clears as soon as it's answered.
+  function markRequired(els, keys, showErrors) {
+    Object.keys(els).forEach(function (k) {
+      var t = els[k], miss = keys.indexOf(k) >= 0;
+      t.classList.toggle('need', miss && !showErrors);
+      t.classList.toggle('invalid', miss && !!showErrors);
+      if (miss && showErrors) { t.setAttribute('aria-invalid', 'true'); } else { t.removeAttribute('aria-invalid'); }
+    });
+  }
+  function focusFirst(els, keys) {
+    var t = null;
+    for (var i = 0; i < keys.length && !t; i++) { t = els[keys[i]] || null; }
+    if (!t) { return false; }
+    t.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    var f = t.matches('textarea, input, button') ? t : t.querySelector('textarea, input:not([type="radio"]), button, input');
+    if (f) { try { f.focus({ preventScroll: true }); } catch (_) { f.focus(); } }
+    return true;
   }
   // ---------------------------------------------------------------------------------------------
   // writes (the only places data leaves the page – rule S6)
@@ -895,8 +984,25 @@ window.ESGOneToOne = function (ctx) {
     var b = bandFor(score);
     return b ? h('span', { class: 'band ' + b.cls + (big ? ' big' : ''), text: b.name }) : h('span', { class: 'muted', text: 'Not enough data' });
   }
+  // Coloured bar following the bands set in Settings, with a marker – no number shown
+  var TRACK_COL = { b0: '#f2c2c3', b1: '#f5dc9e', b2: '#bfe2cd', b3: '#bcd6f3' };
   function track(score) {
-    return h('div', { class: 'track' }, score === null || score === undefined ? [] : [h('i', { style: 'left:' + ((score - 1) / 4 * 100) + '%' })]);
+    var lo = 0, stops = [];
+    SETTINGS.bands.forEach(function (b) {
+      var hi = (clamp(b.max, 1, 5) - 1) / 4 * 100;
+      if (hi > lo || b === SETTINGS.bands[SETTINGS.bands.length - 1]) { hi = Math.max(hi, lo); stops.push(TRACK_COL[b.cls] + ' ' + lo.toFixed(2) + '% ' + (b === SETTINGS.bands[SETTINGS.bands.length - 1] ? 100 : hi).toFixed(2) + '%'); lo = hi; }
+    });
+    var t = h('div', { class: 'track' }, score === null || score === undefined ? [] : [h('i', { style: 'left:' + ((clamp(score, 1, 5) - 1) / 4 * 100) + '%' })]);
+    t.style.background = 'linear-gradient(90deg, ' + stops.join(', ') + ')';
+    return t;
+  }
+  function focusBlock(f, showNums) {
+    if (!f) { return null; }
+    if (!f.next) { return h('div', { class: 'focus' }, [h('b', { text: 'Keep it up' }), h('div', { class: 'small', text: "You're in the top band – keep doing what you're doing." })]); }
+    return h('div', { class: 'focus' }, [
+      h('div', null, ['To move up to ', h('span', { class: 'band ' + f.next.cls, text: f.next.name }), ', focus on:']),
+      h('ul', null, f.items.map(function (x) { return h('li', { text: x.e.title + (showNums ? ' (average ' + f1(x.avg) + ')' : '') }); }))
+    ]);
   }
   function chipFor(r) {
     if (!r) { return h('span', { class: 'chip', text: 'No review yet' }); }
@@ -912,7 +1018,9 @@ window.ESGOneToOne = function (ctx) {
     var ta = h('textarea', { id: id, rows: rows || 3 });
     ta.value = value || ''; ta.disabled = !!disabled;
     ta.addEventListener('input', function () { markDirty(); onInput(ta.value); });
-    return h('div', null, [label ? h('label', { class: 'field', for: id, text: label }) : null, ta]);
+    var w = h('div', null, [label ? h('label', { class: 'field', for: id, text: label }) : null, ta]);
+    w.input = ta;   // so a required box can be marked
+    return w;
   }
   // Date entry: type it the usual UK way (15/07/2027, 15 Jul 27 …) or pick it from the calendar.
   // The day is shown in words underneath so a wrong date is obvious before saving. An unrecognised
@@ -953,7 +1061,7 @@ window.ESGOneToOne = function (ctx) {
   }
   function badDates(el) { return el ? el.querySelectorAll('input.datef.bad').length : 0; }
   function seg(labels, value, onChange, disabled, wide, titles) {
-    var g = h('div', { class: 'seg' + (wide ? ' wide' : ''), role: 'radiogroup' });
+    var g = h('div', { class: 'seg' + (wide === true ? ' wide' : wide ? ' ' + wide : ''), role: 'radiogroup' });
     labels.forEach(function (lab, i) {
       var v = lab.value, on = value !== null && value !== undefined && String(value) === String(v);
       var b = h('button', { type: 'button', role: 'radio', 'aria-pressed': on ? 'true' : 'false', 'aria-checked': on ? 'true' : 'false', disabled: !!disabled, text: lab.text });
@@ -968,7 +1076,12 @@ window.ESGOneToOne = function (ctx) {
     return g;
   }
   function ynSeg(value, onChange, disabled) { return seg([{ value: 'Yes', text: 'Yes' }, { value: 'No', text: 'No' }], value, onChange, disabled, true); }
-  function ratingSeg(value, onChange, disabled) {
+  // words: the technician's version – the scale in words only (the 1–5 values stay in the stored data)
+  function ratingSeg(value, onChange, disabled, words) {
+    if (words) {
+      return seg(PROGRESS.map(function (p) { return { value: p.value, text: p.title }; }), value, onChange, disabled, 'words',
+        PROGRESS.map(function (p) { return p.desc; }));
+    }
     return seg([1, 2, 3, 4, 5].map(function (n) { return { value: n, text: String(n) }; }), value, onChange, disabled, false,
       PROGRESS.map(function (p) { return p.value + ' – ' + p.title + '\n' + p.desc; }));
   }
@@ -1020,17 +1133,25 @@ window.ESGOneToOne = function (ctx) {
   // ---------------------------------------------------------------------------------------------
   // charts (SVG nodes only)
   // ---------------------------------------------------------------------------------------------
-  function trendChart(tech, o, height) {
+  // words: the technician's version – band names instead of the 1–5 axis, and no numbers in tooltips
+  function trendChart(tech, o, height, words) {
     var p = o.period, months = [];
     for (var k = 1; k <= 12; k++) { months.push(addMonths(p.start, k)); }
-    var W = 640, H = height || 230, pl = 30, pr = 14, pt = 10, pb = 24, iw = W - pl - pr, ih = H - pt - pb, n = months.length;
+    var W = 640, H = height || 230, pl = words ? 96 : 30, pr = 14, pt = 10, pb = 24, iw = W - pl - pr, ih = H - pt - pb, n = months.length;
     var x = function (i) { return pl + i * iw / (n - 1); }, y = function (v) { return pt + (5 - v) / 4 * ih; };
     var svg = s('svg', { viewBox: '0 0 ' + W + ' ' + H, class: 'chart', role: 'img', 'aria-label': 'Monthly rating trend' });
     var lo = 1;
-    SETTINGS.bands.forEach(function (b) { var hi = clamp(b.max, 1, 5); if (hi > lo) { svg.appendChild(s('rect', { x: pl, y: y(hi), width: iw, height: y(lo) - y(hi), fill: BAND_TINT[b.cls] })); } lo = Math.max(lo, hi); });
+    SETTINGS.bands.forEach(function (b) {
+      var hi = clamp(b.max, 1, 5);
+      if (hi > lo) {
+        svg.appendChild(s('rect', { x: pl, y: y(hi), width: iw, height: y(lo) - y(hi), fill: BAND_TINT[b.cls] }));
+        if (words && y(lo) - y(hi) >= 12) { svg.appendChild(s('text', { x: pl - 8, y: (y(lo) + y(hi)) / 2 + 4, 'text-anchor': 'end', text: b.name })); }
+      }
+      lo = Math.max(lo, hi);
+    });
     [1, 2, 3, 4, 5].forEach(function (v) {
       svg.appendChild(s('line', { x1: pl, x2: W - pr, y1: y(v), y2: y(v), stroke: '#ffffff', 'stroke-width': 1 }));
-      svg.appendChild(s('text', { x: pl - 8, y: y(v) + 4, 'text-anchor': 'end', text: String(v) }));
+      if (!words) { svg.appendChild(s('text', { x: pl - 8, y: y(v) + 4, 'text-anchor': 'end', text: String(v) })); }
     });
     months.forEach(function (m, i) {
       var t = s('text', { x: x(i), y: H - 6, 'text-anchor': 'middle', text: monthShort(m) });
@@ -1046,7 +1167,7 @@ window.ESGOneToOne = function (ctx) {
       pts.forEach(function (pt) {
         svg.appendChild(s('circle', { cx: x(idx(pt.month)), cy: y(pt[key]), r: 4, fill: color, stroke: '#fff', 'stroke-width': 2 }));
         var hit = s('circle', { cx: x(idx(pt.month)), cy: y(pt[key]), r: 11, fill: 'transparent' });
-        tip(hit, name + ' – ' + monthLabel(pt.month) + '\n' + pt[key].toFixed(1) + ' / 5 (' + bandFor(pt[key]).name + ')');
+        tip(hit, name + ' – ' + monthLabel(pt.month) + '\n' + (words ? bandFor(pt[key]).name : pt[key].toFixed(1) + ' / 5 (' + bandFor(pt[key]).name + ')'));
         svg.appendChild(hit);
       });
     }
@@ -1058,9 +1179,9 @@ window.ESGOneToOne = function (ctx) {
         svg.appendChild(s('line', { x1: x(li), y1: y(lastPt.used), x2: x(ei), y2: y(o.projected), stroke: '#16222c', 'stroke-width': 1.5, 'stroke-dasharray': '4 4' }));
         svg.appendChild(s('circle', { cx: x(ei), cy: y(o.projected), r: 5, fill: '#fff', stroke: '#16222c', 'stroke-width': 2 }));
         var hit = s('circle', { cx: x(ei), cy: y(o.projected), r: 12, fill: 'transparent' });
-        tip(hit, 'Projected at appraisal (' + fmtDate(p.apDate) + ')\n' + o.projected.toFixed(1) + ' / 5 – ' + o.band.name);
+        tip(hit, 'Projected at appraisal (' + fmtDate(p.apDate) + ')\n' + (words ? o.band.name : o.projected.toFixed(1) + ' / 5 – ' + o.band.name));
         svg.appendChild(hit);
-        svg.appendChild(s('text', { x: x(ei) - 8, y: y(o.projected) - 10, 'text-anchor': 'end', style: 'fill:#16222c;font-weight:700', text: 'Projected ' + o.projected.toFixed(1) }));
+        svg.appendChild(s('text', { x: x(ei) - 8, y: y(o.projected) - 10, 'text-anchor': 'end', style: 'fill:#16222c;font-weight:700', text: 'Projected ' + (words ? o.band.name : o.projected.toFixed(1)) }));
       }
     }
     return h('div', null, [legend([{ color: C_SELF, label: 'Self-rating' }, { color: C_TL, label: (L.mgr + ' rating') }, { dash: true, label: 'Projection to appraisal' }]), svg]);
@@ -1128,13 +1249,13 @@ window.ESGOneToOne = function (ctx) {
     var lg = h('div', { class: 'slegend' }, segs.map(function (x) { return h('div', null, [h('i', { class: 'dot', style: 'background:' + x.color }), x.label, h('b', { text: String(x.count) })]); }));
     return h('div', null, [bar, lg]);
   }
-  function pairBars(perExp) {
+  function pairBars(perExp, words) {
     if (!perExp.length) { return h('p', { class: 'muted', text: 'No appraisal expectations yet.' }); }
     return h('div', null, [legend([{ color: C_SELF, label: 'Latest self-rating' }, { color: C_TL, label: ('Latest ' + L.mgr + ' rating') }]),
-      h('div', { class: 'pairbars' }, perExp.map(function (x) {
+      h('div', { class: 'pairbars' + (words ? ' words' : '') }, perExp.map(function (x) {
         function bar(v, c, who) {
-          return [tip(h('div', { class: 'bar' }, v ? h('i', { style: 'width:' + (v / 5 * 100) + '%;background:' + c }) : null), x.e.title + '\n' + who + ': ' + (v ? v + ' – ' + PROGRESS[v - 1].title : 'not rated yet')),
-            h('div', { class: 'v', text: v ? String(v) : '—' })];
+          return [tip(h('div', { class: 'bar' }, v ? h('i', { style: 'width:' + (v / 5 * 100) + '%;background:' + c }) : null), x.e.title + '\n' + who + ': ' + (v ? (words ? '' : v + ' – ') + PROGRESS[v - 1].title : 'not rated yet')),
+            h('div', { class: 'v', text: v ? (words ? PROGRESS[v - 1].title : String(v)) : '—' })];
         }
         return h('div', { class: 'row' }, [h('div', { class: 'lbl', title: x.e.title, text: x.e.title })].concat(bar(x.latestSelf, C_SELF, 'Self')).concat(bar(x.latestTl, C_TL, L.mgr)));
       }))]);
@@ -1204,6 +1325,107 @@ window.ESGOneToOne = function (ctx) {
     }
     return h('section', { class: 'card since' }, [h('div', { class: 'card-h' }, [h('h2', { text: 'Since last time' }), toggle]), body]);
   }
+  // ---------------------------------------------------------------------------------------------
+  // CHALLENGES – a technician flags parts of the released feedback to talk through; both agree, or it closes as Not agreed
+  // ---------------------------------------------------------------------------------------------
+  function challengeChip(r) {
+    if (!r.ch) { return null; }
+    return h('span', { class: 'chip ' + (r.ch.state === 'Agreed' ? 'green' : 'amber'), text: r.ch.state === 'Open' ? '⚑ Challenged' : r.ch.state === 'Agreed' ? '✓ Challenge agreed' : '⚑ Not agreed' });
+  }
+  function challengeBanner(r, aud) {
+    var tl = aud === 'tl';
+    if (!r.ch) {
+      if (!tl && pendingChallenge(r)) {
+        return h('section', { class: 'card chcard' }, [h('h3', { text: '⚑ Challenge sent' }),
+          h('p', { class: 'small', text: 'It will show here once it has been recorded (usually within a few minutes). Your ' + L.mgr + ' is emailed.' })]);
+      }
+      return null;
+    }
+    var c = r.ch, kids = [];
+    var list = h('ul', { class: 'chlist' }, c.sections.map(function (x) {
+      return h('li', null, [h('b', { text: sectionName(r, x.key) }), x.note ? h('div', { class: 'small', text: x.note }) : null]);
+    }));
+    function agreeTl() {
+      busy('ch', async function () {
+        await writeDates(CONFIG.lists.mgr, r.mrId, { ChallengeTlAgreedOn: TODAY });
+        if (c.itemId) { await writeDates(CONFIG.lists.challenges, c.itemId, { TlPing: TODAY }); }
+        c.tlAgreed = true; toast(c.techAgreed ? 'Agreed – you both have, so it closes as agreed shortly.' : 'Agreed – waiting for ' + r.tech + ' to agree too.'); render(false);
+      }).catch(function () {});
+    }
+    function agreeTech() {
+      busy('ch', async function () {
+        await writeDates(CONFIG.lists.challenges, c.itemId, { TechAgreedOn: TODAY });
+        c.techAgreed = true; toast('Thanks – recorded.'); render(false);
+      }).catch(function () {});
+    }
+    function reopen() {
+      confirmBox('Reopen this challenge?', r.tech + ' is emailed and can agree again. If you don\'t both agree by ' + fmtDate(closeByFrom(TODAY)) + ' it closes as Not agreed.', 'Reopen', function () {
+        busy('ch', async function () {
+          await spUpdate(CONFIG.lists.mgr, r.mrId, { ChallengeState: 'Open' });
+          await writeDates(CONFIG.lists.mgr, r.mrId, { ChallengeTlAgreedOn: '', ChallengeTechAgreedOn: '', ChallengeClosedOn: '', ChallengeCloseBy: closeByFrom(TODAY) });
+          if (c.itemId) { await writeDates(CONFIG.lists.challenges, c.itemId, { TechAgreedOn: '', TlPing: TODAY }); }
+          c.state = 'Open'; c.tlAgreed = false; c.techAgreed = false; c.closedOn = ''; c.closeBy = closeByFrom(TODAY);
+          toast('Reopened – ' + r.tech + ' has been emailed.'); render(false);
+        }).catch(function () {});
+      });
+    }
+    if (c.state === 'Open') {
+      kids.push(h('h3', { text: '⚑ Feedback challenged – to talk through at ' + (tl ? 'your 1-to-1 with ' + r.tech : 'your next 1-to-1') }));
+      kids.push(list);
+      kids.push(h('div', { class: 'chstatus small' }, [
+        h('span', { text: (tl ? 'You' : L.mgr) + ': ' + (c.tlAgreed ? 'agreed ✓' : 'not yet') }),
+        h('span', { text: (tl ? r.tech : 'You') + ': ' + (c.techAgreed ? 'agreed ✓' : 'not yet') })]));
+      kids.push(h('p', { class: 'small muted', text: 'It closes when you have both agreed. If not agreed by ' + fmtDate(c.closeBy) + ' it closes as Not agreed and stays flagged.' }));
+      if (tl && !c.tlAgreed) { kids.push(h('div', { class: 'btn-row' }, [h('button', { class: 'btn primary small', type: 'button', text: 'Agree – resolved', onclick: agreeTl })])); }
+      if (!tl && !c.techAgreed && c.itemId) { kids.push(h('div', { class: 'btn-row' }, [h('button', { class: 'btn primary small', type: 'button', text: 'I agree – resolved', onclick: agreeTech })])); }
+    } else {
+      kids.push(h('h3', { text: c.state === 'Agreed' ? '✓ Challenge agreed' + (c.closedOn ? ' on ' + fmtDate(c.closedOn) : '') : '⚑ Challenge not agreed' + (c.closedOn ? ' – closed ' + fmtDate(c.closedOn) : '') }));
+      if (c.state !== 'Agreed') { kids.push(h('p', { class: 'small', text: 'It stays flagged for future review' + (tl ? '. You can reopen it at any time.' : '.') })); }
+      kids.push(list);
+      if (tl) { kids.push(h('div', { class: 'btn-row' }, [h('button', { class: 'btn small', type: 'button', text: 'Reopen challenge', onclick: reopen })])); }
+    }
+    return h('section', { class: 'card chcard ' + (c.state === 'Agreed' ? 'agreed' : 'open') }, kids);
+  }
+  // The technician's flags: one per challengeable part, with an optional note; a bar to send them together
+  function challengePicker(r) {
+    var sel = {}, order = [];
+    var bar = h('div', { class: 'chbar', hidden: true });
+    function drawBar() {
+      bar.textContent = '';
+      bar.hidden = !order.length;
+      if (!order.length) { return; }
+      bar.appendChild(h('span', { text: plural(order.length, 'part') + ' flagged to talk through' }));
+      bar.appendChild(h('div', { class: 'btn-row' }, [
+        h('button', { class: 'btn small ghost', type: 'button', text: 'Cancel', onclick: function () { order.slice().forEach(function (k) { sel[k].toggle(false); }); } }),
+        h('button', { class: 'btn small primary', type: 'button', text: 'Send challenge', onclick: send })]));
+    }
+    function send() {
+      var list = order.map(function (k) { return { key: k, note: sel[k].note().slice(0, 500) }; });
+      confirmBox('Challenge this feedback?', 'Your ' + L.mgr + ' is emailed and the parts you flagged become the topics for your next 1-to-1. It closes when you both agree.', 'Send challenge', function () {
+        busy('chsend', async function () {
+          var id = await spCreate(CONFIG.lists.challenges, { Title: (ME + ' – ' + monthLabel(r.month)).slice(0, 255), ManagerReviewId: String(r.mrId), SectionsJson: JSON.stringify(list) });
+          CHALLENGES.push({ ID: id, ManagerReviewId: r.mrId, SectionsJson: JSON.stringify(list) });
+          toast('Challenge sent – your ' + L.mgr + ' will be emailed.'); render(false);
+        }).catch(function () {});
+      });
+    }
+    function flag(key) {
+      var note = h('input', { type: 'text', maxlength: '500', 'aria-label': 'What would you like to discuss? (optional)', placeholder: 'What would you like to discuss? (optional)' });
+      var noteWrap = h('div', { class: 'chnote', hidden: true }, note);
+      var btn = h('button', { class: 'chflag', type: 'button', 'aria-pressed': 'false', text: '⚑ Challenge', title: 'Flag this to talk through with your ' + L.mgr });
+      function toggle(on) {
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false'); btn.textContent = on ? '⚑ Flagged' : '⚑ Challenge'; noteWrap.hidden = !on;
+        var i = order.indexOf(key);
+        if (on && i < 0) { order.push(key); } else if (!on && i >= 0) { order.splice(i, 1); }
+        if (on) { note.focus(); }
+        drawBar();
+      }
+      sel[key] = { toggle: toggle, note: function () { return note.value.trim(); } };
+      btn.addEventListener('click', function () { toggle(order.indexOf(key) < 0); });
+      return h('div', { class: 'chwrap' }, [btn, noteWrap]);
+    }
+    return { flag: flag, bar: bar };
+  }
   function techView() {
     var mine = reviewsOf(ME).slice().reverse();
     if (!mine.length) {
@@ -1220,8 +1442,11 @@ window.ESGOneToOne = function (ctx) {
 
     var missingBox = h('div', { 'aria-live': 'polite' });
     var meterFill = h('i'), meterTxt = h('span', { class: 'small muted' });
+    var reqEls = {}, showErrors = false;
+    function req(key, el) { if (editable) { reqEls[key] = el.input || el; } return el; }
     function refresh() {
       if (!editable) { return; }
+      markRequired(reqEls, missingKeys(a), showErrors);
       var pr = progressOf(a);
       meterFill.style.width = pr.pct + '%';
       var left = pr.total - pr.done;
@@ -1249,7 +1474,12 @@ window.ESGOneToOne = function (ctx) {
     }
     function submit() {
       var m = missingItems(a);
-      if (m.length) { toast('Please complete: ' + m.join(', '), true); missingBox.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+      if (m.length) {
+        showErrors = true; refresh();
+        toast('Please complete the questions marked in red: ' + m.join(', '), true);
+        if (!focusFirst(reqEls, missingKeys(a))) { missingBox.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+        return;
+      }
       confirmBox('Submit your 1-to-1?', ("You won't be able to change it afterwards. Your " + L.mgr + " will be notified."), 'Submit', function () {
         busy('submit', async function () {
           await autosave.settle();
@@ -1262,7 +1492,7 @@ window.ESGOneToOne = function (ctx) {
     var dl = daysLeft(r);
     var head = h('div', { class: 'pagehead sticky', style: 'display:block' }, [
       h('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:16px' }, [
-        h('div', { class: 'ph-l' }, [h('h2', { text: 'Monthly 1-to-1' }), monthSel, chipFor(r),
+        h('div', { class: 'ph-l' }, [h('h2', { text: 'Monthly 1-to-1' }), monthSel, chipFor(r), challengeChip(r),
           editable ? h('span', { class: 'chip ' + (dl < 0 ? 'red' : dl <= 3 ? 'amber' : 'green'), text: dl < 0 ? plural(-dl, 'day') + ' overdue – you can still submit' : dl === 0 ? 'Due today' : plural(dl, 'day') + ' left' }) : null,
           h('span', { class: 'meta', text: 'Deadline 23:59, ' + fmtDate(r.due) })]),
         editable ? h('div', { class: 'btn-row' }, [h('div', { class: 'meterwrap' }, [meterTxt, saveStatus]), h('button', { class: 'btn', type: 'button', text: 'Save draft', onclick: function () { save().catch(function () {}); } }),
@@ -1275,8 +1505,11 @@ window.ESGOneToOne = function (ctx) {
     function fbBlock(text) { return r.released && text ? h('div', { class: 'feedback' }, [h('b', { text: L.mgr }), text]) : null; }
     var cards = [];
     if (editable) { var since = sinceLastTime(r, mine); if (since) { cards.push(since); } }
+    var picker = canChallenge(r) ? challengePicker(r) : null;
+    function chMark(key) { return picker ? picker.flag(key) : challenged(r, key) ? h('span', { class: 'chip amber', text: '⚑ Challenged' }) : null; }
+    if (r.released) { var chb = challengeBanner(r, 'tech'); if (chb) { cards.push(chb); } }
     cards.push(qCard(1, 'What has gone well for you this month?', null, [
-      textBox(null, a.q1, function (v) { a.q1 = v; refresh(); }, ro, 3), fbBlock(r.fb.q1)]));
+      req('q1', textBox(null, a.q1, function (v) { a.q1 = v; refresh(); }, ro, 3)), fbBlock(r.fb.q1)]));
     // Q2 is optional: folded while empty, so it takes one line unless there's something to say
     var q2has = !!(a.q2.issue || a.q2.impact || a.q2.tried || a.q2.support);
     var q2grid = h('div', { class: 'fgrid c4' }, [
@@ -1295,23 +1528,23 @@ window.ESGOneToOne = function (ctx) {
     if (!q2has) { q2card.classList.add('compact'); }
     cards.push(q2card);
     cards.push(qCard(3, 'How would you rate your current workload?', null, [
-      choiceGroup('Workload rating', WORKLOAD, a.q3, function (v) { a.q3 = v; refresh(); }, ro, 'c5'),
+      req('q3', choiceGroup('Workload rating', WORKLOAD, a.q3, function (v) { a.q3 = v; refresh(); }, ro, 'c5')),
       h('div', { class: 'detail' }, textBox('Comments (optional)', a.q3c, function (v) { a.q3c = v; }, ro, 2)), fbBlock(r.fb.q3)]));
     function ynCard(numb, title, key, detailFn) {
       var detail = h('div', { class: 'detail' }, detailFn());
       detail.hidden = a[key] !== 'Yes';
-      var c = qCard(numb, title, ynSeg(a[key], function (v) { a[key] = v; detail.hidden = v !== 'Yes'; c.classList.toggle('compact', v === 'No'); refresh(); }, ro),
+      var c = qCard(numb, title, req(key, ynSeg(a[key], function (v) { a[key] = v; detail.hidden = v !== 'Yes'; c.classList.toggle('compact', v === 'No'); refresh(); }, ro)),
         [detail, fbBlock(r.fb[key])].filter(Boolean));
       if (a[key] === 'No') { c.classList.add('compact'); }   // answered No: one line
       return c;
     }
     cards.push(ynCard(4, 'Is there anything relating to your wellbeing, workplace support or reasonable adjustments you would like to raise?', 'q4', function () {
-      return textBox('What would you like to raise?', a.q4d, function (v) { a.q4d = v; refresh(); }, ro, 3); }));
+      return req('q4d', textBox('What would you like to raise?', a.q4d, function (v) { a.q4d = v; refresh(); }, ro, 3)); }));
     cards.push(ynCard(5, 'Is there anything upcoming that your line manager should be aware of for planning purposes?', 'q5', function () {
-      return textBox('Please give details', a.q5d, function (v) { a.q5d = v; refresh(); }, ro, 3); }));
+      return req('q5d', textBox('Please give details', a.q5d, function (v) { a.q5d = v; refresh(); }, ro, 3)); }));
     cards.push(ynCard(6, 'Do you have any training, development requirements or career aspirations you would like to discuss?', 'q6', function () {
-      return h('div', { class: 'fgrid c2' }, [textBox('What would you like?', a.q6what, function (v) { a.q6what = v; refresh(); }, ro, 3),
-        textBox('Why / what would it help with?', a.q6why, function (v) { a.q6why = v; }, ro, 3)]); }));
+      return h('div', { class: 'fgrid c2' }, [req('q6what', textBox('What would you like?', a.q6what, function (v) { a.q6what = v; refresh(); }, ro, 3)),
+        textBox('Why / what would it help with? (optional)', a.q6why, function (v) { a.q6why = v; }, ro, 3)]); }));
     cards.push(qCard(7, 'Do you have any feedback for your line manager?', h('span', { class: 'small muted', text: 'Optional' }), [
       textBox(null, a.q7, function (v) { a.q7 = v; }, ro, 3), fbBlock(r.fb.q7)]));
 
@@ -1319,29 +1552,33 @@ window.ESGOneToOne = function (ctx) {
     if (r.released) { expHead = expHead.concat([L.mgr]); }
     var expRows = r.snapshot.map(function (e) {
       var ans = a.q8.find(function (x) { return String(x.id) === String(e.id); });
-      var lbl = h('div', { class: 'small muted', style: 'margin-top:4px', text: ans.rating ? PROGRESS[ans.rating - 1].title : 'Not rated' });
+      var lbl = h('div', { class: 'small muted', style: 'margin-top:4px', text: ans.rating ? PROGRESS[ans.rating - 1].desc : 'Not rated yet' });
       var cells = [
-        h('td', { class: 'top', style: 'width:32%' }, [h('div', { style: 'font-weight:650', text: e.title }), h('div', { class: 'small muted', text: e.measures })]),
-        h('td', { class: 'top', style: 'width:200px' }, [ratingSeg(ans.rating, function (v) { ans.rating = v; lbl.textContent = PROGRESS[v - 1].title; refresh(); }, ro), lbl]),
+        h('td', { class: 'top', style: 'width:30%' }, [h('div', { style: 'font-weight:650', text: e.title }), h('div', { class: 'small muted', text: e.measures })]),
+        h('td', { class: 'top', style: 'width:170px' }, [req('q8:' + e.id, ratingSeg(ans.rating, function (v) { ans.rating = v; lbl.textContent = PROGRESS[v - 1].desc; refresh(); }, ro, true)), lbl]),
         h('td', { class: 'top' }, textBox(null, ans.comment, function (v) { ans.comment = v; }, ro, 2))
       ];
       if (r.released) {
         var tv = r.fb.expRating[e.id];
-        cells.push(h('td', { class: 'top', style: 'width:24%' }, [h('div', { style: 'font-weight:650', text: tv ? tv + ' – ' + PROGRESS[tv - 1].title : 'Not rated' }), r.fb.exp[e.id] ? h('div', { class: 'small', text: r.fb.exp[e.id] }) : null]));
+        cells.push(h('td', { class: 'top', style: 'width:24%' }, [h('div', { style: 'font-weight:650', text: tv ? PROGRESS[tv - 1].title : 'Not rated' }), r.fb.exp[e.id] ? h('div', { class: 'small', text: r.fb.exp[e.id] }) : null,
+          tv || r.fb.exp[e.id] ? chMark('exp:' + e.id) : null]));
       }
       return h('tr', null, cells);
     });
-    cards.push(qCard(8, 'Appraisal expectations – how are you progressing?', h('span', { class: 'small muted', text: '1 Not started · 2 Early · 3 On track · 4 Strong · 5 Fully met' }), [
+    cards.push(qCard(8, 'Appraisal expectations – how are you progressing?', h('span', { class: 'small muted', text: 'Choose the one that fits best' }), [
       r.snapshot.length ? table(expHead, expRows) : h('p', { class: 'muted', text: 'No appraisal expectations are set for you this month.' })]));
     cards.push(qCard(9, "How would you prefer to follow up on this month's review?", null, [
-      choiceGroup('Follow-up preference', FOLLOW.map(function (f) { return { value: f, title: f }; }), a.q9, function (v) { a.q9 = v; refresh(); }, ro, 'c3'), fbBlock(r.fb.q9)]));
+      req('q9', choiceGroup('Follow-up preference', FOLLOW.map(function (f) { return { value: f, title: f }; }), a.q9, function (v) { a.q9 = v; refresh(); }, ro, 'c3')), fbBlock(r.fb.q9)]));
     if (r.released) {
       cards.push(card('Overall feedback and agreed actions', null, [
         h('div', { class: 'feedback', style: 'margin-top:0' }, [h('b', { text: 'Overall' }), r.fb.overall || '—']),
+        r.fb.overall ? chMark('overall') : null,
         h('div', { class: 'feedback' }, [h('b', { text: 'Follow-up' }), followOf(r) || '—']),
         r.fb.meeting ? h('div', { class: 'feedback' }, [h('b', { text: '1-to-1 meeting' }), fmtDate(r.fb.meeting)]) : null,
-        h('div', { style: 'margin-top:12px' }, actionsTable(r.fb.actions.map(function (ac) { return { ac: ac, r: r }; }), {}))
+        h('div', { style: 'margin-top:12px' }, actionsTable(r.fb.actions.map(function (ac) { return { ac: ac, r: r }; }), {})),
+        r.fb.actions.length ? chMark('actions') : null
       ]));
+      if (picker) { cards.push(picker.bar); }
     }
     if (editable) {
       cards.push(missingBox);
@@ -1371,12 +1608,12 @@ window.ESGOneToOne = function (ctx) {
     var outlook = h('section', { class: 'card side-tile' }, [
       h('h3', null, ['Appraisal outlook', h('button', { class: 'btn small ghost', type: 'button', text: 'My appraisal →', onclick: function () { go('myapp'); } })]),
       h('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px' }, [
-        h('div', { class: 'big-score' }, [f1(o.projected), h('small', { text: ' / 5 projected' })]), bandChip(o.projected, true)]),
+        h('span', { class: 'small muted', text: 'Expected at your appraisal' }), bandChip(o.projected, true)]),
       track(o.projected),
       h('dl', { class: 'kv' }, [h('dt', { text: 'Appraisal date' }), h('dd', { class: p.set && days < 0 ? 'overdue' : null, text: p.set ? fmtDate(p.apDate) + (days < 0 ? ' (overdue)' : ' (' + daysToGo(apStatus(p.apDate)).toLowerCase() + ')') : 'Not set yet' }),
         p.set && days >= 0 ? h('dt', { text: 'Aim to complete' }) : null, p.set && days >= 0 ? h('dd', { text: apStatus(p.apDate).state === 'due' ? 'This month – it\'s due ' + fmtDate(p.apDate) : 'In ' + monthLabel(apStatus(p.apDate).aimMonth) }) : null,
-        h('dt', { text: 'Current position' }), h('dd', { text: f1(o.current) + ' / 5' }),
-        h('dt', { text: 'Trend' }), h('dd', { text: (o.slope >= 0 ? '+' : '') + o.slope.toFixed(2) + ' per month' })])
+        h('dt', { text: 'Trend' }), h('dd', { text: trendWord(o) })]),
+      focusBlock(focusAreas(o), false)
     ]);
     var streak = streakOf(ME);
     var prior = mine.filter(function (x) { return x.month < r.month && x.state !== 'Open' && x.state !== 'Closed - Not Submitted'; })[0];
@@ -1417,8 +1654,10 @@ window.ESGOneToOne = function (ctx) {
     ]);
     var tiles = h('div', { class: 'tiles', style: 'margin-top:14px' }, [
       tile('Expected outcome', [bandChip(o.projected, true)], 'Projected at appraisal'),
-      tile('Projected score', [f1(o.projected), h('small', { text: ' / 5' })], 'Trend ' + (o.slope >= 0 ? '+' : '') + o.slope.toFixed(2) + ' per month'),
-      tile('Current position', [f1(o.current), h('small', { text: ' / 5' })], 'Self ' + f1(o.selfAvg) + (' · ' + L.mgr + ' ') + f1(o.tlAvg)),
+      aud === 'tl' ? tile('Projected score', [f1(o.projected), h('small', { text: ' / 5' })], 'Trend ' + (o.slope >= 0 ? '+' : '') + o.slope.toFixed(2) + ' per month')
+        : tile('Trend', trendWord(o), o.pts.length ? 'Over ' + plural(o.pts.length, 'month') + ' so far' : 'No months yet'),
+      aud === 'tl' ? tile('Current position', [f1(o.current), h('small', { text: ' / 5' })], 'Self ' + f1(o.selfAvg) + (' · ' + L.mgr + ' ') + f1(o.tlAvg))
+        : tile('Where you are now', [bandChip(o.current, true)], 'Based on the months so far'),
       (function () {
         var s = p.set ? apStatus(p.apDate) : null;
         if (!s) { return tile('Days to appraisal', '—', 'Not set'); }
@@ -1429,8 +1668,8 @@ window.ESGOneToOne = function (ctx) {
       tile('Open actions', String(openActs.length), acts.filter(function (x) { return acOverdue(x.ac); }).length + ' overdue', acts.some(function (x) { return acOverdue(x.ac); }) ? 'bad' : '')
     ]);
     var rows = [h('div', { class: 'grid2' }, [
-      card('Rating trend', 'Monthly score on the 1–5 scale; shading shows the bands', [trendChart(tech, o, 300)]),
-      card('Expectations – where each one stands', 'Most recent rating in the period', [pairBars(o.perExp)])
+      card('Rating trend', aud === 'tl' ? 'Monthly score on the 1–5 scale; shading shows the bands' : 'Each month against the bands', [trendChart(tech, o, 300, aud !== 'tl')]),
+      card('Expectations – where each one stands', 'Most recent rating in the period', [pairBars(o.perExp, aud !== 'tl'), focusBlock(focusAreas(o), aud === 'tl')])
     ])];
     var prs = periodReviews(tech).filter(function (r) { return r.month <= CUR; });
     if (aud === 'tl') {
@@ -1472,6 +1711,11 @@ window.ESGOneToOne = function (ctx) {
       if (r.state === 'Submitted') { items.push({ pri: 1, ico: '📝', text: r.tech + ' – ' + monthLabel(r.month) + ' review is waiting for you', btn: 'Review', fn: open }); }
       else if (isOverdue(r)) { items.push({ pri: 2, ico: '⏰', text: r.tech + ' – ' + monthLabel(r.month) + ' review is overdue (not submitted)', btn: 'Open', fn: open }); }
       if (r.month === CUR && followOf(r) === DEDICATED && r.state !== 'Completed') { items.push({ pri: 1, ico: '🗓', text: r.tech + ' asked for a dedicated 1-to-1', btn: 'Open', fn: open }); }
+      if (r.ch && r.ch.state === 'Open') {
+        items.push({ pri: 1, ico: '⚑', btn: 'Open', fn: open, text: r.tech + ' challenged your ' + monthLabel(r.month) + ' feedback – talk it through' + (r.ch.tlAgreed ? ' (you have agreed; waiting for them)' : '') + ' · closes ' + fmtDate(r.ch.closeBy) });
+      } else if (r.ch && r.ch.state === 'Not agreed' && r.ch.closedOn && daysBetween(r.ch.closedOn, TODAY) <= 60) {
+        items.push({ pri: 3, ico: '⚑', btn: 'Open', fn: open, text: r.tech + '\'s challenge of the ' + monthLabel(r.month) + ' feedback closed as Not agreed – still flagged' });
+      }
     });
     actionsOf(function (ac, r) { return acOverdue(ac) && TECH_INFO[r.tech] && TECH_INFO[r.tech].active; }, 'tl').forEach(function (x) {
       items.push({ pri: 2, ico: '✅', text: 'Overdue action for ' + x.r.tech + ': ' + x.ac.text + ' (due ' + fmtDate(x.ac.due) + ')', btn: 'Actions', fn: function () { state.actFilter = 'overdue'; go('actions'); } });
@@ -1651,7 +1895,7 @@ window.ESGOneToOne = function (ctx) {
       .sort(function (x, y) { return x.month === y.month ? (x.tech < y.tech ? -1 : 1) : (x.month < y.month ? 1 : -1); });
     var rows = rs.map(function (r) {
       var f = followOf(r);
-      return tr([r.tech, monthLabel(r.month), chipFor(r),
+      return tr([r.tech, monthLabel(r.month), r.ch ? h('span', null, [chipFor(r), ' ', challengeChip(r)]) : chipFor(r),
         r.submittedOn ? fmtDate(r.submittedOn) : '—', isIn(r) && r.answers.q3 ? r.answers.q3 + ' / 5' : '—', isIn(r) && r.answers.mood ? moodEmoji(r.answers.mood) : '—',
         isIn(r) ? f1(selfAvg(r)) : '—', isIn(r) ? f1(mgrAvg(r)) : '—',
         f === DEDICATED ? h('strong', { text: '1-to-1 requested' }) : (f ? f.replace(/\.$/, '').replace(/ —.*/, '') : '—'),
@@ -1898,23 +2142,30 @@ window.ESGOneToOne = function (ctx) {
         r.snapshot.map(function (e) {
           var x = a.q8.find(function (q) { return String(q.id) === String(e.id); }) || {};
           var lbl = h('div', { class: 'small muted', style: 'margin-top:4px', text: fb.expRating[e.id] ? PROGRESS[fb.expRating[e.id] - 1].title : 'Not rated' });
-          return h('tr', null, [
-            h('td', { class: 'top', style: 'width:28%' }, [h('div', { style: 'font-weight:650', text: e.title }), h('div', { class: 'small muted', text: e.measures })]),
+          return h('tr', { class: challenged(r, 'exp:' + e.id) ? 'challenged' : null }, [
+            h('td', { class: 'top', style: 'width:28%' }, [h('div', { style: 'font-weight:650', text: e.title }), h('div', { class: 'small muted', text: e.measures }),
+              challenged(r, 'exp:' + e.id) ? h('span', { class: 'chip amber', text: '⚑ Challenged' }) : null]),
             h('td', { class: 'top', style: 'width:24%' }, has ? [h('div', { style: 'font-weight:650', text: x.rating ? x.rating + ' – ' + PROGRESS[x.rating - 1].title : 'Not rated' }), x.comment ? h('div', { class: 'small', text: x.comment }) : null] : h('span', { class: 'muted', text: '—' })),
             h('td', { class: 'top', style: 'width:200px' }, [ratingSeg(fb.expRating[e.id], function (v) { fb.expRating[e.id] = v; lbl.textContent = PROGRESS[v - 1].title; refreshSide(); }, false), lbl]),
             h('td', { class: 'top' }, textBox(null, fb.exp[e.id], function (v) { fb.exp[e.id] = v; }, false, 2))
           ]);
         })) : h('p', { class: 'muted', text: 'No expectations were set for this month.' })]),
       qCard(9, 'Follow-up', null, [ans(has ? (L.one + ' preference: ') + (a.q9 || r.mrTechFollowUp || '(not answered)') : ''), fbBox('q9', 'Your comment')]),
-      card('Agreed actions', 'Add as many as needed – each needs an owner, close-out criteria and a deadline', [actionsEditor(r)]),
-      card('Overall feedback', null, [textBox(null, fb.overall, function (v) { fb.overall = v; }, false, 3)])
+      card('Agreed actions', 'Add as many as needed – each needs an owner, close-out criteria and a deadline', [actionsEditor(r)], challenged(r, 'actions') ? 'challenged' : '',
+        challenged(r, 'actions') ? h('span', { class: 'chip amber', text: '⚑ Challenged' }) : null),
+      card('Overall feedback', null, [textBox(null, fb.overall, function (v) { fb.overall = v; }, false, 3)], challenged(r, 'overall') ? 'challenged' : '',
+        challenged(r, 'overall') ? h('span', { class: 'chip amber', text: '⚑ Challenged' }) : null)
     ];
     var canComplete = r.state === 'Submitted', canClose = r.state === 'Open' && TODAY > r.due && !r.processing;
     function incompleteActions() { return r.fb.actions.filter(function (ac) { return !ac.text.trim() || !ac.criteria.trim() || !ac.due; }).length; }
     function saveFeedback() {
       if (badDates(root)) { toast('A date isn\'t recognised – fix the highlighted date first.', true); return Promise.reject(new Error('bad date')); }
       var n = incompleteActions();
-      if (n) { toast(n + ' action' + (n === 1 ? ' is' : 's are') + ' missing the action, close-out criteria or deadline.', true); return Promise.reject(new Error('incomplete')); }
+      if (n) {
+        markActions(root, r);
+        toast(n + ' action' + (n === 1 ? ' is' : 's are') + ' missing the action, close-out criteria or deadline (marked in red).', true);
+        return Promise.reject(new Error('incomplete'));
+      }
       return busy('fb', async function () {
         await spUpdate(CONFIG.lists.mgr, r.mrId, mgrFields(r));
         await writeDates(CONFIG.lists.mgr, r.mrId, mgrDates(r));
@@ -1954,7 +2205,7 @@ window.ESGOneToOne = function (ctx) {
       r.released ? h('span', { class: 'small muted', text: 'Released – changes save only when you click Save feedback.' }) : mgrStatus
     ]);
     var head = h('div', { class: 'pagehead sticky' }, [
-      h('div', { class: 'ph-l' }, [h('h2', { text: r.tech + ' – ' + monthLabel(r.month) }), chipFor(r),
+      h('div', { class: 'ph-l' }, [h('h2', { text: r.tech + ' – ' + monthLabel(r.month) }), chipFor(r), challengeChip(r),
         h('span', { class: 'meta', text: r.submittedOn ? 'Submitted ' + fmtDate(r.submittedOn) + (r.late ? ' (late)' : '') : 'Deadline ' + fmtDate(r.due) })]), actions]);
     var side = h('div', { class: 'stack' });
     function refreshSide() {
@@ -1980,10 +2231,23 @@ window.ESGOneToOne = function (ctx) {
     }
     refreshSide();
     var banners = [];
+    var chBanner = challengeBanner(r, 'tl'); if (chBanner) { banners.push(chBanner); }
     if (followOf(r) === DEDICATED) { banners.push(h('div', { class: 'banner amber', text: 'Dedicated 1-to-1 discussion requested' })); }
     if (r.state === 'Completed' || r.state === 'Closed - Not Submitted') { banners.push(h('div', { class: 'banner info', text: ('Already released – any change you save is visible to the ' + lc(L.one) + ' straight away. Record the reason in the Manager Reviews correction log.') })); }
     return h('div', null, [head, h('div', { class: 'layout' }, [h('div', { class: 'stack' }, banners.concat(main)), h('aside', { class: 'side-sticky' }, side)])]);
   }
+  // Marks the empty parts of incomplete action rows in red (cleared as each is filled)
+  function markActions(root, r) {
+    var rows = root.querySelectorAll('.acrow');
+    r.fb.actions.forEach(function (ac, i) {
+      if (!rows[i]) { return; }
+      [['input[aria-label="Action"]', !ac.text.trim()], ['input[aria-label="Close-out criteria"]', !ac.criteria.trim()], ['input.datef', !ac.due]].forEach(function (p) {
+        var el = rows[i].querySelector(p[0]);
+        if (el) { el.classList.toggle('invalid', p[1]); if (p[1]) { el.setAttribute('aria-invalid', 'true'); } else { el.removeAttribute('aria-invalid'); } }
+      });
+    });
+  }
+  function clearInvalid(el) { el.classList.remove('invalid'); el.removeAttribute('aria-invalid'); }
   function actionsEditor(r) {
     var wrap = h('div');
     function draw() {
@@ -1991,13 +2255,13 @@ window.ESGOneToOne = function (ctx) {
       wrap.appendChild(h('div', { class: 'acgrid achead' }, ['#', 'Action', 'Owner', 'Deadline', 'Status', ''].map(function (x) { return h('span', { text: x }); })));
       if (!r.fb.actions.length) { wrap.appendChild(h('div', { class: 'muted small', style: 'padding:8px 10px', text: 'No actions yet.' })); }
       r.fb.actions.forEach(function (ac, i) {
-        var t = h('input', { type: 'text', 'aria-label': 'Action', maxlength: '300' }); t.value = ac.text; t.addEventListener('input', function () { ac.text = t.value; markDirty(); });
+        var t = h('input', { type: 'text', 'aria-label': 'Action', maxlength: '300' }); t.value = ac.text; t.addEventListener('input', function () { ac.text = t.value; if (t.value.trim()) { clearInvalid(t); } markDirty(); });
         var owners = [r.tech, L.mgr];
         if (ac.owner && owners.indexOf(ac.owner) < 0) { owners.push(ac.owner); }
         var ow = h('select', { 'aria-label': 'Owner' }, owners.map(function (v) { var o = h('option', { value: v, text: v }); o.selected = ac.owner === v; return o; }));
         ow.addEventListener('change', function () { ac.owner = ow.value; markDirty(); });
-        var cr = h('input', { type: 'text', 'aria-label': 'Close-out criteria', maxlength: '500' }); cr.value = ac.criteria; cr.addEventListener('input', function () { ac.criteria = cr.value; markDirty(); });
-        var du = dateField(ac.due, function (v) { ac.due = v; }, 'Deadline');
+        var cr = h('input', { type: 'text', 'aria-label': 'Close-out criteria', maxlength: '500' }); cr.value = ac.criteria; cr.addEventListener('input', function () { ac.criteria = cr.value; if (cr.value.trim()) { clearInvalid(cr); } markDirty(); });
+        var du = dateField(ac.due, function (v) { ac.due = v; if (v) { clearInvalid(du.querySelector('input.datef')); } }, 'Deadline');
         var st = h('select', { 'aria-label': 'Status' }, ['Open', 'Closed'].map(function (v) { var o = h('option', { value: v, text: v }); o.selected = ac.status === v; return o; }));
         st.addEventListener('change', function () { ac.status = st.value; ac.closedOn = st.value === 'Closed' ? TODAY : ''; markDirty(); });
         wrap.appendChild(h('div', { class: 'acgrid acrow' }, [h('b', { class: 'num', text: String(i + 1) }), t, ow, du, st,
@@ -2257,8 +2521,18 @@ window.ESGOneToOne = function (ctx) {
       state.wbStep = i;
       (leaving ? save('Open').then(function () { toast('Saved.'); }) : Promise.resolve()).catch(function () {}).then(draw);
     }
+    var marks = [];   // required controls on the current step: orange until answered, red after a blocked Submit
+    function mark(el, missFn) { marks.push({ el: el.input || el, miss: missFn }); return el; }
+    function applyMarks() {
+      var se = !!state.wbShowErr;
+      marks.forEach(function (m) {
+        var x = m.miss();
+        m.el.classList.toggle('need', x && !se); m.el.classList.toggle('invalid', x && se);
+        if (x && se) { m.el.setAttribute('aria-invalid', 'true'); } else { m.el.removeAttribute('aria-invalid'); }
+      });
+    }
     function draw() {
-      nav.textContent = ''; area.textContent = '';
+      nav.textContent = ''; area.textContent = ''; marks = [];
       steps.forEach(function (st2, i) {
         nav.appendChild(h('button', { type: 'button', role: 'tab', class: 'wbstep' + (i === state.wbStep ? ' on' : '') + (done(st2) && st2.k !== 'start' ? ' ok' : ''), 'aria-selected': i === state.wbStep ? 'true' : 'false',
           text: (done(st2) && st2.k !== 'start' ? '✓ ' : '') + st2.t, onclick: function () { goStep(i); } }));
@@ -2277,23 +2551,27 @@ window.ESGOneToOne = function (ctx) {
         area.appendChild(card(sec.title, sec.about, [wbHse(sec)].concat(sec.q.map(function (q, qi) {
           var a = w.answers[q[0]];
           var helpBox = h('div', { class: 'wbhelp' }, textBox('What actions or adjustments do you feel would help?', a.help, function (v) { a.help = v; }, false, 2));
-          var issueWrap = h('div', { class: 'wbcol' }, [h('span', { class: 'wblab', text: 'Is it an issue?' }), seg(WB_YNA, a.issue, function (v) { a.issue = v; helpBox.hidden = v !== 'Y'; drawNav(); }, false, true)]);
+          var issueWrap = h('div', { class: 'wbcol' }, [h('span', { class: 'wblab', text: 'Is it an issue?' }), mark(seg(WB_YNA, a.issue, function (v) { a.issue = v; helpBox.hidden = v !== 'Y'; drawNav(); }, false, true), function () { return a.app === 'Y' && !a.issue; })]);
           helpBox.hidden = a.issue !== 'Y'; issueWrap.style.visibility = a.app === 'Y' ? '' : 'hidden';   // keep the column in place
           var appSeg = seg(WB_YNA, a.app, function (v) {
             a.app = v; if (v !== 'Y') { a.issue = 'NA'; helpBox.hidden = true; } else if (a.issue === 'NA') { a.issue = ''; }
             issueWrap.style.visibility = v === 'Y' ? '' : 'hidden'; if (v === 'Y') { var ib = issueWrap.querySelector('.seg'); Array.prototype.forEach.call(ib.children, function (c) { c.setAttribute('aria-pressed', 'false'); c.setAttribute('aria-checked', 'false'); }); }
             drawNav();
           }, false, true);
+          mark(appSeg, function () { return !a.app; });
           return h('div', { class: 'wbq' }, [h('div', { class: 'wbq-t' }, [h('span', { class: 'qnum', text: String(qi + 1) }), h('span', { text: q[1] })]),
             h('div', { class: 'wbq-a' }, [h('div', { class: 'wbcol' }, [h('span', { class: 'wblab', text: 'Does this apply to you?' }), appSeg]), issueWrap]), helpBox]);
         }))));
       } else if (cur.k === 'you') {
         var p = w.personal;
-        var circBox = h('div', { class: 'stack', style: 'gap:10px;margin-top:10px' }, WB_PERSONAL.map(function (f) { return textBox(f[1], p[f[0]], function (v) { p[f[0]] = v; drawNav(); }, false, 2); }));
+        var circBox = h('div', { class: 'stack', style: 'gap:10px;margin-top:10px' }, WB_PERSONAL.map(function (f) {
+          var tb = textBox(f[1], p[f[0]], function (v) { p[f[0]] = v; drawNav(); }, false, 2);
+          return f[0] === 'circKnow' ? mark(tb, function () { return p.circ === 'Yes' && !p.circKnow.trim(); }) && tb : tb;
+        }));
         circBox.hidden = p.circ !== 'Yes';
         area.appendChild(card('My circumstances', 'Life events or ongoing situations that may affect you at work', [
           h('p', { class: 'small muted', text: 'For example a medical condition, carer duties or another situation. This can change from time to time as life events occur – marriage, divorce, a birth, a bereavement – or it may be ongoing.' }),
-          h('div', { class: 'q-head' }, [h('h3', { text: 'Do you have things that may affect you at work that may have an impact?' }), ynSeg(p.circ || null, function (v) { p.circ = v; circBox.hidden = v !== 'Yes'; drawNav(); })]), circBox]));
+          h('div', { class: 'q-head' }, [h('h3', { text: 'Do you have things that may affect you at work that may have an impact?' }), mark(ynSeg(p.circ || null, function (v) { p.circ = v; circBox.hidden = v !== 'Yes'; drawNav(); }), function () { return !p.circ; })]), circBox]));
         area.appendChild(card('My mental health and support', null, [h('div', { class: 'stack', style: 'gap:12px' }, WB_MORE.slice(0, 4).map(function (f) {
           return h('div', null, [textBox(f[0] === 'supMgr' ? 'As my ' + lc(L.mgr) + ', the best way you can support me at work is…' : f[1], p[f[0]], function (v) { p[f[0]] = v; }, false, 2), f[2] ? h('div', { class: 'small muted', style: 'margin-top:3px', text: f[2] }) : null]);
         }))]));
@@ -2309,15 +2587,27 @@ window.ESGOneToOne = function (ctx) {
         state.wbStep > 0 ? h('button', { class: 'btn', type: 'button', text: '← Back', onclick: function () { goStep(state.wbStep - 1); } }) : h('span'),
         h('div', { class: 'btn-row' }, [wbStatus, h('button', { class: 'btn', type: 'button', text: 'Save draft', onclick: function () { save('Open').then(function () { toast('Draft saved.'); }).catch(function () {}); } }),
           state.wbStep < steps.length - 1 ? h('button', { class: 'btn primary', type: 'button', text: 'Next →', onclick: function () { goStep(state.wbStep + 1); } }) : null])]));
+      drawNav();
     }
     function drawNav() {
-      Array.prototype.forEach.call(nav.children, function (b, i) { var ok = done(steps[i]) && steps[i].k !== 'start'; b.classList.toggle('ok', ok); b.textContent = (ok ? '✓ ' : '') + steps[i].t; });
+      Array.prototype.forEach.call(nav.children, function (b, i) {
+        var st2 = steps[i], ok = done(st2) && st2.k !== 'start';
+        b.classList.toggle('ok', ok); b.textContent = (ok ? '✓ ' : '') + st2.t;
+        b.classList.toggle('miss', !!state.wbShowErr && !ok && st2.k !== 'start' && st2.k !== 'finish');
+      });
+      applyMarks();
     }
     function submit() {
       var miss = wbMissing(w);
-      if (miss.length) { toast('Please answer: ' + miss.join(', '), true); return; }
+      if (miss.length) {
+        state.wbShowErr = true;
+        toast('Please answer the questions marked in red: ' + miss.join(', '), true);
+        var first = steps.findIndex(function (st2) { return st2.k !== 'start' && st2.k !== 'finish' && !done(st2); });
+        if (first >= 0) { goStep(first); }
+        return;
+      }
       confirmBox('Submit your wellbeing assessment?', 'Your ' + lc(L.mgr) + ' will be told it is ready and will go through it with you. You can\'t change it afterwards.', 'Submit', function () {
-        save('Submitted').then(function () { w.rawStatus = 'Submitted'; state.wbStep = 0; toast('Submitted – thank you.'); render(false); }).catch(function () {});
+        save('Submitted').then(function () { w.rawStatus = 'Submitted'; state.wbStep = 0; state.wbShowErr = false; toast('Submitted – thank you.'); render(false); }).catch(function () {});
       });
     }
     draw();
@@ -2655,6 +2945,8 @@ window.ESGOneToOne = function (ctx) {
     var subs = prs.filter(isIn), ot = onTimeOf(tech);
     var acts = actionsOf(function (ac, r) { return r.tech === tech; }, aud);
     var sorted = o.perExp.filter(function (x) { return x.latest; }).slice().sort(function (x, y) { return y.latest - x.latest; });
+    var words = aud !== 'tl', fa = focusAreas(o);
+    function rl(v) { return words ? PROGRESS[v - 1].title : v + ' – ' + PROGRESS[v - 1].title; }
     function rsec(title, children) { return h('section', { class: 'rsec' }, [h('h2', { text: title })].concat(children)); }
     function rtable(headers, rows, empty) {
       return h('table', { class: 'rt' }, [h('thead', null, h('tr', null, headers.map(function (x) { return h('th', { text: x }); }))),
@@ -2674,27 +2966,27 @@ window.ESGOneToOne = function (ctx) {
       ]),
       rsec('1. Summary', [
         h('div', { class: 'rsum' }, [
-          h('div', null, [h('span', { text: 'Expected outcome' }), bandChip(o.projected, true)]),
+          h('div', null, [h('span', { text: 'Expected outcome' }), bandChip(o.projected, true)])
+        ].concat(words ? [
+          h('div', null, [h('span', { text: 'Where you are now' }), bandChip(o.current)]),
+          h('div', null, [h('span', { text: 'Trend' }), h('b', { text: trendWord(o) })])
+        ] : [
           h('div', null, [h('span', { text: 'Projected at appraisal' }), h('b', { text: f1(o.projected) + ' / 5' })]),
           h('div', null, [h('span', { text: 'Current position' }), h('b', { text: f1(o.current) + ' / 5' })]),
           h('div', null, [h('span', { text: ('Self vs ' + L.mgr) }), h('b', { text: f1(o.selfAvg) + ' vs ' + f1(o.tlAvg) })])
-        ]),
+        ])),
         h('div', { class: 'fgrid c2', style: 'margin-top:12px' }, [
-          h('div', null, [h('h3', { text: 'Strongest areas' }), h('ul', null, sorted.slice(0, Math.min(2, Math.ceil(sorted.length / 2))).map(function (x) { return h('li', { text: x.e.title + ' (' + x.latest + ' – ' + PROGRESS[x.latest - 1].title + ')' }); }))]),
-          h('div', null, [h('h3', { text: 'Areas to focus on' }), (function () {
-            var focus = sorted.slice(Math.min(2, Math.ceil(sorted.length / 2))).filter(function (x) { return x.latest <= 3; }).slice(-2).reverse();
-            return h('ul', null, focus.length ? focus.map(function (x) { return h('li', { text: x.e.title + ' (' + x.latest + ' – ' + PROGRESS[x.latest - 1].title + ')' }); })
-              : [h('li', { class: 'muted', text: 'Nothing rated below "On track".' })]);
-          })()])
+          h('div', null, [h('h3', { text: 'Strongest areas' }), h('ul', null, sorted.slice(0, Math.min(2, Math.ceil(sorted.length / 2))).map(function (x) { return h('li', { text: x.e.title + ' (' + rl(x.latest) + ')' }); }))]),
+          h('div', null, [h('h3', { text: 'Areas to focus on' }), focusBlock(fa, !words) || h('p', { class: 'muted', text: 'Not enough ratings yet.' })])
         ]),
-        h('h3', { text: 'Rating trend' }), trendChart(tech, o, 210)
+        h('h3', { text: 'Rating trend' }), trendChart(tech, o, 210, words)
       ]),
       rsec('2. Appraisal expectations', o.perExp.length ? o.perExp.map(function (x) {
         return h('div', null, [
-          h('div', { class: 'exphead' }, [h('h3', { text: x.e.title }), h('span', { class: 'small', text: 'Latest: self ' + (x.latestSelf || '—') + (' · ' + L.mgr + ' ') + (x.latestTl || '—') })]),
+          h('div', { class: 'exphead' }, [h('h3', { text: x.e.title }), h('span', { class: 'small', text: 'Latest: self ' + (x.latestSelf ? (words ? PROGRESS[x.latestSelf - 1].title : x.latestSelf) : '—') + (' · ' + L.mgr + ' ') + (x.latestTl ? (words ? PROGRESS[x.latestTl - 1].title : x.latestTl) : '—') })]),
           h('div', { class: 'small muted', text: 'Measure: ' + x.e.measures }),
           rtable(['Month', 'Self', L.mgr, (L.one + ' evidence'), (L.mgr + ' feedback')], x.hist.map(function (hh) {
-            return [monthShort(hh.month), hh.self ? String(hh.self) : '', hh.tl ? String(hh.tl) : '', hh.comment, hh.fb];
+            return [monthShort(hh.month), hh.self ? (words ? PROGRESS[hh.self - 1].title : String(hh.self)) : '', hh.tl ? (words ? PROGRESS[hh.tl - 1].title : String(hh.tl)) : '', hh.comment, hh.fb];
           }))
         ]);
       }) : [h('p', { class: 'muted', text: 'No expectations.' })]),
@@ -2704,7 +2996,10 @@ window.ESGOneToOne = function (ctx) {
       rsec('6. Agreed actions', [rtable(['Raised', 'Action', 'Owner', 'Close-out criteria', 'Deadline', 'Status'], acts.map(function (x) {
         return [monthShort(x.r.month) + ' ' + x.r.month.slice(2, 4), x.ac.text, x.ac.owner, x.ac.criteria, fmtDate(x.ac.due), x.ac.status === 'Closed' ? 'Closed ' + fmtDate(x.ac.closedOn) : (acOverdue(x.ac) ? 'Open – overdue' : 'Open')];
       }))]),
-      rsec('7. ' + L.mgr + ' feedback', [rtable(['Month', 'Overall feedback'], prs.filter(function (r) { return r.state === 'Completed' && canSeeTl(r, aud) && r.fb.overall; }).map(function (r) { return [monthLabel(r.month), r.fb.overall]; }))]),
+      rsec('7. ' + L.mgr + ' feedback', [rtable(['Month', 'Overall feedback'], prs.filter(function (r) { return r.state === 'Completed' && canSeeTl(r, aud) && r.fb.overall; }).map(function (r) { return [monthLabel(r.month), r.fb.overall]; }))]
+        .concat(prs.some(function (r) { return r.ch && canSeeTl(r, aud); }) ? [h('h3', { text: 'Challenges' }), rtable(['Month', 'Parts challenged', 'Outcome'], prs.filter(function (r) { return r.ch && canSeeTl(r, aud); }).map(function (r) {
+          return [monthLabel(r.month), r.ch.sections.map(function (x) { return sectionName(r, x.key); }).join('; '), r.ch.state === 'Open' ? 'Open' : r.ch.state + (r.ch.closedOn ? ' (' + fmtDate(r.ch.closedOn) + ')' : '')];
+        }))] : [])),
       rsec('8. Submission record', [rtable(['Month', 'Status', 'Submitted'], prs.map(function (r) {
         return [monthLabel(r.month), r.state === 'Closed - Not Submitted' ? 'Not submitted' : r.state === 'Open' ? (isOverdue(r) ? 'Overdue' : 'In progress') : (r.late ? 'Submitted late' : 'Submitted'), r.submittedOn ? fmtDate(r.submittedOn) : ''];
       }))]),
@@ -2718,6 +3013,7 @@ window.ESGOneToOne = function (ctx) {
     '.small{font-size:12px}.muted{color:#5b6774}',
     '.rmeta{display:grid;grid-template-columns:repeat(3,1fr);gap:8px 20px;margin-top:12px;padding:12px 14px;background:#f6f8fa;border-radius:6px}',
     '.rmeta span,.rsum > div > span:first-child{display:block;font-size:11px;color:#5b6774;text-transform:uppercase;letter-spacing:.04em}',
+    '.focus{border-left:3px solid #ef7d3a;background:#fdf0e7;padding:8px 11px;border-radius:0 6px 6px 0}.focus ul{margin:6px 0 0 18px;padding:0}.focus .band{font-size:11px}',
     '.rsum{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.rsum > div{border:1px solid #d9dfe5;border-radius:6px;padding:9px 11px}.rsum b{font-size:18px}',
     '.fgrid{display:grid;gap:12px}.fgrid.c2{grid-template-columns:1fr 1fr}',
     'table.rt{width:100%;border-collapse:collapse;margin-top:4px}table.rt th{text-align:left;font-size:11px;color:#5b6774;padding:5px 7px;border-bottom:1px solid #d9dfe5;background:#f6f8fa}table.rt td{padding:5px 7px;border-bottom:1px solid #edf0f3;vertical-align:top}',
@@ -3036,6 +3332,7 @@ window.ESGOneToOne = function (ctx) {
       window.removeEventListener('beforeunload', onBeforeUnload);
     },
     // exposed for the local test harness only (no data, no side effects)
-    _version: VERSION
+    _version: VERSION,
+    _focusAreas: function (o) { return focusAreas(o); }
   };
 };

@@ -697,6 +697,71 @@
                   "indexed": false,
                   "unique": false,
                   "xml": "<Field Type='Note' Name='CorrectionLog' StaticName='CorrectionLog' DisplayName='CorrectionLog' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "ChallengeState",
+                  "kind": "choice",
+                  "indexed": true,
+                  "unique": false,
+                  "choices": [
+                    "Open",
+                    "Agreed",
+                    "Not agreed"
+                  ],
+                  "default": null,
+                  "xml": "<Field Type='Choice' Name='ChallengeState' StaticName='ChallengeState' DisplayName='ChallengeState' Required='FALSE' Indexed='TRUE' Format='Dropdown' FillInChoice='FALSE'><CHOICES><CHOICE>Open</CHOICE><CHOICE>Agreed</CHOICE><CHOICE>Not agreed</CHOICE></CHOICES></Field>"
+                },
+                {
+                  "name": "ChallengeSectionsJson",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='ChallengeSectionsJson' StaticName='ChallengeSectionsJson' DisplayName='ChallengeSectionsJson' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "ChallengeItemId",
+                  "kind": "num",
+                  "indexed": false,
+                  "unique": false,
+                  "min": null,
+                  "max": null,
+                  "default": null,
+                  "xml": "<Field Type='Number' Name='ChallengeItemId' StaticName='ChallengeItemId' DisplayName='ChallengeItemId' Required='FALSE' Decimals='0'></Field>"
+                },
+                {
+                  "name": "ChallengeOpenedOn",
+                  "kind": "datetime",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='DateTime' Name='ChallengeOpenedOn' StaticName='ChallengeOpenedOn' DisplayName='ChallengeOpenedOn' Required='FALSE' Format='DateTime' FriendlyDisplayFormat='Disabled' />"
+                },
+                {
+                  "name": "ChallengeCloseBy",
+                  "kind": "date",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='DateTime' Name='ChallengeCloseBy' StaticName='ChallengeCloseBy' DisplayName='ChallengeCloseBy' Required='FALSE' Format='DateOnly' FriendlyDisplayFormat='Disabled' />"
+                },
+                {
+                  "name": "ChallengeTlAgreedOn",
+                  "kind": "datetime",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='DateTime' Name='ChallengeTlAgreedOn' StaticName='ChallengeTlAgreedOn' DisplayName='ChallengeTlAgreedOn' Required='FALSE' Format='DateTime' FriendlyDisplayFormat='Disabled' />"
+                },
+                {
+                  "name": "ChallengeTechAgreedOn",
+                  "kind": "datetime",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='DateTime' Name='ChallengeTechAgreedOn' StaticName='ChallengeTechAgreedOn' DisplayName='ChallengeTechAgreedOn' Required='FALSE' Format='DateTime' FriendlyDisplayFormat='Disabled' />"
+                },
+                {
+                  "name": "ChallengeClosedOn",
+                  "kind": "datetime",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='DateTime' Name='ChallengeClosedOn' StaticName='ChallengeClosedOn' DisplayName='ChallengeClosedOn' Required='FALSE' Format='DateTime' FriendlyDisplayFormat='Disabled' />"
                 }
               ],
               "views": [
@@ -904,6 +969,71 @@
                   "indexed": false,
                   "unique": false,
                   "xml": "<Field Type='DateTime' Name='SentOn' StaticName='SentOn' DisplayName='SentOn' Required='FALSE' Format='DateTime' FriendlyDisplayFormat='Disabled' />"
+                }
+              ],
+              "views": []
+            },
+            {
+              "key": "challenges",
+              "url": "OneToOneChallenges",
+              "title": "1-to-1 Challenges",
+              "groupRead": false,
+              "groupContribute": true,
+              "readSecurity": 2,
+              "writeSecurity": 2,
+              "description": "ESG 1-to-1: challenges of released feedback. Each person sees only their own; Flow 7 records the trusted state on the Manager Review.",
+              "fields": [
+                {
+                  "name": "ManagerReviewId",
+                  "kind": "num",
+                  "indexed": true,
+                  "unique": false,
+                  "min": null,
+                  "max": null,
+                  "default": null,
+                  "xml": "<Field Type='Number' Name='ManagerReviewId' StaticName='ManagerReviewId' DisplayName='ManagerReviewId' Required='FALSE' Decimals='0' Indexed='TRUE'></Field>"
+                },
+                {
+                  "name": "MonthKey",
+                  "kind": "text",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Text' Name='MonthKey' StaticName='MonthKey' DisplayName='MonthKey' Required='FALSE' MaxLength='255' />"
+                },
+                {
+                  "name": "SectionsJson",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='SectionsJson' StaticName='SectionsJson' DisplayName='SectionsJson' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                },
+                {
+                  "name": "TechAgreedOn",
+                  "kind": "datetime",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='DateTime' Name='TechAgreedOn' StaticName='TechAgreedOn' DisplayName='TechAgreedOn' Required='FALSE' Format='DateTime' FriendlyDisplayFormat='Disabled' />"
+                },
+                {
+                  "name": "TlPing",
+                  "kind": "datetime",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='DateTime' Name='TlPing' StaticName='TlPing' DisplayName='TlPing' Required='FALSE' Format='DateTime' FriendlyDisplayFormat='Disabled' />"
+                },
+                {
+                  "name": "ChallengeStatus",
+                  "kind": "choice",
+                  "indexed": false,
+                  "unique": false,
+                  "choices": [
+                    "Open",
+                    "Agreed",
+                    "Not agreed",
+                    "Rejected"
+                  ],
+                  "default": "Open",
+                  "xml": "<Field Type='Choice' Name='ChallengeStatus' StaticName='ChallengeStatus' DisplayName='ChallengeStatus' Required='FALSE' Format='Dropdown' FillInChoice='FALSE'><Default>Open</Default><CHOICES><CHOICE>Open</CHOICE><CHOICE>Agreed</CHOICE><CHOICE>Not agreed</CHOICE><CHOICE>Rejected</CHOICE></CHOICES></Field>"
                 }
               ],
               "views": []

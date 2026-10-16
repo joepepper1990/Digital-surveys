@@ -135,7 +135,7 @@ async function main() {
   await page.locator('.q-head .seg button:has-text("No")').nth(2).click();
   var segs = page.locator('td .seg');
   var nSeg = await segs.count();
-  for (var i = 0; i < nSeg; i++) { await segs.nth(i).locator('button:has-text("3")').click(); }
+  for (var i = 0; i < nSeg; i++) { await segs.nth(i).locator('button:has-text("On track")').click(); }
   await page.locator('label.choice:has-text("Quick, informal catch-up")').click();
   await page.locator('.pagehead button:has-text("Submit")').click();
   await page.locator('.modal button:has-text("Submit")').click();
@@ -186,7 +186,7 @@ async function main() {
   errs = await open(page, { as: 'alex', reviewId: String(alexCur.ID) });
   var t7 = await page.locator('[data-oto-root]').innerText();
   ok('Test A: sees released overall feedback and the action', t7.indexOf('Strong month – well done.') >= 0 && t7.indexOf('Book RPS course') >= 0 && t7.indexOf(fmt(due)) >= 0, errs.join('|'));
-  ok('Test A: sees Team Leader ratings per expectation', (await page.locator('td:has-text("4 – Strong progress")').count()) > 0);
+  ok('Test A: sees Team Leader ratings per expectation, in words only', (await page.locator('td:has-text("Strong progress")').count()) > 0 && (await page.locator('td:has-text("4 – Strong progress")').count()) === 0);
 
   // ---------------------------------------------------------------- 8. Test B cannot see Test A's released records
   await open(page, { as: 'sam' });
@@ -270,7 +270,7 @@ async function main() {
   await page.evaluate(function (a) {   // what a technician could do to their own open review through REST
     var rv = OTO_MOCK.current.db.lists['Monthly Reviews'].find(function (r) { return r.ID === a.id; });
     rv.MonthKey = '2099-01'; rv.DueDate = '2099-12-31T23:59:59Z'; rv.Technician = a.other;
-    sessionStorage.setItem('oto-mock-db-v6', JSON.stringify(OTO_MOCK.current.db));
+    sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(OTO_MOCK.current.db));
   }, { id: target.ID, other: samClaims });
   errs = await open(page, { as: 'tl' });
   var rowT = await page.locator('.nw tr:has-text("' + tName + '")').innerText();
@@ -279,7 +279,7 @@ async function main() {
   await page.evaluate(function (a) {   // technician has submitted; Flow 2 has not run yet (5-minute polling window)
     var rv = OTO_MOCK.current.db.lists['Monthly Reviews'].find(function (r) { return r.ID === a.id; });
     rv.ReviewStatus = 'Submitted';
-    sessionStorage.setItem('oto-mock-db-v6', JSON.stringify(OTO_MOCK.current.db));
+    sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(OTO_MOCK.current.db));
   }, { id: target.ID });
   errs = await open(page, { as: 'tl' });
   ok('Status: a submission waiting for Flow 2 shows "Submitted – processing", not "Not started"',
@@ -370,7 +370,7 @@ async function main() {
   var L3 = await layoutAt(1440, 900);
   await L3.pg.evaluate(function () {
     var d = OTO_MOCK.current.db; d.lists['Technicians'] = []; d.lists['Monthly Reviews'] = []; d.lists['Manager Reviews'] = [];
-    sessionStorage.setItem('oto-mock-db-v6', JSON.stringify(d));
+    sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(d));
   });
   await open(L3.pg, { as: 'tl' });
   var m3 = await L3.pg.evaluate(function () { var r = document.querySelector('[data-oto-root]'); return { h: r.getBoundingClientRect().height, vh: window.innerHeight, txt: r.innerText }; });
@@ -527,7 +527,7 @@ async function main() {
   ok('Appraisal: dates further out are not flagged yet', tA.indexOf('Aim to complete Alex Morgan') < 0);
   await P.evaluate(function (iso) {
     var d = OTO_MOCK.current.db; d.lists['Technicians'].find(function (t) { return t.Title === 'Alex Morgan'; }).AppraisalDate = iso + 'T12:00:00Z';
-    sessionStorage.setItem('oto-mock-db-v6', JSON.stringify(d));
+    sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(d));
   }, futureIso(-10));
   await o15({ as: 'tl' });
   var tO = await P.locator('[data-oto-root]').innerText();
@@ -644,7 +644,7 @@ async function main() {
   var R = await c18.newPage(), dlg18 = [];
   R.on('dialog', function (d) { dlg18.push(d.message()); d.accept(); });
   async function save18(fn, arg) {
-    await R.evaluate(function (a) { var d = OTO_MOCK.current.db; (new Function('d', 'arg', a.body))(d, a.arg); sessionStorage.setItem('oto-mock-db-v6', JSON.stringify(d)); }, { body: fn, arg: arg });
+    await R.evaluate(function (a) { var d = OTO_MOCK.current.db; (new Function('d', 'arg', a.body))(d, a.arg); sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(d)); }, { body: fn, arg: arg });
   }
   await open(R, { as: 'tl' }); await R.evaluate(function () { OTO_MOCK.reset(); });
   await open(R, { as: 'tl' });
@@ -690,7 +690,7 @@ async function main() {
     var rv = d.lists['Monthly Reviews'].find(function (x) { return x.Technician.indexOf('jordan.') >= 0 && x.MonthKey === pm; });
     var mr = d.lists['Manager Reviews'].find(function (x) { return x.ReviewItemId === rv.ID; });
     rv.ReviewStatus = 'Submitted'; mr.ReviewState = 'Open'; mr.ReleasedOn = null; mr.SubmittedOn = null;
-    sessionStorage.setItem('oto-mock-db-v6', JSON.stringify(d)); return rv.ID; });
+    sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(d)); return rv.ID; });
   await open(R, { as: 'tl', reviewId: String(prev18) });
   ok('Close – not submitted is disabled while the submission is being processed', await R.locator('button:has-text("Close – not submitted")').isDisabled());
   // toasts survive the redraw that follows a save
@@ -747,7 +747,7 @@ async function main() {
     !d19.perms['1-to-1 Feedback'][fb19.ID] && (await api(B, 'GET', "/_api/web/lists/getbytitle('1-to-1 Feedback')/items")).json.value.length === 0);
   ok('Feedback: sending does not touch the unsaved form', (await B.locator('textarea').first().inputValue()) === q1v + ' (still typing)');
   // email fails → the TL sees it in Needs your attention and can read it
-  await B.evaluate(function () { var d = OTO_MOCK.current.db; d.fbFail = true; sessionStorage.setItem('oto-mock-db-v6', JSON.stringify(d)); });
+  await B.evaluate(function () { var d = OTO_MOCK.current.db; d.fbFail = true; sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(d)); });
   await open(B, { as: 'sam' });
   await B.locator('.fbk-bubble').click(); await B.locator('.fbk-types button:has-text("Suggestion")').click();
   await B.locator('#oto-fbk-text').fill('Could the report include last year too?'); await B.locator('.fbk-panel button:has-text("Send")').click(); await B.waitForTimeout(250);
@@ -763,7 +763,7 @@ async function main() {
   ok('Feedback: Mark as read removes it from the list and records Read', !/Feedback from Sam Patel/.test(await B.locator('[data-oto-root]').innerText()) &&
     d19b.lists['1-to-1 Feedback'].find(function (x) { return x.Message.indexOf('last year') >= 0; }).DeliveryStatus === 'Read');
   // a site where the Feedback list doesn't exist yet (solution not upgraded): a clear message, the text is kept
-  await B.evaluate(function () { var d = OTO_MOCK.current.db; delete d.lists['1-to-1 Feedback']; sessionStorage.setItem('oto-mock-db-v6', JSON.stringify(d)); });
+  await B.evaluate(function () { var d = OTO_MOCK.current.db; delete d.lists['1-to-1 Feedback']; sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(d)); });
   var e19c = await open(B, { as: 'tl' });
   ok('Feedback: the TL page still loads without the Feedback list', !e19c.length && (await B.locator('.attn-card').count()) === 1);
   await open(B, { as: 'jordan' });
@@ -817,7 +817,7 @@ async function main() {
   ok('Shorter form: a question answered No folds to one line', (await q4c.getAttribute('class')).indexOf('compact') >= 0);
   await q4c.locator('button:has-text("Yes")').click();
   ok('Shorter form: changing it to Yes opens it again', (await q4c.getAttribute('class')).indexOf('compact') < 0 && await q4c.locator('textarea').isVisible());
-  await S.evaluate(function (id) { var d = OTO_MOCK.current.db; d.lists['Monthly Reviews'].find(function (x) { return x.ID === id; }).Q2Issue = 'Van tyre slow puncture'; sessionStorage.setItem('oto-mock-db-v6', JSON.stringify(d)); }, cur20.ID);
+  await S.evaluate(function (id) { var d = OTO_MOCK.current.db; d.lists['Monthly Reviews'].find(function (x) { return x.ID === id; }).Q2Issue = 'Van tyre slow puncture'; sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(d)); }, cur20.ID);
   await open(S, { as: 'alex' });
   ok('Shorter form: Q2 with text is open on load', (await S.locator('section.card:has-text("Challenges, blockers") textarea').first().inputValue()) === 'Van tyre slow puncture' &&
     await S.locator('section.card:has-text("Challenges, blockers") textarea').first().isVisible());
@@ -835,7 +835,7 @@ async function main() {
     var d = OTO_MOCK.current.db, rv = d.lists['Monthly Reviews'].filter(function (x) { return x.Technician.indexOf('alex.') >= 0 && x.ID !== id; }).sort(function (x, y) { return x.MonthKey < y.MonthKey ? 1 : -1; })[0];
     rv.Q5PlanningRaise = 'Yes'; rv.Q5PlanningDetail = 'Leave in December';
     var mr = d.lists['Manager Reviews'].find(function (m) { return m.ReviewItemId === rv.ID; }); mr.FB_Q5 = 'UNRELEASED-REPLY'; mr.ReleasedOn = null; mr.ReviewState = 'Submitted';
-    sessionStorage.setItem('oto-mock-db-v6', JSON.stringify(d));
+    sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(d));
   }, cur20.ID);
   await open(S, { as: 'alex' });
   var since2 = await S.locator('.since').innerText();
@@ -870,7 +870,7 @@ async function main() {
   var Q = await c21.newPage();
   Q.on('dialog', function (d) { d.accept(); });
   async function db21() { return Q.evaluate(function () { return JSON.parse(JSON.stringify(OTO_MOCK.current.db)); }); }
-  async function put21(body) { await Q.evaluate(function (b) { var d = OTO_MOCK.current.db; (new Function('d', b))(d); sessionStorage.setItem('oto-mock-db-v6', JSON.stringify(d)); }, body); }
+  async function put21(body) { await Q.evaluate(function (b) { var d = OTO_MOCK.current.db; (new Function('d', b))(d); sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(d)); }, body); }
   await open(Q, { as: 'alex' }); await Q.evaluate(function () { OTO_MOCK.reset(); });
   await open(Q, { as: 'alex' });
   // details of a question switched to No and back to Yes are kept and saved
@@ -958,7 +958,7 @@ async function main() {
     var d = OTO_MOCK.current.db, x = OTO_MOCK.X.join(' ');
     d.lists['1-to-1 Feedback'].push({ ID: 900, Title: x.slice(0, 60), FeedbackType: 'Fault', Message: x, PageName: x, AppVersion: x, DeliveryStatus: 'Failed', HasUniqueRoleAssignments: true,
       Created: new Date().toISOString(), Author: 'i:0#.f|membership|riley.evans@example.test' });
-    sessionStorage.setItem('oto-mock-db-v6', JSON.stringify(d));
+    sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(d));
   });
   await sweep('TL reading hostile feedback', { as: 'tl', xss: '1' }, async function () { await page.locator('.attn-row:has-text("Feedback from") button').first().click(); });
   await sweep('Since last time with hostile earlier answers', { as: 'alex', xss: '1' }, async function () {
@@ -967,6 +967,215 @@ async function main() {
   });
   await sweep('Feedback panel with hostile text', { as: 'alex', xss: '1' }, async function () {
     await page.locator('.fbk-bubble').click(); await page.locator('#oto-fbk-text').fill(await page.evaluate(function () { return OTO_MOCK.X.join(' '); }));
+  });
+
+  // ---------------------------------------------------------------- 22. v4.5: clearer forms, words not numbers, focus areas
+  var c22 = await browser.newContext({ viewport: { width: 1366, height: 900 } });
+  var F = await c22.newPage();
+  F.on('dialog', function (d) { d.accept(); });
+  await open(F, { as: 'alex' }); await F.evaluate(function () { OTO_MOCK.reset(); });
+  await open(F, { as: 'alex' });
+  var q1card = F.locator('section.card:has-text("What has gone well")');
+  await q1card.locator('textarea').fill('');
+  await F.waitForTimeout(100);
+  var nNeed = await F.locator('.need').count();
+  ok('Forms: unanswered required questions have a subtle orange border before Submit', nNeed > 0 && (await F.locator('.invalid').count()) === 0 &&
+    (await q1card.locator('textarea.need').count()) === 1, String(nNeed));
+  ok('Forms: optional questions are never marked', (await F.locator('section.card:has-text("feedback for your line manager") .need').count()) === 0 &&
+    (await F.locator('.side-tile .need').count()) === 0);
+  await F.locator('.pagehead button:has-text("Submit")').click();
+  await F.waitForTimeout(500);
+  ok('Forms: Submit with something missing turns those questions red (no Submit dialog)', (await F.locator('.invalid').count()) === nNeed && (await F.locator('.need').count()) === 0 &&
+    (await F.locator('.modal').count()) === 0 && (await F.locator('[aria-invalid="true"]').count()) === nNeed);
+  ok('Forms: the first missing question gets the focus', await F.evaluate(function () { var a = document.activeElement; return !!a && !!a.closest('.invalid, textarea.invalid') || (a && a.classList.contains('invalid')); }));
+  await q1card.locator('textarea').fill('Filled in now');
+  await F.waitForTimeout(100);
+  ok('Forms: the red clears as soon as that question is answered', (await q1card.locator('.invalid').count()) === 0 && (await F.locator('.invalid').count()) === nNeed - 1);
+  ok('Forms: rating buttons are words for the technician (no 1–5)', (await F.locator('td .seg.words button:has-text("On track")').count()) > 0 &&
+    (await F.locator('td .seg button').evaluateAll(function (bs) { return bs.filter(function (b) { return /^\s*[1-5]\s*$/.test(b.textContent); }).length; })) === 0);
+  // TL: blocked save marks the empty parts of the action row
+  await open(F, { as: 'tl', reviewId: String((await db(F)).lists['Monthly Reviews'].find(function (x) { return x.Technician.indexOf('sam.') >= 0 && x.MonthKey === curMonth(); }).ID) });
+  await F.locator('button:has-text("+ Add action")').click();
+  await F.locator('.acrow').last().locator('input[aria-label="Action"]').fill('Half-written action');
+  await F.locator('button:has-text("Save feedback")').first().click();
+  await F.waitForTimeout(300);
+  ok('Forms: TL – an incomplete action row has its empty parts marked red', (await F.locator('.acrow').last().locator('input.invalid').count()) === 2 &&
+    (await F.locator('.acrow').last().locator('input[aria-label="Action"].invalid').count()) === 0);
+  await F.locator('.acrow').last().locator('input[aria-label="Close-out criteria"]').fill('Done when booked');
+  ok('Forms: TL – the red clears as each part is filled', (await F.locator('.acrow').last().locator('input.invalid').count()) === 1);
+  // wellbeing: a blocked Submit jumps to the first unanswered step and marks it
+  await F.evaluate(function () { OTO_MOCK.reset(); });
+  await open(F, { as: 'alex' });
+  if (await F.locator('.topbar >> text=Wellbeing').count()) {
+    await F.locator('.topbar >> text=Wellbeing').click(); await F.waitForTimeout(200);
+    await F.locator('button:has-text("Continue")').click(); await F.waitForTimeout(200);
+    var wbSubmit = F.locator('.wbstep:has-text("Finish")');
+    if (await wbSubmit.count()) {
+      await wbSubmit.click(); await F.waitForTimeout(200);
+      await F.locator('button:has-text("Submit to my")').click(); await F.waitForTimeout(400);
+      ok('Forms: wellbeing – Submit with gaps jumps to the first unanswered area and marks it red', (await F.locator('.wbstep.on').innerText()).indexOf('Finish') < 0 &&
+        (await F.locator('.seg.invalid').count()) > 0 && (await F.locator('.wbstep.miss').count()) > 0 && (await F.locator('.modal').count()) === 0);
+    } else { ok('Forms: wellbeing – Submit with gaps jumps to the first unanswered area and marks it red', false, 'no open wellbeing form for alex'); }
+  } else { ok('Forms: wellbeing – Submit with gaps jumps to the first unanswered area and marks it red', false, 'no Wellbeing tab'); }
+
+  // no rating numbers anywhere a technician looks
+  var NUM_RE = /\b\d\.\d\b|\/\s?5\b|\b[1-5] – (Not started|Early progress|On track|Strong progress|Fully met)|[+-]\d\.\d\d per month/;
+  async function techText(Pg) { return (await Pg.locator('[data-oto-root]').innerText()).replace(/v\d+\.\d+\.\d+/g, ''); }
+  async function hoverTips(Pg, sel) {
+    var out = [], els = Pg.locator(sel), n = Math.min(await els.count(), 40);
+    for (var i = 0; i < n; i++) { try { await els.nth(i).hover({ force: true, timeout: 1500 }); out.push(await Pg.locator('.tip').innerText()); } catch (_) { /* hidden */ } }
+    return out.join('\n');
+  }
+  await open(F, { as: 'jordan' });
+  var tf = await techText(F);
+  ok('Words not numbers: technician form and side panel show no scores', !NUM_RE.test(tf), (tf.match(NUM_RE) || [''])[0]);
+  ok('Words not numbers: the outlook tile shows the band, a trend word and what to focus on', (await F.locator('.side-tile:has-text("Appraisal outlook") .band').count()) > 0 &&
+    /Improving|Steady|Dipping|Too early/.test(await F.locator('.side-tile:has-text("Appraisal outlook")').innerText()) &&
+    (await F.locator('.side-tile:has-text("Appraisal outlook") .focus').count()) === 1);
+  await F.locator('.topbar >> text=My appraisal').click(); await F.waitForTimeout(200);
+  var tp = await techText(F);
+  var tips = await hoverTips(F, 'svg.chart circle[fill="transparent"], .pairbars .bar');
+  ok('Words not numbers: My appraisal (tiles, chart axis, bars, tooltips) shows no scores', !NUM_RE.test(tp) && !NUM_RE.test(tips) && tips.length > 0,
+    (tp.match(NUM_RE) || tips.match(NUM_RE) || [''])[0]);
+  ok('Words not numbers: the chart is labelled with the band names', /Exceeded/.test(await F.locator('svg.chart').first().textContent()));
+  await F.locator('button:has-text("Generate appraisal report")').click(); await F.waitForTimeout(200);
+  var tr = (await F.locator('.report-doc').innerText()).replace(/v\d+\.\d+\.\d+/g, '');
+  ok('Words not numbers: the technician\'s appraisal report shows no scores', !NUM_RE.test(tr), (tr.match(NUM_RE) || [''])[0]);
+  ok('Focus areas: the report lists up to 3 expectations to focus on', (await F.locator('.report-doc .focus li').count()) >= 1 && (await F.locator('.report-doc .focus li').count()) <= 3);
+  await open(F, { as: 'tl' }); await openTeam(F, 'Jordan Lee');
+  ok('Words not numbers: the Team Leader still sees the numbers', /\d\.\d/.test(await F.locator('.tiles').innerText()) && /\(average \d\.\d\)/.test(await F.locator('[data-oto-root]').innerText()));
+  // focus maths: the 3 lowest averages, next band, and the top band
+  var fm = await F.evaluate(function () {
+    var fa = window.ESGOneToOne()._focusAreas;
+    function ex(id, t, hist) { return { e: { id: id, title: t }, hist: hist.map(function (v) { return { self: v[0], tl: v[1] }; }) }; }
+    var perExp = [ex(1, 'A', [[4, 4], [5, null]]), ex(2, 'B', [[2, 2], [3, 2]]), ex(3, 'C', [[3, null]]), ex(4, 'D', [[2, 1], [2, 2]]), ex(5, 'E', [[null, null]]), ex(6, 'F', [[3, 3], [4, 4]])];
+    var r1 = fa({ band: { name: 'Partially met', cls: 'b1' }, perExp: perExp });
+    var r2 = fa({ band: { name: 'Exceeded', cls: 'b3' }, perExp: perExp });
+    var r3 = fa({ band: null, perExp: perExp });
+    var names = r1 ? r1.items.map(function (x) { return x.e.title; }).join('') : '';
+    return { names: names, next: r1 && r1.next ? r1.next.name : null, top: r2 ? r2.next : 'x', none: r3,
+      ok: names === 'DBC' && r1.next.name === 'Met' && r2 && r2.next === null && r3 === null };
+  });
+  ok('Focus areas: picks the 3 lowest averages and the next band up; top band says keep it up', !!fm && fm.ok, JSON.stringify(fm));
+  await c22.close();
+
+  // ---------------------------------------------------------------- 23. v4.5: challenging released feedback
+  var c23 = await browser.newContext({ viewport: { width: 1366, height: 900 } });
+  var C = await c23.newPage();
+  C.on('dialog', function (d) { d.accept(); });
+  await open(C, { as: 'tl' }); await C.evaluate(function () { OTO_MOCK.reset(); });
+  async function dbC() { return C.evaluate(function () { return JSON.parse(JSON.stringify(OTO_MOCK.current.db)); }); }
+  var d23 = await dbC();
+  var jClaims = claims('jordan.lee@example.test');
+  var jMrs = d23.lists['Manager Reviews'].filter(function (m) { return m.Technician === jClaims; }).sort(function (x, y) { return x.MonthKey < y.MonthKey ? -1 : 1; });
+  var jCur = jMrs[jMrs.length - 1], jOld = jMrs.filter(function (m) { return m.ReleasedOn; })[0];
+  var alexMr = d23.lists['Manager Reviews'].find(function (m) { return m.Technician === claims('alex.morgan@example.test') && m.ReleasedOn; });
+  await open(C, { as: 'alex' });
+  ok('Challenge: nothing to challenge on an open (unreleased) review', (await C.locator('.chflag').count()) === 0);
+  await open(C, { as: 'jordan', reviewId: String(jOld.ReviewItemId) });
+  ok('Challenge: an older released review cannot be challenged (latest only)', jOld.ID !== jCur.ID && (await C.locator('.chflag').count()) === 0);
+  await open(C, { as: 'jordan' });
+  var nFlags = await C.locator('.chflag').count();
+  ok('Challenge: the latest released review offers a flag on each expectation rating, the overall feedback and the actions – nothing else', nFlags >= 2 &&
+    (await C.locator('section.card:has-text("What has gone well") .chflag').count()) === 0 && (await C.locator('section.card:has-text("Overall feedback and agreed actions") .chflag').count()) >= 1);
+  ok('Challenge: no bar until something is flagged', (await C.locator('.chbar:visible').count()) === 0);
+  await C.locator('td .chflag').first().click();
+  await C.locator('.chnote input').first().fill('I evidenced this in the permit audit');
+  await C.locator('section.card:has-text("Overall feedback and agreed actions") .chflag').first().click();
+  ok('Challenge: flagging shows a note box and the send bar', /2 parts flagged/.test(await C.locator('.chbar').innerText()));
+  await C.locator('.chbar button:has-text("Send challenge")').click();
+  await C.locator('.modal button:has-text("Send challenge")').click();
+  await C.waitForTimeout(400);
+  d23 = await dbC();
+  var chItem = d23.lists['1-to-1 Challenges'][0], jCurNow = d23.lists['Manager Reviews'].find(function (m) { return m.ID === jCur.ID; });
+  ok('Challenge: sent – Flow 7 opens it on the Manager Review, keeps it private and emails the TL (E14)', !!chItem && chItem.ChallengeStatus === 'Open' &&
+    jCurNow.ChallengeState === 'Open' && JSON.parse(jCurNow.ChallengeSectionsJson).length === 2 && d23.perms['1-to-1 Challenges'][chItem.ID]['jordan.lee@example.test'] === 'edit' &&
+    d23.emails.some(function (e) { return e.template === 'E14'; }), JSON.stringify(jCurNow.ChallengeState));
+  await open(C, { as: 'jordan' });
+  ok('Challenge: the technician sees the topics, the close-by date and "I agree" – and no more flags', (await C.locator('.chcard li').count()) === 2 &&
+    /closes as Not agreed/.test(await C.locator('.chcard').innerText()) && (await C.locator('.chcard button:has-text("I agree")').count()) === 1 && (await C.locator('.chflag').count()) === 0);
+  ok('Challenge: the note is shown with its topic', /permit audit/.test(await C.locator('.chcard').innerText()));
+  // the TL side
+  await open(C, { as: 'tl' });
+  ok('Challenge: Needs your attention tells the TL', /Jordan Lee challenged your/.test(await C.locator('.attn-card').innerText()));
+  await open(C, { as: 'tl', reviewId: String(jCur.ReviewItemId) });
+  ok('Challenge: the TL sees the banner and the challenged parts marked', (await C.locator('.chcard').count()) === 1 && (await C.locator('tr.challenged').count()) === 1 &&
+    (await C.locator('section.card.challenged').count()) === 1);
+  await C.locator('.chcard button:has-text("Agree – resolved")').click(); await C.waitForTimeout(300);
+  d23 = await dbC(); jCurNow = d23.lists['Manager Reviews'].find(function (m) { return m.ID === jCur.ID; });
+  ok('Challenge: the TL agreeing alone does not close it', !!jCurNow.ChallengeTlAgreedOn && jCurNow.ChallengeState === 'Open' && !!d23.lists['1-to-1 Challenges'][0].TlPing);
+  await open(C, { as: 'jordan' });
+  await C.locator('.chcard button:has-text("I agree")').click(); await C.waitForTimeout(300);
+  d23 = await dbC(); jCurNow = d23.lists['Manager Reviews'].find(function (m) { return m.ID === jCur.ID; });
+  ok('Challenge: both agreed – closed as Agreed and the item locked to Read', jCurNow.ChallengeState === 'Agreed' && !!jCurNow.ChallengeClosedOn &&
+    d23.perms['1-to-1 Challenges'][chItem.ID]['jordan.lee@example.test'] === 'read');
+  await open(C, { as: 'jordan' });
+  ok('Challenge: the technician sees it agreed, and cannot raise another on the same review', /Challenge agreed/.test(await C.locator('.chcard').innerText()) && (await C.locator('.chflag').count()) === 0);
+  // TL reopens
+  await open(C, { as: 'tl', reviewId: String(jCur.ReviewItemId) });
+  await C.locator('.chcard button:has-text("Reopen challenge")').click();
+  await C.locator('.modal button:has-text("Reopen")').click(); await C.waitForTimeout(400);
+  d23 = await dbC(); jCurNow = d23.lists['Manager Reviews'].find(function (m) { return m.ID === jCur.ID; });
+  ok('Challenge: the TL can reopen it – open again, agreements cleared, the technician can edit and is emailed (E15)', jCurNow.ChallengeState === 'Open' &&
+    !jCurNow.ChallengeTlAgreedOn && !jCurNow.ChallengeTechAgreedOn && d23.perms['1-to-1 Challenges'][chItem.ID]['jordan.lee@example.test'] === 'edit' &&
+    d23.emails.some(function (e) { return e.template === 'E15'; }));
+  // month end: not agreed, still flagged
+  await C.evaluate(function () { OTO_MOCK.closeChallenges('2999-01-01'); });
+  await open(C, { as: 'jordan' });
+  ok('Challenge: at its close-by date it closes as Not agreed and stays flagged', /not agreed/i.test(await C.locator('.chcard').innerText()) &&
+    /stays flagged/.test(await C.locator('.chcard').innerText()) && (await C.locator('.chcard button').count()) === 0);
+  await open(C, { as: 'tl' });
+  ok('Challenge: the TL sees "Not agreed – still flagged"', /closed as Not agreed – still flagged/.test(await C.locator('.attn-card').innerText()));
+  await C.locator('.topbar >> text=Monthly reviews').click();
+  ok('Challenge: the reviews table shows the flag', (await C.locator('td .chip:has-text("Not agreed")').count()) >= 1);
+  // static, contained attempts to get round it (the mock enforces SharePoint's permissions)
+  await open(C, { as: 'jordan' });
+  var forge1 = await api(C, 'POST', "/_api/web/lists/getbytitle('Manager%20Reviews')/items(" + jCur.ID + ')/validateUpdateListItem',
+    { formValues: [{ FieldName: 'ChallengeTlAgreedOn', FieldValue: '01/01/2026' }, { FieldName: 'ChallengeState', FieldValue: 'Agreed' }], bNewDocumentUpdate: false });
+  ok('Challenge security: the technician cannot set the TL\'s agreement or the state on the Manager Review', forge1.status === 403);
+  var chW = (await dbC()).writes.filter(function (w) { return w.list === '1-to-1 Challenges' || (w.list === 'Manager Reviews' && w.fields.some(function (f) { return /^Challenge/.test(f); })); });
+  ok('Challenge: the page writes only the challenge fields (technician: its own challenge; TL: the Challenge columns and TlPing)', chW.length >= 5 && chW.every(function (w) {
+    var allowed = w.list === 'Manager Reviews' ? /^Challenge(State|TlAgreedOn|TechAgreedOn|ClosedOn|CloseBy)$/ : w.as === 'tl' ? /^(TlPing|TechAgreedOn)$/ : /^(Title|ManagerReviewId|SectionsJson|TechAgreedOn)$/;
+    return w.fields.every(function (f) { return allowed.test(f); }) && (w.list !== 'Manager Reviews' || w.as === 'tl');
+  }), JSON.stringify(chW.map(function (w) { return w.as + ':' + w.list + ':' + w.fields.join('+'); })));
+  var rf = await api(C, 'GET', "/_api/web/lists/getbytitle('1-to-1%20Challenges')/RootFolder");
+  var forge2 = await api(C, 'POST', "/_api/web/lists/getbytitle('1-to-1%20Challenges')/AddValidateUpdateItemUsingPath", { listItemCreateInfo: { FolderPath: { DecodedUrl: rf.json.ServerRelativeUrl }, UnderlyingObjectType: 0 },
+    formValues: [{ FieldName: 'Title', FieldValue: 'x' }, { FieldName: 'ManagerReviewId', FieldValue: String(alexMr.ID) }, { FieldName: 'SectionsJson', FieldValue: '[{"key":"overall","note":"x"}]' }], bNewDocumentUpdate: false });
+  d23 = await dbC();
+  var forged = d23.lists['1-to-1 Challenges'].find(function (c) { return c.ManagerReviewId === alexMr.ID; });
+  ok('Challenge security: a challenge of someone else\'s review is rejected and hidden, and their review is untouched', forge2.status === 200 && !!forged && forged.ChallengeStatus === 'Rejected' &&
+    !d23.lists['Manager Reviews'].find(function (m) { return m.ID === alexMr.ID; }).ChallengeState &&
+    (await api(C, 'GET', "/_api/web/lists/getbytitle('1-to-1%20Challenges')/items(" + forged.ID + ')')).status === 404);
+  var forge3 = await api(C, 'POST', "/_api/web/lists/getbytitle('1-to-1%20Challenges')/AddValidateUpdateItemUsingPath", { listItemCreateInfo: { FolderPath: { DecodedUrl: rf.json.ServerRelativeUrl }, UnderlyingObjectType: 0 },
+    formValues: [{ FieldName: 'Title', FieldValue: 'x' }, { FieldName: 'ManagerReviewId', FieldValue: String(jCur.ID) }, { FieldName: 'SectionsJson', FieldValue: '[{"key":"overall"}]' }], bNewDocumentUpdate: false });
+  d23 = await dbC();
+  ok('Challenge security: a second challenge of the same review is rejected (only the TL can reopen)', forge3.status === 200 &&
+    d23.lists['1-to-1 Challenges'].filter(function (c) { return c.ManagerReviewId === jCur.ID; }).pop().ChallengeStatus === 'Rejected' &&
+    d23.lists['Manager Reviews'].find(function (m) { return m.ID === jCur.ID; }).ChallengeState === 'Not agreed');
+  var forge4 = await api(C, 'POST', "/_api/web/lists/getbytitle('1-to-1%20Challenges')/items(" + chItem.ID + ')/validateUpdateListItem',
+    { formValues: [{ FieldName: 'TechAgreedOn', FieldValue: '01/01/2026' }], bNewDocumentUpdate: false });
+  ok('Challenge security: once closed the technician can no longer change their challenge', forge4.status === 403);
+  // hostile text in a challenge note, read by the TL and the technician
+  await C.evaluate(function (id) {
+    var d = OTO_MOCK.current.db, x = OTO_MOCK.X.join(' ');
+    var m = d.lists['Manager Reviews'].find(function (y) { return y.ID === id; });
+    m.ChallengeState = 'Open'; m.ChallengeSectionsJson = JSON.stringify([{ key: 'overall', note: x }, { key: '<img src=x onerror=alert(1)>', note: x }, { key: 'actions', note: x }]);
+    m.ChallengeCloseBy = '2999-01-01';
+    sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(d));
+  }, jCur.ID);
+  await open(C, { as: 'tl', reviewId: String(jCur.ReviewItemId) });
+  ok('Challenge: an unknown section key is ignored', (await C.locator('.chcard li').count()) === 2);
+  await c23.close();
+  await sweep('Challenge notes read by the TL', { as: 'tl', xss: '1' }, async function () {
+    await page.evaluate(function () {
+      var d = OTO_MOCK.current.db, x = OTO_MOCK.X.join(' ');
+      var m = d.lists['Manager Reviews'].filter(function (y) { return y.ReleasedOn; })[0];
+      m.ChallengeState = 'Open'; m.ChallengeSectionsJson = JSON.stringify([{ key: 'overall', note: x }]); m.ChallengeCloseBy = '2999-01-01';
+      sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(d));
+    });
+    await open(page, { as: 'tl', xss: '1' });
+    await page.locator('.attn-row:has-text("challenged your") button').first().click();
+    if (!(await page.locator('.chcard').count())) { throw new Error('no challenge banner'); }
   });
 
   await browser.close();

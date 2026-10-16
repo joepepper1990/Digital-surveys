@@ -11,7 +11,7 @@
 // State persists in sessionStorage so you can switch user (TL ↔ Test A ↔ Test B) and carry on.
 (function () {
   'use strict';
-  var KEY = 'oto-mock-db-v6';
+  var KEY = 'oto-mock-db-v7';
   var SITE = 'https://contoso.example/sites/esg-1to1';
   var TZ = 'Europe/London';
 
@@ -29,7 +29,9 @@
     ActionsStatus: ['None', 'Open', 'Done'],
     WbStatus: ['Open', 'Submitted', 'Completed'],
     FbType: ['Fault', 'Improvement', 'Suggestion'],
-    FbStatus: ['Pending', 'Sent', 'Failed', 'Read', 'Held']
+    FbStatus: ['Pending', 'Sent', 'Failed', 'Read', 'Held'],
+    ChState: ['Open', 'Agreed', 'Not agreed'],
+    ChStatus: ['Open', 'Agreed', 'Not agreed', 'Rejected']
   };
   // ?locale=uk (default) | us | uk-noiso | us-noiso – how this pretend SharePoint reads typed dates
   var LOCALE = (function () { try { return new URL(window.location.href).searchParams.get('locale') || 'uk'; } catch (_) { return 'uk'; } })();
@@ -50,7 +52,9 @@
       TechFollowUp: F('text'), ExpectationSnapshotJson: F('note'), FB_Q1: F('note'), FB_Q2: F('note'), FB_Q3: F('note'), FB_Q4: F('note'), FB_Q5: F('note'),
       FB_Q6: F('note'), FB_Q7: F('note'), FB_Q9: F('note'), FB_Overall: F('note'), ExpectationFeedbackJson: F('note'), FollowUpDecision: F('choice', { c: CHOICES.Follow }),
       MeetingDate: F('date'), ActionsJson: F('note'), ActionsStatus: F('choice', { c: CHOICES.ActionsStatus }), NextActionDue: F('date'), CompletedOn: F('datetime'),
-      CompletedBy: F('text'), ReleasedOn: F('datetime'), CorrectionLog: F('note') },
+      CompletedBy: F('text'), ReleasedOn: F('datetime'), CorrectionLog: F('note'),
+      ChallengeState: F('choice', { c: CHOICES.ChState }), ChallengeSectionsJson: F('note'), ChallengeItemId: F('num'), ChallengeOpenedOn: F('datetime'),
+      ChallengeCloseBy: F('date'), ChallengeTlAgreedOn: F('datetime'), ChallengeTechAgreedOn: F('datetime'), ChallengeClosedOn: F('datetime') },
     '1-to-1 Settings': { Title: F('text'), Value: F('note') },
     'Wellbeing Assessments': { Title: F('text'), Technician: F('person'), AssessmentStatus: F('choice', { c: CHOICES.WbStatus }), AssessmentDate: F('date'),
       Position: F('text'), EmployeeNumber: F('text'), AnswersJson: F('note'), PersonalJson: F('note'), ArrangementsJson: F('note'), ManagerNotes: F('note'),
@@ -58,7 +62,9 @@
     // Created and Author are set by SharePoint itself, not from formValues
     '1-to-1 Feedback': { Title: F('text'), FeedbackType: F('choice', { c: CHOICES.FbType }), Message: F('note'), PageName: F('text'), AppVersion: F('text'),
       DeliveryStatus: F('choice', { c: CHOICES.FbStatus }), SentOn: F('datetime'), Created: F('datetime'), Author: F('person'),
-      HasUniqueRoleAssignments: F('bool') }   // set by 'Flow 6' when it locks the item (not writable from the page)
+      HasUniqueRoleAssignments: F('bool') },   // set by 'Flow 6' when it locks the item (not writable from the page)
+    '1-to-1 Challenges': { Title: F('text'), ManagerReviewId: F('num'), MonthKey: F('text'), SectionsJson: F('note'), TechAgreedOn: F('datetime'),
+      TlPing: F('datetime'), ChallengeStatus: F('choice', { c: CHOICES.ChStatus }), Created: F('datetime'), Author: F('person') }
   };
 
   // ---------------------------------------------------------------- people (fictional)
@@ -102,7 +108,7 @@
 
   // ---------------------------------------------------------------- seed
   function seed(xss) {
-    var db = { nextId: {}, lists: {}, perms: { 'Monthly Reviews': {}, 'Manager Reviews': {}, 'Wellbeing Assessments': {}, '1-to-1 Feedback': {} }, fbFail: false, writes: [], emails: [], group: [], digest: 'MOCKDIGEST-' + Date.now() };
+    var db = { nextId: {}, lists: {}, perms: { 'Monthly Reviews': {}, 'Manager Reviews': {}, 'Wellbeing Assessments': {}, '1-to-1 Feedback': {}, '1-to-1 Challenges': {} }, fbFail: false, writes: [], emails: [], group: [], digest: 'MOCKDIGEST-' + Date.now() };
     Object.keys(SCHEMA).forEach(function (l) { db.lists[l] = []; db.nextId[l] = 1; });
     function add(list, fields) { var id = db.nextId[list]++; var it = { ID: id }; Object.keys(fields).forEach(function (k) { it[k] = fields[k]; }); db.lists[list].push(it); return it; }
     var today = londonToday(), CUR = today.slice(0, 7);
@@ -289,7 +295,7 @@
   // ---------------------------------------------------------------- permission model (D.4)
   function canSeeList(db, list, u) {
     if (u.owner) { return !!db.lists[list]; }
-    if (list === '1-to-1 Settings' || list === '1-to-1 Feedback') { return true; }   // group: Read / Contribute (own items only)
+    if (list === '1-to-1 Settings' || list === '1-to-1 Feedback' || list === '1-to-1 Challenges') { return true; }   // group: Read / Submit (own items only)
     if (db.perms[list]) { return Object.keys(db.perms[list]).some(function (id) { return !!db.perms[list][id][u.email]; }); }
     return false;
   }
@@ -419,6 +425,53 @@
     db.emails.push({ to: 'TL', template: 'E13', fbId: it.ID, from: u.email, type: it.FeedbackType, page: it.PageName, message: it.Message });
   }
 
+  // Flow 7: challenges. The trusted state is on the Manager Review; the person holding the item is the trusted technician.
+  function lastDayOf(m) { var d = new Date(Date.UTC(+m.slice(0, 4), +m.slice(5, 7), 0)); return d.toISOString().slice(0, 10); }
+  function closeBy() {
+    var t = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' }), m = t.slice(0, 7), last = lastDayOf(m);
+    if ((Date.parse(last) - Date.parse(t)) / 86400000 < 7) { var n = new Date(Date.UTC(+m.slice(0, 4), +m.slice(5, 7), 1)).toISOString().slice(0, 7); last = lastDayOf(n); }
+    return dateOnlyUtc(last);
+  }
+  function flow7(db, it, u, created) {
+    var P = db.perms['1-to-1 Challenges'];
+    var mr = db.lists['Manager Reviews'].find(function (m) { return m.ID === it.ManagerReviewId; });
+    if (created) {
+      var owner = mr ? userByClaims(mr.Technician) : null;
+      var later = mr && db.lists['Manager Reviews'].some(function (m) { return m.Technician === mr.Technician && m.ReleasedOn && m.MonthKey > mr.MonthKey; });
+      var ok = !!(mr && mr.ReleasedOn && owner && owner.email === u.email && !mr.ChallengeState && !later && it.SectionsJson && it.SectionsJson.trim() && it.SectionsJson.length <= 20000);
+      P[it.ID] = {};
+      if (!ok) { it.ChallengeStatus = 'Rejected'; return; }
+      P[it.ID][u.email] = 'edit';
+      mr.ChallengeState = 'Open'; mr.ChallengeSectionsJson = it.SectionsJson; mr.ChallengeItemId = it.ID; mr.ChallengeOpenedOn = nowIso(); mr.ChallengeCloseBy = closeBy();
+      mr.ChallengeTlAgreedOn = null; mr.ChallengeTechAgreedOn = null; mr.ChallengeClosedOn = null;
+      it.ChallengeStatus = 'Open'; it.MonthKey = mr.MonthKey; it.TechAgreedOn = null;
+      db.emails.push({ to: 'TL', template: 'E14', mrId: mr.ID }); return;
+    }
+    var holders = Object.keys(P[it.ID] || {});
+    if (holders.length !== 1 || !mr || mr.ChallengeItemId !== it.ID) { return; }
+    var email = holders[0], role = P[it.ID][email], owner2 = userByClaims(mr.Technician);
+    if (!owner2 || owner2.email !== email) { return; }
+    if (mr.ChallengeState === 'Open' && role === 'edit') {
+      if (it.SectionsJson && it.SectionsJson.length <= 20000) { mr.ChallengeSectionsJson = it.SectionsJson; }
+      mr.ChallengeTechAgreedOn = it.TechAgreedOn ? (mr.ChallengeTechAgreedOn || nowIso()) : null;
+      if (it.TechAgreedOn && mr.ChallengeTlAgreedOn) { mr.ChallengeState = 'Agreed'; mr.ChallengeClosedOn = nowIso(); P[it.ID][email] = 'read'; it.ChallengeStatus = 'Agreed'; }
+    } else if (mr.ChallengeState === 'Open') {
+      P[it.ID][email] = 'edit'; it.TechAgreedOn = null; mr.ChallengeTechAgreedOn = null; it.ChallengeStatus = 'Open';
+      db.emails.push({ to: email, template: 'E15', mrId: mr.ID });
+    } else {
+      P[it.ID][email] = 'read'; if (mr.ChallengeState) { it.ChallengeStatus = mr.ChallengeState; }
+    }
+  }
+  // Flow 1's daily step: an open challenge past its close-by date closes as Not agreed and the item goes back to Read
+  function closeChallenges(db, todayIso) {
+    db.lists['Manager Reviews'].forEach(function (mr) {
+      if (mr.ChallengeState !== 'Open' || !mr.ChallengeCloseBy || String(mr.ChallengeCloseBy).slice(0, 10) >= todayIso) { return; }
+      mr.ChallengeState = 'Not agreed'; mr.ChallengeClosedOn = nowIso();
+      var P = db.perms['1-to-1 Challenges'][mr.ChallengeItemId];
+      if (P) { Object.keys(P).forEach(function (e) { P[e] = 'read'; }); }
+    });
+  }
+
   // ---------------------------------------------------------------- REST router
   function resp(status, body) {
     var text = body === undefined ? '' : JSON.stringify(body);
@@ -450,7 +503,7 @@
         var rows = db.lists[list].filter(function (it) { return canRead(db, list, it.ID, u); }).map(function (it) { return serialize(list, it); });
         return resp(200, { value: rows });
       }
-      if (method === 'GET' && tail === '/RootFolder') { return u.owner || list === '1-to-1 Feedback' ? resp(200, { ServerRelativeUrl: '/sites/esg-1to1/Lists/' + list.replace(/\W/g, '') }) : spError(403, 'Access denied.'); }
+      if (method === 'GET' && tail === '/RootFolder') { return u.owner || list === '1-to-1 Feedback' || list === '1-to-1 Challenges' ? resp(200, { ServerRelativeUrl: '/sites/esg-1to1/Lists/' + list.replace(/\W/g, '') }) : spError(403, 'Access denied.'); }
       var im = /^\/items\((\d+)\)(\/validateUpdateListItem)?$/.exec(tail);
       if (im) {
         var id = Number(im[1]);
@@ -475,6 +528,7 @@
             if (list === 'Manager Reviews' && 'ReviewState' in pending) { flow3(db, it); }
             if (list === 'Technicians' && 'Active' in pending) { flow4(db, it); }
             if (list === 'Wellbeing Assessments') { flow5(db, it, false); }
+            if (list === '1-to-1 Challenges') { flow7(db, it, u, false); }
             saveDb(db);
           }
           return resp(200, { value: results });
@@ -482,7 +536,7 @@
       }
       if (method === 'POST' && tail === '/AddValidateUpdateItemUsingPath') {
         if (headers['X-RequestDigest'] !== db.digest) { return spError(403, 'The security validation for this page is invalid.'); }
-        if (!u.owner && list !== '1-to-1 Feedback') { return spError(403, 'Access denied.'); }
+        if (!u.owner && list !== '1-to-1 Feedback' && list !== '1-to-1 Challenges') { return spError(403, 'Access denied.'); }
         var b = JSON.parse(options.body || '{}');
         if (!b.listItemCreateInfo || !b.listItemCreateInfo.FolderPath || !b.listItemCreateInfo.FolderPath.DecodedUrl) { return spError(400, 'listItemCreateInfo is required'); }
         var item = { ID: db.nextId[list]++ }, res = [], good = true;
@@ -498,6 +552,10 @@
             item.Author = claimsOf(u); item.Created = nowIso(); item.DeliveryStatus = item.DeliveryStatus || 'Pending';
             db.perms[list][item.ID] = {}; db.perms[list][item.ID][u.email] = 'edit';   // item-level security: own item only
             flow6(db, item, u);
+          }
+          if (list === '1-to-1 Challenges') {
+            item.Author = claimsOf(u); item.Created = nowIso();
+            flow7(db, item, u, true);
           }
           db.writes.push({ as: u.key, list: list, id: item.ID, create: true, fields: (b.formValues || []).map(function (fv) { return fv.FieldName; }), values: (b.formValues || []).reduce(function (o, fv) { o[fv.FieldName] = fv.FieldValue; return o; }, {}) });
           saveDb(db);
@@ -521,6 +579,8 @@
     SITE: SITE, USERS: USERS, X: X,
     db: function (xss) { return loadDb(xss); },
     reset: function () { try { sessionStorage.removeItem(KEY); } catch (_) { /* ignore */ } },
+    // test hook: run Flow 1's daily challenge close as if today were todayIso (yyyy-mm-dd)
+    closeChallenges: function (todayIso) { var db = window.OTO_MOCK.current.db; closeChallenges(db, todayIso); saveDb(db); },
     userByKey: function (k) { return USERS.find(function (u) { return u.key === k; }) || USERS[0]; },
     ctx: function (userKey, xss) {
       var db = loadDb(xss), u = window.OTO_MOCK.userByKey(userKey);

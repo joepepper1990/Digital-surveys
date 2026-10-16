@@ -120,6 +120,9 @@
   .SCOPE .oto .seg button { font: inherit; font-weight: 650; border: none; background: none; padding: 5px 0; width: 36px; cursor: pointer; color: var(--ink); border-left: 1px solid #dfe4ea; }
   .SCOPE .oto .seg button:first-child { border-left: none; }
   .SCOPE .oto .seg.wide button { width: auto; padding: 5px 16px; }
+  .SCOPE .oto .seg.words { display: flex; flex-direction: column; width: 100%; }
+  .SCOPE .oto .seg.words button { width: 100%; text-align: left; padding: 2px 10px; font-weight: 600; font-size: 12.5px; border-left: none; border-top: 1px solid #dfe4ea; }
+  .SCOPE .oto .seg.words button:first-child { border-top: none; }
   .SCOPE .oto .seg button[aria-pressed="true"] { background: var(--navy); color: #fff; }
   .SCOPE .oto .seg button:disabled { cursor: default; }
   .SCOPE .oto .seg button:disabled:not([aria-pressed="true"]) { color: #9aa4ae; }
@@ -133,6 +136,11 @@
   .SCOPE .oto .choice:has(input:checked) { border-color: var(--navy); background: var(--blue-bg); box-shadow: inset 0 0 0 1px var(--navy); }
   .SCOPE .oto .choice:has(input:focus-visible) { outline: 3px solid var(--focus); outline-offset: 2px; }
   .SCOPE .oto .choice:has(input:disabled) { cursor: default; }
+  /* required, still to answer (subtle orange) · missed when Submit was pressed (red) */
+  .SCOPE .oto textarea.need, .SCOPE .oto .seg.need, .SCOPE .oto .choices.need .choice, .SCOPE .oto input.need { border-color: rgba(239, 125, 58, .8); }
+  .SCOPE .oto textarea.invalid, .SCOPE .oto .seg.invalid, .SCOPE .oto .choices.invalid .choice, .SCOPE .oto input.invalid { border-color: var(--red); box-shadow: 0 0 0 1px var(--red); }
+  .SCOPE .oto textarea.invalid, .SCOPE .oto input.invalid, .SCOPE .oto .choices.invalid .choice { background: var(--red-bg); }
+  .SCOPE .oto section.card:has(.invalid) .qnum { background: var(--red); }
 
   /* ---------- questions ---------- */
   .SCOPE .oto .q-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 10px; }
@@ -218,6 +226,25 @@
   .SCOPE .oto .pairbars .bar { height: 8px; background: #eef1f4; border-radius: 4px; overflow: hidden; }
   .SCOPE .oto .pairbars .bar > i { display: block; height: 100%; border-radius: 0 4px 4px 0; }
   .SCOPE .oto .pairbars .v { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted); text-align: right; }
+  .SCOPE .oto .pairbars.words .row { grid-template-columns: 210px 1fr 110px; }
+  /* challenges */
+  .SCOPE .oto .chflag { font: inherit; font-size: 12px; font-weight: 600; margin-top: 6px; padding: 2px 9px; border-radius: 12px; border: 1px solid var(--line); background: #fff; color: var(--muted); cursor: pointer; }
+  .SCOPE .oto .chflag:hover { border-color: var(--amber); color: var(--amber); }
+  .SCOPE .oto .chflag[aria-pressed="true"] { background: var(--amber-bg); border-color: var(--amber); color: var(--amber); }
+  .SCOPE .oto .chnote { margin-top: 6px; }
+  .SCOPE .oto .chbar { position: sticky; bottom: 12px; z-index: 5; display: flex; justify-content: space-between; align-items: center; gap: 12px; background: var(--amber-bg); border: 1px solid var(--amber); border-radius: 8px; padding: 8px 12px; font-weight: 600; box-shadow: 0 4px 14px rgba(0,0,0,.12); }
+  .SCOPE .oto .chbar[hidden] { display: none; }
+  .SCOPE .oto .chcard { border-left: 4px solid var(--amber); }
+  .SCOPE .oto .chcard.agreed { border-left-color: var(--green); }
+  .SCOPE .oto .chcard h3 { font-size: 15px; margin-bottom: 6px; }
+  .SCOPE .oto .chlist { margin: 4px 0 8px 18px; padding: 0; }
+  .SCOPE .oto .chlist li { margin: 3px 0; }
+  .SCOPE .oto .chstatus { display: flex; gap: 18px; margin: 4px 0; font-weight: 600; }
+  .SCOPE .oto tr.challenged td:first-child { box-shadow: inset 3px 0 0 var(--amber); }
+  .SCOPE .oto section.card.challenged { border-left: 4px solid var(--amber); }
+  .SCOPE .oto .focus { margin-top: 12px; border-left: 3px solid var(--accent); background: var(--accent-bg); padding: 8px 11px; border-radius: 0 6px 6px 0; font-size: 13px; }
+  .SCOPE .oto .focus ul { margin: 6px 0 0 18px; padding: 0; }
+  .SCOPE .oto .focus .band { font-size: 11px; }
   .SCOPE .oto .tip { position: fixed; z-index: 95; pointer-events: none; background: #16222c; color: #fff; font-size: 12px; padding: 6px 9px; border-radius: 6px; white-space: pre-line; display: none; max-width: 260px; }
 
   /* ---------- misc ---------- */
@@ -307,6 +334,7 @@
   .SCOPE .oto .wbstep { font: inherit; font-size: 13px; font-weight: 650; border: 1px solid var(--line); background: #fff; color: var(--ink); border-radius: 16px; padding: 5px 12px; cursor: pointer; }
   .SCOPE .oto .wbstep.ok { background: var(--green-bg); border-color: #b7dcc5; color: var(--green); }
   .SCOPE .oto .wbstep.on { background: var(--navy); border-color: var(--navy); color: #fff; }
+  .SCOPE .oto .wbstep.miss { color: var(--red); border-color: var(--red); }
   .SCOPE .oto .wbq { border-top: 1px solid #edf0f3; padding: 12px 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 18px; align-items: center; }
   .SCOPE .oto .wbq:first-of-type { border-top: none; }
   .SCOPE .oto .wbq-t { display: flex; gap: 10px; align-items: flex-start; font-weight: 600; }

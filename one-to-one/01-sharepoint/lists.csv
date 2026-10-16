@@ -69,6 +69,14 @@ Manager Reviews,CompletedOn,Date and time,,,,
 Manager Reviews,CompletedBy,Single line of text,,,,
 Manager Reviews,ReleasedOn,Date and time,,,,
 Manager Reviews,CorrectionLog,Multiple lines (plain),,,,
+Manager Reviews,ChallengeState,Choice,Open|Agreed|Not agreed,(none),Yes,v4.5 challenge (Flow 7 / Team Leader only)
+Manager Reviews,ChallengeSectionsJson,Multiple lines (plain),,,,v4.5 challenged parts and notes (copied by Flow 7)
+Manager Reviews,ChallengeItemId,Number (0 dp),,,,v4.5 the 1-to-1 Challenges item
+Manager Reviews,ChallengeOpenedOn,Date and time,,,,v4.5
+Manager Reviews,ChallengeCloseBy,Date only,,,,v4.5 closes as Not agreed after this date (Flow 1)
+Manager Reviews,ChallengeTlAgreedOn,Date and time,,,,v4.5 Team Leader agreed
+Manager Reviews,ChallengeTechAgreedOn,Date and time,,,,v4.5 technician agreed (copied by Flow 7)
+Manager Reviews,ChallengeClosedOn,Date and time,,,,v4.5
 Wellbeing Assessments,Title,Built-in,,,,e.g. Name – wellbeing assessment
 Wellbeing Assessments,Technician,"Person (single, people only)",,,,The person (Flow 5 grants them access)
 Wellbeing Assessments,AssessmentStatus,Choice,Open|Submitted|Completed,Open,Yes,
@@ -89,5 +97,12 @@ Wellbeing Assessments,CompletedOn,Date and time,,,,Flow 5
 1-to-1 Feedback,AppVersion,Single line of text,,,,Frontend version
 1-to-1 Feedback,DeliveryStatus,Choice,Pending|Sent|Failed|Read|Held,Pending,,Flow 6 (Read = opened on the page; Held = over 10 from one person in a day)
 1-to-1 Feedback,SentOn,Date and time,,,,Flow 6
+1-to-1 Challenges,Title,Built-in,,,,e.g. Name – month
+1-to-1 Challenges,ManagerReviewId,Number (0 dp),,,Yes,The Manager Review being challenged
+1-to-1 Challenges,MonthKey,Single line of text,,,,Set by Flow 7
+1-to-1 Challenges,SectionsJson,Multiple lines (plain),,,,Challenged parts and notes
+1-to-1 Challenges,TechAgreedOn,Date and time,,,,Technician agreed (not trusted until Flow 7 copies it)
+1-to-1 Challenges,TlPing,Date and time,,,,Set by the Team Leader's page to wake Flow 7
+1-to-1 Challenges,ChallengeStatus,Choice,Open|Agreed|Not agreed|Rejected,Open,,Display only – the trusted state is on the Manager Review
 1-to-1 Settings,Title,Built-in,,,,Items: Bands; Reminders; Labels
 1-to-1 Settings,Value,Multiple lines (plain),,,,JSON

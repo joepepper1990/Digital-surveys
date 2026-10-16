@@ -88,7 +88,9 @@ def frontend_fields():
         '1-to-1 Settings': names(re.search(r"spGetAll\(CONFIG\.lists\.settings, '([^']+)'", js).group(1)),
         'Wellbeing Assessments': names(strings_after(js, 'var WB_FIELDS')),
         '1-to-1 Feedback': names(strings_after(js, 'var FB_FIELDS')) - {'HasUniqueRoleAssignments'},   # an item property, not a column
+        '1-to-1 Challenges': names(strings_after(js, 'var CH_FIELDS')) | {'TlPing'},   # TlPing: written by the TL's page to wake Flow 7
     }
+    need['Manager Reviews'] |= names(strings_after(js, 'var MR_CH_FIELDS'))
     need['Monthly Reviews'] |= set(re.findall(r"'([^']+)'", strings_after(tests, 'var TECH_ALLOWED', ']')))
     need['Manager Reviews'] |= set(re.findall(r"'([^']+)'", strings_after(tests, 'var MGR_ALLOWED', ']')))
     return need
@@ -778,6 +780,124 @@ def wellbeing_hardening_checks():
        not any(e['subject'] == 'Your wellbeing assessment is ready to complete' for e in sp.emails[n:]) and it['fields'].get('AssessmentStatus') == 'Submitted')
 
 
+def challenge_checks():
+    """Flow 7 and Flow 1's close: a technician challenges parts of their latest released feedback."""
+    sp = fsp.FakeSP()
+    run('0', sp, T('2026-10-01T06:00:00'))
+    techs, mr, mgr, ch = (sp.list_by_title(x) for x in ('Technicians', 'Monthly Reviews', 'Manager Reviews', '1-to-1 Challenges'))
+    EDIT, READ = sp.role_id('1-to-1 Edit'), sp.role_id('1-to-1 Read')
+    sp.write_item(techs, None, {'item/Title': 'Alex Morgan', 'item/Technician/Claims': sp.users[11]['Claims'], 'item/TechnicianAadId': 'aad-alex'})
+    sp.write_item(techs, None, {'item/Title': 'Sam Patel', 'item/Technician/Claims': sp.users[12]['Claims'], 'item/TechnicianAadId': 'aad-sam'})
+
+    def mgr_of(uid, month):
+        return next(i for i in mgr['items'].values() if i['fields']['Technician'] == uid and i['fields']['MonthKey'] == month)
+
+    def release(uid, month, when):
+        m = mgr_of(uid, month)
+        sp.me = uid
+        sp.write_item(mr, int(m['fields']['ReviewItemId']), {'item/ReviewStatus/Value': 'Submitted'})
+        sp.me = 10
+        fire('2', sp, 'Monthly Reviews', int(m['fields']['ReviewItemId']), T(when))
+        sp.write_item(mgr, m['id'], {'item/FB_Overall': 'Good month', 'item/ReviewState/Value': 'Completed'})
+        fire('3', sp, 'Manager Reviews', m['id'], T(when))
+        return m
+
+    def challenge(uid, mgr_id, sections='[{"key":"overall","note":"I <b>disagree</b> & here is why"}]', when='2026-12-10T09:00:00', title='Challenge'):
+        sp.me = uid
+        it = sp.write_item(ch, None, {'item/Title': title, 'item/ManagerReviewId': mgr_id, 'item/SectionsJson': sections})
+        sp.me = 10
+        n = len(sp.emails)
+        st, eng = fire('7', sp, '1-to-1 Challenges', it['id'], T(when))
+        return it, st, eng, sp.emails[n:]
+
+    run('1', sp, T('2026-10-01T07:00:00'), overrides={'varTestDate': '2026-10-01T07:00:00'})
+    oct_a = release(11, '2026-10', '2026-10-20T09:00:00')
+    run('1', sp, T('2026-11-01T07:00:00'), overrides={'varTestDate': '2026-11-01T07:00:00'})
+    nov_a = release(11, '2026-11', '2026-11-20T09:00:00')
+    nov_s = release(12, '2026-11', '2026-11-20T09:10:00')
+    run('1', sp, T('2026-12-01T07:00:00'), overrides={'varTestDate': '2026-12-01T07:00:00'})
+    dec_s = mgr_of(12, '2026-12')
+
+    # rejected: someone else's review, not the latest, not released, nothing in it
+    for label, uid, target, sec in (('someone else\'s review', 12, nov_a['id'], None), ('an older review (not the latest released)', 11, oct_a['id'], None),
+                                    ('a review not yet released', 12, dec_s['id'], None), ('an empty challenge', 11, nov_a['id'], '  ')):
+        it, st, eng, mails = challenge(uid, target, sec if sec is not None else '[{"key":"overall"}]')
+        tgt = mgr['items'][target]['fields']
+        ok('Flow 7: a challenge of {0} is rejected – Owners only, nothing opened, no email'.format(label), st == 'Succeeded' and it['unique'] and
+           uid not in it['ra'] and it['fields'].get('ChallengeStatus') == 'Rejected' and not tgt.get('ChallengeState') and not mails, (st, eng and eng.log, it['ra']))
+        st2, _ = fire('7', sp, '1-to-1 Challenges', it['id'], T('2026-12-10T09:05:00'))
+        ok('Flow 7: … and its own update does not run it again ({0})'.format(label), st2 == 'Cancelled', st2)
+
+    # accepted
+    it, st, eng, mails = challenge(11, nov_a['id'])
+    f = nov_a['fields']
+    ok('Flow 7: a challenge of the latest released review is accepted – private to the technician (Edit) and the Owners', st == 'Succeeded' and it['unique'] and
+       it['ra'].get(11) == {EDIT} and it['ra'].get(3) == {fsp.FULL} and set(it['ra']) <= {3, 10, 11}, (st, eng and eng.log, it['ra']))
+    ok('Flow 7: the Manager Review records it (Open, sections, item, opened, close-by end of month)', f.get('ChallengeState') == 'Open' and
+       int(f.get('ChallengeItemId')) == it['id'] and 'disagree' in f.get('ChallengeSectionsJson', '') and f.get('ChallengeOpenedOn') and
+       f.get('ChallengeCloseBy') == '2026-12-31' and not f.get('ChallengeTlAgreedOn') and not f.get('ChallengeTechAgreedOn'), f)
+    ok('Flow 7: E14 to the TL names the technician and month, with a link (no challenge text in the email)', len(mails) == 1 and mails[0]['to'] == 'team.leader@example.test' and
+       'Alex Morgan' in mails[0]['subject'] and 'November 2026' in mails[0]['subject'] and '?reviewId=' in mails[0]['body'] and 'disagree' not in mails[0]['body'], mails)
+    ok('Flow 7: the item shows Open and the month', it['fields'].get('ChallengeStatus') == 'Open' and it['fields'].get('MonthKey') == '2026-11', it['fields'])
+    n = len(sp.emails)
+    st, eng = fire('7', sp, '1-to-1 Challenges', it['id'], T('2026-12-10T09:05:00'))
+    ok('Flow 7: its own update runs harmlessly (still open, no second email)', st == 'Succeeded' and f['ChallengeState'] == 'Open' and len(sp.emails) == n, (st, eng and eng.log))
+    it2, st, _, mails = challenge(11, nov_a['id'], when='2026-12-10T09:10:00')
+    ok('Flow 7: a second challenge of the same review is rejected', it2['fields'].get('ChallengeStatus') == 'Rejected' and 11 not in it2['ra'] and
+       int(f['ChallengeItemId']) == it['id'] and not mails)
+    # the technician can't close it alone, whatever they write on their item
+    sp.me = 11
+    sp.write_item(ch, it['id'], {'item/TechAgreedOn': '2026-12-11T09:00:00Z', 'item/ChallengeStatus/Value': 'Agreed'})
+    sp.me = 10
+    st, eng = fire('7', sp, '1-to-1 Challenges', it['id'], T('2026-12-11T09:05:00'))
+    ok('Flow 7: the technician agreeing (or writing Agreed on their item) does not close it without the TL', st == 'Succeeded' and f['ChallengeState'] == 'Open' and
+       f.get('ChallengeTechAgreedOn') and it['ra'].get(11) == {EDIT}, (st, f))
+    # the TL agrees on the Manager Review (the technician can only read that) and wakes the flow
+    sp.write_item(mgr, nov_a['id'], {'item/ChallengeTlAgreedOn': '2026-12-12T09:00:00Z'})
+    sp.write_item(ch, it['id'], {'item/TlPing': '2026-12-12T09:00:00Z'})
+    st, eng = fire('7', sp, '1-to-1 Challenges', it['id'], T('2026-12-12T09:05:00'))
+    ok('Flow 7: both agreed – Agreed, closed, and the item locked to Read', st == 'Succeeded' and f['ChallengeState'] == 'Agreed' and f.get('ChallengeClosedOn') and
+       it['ra'].get(11) == {READ} and it['fields'].get('ChallengeStatus') == 'Agreed', (st, eng and eng.log, f, it['ra']))
+    n = len(sp.emails)
+    st, _ = fire('7', sp, '1-to-1 Challenges', it['id'], T('2026-12-12T09:10:00'))
+    ok('Flow 7: closed – a later run changes nothing', st == 'Succeeded' and f['ChallengeState'] == 'Agreed' and it['ra'].get(11) == {READ} and len(sp.emails) == n)
+    # the TL reopens it
+    sp.write_item(mgr, nov_a['id'], {'item/ChallengeState/Value': 'Open', 'item/ChallengeTlAgreedOn': None, 'item/ChallengeTechAgreedOn': None,
+                                     'item/ChallengeClosedOn': None, 'item/ChallengeCloseBy': '2026-12-31'})
+    sp.write_item(ch, it['id'], {'item/TlPing': '2026-12-13T09:00:00Z', 'item/TechAgreedOn': None})
+    n = len(sp.emails)
+    st, eng = fire('7', sp, '1-to-1 Challenges', it['id'], T('2026-12-13T09:05:00'))
+    ok('Flow 7: reopened by the TL – the technician gets Edit back and E15', st == 'Succeeded' and it['ra'].get(11) == {EDIT} and f['ChallengeState'] == 'Open' and
+       len(sp.emails) == n + 1 and sp.emails[-1]['to'] == 'alex.morgan@example.test' and 'reopened' in sp.emails[-1]['subject'], (st, eng and eng.log))
+    # tampering while open: two holders; pointing the item at another review
+    it['ra'][12] = {EDIT}
+    st, _ = fire('7', sp, '1-to-1 Challenges', it['id'], T('2026-12-13T09:10:00'))
+    ok('Flow 7: two people holding a challenge stops the run (Failed)', st == 'Failed', st)
+    del it['ra'][12]
+    sp.me = 11
+    sp.write_item(ch, it['id'], {'item/ManagerReviewId': nov_s['id']})
+    sp.me = 10
+    st, _ = fire('7', sp, '1-to-1 Challenges', it['id'], T('2026-12-13T09:15:00'))
+    ok('Flow 7: pointing a challenge at another review is ignored', st == 'Cancelled' and not nov_s['fields'].get('ChallengeState'), st)
+    sp.write_item(ch, it['id'], {'item/ManagerReviewId': nov_a['id']})
+    # last 7 days of a month: runs to the end of next month
+    it3, st, _, _ = challenge(12, nov_s['id'], when='2026-12-27T09:00:00')
+    ok('Flow 7: raised in the last 7 days of a month – closes at the end of next month', nov_s['fields'].get('ChallengeCloseBy') == '2027-01-31', nov_s['fields'])
+    # Flow 1: past the close-by date -> Not agreed, still flagged, item back to Read
+    st, eng = run('1', sp, T('2027-01-01T07:00:00'), overrides={'varTestDate': '2027-01-01T07:00:00'})
+    ok('Flow 1: an open challenge past its close-by date closes as Not agreed and the item goes back to Read', st == 'Succeeded' and
+       f['ChallengeState'] == 'Not agreed' and f.get('ChallengeClosedOn') and it['ra'].get(11) == {READ}, (st, eng and eng.log, f))
+    ok('Flow 1: one not yet at its close-by date stays open', nov_s['fields']['ChallengeState'] == 'Open' and it3['ra'].get(12) == {EDIT})
+    st, _ = fire('7', sp, '1-to-1 Challenges', it['id'], T('2027-01-01T08:00:00'))
+    ok('Flow 7: after the close the item shows Not agreed', it['fields'].get('ChallengeStatus') == 'Not agreed', it['fields'])
+    # before Setup has created the list (upgrade order): Flow 1 still runs
+    sp2 = fsp.FakeSP()
+    run('0', sp2, T('2026-10-01T06:00:00'))
+    del sp2.lists[sp2.list_by_title('1-to-1 Challenges')['Id'] if 'Id' in sp2.list_by_title('1-to-1 Challenges') else next(k for k, v in sp2.lists.items() if v['Title'] == '1-to-1 Challenges')]
+    st, eng = run('1', sp2, T('2026-11-01T07:00:00'), overrides={'varTestDate': '2026-11-01T07:00:00'})
+    ok('Flow 1: runs normally on a site without the Challenges list', st == 'Succeeded', eng and eng.log)
+
+
 if __name__ == '__main__':
     site = setup_checks()
     partial_site_checks()
@@ -789,6 +909,7 @@ if __name__ == '__main__':
     feedback_checks()
     qa_regression_checks()
     wellbeing_hardening_checks()
+    challenge_checks()
     passed = sum(1 for _, p in RESULTS if p)
     print('\n[{2}] {0} / {1} passed'.format(passed, len(RESULTS), MODE))
     sys.exit(0 if passed == len(RESULTS) else 1)

@@ -44,6 +44,7 @@ MR = LIST_TITLE['reviews']
 MGR = LIST_TITLE['mgr']
 WB = LIST_TITLE['wellbeing']
 FB = LIST_TITLE['feedback']
+CH = LIST_TITLE['challenges']
 SETTINGS = LIST_TITLE['settings']
 
 
@@ -687,6 +688,34 @@ def flow_daily():
                 ('Note_wellbeing_failed', append('varProblems', 'Wellbeing review reminders could not be checked today. Open the run history for details.')),
             )), {'WellbeingTry': FAILED}),
         })),
+        ('List_challenges', query("@body('Get_lists')?['value']", "@equals(item()?['RootFolder']?['Name'], 'OneToOneChallenges')", secure=True)),
+        ('Challenges_list_exists', cond("@not(empty(body('List_challenges')))", {
+            # An open challenge not agreed by its close-by date closes as Not agreed (it stays flagged; the line manager can
+            # reopen it). The person's access to their challenge goes back to Read. A failure is noted, never fatal.
+            'ChallengeTry': after(scope(seq(
+                # REST only: this flow is on during an upgrade, before Setup has added these columns
+                ('Open_challenges', http('GET', "_api/web/lists(guid'@{outputs('Ids')?['mgrList']}')/items?$select=ID,Title,ChallengeCloseBy,ChallengeItemId,"
+                                         "Technician/Name&$expand=Technician&$filter=ChallengeState eq 'Open'&$top=5000")),
+                ('ChToday', compose("@formatDateTime(outputs('ukNow'), 'yyyy-MM-dd')")),
+                ('Past_close_by', query("@body('Open_challenges')?['value']",
+                                        "@and(not(empty(item()?['ChallengeCloseBy'])), less(ticks(concat(" + local_date("item()?['ChallengeCloseBy']") + ", 'T00:00:00Z')), "
+                                        "ticks(concat(outputs('ChToday'), 'T00:00:00Z'))))", secure=True)),
+                ('Each_past_close_by', foreach("@body('Past_close_by')", seq(
+                    ('Close_not_agreed', http('POST', "_api/web/lists(guid'@{outputs('Ids')?['mgrList']}')/items(@{items('Each_past_close_by')?['ID']})",
+                                              '{"ChallengeState":"Not agreed","ChallengeClosedOn":"@{utcNow()}"}',
+                                              headers={'X-HTTP-Method': 'MERGE', 'IF-MATCH': '*'})),
+                    ('Has_item', cond("@not(empty(" + idstr("items('Each_past_close_by')?['ChallengeItemId']") + "))", seq(
+                        ensure_user('Ensure_challenger', "items('Each_past_close_by')?['Technician']?['Name']"),
+                        ('ChIds', compose({'chList': "@first(body('List_challenges'))?['Id']"})),
+                        *setperm('_X', 'chList', idnum("items('Each_past_close_by')?['ChallengeItemId']"), "outputs('Ids')?['read']",
+                                 "body('Ensure_challenger')?['Id']", ids='ChIds'),
+                    ))),
+                ))),
+            )), {}),
+            'ChallengeCatch': after(scope(seq(
+                ('Note_challenges_failed', append('varProblems', 'Challenges past their close-by date could not be closed today. Open the run history for details.')),
+            )), {'ChallengeTry': FAILED}),
+        })),
         ('Any_problems', cond("@greater(length(variables('varProblems')), 0)", seq(
             ('Send_E7', email('@' + TL_EMAIL, '1-to-1 system: action needed', e7)),
         ))),
@@ -1065,10 +1094,155 @@ def flow_feedback():
     return definition(triggers, actions)
 
 
+# --------------------------------------------------------------------------------------------- Flow 7
+CHALLENGE_HOLDERS = ("@and(equals(item()?['Member']?['PrincipalType'], 1), or(contains(string(item()?['RoleDefinitionBindings']), '1-to-1 Edit'), "
+                     "contains(string(item()?['RoleDefinitionBindings']), '1-to-1 Read')))")
+
+
+def close_by(uk_now):
+    """End of the month (UK date); if fewer than 7 days are left, the end of the next month."""
+    last = "formatDateTime(addDays(addToTime(startOfMonth(" + uk_now + "), 1, 'Month'), -1), 'yyyy-MM-dd')"
+    nxt = "formatDateTime(addDays(addToTime(startOfMonth(" + uk_now + "), 2, 'Month'), -1), 'yyyy-MM-dd')"
+    return "@if(less(sub(dayOfMonth(" + last + "), dayOfMonth(" + uk_now + ")), 7), " + nxt + ", " + last + ")"
+
+
+def flow_challenge():
+    """A technician challenges parts of their latest released feedback (the expectation ratings, the overall feedback or
+    the agreed actions). The trusted state lives on the Manager Review, which the technician can only read.
+    First run (item not yet locked): accept only from the review's own technician, on their latest released review that
+    has never been challenged; make the item private to them (1-to-1 Edit) and the Owners; open the challenge on the
+    Manager Review and email the line manager (E14). Anything else: Owners-only and Rejected.
+    Later runs: the trusted person is the single holder. While open, copy their sections and their agreement; when the
+    line manager has also agreed (recorded on the Manager Review only) close it as Agreed and lock the item to Read.
+    Open again while the holder only has Read = the line manager reopened it: give Edit back and email them (E15).
+    Closed: make sure the item is Read and shows the review's state. Flow 1 closes it as Not agreed after its close-by date."""
+    TB = 'triggerBody()'
+    BASE = "_api/web/lists(guid'@{outputs('ChIds')?['chList']}')/items(@{" + TB + "?['ID']})"
+    MRO = "outputs('Mr')"
+    H = "outputs('Holder')"
+    month = "@{formatDateTime(concat(" + MRO + "?['MonthKey'], '-01'), 'MMMM yyyy')}"
+    e14 = ('<p><b>@{' + esc(MRO + "?['Technician']?['DisplayName']") + '}</b> has challenged part of your feedback on their ' + month + ' 1-to-1. '
+           'Talk it through with them – the challenged parts are the topics for that conversation.</p>'
+           '<p><a href="' + link(MRO + "?['ReviewItemId']") + '"><b>Open the review</b></a></p>'
+           "<p style=\"color:#666\">It closes when you have both agreed, or as Not agreed on @{formatDateTime(outputs('CloseBy'), 'dd-MMM-yyyy')} "
+           '(it stays flagged, and you can reopen it at any time).</p>')
+    e15 = ('<p>Your line manager has reopened the challenge on your ' + month + ' 1-to-1 feedback. Have a look and agree it when you are happy.</p>'
+           '<p><a href="' + link(MRO + "?['ReviewItemId']") + '"><b>Open my review</b></a></p>')
+    valid_first = ("@and(not(equals(" + MRO + ", null)), not(empty(" + MRO + "?['ReleasedOn'])), "
+                   "equals(toLower(coalesce(" + TB + "?['Author']?['Email'], '#author')), toLower(coalesce(" + MRO + "?['Technician']?['Email'], '#tech'))), "
+                   "empty(coalesce(" + MRO + "?['ChallengeState']?['Value'], '')), equals(length(body('Later_released')), 0), "
+                   "not(empty(trim(coalesce(" + TB + "?['SectionsJson'], '')))), less(length(coalesce(" + TB + "?['SectionsJson'], '')), 20001))")
+    sections_ok = "and(not(empty(trim(coalesce(" + TB + "?['SectionsJson'], '')))), less(length(coalesce(" + TB + "?['SectionsJson'], '')), 20001))"
+    try_actions = seq(
+        *load_ids(),
+        ('List_challenges', query("@body('Get_lists')?['value']", "@equals(item()?['RootFolder']?['Name'], 'OneToOneChallenges')", secure=True)),
+        ('ChIds', compose({'chList': "@first(body('List_challenges'))?['Id']"})),
+        ('Check_challenges_list', cond("@equals(outputs('ChIds')?['chList'], null)", seq(
+            ('STOP_run_the_setup_flow_again', compose("@int('The 1-to-1 Challenges list was not found. Run ESG 1-to-1 | 0 Setup again.')"))))),
+        ('Get_item_scope', http('GET', BASE + '?$select=HasUniqueRoleAssignments')),
+        ('Get_assignments', http('GET', BASE + '/roleassignments?$expand=Member,RoleDefinitionBindings&$select=PrincipalId,Member/Id,'
+                                 'Member/Title,Member/LoginName,Member/Email,Member/PrincipalType,RoleDefinitionBindings/Name')),
+        ('Holders', query("@body('Get_assignments')?['value']", CHALLENGE_HOLDERS, secure=True)),
+        ('Get_mr', get_items(MGR, "ID eq @{" + idnum(TB + "?['ManagerReviewId']") + "}", top=1)),
+        ('Mr', compose("@first(body('Get_mr')?['value'])", secure=True)),
+        ('Get_same_person', get_items(MGR, "TechnicianAadId eq '@{coalesce(" + MRO + "?['TechnicianAadId'], '#none')}'", top=500)),
+        ('Later_released', query("@body('Get_same_person')?['value']",
+                                 "@and(not(empty(item()?['ReleasedOn'])), greater(int(replace(coalesce(item()?['MonthKey'], '0'), '-', '')), int(replace(coalesce(" + MRO + "?['MonthKey'], '0'), '-', ''))))",
+                                 secure=True)),
+        ('ukNow', compose("@convertFromUtc(utcNow(), 'GMT Standard Time', 'yyyy-MM-ddTHH:mm:ss')")),
+        ('CloseBy', compose(close_by("outputs('ukNow')"))),
+        ('First_run', cond("@equals(body('Get_item_scope')?['HasUniqueRoleAssignments'], false)",
+            seq(
+                ('Accept', cond(valid_first,
+                    seq(
+                        ensure_user('Ensure_user', TB + "?['Author']?['Claims']"),
+                        *setperm('', 'chList', TB + "?['ID']", "outputs('Ids')?['edit']", "body('Ensure_user')?['Id']", ids='ChIds'),
+                        ('Open_on_review', patch_item(MGR, '@' + MRO + "?['ID']", {
+                            'Title': '@' + MRO + "?['Title']",
+                            'ChallengeState/Value': 'Open',
+                            'ChallengeSectionsJson': '@' + TB + "?['SectionsJson']",
+                            'ChallengeItemId': '@' + TB + "?['ID']",
+                            'ChallengeOpenedOn': '@utcNow()',
+                            'ChallengeCloseBy': "@outputs('CloseBy')",
+                            'ChallengeTlAgreedOn': None, 'ChallengeTechAgreedOn': None, 'ChallengeClosedOn': None})),
+                        ('Mark_open', patch_item(CH, '@' + TB + "?['ID']", {'Title': '@' + TB + "?['Title']", 'ChallengeStatus/Value': 'Open',
+                                                                          'TechAgreedOn': None, 'MonthKey': '@' + MRO + "?['MonthKey']"})),
+                        ('Send_E14', email('@' + TL_EMAIL, "1-to-1 feedback challenged: @{" + MRO + "?['Technician']?['DisplayName']}, " + month, e14)),
+                    ),
+                    seq(
+                        # not from this review's technician, not their latest released review, already challenged, or empty:
+                        # nobody but the Owners can see it any more
+                        ('Reject_break', http('POST', BASE + '/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)')),
+                        ('Reject_owners', http('POST', BASE + "/roleassignments/addroleassignment(principalid=@{outputs('Ids')?['owners']},"
+                                                              "roledefid=@{outputs('Ids')?['fullControl']})")),
+                        ('Mark_rejected', patch_item(CH, '@' + TB + "?['ID']", {'Title': '@' + TB + "?['Title']", 'ChallengeStatus/Value': 'Rejected'})),
+                    ))),
+            ),
+            seq(
+                ('No_holder', cond("@equals(length(body('Holders')), 0)", seq(('Rejected_or_owners_only', terminate('Cancelled'))))),
+                ('Too_many_holders', cond("@greater(length(body('Holders')), 1)", seq(
+                    ('More_than_one_person_holds_it', terminate('Failed', 'More than one person has access to this challenge. Check its permissions.')),
+                ))),
+                ('Holder', compose("@first(body('Holders'))", secure=True)),
+                # the item must still be the one the review points at (they could have changed ManagerReviewId)
+                ('Not_this_review', cond("@or(equals(" + MRO + ", null), not(equals(" + idstr(MRO + "?['ChallengeItemId']") + ", string(" + TB + "?['ID']))), "
+                                         "not(equals(toLower(coalesce(" + H + "?['Member']?['Email'], '#holder')), toLower(coalesce(" + MRO + "?['Technician']?['Email'], '#tech')))))",
+                                         seq(('Ignore_mismatch', terminate('Cancelled'))))),
+                ('Holder_can_edit', compose("@contains(string(" + H + "?['RoleDefinitionBindings']), '1-to-1 Edit')")),
+                ('Is_open', compose("@equals(" + MRO + "?['ChallengeState']?['Value'], 'Open')")),
+                ('While_open', cond("@and(outputs('Is_open'), outputs('Holder_can_edit'))",
+                    seq(
+                        # the line manager's agreement is read only from the Manager Review (the technician can't write it)
+                        ('Both_agreed', compose("@and(not(empty(" + TB + "?['TechAgreedOn'])), not(empty(" + MRO + "?['ChallengeTlAgreedOn'])))")),
+                        ('Update_review', patch_item(MGR, '@' + MRO + "?['ID']", {
+                            'Title': '@' + MRO + "?['Title']",
+                            'ChallengeSectionsJson': "@if(" + sections_ok + ", " + TB + "?['SectionsJson'], " + MRO + "?['ChallengeSectionsJson'])",
+                            'ChallengeTechAgreedOn': "@if(empty(" + TB + "?['TechAgreedOn']), null, coalesce(" + MRO + "?['ChallengeTechAgreedOn'], utcNow()))",
+                            'ChallengeState/Value': "@if(outputs('Both_agreed'), 'Agreed', 'Open')",
+                            'ChallengeClosedOn': "@if(outputs('Both_agreed'), utcNow(), null)"})),
+                        ('Agreed', cond("@outputs('Both_agreed')", seq(
+                            *setperm('_A', 'chList', TB + "?['ID']", "outputs('Ids')?['read']", H + "?['Member']?['Id']", ids='ChIds'),
+                            ('Mark_agreed', patch_item(CH, '@' + TB + "?['ID']", {'Title': '@' + TB + "?['Title']", 'ChallengeStatus/Value': 'Agreed'})),
+                        ))),
+                    ),
+                    seq(
+                        ('Reopened', cond("@outputs('Is_open')",
+                            seq(
+                                *setperm('_R', 'chList', TB + "?['ID']", "outputs('Ids')?['edit']", H + "?['Member']?['Id']", ids='ChIds'),
+                                ('Clear_review_agreement', patch_item(MGR, '@' + MRO + "?['ID']", {'Title': '@' + MRO + "?['Title']", 'ChallengeTechAgreedOn': None})),
+                                ('Clear_item_agreement', patch_item(CH, '@' + TB + "?['ID']", {'Title': '@' + TB + "?['Title']", 'TechAgreedOn': None,
+                                                                                             'ChallengeStatus/Value': 'Open'})),
+                                ('Send_E15', email('@' + H + "?['Member']?['Email']", 'Your 1-to-1 challenge has been reopened', e15)),
+                            ),
+                            seq(
+                                ('Lock_if_editable', cond("@outputs('Holder_can_edit')", seq(
+                                    *setperm('_C', 'chList', TB + "?['ID']", "outputs('Ids')?['read']", H + "?['Member']?['Id']", ids='ChIds'),
+                                ))),
+                                ('Show_state', cond("@and(not(empty(coalesce(" + MRO + "?['ChallengeState']?['Value'], ''))), "
+                                                    "not(equals(" + TB + "?['ChallengeStatus']?['Value'], " + MRO + "?['ChallengeState']?['Value'])))", seq(
+                                    ('Mirror_state', patch_item(CH, '@' + TB + "?['ID']", {'Title': '@' + TB + "?['Title']",
+                                                                                         'ChallengeStatus/Value': '@' + MRO + "?['ChallengeState']?['Value']"})),
+                                ))),
+                            ))),
+                    ))),
+            ))),
+    )
+    actions = {'Try': after(scope(try_actions), {}), 'Catch': catch('ESG 1-to-1 | 7 Challenge')}
+    triggers = {'When_a_challenge_is_created_or_modified': {
+        'type': 'OpenApiConnection',
+        'recurrence': {'frequency': 'Minute', 'interval': 5},
+        'splitOn': "@triggerOutputs()?['body/value']",
+        'runtimeConfiguration': {'secureData': {'properties': ['inputs', 'outputs']}},
+        'inputs': {'host': {'connectionName': 'shared_sharepointonline', 'operationId': 'GetOnUpdatedItems', 'apiId': SP_API},
+                   'parameters': {'dataset': '@' + SITE, 'table': CH},
+                   'authentication': "@parameters('$authentication')"}}}
+    return definition(triggers, actions)
+
+
 FLOWS = [
     {'id': '6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c01', 'name': 'ESG 1-to-1 | 0 Setup (run once)', 'build': flow_setup,
      'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': True,
-     'description': 'Creates or completes the seven lists, columns, indexes, views, permission levels, group and list permissions. Safe to re-run.'},
+     'description': 'Creates or completes the eight lists, columns, indexes, views, permission levels, group and list permissions. Safe to re-run.'},
     {'id': '6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c02', 'name': 'ESG 1-to-1 | 1 Daily scheduler', 'build': flow_daily,
      'connectors': ['shared_sharepointonline', 'shared_office365', 'shared_office365users'], 'on': False,
      'description': 'Daily 07:00 UK: creates each month\'s reviews, makes them private, emails links and reminders.'},
@@ -1087,6 +1261,9 @@ FLOWS = [
     {'id': '6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c07', 'name': 'ESG 1-to-1 | 6 Feedback', 'build': flow_feedback,
      'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': False,
      'description': 'Feedback from the page: makes each item Owners-only, emails it to the line manager, and flags it if the email fails.'},
+    {'id': '6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c08', 'name': 'ESG 1-to-1 | 7 Challenge', 'build': flow_challenge,
+     'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': False,
+     'description': 'Challenges of released feedback: checks them, keeps them private, records the state on the Manager Review and emails both.'},
 ]
 
 

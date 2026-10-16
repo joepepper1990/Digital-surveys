@@ -21,6 +21,8 @@ APPLIES_TO = ['Shared', 'Individual']
 WB_STATUS = ['Open', 'Submitted', 'Completed']
 FEEDBACK_TYPES = ['Fault', 'Improvement', 'Suggestion']
 DELIVERY_STATUS = ['Pending', 'Sent', 'Failed', 'Read', 'Held']
+CHALLENGE_STATE = ['Open', 'Agreed', 'Not agreed']
+CHALLENGE_STATUS = ['Open', 'Agreed', 'Not agreed', 'Rejected']
 DEFAULT_REMINDERS = '[20,27]'
 
 DEFAULT_BANDS = ('[{"name":"Not met","max":1.5},{"name":"Partially met","max":2.25},'
@@ -191,6 +193,15 @@ LISTS = [
             text('CompletedBy'),
             date('ReleasedOn', with_time=True),
             note('CorrectionLog'),
+            # challenge of the released feedback (Flow 7 / the Team Leader only – the technician can only read these)
+            choice('ChallengeState', CHALLENGE_STATE, indexed=True),
+            note('ChallengeSectionsJson'),
+            number('ChallengeItemId'),
+            date('ChallengeOpenedOn', with_time=True),
+            date('ChallengeCloseBy'),
+            date('ChallengeTlAgreedOn', with_time=True),
+            date('ChallengeTechAgreedOn', with_time=True),
+            date('ChallengeClosedOn', with_time=True),
         ],
         'views': [
             view('Overdue', ['LinkTitle', 'Technician', 'MonthKey', 'DueDate', 'ReviewState'],
@@ -236,6 +247,23 @@ LISTS = [
             text('AppVersion'),
             choice('DeliveryStatus', DELIVERY_STATUS, default='Pending'),
             date('SentOn', with_time=True),
+        ],
+        'views': [],
+    },
+    {
+        # A technician challenges parts of their latest released feedback. Same access as Feedback (each person sees only
+        # their own); Flow 7 checks it, makes it private to them and the Owners, and keeps the trusted state on the
+        # Manager Review, which the technician can only read.
+        'key': 'challenges', 'url': 'OneToOneChallenges', 'title': '1-to-1 Challenges', 'groupRead': False,
+        'groupContribute': True, 'readSecurity': 2, 'writeSecurity': 2,
+        'description': 'ESG 1-to-1: challenges of released feedback. Each person sees only their own; Flow 7 records the trusted state on the Manager Review.',
+        'fields': [
+            number('ManagerReviewId', indexed=True),
+            text('MonthKey'),
+            note('SectionsJson'),
+            date('TechAgreedOn', with_time=True),
+            date('TlPing', with_time=True),
+            choice('ChallengeStatus', CHALLENGE_STATUS, default='Open'),
         ],
         'views': [],
     },
