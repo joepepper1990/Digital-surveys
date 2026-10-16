@@ -417,7 +417,7 @@ window.ESGOneToOne = function (ctx) {
   var WB_FIELDS = 'ID,Title,AssessmentStatus,AssessmentDate,Position,EmployeeNumber,AnswersJson,PersonalJson,ArrangementsJson,ManagerNotes,NextReviewDate,' +
     'SubmittedOn,CompletedOn,Technician/Id,Technician/Title,Technician/EMail';
   // Feedback list: only failed / undelivered items are read (line manager only), to show in Needs your attention.
-  var FB_FIELDS = 'ID,Title,FeedbackType,Message,PageName,AppVersion,DeliveryStatus,SentOn,Created,Author/Title,Author/EMail';
+  var FB_FIELDS = 'ID,Title,FeedbackType,Message,PageName,AppVersion,DeliveryStatus,SentOn,Created,HasUniqueRoleAssignments,Author/Title,Author/EMail';
   var REV_FIELDS = 'ID,Title,MonthKey,DueDate,ReviewStatus,Q1WentWell,Q2Issue,Q2Impact,Q2Tried,Q2Support,Q3WorkloadRating,Q3WorkloadComment,' +
     'Q4WellbeingRaise,Q4WellbeingDetail,Q5PlanningRaise,Q5PlanningDetail,Q6DevRaise,Q6DevWhat,Q6DevWhy,Q7ManagerFeedback,ExpectationsJson,Q9FollowUp,' +
     'Mood,WinOfMonth,AppraisalDate,Technician/Id,Technician/Title,Technician/EMail';
@@ -534,10 +534,18 @@ window.ESGOneToOne = function (ctx) {
         if (!TECH_INFO[name]) { TECH_INFO[name] = { appraisal: '', itemId: 0, email: email, claims: '', active: false }; }
         REVIEWS.push(buildReview(rv, mr, name));
       });
-      // feedback the line manager hasn't received by email: Failed, or still Pending after an hour (Flow 6 off?)
-      FEEDBACK_ISSUES = (await spGetAll(CONFIG.lists.feedback, FB_FIELDS, 'Author')).filter(function (f) {
-        var st = str(f.DeliveryStatus) || 'Pending', age = Date.now() - new Date(f.Created).getTime();
-        return st === 'Failed' || (st === 'Pending' && age > 3600000);
+      // Feedback the line manager hasn't had by email. Only items Flow 6 has handled (locked, so the sender can no longer
+      // change them) are trusted to say Failed or Held; anything not locked an hour after it was sent means Flow 6 is off.
+      FEEDBACK_ISSUES = [];
+      var heldBy = {};
+      (await spGetAll(CONFIG.lists.feedback, FB_FIELDS, 'Author')).forEach(function (f) {
+        var st = str(f.DeliveryStatus), locked = f.HasUniqueRoleAssignments === true, age = Date.now() - new Date(f.Created).getTime();
+        if (locked && st === 'Failed') { FEEDBACK_ISSUES.push({ kind: 'failed', items: [f] }); }
+        else if (locked && st === 'Held') {
+          var k = str(f.Author && f.Author.EMail).toLowerCase() || 'unknown';
+          if (!heldBy[k]) { heldBy[k] = { kind: 'held', items: [] }; FEEDBACK_ISSUES.push(heldBy[k]); }
+          heldBy[k].items.push(f);
+        } else if (!locked && age > 3600000) { FEEDBACK_ISSUES.push({ kind: 'pending', items: [f] }); }
       });
       var exps = await spGetAll(CONFIG.lists.exp, 'ID,Title,Measures,AppraisalYear,AppliesTo,SortOrder,Active,Technician/Id,Technician/Title,Technician/EMail,Technician/Name', 'Technician');
       var wbChk = await req('GET', listPath(CONFIG.lists.wellbeing) + '?$select=Id');
@@ -776,6 +784,7 @@ window.ESGOneToOne = function (ctx) {
   // ---------------------------------------------------------------------------------------------
   function toast(msg, isErr) {
     if (!root) { return; }
+    Array.prototype.forEach.call(root.querySelectorAll('.toast'), function (old) { old.remove(); });   // never stack on top of each other
     var t = h('div', { class: 'toast' + (isErr ? ' err' : ''), role: 'status', text: msg });
     root.appendChild(t); if (live) { live.textContent = msg; }
     setTimeout(function () { t.remove(); }, isErr ? 6000 : 3200);
@@ -856,7 +865,7 @@ window.ESGOneToOne = function (ctx) {
         if (result === 'skip') { show('Auto-save paused – finish the highlighted item', 'warn'); return; }
         lastAt = Date.now();
         if (editGen === gen) { dirty = false; } else { kick(); }   // typed while saving: save again
-        show('Saved ' + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }));
+        show('Saved ' + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: CONFIG.timeZone }));
       }).catch(function () {
         running = false;
         if (statusEl !== el) { return; }
@@ -1151,9 +1160,9 @@ window.ESGOneToOne = function (ctx) {
     var prior = mine.filter(function (x) { return x.month < r.month; })[0];
     if (!prior) { return null; }
     var pa = prior.answers, pf = prior.fb, rel = prior.released, raised = [];
-    function item(label, text, reply) { raised.push({ label: label, text: text, reply: rel ? reply : '' }); }
+    function item(label, text, reply, privateItem) { raised.push({ label: label, text: text, reply: rel ? reply : '', priv: !!privateItem }); }
     if (pa.q2.issue || pa.q2.support) { item('Challenge', pa.q2.issue + (pa.q2.support ? (pa.q2.issue ? ' – ' : '') + 'support needed: ' + pa.q2.support : ''), pf.q2); }
-    if (pa.q4 === 'Yes') { item('Wellbeing', pa.q4d || 'You asked to talk about it', pf.q4); }
+    if (pa.q4 === 'Yes') { item('Wellbeing', pa.q4d || 'You asked to talk about it', pf.q4, true); }
     if (pa.q5 === 'Yes') { item('Planning', pa.q5d || 'Something coming up', pf.q5); }
     if (pa.q6 === 'Yes') { item('Development', pa.q6what || 'Training or development', pf.q6); }
     if (pa.q9 === DEDICATED) { item('1-to-1', 'You asked for a dedicated 1-to-1', pf.q9 || (pf.meeting ? 'Meeting on ' + fmtDate(pf.meeting) : '')); }
@@ -1173,6 +1182,12 @@ window.ESGOneToOne = function (ctx) {
         body.appendChild(h('div', { class: 'since-h', text: 'What you raised in ' + monthLabel(prior.month) }));
         if (!rel) { body.appendChild(h('div', { class: 'small muted', text: 'Feedback not released yet – your ' + lc(L.mgr) + '\'s replies will show here.' })); }
         body.appendChild(h('ul', { class: 'since-list' }, raised.map(function (x) {
+          if (x.priv) {   // health information: not on screen until they choose to see it
+            var hid = h('span', null, [clip(x.text, 140), x.reply ? h('div', { class: 'since-reply' }, [h('b', { text: L.mgr + ': ' }), clip(x.reply, 160)]) : null]);
+            hid.hidden = true;
+            var showBtn = h('button', { class: 'linkbtn', type: 'button', text: 'show', onclick: function () { hid.hidden = false; showBtn.remove(); } });
+            return h('li', null, [h('b', { text: x.label + ': ' }), h('span', { class: 'muted', text: 'you raised a wellbeing point ' }), showBtn, hid]);
+          }
           return h('li', null, [h('b', { text: x.label + ': ' }), clip(x.text, 140),
             x.reply ? h('div', { class: 'since-reply' }, [h('b', { text: L.mgr + ': ' }), clip(x.reply, 160)]) : null]);
         })));
@@ -1462,10 +1477,11 @@ window.ESGOneToOne = function (ctx) {
       items.push({ pri: 2, ico: '✅', text: 'Overdue action for ' + x.r.tech + ': ' + x.ac.text + ' (due ' + fmtDate(x.ac.due) + ')', btn: 'Actions', fn: function () { state.actFilter = 'overdue'; go('actions'); } });
     });
     wellbeingAttention().forEach(function (x) { items.push(x); });
-    FEEDBACK_ISSUES.forEach(function (f) {
-      var who = str(f.Author && f.Author.Title) || 'someone';
-      items.push({ pri: str(f.DeliveryStatus) === 'Failed' ? 1 : 2, ico: '💬', btn: 'Read', fn: function () { openFeedbackItem(f); },
-        text: 'Feedback from ' + who + (str(f.DeliveryStatus) === 'Failed' ? ' couldn\'t be emailed' : ' hasn\'t been emailed yet') + ' – read it here' });
+    FEEDBACK_ISSUES.forEach(function (g) {
+      var f = g.items[0], who = str(f.Author && f.Author.Title) || 'someone';
+      items.push({ pri: g.kind === 'failed' ? 1 : 2, ico: '💬', btn: 'Read', fn: function () { openFeedbackItem(g); },
+        text: g.kind === 'held' ? who + ' sent ' + plural(g.items.length, 'more feedback message') + ' than are emailed in a day (10) – read them here'
+          : 'Feedback from ' + who + (g.kind === 'failed' ? ' couldn\'t be emailed' : ' hasn\'t been emailed yet') + ' – read it here' });
     });
     TECHS.forEach(function (t) {
       var ap = apDateOf(t);
@@ -1644,7 +1660,7 @@ window.ESGOneToOne = function (ctx) {
     });
     return card('Monthly reviews', rs.length + ' shown', [
       h('div', { class: 'filters' }, [h('div', null, [h('label', { for: 'oto-f-month', text: 'Month' }), monthSel]), h('div', null, [h('label', { for: 'oto-f-tech', text: L.one }), techSel])]),
-      table([L.one, 'Month', 'Status', 'Submitted', 'Workload', 'Energy', 'Self avg', 'Your avg', 'Follow-up', 'Actions', ''], rows)
+      h('div', { class: 'nw' }, table([L.one, 'Month', 'Status', 'Submitted', 'Workload', 'Energy', 'Self avg', 'Your avg', 'Follow-up', 'Actions', ''], rows))
     ]);
   }
 
@@ -1682,7 +1698,7 @@ window.ESGOneToOne = function (ctx) {
     var tIn = h('input', { type: 'text', id: 'oto-x-title', maxlength: '255' }); tIn.value = f.title;
     var mIn = h('textarea', { id: 'oto-x-meas', rows: 3 }); mIn.value = f.measures;
     var yIn = h('input', { type: 'text', id: 'oto-x-year', maxlength: '20' }); yIn.value = f.year;
-    var scSel = h('select', { id: 'oto-x-scope' }, ['Shared', 'Individual'].map(function (v) { var o = h('option', { value: v, text: v === 'Shared' ? ('Shared – all ' + lc(L.many)) : 'Individual' }); o.selected = v === f.scope; return o; }));
+    var scSel = h('select', { id: 'oto-x-scope' }, ['Shared', 'Individual'].map(function (v) { var o = h('option', { value: v, text: v === 'Shared' ? 'Shared (everyone)' : 'Individual' }); o.selected = v === f.scope; return o; }));
     var teSel = h('select', { id: 'oto-x-tech' }, [h('option', { value: '', text: '—' })].concat(TECHS.map(function (t) { var o = h('option', { value: t, text: t }); o.selected = t === f.tech; return o; })));
     teSel.disabled = f.scope !== 'Individual';
     scSel.addEventListener('change', function () { teSel.disabled = scSel.value !== 'Individual'; if (teSel.disabled) { teSel.value = ''; } });
@@ -1803,7 +1819,7 @@ window.ESGOneToOne = function (ctx) {
     var headers = [].concat(opts.showTech ? [L.one] : [], opts.showMonth ? ['From'] : [], ['Action', 'Owner', 'Close-out criteria', 'Deadline', 'Status'], opts.manage ? [''] : []);
     var rows = items.map(function (x) {
       var ac = x.ac, od = acOverdue(ac);
-      var cells = [].concat(opts.showTech ? [x.r.tech] : [], opts.showMonth ? [monthShort(x.r.month)] : [], [
+      var cells = [].concat(opts.showTech ? [x.r.tech] : [], opts.showMonth ? [monthShort(x.r.month) + ' ' + x.r.month.slice(2, 4)] : [], [
         h('span', { style: 'font-weight:600', text: ac.text }), ac.owner,
         h('span', { class: 'small', text: ac.criteria }),
         h('span', { class: od ? 'overdue' : '', text: fmtDate(ac.due) + (od ? ' – overdue' : '') }),
@@ -1877,7 +1893,7 @@ window.ESGOneToOne = function (ctx) {
       qCard(4, 'Wellbeing and support', null, [ans(yn(a.q4, a.q4d)), fbBox('q4')]),
       qCard(5, 'Upcoming planning', null, [ans(yn(a.q5, a.q5d)), fbBox('q5')]),
       qCard(6, 'Development, training and aspirations', null, [ans(yn(a.q6, a.q6what ? a.q6what + (a.q6why ? ' (' + a.q6why + ')' : '') : '')), fbBox('q6')]),
-      qCard(7, 'Feedback for line manager', null, [ans(has ? a.q7 : ''), fbBox('q7', 'Your response')]),
+      qCard(7, 'Feedback for ' + lc(L.mgr), null, [ans(has ? a.q7 : ''), fbBox('q7', 'Your response')]),
       qCard(8, 'Appraisal expectations', h('span', { class: 'small muted', text: 'Your ratings feed the appraisal outlook' }), [r.snapshot.length ? table(['Expectation', L.one, 'Your rating', 'Your feedback'],
         r.snapshot.map(function (e) {
           var x = a.q8.find(function (q) { return String(q.id) === String(e.id); }) || {};
@@ -2140,7 +2156,7 @@ window.ESGOneToOne = function (ctx) {
           last ? h('button', { class: 'btn small ghost', type: 'button', text: 'Last one', onclick: function () { go('wb', { wbId: last.id }); } }) : null])]);
     });
     var all = WELLBEING.slice().sort(function (a, b) { return a.id < b.id ? 1 : -1; });
-    var guide = h('details', { class: 'how' }, [h('summary', { text: 'ⓘ Guidance for line managers' })].concat(WB_INTRO_MGR.map(function (p) { return h('p', { text: p }); })).concat([h('p', { text: WB_STRESS })]));
+    var guide = h('details', { class: 'how' }, [h('summary', { text: 'ⓘ Guidance for ' + lc(L.mgr) + 's' })].concat(WB_INTRO_MGR.map(function (p) { return h('p', { text: p }); })).concat([h('p', { text: WB_STRESS })]));
     return h('div', { class: 'stack' }, [tiles,
       card('Team wellbeing', 'Completed at least once a year · only you and each person can see their assessment', [guide,
         h('div', { style: 'margin-top:10px' }, table([L.one, 'Last completed', 'In progress', 'Next review', ''], rows, { empty: 'No ' + lc(L.many) + ' yet.' })),
@@ -2262,10 +2278,10 @@ window.ESGOneToOne = function (ctx) {
           var a = w.answers[q[0]];
           var helpBox = h('div', { class: 'wbhelp' }, textBox('What actions or adjustments do you feel would help?', a.help, function (v) { a.help = v; }, false, 2));
           var issueWrap = h('div', { class: 'wbcol' }, [h('span', { class: 'wblab', text: 'Is it an issue?' }), seg(WB_YNA, a.issue, function (v) { a.issue = v; helpBox.hidden = v !== 'Y'; drawNav(); }, false, true)]);
-          helpBox.hidden = a.issue !== 'Y'; issueWrap.hidden = a.app !== 'Y';
+          helpBox.hidden = a.issue !== 'Y'; issueWrap.style.visibility = a.app === 'Y' ? '' : 'hidden';   // keep the column in place
           var appSeg = seg(WB_YNA, a.app, function (v) {
             a.app = v; if (v !== 'Y') { a.issue = 'NA'; helpBox.hidden = true; } else if (a.issue === 'NA') { a.issue = ''; }
-            issueWrap.hidden = v !== 'Y'; if (v === 'Y') { var ib = issueWrap.querySelector('.seg'); Array.prototype.forEach.call(ib.children, function (c) { c.setAttribute('aria-pressed', 'false'); c.setAttribute('aria-checked', 'false'); }); }
+            issueWrap.style.visibility = v === 'Y' ? '' : 'hidden'; if (v === 'Y') { var ib = issueWrap.querySelector('.seg'); Array.prototype.forEach.call(ib.children, function (c) { c.setAttribute('aria-pressed', 'false'); c.setAttribute('aria-checked', 'false'); }); }
             drawNav();
           }, false, true);
           return h('div', { class: 'wbq' }, [h('div', { class: 'wbq-t' }, [h('span', { class: 'qnum', text: String(qi + 1) }), h('span', { text: q[1] })]),
@@ -2377,7 +2393,7 @@ window.ESGOneToOne = function (ctx) {
       h('div', { class: 'rmeta' }, [
         h('div', null, [h('span', { text: 'Employee name' }), h('b', { text: w.tech })]), h('div', null, [h('span', { text: 'Assessment date' }), h('b', { text: w.date ? fmtDate(w.date) : '' })]),
         h('div', null, [h('span', { text: 'Position' }), h('b', { text: w.position })]), h('div', null, [h('span', { text: 'Review date' }), h('b', { text: w.nextReview ? fmtDate(w.nextReview) : '' })]),
-        h('div', null, [h('span', { text: 'Employee number' }), h('b', { text: w.empNo })]), h('div', null, [h('span', { text: 'Line manager' }), h('b', { text: IS_TL ? ME : '' })])]),
+        h('div', null, [h('span', { text: 'Employee number' }), h('b', { text: w.empNo })]), h('div', null, [h('span', { text: L.mgr }), h('b', { text: IS_TL ? ME : '' })])]),
       h('p', { class: 'small', text: WB_STRESS })
     ].concat(WB_SECTIONS.map(function (sec) {
       return h('section', { class: 'rsec' }, [h('h2', { text: sec.title }), rt(['Question', 'Applicable?', 'An issue?', 'Actions / adjustments that would help'], sec.q.map(function (q) {
@@ -2530,7 +2546,7 @@ window.ESGOneToOne = function (ctx) {
           Array.from({ length: 28 }, function (_, k) { var o = h('option', { value: String(k + 1), text: ordinal(k + 1) }); o.selected = rem[i] === k + 1; return o; })));
         sel.addEventListener('change', function () {
           rem = sels.map(function (x) { return Number(x.value); }).filter(function (n, j, a) { return n && a.indexOf(n) === j; }).sort(function (x, y) { return x - y; });
-          preview.textContent = 'Reminders on the ' + remindersText(rem) + ' of each month.';
+          preview.textContent = rem.length ? 'Reminders on the ' + remindersText(rem) + ' of each month.' : 'No reminders will be sent.';
         });
         return sel;
       });
@@ -2665,7 +2681,11 @@ window.ESGOneToOne = function (ctx) {
         ]),
         h('div', { class: 'fgrid c2', style: 'margin-top:12px' }, [
           h('div', null, [h('h3', { text: 'Strongest areas' }), h('ul', null, sorted.slice(0, Math.min(2, Math.ceil(sorted.length / 2))).map(function (x) { return h('li', { text: x.e.title + ' (' + x.latest + ' – ' + PROGRESS[x.latest - 1].title + ')' }); }))]),
-          h('div', null, [h('h3', { text: 'Areas to focus on' }), h('ul', null, sorted.slice(Math.min(2, Math.ceil(sorted.length / 2))).slice(-2).reverse().map(function (x) { return h('li', { text: x.e.title + ' (' + x.latest + ' – ' + PROGRESS[x.latest - 1].title + ')' }); }))])
+          h('div', null, [h('h3', { text: 'Areas to focus on' }), (function () {
+            var focus = sorted.slice(Math.min(2, Math.ceil(sorted.length / 2))).filter(function (x) { return x.latest <= 3; }).slice(-2).reverse();
+            return h('ul', null, focus.length ? focus.map(function (x) { return h('li', { text: x.e.title + ' (' + x.latest + ' – ' + PROGRESS[x.latest - 1].title + ')' }); })
+              : [h('li', { class: 'muted', text: 'Nothing rated below "On track".' })]);
+          })()])
         ]),
         h('h3', { text: 'Rating trend' }), trendChart(tech, o, 210)
       ]),
@@ -2682,9 +2702,9 @@ window.ESGOneToOne = function (ctx) {
       rsec('4. Development and training', [rtable(['Month', 'Requested', 'Why'], subs.filter(function (r) { return r.answers.q6 === 'Yes'; }).map(function (r) { return [monthLabel(r.month), r.answers.q6what, r.answers.q6why]; }))]),
       rsec('5. Challenges and support', [rtable(['Month', 'Issue', 'Impact', 'Support needed'], subs.filter(function (r) { return r.answers.q2.issue; }).map(function (r) { return [monthLabel(r.month), r.answers.q2.issue, r.answers.q2.impact, r.answers.q2.support]; }))]),
       rsec('6. Agreed actions', [rtable(['Raised', 'Action', 'Owner', 'Close-out criteria', 'Deadline', 'Status'], acts.map(function (x) {
-        return [monthShort(x.r.month), x.ac.text, x.ac.owner, x.ac.criteria, fmtDate(x.ac.due), x.ac.status === 'Closed' ? 'Closed ' + fmtDate(x.ac.closedOn) : (acOverdue(x.ac) ? 'Open – overdue' : 'Open')];
+        return [monthShort(x.r.month) + ' ' + x.r.month.slice(2, 4), x.ac.text, x.ac.owner, x.ac.criteria, fmtDate(x.ac.due), x.ac.status === 'Closed' ? 'Closed ' + fmtDate(x.ac.closedOn) : (acOverdue(x.ac) ? 'Open – overdue' : 'Open')];
       }))]),
-      rsec('7. Line manager feedback', [rtable(['Month', 'Overall feedback'], prs.filter(function (r) { return r.state === 'Completed' && canSeeTl(r, aud) && r.fb.overall; }).map(function (r) { return [monthLabel(r.month), r.fb.overall]; }))]),
+      rsec('7. ' + L.mgr + ' feedback', [rtable(['Month', 'Overall feedback'], prs.filter(function (r) { return r.state === 'Completed' && canSeeTl(r, aud) && r.fb.overall; }).map(function (r) { return [monthLabel(r.month), r.fb.overall]; }))]),
       rsec('8. Submission record', [rtable(['Month', 'Status', 'Submitted'], prs.map(function (r) {
         return [monthLabel(r.month), r.state === 'Closed - Not Submitted' ? 'Not submitted' : r.state === 'Open' ? (isOverdue(r) ? 'Overdue' : 'In progress') : (r.late ? 'Submitted late' : 'Submitted'), r.submittedOn ? fmtDate(r.submittedOn) : ''];
       }))]),
@@ -2706,7 +2726,7 @@ window.ESGOneToOne = function (ctx) {
     '.legend{display:flex;gap:14px;font-size:12px;color:#5b6774;margin-bottom:6px}.legend .sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px}.legend .sw.dash{height:0;border-top:2px dashed #5b6774;width:14px;vertical-align:3px}',
     'svg.chart{width:100%;height:auto;display:block}svg.chart text{font-size:11px;fill:#5b6774}',
     '.note{font-size:11px;color:#5b6774;margin-top:24px;border-top:1px solid #d9dfe5;padding-top:8px}',
-    '@media print{@page{size:A4;margin:12mm}.report-doc{padding:0}.rsec{break-inside:avoid-page}}'
+    '@media print{@page{size:A4;margin:12mm}.report-doc{padding:0}.rsec h2{break-after:avoid}.rt tr,.fgrid>div{break-inside:avoid}.rt td:nth-child(n+4){white-space:nowrap}}'
   ].join('\n');
   function printReport(tech, aud) {
     var w = window.open('', '_blank');
@@ -2719,7 +2739,7 @@ window.ESGOneToOne = function (ctx) {
     setTimeout(function () { try { w.print(); } catch (_) { /* user can print manually */ } }, 400);
   }
   function reportView(tech, aud) {
-    return h('div', { class: 'report-wrap', role: 'dialog', 'aria-label': 'Appraisal report' }, [
+    return h('div', { class: 'report-wrap', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Appraisal report' }, [
       h('div', { class: 'report-bar' }, [h('strong', { text: 'Appraisal report – ' + tech }), h('div', { class: 'btn-row' }, [
         h('button', { class: 'btn primary', type: 'button', text: '🖨 Print / Save as PDF', onclick: function () { printReport(tech, aud); } }),
         h('button', { class: 'btn', type: 'button', text: 'Close', onclick: function () { state.report = null; render(false); } })])]),
@@ -2795,23 +2815,31 @@ window.ESGOneToOne = function (ctx) {
     if (w && w.redraw) { w.redraw(); var b = w.querySelector('.fbk-bubble'); if (b) { b.focus(); } }
   }
   // Line manager: read feedback that wasn't emailed, and mark it read.
-  function openFeedbackItem(f) {
-    var back = h('div', { class: 'modal-back' });
+  function openFeedbackItem(g) {
+    var back = h('div', { class: 'modal-back' }), first0 = g.items[0];
     function row(k, v) { return h('tr', null, [h('th', { text: k }), h('td', { text: v })]); }
-    var created = f.Created ? new Date(f.Created) : null;
+    function when(f) {
+      var c = f.Created ? new Date(f.Created) : null;
+      return c && !isNaN(c) ? fmtDate(localDate(f.Created)) + ' ' + c.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: CONFIG.timeZone }) : '';
+    }
+    var status = g.kind === 'failed' ? 'Could not be delivered' : g.kind === 'held' ? 'Not emailed – more than 10 from one person in a day'
+      : 'Not sent yet – check ESG 1-to-1 | 6 Feedback is On';
+    var blocks = g.items.map(function (f) {
+      return h('div', { class: 'fbk-item' }, [h('div', { class: 'small muted', text: (str(f.FeedbackType) || 'Suggestion') + ' · ' + when(f) + ' · ' + str(f.PageName) +
+        (f.AppVersion ? ' (version ' + str(f.AppVersion) + ')' : '') }), h('div', { class: 'fbk-msg', text: str(f.Message) })]);
+    });
     back.appendChild(h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Feedback' }, [
-      h('h3', { text: 'Feedback – ' + (str(f.FeedbackType) || 'Suggestion') }),
+      h('h3', { text: g.items.length > 1 ? plural(g.items.length, 'feedback message') : 'Feedback – ' + (str(first0.FeedbackType) || 'Suggestion') }),
       h('table', { class: 'tbl' }, [h('tbody', null, [
-        row('From', str(f.Author && f.Author.Title) + (f.Author && f.Author.EMail ? ' (' + str(f.Author.EMail) + ')' : '')),
-        row('Sent', created && !isNaN(created) ? fmtDate(localDate(f.Created)) + ' ' + created.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: CONFIG.timeZone }) : ''),
-        row('Page', str(f.PageName) + (f.AppVersion ? ' (version ' + str(f.AppVersion) + ')' : '')),
-        row('Email', str(f.DeliveryStatus) === 'Failed' ? 'Could not be delivered' : 'Not sent yet – check ESG 1-to-1 | 6 Feedback is On')])]),
-      h('div', { class: 'fbk-msg', text: str(f.Message) }),
+        // as recorded by SharePoint (the person signed in when it was sent)
+        row('From', str(first0.Author && first0.Author.Title) + (first0.Author && first0.Author.EMail ? ' (' + str(first0.Author.EMail) + ')' : '')),
+        row('Email', status)])]),
+      h('div', { class: 'fbk-list' }, blocks),
       h('div', { class: 'btn-row', style: 'margin-top:14px' }, [
-        h('button', { class: 'btn primary', type: 'button', text: 'Mark as read', onclick: function () {
+        h('button', { class: 'btn primary', type: 'button', text: g.items.length > 1 ? 'Mark all as read' : 'Mark as read', onclick: function () {
           busy('fb', async function () {
-            await spUpdate(CONFIG.lists.feedback, f.ID, { DeliveryStatus: 'Read' });
-            FEEDBACK_ISSUES = FEEDBACK_ISSUES.filter(function (x) { return x.ID !== f.ID; });
+            for (var i = 0; i < g.items.length; i++) { await spUpdate(CONFIG.lists.feedback, g.items[i].ID, { DeliveryStatus: 'Read' }); }
+            FEEDBACK_ISSUES = FEEDBACK_ISSUES.filter(function (x) { return x !== g; });
             back.remove(); toast('Marked as read. It stays in the 1-to-1 Feedback list.'); render(false);
           }).catch(function () {});
         } }),
@@ -2888,7 +2916,7 @@ window.ESGOneToOne = function (ctx) {
       expect: ['', 'Appraisal expectations'], actions: ['', 'Actions'], wellbeing: ['', 'Wellbeing assessments'], wb: ['Wellbeing ›', 'Wellbeing assessment'] };
     var tt = titles[v] || ['', ''];
     if (v === 'profile') { tt = ['Team overview ›', state.profileTech]; }
-    if (v === 'mgr') { var rv = REVIEWS.find(function (x) { return x.id === state.reviewId; }); tt = rv ? [(state.backTo === 'profile' ? rv.tech : 'Monthly reviews') + ' ›', rv.tech + ' – ' + monthLabel(rv.month)] : ['', 'Review']; }
+    if (v === 'mgr') { var rv = REVIEWS.find(function (x) { return x.id === state.reviewId; }); tt = rv ? [(state.backTo === 'profile' ? rv.tech : state.backTo === 'team' ? 'Team overview' : 'Monthly reviews') + ' ›', rv.tech + ' – ' + monthLabel(rv.month)] : ['', 'Review']; }
     var titlebar = h('div', { class: 'titlebar' }, [h('div', null, [tt[0] ? h('div', { class: 'crumb', text: tt[0] }) : null, h('h1', { text: tt[1] })]),
       h('span', { class: 'small muted', text: 'Today ' + fmtDate(TODAY) })]);
     var main = h('main');
@@ -2960,14 +2988,25 @@ window.ESGOneToOne = function (ctx) {
       if (top) {
         var btn = Array.prototype.filter.call(top.querySelectorAll('button'), function (b) { return /^(Cancel|Close)$/.test(b.textContent.trim()); }).pop();
         if (btn) { e.preventDefault(); btn.click(); }
-      } else if (FBK.open) { e.preventDefault(); closeFeedback(); }
+      } else if (state.report) { e.preventDefault(); state.report = null; render(false); }
+      else if (FBK.open) { e.preventDefault(); closeFeedback(); }
     });
     // Return focus to whatever opened a dialog once it closes.
     if (window.MutationObserver) {
       var opener = null;
       new window.MutationObserver(function (muts) {
         muts.forEach(function (m) {
-          Array.prototype.forEach.call(m.addedNodes, function (n) { if (n.classList && n.classList.contains('modal-back')) { opener = document.activeElement; } });
+          Array.prototype.forEach.call(m.addedNodes, function (n) {
+            if (n.classList && n.classList.contains('modal-back')) {
+              opener = document.activeElement;
+              // move focus into the dialog (first field, else its first button) unless something inside already has it
+              setTimeout(function () {
+                if (!n.isConnected || n.contains(document.activeElement)) { return; }
+                var f = n.querySelector('input:not([type=hidden]):not([disabled]):not(.dpick), select, textarea, button');
+                if (f) { try { f.focus(); } catch (_) { /* ignore */ } }
+              }, 0);
+            }
+          });
           Array.prototype.forEach.call(m.removedNodes, function (n) {
             if (n.classList && n.classList.contains('modal-back') && opener && opener.isConnected && !root.querySelector('.modal-back')) { try { opener.focus(); } catch (_) { /* ignore */ } opener = null; }
           });

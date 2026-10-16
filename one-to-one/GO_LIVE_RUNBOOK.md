@@ -19,7 +19,7 @@ This runbook takes you from where you are now to technicians receiving their fir
 
 - Site, page, Welcome and the `1-to-1 Technicians` group are built.
 - **Stage 0A and 0B have passed.**
-- **All build files are produced** and tested locally (182 frontend checks, 167 flow simulations).
+- **All build files are produced** and tested locally (182 frontend checks, 180 flow simulations).
 
 **Legend:**
 
@@ -51,7 +51,7 @@ Stage 0A and 0B passed in the live tenant. Two findings are built into the setup
 
 | File | What it is |
 |---|---|
-| `04-solution/ESGOneToOne_1_2_0_0_unmanaged.zip` | **The seven flows as one importable solution**, including the setup flow that creates the lists |
+| `04-solution/ESGOneToOne_1_2_1_0_unmanaged.zip` | **The seven flows as one importable solution**, including the setup flow that creates the lists |
 | `02-frontend/one-to-one.html`, `one-to-one.js` | The app, v4.4.0. **Nothing to edit.** |
 | `01-sharepoint/lists.md`, `lists.csv` | Column-by-column list checklist |
 | `03-flows/FLOW_BUILD_SHEETS.md` | Flows 1–3, step by step |
@@ -65,7 +65,7 @@ Stage 0A and 0B passed in the live tenant. Two findings are built into the setup
 
 Follow [`04-solution/IMPORT_GUIDE.md`](04-solution/IMPORT_GUIDE.md) §1–§4.
 
-- [ ] **Solutions → Import solution** → `04-solution/ESGOneToOne_1_2_0_0_unmanaged.zip`.
+- [ ] **Solutions → Import solution** → `04-solution/ESGOneToOne_1_2_1_0_unmanaged.zip`.
   - Pick your three connections.
   - Enter the **Site URL** (no trailing slash) and **your email**.
 - [ ] Run **ESG 1-to-1 | 0 Setup (run once)**. It creates the seven lists exactly as [`01-sharepoint/lists.md`](01-sharepoint/lists.md) describes, the two permission levels, the `1-to-1 Technicians` group (if missing), list permissions and the `Bands` and `Reminders` settings.
@@ -80,7 +80,7 @@ Follow [`04-solution/IMPORT_GUIDE.md`](04-solution/IMPORT_GUIDE.md) §1–§4.
 **⛔ Gate:** check the permissions on each list.
 
 - The five data lists (including **Wellbeing Assessments**) show **only Owners – Full Control**.
-- **1-to-1 Feedback** shows Owners – Full Control plus `1-to-1 Technicians` – **Contribute**, with item-level permissions set to their own items only.
+- **1-to-1 Feedback** shows Owners – Full Control plus `1-to-1 Technicians` – **1-to-1 Submit** (Contribute without delete, versions, alerts or personal views), with item-level permissions set to their own items only.
 - **1-to-1 Settings** shows Owners plus `1-to-1 Technicians` – Read.
 
 ## Phase 5 — (no longer needed) Record the IDs ✅
@@ -150,7 +150,7 @@ With **only Test A and Test B** in Technicians:
   - The **Actions** page closes an action.
   - The **Appraisal report** for A prints or saves as PDF.
 - [ ] **As Test B:** throughout, B never sees anything of A's.
-- [ ] Run plan **section H**: F1–F44 and **every P test (P1–P25)**. The XSS test P15 is release-blocking.
+- [ ] Run plan **section H**: F1–F44 and **every P test (P1–P28)**. The XSS test P15 is release-blocking.
 
 **⛔ Gate:** every P test passes and the journey works end to end.
 

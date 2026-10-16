@@ -456,6 +456,26 @@
                 ]
               }
             },
+            "Active_tech_emails": {
+              "type": "Select",
+              "inputs": {
+                "from": "@body('Get_technicians')?['value']",
+                "select": "@toLower(coalesce(item()?['Technician']?['Email'], ''))"
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              },
+              "runAfter": {
+                "Get_expectations": [
+                  "Succeeded"
+                ]
+              }
+            },
             "Each_technician": {
               "type": "Foreach",
               "foreach": "@body('Get_technicians')?['value']",
@@ -468,6 +488,13 @@
                       "inputs": {
                         "name": "varTechAad",
                         "value": "@toLower(coalesce(items('Each_technician')?['TechnicianAadId'], ''))"
+                      },
+                      "runtimeConfiguration": {
+                        "secureData": {
+                          "properties": [
+                            "inputs"
+                          ]
+                        }
                       },
                       "runAfter": {}
                     },
@@ -554,6 +581,13 @@
                     "ReviewKey": {
                       "type": "Compose",
                       "inputs": "@concat(variables('varTechAad'), '_', outputs('MonthKey'))",
+                      "runtimeConfiguration": {
+                        "secureData": {
+                          "properties": [
+                            "inputs"
+                          ]
+                        }
+                      },
                       "runAfter": {
                         "No_AadId": [
                           "Succeeded"
@@ -1139,7 +1173,7 @@
                 }
               },
               "runAfter": {
-                "Get_expectations": [
+                "Active_tech_emails": [
                   "Succeeded"
                 ]
               }
@@ -1217,7 +1251,7 @@
                   "type": "Query",
                   "inputs": {
                     "from": "@body('Outstanding')?['value']",
-                    "where": "@not(empty(item()?['LinkSentOn']))"
+                    "where": "@and(not(empty(item()?['LinkSentOn'])), contains(body('Active_tech_emails'), toLower(coalesce(item()?['Technician']?['Email'], '#none'))))"
                   },
                   "runtimeConfiguration": {
                     "secureData": {
@@ -1340,31 +1374,11 @@
                       },
                       "runAfter": {}
                     },
-                    "Active_emails": {
-                      "type": "Select",
-                      "inputs": {
-                        "from": "@body('Get_technicians')?['value']",
-                        "select": "@toLower(coalesce(item()?['Technician']?['Email'], ''))"
-                      },
-                      "runtimeConfiguration": {
-                        "secureData": {
-                          "properties": [
-                            "inputs",
-                            "outputs"
-                          ]
-                        }
-                      },
-                      "runAfter": {
-                        "Get_wellbeing": [
-                          "Succeeded"
-                        ]
-                      }
-                    },
                     "Today": {
                       "type": "Compose",
                       "inputs": "@formatDateTime(outputs('ukNow'), 'yyyy-MM-dd')",
                       "runAfter": {
-                        "Active_emails": [
+                        "Get_wellbeing": [
                           "Succeeded"
                         ]
                       }
@@ -1382,7 +1396,7 @@
                       "type": "Query",
                       "inputs": {
                         "from": "@body('Get_wellbeing')?['value']",
-                        "where": "@and(contains(createArray(outputs('Today'), outputs('In7')), if(contains(string(coalesce(item()?['NextReviewDate'], '')), 'T'), formatDateTime(convertFromUtc(coalesce(item()?['NextReviewDate'], '2000-01-01T00:00:00Z'), 'GMT Standard Time'), 'yyyy-MM-dd'), coalesce(item()?['NextReviewDate'], ''))), not(empty(item()?['CompletedOn'])), contains(body('Active_emails'), toLower(coalesce(item()?['Technician']?['EMail'], '#none'))))"
+                        "where": "@and(contains(createArray(outputs('Today'), outputs('In7')), if(contains(string(coalesce(item()?['NextReviewDate'], '')), 'T'), formatDateTime(convertFromUtc(coalesce(item()?['NextReviewDate'], '2000-01-01T00:00:00Z'), 'GMT Standard Time'), 'yyyy-MM-dd'), coalesce(item()?['NextReviewDate'], ''))), not(empty(item()?['CompletedOn'])), contains(body('Active_tech_emails'), toLower(coalesce(item()?['Technician']?['EMail'], '#none'))))"
                       },
                       "runtimeConfiguration": {
                         "secureData": {

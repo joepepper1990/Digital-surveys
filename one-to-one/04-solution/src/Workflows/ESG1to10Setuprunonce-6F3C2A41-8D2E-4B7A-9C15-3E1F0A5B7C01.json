@@ -892,10 +892,11 @@
                     "Pending",
                     "Sent",
                     "Failed",
-                    "Read"
+                    "Read",
+                    "Held"
                   ],
                   "default": "Pending",
-                  "xml": "<Field Type='Choice' Name='DeliveryStatus' StaticName='DeliveryStatus' DisplayName='DeliveryStatus' Required='FALSE' Format='Dropdown' FillInChoice='FALSE'><Default>Pending</Default><CHOICES><CHOICE>Pending</CHOICE><CHOICE>Sent</CHOICE><CHOICE>Failed</CHOICE><CHOICE>Read</CHOICE></CHOICES></Field>"
+                  "xml": "<Field Type='Choice' Name='DeliveryStatus' StaticName='DeliveryStatus' DisplayName='DeliveryStatus' Required='FALSE' Format='Dropdown' FillInChoice='FALSE'><Default>Pending</Default><CHOICES><CHOICE>Pending</CHOICE><CHOICE>Sent</CHOICE><CHOICE>Failed</CHOICE><CHOICE>Read</CHOICE><CHOICE>Held</CHOICE></CHOICES></Field>"
                 },
                 {
                   "name": "SentOn",
@@ -947,6 +948,13 @@
               "low": 138612769,
               "order": 201,
               "description": "ESG 1-to-1: technician on a submitted or released review. Copy of Read without View Versions or Create Alerts."
+            },
+            {
+              "name": "1-to-1 Submit",
+              "high": 304,
+              "low": 205721639,
+              "order": 202,
+              "description": "ESG 1-to-1: the technicians group on the Feedback list only. Copy of Contribute without delete, versions, alerts or personal views/web parts."
             }
           ],
           "runAfter": {
@@ -1529,11 +1537,11 @@
                 ]
               }
             },
-            "Role_contribute_builtin": {
+            "Role_submit": {
               "type": "Query",
               "inputs": {
                 "from": "@body('Get_roles_again')?['value']",
-                "where": "@equals(item()?['RoleTypeKind'], 3)"
+                "where": "@equals(item()?['Name'], '1-to-1 Submit')"
               },
               "runAfter": {
                 "Role_read_builtin": [
@@ -1547,13 +1555,13 @@
                 "owners": "@body('Get_owners_group')?['Id']",
                 "fullControl": "@first(body('Role_full_control'))?['Id']",
                 "readBuiltIn": "@first(body('Role_read_builtin'))?['Id']",
-                "contributeBuiltIn": "@first(body('Role_contribute_builtin'))?['Id']",
+                "submit": "@first(body('Role_submit'))?['Id']",
                 "members": "@coalesce(body('Get_members_group')?['Id'], -1)",
                 "visitors": "@coalesce(body('Get_visitors_group')?['Id'], -1)",
                 "group": "@first(body('Find_group_again'))?['Id']"
               },
               "runAfter": {
-                "Role_contribute_builtin": [
+                "Role_submit": [
                   "Succeeded"
                 ]
               }
@@ -2494,7 +2502,39 @@
                   "type": "If",
                   "expression": "@equals(items('Each_list')?['groupContribute'], true)",
                   "actions": {
-                    "Grant_group_contribute": {
+                    "Group_had_access": {
+                      "type": "If",
+                      "expression": "@contains(body('Principals'), outputs('Ids')?['group'])",
+                      "actions": {
+                        "Remove_group_access": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                              "parameters/method": "POST",
+                              "parameters/uri": "_api/web/lists(guid'@{outputs('List')?['Id']}')/roleassignments/getbyprincipalid(@{outputs('Ids')?['group']})",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata",
+                                "X-HTTP-Method": "DELETE",
+                                "IF-MATCH": "*"
+                              }
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runAfter": {}
+                        }
+                      },
+                      "else": {
+                        "actions": {}
+                      },
+                      "runAfter": {}
+                    },
+                    "Grant_group_submit": {
                       "type": "OpenApiConnection",
                       "inputs": {
                         "host": {
@@ -2505,23 +2545,27 @@
                         "parameters": {
                           "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
                           "parameters/method": "POST",
-                          "parameters/uri": "_api/web/lists(guid'@{outputs('List')?['Id']}')/roleassignments/addroleassignment(principalid=@{outputs('Ids')?['group']},roledefid=@{outputs('Ids')?['contributeBuiltIn']})",
+                          "parameters/uri": "_api/web/lists(guid'@{outputs('List')?['Id']}')/roleassignments/addroleassignment(principalid=@{outputs('Ids')?['group']},roledefid=@{outputs('Ids')?['submit']})",
                           "parameters/headers": {
                             "Accept": "application/json;odata=nometadata"
                           }
                         },
                         "authentication": "@parameters('$authentication')"
                       },
-                      "runAfter": {}
+                      "runAfter": {
+                        "Group_had_access": [
+                          "Succeeded"
+                        ]
+                      }
                     },
-                    "Log_group_contribute": {
+                    "Log_group_submit": {
                       "type": "AppendToArrayVariable",
                       "inputs": {
                         "name": "varLog",
-                        "value": "@concat(items('Each_list')?['title'], ': 1-to-1 Technicians given Contribute (each person sees only their own items)')"
+                        "value": "@concat(items('Each_list')?['title'], ': 1-to-1 Technicians given 1-to-1 Submit (each person sees only their own items)')"
                       },
                       "runAfter": {
-                        "Grant_group_contribute": [
+                        "Grant_group_submit": [
                           "Succeeded"
                         ]
                       }

@@ -380,6 +380,31 @@
                 ]
               }
             },
+            "Too_many_holders": {
+              "type": "If",
+              "expression": "@greater(length(body('Holders')), 1)",
+              "actions": {
+                "More_than_one_person_holds_it": {
+                  "type": "Terminate",
+                  "inputs": {
+                    "runStatus": "Failed",
+                    "runError": {
+                      "code": "ESG1to1",
+                      "message": "More than one person has access to this wellbeing assessment. Check its permissions."
+                    }
+                  },
+                  "runAfter": {}
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {
+                "Holders": [
+                  "Succeeded"
+                ]
+              }
+            },
             "Holder": {
               "type": "Compose",
               "inputs": "@first(body('Holders'))",
@@ -391,7 +416,7 @@
                 }
               },
               "runAfter": {
-                "Holders": [
+                "Too_many_holders": [
                   "Succeeded"
                 ]
               }
@@ -409,6 +434,27 @@
               "type": "If",
               "expression": "@or(equals(body('Get_item_scope')?['HasUniqueRoleAssignments'], false), equals(outputs('Holder'), null))",
               "actions": {
+                "Already_used": {
+                  "type": "If",
+                  "expression": "@or(not(empty(triggerBody()?['SubmittedOn'])), not(empty(triggerBody()?['CompletedOn'])))",
+                  "actions": {
+                    "Submitted_but_nobody_holds_it": {
+                      "type": "Terminate",
+                      "inputs": {
+                        "runStatus": "Failed",
+                        "runError": {
+                          "code": "ESG1to1",
+                          "message": "This wellbeing assessment was submitted but nobody holds it now. Check its permissions; it was not re-shared."
+                        }
+                      },
+                      "runAfter": {}
+                    }
+                  },
+                  "else": {
+                    "actions": {}
+                  },
+                  "runAfter": {}
+                },
                 "No_person": {
                   "type": "If",
                   "expression": "@empty(coalesce(triggerBody()?['Technician']?['Claims'], ''))",
@@ -424,7 +470,11 @@
                   "else": {
                     "actions": {}
                   },
-                  "runAfter": {}
+                  "runAfter": {
+                    "Already_used": [
+                      "Succeeded"
+                    ]
+                  }
                 },
                 "Ensure_user": {
                   "type": "OpenApiConnection",
@@ -865,6 +915,48 @@
                     },
                     "else": {
                       "actions": {
+                        "Tidy_while_open": {
+                          "type": "If",
+                          "expression": "@and(outputs('Holder_can_edit'), or(not(empty(triggerBody()?['SubmittedOn'])), not(empty(triggerBody()?['CompletedOn'])), not(empty(triggerBody()?['ArrangementsJson'])), not(empty(triggerBody()?['ManagerNotes'])), not(empty(triggerBody()?['NextReviewDate'])), not(equals(toLower(coalesce(triggerBody()?['Technician']?['Claims'], '')), toLower(coalesce(outputs('Holder')?['Member']?['LoginName'], ''))))))",
+                          "actions": {
+                            "Restore_open": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "connectionName": "shared_sharepointonline",
+                                  "operationId": "PatchItem",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                },
+                                "parameters": {
+                                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                                  "table": "Wellbeing Assessments",
+                                  "id": "@triggerBody()?['ID']",
+                                  "item/Title": "@triggerBody()?['Title']",
+                                  "item/SubmittedOn": null,
+                                  "item/CompletedOn": null,
+                                  "item/ArrangementsJson": "",
+                                  "item/ManagerNotes": "",
+                                  "item/NextReviewDate": null,
+                                  "item/Technician/Claims": "@outputs('Holder')?['Member']?['LoginName']"
+                                },
+                                "authentication": "@parameters('$authentication')"
+                              },
+                              "runtimeConfiguration": {
+                                "secureData": {
+                                  "properties": [
+                                    "inputs",
+                                    "outputs"
+                                  ]
+                                }
+                              },
+                              "runAfter": {}
+                            }
+                          },
+                          "else": {
+                            "actions": {}
+                          },
+                          "runAfter": {}
+                        },
                         "Completed_by_manager": {
                           "type": "If",
                           "expression": "@and(not(outputs('Holder_can_edit')), equals(outputs('Status'), 'Completed'), empty(triggerBody()?['CompletedOn']), not(empty(triggerBody()?['SubmittedOn'])))",
@@ -930,7 +1022,11 @@
                           "else": {
                             "actions": {}
                           },
-                          "runAfter": {}
+                          "runAfter": {
+                            "Tidy_while_open": [
+                              "Succeeded"
+                            ]
+                          }
                         }
                       }
                     },

@@ -56,6 +56,7 @@ class FakeSP:
         self.fail_fields = set()        # column names createfieldasxml will refuse (to test warn-and-continue)
         self.fail_uris = []
         self.fail_mail = []
+        self.clock = None               # if set (ISO UTC), writes stamp Created / Modified with it
         self.dates_as_instants = False  # connector returns date-only values as UTC instants instead of yyyy-MM-dd  # user ids whose account cannot be resolved (left the organisation)
 
     # ------------------------------------------------------------------ model helpers
@@ -195,11 +196,15 @@ class FakeSP:
                                                {'1': True, '0': False}.get(f['Default'], f['Default'])
                                                if f['Type'] == 'Boolean' else f['Default'])
             lst['items'][item_id] = {'id': item_id, 'fields': fields, 'unique': False, 'ra': {}, 'author': self.me}
+            if self.clock:
+                fields['Created'] = self.clock
         it = lst['items'].get(item_id)
         if it is None:
             fail(404, 'item not found')
         it['fields'].update(vals)
         it['editor'] = self.me
+        if self.clock:
+            it['fields']['Modified'] = self.clock
         return it
 
     def item_out(self, lst, it):

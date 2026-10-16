@@ -189,11 +189,11 @@ Created by the setup flow (solution 1.2) at `Lists/OneToOneFeedback`, display na
 | Message | Multiple lines (plain) | What they wrote (2,000 characters at most) |
 | PageName | Single line of text | The page they were on |
 | AppVersion | Single line of text | Frontend version |
-| DeliveryStatus | Choice: Pending / Sent / Failed / Read (default Pending) | **Flow 6:** Sent, or Failed if the email didn't go. **You:** Read, from *Needs your attention*. |
+| DeliveryStatus | Choice: Pending / Sent / Failed / Read / Held (default Pending) | **Flow 6:** Sent, Failed if the email didn't go, or Held when one person sends more than 10 in a day (kept, not emailed one by one). **You:** Read, from *Needs your attention*. |
 | SentOn | Date and time | **Flow 6 only** |
 
 - [ ] Advanced settings → **Item-level permissions:** *Read items that were created by the user*; *Create items and edit items that were created by the user*.
-- [ ] Permissions: **Owners – Full Control** and `1-to-1 Technicians` – **Contribute** (this list only). Flow 6 makes each item Owners-only straight after it's sent.
+- [ ] Permissions: **Owners – Full Control** and `1-to-1 Technicians` – **1-to-1 Submit** (this list only; Contribute without delete, versions, alerts or personal views). Flow 6 makes each item Owners-only straight after it's sent.
 
 ---
 
@@ -202,6 +202,6 @@ Created by the setup flow (solution 1.2) at `Lists/OneToOneFeedback`, display na
 - [ ] Site contents shows the seven lists (plus the Welcome libraries/lists).
 - [ ] **Technicians, Appraisal Expectations, Monthly Reviews, Manager Reviews, Wellbeing Assessments:** permissions page shows **only Owners – Full Control**.
 - [ ] **1-to-1 Settings:** Owners – Full Control **and** `1-to-1 Technicians` – Read. Nothing else.
-- [ ] **1-to-1 Feedback:** Owners – Full Control **and** `1-to-1 Technicians` – Contribute, with item-level permissions set to their own items only.
+- [ ] **1-to-1 Feedback:** Owners – Full Control **and** `1-to-1 Technicians` – 1-to-1 Submit, with item-level permissions set to their own items only.
 - [ ] Versioning on, attachments off, search off, on every list.
 - [ ] Spot-check three internal names: open List settings → click the column → the URL ends `Field=Q9FollowUp` (etc.).

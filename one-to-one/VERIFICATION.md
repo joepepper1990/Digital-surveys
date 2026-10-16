@@ -1,6 +1,6 @@
 # ESG 1-to-1 — verification record (15-Oct-2026)
 
-**Scope:** frontend v4.4.0, solution 1.2.0.0, the importable solution (setup flow + Flows 1–6), the legacy-package builder, the seven-list schema and all documents.
+**Scope:** frontend v4.4.0, solution 1.2.1.0, the importable solution (setup flow + Flows 1–6), the legacy-package builder, the seven-list schema and all documents.
 
 **What this record can and can't prove.** Everything here ran outside your tenant. It proves the files are well-formed, internally consistent and behave as specified against a strict model of SharePoint that follows Microsoft's documentation. Only the tenant can prove the import and real permissions (§5).
 
@@ -12,7 +12,7 @@
 | Solution build | `04-solution/tools/build.py`: generate `src/`, validate, pack with Microsoft's Power Platform CLI, unpack again and compare | Packs; round trip identical |
 | Static validator | Expressions, references, scopes, run-after chains, required connector parameters, list/column names, JSON request bodies, field XML / view CAML, schedule time zone, secured run history, no hidden failures | 7 flows clean |
 | Validator proof | `tools/test_validate.py`: deliberately broken copies of the flows | **23 / 23** caught |
-| End-to-end simulation | `tools/simulate.py`: the real flow JSON executed against an in-memory SharePoint | **167 / 167** (solution) and **167 / 167** (legacy form) |
+| End-to-end simulation | `tools/simulate.py`: the real flow JSON executed against an in-memory SharePoint | **180 / 180** (solution) and **180 / 180** (legacy form) |
 | Simulation proof | New scenarios run against the previously committed flows / frontend | 18 flow checks and 2 frontend checks fail on the old code, so the tests detect the bugs fixed in §3. Second review (§3a): 7 new flow checks fail on the 1.1.1.0 flows, and the new frontend checks fail on 4.2.1 (privacy ×3, robustness – the run then stops because the old profile page crashes) |
 | Legacy builder | `tools/test_builder.js` + `check_builder_zips.py` | Rejects bad input; no network requests; zips are standard and exactly as expected |
 | Microsoft schema | Flow definitions checked against Microsoft's published workflow-definition JSON schema | No error class that real exported Microsoft (PnP) flows don't also produce |
@@ -68,6 +68,36 @@ Three fresh reviewers (frontend; flows and package; docs and repository privacy)
 | 28 | Smaller UI issues: plurals, "Today", wording in the appraisal month, role labels, overlapping strongest/focus lists, Settings closing without a prompt, a typed meeting date lost on redraw, misleading date-save error, unchecked paging links, Escape to close dialogs. | Low | Fixed | Frontend (prompt, Escape) |
 | 29 | Documentation: the real site name in the plan; inconsistent flow turn-on order; Wellbeing missing from post-setup checks; stale counts, menus and retention text. | High (privacy) / Docs | Site name removed from current files; docs aligned | Consistency sweep |
 
+### 3b. Third round – features, break-it and security testing (16-Oct-2026, frontend 4.4.0 / solution 1.2.1.0)
+
+Three independent testers worked only on copies and the local mock/simulator (nothing live): every feature and screen at four widths; deliberate attempts to break each part; and attempts to bypass the security as a technician. The core design held: no technician could read, change or release another person's review, Manager Review or wellbeing record, and no script injection succeeded. Fixed:
+
+| # | Finding | Severity | Fix | Covered by |
+|---|---|---|---|---|
+| 30 | Details of Q4–Q6 switched to No and back to Yes showed on screen but were saved blank | High | Saving no longer clears the in-memory answers | Frontend |
+| 31 | One `null` entry in a JSON column (or broken Bands) stopped the page loading for everyone | High | Lists filtered to objects; Bands fall back to defaults | Frontend |
+| 32 | Double clicks created duplicate expectations, people, assessments, Bands rows | Medium | One action of a kind at a time | Frontend (slow-server test) |
+| 33 | Flow 4 removed access when a duplicate row was deactivated | Medium | Access kept while any row for the person is Active | Simulation |
+| 34 | Two people with the same name were merged in the TL views | Medium | Kept apart (name + email) | Frontend |
+| 35 | Flow 2 used the run time: a 23:58 submission could be stamped next month and late | Medium | Uses the item's Modified time (trusted up to 30 min back) | Simulation (2) |
+| 36 | Deactivated people still got reminders | Medium | Reminders only to active people | Simulation |
+| 37 | The page and Flow 1 read the Reminders setting differently | Medium | Page reads it exactly as Flow 1; Save rewrites unreadable values | Frontend |
+| 38 | Submit didn't wait for an auto-save already on its way | Medium | Submit / Complete wait for it | Code review |
+| 39 | Feedback: a sender could stop their item being locked/emailed by pre-setting the delivery columns | Low (security) | Flow 6 decides "handled" from the item's lock, never from columns; the page trusts Failed/Held only on locked items | Simulation (3), frontend |
+| 40 | Feedback: one person could flood the TL and the flow allowance | Medium (security) | Max 10 emails per person per day; the rest Held and grouped | Simulation, frontend |
+| 41 | Feedback list: built-in Contribute let people set alerts (could email others' new items before the lock) | Medium (security, tenant check P27) | New `1-to-1 Submit` level: no alerts, delete, versions or personal views | Simulation |
+| 42 | Wellbeing: while open, the person could relabel it as someone else's or fake the submitted stamp / manager fields | Low (security) | Flow 5 puts them back on every run while it's open | Simulation |
+| 43 | Wellbeing: two holders or a lost holder could skip the lock or re-share a submitted assessment | Low (security) | Exactly one holder, else stop; a used assessment is never re-shared | Simulation (2) |
+| 44 | *Since last time* showed last month's wellbeing detail on the first screen | Info (privacy) | Hidden until the person chooses Show | Frontend |
+| 45 | Flow 1 run history showed a technician's directory ID | Info | Secured | Validator |
+| 46 | Formatting: the bubble covered buttons; stacked messages; the top bar wrapped at 1366 px; clipped tables; "Reminders on the none"; wellbeing columns jumped; dialogs didn't take focus; report not closable with Escape; print layout; wording | Medium/Low | Compact bubble + page padding; one message at a time; one-row top bar; scrollable tables; wording; focus/Escape; print rules | Frontend, screenshots |
+| 47 | Smaller robustness items: action close-out partial failure, *Same as last month* not auto-saved, a bad `?reviewId` trapping the technician, free-text appraisal year | Low | Fixed | Frontend |
+
+**Accepted / tenant checks:**
+- **Feedback sender forgery (P26).** Can a Contributor set `Author` on the Feedback list? The E13 sender is "as recorded by SharePoint".
+- **List metadata (P28).** Counts and dates may be visible to technicians, but no content.
+- **`1-to-1 Edit` keeps View Versions and Create Alerts.** The only versions are the technician's own drafts, and the TL writes nothing to an item while the technician holds Edit, so it was left unchanged to avoid "rights differ" warnings on existing sites.
+
 ## 4. Confirmed against Microsoft documentation
 
 From the platform audit, with sources in the audit notes:
@@ -94,7 +124,7 @@ From the platform audit, with sources in the audit notes:
 |---|---|
 | Solution imports, connections bind, environment variables accepted | IMPORT_GUIDE §2 |
 | Setup run: lists, views, permission levels, group, permissions as the summary says | IMPORT_GUIDE §3–§4 |
-| Real item permissions, emails and timings | Plan section H (F1–F44, P1–P25), with Test A / Test B |
+| Real item permissions, emails and timings | Plan section H (F1–F44, P1–P28), with Test A / Test B |
 | Personal-regional-settings date round trip (R16) | Test F27 |
 | Limited-access lockdown mode not active | NEXT_STEPS "Things to verify early" |
 

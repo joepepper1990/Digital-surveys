@@ -20,7 +20,7 @@ YES_NO = ['Yes', 'No']
 APPLIES_TO = ['Shared', 'Individual']
 WB_STATUS = ['Open', 'Submitted', 'Completed']
 FEEDBACK_TYPES = ['Fault', 'Improvement', 'Suggestion']
-DELIVERY_STATUS = ['Pending', 'Sent', 'Failed', 'Read']
+DELIVERY_STATUS = ['Pending', 'Sent', 'Failed', 'Read', 'Held']
 DEFAULT_REMINDERS = '[20,27]'
 
 DEFAULT_BANDS = ('[{"name":"Not met","max":1.5},{"name":"Partially met","max":2.25},'
@@ -266,6 +266,12 @@ for _k in ['AddListItems', 'DeleteListItems', 'DeleteVersions', 'ManagePersonalV
 EDIT_HIGH = CONTRIBUTE[0]
 READ1_LOW = READ[1] & ~_LOW['ViewVersions']
 READ1_HIGH = READ[0] & ~_HIGH['CreateAlerts']
+# Feedback list only: add (and edit their own item until Flow 6 locks it) – no delete, no versions, no alerts (an alert
+# could email someone else's new item before it is locked), no personal views or web parts.
+SUBMIT_LOW = CONTRIBUTE[1]
+for _k in ['DeleteListItems', 'ViewVersions', 'DeleteVersions', 'ManagePersonalViews', 'AddDelPrivateWebParts', 'UpdatePersonalWebParts']:
+    SUBMIT_LOW &= ~_LOW[_k]
+SUBMIT_HIGH = CONTRIBUTE[0] & ~_HIGH['CreateAlerts']
 
 ROLES = [
     {'name': '1-to-1 Edit', 'high': EDIT_HIGH, 'low': EDIT_LOW, 'order': 200,
@@ -274,4 +280,7 @@ ROLES = [
     {'name': '1-to-1 Read', 'high': READ1_HIGH, 'low': READ1_LOW, 'order': 201,
      'description': "ESG 1-to-1: technician on a submitted or released review. Copy of Read without View Versions "
                     "or Create Alerts."},
+    {'name': '1-to-1 Submit', 'high': SUBMIT_HIGH, 'low': SUBMIT_LOW, 'order': 202,
+     'description': "ESG 1-to-1: the technicians group on the Feedback list only. Copy of Contribute without delete, "
+                    "versions, alerts or personal views/web parts."},
 ]

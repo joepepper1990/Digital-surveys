@@ -275,11 +275,81 @@
                 ]
               }
             },
-            "Should_be_member": {
-              "type": "Compose",
-              "inputs": "@equals(triggerBody()?['Active'], true)",
+            "Get_active": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "GetItems",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                  "table": "Technicians",
+                  "$filter": "Active eq 1",
+                  "$top": 5000
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              },
               "runAfter": {
                 "Is_member": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Active_logins": {
+              "type": "Select",
+              "inputs": {
+                "from": "@body('Get_active')?['value']",
+                "select": "@toLower(coalesce(item()?['Technician']?['Claims'], '#none'))"
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              },
+              "runAfter": {
+                "Get_active": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Active_emails": {
+              "type": "Select",
+              "inputs": {
+                "from": "@body('Get_active')?['value']",
+                "select": "@toLower(coalesce(item()?['Technician']?['Email'], '#none'))"
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              },
+              "runAfter": {
+                "Active_logins": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Should_be_member": {
+              "type": "Compose",
+              "inputs": "@or(equals(triggerBody()?['Active'], true), contains(body('Active_logins'), toLower(triggerBody()?['Technician']?['Claims'])), contains(body('Active_emails'), toLower(coalesce(triggerBody()?['Technician']?['Email'], '#none'))))",
+              "runAfter": {
+                "Active_emails": [
                   "Succeeded"
                 ]
               }
@@ -430,76 +500,6 @@
                 ]
               }
             },
-            "Get_active": {
-              "type": "OpenApiConnection",
-              "inputs": {
-                "host": {
-                  "connectionName": "shared_sharepointonline",
-                  "operationId": "GetItems",
-                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                },
-                "parameters": {
-                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
-                  "table": "Technicians",
-                  "$filter": "Active eq 1",
-                  "$top": 5000
-                },
-                "authentication": "@parameters('$authentication')"
-              },
-              "runtimeConfiguration": {
-                "secureData": {
-                  "properties": [
-                    "inputs",
-                    "outputs"
-                  ]
-                }
-              },
-              "runAfter": {
-                "Remove_needed": [
-                  "Succeeded"
-                ]
-              }
-            },
-            "Active_logins": {
-              "type": "Select",
-              "inputs": {
-                "from": "@body('Get_active')?['value']",
-                "select": "@toLower(coalesce(item()?['Technician']?['Claims'], '#none'))"
-              },
-              "runtimeConfiguration": {
-                "secureData": {
-                  "properties": [
-                    "inputs",
-                    "outputs"
-                  ]
-                }
-              },
-              "runAfter": {
-                "Get_active": [
-                  "Succeeded"
-                ]
-              }
-            },
-            "Active_emails": {
-              "type": "Select",
-              "inputs": {
-                "from": "@body('Get_active')?['value']",
-                "select": "@toLower(coalesce(item()?['Technician']?['Email'], '#none'))"
-              },
-              "runtimeConfiguration": {
-                "secureData": {
-                  "properties": [
-                    "inputs",
-                    "outputs"
-                  ]
-                }
-              },
-              "runAfter": {
-                "Active_logins": [
-                  "Succeeded"
-                ]
-              }
-            },
             "Get_members_now": {
               "type": "OpenApiConnection",
               "inputs": {
@@ -527,7 +527,7 @@
                 }
               },
               "runAfter": {
-                "Active_emails": [
+                "Remove_needed": [
                   "Succeeded"
                 ]
               }

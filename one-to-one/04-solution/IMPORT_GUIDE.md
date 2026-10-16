@@ -7,7 +7,7 @@ You don't build the flows or the lists by hand any more:
 
 | File | What it is |
 |---|---|
-| [`ESGOneToOne_1_2_0_0_unmanaged.zip`](ESGOneToOne_1_2_0_0_unmanaged.zip) | **The solution (1.2.0.0).** Seven flows, three connection references, two environment variables. |
+| [`ESGOneToOne_1_2_1_0_unmanaged.zip`](ESGOneToOne_1_2_1_0_unmanaged.zip) | **The solution (1.2.1.0).** Seven flows, three connection references, two environment variables. |
 | [`legacy-package-builder.html`](legacy-package-builder.html) | **Fallback only**, if your environment can't import solutions (§6). |
 
 The seven flows:
@@ -26,11 +26,11 @@ Flows 1–6 are imported **off**, because the lists don't exist until the setup 
 
 ---
 
-## 0. Already imported an earlier version? Upgrade to 1.2 (10 min)
+## 0. Already imported an earlier version? Upgrade to 1.2.1 (10 min)
 
-Do this instead of §1–§3 if **ESG 1-to-1** (1.0 or 1.1) is already in your environment. Every step applies whichever version you're on: **1.2 needs Setup re-run**, because it adds the *1-to-1 Feedback* list.
+Do this instead of §1–§3 if **ESG 1-to-1** (1.0, 1.1 or 1.2.0) is already in your environment. Every step applies whichever version you're on: **1.2.1 needs Setup re-run** – it adds the *1-to-1 Feedback* list (if missing) and the `1-to-1 Submit` permission level, and moves the group on that list from Contribute to `1-to-1 Submit`.
 
-1. **Solutions → Import solution → Browse** → `ESGOneToOne_1_2_0_0_unmanaged.zip` → **Next**.
+1. **Solutions → Import solution → Browse** → `ESGOneToOne_1_2_1_0_unmanaged.zip` → **Next**.
    - It says it will **upgrade** the existing solution. Keep the defaults and leave *"Enable Plugin steps and flows included in the solution"* **unticked**.
    - Connections and environment variables keep their current values; just click **Next / Import**.
 2. Run **ESG 1-to-1 | 0 Setup (run once)** again. It adds what's missing – the **1-to-1 Feedback** list (new in 1.2), and from 1.0 also the **Wellbeing Assessments** list and the **Reminders** setting – and changes nothing that already exists. Wait for the summary email.
@@ -58,7 +58,7 @@ Do this instead of §1–§3 if **ESG 1-to-1** (1.0 or 1.1) is already in your e
 
 ## 2. Import the solution (10 min)
 
-1. **Solutions → Import solution → Browse** → choose `ESGOneToOne_1_2_0_0_unmanaged.zip` → **Next** → **Next**.
+1. **Solutions → Import solution → Browse** → choose `ESGOneToOne_1_2_1_0_unmanaged.zip` → **Next** → **Next**.
 2. **Connections.** For each of the three connection references, pick an existing connection or click **+ New connection**, signed in as **you**:
 
    | Connection reference | Connector |
@@ -87,13 +87,13 @@ Do this instead of §1–§3 if **ESG 1-to-1** (1.0 or 1.1) is already in your e
 
 | Item | Result |
 |---|---|
-| Permission levels | `1-to-1 Edit` and `1-to-1 Read`, with the exact rights in plan D.3. It creates them if missing. If one already exists with different rights, it **warns and doesn't change it**. |
+| Permission levels | `1-to-1 Edit`, `1-to-1 Read` and (from 1.2.1) `1-to-1 Submit`, with the exact rights in plan D.3. It creates them if missing. If one already exists with different rights, it **warns and doesn't change it**. |
 | Group | `1-to-1 Technicians`, created if missing. Membership is visible to group members only. SharePoint has no owner-only option, so technicians can see who else is in the group. No join requests. **No site permissions.** |
 | Lists | **Technicians**, **Appraisal Expectations**, **Monthly Reviews**, **Manager Reviews**, **Wellbeing Assessments**, **1-to-1 Settings**, **1-to-1 Feedback**, matching [`../01-sharepoint/lists.md`](../01-sharepoint/lists.md) exactly: every column type, choice, default, min/max and index, *Enforce unique values* on `ReviewKey`, and the views *Active*, *Needs attention*, *Retired* (Appraisal Expectations), *Overdue*, *Open actions* (Manager Reviews) and *Reviews due* (Wellbeing Assessments). |
 | List settings | Versioning on (100 versions), attachments off, not in search, offline sync off, not on the quick launch |
 | List permissions | Inheritance stopped. **Owners – Full Control only.** **1-to-1 Settings** also gets `1-to-1 Technicians` – Read. |
 | `Bands` and `Reminders` settings | The default band thresholds, and reminder days 20th and 27th |
-| 1-to-1 Feedback (1.2) | Item-level permissions: each person reads and edits only their own items; `1-to-1 Technicians` – **Contribute** on this list only |
+| 1-to-1 Feedback (1.2) | Item-level permissions: each person reads and edits only their own items; `1-to-1 Technicians` – **1-to-1 Submit** on this list only (a third permission level setup creates: Contribute without delete, versions, alerts or personal views) |
 | Checks (warnings only) | You are Site Collection Admin; regional settings are English (UK) and London time; the Site URL has no trailing slash |
 
 **What setup does not do.** These were done in Stage 0, and the runbook covers them:
@@ -117,7 +117,7 @@ It removes your own direct entry only if you are Site Collection Admin or in the
 - [ ] Open each list → **Settings → Permissions for this list**:
   - the five data lists (including **Wellbeing Assessments**, which holds health information): **Owners – Full Control** only;
   - **1-to-1 Settings** also has `1-to-1 Technicians` – Read;
-  - **1-to-1 Feedback** has Owners – Full Control **and** `1-to-1 Technicians` – **Contribute**. Its List settings → Advanced settings → *Item-level permissions* must be **Read items that were created by the user** and **Create items and edit items that were created by the user** (so each person sees only their own until Flow 6 locks it).
+  - **1-to-1 Feedback** has Owners – Full Control **and** `1-to-1 Technicians` – **1-to-1 Submit**. Its List settings → Advanced settings → *Item-level permissions* must be **Read items that were created by the user** and **Create items and edit items that were created by the user** (so each person sees only their own until Flow 6 locks it).
 - [ ] **1-to-1 Settings** has two items, `Bands` and `Reminders` (a third, `Labels`, appears if you rename roles in ⚙ Settings → Names).
 - [ ] Spot-check one column: Monthly Reviews → List settings → **Q9FollowUp**. The address bar ends `Field=Q9FollowUp`, and there are three choices.
 

@@ -30,7 +30,7 @@ One tick-list from where you are now to a running system. For a single printable
 
 - [ ] **Solution zip.** The verification pass replaced it under the same file name. Open your zip, then open `solution.xml` in Notepad.
   - The correct version contains `<RootComponent type="380" schemaName="esg_SiteUrl"`.
-  - If yours doesn't, re-download [`04-solution/ESGOneToOne_1_2_0_0_unmanaged.zip`](04-solution/ESGOneToOne_1_2_0_0_unmanaged.zip).
+  - If yours doesn't, re-download [`04-solution/ESGOneToOne_1_2_1_0_unmanaged.zip`](04-solution/ESGOneToOne_1_2_1_0_unmanaged.zip).
 - [ ] **Frontend.** Download the latest [`02-frontend/one-to-one.html`](02-frontend/one-to-one.html) and [`02-frontend/one-to-one.js`](02-frontend/one-to-one.js) (v4.4.0).
 - [ ] **Approved route.** Transfer the files the usual approved way.
 
@@ -56,7 +56,7 @@ One tick-list from where you are now to a running system. For a single printable
 - [ ] **Site contents:** the seven lists are there (Technicians, Appraisal Expectations, Monthly Reviews, Manager Reviews, Wellbeing Assessments, 1-to-1 Settings).
 - [ ] **Permissions on each list:**
   - the five data lists (including **Wellbeing Assessments**) show **Owners – Full Control only**;
-  - **1-to-1 Feedback** shows Owners plus `1-to-1 Technicians` – **Contribute** (each person sees only their own items);
+  - **1-to-1 Feedback** shows Owners plus `1-to-1 Technicians` – **1-to-1 Submit** (each person sees only their own items);
   - **1-to-1 Settings** also shows `1-to-1 Technicians` – Read.
 
 > Setup reuses your existing group and permission levels. If a level's rights differ from the plan, it tells you and changes nothing.
@@ -111,7 +111,7 @@ One tick-list from where you are now to a running system. For a single printable
 
 Work through [plan section H](IMPLEMENTATION_PLAN.md#h-testing) and record each result: Pass/Fail, date, tester, screenshot.
 
-- [ ] **Every privacy test P1–P25.** These are mandatory: **any failure blocks go-live**. They include:
+- [ ] **Every privacy test P1–P28.** These are mandatory: **any failure blocks go-live**. They include:
   - P15 script injection;
   - P16 code integrity;
   - P18 Settings read-only;

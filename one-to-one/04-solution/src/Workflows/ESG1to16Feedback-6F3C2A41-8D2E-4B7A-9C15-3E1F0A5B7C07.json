@@ -57,11 +57,6 @@
             "interval": 5
           },
           "splitOn": "@triggerOutputs()?['body/value']",
-          "conditions": [
-            {
-              "expression": "@and(empty(triggerBody()?['SentOn']), equals(coalesce(triggerBody()?['DeliveryStatus']?['Value'], 'Pending'), 'Pending'))"
-            }
-          ],
           "runtimeConfiguration": {
             "secureData": {
               "properties": [
@@ -301,7 +296,7 @@
                 ]
               }
             },
-            "Lock_reset": {
+            "Get_item_scope": {
               "type": "OpenApiConnection",
               "inputs": {
                 "host": {
@@ -311,8 +306,8 @@
                 },
                 "parameters": {
                   "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
-                  "parameters/method": "POST",
-                  "parameters/uri": "_api/web/lists(guid'@{outputs('FbIds')?['fbList']}')/items(@{triggerBody()?['ID']})/resetroleinheritance",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/lists(guid'@{outputs('FbIds')?['fbList']}')/items(@{triggerBody()?['ID']})?$select=HasUniqueRoleAssignments",
                   "parameters/headers": {
                     "Accept": "application/json;odata=nometadata"
                   }
@@ -329,6 +324,27 @@
               },
               "runAfter": {
                 "Check_feedback_list": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Already_handled": {
+              "type": "If",
+              "expression": "@equals(body('Get_item_scope')?['HasUniqueRoleAssignments'], true)",
+              "actions": {
+                "Handled_by_an_earlier_run": {
+                  "type": "Terminate",
+                  "inputs": {
+                    "runStatus": "Cancelled"
+                  },
+                  "runAfter": {}
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {
+                "Get_item_scope": [
                   "Succeeded"
                 ]
               }
@@ -360,7 +376,7 @@
                 }
               },
               "runAfter": {
-                "Lock_reset": [
+                "Already_handled": [
                   "Succeeded"
                 ]
               }
@@ -397,19 +413,19 @@
                 ]
               }
             },
-            "Send_E13": {
+            "Get_recent": {
               "type": "OpenApiConnection",
               "inputs": {
                 "host": {
-                  "connectionName": "shared_office365",
-                  "operationId": "SendEmailV2",
-                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "GetItems",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
                 },
                 "parameters": {
-                  "emailMessage/To": "@parameters('ESG 1-to-1 Team Leader email (esg_ManagerEmail)')",
-                  "emailMessage/Subject": "1-to-1 feedback (@{triggerBody()?['FeedbackType']?['Value']}): @{triggerBody()?['Title']}",
-                  "emailMessage/Body": "<p><b>@{replace(replace(replace(coalesce(triggerBody()?['Author']?['DisplayName'], ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</b> (@{replace(replace(replace(coalesce(triggerBody()?['Author']?['Email'], ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}) sent this from the 1-to-1 page.</p><table cellpadding=\"4\" style=\"border-collapse:collapse\"><tr><td><b>Type</b></td><td>@{replace(replace(replace(coalesce(triggerBody()?['FeedbackType']?['Value'], ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</td></tr><tr><td><b>Page</b></td><td>@{replace(replace(replace(coalesce(triggerBody()?['PageName'], ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')} (version @{replace(replace(replace(coalesce(triggerBody()?['AppVersion'], ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')})</td></tr><tr><td><b>Sent</b></td><td>@{convertFromUtc(utcNow(), 'GMT Standard Time', 'dd-MMM-yyyy HH:mm')}</td></tr></table><div style=\"white-space:pre-wrap;border-left:3px solid #ccc;padding:6px 10px;margin-top:8px\">@{replace(replace(replace(coalesce(triggerBody()?['Message'], ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</div><p style=\"color:#666\">Kept in the 1-to-1 Feedback list (Owners only).</p>",
-                  "emailMessage/Importance": "Normal"
+                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                  "table": "1-to-1 Feedback",
+                  "$orderby": "ID desc",
+                  "$top": 500
                 },
                 "authentication": "@parameters('$authentication')"
               },
@@ -427,23 +443,11 @@
                 ]
               }
             },
-            "Stamp_sent": {
-              "type": "OpenApiConnection",
+            "From_sender_today": {
+              "type": "Query",
               "inputs": {
-                "host": {
-                  "connectionName": "shared_sharepointonline",
-                  "operationId": "PatchItem",
-                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                },
-                "parameters": {
-                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
-                  "table": "1-to-1 Feedback",
-                  "id": "@triggerBody()?['ID']",
-                  "item/Title": "@triggerBody()?['Title']",
-                  "item/SentOn": "@utcNow()",
-                  "item/DeliveryStatus/Value": "Sent"
-                },
-                "authentication": "@parameters('$authentication')"
+                "from": "@body('Get_recent')?['value']",
+                "where": "@and(equals(toLower(coalesce(item()?['Author']?['Email'], '')), toLower(coalesce(triggerBody()?['Author']?['Email'], '#none'))), greater(ticks(coalesce(item()?['Created'], '1900-01-01T00:00:00Z')), ticks(addDays(utcNow(), -1))))"
               },
               "runtimeConfiguration": {
                 "secureData": {
@@ -454,89 +458,190 @@
                 }
               },
               "runAfter": {
-                "Send_E13": [
+                "Get_recent": [
                   "Succeeded"
                 ]
               }
             },
-            "Mark_failed": {
-              "type": "OpenApiConnection",
-              "inputs": {
-                "host": {
-                  "connectionName": "shared_sharepointonline",
-                  "operationId": "PatchItem",
-                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                },
-                "parameters": {
-                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
-                  "table": "1-to-1 Feedback",
-                  "id": "@triggerBody()?['ID']",
-                  "item/Title": "@triggerBody()?['Title']",
-                  "item/DeliveryStatus/Value": "Failed"
-                },
-                "authentication": "@parameters('$authentication')"
+            "Over_limit": {
+              "type": "If",
+              "expression": "@greater(length(body('From_sender_today')), 10)",
+              "actions": {
+                "Stamp_held": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "PatchItem",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                      "table": "1-to-1 Feedback",
+                      "id": "@triggerBody()?['ID']",
+                      "item/Title": "@triggerBody()?['Title']",
+                      "item/SentOn": "@utcNow()",
+                      "item/DeliveryStatus/Value": "Held"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs",
+                        "outputs"
+                      ]
+                    }
+                  },
+                  "runAfter": {}
+                }
               },
-              "runtimeConfiguration": {
-                "secureData": {
-                  "properties": [
-                    "inputs",
-                    "outputs"
-                  ]
+              "else": {
+                "actions": {
+                  "Send_E13": {
+                    "type": "OpenApiConnection",
+                    "inputs": {
+                      "host": {
+                        "connectionName": "shared_office365",
+                        "operationId": "SendEmailV2",
+                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                      },
+                      "parameters": {
+                        "emailMessage/To": "@parameters('ESG 1-to-1 Team Leader email (esg_ManagerEmail)')",
+                        "emailMessage/Subject": "1-to-1 feedback (@{triggerBody()?['FeedbackType']?['Value']}): @{triggerBody()?['Title']}",
+                        "emailMessage/Body": "<p><b>@{replace(replace(replace(coalesce(triggerBody()?['Author']?['DisplayName'], ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</b> (@{replace(replace(replace(coalesce(triggerBody()?['Author']?['Email'], ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}) sent this from the 1-to-1 page.</p><table cellpadding=\"4\" style=\"border-collapse:collapse\"><tr><td><b>Type</b></td><td>@{replace(replace(replace(coalesce(triggerBody()?['FeedbackType']?['Value'], ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</td></tr><tr><td><b>Page</b></td><td>@{replace(replace(replace(coalesce(triggerBody()?['PageName'], ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')} (version @{replace(replace(replace(coalesce(triggerBody()?['AppVersion'], ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')})</td></tr><tr><td><b>Sent</b></td><td>@{convertFromUtc(utcNow(), 'GMT Standard Time', 'dd-MMM-yyyy HH:mm')}</td></tr></table><div style=\"white-space:pre-wrap;border-left:3px solid #ccc;padding:6px 10px;margin-top:8px\">@{replace(replace(replace(coalesce(triggerBody()?['Message'], ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</div><p style=\"color:#666\">Kept in the 1-to-1 Feedback list (Owners only).</p>",
+                        "emailMessage/Importance": "Normal"
+                      },
+                      "authentication": "@parameters('$authentication')"
+                    },
+                    "runtimeConfiguration": {
+                      "secureData": {
+                        "properties": [
+                          "inputs",
+                          "outputs"
+                        ]
+                      }
+                    },
+                    "runAfter": {}
+                  },
+                  "Stamp_sent": {
+                    "type": "OpenApiConnection",
+                    "inputs": {
+                      "host": {
+                        "connectionName": "shared_sharepointonline",
+                        "operationId": "PatchItem",
+                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                      },
+                      "parameters": {
+                        "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                        "table": "1-to-1 Feedback",
+                        "id": "@triggerBody()?['ID']",
+                        "item/Title": "@triggerBody()?['Title']",
+                        "item/SentOn": "@utcNow()",
+                        "item/DeliveryStatus/Value": "Sent"
+                      },
+                      "authentication": "@parameters('$authentication')"
+                    },
+                    "runtimeConfiguration": {
+                      "secureData": {
+                        "properties": [
+                          "inputs",
+                          "outputs"
+                        ]
+                      }
+                    },
+                    "runAfter": {
+                      "Send_E13": [
+                        "Succeeded"
+                      ]
+                    }
+                  },
+                  "Mark_failed": {
+                    "type": "OpenApiConnection",
+                    "inputs": {
+                      "host": {
+                        "connectionName": "shared_sharepointonline",
+                        "operationId": "PatchItem",
+                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                      },
+                      "parameters": {
+                        "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                        "table": "1-to-1 Feedback",
+                        "id": "@triggerBody()?['ID']",
+                        "item/Title": "@triggerBody()?['Title']",
+                        "item/DeliveryStatus/Value": "Failed"
+                      },
+                      "authentication": "@parameters('$authentication')"
+                    },
+                    "runtimeConfiguration": {
+                      "secureData": {
+                        "properties": [
+                          "inputs",
+                          "outputs"
+                        ]
+                      }
+                    },
+                    "runAfter": {
+                      "Send_E13": [
+                        "Failed",
+                        "TimedOut"
+                      ]
+                    }
+                  },
+                  "Send_E13_notice": {
+                    "type": "OpenApiConnection",
+                    "inputs": {
+                      "host": {
+                        "connectionName": "shared_office365",
+                        "operationId": "SendEmailV2",
+                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                      },
+                      "parameters": {
+                        "emailMessage/To": "@parameters('ESG 1-to-1 Team Leader email (esg_ManagerEmail)')",
+                        "emailMessage/Subject": "1-to-1 feedback could not be delivered – please read it in the list",
+                        "emailMessage/Body": "<p>A message sent with the 1-to-1 feedback button could not be emailed to you. Open the <b>1-to-1 Feedback</b> list (Site contents), or <b>Needs your attention</b> on the 1-to-1 page, to read it.</p>",
+                        "emailMessage/Importance": "Normal"
+                      },
+                      "authentication": "@parameters('$authentication')"
+                    },
+                    "runtimeConfiguration": {
+                      "secureData": {
+                        "properties": [
+                          "inputs",
+                          "outputs"
+                        ]
+                      }
+                    },
+                    "runAfter": {
+                      "Mark_failed": [
+                        "Succeeded",
+                        "Failed",
+                        "TimedOut"
+                      ]
+                    }
+                  },
+                  "Delivery_failed": {
+                    "type": "Terminate",
+                    "inputs": {
+                      "runStatus": "Failed",
+                      "runError": {
+                        "code": "ESG1to1",
+                        "message": "The feedback email (E13) could not be sent. The item is marked Failed."
+                      }
+                    },
+                    "runAfter": {
+                      "Send_E13_notice": [
+                        "Succeeded",
+                        "Failed",
+                        "TimedOut"
+                      ]
+                    }
+                  }
                 }
               },
               "runAfter": {
-                "Send_E13": [
-                  "Failed",
-                  "TimedOut"
-                ]
-              }
-            },
-            "Send_E13_notice": {
-              "type": "OpenApiConnection",
-              "inputs": {
-                "host": {
-                  "connectionName": "shared_office365",
-                  "operationId": "SendEmailV2",
-                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
-                },
-                "parameters": {
-                  "emailMessage/To": "@parameters('ESG 1-to-1 Team Leader email (esg_ManagerEmail)')",
-                  "emailMessage/Subject": "1-to-1 feedback could not be delivered – please read it in the list",
-                  "emailMessage/Body": "<p>A message sent with the 1-to-1 feedback button could not be emailed to you. Open the <b>1-to-1 Feedback</b> list (Site contents), or <b>Needs your attention</b> on the 1-to-1 page, to read it.</p>",
-                  "emailMessage/Importance": "Normal"
-                },
-                "authentication": "@parameters('$authentication')"
-              },
-              "runtimeConfiguration": {
-                "secureData": {
-                  "properties": [
-                    "inputs",
-                    "outputs"
-                  ]
-                }
-              },
-              "runAfter": {
-                "Mark_failed": [
-                  "Succeeded",
-                  "Failed",
-                  "TimedOut"
-                ]
-              }
-            },
-            "Delivery_failed": {
-              "type": "Terminate",
-              "inputs": {
-                "runStatus": "Failed",
-                "runError": {
-                  "code": "ESG1to1",
-                  "message": "The feedback email (E13) could not be sent. The item is marked Failed."
-                }
-              },
-              "runAfter": {
-                "Send_E13_notice": [
-                  "Succeeded",
-                  "Failed",
-                  "TimedOut"
+                "From_sender_today": [
+                  "Succeeded"
                 ]
               }
             }

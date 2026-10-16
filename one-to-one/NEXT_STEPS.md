@@ -32,12 +32,12 @@
 
 Follow [`GO_LIVE_RUNBOOK.md`](GO_LIVE_RUNBOOK.md) from **Phase 4**:
 
-1. **Import the solution** [`04-solution/ESGOneToOne_1_2_0_0_unmanaged.zip`](04-solution/IMPORT_GUIDE.md): pick your connections, enter the site URL and your email.
+1. **Import the solution** [`04-solution/ESGOneToOne_1_2_1_0_unmanaged.zip`](04-solution/IMPORT_GUIDE.md): pick your connections, enter the site URL and your email.
 2. **Run *ESG 1-to-1 | 0 Setup*.** It creates the seven lists, permission levels, group and list permissions, then emails you a summary.
 3. **Install the frontend.** Upload two files, choose the *ESG 1-to-1* layout in a full-width section. There's nothing to edit.
 4. **Turn on the flows** once the Setup email has arrived: 2, 3, 4, 5, 6, then 1 last.
 5. **Add Test A and Test B**, set their appraisal dates in ⚙ Settings, and add expectations.
-6. **Rehearse** and run every test in plan section H (F1–F44, P1–P25).
+6. **Rehearse** and run every test in plan section H (F1–F44, P1–P28).
 7. **Clean down and go live.**
 
 ## Things to verify early in the tenant

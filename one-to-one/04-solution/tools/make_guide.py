@@ -79,7 +79,7 @@ GUIDE = r'''# ESG Monthly Technician 1-to-1 — Finalisation Guide
 
 **From the end of Stage 0B to a live system, then running it month to month.** This document is self-contained: you don't need any other file to follow it. Tick each box as you go.
 
-Version: system v4.4.0 (frontend) · solution 1.2.0.0 · guide dated 15-Oct-2026
+Version: system v4.4.0 (frontend) · solution 1.2.1.0 · guide dated 15-Oct-2026
 
 ---
 
@@ -93,12 +93,12 @@ Version: system v4.4.0 (frontend) · solution 1.2.0.0 · guide dated 15-Oct-2026
   - the `1-to-1 Edit` and `1-to-1 Read` permission levels exist.
 - **Everything to install is built and verified offline:**
   - frontend: 182 automated checks;
-  - flows: simulated end to end, 167 checks, and 23 deliberately broken copies all caught by the validator;
+  - flows: simulated end to end, 180 checks, and 23 deliberately broken copies all caught by the validator;
   - two independent reviews fixed 29 defects (see VERIFICATION.md).
 
 **Not yet proven:** nothing has run in your tenant yet.
 
-> **The system is fully implemented when Phase F (go-live) is done and every privacy test (P1–P25) in Phase C has passed.**
+> **The system is fully implemented when Phase F (go-live) is done and every privacy test (P1–P28) in Phase C has passed.**
 
 | Phase | What | Who's involved | Time |
 |---|---|---|---|
@@ -119,7 +119,7 @@ Version: system v4.4.0 (frontend) · solution 1.2.0.0 · guide dated 15-Oct-2026
 
 | File | Goes to |
 |---|---|
-| `ESGOneToOne_1_2_0_0_unmanaged.zip` | Power Automate → **Solutions → Import solution**. Contains the seven flows; the setup flow creates the lists. |
+| `ESGOneToOne_1_2_1_0_unmanaged.zip` | Power Automate → **Solutions → Import solution**. Contains the seven flows; the setup flow creates the lists. |
 | `one-to-one.html` | SharePoint → *Welcome Web Part - Custom Layouts* library |
 | `one-to-one.js` | Same library, alongside the `.html` |
 
@@ -157,7 +157,7 @@ Version: system v4.4.0 (frontend) · solution 1.2.0.0 · guide dated 15-Oct-2026
 2. [ ] Top right: pick the environment IT named for the flows.
 3. [ ] Left menu: **Solutions**.
    - If it asks to create a **Dataverse database**, or *Solutions* is missing, use §4.8 instead.
-4. [ ] **Import solution → Browse →** `ESGOneToOne_1_2_0_0_unmanaged.zip` → **Next → Next**.
+4. [ ] **Import solution → Browse →** `ESGOneToOne_1_2_1_0_unmanaged.zip` → **Next → Next**.
 5. [ ] **Connections.** For each of the three, pick yours or click **+ New connection**, signed in as you:
 
    | Connection reference | Connector |
@@ -192,7 +192,7 @@ Version: system v4.4.0 (frontend) · solution 1.2.0.0 · guide dated 15-Oct-2026
 - [ ] Each list → ⚙ → **List settings → Permissions for this list**:
   - Technicians, Appraisal Expectations, Monthly Reviews, Manager Reviews and **Wellbeing Assessments** (health information) show **only** *Owners – Full Control*;
   - **1-to-1 Settings** shows Owners **and** `1-to-1 Technicians` – Read;
-  - **1-to-1 Feedback** shows Owners **and** `1-to-1 Technicians` – **Contribute**; its Advanced settings → *Item-level permissions* are "Read items that were created by the user" and "Create items and edit items that were created by the user".
+  - **1-to-1 Feedback** shows Owners **and** `1-to-1 Technicians` – **1-to-1 Submit**; its Advanced settings → *Item-level permissions* are "Read items that were created by the user" and "Create items and edit items that were created by the user".
 - [ ] **1-to-1 Settings** contains two items, **Bands** and **Reminders**.
 - [ ] Spot check: Monthly Reviews → List settings → click **Q9FollowUp**. The address ends `Field=Q9FollowUp`, and it has three choices.
 
@@ -303,7 +303,7 @@ Only if §4.2 step 3 showed that solutions can't be imported:
 
 {F_TABLE}
 
-### 6.2 Privacy and bypass tests (P1–P25) — all mandatory
+### 6.2 Privacy and bypass tests (P1–P28) — all mandatory
 
 {P_TABLE}
 

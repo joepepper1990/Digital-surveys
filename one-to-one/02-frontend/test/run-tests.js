@@ -36,7 +36,7 @@ function staticChecks() {
   ok('No email addresses or tenant hosts in shipped files', !/[\w.-]+@[\w-]+\.[\w.]+/.test(js + html) && !/sharepoint\.com/i.test(js + html));
   ok('Writes only through spUpdate/spCreate (single validateUpdateListItem + AddValidate path)',
     (code.match(/validateUpdateListItem/g) || []).length === 1 && (code.match(/AddValidateUpdateItemUsingPath/g) || []).length === 1);
-  ok('No permission endpoints called from the frontend', !/roleassignments|breakroleinheritance|resetroleinheritance|ensureuser/i.test(code));
+  ok('No permission endpoints called from the frontend', !/roleassignments|breakroleinheritance|resetroleinheritance|ensureuser/i.test(code.replace(/HasUniqueRoleAssignments/g, '')));
 }
 
 // ------------------------------------------------------------------ helpers
@@ -214,7 +214,7 @@ async function main() {
   ok('Settings: appraisal date written to Technicians (verified by reading it back)', techW && techW.values.AppraisalDate === summer &&
     d9.lists['Technicians'].some(function (t) { return t.Title === 'Casey Brooks' && new Date(t.AppraisalDate).toLocaleDateString('en-CA', { timeZone: 'Europe/London' }) === summer; }));
   ok('Settings: copy written to the current Monthly Review', d9.writes.some(function (w) { return w.list === 'Monthly Reviews' && w.as === 'tl' && 'AppraisalDate' in w.values; }));
-  var sw = d9.writes.filter(function (w) { return w.list === '1-to-1 Settings'; }).pop();
+  var sw = d9.writes.filter(function (w) { return w.list === '1-to-1 Settings' && /"max"/.test(w.values.Value || ''); }).pop();   // the Bands write
   ok('Settings: bands saved to the Settings list', sw && JSON.parse(sw.values.Value)[2].max === 3.9);
   await open(page, { as: 'tl' });
   ok('Dates: a BST date reloads as the same calendar day', (await page.locator('.nw tr:has-text("Casey Brooks")').innerText()).indexOf(fmt(summer)) >= 0);
@@ -928,13 +928,35 @@ async function main() {
   await Q.locator('button:has-text("Add expectation")').dblclick(); await Q.waitForTimeout(2500);
   ok('Double click: Add expectation creates one item, not two', (await db21()).lists['Appraisal Expectations'].filter(function (x) { return x.Title === 'Year format check'; }).length === 1);
   await Q.evaluate(function () { OTO_MOCK.current.db.latency = 0; });
+  // security review: the page only trusts feedback states that Flow 6 set (item locked); floods are grouped
+  await put21("var now = new Date().toISOString(), a = 'i:0#.f|membership|sam.patel@example.test';" +
+    "d.lists['1-to-1 Feedback'].push({ ID: 801, Title: 'FORGED', FeedbackType: 'Fault', Message: 'FORGED-FAILED', PageName: 'p', AppVersion: 'v', DeliveryStatus: 'Failed', Created: now, Author: a });" +
+    "for (var k = 0; k < 3; k++) { d.lists['1-to-1 Feedback'].push({ ID: 810 + k, Title: 'held ' + k, FeedbackType: 'Suggestion', Message: 'HELD-' + k, PageName: 'p', AppVersion: 'v', DeliveryStatus: 'Held', HasUniqueRoleAssignments: true, Created: now, Author: a }); }");
+  await open(Q, { as: 'tl' });
+  var at21 = await Q.locator('.attn').innerText();
+  ok('Security: a sender-set "Failed" on an item the flow never handled is not shown to the TL', at21.indexOf('FORGED') < 0 && !/Feedback from Sam Patel couldn't be emailed/.test(at21), at21);
+  ok('Security: messages held by the flood guard show as one row', /Sam Patel sent 3 more feedback messages than are emailed in a day/.test(at21), at21);
+  await Q.locator('.attn-row:has-text("more feedback messages") button').click();
+  ok('Security: the held messages can all be read and marked read together', (await Q.locator('.modal .fbk-msg').count()) === 3 &&
+    await Q.locator('.modal button:has-text("Mark all as read")').isVisible());
+  await Q.locator('.modal button:has-text("Close")').click();
+  var tech21 = await api(Q, 'POST', "/_api/web/lists/getbytitle('1-to-1%20Feedback')/items(810)/validateUpdateListItem", { formValues: [{ FieldName: 'HasUniqueRoleAssignments', FieldValue: '1' }], bNewDocumentUpdate: false });
+  ok('Security: the locked state is not a column anyone can write', tech21.status === 200 && tech21.json.value[0].HasException === true);
+  // health information is not on the first screen of "Since last time"
+  await put21("var rv = d.lists['Monthly Reviews'].filter(function (x) { return x.Technician.indexOf('alex.') >= 0; }).sort(function (x, y) { return x.MonthKey < y.MonthKey ? 1 : -1; })[1];" +
+    "rv.Q4WellbeingRaise = 'Yes'; rv.Q4WellbeingDetail = 'PRIVATE-HEALTH-DETAIL';");
+  await open(Q, { as: 'alex' });
+  ok('Privacy: a wellbeing point in "Since last time" stays hidden until they choose Show', (await Q.locator('.since').innerText()).indexOf('PRIVATE-HEALTH-DETAIL') < 0 &&
+    /you raised a wellbeing point/.test(await Q.locator('.since').innerText()));
+  await Q.locator('.since button:has-text("show")').click();
+  ok('Privacy: … and Show reveals it', (await Q.locator('.since').innerText()).indexOf('PRIVATE-HEALTH-DETAIL') >= 0);
   await c21.close();
 
   // XSS: hostile feedback shown to the TL, and typed into the panel
   await open(page, { as: 'tl', xss: '1' });
   await page.evaluate(function () {
     var d = OTO_MOCK.current.db, x = OTO_MOCK.X.join(' ');
-    d.lists['1-to-1 Feedback'].push({ ID: 900, Title: x.slice(0, 60), FeedbackType: 'Fault', Message: x, PageName: x, AppVersion: x, DeliveryStatus: 'Failed',
+    d.lists['1-to-1 Feedback'].push({ ID: 900, Title: x.slice(0, 60), FeedbackType: 'Fault', Message: x, PageName: x, AppVersion: x, DeliveryStatus: 'Failed', HasUniqueRoleAssignments: true,
       Created: new Date().toISOString(), Author: 'i:0#.f|membership|riley.evans@example.test' });
     sessionStorage.setItem('oto-mock-db-v6', JSON.stringify(d));
   });

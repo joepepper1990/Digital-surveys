@@ -29,7 +29,7 @@
     ActionsStatus: ['None', 'Open', 'Done'],
     WbStatus: ['Open', 'Submitted', 'Completed'],
     FbType: ['Fault', 'Improvement', 'Suggestion'],
-    FbStatus: ['Pending', 'Sent', 'Failed', 'Read']
+    FbStatus: ['Pending', 'Sent', 'Failed', 'Read', 'Held']
   };
   // ?locale=uk (default) | us | uk-noiso | us-noiso – how this pretend SharePoint reads typed dates
   var LOCALE = (function () { try { return new URL(window.location.href).searchParams.get('locale') || 'uk'; } catch (_) { return 'uk'; } })();
@@ -57,7 +57,8 @@
       NextReviewDate: F('date'), SubmittedOn: F('datetime'), CompletedOn: F('datetime') },
     // Created and Author are set by SharePoint itself, not from formValues
     '1-to-1 Feedback': { Title: F('text'), FeedbackType: F('choice', { c: CHOICES.FbType }), Message: F('note'), PageName: F('text'), AppVersion: F('text'),
-      DeliveryStatus: F('choice', { c: CHOICES.FbStatus }), SentOn: F('datetime'), Created: F('datetime'), Author: F('person') }
+      DeliveryStatus: F('choice', { c: CHOICES.FbStatus }), SentOn: F('datetime'), Created: F('datetime'), Author: F('person'),
+      HasUniqueRoleAssignments: F('bool') }   // set by 'Flow 6' when it locks the item (not writable from the page)
   };
 
   // ---------------------------------------------------------------- people (fictional)
@@ -313,7 +314,7 @@
   // ---------------------------------------------------------------- value coercion (validateUpdateListItem)
   function coerce(list, name, value) {
     var f = SCHEMA[list][name];
-    if (!f) { return { err: 'Column \'' + name + '\' does not exist.' }; }
+    if (!f || name === 'HasUniqueRoleAssignments' || name === 'Author' || name === 'Created') { return { err: 'Column \'' + name + '\' does not exist or is read-only.' }; }
     var v = value === null || value === undefined ? '' : String(value);
     switch (f.t) {
       case 'text': if (v.length > 255) { return { err: 'Text too long (max 255)' }; } return { v: v };
@@ -408,7 +409,11 @@
 
   // Flow 6: lock the feedback item to Owners, email the line manager; on a mail failure mark it Failed and send a short notice.
   function flow6(db, it, u) {
-    delete db.perms['1-to-1 Feedback'][it.ID];
+    delete db.perms['1-to-1 Feedback'][it.ID]; it.HasUniqueRoleAssignments = true;
+    var day = Date.now() - 86400000;
+    if (db.lists['1-to-1 Feedback'].filter(function (x) { return x.Author === it.Author && new Date(x.Created).getTime() > day; }).length > 10) {
+      it.DeliveryStatus = 'Held'; it.SentOn = nowIso(); return;
+    }
     if (db.fbFail) { it.DeliveryStatus = 'Failed'; db.emails.push({ to: 'TL', template: 'E13-notice', fbId: it.ID }); return; }
     it.DeliveryStatus = 'Sent'; it.SentOn = nowIso();
     db.emails.push({ to: 'TL', template: 'E13', fbId: it.ID, from: u.email, type: it.FeedbackType, page: it.PageName, message: it.Message });

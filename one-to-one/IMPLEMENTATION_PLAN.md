@@ -1,6 +1,6 @@
 # ESG Monthly Technician 1-to-1 — Implementation Plan (v4)
 
-**Status:** v4.3, dated 15-Oct-2026 (frontend 4.4.0, solution 1.2.0.0 – see *v4.2 additions* and *v4.3* below). **Current position and next actions:** [`NEXT_STEPS.md`](NEXT_STEPS.md).
+**Status:** v4.3, dated 15-Oct-2026 (frontend 4.4.0, solution 1.2.1.0 – see *v4.2 additions* and *v4.3* below). **Current position and next actions:** [`NEXT_STEPS.md`](NEXT_STEPS.md).
 
 - **Stages 0A and 0B have passed in the live tenant.** Welcome runs the external script, authenticated REST works, and the item-level security model holds.
 - The visual design was agreed through prototype v7 ([`prototype/prototype.html`](prototype/prototype.html)).
@@ -43,7 +43,7 @@ The system has **seven lists** (five data lists, including Wellbeing Assessments
 | Removed | — | Private notes, ask-for-a-chat, workload trend, the occupational-health text (`eapText`), example text in boxes, and the "how it's worked out" panel for technicians |
 | Flows | — | Flow 1 copies `AppraisalDate` and initialises the two JSON columns. Email dates use `dd-MMM-yyyy`. E3's request tag uses `startsWith`. Flows 2 and 3 are unchanged. |
 | Security model | — | **Unchanged.** No new trust boundary: new technician fields are on the technician's own item; new TL data is on Manager Reviews (released by Flow 3); the Settings list holds no personal data. |
-| Delivery (v4.1) | Lists and flows built by hand from G Parts 3–8 | **Import one solution** ([`04-solution/ESGOneToOne_1_2_0_0_unmanaged.zip`](04-solution/IMPORT_GUIDE.md)), then run **ESG 1-to-1 \| 0 Setup**, which builds everything in C, D.2 and D.3. The flows look up group, role and list IDs at run time, so G Part 4 is no longer needed. The site URL and TL email are environment variables. For environments without Dataverse there is an offline legacy-package builder. Verified locally: a static validator, 23 mutation tests and 167 end-to-end simulations against a fake SharePoint. |
+| Delivery (v4.1) | Lists and flows built by hand from G Parts 3–8 | **Import one solution** ([`04-solution/ESGOneToOne_1_2_1_0_unmanaged.zip`](04-solution/IMPORT_GUIDE.md)), then run **ESG 1-to-1 \| 0 Setup**, which builds everything in C, D.2 and D.3. The flows look up group, role and list IDs at run time, so G Part 4 is no longer needed. The site URL and TL email are environment variables. For environments without Dataverse there is an offline legacy-package builder. Verified locally: a static validator, 23 mutation tests and 167 end-to-end simulations against a fake SharePoint. |
 
 
 ## Changes in v3
@@ -322,6 +322,7 @@ Break inheritance on all seven lists so that only **Owners (Full Control)** rema
 |---|---|---|---|
 | **`1-to-1 Edit`** | Contribute | Add Items, Delete Items, Delete Versions, Manage Personal Views, Add/Remove Personal Web Parts, Update Personal Web Parts | Technician on **their own open** Monthly Review |
 | **`1-to-1 Read`** | Read | **View Versions**, Create Alerts | Technician on their submitted review and on their **released** Manager Review. Without View Versions, they can't see the TL's earlier drafts. |
+| **`1-to-1 Submit`** (v4.3, setup 1.2.1) | Contribute | Delete Items, View Versions, Delete Versions, **Create Alerts**, Manage Personal Views, Add/Remove and Update Personal Web Parts | The group on the **1-to-1 Feedback** list only (with "own items only" item-level settings). No alerts, so nobody can be emailed someone else's new item before Flow 6 locks it. Setup creates it. |
 
 Keep **Use Remote Interfaces** ticked in both, because the frontend's REST calls need it.
 
@@ -1266,7 +1267,7 @@ These are in [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) §4:
 | Appraisal timing (4.2.1) | A passed appraisal date reads **Overdue by N days** (team table, Settings, profile tile, overview tile *Appraisals overdue*) and *Needs your attention* says to set the next date once it's done. Appraisals are best done in the **calendar month before** the date: a subtle "aim: in December" line under Days to go (amber once that month starts), "Aim to complete X's appraisal by 31-Dec" in *Needs your attention*, and "Aim to complete" on the technician's outlook. The appraisal date stays the deadline. | Display only. |
 | Upgrade-safe Flow 1 (1.1.1.0) | 1.1.0.0's Flow 1 read *Wellbeing Assessments* with a connector step, so after importing over 1.0 it could not be turned back on until Setup had created the list (*GetTable … List not found*). Flow 1 now reads it by REST through the list ID found at run time. A validator rule (plus mutation) stops flows 1–4 naming a list added after 1.0 in a connector step. | REST read is secured like the other steps. |
 
-### v4.3 – feedback bubble (frontend 4.4.0, solution 1.2.0.0)
+### v4.3 – feedback bubble (frontend 4.4.0, solution 1.2.1.0)
 
 | Area | What changed | Security notes |
 |---|---|---|
@@ -1388,6 +1389,9 @@ These are in [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) §4:
 | P23 🔒 (v4.2) | **Change after submitting** | A: write to their submitted assessment | Denied (403). |
 | P24 🔒 (v4.2) | **Join the group / see the roster** | A: GET `…getbytitle('Technicians')/items`; POST `_api/web/sitegroups(<id>)/users` | Both denied. (Only Flow 4, as the TL, changes the group.) |
 | P25 🔒 (v4.3) | **Read someone else's feedback, or your own after sending** | B: GET `…getbytitle('1-to-1 Feedback')/items` after A sent one; A: the same once Flow 6 has run | B gets none of A's items; A gets nothing back once it's locked. |
+| P26 🔒 (v4.4) | **Send feedback as someone else** | A: POST `…getbytitle('1-to-1 Feedback')/AddValidateUpdateItemUsingPath` with form values `Author` / `Editor` set to B | The item is recorded as A (Author/Editor ignored or rejected). If SharePoint accepts the change, record it here: the E13 sender is then "as recorded", and the TL should confirm unexpected feedback in person. |
+| P27 🔒 (v4.4) | **Get alerted to others' feedback** | B: try *Alert me* on 1-to-1 Feedback, and POST `…/alerts/add` | Denied – `1-to-1 Submit` has no Create Alerts. |
+| P28 🔒 (v4.4) | **List metadata / change log** | B: GET `…getbytitle('Wellbeing Assessments')?$select=ItemCount,LastItemUserModifiedDate`; POST `…/GetChanges` on Wellbeing Assessments and 1-to-1 Feedback | Denied, or reveals nothing personal. If dates/counts are visible, record it as an accepted risk (no content is exposed). |
 | P17 🔒 | **No data leaves the tenant** | As the TL, open each view with F12 → **Network** recording (ask IT if developer tools are blocked) | Every request carrying list data goes to `<tenant>.sharepoint.com`. Record any other host contacted (for example the web part's own code CDN) for IT-11. None of them may receive review content. |
 
 ---
@@ -1483,9 +1487,9 @@ All of these are text, contain **no tenant names, credentials or personal data**
 | K3 | [`02-frontend/one-to-one.html`](02-frontend/one-to-one.html) | **Produced (v4.4.0)** |
 | K4 | [`02-frontend/one-to-one.js`](02-frontend/one-to-one.js) | **Produced (v4.4.0)** |
 | K5 | [`03-flows/FLOW_BUILD_SHEETS.md`](03-flows/FLOW_BUILD_SHEETS.md) | **Produced (v4)**: Flows 1–3, SETPERM, Ensure_user, Try/Catch |
-| K5a | [`04-solution/ESGOneToOne_1_2_0_0_unmanaged.zip`](04-solution/IMPORT_GUIDE.md) | **Produced (1.2.0.0)**: importable solution with setup flow + Flows 1–6, connection references, environment variables; legacy-package builder; source, validator and simulation in [`04-solution/tools/`](04-solution/README.md) |
+| K5a | [`04-solution/ESGOneToOne_1_2_1_0_unmanaged.zip`](04-solution/IMPORT_GUIDE.md) | **Produced (1.2.1.0)**: importable solution with setup flow + Flows 1–6, connection references, environment variables; legacy-package builder; source, validator and simulation in [`04-solution/tools/`](04-solution/README.md) |
 | K6 | [`03-flows/EMAIL_TEMPLATES.md`](03-flows/EMAIL_TEMPLATES.md) | **Produced (v4.2)**: E1–E5, E7–E12 (there is no E6) |
-| K7 | Test record | Use section H directly (F1–F44, P1–P25); add Pass/Fail, date, tester and screenshot columns |
+| K7 | Test record | Use section H directly (F1–F44, P1–P28); add Pass/Fail, date, tester and screenshot columns |
 | K8 | Privacy notice | **Not needed.** The TL decided it's handled between the TL and each technician. |
 | K9 | [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) | **Produced (v4)** |
 | K10 | [`02-frontend/mock/`](02-frontend/mock/), [`02-frontend/test/`](02-frontend/test/), [`02-frontend/tools/`](02-frontend/tools/) | **Produced.** 182 checks passing. |

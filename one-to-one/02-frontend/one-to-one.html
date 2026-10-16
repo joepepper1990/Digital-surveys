@@ -159,7 +159,7 @@
   .SCOPE .oto table.tbl td.num { font-variant-numeric: tabular-nums; }
   .SCOPE .oto table.tbl td.top { vertical-align: top; }
   .SCOPE .oto table.tbl input, .SCOPE .oto table.tbl select { padding: 5px 7px; }
-  .SCOPE .oto .tbl-wrap { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .SCOPE .oto .tbl-wrap { border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; overflow-y: hidden; }
   .SCOPE .oto .filters { display: flex; gap: 12px; align-items: end; margin-bottom: 12px; }
   .SCOPE .oto .filters > div { width: 200px; }
   .SCOPE .oto .filters label { font-size: 12px; font-weight: 600; display: block; margin-bottom: 3px; }
@@ -240,7 +240,7 @@
   .SCOPE .oto .datehint { flex-basis: 100%; font-size: 11px; color: var(--muted); min-height: 0; }
   .SCOPE .oto .datehint.bad { color: var(--red); font-weight: 600; }
   .SCOPE .oto input.datef.bad { border-color: var(--red); background: var(--red-bg); }
-  .SCOPE .oto .toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); background: #233; color: #fff; padding: 10px 16px; border-radius: 6px; z-index: 96; }
+  .SCOPE .oto .toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); background: #233; color: #fff; padding: 10px 16px; border-radius: 6px; z-index: 96; max-width: min(640px, calc(100vw - 140px)); }
   .SCOPE .oto .toast.err { background: var(--red); }
   .SCOPE .oto .banner { padding: 9px 14px; border-radius: 8px; font-weight: 600; }
   .SCOPE .oto .banner.info { background: var(--blue-bg); color: var(--navy); border: 1px solid #c4d6ee; }
@@ -279,6 +279,9 @@
 
   /* ---------- v4.2 additions ---------- */
   .SCOPE .oto .modal.wide.settings { width: 1060px; max-width: calc(100vw / var(--z) - 32px); }
+  .SCOPE .oto .modal.wide.settings .stabs { position: sticky; top: -22px; background: #fff; z-index: 2; padding-top: 8px; }
+  .SCOPE .oto .modal.wide.settings .settings-body { min-height: 320px; }
+  .SCOPE .oto .modal.wide.settings > .btn-row:last-child { position: sticky; bottom: -22px; background: #fff; padding: 10px 0; border-top: 1px solid var(--line); }
   .SCOPE .oto .stabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 12px 0 14px; flex-wrap: wrap; }
   .SCOPE .oto .stab { font: inherit; font-weight: 650; background: none; border: none; padding: 8px 14px; cursor: pointer; color: var(--muted); border-bottom: 3px solid transparent; }
   .SCOPE .oto .stab[aria-selected="true"] { color: var(--navy); border-bottom-color: var(--accent); }
@@ -327,8 +330,9 @@
   .SCOPE .oto .report-wrap { z-index: 10000; }
   /* ---------- v4.3 feedback bubble (bottom-right, above the page, below dialogs) ---------- */
   .SCOPE .oto .fbk { position: fixed; right: 20px; bottom: 20px; z-index: 10005; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
-  .SCOPE .oto .fbk-bubble { display: inline-flex; align-items: center; gap: 8px; border: 0; border-radius: 999px; padding: 11px 16px 11px 14px; background: var(--navy); color: #fff; font: inherit; font-weight: 650; font-size: 14px; cursor: pointer; box-shadow: 0 6px 18px rgba(14,66,87,.35); }
-  .SCOPE .oto .fbk-bubble span[aria-hidden] { font-size: 18px; line-height: 1; }
+  .SCOPE .oto .fbk-bubble { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: 999px; width: 48px; height: 48px; padding: 0; background: var(--navy); color: #fff; font: inherit; font-weight: 650; font-size: 14px; cursor: pointer; box-shadow: 0 6px 18px rgba(14,66,87,.35); }
+  .SCOPE .oto .fbk-bubble span[aria-hidden] { font-size: 20px; line-height: 1; }
+  .SCOPE .oto .fbk-bubble .fbk-lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }   /* label for screen readers; the tooltip shows it */
   .SCOPE .oto .fbk-bubble:hover { background: var(--navy-2); }
   .SCOPE .oto .fbk-bubble:focus-visible { outline: 3px solid #ef7d3a; outline-offset: 2px; }
   .SCOPE .oto .fbk-bubble[aria-expanded="true"] { background: #0e4257; }
@@ -340,12 +344,21 @@
   .SCOPE .oto .fbk-types button.on { background: var(--navy); border-color: var(--navy); color: #fff; }
   .SCOPE .oto .fbk-meta { display: flex; justify-content: space-between; gap: 10px; margin: 6px 0 10px; align-items: flex-start; }
   .SCOPE .oto .fbk-meta > span:last-child { white-space: nowrap; }
-  .SCOPE .oto .shell { padding-bottom: 64px; }   /* room so the bubble never hides the end of a page */
+  .SCOPE .oto .shell { padding-bottom: 84px; }   /* room so the bubble never hides the end of a page */
   .SCOPE .oto .fbk-note { border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; font-size: 13px; }
   .SCOPE .oto .fbk-note.good { background: var(--green-bg); color: var(--green); }
   .SCOPE .oto .fbk-note.bad { background: #fde8e9; color: var(--red); }
+  .SCOPE .oto .fbk-list { max-height: 50vh; overflow-y: auto; }
+  .SCOPE .oto .fbk-item { margin-top: 10px; }
+  .SCOPE .oto .fbk-item .fbk-msg { margin-top: 4px; }
   .SCOPE .oto .fbk-msg { white-space: pre-wrap; background: var(--soft); border-left: 3px solid var(--navy-2); padding: 10px 12px; margin-top: 12px; border-radius: 0 6px 6px 0; max-height: 40vh; overflow: auto; }
   @media print { .SCOPE .oto .fbk { display: none !important; } }
+  /* smaller laptops: keep the top bar on one row (the deadline is also shown in Needs your attention / on the form) */
+  @media (max-width: 1500px) {
+    .SCOPE .oto .topbar { gap: 6px 10px; padding: 0 14px; }
+    .SCOPE .oto .topbar button.nav { padding-left: 9px; padding-right: 9px; gap: 6px; }
+    .SCOPE .oto .topbar .status > span:first-of-type, .SCOPE .oto .topbar .status > br:first-of-type { display: none; }
+  }
   /* ---------- v4.4 auto-save status, folded cards, Since last time ---------- */
   .SCOPE .oto .meterwrap { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
   .SCOPE .oto .autosave { font-size: 12px; color: var(--muted); white-space: nowrap; }

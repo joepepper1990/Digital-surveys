@@ -132,7 +132,7 @@ E4 and E5 are written in the first person (they come from your mailbox), so they
 | E10 | 5 Wellbeing → you | `Wellbeing assessment submitted: <name>` | Arrange a private, hour-long conversation; link to the assessment. |
 | E11 | 5 Wellbeing → the person | `Your wellbeing assessment record is ready` | Thanks for the conversation; the agreed record (arrangements, review date) is ready to view; link. |
 | E12 | 1 Daily scheduler → you | `Wellbeing review due in 7 days: <name>` / `Wellbeing review due today: <name>` | The review agreed with that person is due on DD-MMM-YYYY; link to the last assessment. |
-| E13 | 6 Feedback → you | `1-to-1 feedback (<Fault / Improvement / Suggestion>): <first 60 characters>` | Who sent it (name and email), the type, the page and version, the time, and their message (HTML-escaped, line breaks kept). If it can't be sent you get `1-to-1 feedback could not be delivered – please read it in the list` instead, with no content, and the item shows in *Needs your attention*. |
+| E13 | 6 Feedback → you | `1-to-1 feedback (<Fault / Improvement / Suggestion>): <first 60 characters>` | Who sent it (name and email), the type, the page and version, the time, and their message (HTML-escaped, line breaks kept). If it can't be sent you get `1-to-1 feedback could not be delivered – please read it in the list` instead, with no content, and the item shows in *Needs your attention*. More than 10 from one person in 24 hours are kept but not emailed one by one (*Held*); they show as one row in *Needs your attention*. |
 
 The exact HTML is in [`../04-solution/tools/flows.py`](../04-solution/tools/flows.py) (`flow_team`, `flow_wellbeing`, `flow_daily`).
 

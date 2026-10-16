@@ -87,7 +87,7 @@ def frontend_fields():
         'Appraisal Expectations': names(re.search(r"spGetAll\(CONFIG\.lists\.exp, '([^']+)'", js).group(1)),
         '1-to-1 Settings': names(re.search(r"spGetAll\(CONFIG\.lists\.settings, '([^']+)'", js).group(1)),
         'Wellbeing Assessments': names(strings_after(js, 'var WB_FIELDS')),
-        '1-to-1 Feedback': names(strings_after(js, 'var FB_FIELDS')),
+        '1-to-1 Feedback': names(strings_after(js, 'var FB_FIELDS')) - {'HasUniqueRoleAssignments'},   # an item property, not a column
     }
     need['Monthly Reviews'] |= set(re.findall(r"'([^']+)'", strings_after(tests, 'var TECH_ALLOWED', ']')))
     need['Manager Reviews'] |= set(re.findall(r"'([^']+)'", strings_after(tests, 'var MGR_ALLOWED', ']')))
@@ -167,9 +167,9 @@ def setup_checks():
         if spec['groupRead']:
             want_ra[gid] = {fsp.READ}
         if spec.get('groupContribute'):
-            want_ra[gid] = {fsp.CONTRIB}
+            want_ra[gid] = {sp.role_id('1-to-1 Submit')}   # Contribute without delete, versions, alerts or personal views
         ok('Setup: {0} permissions are exactly {1}'.format(spec['title'], 'Owners FC + technicians Read' if spec['groupRead'] else
-                                                         'Owners FC + technicians Contribute (own items only)' if spec.get('groupContribute') else 'Owners FC'),
+                                                         'Owners FC + technicians 1-to-1 Submit (own items only)' if spec.get('groupContribute') else 'Owners FC'),
            l['unique'] and l['ra'] == want_ra, l['ra'])
     for r in ROLES:
         got = next((x for x in sp.roles if x['Name'] == r['name']), None)
@@ -635,7 +635,7 @@ def feedback_checks():
     ok('Flow 6: SentOn stamped and DeliveryStatus = Sent', it['fields'].get('SentOn') and it['fields'].get('DeliveryStatus') == 'Sent', it['fields'])
     n = len(sp.emails)
     st, _ = fire('6', sp, '1-to-1 Feedback', it['id'], T('2026-10-20T09:05:00'))
-    ok('Flow 6: its own update does not run it again (no second email)', st == 'NotTriggered' and len(sp.emails) == n, st)
+    ok('Flow 6: its own update does not run it again (no second email)', st in ('NotTriggered', 'Cancelled') and len(sp.emails) == n, st)
     # the mail service refuses the email
     sp.me = 12
     it2 = sp.write_item(fb, None, {'item/Title': 'Idea', 'item/FeedbackType/Value': 'Suggestion', 'item/Message': 'Dark mode please',
@@ -653,7 +653,7 @@ def feedback_checks():
        (st, new))
     n = len(sp.emails)
     st, _ = fire('6', sp, '1-to-1 Feedback', it2['id'], T('2026-10-21T09:05:00'))
-    ok('Flow 6 (email fails): marking it Failed does not set off a retry loop', st == 'NotTriggered' and len(sp.emails) == n, st)
+    ok('Flow 6 (email fails): marking it Failed does not set off a retry loop', st in ('NotTriggered', 'Cancelled') and len(sp.emails) == n, st)
     # nothing at all can be emailed: the run still ends Failed (Power Automate's own failure notice) and the item says Failed
     sp.me = 11
     it3 = sp.write_item(fb, None, {'item/Title': 'x', 'item/FeedbackType/Value': 'Improvement', 'item/Message': 'x', 'item/PageName': 'p', 'item/AppVersion': 'v'})
@@ -663,6 +663,35 @@ def feedback_checks():
     sp.fail_mail = []
     ok('Flow 6 (mail service down): run Failed, item Failed, still locked', st == 'Failed' and it3['fields'].get('DeliveryStatus') == 'Failed' and
        11 not in it3['ra'], (st, it3['fields']))
+    # the sender can't stop their item being locked by pre-setting the delivery columns
+    for forged in ({'item/DeliveryStatus/Value': 'Sent'}, {'item/SentOn': '2026-10-22T08:00:00Z'}, {'item/DeliveryStatus/Value': 'Failed'}):
+        sp.me = 11
+        f = sp.write_item(fb, None, dict({'item/Title': 'forged', 'item/FeedbackType/Value': 'Fault', 'item/Message': 'x', 'item/PageName': 'p', 'item/AppVersion': 'v'}, **forged))
+        sp.me = 10
+        n = len(sp.emails)
+        st, _ = fire('6', sp, '1-to-1 Feedback', f['id'], T('2026-10-22T10:00:00'))
+        ok('Flow 6: a sender pre-setting {0} is still locked and emailed'.format(list(forged)[0].split('/')[1]), st == 'Succeeded' and f['unique'] and
+           11 not in f['ra'] and f['fields'].get('DeliveryStatus') == 'Sent' and len(sp.emails) == n + 1, (st, f['fields']))
+    # flood guard: from the 11th message in 24 hours, items are kept (Held) and locked, but not emailed one by one
+    fb2 = fsp.FakeSP(); run('0', fb2, T('2026-10-14T09:00:00')); L2 = fb2.list_by_title('1-to-1 Feedback')
+    fb2.clock = '2026-10-23T09:00:00Z'
+    sent = []
+    for k in range(12):
+        fb2.me = 11
+        it_k = fb2.write_item(L2, None, {'item/Title': 'msg %d' % k, 'item/FeedbackType/Value': 'Suggestion', 'item/Message': 'm', 'item/PageName': 'p', 'item/AppVersion': 'v'})
+        fb2.me = 10
+        n = len(fb2.emails)
+        st, _ = fire('6', fb2, '1-to-1 Feedback', it_k['id'], T('2026-10-23T09:05:00'))
+        sent.append((st, len(fb2.emails) - n, it_k['fields'].get('DeliveryStatus'), it_k['unique']))
+    ok('Flow 6: a flood is capped – 10 emails, then items are Held (still locked, not emailed)',
+       [x[1] for x in sent] == [1] * 10 + [0, 0] and [x[2] for x in sent[10:]] == ['Held', 'Held'] and all(x[3] for x in sent), sent)
+    fb2.clock = '2026-10-24T09:10:00Z'
+    fb2.me = 11
+    it_n = fb2.write_item(L2, None, {'item/Title': 'next day', 'item/FeedbackType/Value': 'Suggestion', 'item/Message': 'm', 'item/PageName': 'p', 'item/AppVersion': 'v'})
+    fb2.me = 10
+    n = len(fb2.emails)
+    fire('6', fb2, '1-to-1 Feedback', it_n['id'], T('2026-10-24T09:15:00'))
+    ok('Flow 6: the next day they are emailed again', len(fb2.emails) == n + 1 and it_n['fields'].get('DeliveryStatus') == 'Sent')
 
 
 
@@ -715,6 +744,40 @@ def qa_regression_checks():
        (st, m_sam['fields'].get('SubmittedOn')))
 
 
+
+def wellbeing_hardening_checks():
+    """Security review (16-Oct-2026): Flow 5 trusts only the item permission, never columns the person can edit."""
+    sp = fsp.FakeSP()
+    run('0', sp, T('2026-10-14T09:00:00'))
+    wb = sp.list_by_title('Wellbeing Assessments')
+    edit = sp.role_id('1-to-1 Edit')
+    it = sp.write_item(wb, None, {'item/Title': 'Alex Morgan – wellbeing assessment', 'item/Technician/Claims': sp.users[11]['Claims']})
+    fire('5', sp, 'Wellbeing Assessments', it['id'], T('2026-10-20T09:00:00'))
+    # while it's open, Alex re-labels it as Sam's and fakes the submitted stamp and manager notes
+    sp.me = 11
+    sp.write_item(wb, it['id'], {'item/Technician/Claims': sp.users[12]['Claims'], 'item/SubmittedOn': '2026-10-20T09:01:00Z', 'item/ManagerNotes': 'approved'})
+    sp.me = 10
+    st, eng = fire('5', sp, 'Wellbeing Assessments', it['id'], T('2026-10-20T09:05:00'))
+    f = it['fields']
+    ok('Flow 5: while open, the person column, stamps and manager fields are put back on the next run', st == 'Succeeded' and f['Technician'] == 11 and
+       not f.get('SubmittedOn') and not f.get('ManagerNotes') and f.get('AssessmentStatus') == 'Open' and it['ra'].get(11) == {edit}, (st, eng and eng.log, f))
+    # a second person holding it (owner-side permission mistake): stop, don't guess
+    it['ra'][12] = {edit}
+    st, _ = fire('5', sp, 'Wellbeing Assessments', it['id'], T('2026-10-20T09:10:00'))
+    ok('Flow 5: two people holding one assessment → the run fails (TL emailed), nothing changed', st == 'Failed' and it['ra'].get(11) == {edit})
+    del it['ra'][12]
+    # a submitted assessment that nobody holds any more is never re-shared
+    sp.me = 11
+    sp.write_item(wb, it['id'], {'item/AssessmentStatus/Value': 'Submitted'})
+    sp.me = 10
+    fire('5', sp, 'Wellbeing Assessments', it['id'], T('2026-10-21T09:00:00'))
+    it['ra'] = {k: v for k, v in it['ra'].items() if k != 11}   # e.g. the person was removed from the site
+    n = len(sp.emails)
+    st, _ = fire('5', sp, 'Wellbeing Assessments', it['id'], T('2026-10-22T09:00:00'))
+    ok('Flow 5: a submitted assessment nobody holds any more is not re-shared (run fails, TL told)', st == 'Failed' and 11 not in it['ra'] and
+       not any(e['subject'] == 'Your wellbeing assessment is ready to complete' for e in sp.emails[n:]) and it['fields'].get('AssessmentStatus') == 'Submitted')
+
+
 if __name__ == '__main__':
     site = setup_checks()
     partial_site_checks()
@@ -725,6 +788,7 @@ if __name__ == '__main__':
     team_and_wellbeing_checks()
     feedback_checks()
     qa_regression_checks()
+    wellbeing_hardening_checks()
     passed = sum(1 for _, p in RESULTS if p)
     print('\n[{2}] {0} / {1} passed'.format(passed, len(RESULTS), MODE))
     sys.exit(0 if passed == len(RESULTS) else 1)

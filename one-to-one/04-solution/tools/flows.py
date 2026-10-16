@@ -450,9 +450,13 @@ def flow_setup():
             ('Log_group_read', append(G, "@concat(" + L + "?['title'], ': " + GROUP_TITLE + " given Read')")),
         )), {'I_have_direct_access': TOLERANT})),
         ('Group_needs_contribute', cond("@equals(" + L + "?['groupContribute'], true)", seq(
-            ('Grant_group_contribute', http('POST', LBASE + "/roleassignments/addroleassignment(principalid=@{outputs('Ids')?['group']},"
-                                                            "roledefid=@{outputs('Ids')?['contributeBuiltIn']})", secure=False)),
-            ('Log_group_contribute', append(G, "@concat(" + L + "?['title'], ': " + GROUP_TITLE + " given Contribute (each person sees only their own items)')")),
+            # replace whatever the group had (1.2.0.0 gave it the built-in Contribute) with the narrower 1-to-1 Submit
+            ('Group_had_access', cond("@contains(body('Principals'), outputs('Ids')?['group'])", seq(
+                ('Remove_group_access', delete(LBASE + "/roleassignments/getbyprincipalid(@{outputs('Ids')?['group']})")),
+            ))),
+            ('Grant_group_submit', http('POST', LBASE + "/roleassignments/addroleassignment(principalid=@{outputs('Ids')?['group']},"
+                                                        "roledefid=@{outputs('Ids')?['submit']})", secure=False)),
+            ('Log_group_submit', append(G, "@concat(" + L + "?['title'], ': " + GROUP_TITLE + " given 1-to-1 Submit (each person sees only their own items)')")),
         ))),
     ))
 
@@ -502,11 +506,11 @@ def flow_setup():
                                   {'Get_visitors_group': TOLERANT})),
         ('Role_full_control', query("@body('Get_roles_again')?['value']", "@equals(item()?['RoleTypeKind'], 5)")),
         ('Role_read_builtin', query("@body('Get_roles_again')?['value']", "@equals(item()?['RoleTypeKind'], 2)")),
-        ('Role_contribute_builtin', query("@body('Get_roles_again')?['value']", "@equals(item()?['RoleTypeKind'], 3)")),
+        ('Role_submit', query("@body('Get_roles_again')?['value']", "@equals(item()?['Name'], '1-to-1 Submit')")),
         ('Ids', compose({'owners': "@body('Get_owners_group')?['Id']",
                          'fullControl': "@first(body('Role_full_control'))?['Id']",
                          'readBuiltIn': "@first(body('Role_read_builtin'))?['Id']",
-                         'contributeBuiltIn': "@first(body('Role_contribute_builtin'))?['Id']",
+                         'submit': "@first(body('Role_submit'))?['Id']",
                          'members': "@coalesce(body('Get_members_group')?['Id'], -1)",
                          'visitors': "@coalesce(body('Get_visitors_group')?['Id'], -1)",
                          'group': "@first(body('Find_group_again'))?['Id']"})),
@@ -569,14 +573,14 @@ def flow_daily():
                       "outputs('AppraisalYear'))), or(equals(item()?['AppliesTo']?['Value'], 'Shared'), "
                       "equals(toLower(coalesce(item()?['Technician']?['Email'], '')), toLower(" + T + "?['Technician']?['Email']))))")
     tech_try = seq(
-        ('Set_varTechAad', set_var('varTechAad', "@toLower(coalesce(" + T + "?['TechnicianAadId'], ''))")),
+        ('Set_varTechAad', dict(set_var('varTechAad', "@toLower(coalesce(" + T + "?['TechnicianAadId'], ''))"), runtimeConfiguration={'secureData': {'properties': ['inputs']}})),
         ('No_AadId', cond("@empty(variables('varTechAad'))", seq(
             ('Get_profile', user_profile("@last(split(" + T + "?['Technician']?['Claims'], '|'))")),
             ('Save_AadId', patch_item('Technicians', '@' + T + "?['ID']",
                                       {'Title': '@' + T + "?['Title']", 'TechnicianAadId': "@toLower(body('Get_profile')?['id'])"})),
             ('Set_varTechAad_from_profile', set_var('varTechAad', "@toLower(body('Get_profile')?['id'])")),
         ))),
-        ('ReviewKey', compose("@concat(variables('varTechAad'), '_', outputs('MonthKey'))")),
+        ('ReviewKey', compose("@concat(variables('varTechAad'), '_', outputs('MonthKey'))", secure=True)),
         ('Find_mgr', get_items(MGR, "ReviewKey eq '@{outputs('ReviewKey')}'", top=1)),
         ('Mgr_missing', cond("@equals(length(body('Find_mgr')?['value']), 0)", seq(
             ('My_expectations', query("@body('Get_expectations')?['value']", snapshot_where, secure=True)),
@@ -922,10 +926,18 @@ def flow_wellbeing():
         ('Get_assignments', http('GET', BASE + '/roleassignments?$expand=Member,RoleDefinitionBindings&$select=PrincipalId,Member/Id,'
                                  'Member/Title,Member/LoginName,Member/Email,Member/PrincipalType,RoleDefinitionBindings/Name')),
         ('Holders', query("@body('Get_assignments')?['value']", holders, secure=True)),
+        ('Too_many_holders', cond("@greater(length(body('Holders')), 1)", seq(
+            ('More_than_one_person_holds_it', terminate('Failed', 'More than one person has access to this wellbeing assessment. Check its permissions.')),
+        ))),
         ('Holder', compose("@first(body('Holders'))", secure=True)),
         ('Status', compose("@coalesce(" + TB + "?['AssessmentStatus']?['Value'], 'Open')")),
         ('New_assessment', cond("@or(equals(body('Get_item_scope')?['HasUniqueRoleAssignments'], false), equals(" + H + ", null))",
             seq(
+                # never re-share one that was already submitted or completed (its person lost access some other way)
+                ('Already_used', cond("@or(not(empty(" + TB + "?['SubmittedOn'])), not(empty(" + TB + "?['CompletedOn'])))", seq(
+                    ('Submitted_but_nobody_holds_it', terminate('Failed', 'This wellbeing assessment was submitted but nobody holds it now. '
+                                                                          'Check its permissions; it was not re-shared.')),
+                ))),
                 ('No_person', cond("@empty(coalesce(" + TB + "?['Technician']?['Claims'], ''))", seq(('No_person_set', terminate('Cancelled'))))),
                 ensure_user('Ensure_user', TB + "?['Technician']?['Claims']"),
                 *setperm('', 'wbList', TB + "?['ID']", "outputs('Ids')?['edit']", "body('Ensure_user')?['Id']", ids='WbIds'),
@@ -952,6 +964,16 @@ def flow_wellbeing():
                         ('Send_E10', email('@' + TL_EMAIL, "Wellbeing assessment submitted: @{" + H + "?['Member']?['Title']}", e10)),
                     ),
                     seq(
+                        # while it's still theirs to edit, anything only the flow or the line manager may set is put back:
+                        # the person column, the submitted/completed stamps and the line manager's fields
+                        ('Tidy_while_open', cond(
+                            "@and(outputs('Holder_can_edit'), or(not(empty(" + TB + "?['SubmittedOn'])), not(empty(" + TB + "?['CompletedOn'])), "
+                            "not(empty(" + TB + "?['ArrangementsJson'])), not(empty(" + TB + "?['ManagerNotes'])), not(empty(" + TB + "?['NextReviewDate'])), "
+                            "not(equals(toLower(coalesce(" + TB + "?['Technician']?['Claims'], '')), toLower(coalesce(" + H + "?['Member']?['LoginName'], ''))))))", seq(
+                                ('Restore_open', patch_item(WB, '@' + TB + "?['ID']", {
+                                    'Title': '@' + TB + "?['Title']", 'SubmittedOn': None, 'CompletedOn': None, 'ArrangementsJson': '',
+                                    'ManagerNotes': '', 'NextReviewDate': None, 'Technician/Claims': '@' + H + "?['Member']?['LoginName']"})),
+                            ))),
                         ('Completed_by_manager', cond(
                             "@and(not(outputs('Holder_can_edit')), equals(outputs('Status'), 'Completed'), empty(" + TB + "?['CompletedOn']), "
                             "not(empty(" + TB + "?['SubmittedOn'])))", seq(
@@ -1000,28 +1022,42 @@ def flow_feedback():
         ('FbIds', compose({'fbList': "@first(body('List_feedback'))?['Id']"})),
         ('Check_feedback_list', cond("@equals(outputs('FbIds')?['fbList'], null)", seq(
             ('STOP_run_the_setup_flow_again', compose("@int('The 1-to-1 Feedback list was not found. Run ESG 1-to-1 | 0 Setup again.')"))))),
+        # Already handled? Decided from the item's permissions, which only the flow changes – never from columns the
+        # sender can write (they could otherwise set Sent/Failed to stop it ever being locked or emailed).
+        ('Get_item_scope', http('GET', BASE + '?$select=HasUniqueRoleAssignments')),
+        ('Already_handled', cond("@equals(body('Get_item_scope')?['HasUniqueRoleAssignments'], true)", seq(
+            ('Handled_by_an_earlier_run', terminate('Cancelled')),
+        ))),
         # lock first: whatever happens to the email, the item is no longer visible to the sender (or anyone but Owners)
-        ('Lock_reset', http('POST', BASE + '/resetroleinheritance')),
         ('Lock_break', http('POST', BASE + '/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)')),
         ('Lock_owners', http('POST', BASE + "/roleassignments/addroleassignment(principalid=@{outputs('Ids')?['owners']},"
                                             "roledefid=@{outputs('Ids')?['fullControl']})")),
-        ('Send_E13', email('@' + TL_EMAIL, "1-to-1 feedback (@{" + TB + "?['FeedbackType']?['Value']}): @{" + TB + "?['Title']}", e13)),
-        ('Stamp_sent', patch_item(FB, '@' + TB + "?['ID']", {'Title': '@' + TB + "?['Title']", 'SentOn': '@utcNow()',
-                                                                'DeliveryStatus/Value': 'Sent'})),
+        # flood guard: more than 10 from one person in 24 hours are kept (Held) but not emailed one by one
+        ('Get_recent', get_items(FB, None, top=500, order='ID desc')),
+        ('From_sender_today', query("@body('Get_recent')?['value']",
+                                    "@and(equals(toLower(coalesce(item()?['Author']?['Email'], '')), toLower(coalesce(" + TB + "?['Author']?['Email'], '#none'))), "
+                                    "greater(ticks(coalesce(item()?['Created'], '1900-01-01T00:00:00Z')), ticks(addDays(utcNow(), -1))))", secure=True)),
+        ('Over_limit', cond("@greater(length(body('From_sender_today')), 10)",
+            seq(
+                ('Stamp_held', patch_item(FB, '@' + TB + "?['ID']", {'Title': '@' + TB + "?['Title']", 'SentOn': '@utcNow()', 'DeliveryStatus/Value': 'Held'})),
+            ),
+            {
+                'Send_E13': after(email('@' + TL_EMAIL, "1-to-1 feedback (@{" + TB + "?['FeedbackType']?['Value']}): @{" + TB + "?['Title']}", e13), {}),
+                'Stamp_sent': after(patch_item(FB, '@' + TB + "?['ID']", {'Title': '@' + TB + "?['Title']", 'SentOn': '@utcNow()',
+                                                                         'DeliveryStatus/Value': 'Sent'}), {'Send_E13': OK}),
+                'Mark_failed': after(patch_item(FB, '@' + TB + "?['ID']", {'Title': '@' + TB + "?['Title']", 'DeliveryStatus/Value': 'Failed'}),
+                                     {'Send_E13': FAILED}),
+                'Send_E13_notice': after(email('@' + TL_EMAIL, '1-to-1 feedback could not be delivered – please read it in the list', notice),
+                                         {'Mark_failed': TOLERANT}),
+                'Delivery_failed': after(terminate('Failed', 'The feedback email (E13) could not be sent. The item is marked Failed.'),
+                                         {'Send_E13_notice': TOLERANT}),
+            })),
     )
-    try_actions['Mark_failed'] = after(patch_item(FB, '@' + TB + "?['ID']", {'Title': '@' + TB + "?['Title']", 'DeliveryStatus/Value': 'Failed'}),
-                                       {'Send_E13': FAILED})
-    try_actions['Send_E13_notice'] = after(email('@' + TL_EMAIL, '1-to-1 feedback could not be delivered – please read it in the list', notice),
-                                           {'Mark_failed': TOLERANT})
-    try_actions['Delivery_failed'] = after(terminate('Failed', 'The feedback email (E13) could not be sent. The item is marked Failed.'),
-                                           {'Send_E13_notice': TOLERANT})
     actions = {'Try': after(scope(try_actions), {}), 'Catch': catch('ESG 1-to-1 | 6 Feedback')}
     triggers = {'When_feedback_is_sent': {
         'type': 'OpenApiConnection',
         'recurrence': {'frequency': 'Minute', 'interval': 5},
         'splitOn': "@triggerOutputs()?['body/value']",
-        # only items not yet handled: the flow's own updates (Sent / Failed) and 'Read' set on the page don't run it again
-        'conditions': [{'expression': "@and(empty(triggerBody()?['SentOn']), equals(coalesce(triggerBody()?['DeliveryStatus']?['Value'], 'Pending'), 'Pending'))"}],
         'runtimeConfiguration': {'secureData': {'properties': ['inputs', 'outputs']}},
         'inputs': {'host': {'connectionName': 'shared_sharepointonline', 'operationId': 'GetOnUpdatedItems', 'apiId': SP_API},
                    'parameters': {'dataset': '@' + SITE, 'table': FB},

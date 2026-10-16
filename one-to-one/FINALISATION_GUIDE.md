@@ -2,7 +2,7 @@
 
 **From the end of Stage 0B to a live system, then running it month to month.** This document is self-contained: you don't need any other file to follow it. Tick each box as you go.
 
-Version: system v4.4.0 (frontend) · solution 1.2.0.0 · guide dated 15-Oct-2026
+Version: system v4.4.0 (frontend) · solution 1.2.1.0 · guide dated 15-Oct-2026
 
 ---
 
@@ -16,12 +16,12 @@ Version: system v4.4.0 (frontend) · solution 1.2.0.0 · guide dated 15-Oct-2026
   - the `1-to-1 Edit` and `1-to-1 Read` permission levels exist.
 - **Everything to install is built and verified offline:**
   - frontend: 182 automated checks;
-  - flows: simulated end to end, 167 checks, and 23 deliberately broken copies all caught by the validator;
+  - flows: simulated end to end, 180 checks, and 23 deliberately broken copies all caught by the validator;
   - two independent reviews fixed 29 defects (see VERIFICATION.md).
 
 **Not yet proven:** nothing has run in your tenant yet.
 
-> **The system is fully implemented when Phase F (go-live) is done and every privacy test (P1–P25) in Phase C has passed.**
+> **The system is fully implemented when Phase F (go-live) is done and every privacy test (P1–P28) in Phase C has passed.**
 
 | Phase | What | Who's involved | Time |
 |---|---|---|---|
@@ -42,7 +42,7 @@ Version: system v4.4.0 (frontend) · solution 1.2.0.0 · guide dated 15-Oct-2026
 
 | File | Goes to |
 |---|---|
-| `ESGOneToOne_1_2_0_0_unmanaged.zip` | Power Automate → **Solutions → Import solution**. Contains the seven flows; the setup flow creates the lists. |
+| `ESGOneToOne_1_2_1_0_unmanaged.zip` | Power Automate → **Solutions → Import solution**. Contains the seven flows; the setup flow creates the lists. |
 | `one-to-one.html` | SharePoint → *Welcome Web Part - Custom Layouts* library |
 | `one-to-one.js` | Same library, alongside the `.html` |
 
@@ -80,7 +80,7 @@ Version: system v4.4.0 (frontend) · solution 1.2.0.0 · guide dated 15-Oct-2026
 2. [ ] Top right: pick the environment IT named for the flows.
 3. [ ] Left menu: **Solutions**.
    - If it asks to create a **Dataverse database**, or *Solutions* is missing, use §4.8 instead.
-4. [ ] **Import solution → Browse →** `ESGOneToOne_1_2_0_0_unmanaged.zip` → **Next → Next**.
+4. [ ] **Import solution → Browse →** `ESGOneToOne_1_2_1_0_unmanaged.zip` → **Next → Next**.
 5. [ ] **Connections.** For each of the three, pick yours or click **+ New connection**, signed in as you:
 
    | Connection reference | Connector |
@@ -109,13 +109,13 @@ Version: system v4.4.0 (frontend) · solution 1.2.0.0 · guide dated 15-Oct-2026
 
 | Item | Result |
 |---|---|
-| Permission levels | `1-to-1 Edit` and `1-to-1 Read`, with the exact rights in plan D.3. It creates them if missing. If one already exists with different rights, it **warns and doesn't change it**. |
+| Permission levels | `1-to-1 Edit`, `1-to-1 Read` and (from 1.2.1) `1-to-1 Submit`, with the exact rights in plan D.3. It creates them if missing. If one already exists with different rights, it **warns and doesn't change it**. |
 | Group | `1-to-1 Technicians`, created if missing. Membership is visible to group members only. SharePoint has no owner-only option, so technicians can see who else is in the group. No join requests. **No site permissions.** |
 | Lists | **Technicians**, **Appraisal Expectations**, **Monthly Reviews**, **Manager Reviews**, **Wellbeing Assessments**, **1-to-1 Settings**, **1-to-1 Feedback**, matching the agreed list specification exactly: every column type, choice, default, min/max and index, *Enforce unique values* on `ReviewKey`, and the views *Active*, *Needs attention*, *Retired* (Appraisal Expectations), *Overdue*, *Open actions* (Manager Reviews) and *Reviews due* (Wellbeing Assessments). |
 | List settings | Versioning on (100 versions), attachments off, not in search, offline sync off, not on the quick launch |
 | List permissions | Inheritance stopped. **Owners – Full Control only.** **1-to-1 Settings** also gets `1-to-1 Technicians` – Read. |
 | `Bands` and `Reminders` settings | The default band thresholds, and reminder days 20th and 27th |
-| 1-to-1 Feedback (1.2) | Item-level permissions: each person reads and edits only their own items; `1-to-1 Technicians` – **Contribute** on this list only |
+| 1-to-1 Feedback (1.2) | Item-level permissions: each person reads and edits only their own items; `1-to-1 Technicians` – **1-to-1 Submit** on this list only (a third permission level setup creates: Contribute without delete, versions, alerts or personal views) |
 | Checks (warnings only) | You are Site Collection Admin; regional settings are English (UK) and London time; the Site URL has no trailing slash |
 
 ### 4.4 Check the result (5 min)
@@ -124,7 +124,7 @@ Version: system v4.4.0 (frontend) · solution 1.2.0.0 · guide dated 15-Oct-2026
 - [ ] Each list → ⚙ → **List settings → Permissions for this list**:
   - Technicians, Appraisal Expectations, Monthly Reviews, Manager Reviews and **Wellbeing Assessments** (health information) show **only** *Owners – Full Control*;
   - **1-to-1 Settings** shows Owners **and** `1-to-1 Technicians` – Read;
-  - **1-to-1 Feedback** shows Owners **and** `1-to-1 Technicians` – **Contribute**; its Advanced settings → *Item-level permissions* are "Read items that were created by the user" and "Create items and edit items that were created by the user".
+  - **1-to-1 Feedback** shows Owners **and** `1-to-1 Technicians` – **1-to-1 Submit**; its Advanced settings → *Item-level permissions* are "Read items that were created by the user" and "Create items and edit items that were created by the user".
 - [ ] **1-to-1 Settings** contains two items, **Bands** and **Reminders**.
 - [ ] Spot check: Monthly Reviews → List settings → click **Q9FollowUp**. The address ends `Field=Q9FollowUp`, and it has three choices.
 
@@ -316,7 +316,7 @@ Only if §4.2 step 3 showed that solutions can't be imported:
 | F43 (v4.4) | As A: type an answer, wait about 5 s, reload | Top shows *Saved hh:mm*; the answer is kept; the review is still a Draft (no submission email). |  |  |  |
 | F44 (v4.4) | Month two (test date next month): open A's new form | **Since last time** lists last month's raised items, your released replies and A's actions. Before you release, it says *Feedback not released yet*. |  |  |  |
 
-### 6.2 Privacy and bypass tests (P1–P25) — all mandatory
+### 6.2 Privacy and bypass tests (P1–P28) — all mandatory
 
 | # | Attempt by Test A | Request | Expected | Result | Date | Initials |
 |---|---|---|---|---|---|---|
@@ -344,6 +344,9 @@ Only if §4.2 step 3 showed that solutions can't be imported:
 | P23 (v4.2) | **Change after submitting** | A: write to their submitted assessment | Denied (403). |  |  |  |
 | P24 (v4.2) | **Join the group / see the roster** | A: GET `…getbytitle('Technicians')/items`; POST `_api/web/sitegroups(<id>)/users` | Both denied. (Only Flow 4, as the TL, changes the group.) |  |  |  |
 | P25 (v4.3) | **Read someone else's feedback, or your own after sending** | B: GET `…getbytitle('1-to-1 Feedback')/items` after A sent one; A: the same once Flow 6 has run | B gets none of A's items; A gets nothing back once it's locked. |  |  |  |
+| P26 (v4.4) | **Send feedback as someone else** | A: POST `…getbytitle('1-to-1 Feedback')/AddValidateUpdateItemUsingPath` with form values `Author` / `Editor` set to B | The item is recorded as A (Author/Editor ignored or rejected). If SharePoint accepts the change, record it here: the E13 sender is then "as recorded", and the TL should confirm unexpected feedback in person. |  |  |  |
+| P27 (v4.4) | **Get alerted to others' feedback** | B: try *Alert me* on 1-to-1 Feedback, and POST `…/alerts/add` | Denied – `1-to-1 Submit` has no Create Alerts. |  |  |  |
+| P28 (v4.4) | **List metadata / change log** | B: GET `…getbytitle('Wellbeing Assessments')?$select=ItemCount,LastItemUserModifiedDate`; POST `…/GetChanges` on Wellbeing Assessments and 1-to-1 Feedback | Denied, or reveals nothing personal. If dates/counts are visible, record it as an accepted risk (no content is exposed). |  |  |  |
 | P17 | **No data leaves the tenant** | As the TL, open each view with F12 → **Network** recording (ask IT if developer tools are blocked) | Every request carrying list data goes to `<tenant>.sharepoint.com`. Record any other host contacted (for example the web part's own code CDN) for IT-11. None of them may receive review content. |  |  |  |
 
 ### 6.3 Questions for IT (record the answers)
