@@ -245,7 +245,7 @@ window.ESGOneToOneReset = function (ctx) {
     var phrase = 'DELETE ' + sel.length + ' RECORDS';
     var flowChk = h('input', { type: 'checkbox', id: 'rs-flow1' }); flowChk.checked = flowOff;
     flowChk.addEventListener('change', function () { flowOff = flowChk.checked; render(); });
-    var typed = h('input', { type: 'text', 'aria-label': 'Type the confirmation', autocomplete: 'off', placeholder: phrase });
+    var typed = h('input', { type: 'text', 'aria-label': 'Type the confirmation', autocomplete: 'off', spellcheck: 'false' });
     var go = btn('Delete ' + sel.length + ' records', function () {
       if (typed.value.trim() !== phrase) { msg = { text: 'Type exactly: ' + phrase, bad: true }; render(); return; }
       act('Deleting', async function () {

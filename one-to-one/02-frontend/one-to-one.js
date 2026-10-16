@@ -3033,7 +3033,7 @@ window.ESGOneToOne = function (ctx) {
             perTd.appendChild(h('div', { text: 'Since ' + fmtDate(info.cycleStart || hist[hist.length - 1].completed) }));
             perTd.appendChild(h('div', { class: 'muted', text: 'Last appraisal completed ' + fmtDate(hist[hist.length - 1].completed) }));
           } else {
-            perTd.appendChild(h('div', { class: 'small muted', text: 'Period start (until the first completion is recorded):' }));
+            perTd.appendChild(h('div', { class: 'small muted', text: 'Period start', title: 'The date their last appraisal was completed. Editable until the first completion is recorded here.' }));
             perTd.appendChild(dateField(d.start, function (v) { d.start = v; }, 'Appraisal period start for ' + t, { noDirty: true }));
           }
         }
@@ -3052,15 +3052,15 @@ window.ESGOneToOne = function (ctx) {
               }).catch(function () {});
             });
         } });
-        var tools = h('div', { class: 'btn-row', style: 'flex-wrap:nowrap' }, [
+        var tools = h('div', { class: 'stack', style: 'gap:6px;align-items:stretch;min-width:170px' }, [
           V14 ? h('button', { class: 'btn small', type: 'button', text: 'Mark appraisal completed…', onclick: function () { markCompleted(t); } }) : null,
           V14 && (info.history || []).length ? h('button', { class: 'btn small ghost', type: 'button', text: 'Undo last', title: 'Undo the last recorded completion', onclick: function () { undoCompleted(t); } }) : null,
           toggle]);
         var nameTd = h('td', null, [h('div', { style: 'font-weight:600', text: t }), h('div', { class: 'small muted', text: info.email || '—' })]);
         var status = h('td', null, h('span', { class: 'chip ' + (info.active ? 'green' : ''), text: info.active ? 'Active' : 'Inactive' }));
-        var apTd = h('td', { style: 'min-width:180px' }, dateField(d.ap, function (v) { d.ap = v; upd(); }, 'Next appraisal date for ' + t, { noDirty: true }));
+        var apTd = h('td', { style: 'min-width:170px' }, dateField(d.ap, function (v) { d.ap = v; upd(); }, 'Next appraisal date for ' + t, { noDirty: true }));
         if (!V14) { return h('tr', { class: info.active ? null : 'retired' }, [nameTd, status, apTd, daysTd, h('td', null, toggle)]); }
-        var wbTd = h('td', { style: 'min-width:180px' }, dateField(d.wb, function (v) { d.wb = v; }, 'Next wellbeing assessment date for ' + t, { noDirty: true }));
+        var wbTd = h('td', { style: 'min-width:170px' }, dateField(d.wb, function (v) { d.wb = v; }, 'Next wellbeing assessment date for ' + t, { noDirty: true }));
         return h('tr', { class: info.active ? null : 'retired' }, [nameTd, status, apTd, daysTd, wbTd, perTd, h('td', null, tools)]);
       }), { empty: 'Nobody yet – add the first person below.' })));
       out.push(h('p', { class: 'small muted', text: 'Dates never move by themselves. Change the next appraisal or wellbeing date here whenever it is brought forward or put back – it never changes which period a monthly 1-to-1 belongs to. When an appraisal has actually happened, use "Mark appraisal completed…" to start the new period.' }));
