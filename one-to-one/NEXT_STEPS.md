@@ -14,15 +14,17 @@
   - DD-MMM-YYYY dates;
   - reports;
   - removed: private notes and "ask for a chat".
-- **All build files produced (plan v4):**
+- **All build files produced (plan v5.0 – page 5.0.0, solution 1.4.0.0):**
 
   | File | What it is |
   |---|---|
-  | [`02-frontend/`](02-frontend/README.md) | Production frontend v4.5.0 (desktop only), local mock, 273 automated checks (all passing) |
+  | [`02-frontend/`](02-frontend/README.md) | Production frontend v5.0.0 (desktop only), local mock, 305 automated checks (all passing); one-time reset tool in `reset/` (31 checks) |
   | [`01-sharepoint/lists.md`](01-sharepoint/lists.md) | Eight-list build checklist |
-  | [`04-solution/`](04-solution/IMPORT_GUIDE.md) | **Importable solution**: setup flow (creates the lists exactly) + Flows 1–7 (1.3.0.0); offline legacy builder; validated (25 / 25 mutations caught) and simulated end to end (220 / 220) |
+  | [`04-solution/`](04-solution/IMPORT_GUIDE.md) | **Importable solution**: setup flow (creates the lists exactly) + Flows 1–6 and 8 (1.4.0.0; no Flow 7); offline legacy builder; validated (29 / 29 mutations caught) and simulated end to end (215 / 215) |
   | [`03-flows/`](03-flows/FLOW_BUILD_SHEETS.md) | Flow build sheets and email templates (reference / manual build) |
   | [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) | Operating manual |
+  | [`MIGRATION_1_4.md`](MIGRATION_1_4.md) | Upgrade order from 4.5.0 / 1.3.0.2, going back, tenant-only checks T1–T11 |
+  | [`RESET_PROCEDURE.md`](RESET_PROCEDURE.md) | One-time test-data reset (separate approval) |
 
 ## What you do next
 
@@ -32,20 +34,23 @@
 
 Follow [`GO_LIVE_RUNBOOK.md`](GO_LIVE_RUNBOOK.md) from **Phase 4**:
 
-1. **Import the solution** [`04-solution/ESGOneToOne_1_3_0_0_unmanaged.zip`](04-solution/IMPORT_GUIDE.md): pick your connections, enter the site URL and your email.
+1. **Import the solution** [`04-solution/ESGOneToOne_1_4_0_0_unmanaged.zip`](04-solution/IMPORT_GUIDE.md): pick your connections, enter the site URL and your email.
 2. **Run *ESG 1-to-1 | 0 Setup*.** It creates the eight lists, permission levels, group and list permissions, then emails you a summary.
 3. **Install the frontend.** Upload two files, choose the *ESG 1-to-1* layout in a full-width section. There's nothing to edit.
-4. **Turn on the flows** once the Setup email has arrived: 2, 3, 4, 5, 6, 7, then 1 last.
-5. **Add Test A and Test B**, set their appraisal dates in ⚙ Settings, and add expectations.
-6. **Rehearse** and run every test in plan section H (F1–F48, P1–P29).
+4. **Turn on the flows** once the Setup email has arrived: 2, 3, 4, 5, 6, 8, then 1 last.
+5. **Add Test A and Test B**, set their next appraisal, next wellbeing and appraisal period start in ⚙ Settings → Team, and add expectations.
+6. **Rehearse** and run every test in plan section H (F1–F56, P1–P30).
 7. **Clean down and go live.**
 
-**Already imported 1.2.1 (or earlier)?** Upgrade to 1.3.0 instead of steps 1–4 ([IMPORT_GUIDE §0](04-solution/IMPORT_GUIDE.md)):
+**Already on 1.3.0.x / page 4.5.0 (or earlier)?** Upgrade to 1.4.0.0 instead of steps 1–4, in the order in [`MIGRATION_1_4.md`](MIGRATION_1_4.md) ([IMPORT_GUIDE §0](04-solution/IMPORT_GUIDE.md)); plain-language version: [`SIMPLE_UPGRADE_STEPS.md`](SIMPLE_UPGRADE_STEPS.md):
 
-1. Import `ESGOneToOne_1_3_0_0_unmanaged.zip` as an **Upgrade**.
-2. Re-run **0 Setup** (creates the *1-to-1 Challenges* list and the new Manager Reviews columns).
-3. Turn on **Flow 7** (and check flows 1–6 are On).
-4. Upload `one-to-one.html` and `one-to-one.js`, then **Reset layout cache**. The top bar shows **v4.5.0**.
+1. Back up the lists; turn off **Flow 7** and **Flow 1**.
+2. Import `ESGOneToOne_1_4_0_0_unmanaged.zip` as an **Upgrade** (Flow 8 arrives Off).
+3. Re-run **0 Setup** (adds the Technicians date columns and the *1-to-1 Amendments* list; retires challenges, keeping the data).
+4. Turn on flows 2, 3, 4, 5, 6 and **8**; leave 1 and 7 off.
+5. Upload `one-to-one.html` and `one-to-one.js`, then **Reset layout cache**. The top bar shows **v5.0.0**.
+6. ⚙ Settings → Team: enter each person's appraisal period start, next appraisal and next wellbeing. Then turn on **Flow 1**.
+7. Later, with approval: the optional test-data reset ([`RESET_PROCEDURE.md`](RESET_PROCEDURE.md)) and deleting Flow 7.
 
 ## Things to verify early in the tenant
 
@@ -62,6 +67,7 @@ The local mock can't prove these. Check them in your first session after install
 | Print / Save as PDF | Open a report and click Print | Allow pop-ups for the SharePoint site |
 | Limited-access lockdown | Ask IT whether *limited-access user permission lockdown mode* is on for the site. Stage 0B's technician REST calls passing suggests not. | If it's on, technicians' page calls can fail; IT can turn the feature off for this site |
 | Personal regional settings (R16) | Plan test F27: an appraisal date saved in ⚙ Settings reads back as the same day | Set your personal region to English (UK) |
+| Solution 1.4 tenant-only checks | [`MIGRATION_1_4.md`](MIGRATION_1_4.md) T1–T11: flows 2–6 and 8 activate; Setup *complete*; Flow 2 sees **Editor** (an amendment is cancelled, no E3); Flow 8 sends one E16; `recycle()` refused for a technician; 1-to-1 Amendments versioned and Owners only; reset layout listed and then removed; date round trips | Send the run's error text or the check that failed |
 
 ## If something fails
 

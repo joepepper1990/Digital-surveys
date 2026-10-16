@@ -104,6 +104,8 @@ POWER AUTOMATE (TL connection; standard connectors)
  └─ Flow 3  Manager Reviews set Completed/Closed  → lock + release feedback (tech READ), notify tech
 ```
 
+Added later (see the version sections before H): the **Wellbeing Assessments** list and Flows 4–5 (v4.2), the **1-to-1 Feedback** list and Flow 6 (v4.3), and in 1.4 the Owners-only **1-to-1 Amendments** list with Flow 8 *Amendment notice*. The v4.5 challenge feature (Flow 7, *1-to-1 Challenges*) was removed in 1.4.
+
 ### A.2 Why this shape (short version)
 
 - **A custom page frontend rather than a list form.** It gives personal links, partial (draft) saves, a repeating expectations section and separate TL views. A list form does none of these cleanly. (v1 and v2 used a canvas app for the same reasons. v3 uses a Welcome custom layout, as requested.)
@@ -1237,8 +1239,8 @@ Run **H** tests F1–F4, F8–F12 and F18, plus **P1, P2, P3, P5, P8 and P15**. 
 1. [ ] Enter real Shared expectations in **Appraisal Expectations**, plus one Individual expectation for Test A.
 2. [ ] To run tests F5–F7, create a fresh test month: set `varTestDate` to the 1st of next month and run Flow 1.
 3. [ ] Write the **annual rollover** procedure in the configuration reference:
-   1. Before the new appraisal year starts, add the new year's expectations. **Edit in grid view** makes this quick: copy, paste and change AppraisalYear.
-   2. On the last day of the old year, set the old ones to **Active = No**. **Never delete them.**
+   1. Before the new appraisal year starts, add any new expectations with that year as their first year (they stay hidden until it starts). **Edit in grid view** makes this quick: copy, paste and change AppraisalYear.
+   2. From 1.4 an expectation carries on into later years until it is retired, so at the year end set only the ones that no longer apply to **Active = No**. A retired one may later be **Delete permanently** (TL only, to the recycle bin); past reviews keep their own copy either way.
    3. The next month's reviews pick up the new set automatically, and older reviews keep their own snapshot.
 
 ### Part 12 — Stage 4: privacy tests and go-live ⏱ 6–7 h
@@ -1316,6 +1318,26 @@ These are in [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) §4:
 | Desktop only | Confirmed by the TL: phones are out of scope (no phone layout). IT-7 is **not needed**. | – |
 
 
+### v5.0.0 / solution 1.4 – variable appraisal periods, missed months, amendments, challenges removed (frontend 5.0.0, solution 1.4.0.0)
+
+Upgrade from 4.5.0 / 1.3.0.2 in the order given in [`MIGRATION_1_4.md`](MIGRATION_1_4.md) (tenant-only checks T1–T11 there). The one-time test-data reset is in [`RESET_PROCEDURE.md`](RESET_PROCEDURE.md).
+
+| Area | Design decision | Security / data notes |
+|---|---|---|
+| Appraisal periods | A period runs from the date the previous appraisal was **actually completed** (or a baseline *Appraisal period start* the TL sets in Settings → Team) to the next completion – any length (12, 15, 23 months …). A monthly review belongs to a period by its **month**: after the start's month, up to and including the completion month. The next appraisal due date is only the projection's end point; changing it never moves a review between periods. Reviews before the first period start form a closed "earlier period"; with no start set there is no forecast. Profile and appraisal report have a period selector (current + each past period). | History in `Technicians.AppraisalHistoryJson` (TL only, the source of truth). The boundaries are copied to each Monthly Review (`AppraisalBoundaries`) only so the technician's own view can group their reviews; the TL's views never read that copy. |
+| Settings → Team | Per person: **Next appraisal**, **Days to go**, **Next wellbeing**, **Appraisal period start** (editable while there is no history), **Mark appraisal completed…** (actual completion date ≤ today and after the current start; a new next due date after the completion; confirmation dialog; a second completion in the same month replaces the first) and **Undo last**. Dates never move by themselves. | Writes only the Technicians item (and the display copies); every date write is read back and verified. |
+| Missed months | *Closed – Not Submitted* and overdue *Open* months are excluded from averages, the expected outcome / forecast, the trend and the on-time denominator (**on time = on-time ÷ submitted**). A missed month neither extends nor breaks the on-time streak; a late one breaks it. Tiles and reports show "N rated reviews of M months · K missed". | Display only. |
+| TL amendments | A released (Completed / Closed) review is **read-only** until the TL clicks **Amend…**; a submitted, not yet released review keeps normal feedback saving plus **Amend answers…** for the technician's answers. In amend mode nothing auto-saves. **Save amendment…** requires a reason and lists the changed fields. Save order: re-read *Modified* on both items (refuse if changed elsewhere) → create a **Draft** record in *1-to-1 Amendments* (before/after of the changed columns only) → write only the changed columns → set *NotifyStatus* = Pending. The review shows an **Amended (n)** card to the TL only. *Needs your attention* lists failed or stuck emails (**Resend** → Retry) and unfinished Drafts (**Send notice**, or **Dismiss** → Cancelled). Replaces the old "edit in SharePoint and write the reason in `CorrectionLog`" process. | *1-to-1 Amendments* is Owners only and versioned; who and when are SharePoint's Created By / Created, never set by the page. Tamper-**evident**, not tamper-proof: site owners and admins can always edit a list they own. The E16 email is an independent record. Technicians never see the reason or before/after values. |
+| Flow 8 *Amendment notice* | New; arrives **Off** at import. For a Pending (or Retry) record it re-reads the item, sends **E16** to the technician (the month and a link only – no content, no reason), marks it *Sent*; on failure marks it *Failed* and sends the TL a short notice. One run at a time, so one email per amendment; its own updates never start it again. | Secured run history like the other flows. |
+| Flow 2 / Flow 1 | Flow 2 cancels when the editor is the TL and the Manager Review is no longer Open – an amendment is **not** a resubmission (no E3, no new stamp, no permission change). Flow 1 reports any submitted review Flow 2 never processed (E7). | Needs Flow 2's trigger to carry **Editor** (tenant check T3). |
+| Wellbeing date | The next wellbeing assessment due date is `Technicians.NextWellbeingDate`, set in Settings → Team. Completing an assessment requires the TL to **confirm or set** the next date (must be after today) – never automatic, never invented. *Needs your attention* can suggest the date from the last assessment ("Use it"), applied only when the TL clicks it. | – |
+| Reminders | Flow 1: **E12** (wellbeing) now from `NextWellbeingDate`, and new **E17** (appraisal) from `AppraisalDate`: 7 days before, on the day, then weekly while overdue, active people only. | Emails to the TL only, no content. |
+| Expectations | **No limit of 10** (any number; a warning above 30 on one review because of the note column's size). Shared always come before Individual (Flow 1 orders AppliesTo desc, SortOrder asc); SortOrder is within each group and new items go to the end of their group. The expectation year is the **first** appraisal year it applies to and it carries on until retired (it no longer disappears in April); a later year stays hidden until it starts; a mistyped year is ignored safely. The page has a Shared card and one card per technician. Retired expectations can be **Delete permanently** (TL only, confirmation, site recycle bin for about 93 days; past reviews keep their own copies). | The only page delete is `recycle()` on a retired expectation; technicians' permission levels have no Delete (tenant check T5). |
+| Challenges removed | The whole v4.5 / 1.3 challenge system (1-to-1 Challenges list, Flow 7, E14 / E15, all UI) is removed. Data is **kept**: Setup 1.4 removes the technicians group from the Challenges list, makes its items Owners-only and closes open challenges as *Not agreed*. Flow 7 is not in the 1.4 solution; an unmanaged import doesn't delete it, so the TL turns it off and deletes it after approval. | No technician access to the old records. The `Challenge…` columns on Manager Reviews stay, unused. |
+| Screen clean-up | Profile: *Workload by month* and *Energy by month* charts removed. Team overview: *Expected appraisal outcomes* and the *Workload this month* chart switcher removed; *Needs your attention* takes the full width. "Today dd-MMM-yyyy" removed from the title bar. The feedback bubble is a compact pill with a visible **Feedback** label. | Display only. |
+| Reset tool | One-time, temporary: `02-frontend/reset/one-to-one-reset.html` + `.js`, Welcome layout **ESG 1-to-1 reset tool**. Inventory → JSON backup → dry run → typed confirmation (Flow 1 off) → recycle bin → verify and report. | Never touches Technicians, Settings, permissions, groups or flows; refuses any other list; technicians have no Delete. Removed after use. |
+| Lists and flows | Eight lists: Technicians, Appraisal Expectations, Monthly Reviews, Manager Reviews, 1-to-1 Settings, Wellbeing Assessments, 1-to-1 Feedback, **1-to-1 Amendments**. Flows: 0 Setup, 1–6, **8** (no 7). ZIP `04-solution/ESGOneToOne_1_4_0_0_unmanaged.zip`. | All 1.4 writes to columns added after their list was created use REST MERGE (tenant check T1). |
+
 ## H. Testing
 
 **How to record results.** For each test, record Pass or Fail, the date, the tester and a screenshot.
@@ -1370,7 +1392,7 @@ These are in [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) §4:
 | F20 | `varTestDate` = `2027-03-01T07:00:00`, then `2026-10-01T07:00:00` | DueDate = `2027-03-31T22:59:59Z` (BST) and `2026-10-31T23:59:59Z` (GMT) |
 | F21 | Temporarily set `varEditId` to `999`. Create a fresh test month and run. | Items are created, but **no E1 is sent**. The TL gets E7, and the technician can't see the item. Restore the value and run again: E1 is sent. |
 | F22 | A completes a draft on a standard laptop screen (1366 px wide) at 100% zoom | Everything is usable without sideways scrolling |
-| F23 | Correction: the TL edits a locked answer in SharePoint and adds a CorrectionLog note | The version history shows the change and who made it |
+| F23 (1.4) | **Amendment.** The TL opens A's released review → **Amend…** → changes one feedback field and one of A's answers → **Save amendment…**, first with no reason, then with one | Before Amend the review is read-only and nothing auto-saves. Without a reason it refuses; the dialog lists the changed fields. Then: one *1-to-1 Amendments* item (reason, before/after of the two columns only, Created By = the TL) → *Sent*; A gets **E16** (month and link only) within about 5 minutes; no E3; Flow 2's run is *Cancelled*; the review shows **Amended (1)** to the TL only; A sees the new values. |
 | F24 (v4) | The TL adds **three** action rows to A's review. One is missing its close-out criteria. The TL clicks **Complete & release**. | Blocked, with a message naming the missing field. After the TL fills it in, Complete works. In Manager Reviews, `ActionsJson` holds three rows, `ActionsStatus` = Open, and `NextActionDue` = the earliest deadline. |
 | F25 (v4) | After release, the TL closes one action on the **Actions** page | The action moves to Done with today's date. A sees it closed. The list view *Open actions* updates. |
 | F26 (v4) | The TL rates A's expectations 1–5 and saves without completing | A's **My appraisal** still uses A's self-ratings only. After Complete, A's outlook uses the TL ratings for that month. |
@@ -1383,11 +1405,11 @@ These are in [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) §4:
 | F33 (v4.2) | ⚙ Settings → Names: Manager role = *Line Manager*, member role = *Engineer(s)*; check as TL and as A | Both pages use the new words; nothing else changes. Reset afterwards. |
 | F34 (v4.2) | ⚙ Settings → Reminders: set a day = today; run Flow 1 | Only people who haven't submitted get E2. Set it back to 20 and 27. |
 | F35 (v4.2) | Expectations: drag the 4th shared expectation to the top; add an individual one | List order changes; next month's snapshot follows it; the new individual one appears after the shared ones. |
-| F36 (v4.2) | Team overview: switch the third chart through every option; reload | Each draws; the choice is remembered. *Needs your attention* lists waiting reviews, overdue actions, wellbeing items. |
+| F36 (v4.2, changed in 5.0.0) | Team overview | No chart switcher, *Expected appraisal outcomes* or *Workload this month*; *Needs your attention* is full width and lists waiting reviews, overdue actions, wellbeing items, and people with no period start or next wellbeing date. |
 | F37 (v4.2) | Wellbeing: TL starts one for A | A gets E9 within about 5 minutes; the item's *Manage access* shows Owners + A (1-to-1 Edit) only. |
 | F38 (v4.2) | A completes every step and submits | Flow 5 locks it (A: 1-to-1 Read), stamps SubmittedOn, TL gets E10. A sees it read-only. |
-| F39 (v4.2) | TL adds an arrangement, notes, next review date (defaults to a year on), then Complete | A gets E11 and sees the agreed record; Print shows the form with signature lines. |
-| F40 (v4.2) | Set the next review date to 7 days ahead; run Flow 1 | TL gets E12 with a link; nothing goes to A. |
+| F39 (v4.2, changed in 1.4) | TL adds an arrangement and notes, then **Complete** | Complete asks the TL to confirm or set the **Next wellbeing assessment** (it must be after today; nothing is set silently). A gets E11 and sees the agreed record; Print shows the form with signature lines; Settings → Team shows the chosen date. |
+| F40 (v4.2, changed in 1.4) | Settings → Team: set A's **Next wellbeing** to 7 days ahead; run Flow 1. Then with `varTestDate` on that day, and 7 days after it. | TL gets **E12** 7 days before, on the day and weekly while overdue, with a link; nothing goes to A. |
 | F41 (v4.3) | As A: 💬 **Feedback** → Fault → type a message → **Send** | "Thank you. Your feedback has been submitted to your Team Leader." Within about 5 minutes the TL gets E13 naming A, the page and the version; the item in *1-to-1 Feedback* is Owners-only and *Sent*. |
 | F42 (v4.3) | Turn Flow 6 **off**, send feedback as A, wait an hour (or turn Flow 6 on with the email connection broken) | The TL sees "Feedback from A … – read it here" in *Needs your attention*, can read it and **Mark as read**. |
 | F43 (v4.4) | As A: type an answer, wait about 5 s, reload | Top shows *Saved hh:mm*; the answer is kept; the review is still a Draft (no submission email). |
@@ -1395,7 +1417,15 @@ These are in [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) §4:
 | F45 (v4.5) | As A: open a new form, answer one required question, leave the rest, press **Submit**; then answer them one by one. Repeat on the wellbeing form; as the TL, leave an action row's criteria empty and save. | Unanswered required questions (including Yes/No and rating buttons) have an orange border; Submit turns them red and jumps to the first; each clears as it's answered. Optional questions are never marked. Wellbeing: Submit jumps to the first unanswered step and its pill turns red. TL: the empty action / criteria / deadline is marked red and the save is blocked. |
 | F46 (v4.5) | As A: rate expectations, then (after release) open the outlook, *My appraisal*, the charts and the appraisal report. Change a band threshold in ⚙ Settings and reload. | A sees **words only**: rating buttons *Not started … Fully met*, a band chip and coloured bar, trend *Improving / Steady / Dipping / Too early to tell*, band-labelled chart axis and tooltips – no numeric rating or score anywhere. The TL's screens still show the numbers. The coloured bar follows the new thresholds. |
 | F47 (v4.5) | With at least two released months for A, open A's outlook, *My appraisal*, A's profile (as the TL) and report section 1 | *To move up to <next band>, focus on:* the three expectations with the lowest average rating over the period (TL rating once released, otherwise self). In the top band: *Keep it up*. The TL sees the averages in brackets. Report section 1 is *Areas to focus on*. |
-| F48 (v4.5) | **Challenge round trip.** As A, on the latest released review: ⚑ **Challenge** an expectation rating and the overall feedback with a note → **Send challenge**. Then: A presses *I agree – resolved*; the TL presses *Agree – resolved*. Repeat on a fresh test review and set Flow 1's test date past the close-by date; then the TL presses **Reopen challenge**. | Within about 5 minutes the TL gets **E14** (no challenge text); the item's *Manage access* shows Owners + A (`1-to-1 Edit`) only; the TL sees the banner, amber parts, *Needs your attention* and a chip on Monthly reviews. Only A's agreement: still Open. Both: **Agreed**, A's item drops to Read. Past the close-by date Flow 1 closes it as **Not agreed** (still flagged; A's item Read). Reopen: A gets **E15** and Edit back, with agreement cleared. ⚑ Challenge is not offered on older reviews, and a second challenge of the same review is *Rejected*. Report section 7 lists the challenges and outcomes. |
+| F48 (1.4; replaces the v4.5 challenge round trip) | **Challenges retired.** After Setup 1.4 on a site upgraded from 1.3 | *1-to-1 Challenges* (if present) shows Owners – Full Control only; any challenge that was open is *Not agreed*; no ⚑ Challenge anywhere on the page; *7 Challenge* is Off (then deleted after approval). |
+| F49 (1.4) | **Periods.** Settings → Team: set A's **Appraisal period start**; then **Mark appraisal completed…** (a completion date ≤ today, a new next due date) → confirm; then **Undo last**, and complete again | A new period starts with only its own reviews; profile and report offer the previous period in the period selector; the completion month belongs to the period it ends. Undo restores the previous state. A completion date in the future, before the current start, or a next due date not after the completion is refused. |
+| F50 (1.4) | **Next appraisal moved.** Change A's Next appraisal to a later date, then an earlier one | Days to go and the forecast end point change; **no review moves between periods**. |
+| F51 (1.4) | **Missed months.** With one month *Closed – Not Submitted* and one late submission for A | Profile tiles and report: "N rated reviews of M months · 1 missed"; averages, forecast and trend ignore the missed month; on time is out of submitted reviews; the late month breaks the streak, the missed one doesn't. |
+| F52 (1.4) | **Appraisal reminders.** Settings → Team: A's Next appraisal 7 days ahead; run Flow 1, then with `varTestDate` on the day and 7 days after | TL gets **E17** each time (7 days before, on the day, weekly while overdue); nothing goes to A. |
+| F53 (1.4) | **Expectations, no limit.** Have 12 active Shared and 1 Individual for A; enter one for the current year and one for next year; create next month (`varTestDate`) | A's new form has all 12 Shared, then the Individual one; the current-year one carries on into next April; next year's appears only from then. |
+| F54 (1.4) | **Delete permanently.** Retire a test expectation, then **Delete permanently** | Offered only on retired items, asks for confirmation; the item is in **Site contents → Recycle bin**; past reviews still show their copy. |
+| F55 (1.4) | **Amend answers on a submitted review.** Before releasing A's submitted review: **Amend answers…**; meanwhile change the review in another tab and save there; then retry | The first save is refused (*changed elsewhere – reload*); after reloading it saves; normal *Save feedback* still works on a submitted review. |
+| F56 (1.4) | **Amendment notice failures.** Turn Flow 8 off, amend a review, wait an hour; then turn it on and **Resend** | *Needs your attention* shows the unsent email; Resend → *Retry* → one E16 → *Sent*. A Draft left by an interrupted save shows **Send notice** / **Dismiss** (Dismiss → *Cancelled*, no email). |
 
 ### Privacy and bypass tests
 
@@ -1428,7 +1458,8 @@ These are in [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) §4:
 | P26 🔒 (v4.4) | **Send feedback as someone else** | A: POST `…getbytitle('1-to-1 Feedback')/AddValidateUpdateItemUsingPath` with form values `Author` / `Editor` set to B | The item is recorded as A (Author/Editor ignored or rejected). If SharePoint accepts the change, record it here: the E13 sender is then "as recorded", and the TL should confirm unexpected feedback in person. |
 | P27 🔒 (v4.4) | **Get alerted to others' feedback** | B: try *Alert me* on 1-to-1 Feedback, and POST `…/alerts/add` | Denied – `1-to-1 Submit` has no Create Alerts. |
 | P28 🔒 (v4.4) | **List metadata / change log** | B: GET `…getbytitle('Wellbeing Assessments')?$select=ItemCount,LastItemUserModifiedDate`; POST `…/GetChanges` on Wellbeing Assessments and 1-to-1 Feedback | Denied, or reveals nothing personal. If dates/counts are visible, record it as an accepted risk (no content is exposed). |
-| P29 🔒 (v4.5) | **Forge a challenge's state** | A, on their own released review: POST `…getbytitle('Manager%20Reviews')/items({MA})/validateUpdateListItem` setting `ChallengeState` = `Agreed` and `ChallengeTlAgreedOn`; B: GET `…getbytitle('1-to-1%20Challenges')/items` and POST `…items(<A's challenge id>)/validateUpdateListItem` setting `TechAgreedOn`. Also: A creates a challenge with `ManagerReviewId` = B's Manager Review ID. | A's write to the Manager Review is denied (Read only) and nothing changes; B sees none of A's challenges and can't write to them. The challenge naming B's review is *Rejected* and Owners-only, with no email. (Author on the Challenges list is covered by P26.) |
+| P29 🔒 (1.4; replaces the v4.5 challenge-forgery test) | **Read the restricted audit or the retired challenges** | A: GET `…getbytitle('1-to-1%20Amendments')/items` and open `/Lists/OneToOneAmendments`; GET `…getbytitle('1-to-1%20Challenges')/items` | Denied / not found. A never sees a reason or before/after value (tenant checks T7, T8). |
+| P30 🔒 (1.4) | **Forge an amendment or delete** | A: POST `…getbytitle('1-to-1%20Amendments')/AddValidateUpdateItemUsingPath` with `NotifyStatus` = `Pending` and `Technician` = B; POST `…getbytitle('Appraisal%20Expectations')/items(<id>)/recycle()` | Both denied (403 / not found); no E16 is sent to B; nothing is deleted (tenant check T5). |
 | P17 🔒 | **No data leaves the tenant** | As the TL, open each view with F12 → **Network** recording (ask IT if developer tools are blocked) | Every request carrying list data goes to `<tenant>.sharepoint.com`. Record any other host contacted (for example the web part's own code CDN) for IT-11. None of them may receive review content. |
 
 ---
@@ -1508,6 +1539,8 @@ v4 reduces Part 7 to about 30 minutes, because there is no CONFIG to edit. Allow
 | R17 (v4.2) | Before Flow 5's first lock (≤ 5 min after submitting), the TL screen could show a person's own "Submitted" stamp | Complete is only offered for a submitted assessment; if anything was forged, Flow 5 re-locks it and wipes the TL fields (P22), and the TL simply re-enters them. |
 | R18 (v4.2) | Wellbeing data is health-related (special category) | Separate list, item-level permissions per person, never in reports/charts, secure run history, 24-month retention (CONFIG_REFERENCE §4). Confirm with HR/IT that this matches the paper form's handling. |
 | R19 (v4.2) | Adding someone in Settings depends on Flow 4 running | Settings says access follows within about 5 minutes; E8 confirms each change; troubleshooting row in CONFIG_REFERENCE §6. |
+| R20 (1.4) | Site owners and site collection admins can edit the *1-to-1 Amendments* audit | Tamper-evident: versioning (100) keeps every change; the E16 email to the technician is an independent record; Owners stays the TL only (quarterly check). |
+| R21 (1.4) | Flow 7 and the retired *1-to-1 Challenges* list stay in the environment until the TL deletes them | Flow 7 is turned off before the import; the list is Owners-only with open items closed; deletion is a separate, approved step (MIGRATION_1_4 step 10). |
 | R16 (v4.1) | `validateUpdateListItem` might read dd/MM/yyyy using the TL's *personal* regional settings rather than the site's | Tenant test F27 checks the round trip. If it fails, set your personal region to English (UK). |
 
 ---
@@ -1521,15 +1554,16 @@ All of these are text, contain **no tenant names, credentials or personal data**
 | K0 / K0B | `02-frontend/probe/` | **Produced and run.** Stage 0A and 0B passed. |
 | K1 | [`01-sharepoint/lists.md`](01-sharepoint/lists.md) + [`lists.csv`](01-sharepoint/lists.csv) | **Produced (v4)** |
 | K2 | Site security tick-list | Covered by G Parts 1–2 and D.6, plus the quarterly check in CONFIG_REFERENCE §4 |
-| K3 | [`02-frontend/one-to-one.html`](02-frontend/one-to-one.html) | **Produced (v4.5.0)** |
-| K4 | [`02-frontend/one-to-one.js`](02-frontend/one-to-one.js) | **Produced (v4.5.0)** |
+| K3 | [`02-frontend/one-to-one.html`](02-frontend/one-to-one.html) | **Produced (v5.0.0)** |
+| K4 | [`02-frontend/one-to-one.js`](02-frontend/one-to-one.js) | **Produced (v5.0.0)** |
+| K4a | [`02-frontend/reset/`](02-frontend/reset/) | **Produced (1.0.0, temporary):** one-time test-data reset tool, see [`RESET_PROCEDURE.md`](RESET_PROCEDURE.md) |
 | K5 | [`03-flows/FLOW_BUILD_SHEETS.md`](03-flows/FLOW_BUILD_SHEETS.md) | **Produced (v4)**: Flows 1–3, SETPERM, Ensure_user, Try/Catch |
-| K5a | [`04-solution/ESGOneToOne_1_3_0_0_unmanaged.zip`](04-solution/IMPORT_GUIDE.md) | **Produced (1.3.0.0)**: importable solution with setup flow + Flows 1–7, connection references, environment variables; legacy-package builder; source, validator and simulation in [`04-solution/tools/`](04-solution/README.md) |
-| K6 | [`03-flows/EMAIL_TEMPLATES.md`](03-flows/EMAIL_TEMPLATES.md) | **Produced (v4.5)**: E1–E5, E7–E15 (there is no E6) |
-| K7 | Test record | Use section H directly (F1–F48, P1–P29); add Pass/Fail, date, tester and screenshot columns |
+| K5a | [`04-solution/ESGOneToOne_1_4_0_0_unmanaged.zip`](04-solution/IMPORT_GUIDE.md) | **Produced (1.4.0.0)**: importable solution with setup flow + Flows 1–6 and 8, connection references, environment variables; legacy-package builder; source, validator and simulation in [`04-solution/tools/`](04-solution/README.md) |
+| K6 | [`03-flows/EMAIL_TEMPLATES.md`](03-flows/EMAIL_TEMPLATES.md) | **Produced (1.4)**: E1–E5, E7–E13, E16, E17 (there is no E6; E14 / E15 retired with challenges) |
+| K7 | Test record | Use section H directly (F1–F56, P1–P30; in 1.4 F48 and P29 check that challenges are retired); add Pass/Fail, date, tester and screenshot columns |
 | K8 | Privacy notice | **Not needed.** The TL decided it's handled between the TL and each technician. |
 | K9 | [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) | **Produced (v4)** |
-| K10 | [`02-frontend/mock/`](02-frontend/mock/), [`02-frontend/test/`](02-frontend/test/), [`02-frontend/tools/`](02-frontend/tools/) | **Produced.** 273 checks passing. |
+| K10 | [`02-frontend/mock/`](02-frontend/mock/), [`02-frontend/test/`](02-frontend/test/), [`02-frontend/tools/`](02-frontend/tools/) | **Produced.** 305 checks passing (plus 31 for the reset tool). |
 | K11 | Frontend security notes for IT-13 | Section E.3–E.4 plus [`02-frontend/README.md`](02-frontend/README.md) (endpoints, rules, test evidence) |
 | — | [`prototype/prototype.html`](prototype/prototype.html) | Design baseline (prototype v7) |
 
@@ -1540,14 +1574,14 @@ All of these are text, contain **no tenant names, credentials or personal data**
 1. **Build approach (unchanged security model):**
    - A private SharePoint communication site with **eight lists**.
    - **Manager Reviews is the authoritative, tamper-proof record**, now holding TL ratings and multi-row actions. Monthly Reviews holds only the technician's answers. 1-to-1 Settings holds the band thresholds.
-   - Custom permission levels, applied per item by standard-connector flows (Flows 1–3 for reviews; 5, 6 and 7 for wellbeing, feedback and challenges).
+   - Custom permission levels, applied per item by standard-connector flows (Flows 1–3 for reviews; 5 and 6 for wellbeing and feedback). Flow 8 sends amendment notices; amendments are audited in the Owners-only *1-to-1 Amendments* list.
    - A desktop frontend with a top menu bar, in the **Welcome by Accelerator 365** web part on `OneToOne.aspx`.
 2. **Status:** Stage 0A and 0B passed. All build files are produced and tested locally.
 3. **Next (the TL, in the tenant), following [`GO_LIVE_RUNBOOK.md`](GO_LIVE_RUNBOOK.md):**
    1. Import the solution and run the setup flow (creates the eight lists).
-   2. After the Setup summary email, turn on Flows 2, 3, 4, 5, 6, 7, then 1 last.
+   2. After the Setup summary email, turn on Flows 2, 3, 4, 5, 6, 8, then 1 last (upgrading from 1.3: follow [`MIGRATION_1_4.md`](MIGRATION_1_4.md)).
    3. Install the frontend.
-   4. Set appraisal dates.
+   4. Set each person's next appraisal, next wellbeing and appraisal period start (⚙ Settings → Team).
    5. Load expectations.
    6. Run the tests in section H with Test A and Test B.
    7. Clean down and go live.
