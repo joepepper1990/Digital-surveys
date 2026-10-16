@@ -2,7 +2,7 @@
 
 **From the end of Stage 0B to a live system, then running it month to month.** This document is self-contained: you don't need any other file to follow it. Tick each box as you go.
 
-Version: system v4.3.0 (frontend) · solution 1.2.0.0 · guide dated 15-Oct-2026
+Version: system v4.4.0 (frontend) · solution 1.2.0.0 · guide dated 15-Oct-2026
 
 ---
 
@@ -56,7 +56,7 @@ Version: system v4.3.0 (frontend) · solution 1.2.0.0 · guide dated 15-Oct-2026
 ## 3. Phase 0 — Get and check the files (5 min)
 
 - [ ] **Right zip.** Open the zip, then open `solution.xml` in Notepad. It must contain `<RootComponent type="380" schemaName="esg_SiteUrl"`. If it doesn't, you have an older download: get the latest one.
-- [ ] **Right frontend.** You have `one-to-one.html` and `one-to-one.js` (v4.3.0). After installing, the top menu bar must show **v4.3.0** (right-hand end).
+- [ ] **Right frontend.** You have `one-to-one.html` and `one-to-one.js` (v4.4.0). After installing, the top menu bar must show **v4.4.0** (right-hand end).
 - [ ] **Unchanged files.** Transfer them the usual approved way. Don't open and re-save them in Word.
 
 ---
@@ -149,7 +149,7 @@ Version: system v4.3.0 (frontend) · solution 1.2.0.0 · guide dated 15-Oct-2026
 - [ ] **Version check.** If you replaced `one-to-one.html` / `one-to-one.js` after first choosing the layout: web part settings (pencil) → **Reset layout cache** → **Republish**.
 - [ ] Open the site. You should see:
   - a dark **top menu bar**: Team overview, Monthly reviews, Expectations, Actions and Wellbeing on the left; **Team (0) ▾** and **⚙ Settings** on the right;
-  - the month, deadline, ↻ Refresh and **v4.3.0** at the far right;
+  - the month, deadline, ↻ Refresh and **v4.4.0** at the far right;
   - a round 💬 **Feedback** button at the bottom-right;
   - **Team overview** showing six tiles at 0, then *"No technicians yet"* with four numbered getting-started steps.
 - [ ] Click through **Monthly reviews**, **Expectations**, **Actions**, **Wellbeing** and **⚙ Settings**. Expect no errors (empty pages are normal for now).
@@ -205,7 +205,7 @@ Only if §4.2 step 3 showed that solutions can't be imported:
 - [ ] **As you:** Team overview lists Test A and Test B.
 - [ ] **As Test A** (InPrivate window):
   - Open the email link. Their form opens. The top menu bar has only *This month · My appraisal · Wellbeing · Appraisal report*, with no Team menu or Settings.
-  - Fill in a few answers → **Save** → reload. The answers are kept.
+  - Fill in a few answers. Within about 5 seconds the top shows **Saved hh:mm** – no need to click Save. Reload: the answers are kept (F43).
   - Complete everything → **Submit**. Within about 5 minutes the review becomes read-only.
 - [ ] **As you:** *"1-to-1 submitted"* arrives. Monthly reviews shows a badge, and **Team ▾** shows a red dot next to Test A.
   - Open the review. Add feedback per question and a 1–5 rating per expectation.
@@ -218,6 +218,7 @@ Only if §4.2 step 3 showed that solutions can't be imported:
   - **As Test A:** *"Your wellbeing assessment is ready to complete"* arrives → open it → work through the steps → **Submit**.
   - **As you:** *"Wellbeing assessment submitted"* arrives → open it → add an arrangement, notes and the next review date (a year on by default) → **Complete**.
   - **As Test A:** *"Your wellbeing assessment record is ready"* arrives; the agreed record shows; **Print / Save as PDF** works.
+- [ ] **Month two – "Since last time" (F44):** with Flow 1's test date set to the next month (§6), Test A's new form starts with **Since last time**: what they raised, your replies and their actions.
 - [ ] **Feedback (tests F41, P25):**
   - **As Test A:** click 💬 **Feedback** (bottom-right) → **Fault** → type a short message → **Send**. It says *"Thank you. Your feedback has been submitted to your Team Leader."*
   - **As you:** within about 5 minutes *"1-to-1 feedback (Fault): …"* arrives, naming Test A, the page and the version.
@@ -266,7 +267,7 @@ Only if §4.2 step 3 showed that solutions can't be imported:
 | `Accept` | `application/json;odata=nometadata` |
 | `Content-Type` | `application/json;odata=nometadata` |
 
-### 6.1 Functional tests (F1–F42)
+### 6.1 Functional tests (F1–F44)
 
 | # | Test | Expected | Result | Date | Initials |
 |---|---|---|---|---|---|
@@ -312,6 +313,8 @@ Only if §4.2 step 3 showed that solutions can't be imported:
 | F40 (v4.2) | Set the next review date to 7 days ahead; run Flow 1 | TL gets E12 with a link; nothing goes to A. |  |  |  |
 | F41 (v4.3) | As A: 💬 **Feedback** → Fault → type a message → **Send** | "Thank you. Your feedback has been submitted to your Team Leader." Within about 5 minutes the TL gets E13 naming A, the page and the version; the item in *1-to-1 Feedback* is Owners-only and *Sent*. |  |  |  |
 | F42 (v4.3) | Turn Flow 6 **off**, send feedback as A, wait an hour (or turn Flow 6 on with the email connection broken) | The TL sees "Feedback from A … – read it here" in *Needs your attention*, can read it and **Mark as read**. |  |  |  |
+| F43 (v4.4) | As A: type an answer, wait about 5 s, reload | Top shows *Saved hh:mm*; the answer is kept; the review is still a Draft (no submission email). |  |  |  |
+| F44 (v4.4) | Month two (test date next month): open A's new form | **Since last time** lists last month's raised items, your released replies and A's actions. Before you release, it says *Feedback not released yet*. |  |  |  |
 
 ### 6.2 Privacy and bypass tests (P1–P25) — all mandatory
 

@@ -346,6 +346,19 @@
   .SCOPE .oto .fbk-note.bad { background: #fde8e9; color: var(--red); }
   .SCOPE .oto .fbk-msg { white-space: pre-wrap; background: var(--soft); border-left: 3px solid var(--navy-2); padding: 10px 12px; margin-top: 12px; border-radius: 0 6px 6px 0; max-height: 40vh; overflow: auto; }
   @media print { .SCOPE .oto .fbk { display: none !important; } }
+  /* ---------- v4.4 auto-save status, folded cards, Since last time ---------- */
+  .SCOPE .oto .meterwrap { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+  .SCOPE .oto .autosave { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .SCOPE .oto .autosave.warn { color: var(--amber); font-weight: 600; }
+  .SCOPE .oto section.card.compact { padding-top: 12px; padding-bottom: 12px; }
+  .SCOPE .oto section.card.compact .q-head { margin-bottom: 0; }
+  .SCOPE .oto .since { border-left: 4px solid var(--navy-2); }
+  .SCOPE .oto .since .card-h { align-items: center; }
+  .SCOPE .oto .since-h { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 10px 0 4px; }
+  .SCOPE .oto .since-list { margin: 0; padding-left: 18px; }
+  .SCOPE .oto .since-list li { margin: 4px 0; }
+  .SCOPE .oto .since-reply { background: #f1f7f3; border-left: 3px solid var(--green); padding: 4px 9px; margin: 4px 0 2px; border-radius: 0 6px 6px 0; font-size: 13px; }
+  .SCOPE .oto .since-list .ok { color: var(--green); font-weight: 700; }
         </style>
         <div class="oto" data-oto-root>
             <p style="padding:24px;font-family:Segoe UI,Arial,sans-serif">Loading the ESG 1-to-1…</p>

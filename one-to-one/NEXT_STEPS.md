@@ -18,7 +18,7 @@
 
   | File | What it is |
   |---|---|
-  | [`02-frontend/`](02-frontend/README.md) | Production frontend v4.3.0, local mock, 182 automated checks (all passing) |
+  | [`02-frontend/`](02-frontend/README.md) | Production frontend v4.4.0, local mock, 182 automated checks (all passing) |
   | [`01-sharepoint/lists.md`](01-sharepoint/lists.md) | Seven-list build checklist |
   | [`04-solution/`](04-solution/IMPORT_GUIDE.md) | **Importable solution**: setup flow (creates the lists exactly) + Flows 1–6; offline legacy builder; validated and simulated end to end |
   | [`03-flows/`](03-flows/FLOW_BUILD_SHEETS.md) | Flow build sheets and email templates (reference / manual build) |
@@ -37,7 +37,7 @@ Follow [`GO_LIVE_RUNBOOK.md`](GO_LIVE_RUNBOOK.md) from **Phase 4**:
 3. **Install the frontend.** Upload two files, choose the *ESG 1-to-1* layout in a full-width section. There's nothing to edit.
 4. **Turn on the flows** once the Setup email has arrived: 2, 3, 4, 5, 6, then 1 last.
 5. **Add Test A and Test B**, set their appraisal dates in ⚙ Settings, and add expectations.
-6. **Rehearse** and run every test in plan section H (F1–F42, P1–P25).
+6. **Rehearse** and run every test in plan section H (F1–F44, P1–P25).
 7. **Clean down and go live.**
 
 ## Things to verify early in the tenant

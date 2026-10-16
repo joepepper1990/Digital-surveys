@@ -52,7 +52,7 @@ Stage 0A and 0B passed in the live tenant. Two findings are built into the setup
 | File | What it is |
 |---|---|
 | `04-solution/ESGOneToOne_1_2_0_0_unmanaged.zip` | **The seven flows as one importable solution**, including the setup flow that creates the lists |
-| `02-frontend/one-to-one.html`, `one-to-one.js` | The app, v4.3.0. **Nothing to edit.** |
+| `02-frontend/one-to-one.html`, `one-to-one.js` | The app, v4.4.0. **Nothing to edit.** |
 | `01-sharepoint/lists.md`, `lists.csv` | Column-by-column list checklist |
 | `03-flows/FLOW_BUILD_SHEETS.md` | Flows 1–3, step by step |
 | `03-flows/EMAIL_TEMPLATES.md` | E1–E5, E7–E12 (there is no E6) |
@@ -99,7 +99,7 @@ Follow [`02-frontend/README.md`](02-frontend/README.md) §Install.
   - **Republish**.
 - [ ] Make `OneToOne` the home page.
 - [ ] The group has Read on the page, the layouts library and the Welcome Errors list. Setup already granted it on 1-to-1 Settings.
-- [ ] As TL: **Team overview** opens, the top menu bar shows **Team ▾** and **⚙ Settings**, and its right-hand end shows **v4.3.0**. The 💬 **Feedback** button sits bottom-right.
+- [ ] As TL: **Team overview** opens, the top menu bar shows **Team ▾** and **⚙ Settings**, and its right-hand end shows **v4.4.0**. The 💬 **Feedback** button sits bottom-right.
 
 ## Phase 7 — Turn on flows 1 to 6 🧑 ⏱ 2 min
 
@@ -150,7 +150,7 @@ With **only Test A and Test B** in Technicians:
   - The **Actions** page closes an action.
   - The **Appraisal report** for A prints or saves as PDF.
 - [ ] **As Test B:** throughout, B never sees anything of A's.
-- [ ] Run plan **section H**: F1–F42 and **every P test (P1–P25)**. The XSS test P15 is release-blocking.
+- [ ] Run plan **section H**: F1–F44 and **every P test (P1–P25)**. The XSS test P15 is release-blocking.
 
 **⛔ Gate:** every P test passes and the journey works end to end.
 

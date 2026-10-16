@@ -31,7 +31,7 @@ One tick-list from where you are now to a running system. For a single printable
 - [ ] **Solution zip.** The verification pass replaced it under the same file name. Open your zip, then open `solution.xml` in Notepad.
   - The correct version contains `<RootComponent type="380" schemaName="esg_SiteUrl"`.
   - If yours doesn't, re-download [`04-solution/ESGOneToOne_1_2_0_0_unmanaged.zip`](04-solution/ESGOneToOne_1_2_0_0_unmanaged.zip).
-- [ ] **Frontend.** Download the latest [`02-frontend/one-to-one.html`](02-frontend/one-to-one.html) and [`02-frontend/one-to-one.js`](02-frontend/one-to-one.js) (v4.3.0).
+- [ ] **Frontend.** Download the latest [`02-frontend/one-to-one.html`](02-frontend/one-to-one.html) and [`02-frontend/one-to-one.js`](02-frontend/one-to-one.js) (v4.4.0).
 - [ ] **Approved route.** Transfer the files the usual approved way.
 
 ## Phase A — See the system yourself (nobody else involved)
@@ -75,7 +75,7 @@ One tick-list from where you are now to a running system. For a single printable
 - [ ] Open the site. You see:
   - the dark top menu bar (Team overview, Monthly reviews, Expectations, Actions, Wellbeing, Team ▾, ⚙ Settings);
   - **"No technicians yet"** on Team overview;
-  - **v4.3.0** at the right-hand end of the top menu bar;
+  - **v4.4.0** at the right-hand end of the top menu bar;
   - the 💬 **Feedback** button bottom-right.
 - [ ] Click through **Monthly reviews**, **Expectations**, **Actions** and **⚙ Settings**.
 - [ ] **Expectations:** add one *Shared* expectation. This proves item creation and Yes/No columns in your tenant. (The *Individual* one needs a technician in the list, so it moves to Phase B.)
@@ -94,7 +94,7 @@ One tick-list from where you are now to a running system. For a single printable
 - [ ] **As you:** Team overview now lists Test A and Test B.
 - [ ] **As Test A** (InPrivate window):
   - open the email link: their form opens, with only *This month / My appraisal / Appraisal report / Wellbeing* in the top menu bar;
-  - fill in a few answers → **Save** → reload: answers are kept;
+  - fill in a few answers, wait until it says **Saved hh:mm** (about 5 seconds), then reload: answers are kept (F43);
   - complete it → **Submit**. Within about 5 minutes it's read-only.
 - [ ] **As Test A:** 💬 **Feedback** → Fault → a short message → **Send** → *"Thank you. Your feedback has been submitted to your Team Leader."* **As you:** *"1-to-1 feedback (Fault): …"* arrives within about 5 minutes (F41).
 - [ ] **As you:** the *"1-to-1 submitted"* email arrives.
@@ -117,7 +117,7 @@ Work through [plan section H](IMPLEMENTATION_PLAN.md#h-testing) and record each 
   - P18 Settings read-only;
   - P19 TL ratings and actions;
   - P20 appraisal-date tampering.
-- [ ] **Functional tests F1–F42.**
+- [ ] **Functional tests F1–F44.**
   - Date tests F13–F20 use flow 1's `varTestDate`: Edit → *Initialize varTestDate* → set → Save → Run.
   - **Clear it afterwards.**
 - [ ] **Ask IT:**

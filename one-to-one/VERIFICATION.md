@@ -1,6 +1,6 @@
 # ESG 1-to-1 — verification record (15-Oct-2026)
 
-**Scope:** frontend v4.3.0, solution 1.2.0.0, the importable solution (setup flow + Flows 1–6), the legacy-package builder, the seven-list schema and all documents.
+**Scope:** frontend v4.4.0, solution 1.2.0.0, the importable solution (setup flow + Flows 1–6), the legacy-package builder, the seven-list schema and all documents.
 
 **What this record can and can't prove.** Everything here ran outside your tenant. It proves the files are well-formed, internally consistent and behave as specified against a strict model of SharePoint that follows Microsoft's documentation. Only the tenant can prove the import and real permissions (§5).
 
@@ -94,7 +94,7 @@ From the platform audit, with sources in the audit notes:
 |---|---|
 | Solution imports, connections bind, environment variables accepted | IMPORT_GUIDE §2 |
 | Setup run: lists, views, permission levels, group, permissions as the summary says | IMPORT_GUIDE §3–§4 |
-| Real item permissions, emails and timings | Plan section H (F1–F42, P1–P25), with Test A / Test B |
+| Real item permissions, emails and timings | Plan section H (F1–F44, P1–P25), with Test A / Test B |
 | Personal-regional-settings date round trip (R16) | Test F27 |
 | Limited-access lockdown mode not active | NEXT_STEPS "Things to verify early" |
 

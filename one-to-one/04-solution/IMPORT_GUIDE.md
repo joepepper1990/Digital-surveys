@@ -36,7 +36,7 @@ Do this instead of §1–§3 if **ESG 1-to-1** (1.0 or 1.1) is already in your e
 2. Run **ESG 1-to-1 | 0 Setup (run once)** again. It adds what's missing – the **1-to-1 Feedback** list (new in 1.2), and from 1.0 also the **Wellbeing Assessments** list and the **Reminders** setting – and changes nothing that already exists. Wait for the summary email.
 3. Once the Setup summary email has arrived, make sure every flow is **On**, in this order: **2 Review submitted**, **3 Manager decision**, **4 Team members**, **5 Wellbeing**, **6 Feedback**, and **1 Daily scheduler** last. Flows that are already On stay On.
    - Import message *"one or more flows may not have turned on … GetTable … List not found"*: this was 1.1.0.0's Flow 1 looking for the Wellbeing list before Setup had created it. 1.1.1.0 and later fix it. If you still see it, it is harmless: finish step 2 (Setup), then turn the flow on here.
-4. Upload the new `one-to-one.html` and `one-to-one.js` (v4.3.0) with **Replace**, then web part settings → **Reset layout cache** → **Republish**. The top bar shows **v4.3.0**, a **Wellbeing** tab, and the 💬 **Feedback** bubble bottom-right.
+4. Upload the new `one-to-one.html` and `one-to-one.js` (v4.4.0) with **Replace**, then web part settings → **Reset layout cache** → **Republish**. The top bar shows **v4.4.0**, a **Wellbeing** tab, and the 💬 **Feedback** bubble bottom-right.
 5. Check: Site contents → **Wellbeing Assessments** → Permissions: **Owners – Full Control only**; **1-to-1 Feedback** → as in §4 below.
 
 ## 1. Before you start (5 min)

@@ -455,6 +455,7 @@
         if (method === 'POST' && im[2]) {
           if (headers['X-RequestDigest'] !== db.digest) { return spError(403, 'The security validation for this page is invalid.'); }
           if (!canWrite(db, list, id, u)) { return spError(403, 'Access denied. You do not have permission to perform this action or access this resource.'); }
+          if (db.failWrites > 0) { db.failWrites--; return spError(500, 'Simulated server error'); }   // test hook
           var body = JSON.parse(options.body || '{}');
           var results = [], ok = true, pending = {};
           (body.formValues || []).forEach(function (fv) {

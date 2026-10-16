@@ -770,6 +770,100 @@ async function main() {
   ok('Feedback: without the list, a clear message and the text is kept', /isn't switched on yet/.test(await B.locator('.fbk-note').innerText()) &&
     (await B.locator('#oto-fbk-text').inputValue()) === 'Hello');
   await c19.close();
+  // ---------------------------------------------------------------- 20. v4.4: auto-save, shorter form, Since last time
+  var c20 = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  var S = await c20.newPage();
+  S.on('dialog', function (d) { d.accept(); });
+  async function db20() { return S.evaluate(function () { return JSON.parse(JSON.stringify(OTO_MOCK.current.db)); }); }
+  function writesBy(d, who, list) { return d.writes.filter(function (w) { return w.as === who && w.list === list && !w.create; }); }
+  await open(S, { as: 'alex' }); await S.evaluate(function () { OTO_MOCK.reset(); });
+  await open(S, { as: 'alex' });
+  ok('Shorter form: progress shows the time left', /about \d+ min left/.test(await S.locator('.meterwrap').innerText()));
+  ok('Auto-save: the status line says changes save automatically', /Changes save automatically/.test(await S.locator('.meterwrap .autosave').innerText()));
+  var w0 = writesBy(await db20(), 'alex', 'Monthly Reviews').length;
+  await S.locator('section.card:has-text("What has gone well") textarea').fill('Auto-saved answer');
+  await S.waitForTimeout(5500);
+  var d20 = await db20();
+  var cur20 = d20.lists['Monthly Reviews'].find(function (x) { return x.Technician.indexOf('alex.') >= 0 && x.MonthKey === curMonth(); });
+  ok('Auto-save: an answer saves itself as a Draft about 4 s after typing stops, with no pop-up', writesBy(d20, 'alex', 'Monthly Reviews').length === w0 + 1 &&
+    cur20.Q1WentWell === 'Auto-saved answer' && cur20.ReviewStatus === 'Draft' && /Saved \d\d:\d\d/.test(await S.locator('.meterwrap .autosave').innerText()) &&
+    (await S.locator('.toast').count()) === 0);
+  ok('Auto-save: a draft does not count as submitted (Manager Review still Open)', d20.lists['Manager Reviews'].find(function (m) { return m.ReviewItemId === cur20.ID; }).ReviewState === 'Open');
+  await open(S, { as: 'alex' });
+  w0 = writesBy(await db20(), 'alex', 'Monthly Reviews').length;
+  var q1 = S.locator('section.card:has-text("What has gone well") textarea');
+  await q1.fill('Edit one'); await S.waitForTimeout(1500); await q1.fill('Edit two'); await S.waitForTimeout(5500);
+  d20 = await db20();
+  ok('Auto-save: quick successive edits make one save, with the latest text', writesBy(d20, 'alex', 'Monthly Reviews').length === w0 + 1 &&
+    d20.lists['Monthly Reviews'].find(function (x) { return x.ID === cur20.ID; }).Q1WentWell === 'Edit two');
+  await open(S, { as: 'alex' });
+  await S.evaluate(function () { OTO_MOCK.current.db.failWrites = 1; });
+  await S.locator('section.card:has-text("What has gone well") textarea').fill('Will fail first');
+  await S.waitForTimeout(5500);
+  ok('Auto-save: a failed save says so quietly (no pop-up)', /Not saved/.test(await S.locator('.meterwrap .autosave').innerText()) && (await S.locator('.toast').count()) === 0);
+  await S.locator('section.card:has-text("What has gone well") textarea').fill('Saved on retry');
+  await S.waitForTimeout(5500);
+  ok('Auto-save: the next change saves it', /Saved/.test(await S.locator('.meterwrap .autosave').innerText()) &&
+    (await db20()).lists['Monthly Reviews'].find(function (x) { return x.ID === cur20.ID; }).Q1WentWell === 'Saved on retry');
+  // shorter form
+  await open(S, { as: 'alex' });
+  var q2c = S.locator('section.card:has-text("Challenges, blockers")');
+  ok('Shorter form: Q2 is folded to one line while empty', (await q2c.getAttribute('class')).indexOf('compact') >= 0 && !(await q2c.locator('textarea').first().isVisible()));
+  await q2c.locator('button:has-text("+ Add")').click();
+  ok('Shorter form: + Add opens Q2', await q2c.locator('textarea').first().isVisible());
+  var q4c = S.locator('section.card:has-text("wellbeing, workplace support")');
+  await q4c.locator('button:has-text("No")').click();
+  ok('Shorter form: a question answered No folds to one line', (await q4c.getAttribute('class')).indexOf('compact') >= 0);
+  await q4c.locator('button:has-text("Yes")').click();
+  ok('Shorter form: changing it to Yes opens it again', (await q4c.getAttribute('class')).indexOf('compact') < 0 && await q4c.locator('textarea').isVisible());
+  await S.evaluate(function (id) { var d = OTO_MOCK.current.db; d.lists['Monthly Reviews'].find(function (x) { return x.ID === id; }).Q2Issue = 'Van tyre slow puncture'; sessionStorage.setItem('oto-mock-db-v6', JSON.stringify(d)); }, cur20.ID);
+  await open(S, { as: 'alex' });
+  ok('Shorter form: Q2 with text is open on load', (await S.locator('section.card:has-text("Challenges, blockers") textarea').first().inputValue()) === 'Van tyre slow puncture' &&
+    await S.locator('section.card:has-text("Challenges, blockers") textarea').first().isVisible());
+  // Since last time
+  var since = await S.locator('.since').innerText();
+  ok('Since last time: shows what was raised last month and the actions', /What you raised in/i.test(since) && /YOUR ACTIONS|Your actions/i.test(since), since.slice(0, 300));
+  await S.locator('.since button:has-text("Hide")').click();
+  await open(S, { as: 'alex' });
+  ok('Since last time: Hide is remembered', !(await S.locator('.since .since-body').isVisible()));
+  await S.locator('.since button:has-text("Show")').click();
+  var opts20 = await S.locator('select[aria-label="Choose a month"] option').allTextContents();
+  await S.locator('select[aria-label="Choose a month"]').selectOption({ index: 1 });
+  ok('Since last time: not shown on past (read-only) months', (await S.locator('.since').count()) === 0);
+  await S.evaluate(function (id) {
+    var d = OTO_MOCK.current.db, rv = d.lists['Monthly Reviews'].filter(function (x) { return x.Technician.indexOf('alex.') >= 0 && x.ID !== id; }).sort(function (x, y) { return x.MonthKey < y.MonthKey ? 1 : -1; })[0];
+    rv.Q5PlanningRaise = 'Yes'; rv.Q5PlanningDetail = 'Leave in December';
+    var mr = d.lists['Manager Reviews'].find(function (m) { return m.ReviewItemId === rv.ID; }); mr.FB_Q5 = 'UNRELEASED-REPLY'; mr.ReleasedOn = null; mr.ReviewState = 'Submitted';
+    sessionStorage.setItem('oto-mock-db-v6', JSON.stringify(d));
+  }, cur20.ID);
+  await open(S, { as: 'alex' });
+  var since2 = await S.locator('.since').innerText();
+  ok('Since last time: unreleased feedback is never shown, with a note instead', /Feedback not released yet/.test(since2) && since2.indexOf('UNRELEASED-REPLY') < 0 && /Leave in December/.test(since2), since2.slice(0, 300));
+  // the line manager's review: auto-save before release only
+  await open(S, { as: 'tl' }); await S.evaluate(function () { OTO_MOCK.reset(); });
+  var d20b = await (async function () { await open(S, { as: 'tl' }); return db20(); })();
+  var samRv = d20b.lists['Monthly Reviews'].find(function (x) { return x.Technician.indexOf('sam.') >= 0 && x.MonthKey === curMonth(); });
+  var samMr = d20b.lists['Manager Reviews'].find(function (m) { return m.ReviewItemId === samRv.ID; });
+  await open(S, { as: 'tl', reviewId: String(samRv.ID) });
+  await S.locator('section.card:has-text("What has gone well") textarea').first().fill('TL auto-saved feedback');
+  await S.waitForTimeout(5500);
+  ok('Auto-save (TL): feedback on an unreleased review saves itself', (await db20()).lists['Manager Reviews'].find(function (m) { return m.ID === samMr.ID; }).FB_Q1 === 'TL auto-saved feedback');
+  var relMr = d20b.lists['Manager Reviews'].find(function (m) { return m.ReleasedOn && m.ReviewItemId; });
+  await open(S, { as: 'tl', reviewId: String(relMr.ReviewItemId) });
+  var before20 = (await db20()).writes.length;
+  await S.locator('section.card:has-text("What has gone well") textarea').first().fill('Half-typed thought');
+  await S.waitForTimeout(5500);
+  ok('Auto-save (TL): never on a released review (it would go live half-typed)', (await db20()).writes.length === before20 &&
+    /changes save only when you click Save feedback/.test(await S.locator('[data-oto-root]').innerText()));
+  // the technician's wellbeing form
+  await open(S, { as: 'alex' });
+  await S.locator('.topbar >> text=Wellbeing').click(); await S.locator('button:has-text("Continue")').first().click(); await S.waitForTimeout(150);
+  var wbw = (await db20()).writes.filter(function (w) { return w.list === 'Wellbeing Assessments'; }).length;
+  await S.locator('#oto-wb-pos').fill('Senior Technician');
+  await S.waitForTimeout(5500);
+  ok('Auto-save: the wellbeing form saves itself too', (await db20()).writes.filter(function (w) { return w.list === 'Wellbeing Assessments'; }).length === wbw + 1);
+  await c20.close();
+
   // XSS: hostile feedback shown to the TL, and typed into the panel
   await open(page, { as: 'tl', xss: '1' });
   await page.evaluate(function () {
@@ -779,6 +873,10 @@ async function main() {
     sessionStorage.setItem('oto-mock-db-v6', JSON.stringify(d));
   });
   await sweep('TL reading hostile feedback', { as: 'tl', xss: '1' }, async function () { await page.locator('.attn-row:has-text("Feedback from") button').first().click(); });
+  await sweep('Since last time with hostile earlier answers', { as: 'alex', xss: '1' }, async function () {
+    if (!(await page.locator('.since').count())) { throw new Error('Since last time card missing'); }
+    var m = page.locator('.since button:has-text("more")'); var n = await m.count(); for (var i = 0; i < n; i++) { await m.nth(0).click(); }
+  });
   await sweep('Feedback panel with hostile text', { as: 'alex', xss: '1' }, async function () {
     await page.locator('.fbk-bubble').click(); await page.locator('#oto-fbk-text').fill(await page.evaluate(function () { return OTO_MOCK.X.join(' '); }));
   });

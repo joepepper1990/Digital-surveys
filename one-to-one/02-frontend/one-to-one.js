@@ -17,7 +17,7 @@
 window.ESGOneToOne = function (ctx) {
   'use strict';
 
-  var VERSION = '4.3.0';
+  var VERSION = '4.4.0';
 
   // ---------------------------------------------------------------------------------------------
   // CONFIG — normally nothing to change. List titles must match the lists you created.
@@ -824,7 +824,44 @@ window.ESGOneToOne = function (ctx) {
     if (discard) { start().catch(loadFailed); } else { render(true); }
     return true;
   }
-  function markDirty() { dirty = true; }
+  function markDirty() { dirty = true; editGen += 1; autosave.kick(); }
+  var editGen = 0;
+  // Auto-save: the open form registers a saver; it runs 4 s after the last change (at most every 20 s, to keep
+  // list versions down), silently – a small status line shows Saving… / Saved 10:42 / Not saved. render() clears it.
+  var autosave = (function () {
+    var saver = null, statusEl = null, timer = null, retry = null, lastAt = 0, running = false;
+    var DELAY = 4000, MIN_GAP = 20000, RETRY = 30000;
+    function show(text, cls) { if (statusEl) { statusEl.textContent = text; statusEl.className = 'autosave' + (cls ? ' ' + cls : ''); } }
+    function stop() { if (timer) { clearTimeout(timer); timer = null; } if (retry) { clearTimeout(retry); retry = null; } }
+    function clear() { stop(); saver = null; statusEl = null; }
+    function set(fn, el) { clear(); saver = fn; statusEl = el; show('Changes save automatically'); }
+    function kick() {
+      if (!saver) { return; }
+      if (timer) { clearTimeout(timer); }
+      timer = setTimeout(run, Math.max(DELAY, MIN_GAP - (Date.now() - lastAt)));
+    }
+    function run() {
+      timer = null;
+      if (!saver || !dirty) { return; }
+      if (running || busyCount > 0) { kick(); return; }
+      var fn = saver, gen = editGen, el = statusEl;
+      running = true; show('Saving…');
+      Promise.resolve().then(fn).then(function (result) {
+        running = false;
+        if (statusEl !== el) { return; }   // the page moved on
+        if (result === 'skip') { show('Auto-save paused – finish the highlighted item', 'warn'); return; }
+        lastAt = Date.now();
+        if (editGen === gen) { dirty = false; } else { kick(); }   // typed while saving: save again
+        show('Saved ' + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }));
+      }).catch(function () {
+        running = false;
+        if (statusEl !== el) { return; }
+        show('Not saved – will retry', 'warn');
+        retry = setTimeout(function () { retry = null; kick(); }, RETRY);
+      });
+    }
+    return { set: set, kick: kick, clear: clear };
+  })();
 
   // ---------------------------------------------------------------------------------------------
   // generic UI pieces
@@ -1091,6 +1128,61 @@ window.ESGOneToOne = function (ctx) {
   // ---------------------------------------------------------------------------------------------
   // TECHNICIAN – this month
   // ---------------------------------------------------------------------------------------------
+  // "Since last time": what this person raised last month, the line manager's reply, and how their actions stand.
+  // Everything comes from records already loaded for them; unreleased feedback is never shown (canSeeTl).
+  function sinceHidden(v) {
+    try { if (v !== undefined) { window.localStorage.setItem('esg1to1.sinceHidden', v ? '1' : '0'); } return window.localStorage.getItem('esg1to1.sinceHidden') === '1'; }
+    catch (_) { return !!v; }
+  }
+  function clip(text, n) {
+    text = str(text);
+    if (text.length <= n) { return h('span', { text: text }); }
+    var sp = h('span', { text: text.slice(0, n).replace(/\s+\S*$/, '') + '… ' });
+    var more = h('button', { class: 'linkbtn', type: 'button', text: 'more', onclick: function () { sp.textContent = text; more.remove(); } });
+    return h('span', null, [sp, more]);
+  }
+  function sinceLastTime(r, mine) {
+    var prior = mine.filter(function (x) { return x.month < r.month; })[0];
+    if (!prior) { return null; }
+    var pa = prior.answers, pf = prior.fb, rel = prior.released, raised = [];
+    function item(label, text, reply) { raised.push({ label: label, text: text, reply: rel ? reply : '' }); }
+    if (pa.q2.issue || pa.q2.support) { item('Challenge', pa.q2.issue + (pa.q2.support ? (pa.q2.issue ? ' – ' : '') + 'support needed: ' + pa.q2.support : ''), pf.q2); }
+    if (pa.q4 === 'Yes') { item('Wellbeing', pa.q4d || 'You asked to talk about it', pf.q4); }
+    if (pa.q5 === 'Yes') { item('Planning', pa.q5d || 'Something coming up', pf.q5); }
+    if (pa.q6 === 'Yes') { item('Development', pa.q6what || 'Training or development', pf.q6); }
+    if (pa.q9 === DEDICATED) { item('1-to-1', 'You asked for a dedicated 1-to-1', pf.q9 || (pf.meeting ? 'Meeting on ' + fmtDate(pf.meeting) : '')); }
+    var acts = actionsOf(function (ac) { return ac.status === 'Open' || (ac.closedOn && ac.closedOn >= prior.month + '-01'); }, 'tech')
+      .filter(function (x) { return x.r.tech === ME; })
+      .sort(function (x, y) { return (x.ac.status === y.ac.status ? 0 : x.ac.status === 'Open' ? -1 : 1) || (x.ac.due < y.ac.due ? -1 : 1); });
+    var hidden = sinceHidden();
+    var body = h('div', { class: 'since-body' });
+    body.hidden = hidden;
+    var toggle = h('button', { class: 'linkbtn', type: 'button', text: hidden ? 'Show' : 'Hide', 'aria-expanded': hidden ? 'false' : 'true', onclick: function () {
+      var hide = !body.hidden; body.hidden = hide; sinceHidden(hide); toggle.textContent = hide ? 'Show' : 'Hide'; toggle.setAttribute('aria-expanded', hide ? 'false' : 'true');
+    } });
+    if (!raised.length && !acts.length) {
+      body.appendChild(h('p', { class: 'small muted', style: 'margin:0', text: 'Nothing was raised last time – no open actions.' }));
+    } else {
+      if (raised.length) {
+        body.appendChild(h('div', { class: 'since-h', text: 'What you raised in ' + monthLabel(prior.month) }));
+        if (!rel) { body.appendChild(h('div', { class: 'small muted', text: 'Feedback not released yet – your ' + lc(L.mgr) + '\'s replies will show here.' })); }
+        body.appendChild(h('ul', { class: 'since-list' }, raised.map(function (x) {
+          return h('li', null, [h('b', { text: x.label + ': ' }), clip(x.text, 140),
+            x.reply ? h('div', { class: 'since-reply' }, [h('b', { text: L.mgr + ': ' }), clip(x.reply, 160)]) : null]);
+        })));
+      }
+      if (acts.length) {
+        body.appendChild(h('div', { class: 'since-h', text: 'Your actions' }));
+        body.appendChild(h('ul', { class: 'since-list' }, acts.slice(0, 6).map(function (x) {
+          var od = acOverdue(x.ac);
+          return h('li', null, [h('span', { class: x.ac.status === 'Open' ? (od ? 'overdue' : '') : 'ok', text: x.ac.status === 'Open' ? (od ? '⏰ ' : '○ ') : '✓ ' }),
+            clip(x.ac.text, 120), h('span', { class: 'small muted', text: x.ac.status === 'Open' ? ' – due ' + fmtDate(x.ac.due) + (od ? ' (overdue)' : '') : ' – done' })]);
+        })));
+        if (acts.length > 6) { body.appendChild(h('button', { class: 'linkbtn', type: 'button', text: '+' + (acts.length - 6) + ' more → My appraisal', onclick: function () { go('myapp'); } })); }
+      }
+    }
+    return h('section', { class: 'card since' }, [h('div', { class: 'card-h' }, [h('h2', { text: 'Since last time' }), toggle]), body]);
+  }
   function techView() {
     var mine = reviewsOf(ME).slice().reverse();
     if (!mine.length) {
@@ -1110,11 +1202,19 @@ window.ESGOneToOne = function (ctx) {
       if (!editable) { return; }
       var pr = progressOf(a);
       meterFill.style.width = pr.pct + '%';
-      meterTxt.textContent = pr.pct === 100 ? 'All done — ready to submit ✓' : pr.done + ' of ' + pr.total + ' complete';
+      var left = pr.total - pr.done;
+      meterTxt.textContent = pr.pct === 100 ? 'All done — ready to submit ✓'
+        : pr.done + ' of ' + pr.total + ' complete · about ' + Math.max(1, Math.ceil(left * 0.75)) + ' min left';
       missingBox.textContent = '';
       var m = missingItems(a);
       missingBox.appendChild(m.length ? h('div', { class: 'missing' }, [h('strong', { text: 'Still to complete: ' }), m.join(' · ')])
         : h('div', { class: 'done', text: 'Everything required is complete – you can submit when ready.' }));
+    }
+    var saveStatus = h('span', { class: 'autosave', role: 'status' });
+    if (editable) {
+      autosave.set(function () {
+        return spUpdate(CONFIG.lists.reviews, r.id, techFields(r, 'Draft')).then(function () { r.draft = true; r.status = 'Draft'; });
+      }, saveStatus);
     }
     var monthSel = h('select', { 'aria-label': 'Choose a month', style: 'width:180px', onchange: function () { if (!go('tech', { reviewId: Number(monthSel.value) })) { monthSel.value = String(r.id); } } },
       mine.map(function (x) { var o = h('option', { value: String(x.id), text: monthLabel(x.month) }); o.selected = x.id === r.id; return o; }));
@@ -1142,7 +1242,7 @@ window.ESGOneToOne = function (ctx) {
         h('div', { class: 'ph-l' }, [h('h2', { text: 'Monthly 1-to-1' }), monthSel, chipFor(r),
           editable ? h('span', { class: 'chip ' + (dl < 0 ? 'red' : dl <= 3 ? 'amber' : 'green'), text: dl < 0 ? plural(-dl, 'day') + ' overdue – you can still submit' : dl === 0 ? 'Due today' : plural(dl, 'day') + ' left' }) : null,
           h('span', { class: 'meta', text: 'Deadline 23:59, ' + fmtDate(r.due) })]),
-        editable ? h('div', { class: 'btn-row' }, [meterTxt, h('button', { class: 'btn', type: 'button', text: 'Save draft', onclick: function () { save().catch(function () {}); } }),
+        editable ? h('div', { class: 'btn-row' }, [h('div', { class: 'meterwrap' }, [meterTxt, saveStatus]), h('button', { class: 'btn', type: 'button', text: 'Save draft', onclick: function () { save().catch(function () {}); } }),
           h('button', { class: 'btn primary', type: 'button', text: 'Submit', onclick: submit })])
           : h('span', { class: 'muted', text: r.released ? 'Read-only – feedback released' : ('Submitted – awaiting your ' + L.mgr) })
       ]),
@@ -1151,22 +1251,36 @@ window.ESGOneToOne = function (ctx) {
 
     function fbBlock(text) { return r.released && text ? h('div', { class: 'feedback' }, [h('b', { text: L.mgr }), text]) : null; }
     var cards = [];
+    if (editable) { var since = sinceLastTime(r, mine); if (since) { cards.push(since); } }
     cards.push(qCard(1, 'What has gone well for you this month?', null, [
       textBox(null, a.q1, function (v) { a.q1 = v; refresh(); }, ro, 3), fbBlock(r.fb.q1)]));
-    cards.push(qCard(2, 'Challenges, blockers and support needed', h('span', { class: 'small muted', text: 'Optional' }), [
-      h('div', { class: 'fgrid c4' }, [
-        textBox("What's the issue?", a.q2.issue, function (v) { a.q2.issue = v; }, ro, 3),
-        textBox("What's the impact?", a.q2.impact, function (v) { a.q2.impact = v; }, ro, 3),
-        textBox('What have you tried?', a.q2.tried, function (v) { a.q2.tried = v; }, ro, 3),
-        textBox('What support is needed?', a.q2.support, function (v) { a.q2.support = v; }, ro, 3)
-      ]), fbBlock(r.fb.q2)]));
+    // Q2 is optional: folded while empty, so it takes one line unless there's something to say
+    var q2has = !!(a.q2.issue || a.q2.impact || a.q2.tried || a.q2.support);
+    var q2grid = h('div', { class: 'fgrid c4' }, [
+      textBox("What's the issue?", a.q2.issue, function (v) { a.q2.issue = v; }, ro, 3),
+      textBox("What's the impact?", a.q2.impact, function (v) { a.q2.impact = v; }, ro, 3),
+      textBox('What have you tried?', a.q2.tried, function (v) { a.q2.tried = v; }, ro, 3),
+      textBox('What support is needed?', a.q2.support, function (v) { a.q2.support = v; }, ro, 3)
+    ]);
+    q2grid.hidden = !q2has;
+    var q2add = h('button', { class: 'btn small', type: 'button', text: '+ Add', 'aria-expanded': 'false', onclick: function () {
+      q2grid.hidden = false; q2add.remove(); q2card.classList.remove('compact');
+      var f = q2grid.querySelector('textarea'); if (f) { f.focus(); }
+    } });
+    var q2card = qCard(2, 'Challenges, blockers and support needed', q2has || ro ? h('span', { class: 'small muted', text: q2has ? 'Optional' : 'Nothing raised' }) : q2add,
+      [q2grid, fbBlock(r.fb.q2)].filter(Boolean));
+    if (!q2has) { q2card.classList.add('compact'); }
+    cards.push(q2card);
     cards.push(qCard(3, 'How would you rate your current workload?', null, [
       choiceGroup('Workload rating', WORKLOAD, a.q3, function (v) { a.q3 = v; refresh(); }, ro, 'c5'),
       h('div', { class: 'detail' }, textBox('Comments (optional)', a.q3c, function (v) { a.q3c = v; }, ro, 2)), fbBlock(r.fb.q3)]));
     function ynCard(numb, title, key, detailFn) {
       var detail = h('div', { class: 'detail' }, detailFn());
       detail.hidden = a[key] !== 'Yes';
-      return qCard(numb, title, ynSeg(a[key], function (v) { a[key] = v; detail.hidden = v !== 'Yes'; refresh(); }, ro), [detail, fbBlock(r.fb[key])].filter(Boolean));
+      var c = qCard(numb, title, ynSeg(a[key], function (v) { a[key] = v; detail.hidden = v !== 'Yes'; c.classList.toggle('compact', v === 'No'); refresh(); }, ro),
+        [detail, fbBlock(r.fb[key])].filter(Boolean));
+      if (a[key] === 'No') { c.classList.add('compact'); }   // answered No: one line
+      return c;
     }
     cards.push(ynCard(4, 'Is there anything relating to your wellbeing, workplace support or reasonable adjustments you would like to raise?', 'q4', function () {
       return textBox('What would you like to raise?', a.q4d, function (v) { a.q4d = v; refresh(); }, ro, 3); }));
@@ -1777,6 +1891,15 @@ window.ESGOneToOne = function (ctx) {
         dirty = false;
       });
     }
+    // Auto-save only before release: once released, every save is visible to the technician straight away,
+    // so half-typed text must never go live – that stays a deliberate Save.
+    var mgrStatus = h('span', { class: 'autosave', role: 'status' });
+    if (!r.released && (r.state === 'Open' || r.state === 'Submitted')) {
+      autosave.set(function () {
+        if (badDates(root) || incompleteActions()) { return 'skip'; }
+        return spUpdate(CONFIG.lists.mgr, r.mrId, mgrFields(r)).then(function () { return writeDates(CONFIG.lists.mgr, r.mrId, mgrDates(r)); });
+      }, mgrStatus);
+    }
     function command(newState, okMsg) {
       saveFeedback().then(function () {
         return busy('state', async function () {
@@ -1796,7 +1919,8 @@ window.ESGOneToOne = function (ctx) {
         confirmBox('Close as not submitted?', r.tech + ' will no longer be able to submit this review.', 'Close review', function () {
           command('Closed - Not Submitted', 'Closed.'); });
       } }),
-      h('button', { class: 'btn ghost', type: 'button', text: '← Back', onclick: function () { go(state.backTo === 'profile' ? 'profile' : (state.backTo || 'reviews')); } })
+      h('button', { class: 'btn ghost', type: 'button', text: '← Back', onclick: function () { go(state.backTo === 'profile' ? 'profile' : (state.backTo || 'reviews')); } }),
+      r.released ? h('span', { class: 'small muted', text: 'Released – changes save only when you click Save feedback.' }) : mgrStatus
     ]);
     var head = h('div', { class: 'pagehead sticky' }, [
       h('div', { class: 'ph-l' }, [h('h2', { text: r.tech + ' – ' + monthLabel(r.month) }), chipFor(r),
@@ -2081,16 +2205,18 @@ window.ESGOneToOne = function (ctx) {
     var area = h('div', { class: 'stack' });
     var nav = h('div', { class: 'wbsteps', role: 'tablist', 'aria-label': 'Sections' });
     function done(st2) { return st2.sec ? wbSectionDone(w, st2.sec) : st2.k === 'you' ? wbYouDone(w) : st2.k === 'start' ? true : false; }
-    function save(status) {
-      return busy('wb', async function () {
+    function writeWb(status) {
+      return (async function () {
         var a = {};
         Object.keys(w.answers).forEach(function (k) { var x = w.answers[k]; if (x.app || x.issue || x.help) { a[k] = { app: x.app, issue: x.issue, help: x.issue === 'Y' ? x.help : '' }; } });
         var p = {}; Object.keys(w.personal).forEach(function (k) { p[k] = w.personal[k]; });
         if (p.circ !== 'Yes') { WB_PERSONAL.forEach(function (f) { p[f[0]] = ''; }); }
         await spUpdate(CONFIG.lists.wellbeing, w.id, { Position: w.position, EmployeeNumber: w.empNo, AnswersJson: JSON.stringify(a), PersonalJson: JSON.stringify(p), AssessmentStatus: status });
-        dirty = false;
-      });
+      })();
     }
+    function save(status) { return busy('wb', function () { return writeWb(status).then(function () { dirty = false; }); }); }
+    var wbStatus = h('span', { class: 'autosave', role: 'status' });
+    if (!IS_TL && wbState(w) === 'Open') { autosave.set(function () { return writeWb('Open'); }, wbStatus); }
     function goStep(i) {
       var leaving = dirty;
       state.wbStep = i;
@@ -2146,7 +2272,7 @@ window.ESGOneToOne = function (ctx) {
       }
       area.appendChild(h('div', { class: 'btn-row', style: 'justify-content:space-between' }, [
         state.wbStep > 0 ? h('button', { class: 'btn', type: 'button', text: '← Back', onclick: function () { goStep(state.wbStep - 1); } }) : h('span'),
-        h('div', { class: 'btn-row' }, [h('button', { class: 'btn', type: 'button', text: 'Save draft', onclick: function () { save('Open').then(function () { toast('Draft saved.'); }).catch(function () {}); } }),
+        h('div', { class: 'btn-row' }, [wbStatus, h('button', { class: 'btn', type: 'button', text: 'Save draft', onclick: function () { save('Open').then(function () { toast('Draft saved.'); }).catch(function () {}); } }),
           state.wbStep < steps.length - 1 ? h('button', { class: 'btn primary', type: 'button', text: 'Next →', onclick: function () { goStep(state.wbStep + 1); } }) : null])]));
     }
     function drawNav() {
@@ -2679,6 +2805,7 @@ window.ESGOneToOne = function (ctx) {
   // ---------------------------------------------------------------------------------------------
   function render(scrollTop) {
     if (disposed || !root) { return; }
+    autosave.clear();
     // toasts and confetti outlive a redraw, so a message shown just before render() (e.g. a save error) stays visible
     var keep = Array.prototype.filter.call(root.children, function (c) { return c.classList.contains('toast') || c.classList.contains('confetti'); });
     root.textContent = '';

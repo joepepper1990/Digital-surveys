@@ -1,4 +1,4 @@
-# ESG 1-to-1 — frontend (v4.3.0)
+# ESG 1-to-1 — frontend (v4.4.0)
 
 | File | What it is |
 |---|---|
@@ -47,7 +47,7 @@ Steps:
 
 | # | As | Do | Expect |
 |---|---|---|---|
-| 1 | TL | Open the site | **Team overview**. The top menu bar has Team overview, Monthly reviews, Expectations, Actions, Wellbeing, **Team ▾** (the team list) and **⚙ Settings**, and shows **v4.3.0** at its right-hand end. |
+| 1 | TL | Open the site | **Team overview**. The top menu bar has Team overview, Monthly reviews, Expectations, Actions, Wellbeing, **Team ▾** (the team list) and **⚙ Settings**, and shows **v4.4.0** at its right-hand end. |
 | 2 | TL | ⚙ Settings → set an appraisal date (e.g. `15-Jul-2027`) → Save → reopen | Same date shown, and the Technicians list shows 15/07/2027 |
 | 3 | TL | Expectations → add a Shared one, then an Individual one, then retire one | Items appear in the list. Retired = Active **No**. |
 | 4 | Test A | Open the E1 link | Their review. The menu bar has only *This month · My appraisal · Appraisal report · Wellbeing*. |
@@ -56,6 +56,8 @@ Steps:
 | 7 | TL | Open Test A's review → add 2 actions → Save | Manager Reviews: `ActionsJson` has 2 rows, `ActionsStatus` = Open, `NextActionDue` set |
 | 8 | TL / Test A | Appraisal report → Print / Save as PDF | The print window opens with 8 sections and no wellbeing answers |
 | 9 | Test A | 💬 Feedback → Fault → message → Send | "Thank you. Your feedback has been submitted to your Team Leader." The TL gets E13 within about 5 minutes. |
+| 10 | Test A | Type an answer, wait ~5 s, reload | *Saved hh:mm* shows; the answer is kept; still a Draft |
+| 11 | Test A | Month two: open the new form | **Since last time** shows last month's raised items, released replies and actions |
 
 If anything fails, press **F12 → Console**, copy the red errors (remove the site address), and use the prompt in [`../NEXT_STEPS.md`](../NEXT_STEPS.md).
 

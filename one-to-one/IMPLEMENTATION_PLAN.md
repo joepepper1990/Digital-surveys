@@ -1,6 +1,6 @@
 # ESG Monthly Technician 1-to-1 — Implementation Plan (v4)
 
-**Status:** v4.3, dated 15-Oct-2026 (frontend 4.3.0, solution 1.2.0.0 – see *v4.2 additions* and *v4.3* below). **Current position and next actions:** [`NEXT_STEPS.md`](NEXT_STEPS.md).
+**Status:** v4.3, dated 15-Oct-2026 (frontend 4.4.0, solution 1.2.0.0 – see *v4.2 additions* and *v4.3* below). **Current position and next actions:** [`NEXT_STEPS.md`](NEXT_STEPS.md).
 
 - **Stages 0A and 0B have passed in the live tenant.** Welcome runs the external script, authenticated REST works, and the item-level security model holds.
 - The visual design was agreed through prototype v7 ([`prototype/prototype.html`](prototype/prototype.html)).
@@ -625,7 +625,7 @@ It opens in an in-page overlay with **Print / Save as PDF**. That opens a clean 
 
 **Layout**
 
-- Built for desktop: a top menu bar plus a full-width content area that scales up on large screens, with no large blank regions (v4.3.0).
+- Built for desktop: a top menu bar plus a full-width content area that scales up on large screens, with no large blank regions (v4.4.0).
 - Colours: navy UI; self ratings blue `#2a78d6`; TL ratings orange `#eb6834`; band colours red/amber/green/blue.
 - Overlays use z-index 10000+ so they sit above SharePoint's chrome.
 
@@ -1180,7 +1180,7 @@ You don't build any screens, and **there is nothing to edit in the files**. Full
 4. [ ] **Site Pages:** `OneToOne` → **… → Make homepage**.
 5. [ ] Permissions check (D.6): `1-to-1 Technicians` has **Read** on the page, the layouts library, the Welcome Errors list and **1-to-1 Settings**.
 6. [ ] Check that `varPageLink` in the flows matches the page link.
-7. [ ] **Check as the TL:** the site opens on **Team overview**, with the top menu bar showing Team ▾ and ⚙ Settings. The menu bar shows **v4.3.0** at its right-hand end.
+7. [ ] **Check as the TL:** the site opens on **Team overview**, with the top menu bar showing Team ▾ and ⚙ Settings. The menu bar shows **v4.4.0** at its right-hand end.
 8. [ ] **Check as the TL:** open ⚙ **Settings**, enter each test technician's appraisal date (DD-MMM-YYYY), and save.
 9. [ ] **Check as Test A:** the E1 link opens **their** review. The menu bar shows only *This month · My appraisal · Appraisal report · Wellbeing*.
 
@@ -1266,12 +1266,21 @@ These are in [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) §4:
 | Appraisal timing (4.2.1) | A passed appraisal date reads **Overdue by N days** (team table, Settings, profile tile, overview tile *Appraisals overdue*) and *Needs your attention* says to set the next date once it's done. Appraisals are best done in the **calendar month before** the date: a subtle "aim: in December" line under Days to go (amber once that month starts), "Aim to complete X's appraisal by 31-Dec" in *Needs your attention*, and "Aim to complete" on the technician's outlook. The appraisal date stays the deadline. | Display only. |
 | Upgrade-safe Flow 1 (1.1.1.0) | 1.1.0.0's Flow 1 read *Wellbeing Assessments* with a connector step, so after importing over 1.0 it could not be turned back on until Setup had created the list (*GetTable … List not found*). Flow 1 now reads it by REST through the list ID found at run time. A validator rule (plus mutation) stops flows 1–4 naming a list added after 1.0 in a connector step. | REST read is secured like the other steps. |
 
-### v4.3 – feedback bubble (frontend 4.3.0, solution 1.2.0.0)
+### v4.3 – feedback bubble (frontend 4.4.0, solution 1.2.0.0)
 
 | Area | What changed | Security notes |
 |---|---|---|
 | Feedback bubble | A 💬 **Feedback** button bottom-right on every page, for everyone. Type (Fault / Improvement / Suggestion) and a message (2,000 characters at most); sent with the person's name, the page and the version. On-screen: "Thank you. Your feedback has been submitted to your Team Leader." | Creates an item in the new **1-to-1 Feedback** list – the only list the group can add to (**Contribute**, with item-level security: each person reads and edits only their own items). |
 | Flow 6 Feedback | Locks each new item to **Owners only** first, then emails it to the TL (**E13**) and stamps `SentOn` / `DeliveryStatus = Sent`. If the email fails: the item is marked **Failed**, a short notice without the content is tried, and the run ends Failed (Power Automate's own failure notice). Failed – or still Pending after an hour – items appear in the TL's *Needs your attention*, readable in a dialog, with **Mark as read**. | Message HTML-escaped in the email. The trigger only fires for Pending items, so the flow's own updates can't loop. |
+
+
+### v4.4 – friendlier forms (frontend 4.4.0; solution unchanged)
+
+| Area | What changed | Security notes |
+|---|---|---|
+| Auto-save | The technician's monthly and wellbeing forms, and the TL's review **until it is released**, save themselves about 4 s after typing stops (at most every 20 s), silently: *Saving… / Saved 10:42 / Not saved – will retry*. A released review only saves on **Save feedback**, so half-typed text never goes live. | Same writes as **Save draft** (Draft status never triggers Flow 2). |
+| Shorter form | Time left ("about 6 min left"); Q2 folded while empty (**+ Add**); Q4–Q6 fold to one line when answered *No*. | Display only. |
+| Since last time | Top of the current form: what the technician raised last month, the TL's replies (only once released) and their open / recently done actions. | Built only from the technician's own loaded records; unreleased feedback is never shown. |
 
 
 ## H. Testing
@@ -1348,6 +1357,8 @@ These are in [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) §4:
 | F40 (v4.2) | Set the next review date to 7 days ahead; run Flow 1 | TL gets E12 with a link; nothing goes to A. |
 | F41 (v4.3) | As A: 💬 **Feedback** → Fault → type a message → **Send** | "Thank you. Your feedback has been submitted to your Team Leader." Within about 5 minutes the TL gets E13 naming A, the page and the version; the item in *1-to-1 Feedback* is Owners-only and *Sent*. |
 | F42 (v4.3) | Turn Flow 6 **off**, send feedback as A, wait an hour (or turn Flow 6 on with the email connection broken) | The TL sees "Feedback from A … – read it here" in *Needs your attention*, can read it and **Mark as read**. |
+| F43 (v4.4) | As A: type an answer, wait about 5 s, reload | Top shows *Saved hh:mm*; the answer is kept; the review is still a Draft (no submission email). |
+| F44 (v4.4) | Month two (test date next month): open A's new form | **Since last time** lists last month's raised items, your released replies and A's actions. Before you release, it says *Feedback not released yet*. |
 
 ### Privacy and bypass tests
 
@@ -1469,12 +1480,12 @@ All of these are text, contain **no tenant names, credentials or personal data**
 | K0 / K0B | `02-frontend/probe/` | **Produced and run.** Stage 0A and 0B passed. |
 | K1 | [`01-sharepoint/lists.md`](01-sharepoint/lists.md) + [`lists.csv`](01-sharepoint/lists.csv) | **Produced (v4)** |
 | K2 | Site security tick-list | Covered by G Parts 1–2 and D.6, plus the quarterly check in CONFIG_REFERENCE §4 |
-| K3 | [`02-frontend/one-to-one.html`](02-frontend/one-to-one.html) | **Produced (v4.3.0)** |
-| K4 | [`02-frontend/one-to-one.js`](02-frontend/one-to-one.js) | **Produced (v4.3.0)** |
+| K3 | [`02-frontend/one-to-one.html`](02-frontend/one-to-one.html) | **Produced (v4.4.0)** |
+| K4 | [`02-frontend/one-to-one.js`](02-frontend/one-to-one.js) | **Produced (v4.4.0)** |
 | K5 | [`03-flows/FLOW_BUILD_SHEETS.md`](03-flows/FLOW_BUILD_SHEETS.md) | **Produced (v4)**: Flows 1–3, SETPERM, Ensure_user, Try/Catch |
 | K5a | [`04-solution/ESGOneToOne_1_2_0_0_unmanaged.zip`](04-solution/IMPORT_GUIDE.md) | **Produced (1.2.0.0)**: importable solution with setup flow + Flows 1–6, connection references, environment variables; legacy-package builder; source, validator and simulation in [`04-solution/tools/`](04-solution/README.md) |
 | K6 | [`03-flows/EMAIL_TEMPLATES.md`](03-flows/EMAIL_TEMPLATES.md) | **Produced (v4.2)**: E1–E5, E7–E12 (there is no E6) |
-| K7 | Test record | Use section H directly (F1–F42, P1–P25); add Pass/Fail, date, tester and screenshot columns |
+| K7 | Test record | Use section H directly (F1–F44, P1–P25); add Pass/Fail, date, tester and screenshot columns |
 | K8 | Privacy notice | **Not needed.** The TL decided it's handled between the TL and each technician. |
 | K9 | [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) | **Produced (v4)** |
 | K10 | [`02-frontend/mock/`](02-frontend/mock/), [`02-frontend/test/`](02-frontend/test/), [`02-frontend/tools/`](02-frontend/tools/) | **Produced.** 182 checks passing. |
