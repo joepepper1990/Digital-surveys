@@ -162,11 +162,13 @@ window.ESGOneToOne = function (ctx) {
   // lower-case the first letter for use mid-sentence, but leave acronyms (e.g. "SQEP") alone
   function lc(x) { return String(x || '').split(' ').map(function (w) { return w.length > 1 && w.charAt(1) === w.charAt(1).toLowerCase() ? w.charAt(0).toLowerCase() + w.slice(1) : w; }).join(' '); }
   function defaultReminders() { return [20, 27]; }
+  // Read exactly as Flow 1 does: it emails on any day whose number appears in the stored list, so only plain whole
+  // numbers count, and anything unreadable means no reminders (the page shows 'off', and Save rewrites it cleanly).
   function parseReminders(json) {
     var v = safeJson(json, null);
-    if (!Array.isArray(v)) { return defaultReminders(); }
-    var out = v.map(Number).filter(function (n, i, a) { return Number.isInteger(n) && n >= 1 && n <= 28 && a.indexOf(n) === i; }).sort(function (x, y) { return x - y; }).slice(0, 3);
-    return out;
+    if (!Array.isArray(v)) { return []; }
+    return v.filter(function (n, i, a) { return typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= 31 && a.indexOf(n) === i; })
+      .sort(function (x, y) { return x - y; });
   }
   function ordinal(n) { var s2 = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s2[(v - 20) % 10] || s2[v] || s2[0]); }
   function remindersText(days) { if (!days.length) { return 'none'; } var o = days.map(ordinal); return o.length === 1 ? o[0] : o.slice(0, -1).join(', ') + ' and ' + o[o.length - 1]; }
@@ -258,6 +260,8 @@ window.ESGOneToOne = function (ctx) {
     if (!str || typeof str !== 'string') { return fallback; }
     try { var v = JSON.parse(str); return v === null || v === undefined ? fallback : v; } catch (_) { return fallback; }
   }
+  // A JSON column that should hold a list of objects: anything else (null entries, numbers, a bare object) is ignored.
+  function jsonList(raw) { var v = safeJson(raw, []); return Array.isArray(v) ? v.filter(function (x) { return x && typeof x === 'object' && !Array.isArray(x); }) : []; }
   function str(v) { return v === null || v === undefined ? '' : String(v); }
   function num(v) { var n = Number(v); return v === null || v === undefined || v === '' || isNaN(n) ? null : n; }
 
@@ -424,11 +428,10 @@ window.ESGOneToOne = function (ctx) {
     return { q1: '', q2: '', q3: '', q4: '', q5: '', q6: '', q7: '', q9: '', overall: '', exp: {}, expRating: {}, followOverride: '', meeting: '', actions: [] };
   }
   function buildReview(rv, mr, techName) {
-    var expJson = safeJson(rv.ExpectationsJson, []);
-    if (!Array.isArray(expJson)) { expJson = []; }
+    var expJson = jsonList(rv.ExpectationsJson);
     var snap;
-    var trusted = mr ? safeJson(mr.ExpectationSnapshotJson, null) : null;
-    if (IS_TL && Array.isArray(trusted)) {
+    var trusted = mr && Array.isArray(safeJson(mr.ExpectationSnapshotJson, null)) ? jsonList(mr.ExpectationSnapshotJson) : null;
+    if (IS_TL && trusted) {
       snap = trusted.map(function (e) { return { id: e.id, title: str(e.title), measures: str(e.measures), year: str(e.year) }; });
     } else {
       snap = expJson.map(function (e) { return { id: e.id, title: str(e.title), measures: str(e.measures), year: str(e.year) }; });
@@ -469,10 +472,8 @@ window.ESGOneToOne = function (ctx) {
       fb.q1 = str(mr.FB_Q1); fb.q2 = str(mr.FB_Q2); fb.q3 = str(mr.FB_Q3); fb.q4 = str(mr.FB_Q4); fb.q5 = str(mr.FB_Q5);
       fb.q6 = str(mr.FB_Q6); fb.q7 = str(mr.FB_Q7); fb.q9 = str(mr.FB_Q9); fb.overall = str(mr.FB_Overall);
       fb.followOverride = str(mr.FollowUpDecision); fb.meeting = localDate(mr.MeetingDate);
-      var ef = safeJson(mr.ExpectationFeedbackJson, []);
-      (Array.isArray(ef) ? ef : []).forEach(function (x) { fb.exp[x.id] = str(x.feedback); if (r15(x.rating)) { fb.expRating[x.id] = r15(x.rating); } });
-      var acts = safeJson(mr.ActionsJson, []);
-      fb.actions = (Array.isArray(acts) ? acts : []).map(function (a) {
+      jsonList(mr.ExpectationFeedbackJson).forEach(function (x) { fb.exp[x.id] = str(x.feedback); if (r15(x.rating)) { fb.expRating[x.id] = r15(x.rating); } });
+      fb.actions = jsonList(mr.ActionsJson).map(function (a) {
         return { id: str(a.id) || String(Math.random()).slice(2, 10), text: str(a.text), owner: str(a.owner), criteria: str(a.criteria),
           due: /^\d{4}-\d{2}-\d{2}$/.test(str(a.due)) ? str(a.due) : '', status: str(a.status) === 'Closed' ? 'Closed' : 'Open',
           closedOn: /^\d{4}-\d{2}-\d{2}$/.test(str(a.closedOn)) ? str(a.closedOn) : '' };
@@ -483,7 +484,7 @@ window.ESGOneToOne = function (ctx) {
   }
   function parseBands(json) {
     var b = safeJson(json, null);
-    if (!Array.isArray(b) || b.length !== 4) { return defaultBands(); }
+    if (!Array.isArray(b) || b.length !== 4 || b.some(function (x) { return !x || typeof x !== 'object'; })) { return defaultBands(); }
     var def = defaultBands();
     var out = b.map(function (x, i) { return { max: i === 3 ? 99 : Number(x.max), name: str(x.name) || def[i].name, cls: def[i].cls }; });
     for (var i = 0; i < 3; i++) { if (isNaN(out[i].max) || out[i].max <= (i ? out[i - 1].max : 1) || out[i].max > 5) { return def; } }
@@ -502,7 +503,8 @@ window.ESGOneToOne = function (ctx) {
     function srow(t) { return settingsRows.find(function (x) { return str(x.Title) === t; }); }
     var bandsRow = srow('Bands'), remRow = srow('Reminders'), labRow = srow('Labels');
     SETTINGS = { bands: bandsRow ? parseBands(bandsRow.Value) : defaultBands(), itemId: bandsRow ? bandsRow.ID : 0,
-      reminders: remRow ? parseReminders(remRow.Value) : defaultReminders(), remindersId: remRow ? remRow.ID : 0, labelsId: labRow ? labRow.ID : 0 };
+      reminders: remRow ? parseReminders(remRow.Value) : defaultReminders(), remindersId: remRow ? remRow.ID : 0, labelsId: labRow ? labRow.ID : 0,
+      remindersRaw: remRow ? str(remRow.Value) : null };
     L = labRow ? parseLabels(labRow.Value) : defaultLabels();
 
     var revs = await spGetAll(CONFIG.lists.reviews, REV_FIELDS, 'Technician');
@@ -517,6 +519,8 @@ window.ESGOneToOne = function (ctx) {
       techs.forEach(function (t) {
         var name = str(t.Title) || str(t.Technician && t.Technician.Title);
         var email = str(t.Technician && t.Technician.EMail).toLowerCase();
+        // two people with the same name are kept apart (everything on the page is keyed by this name)
+        if (TECH_INFO[name] && TECH_INFO[name].email !== email) { name = name + ' (' + (email || ('item ' + t.ID)) + ')'; }
         TECH_INFO[name] = { appraisal: localDate(t.AppraisalDate), itemId: t.ID, email: email, claims: str(t.Technician && t.Technician.Name), active: !!t.Active };
         if (email) { byEmail[email] = name; }
         if (t.Active) { TECHS.push(name); }
@@ -706,25 +710,20 @@ window.ESGOneToOne = function (ctx) {
     if (!a.q9) { m.push('Q9 Follow-up'); }
     return m;
   }
-  function clearHidden(a) {
-    if (a.q4 !== 'Yes') { a.q4d = ''; }
-    if (a.q5 !== 'Yes') { a.q5d = ''; }
-    if (a.q6 !== 'Yes') { a.q6what = ''; a.q6why = ''; }
-  }
-
   // ---------------------------------------------------------------------------------------------
   // writes (the only places data leaves the page – rule S6)
   // ---------------------------------------------------------------------------------------------
   // Technician: Monthly Reviews, own item only (SharePoint enforces it).
   function techFields(r, status) {
-    var a = r.answers;
-    clearHidden(a);
+    // Details of a question answered No are sent as blank, but the in-memory answers (and the boxes on screen)
+    // keep them, so switching back to Yes shows – and saves – exactly what is on screen.
+    var a = r.answers, y4 = a.q4 === 'Yes', y5 = a.q5 === 'Yes', y6 = a.q6 === 'Yes';
     return {
       Q1WentWell: a.q1, Q2Issue: a.q2.issue, Q2Impact: a.q2.impact, Q2Tried: a.q2.tried, Q2Support: a.q2.support,
       Q3WorkloadRating: a.q3 || '', Q3WorkloadComment: a.q3c,
-      Q4WellbeingRaise: a.q4 || '', Q4WellbeingDetail: a.q4d,
-      Q5PlanningRaise: a.q5 || '', Q5PlanningDetail: a.q5d,
-      Q6DevRaise: a.q6 || '', Q6DevWhat: a.q6what, Q6DevWhy: a.q6why,
+      Q4WellbeingRaise: a.q4 || '', Q4WellbeingDetail: y4 ? a.q4d : '',
+      Q5PlanningRaise: a.q5 || '', Q5PlanningDetail: y5 ? a.q5d : '',
+      Q6DevRaise: a.q6 || '', Q6DevWhat: y6 ? a.q6what : '', Q6DevWhy: y6 ? a.q6why : '',
       Q7ManagerFeedback: a.q7,
       ExpectationsJson: JSON.stringify(r.snapshot.map(function (e) {
         var x = a.q8.find(function (q) { return String(q.id) === String(e.id); }) || {};
@@ -755,11 +754,15 @@ window.ESGOneToOne = function (ctx) {
     return f;
   }
   function mgrDates(r) { return { MeetingDate: r.fb.meeting || '', NextActionDue: nextActionDue(r.fb.actions) }; }
+  var busyLabels = {};
   async function busy(label, fn) {
+    // a second click while the same action is still running is ignored (no duplicate items, no second email)
+    if (busyLabels[label]) { return new Promise(function () {}); }
+    busyLabels[label] = true;
     busyCount += 1; renderBusy();
     try { return await fn(); }
     catch (e) { toast(String(e && e.message ? e.message : e), true); throw e; }
-    finally { busyCount -= 1; renderBusy(); }
+    finally { busyCount -= 1; delete busyLabels[label]; renderBusy(); }
   }
   function renderBusy() {
     if (!root) { return; }
@@ -829,7 +832,7 @@ window.ESGOneToOne = function (ctx) {
   // Auto-save: the open form registers a saver; it runs 4 s after the last change (at most every 20 s, to keep
   // list versions down), silently – a small status line shows Saving… / Saved 10:42 / Not saved. render() clears it.
   var autosave = (function () {
-    var saver = null, statusEl = null, timer = null, retry = null, lastAt = 0, running = false;
+    var saver = null, statusEl = null, timer = null, retry = null, lastAt = 0, running = false, inflight = null;
     var DELAY = 4000, MIN_GAP = 20000, RETRY = 30000;
     function show(text, cls) { if (statusEl) { statusEl.textContent = text; statusEl.className = 'autosave' + (cls ? ' ' + cls : ''); } }
     function stop() { if (timer) { clearTimeout(timer); timer = null; } if (retry) { clearTimeout(retry); retry = null; } }
@@ -846,7 +849,8 @@ window.ESGOneToOne = function (ctx) {
       if (running || busyCount > 0) { kick(); return; }
       var fn = saver, gen = editGen, el = statusEl;
       running = true; show('Saving…');
-      Promise.resolve().then(fn).then(function (result) {
+      inflight = Promise.resolve().then(fn);
+      inflight.then(function (result) {
         running = false;
         if (statusEl !== el) { return; }   // the page moved on
         if (result === 'skip') { show('Auto-save paused – finish the highlighted item', 'warn'); return; }
@@ -860,7 +864,9 @@ window.ESGOneToOne = function (ctx) {
         retry = setTimeout(function () { retry = null; kick(); }, RETRY);
       });
     }
-    return { set: set, kick: kick, clear: clear };
+    // Submit / Complete stop auto-save and wait for a save already on its way, so a late draft can't overwrite them.
+    function settle() { clear(); var p = inflight; return p ? p.then(function () {}, function () {}) : Promise.resolve(); }
+    return { set: set, kick: kick, clear: clear, settle: settle };
   })();
 
   // ---------------------------------------------------------------------------------------------
@@ -1190,6 +1196,7 @@ window.ESGOneToOne = function (ctx) {
     }
     var r = REVIEWS.find(function (x) { return x.id === state.reviewId; });
     if (state.reviewId && !r) {
+      state.reviewId = null;   // so 'This month' goes back to the current review
       return card('Review not found', null, [h('p', { text: ('This review could not be found, or it isn\'t yours. Use the link in your latest email or contact your ' + L.mgr + '.') })]);
     }
     r = r || mine[0];
@@ -1230,6 +1237,7 @@ window.ESGOneToOne = function (ctx) {
       if (m.length) { toast('Please complete: ' + m.join(', '), true); missingBox.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
       confirmBox('Submit your 1-to-1?', ("You won't be able to change it afterwards. Your " + L.mgr + " will be notified."), 'Submit', function () {
         busy('submit', async function () {
+          await autosave.settle();
           await spUpdate(CONFIG.lists.reviews, r.id, techFields(r, 'Submitted'));
           r.state = 'Submitted'; r.status = 'Submitted'; dirty = false;
           confetti(); toast('🎉 Nice one — ' + monthShort(r.month) + (' done! Your ' + L.mgr + ' has been notified.')); render(false);
@@ -1366,8 +1374,8 @@ window.ESGOneToOne = function (ctx) {
           a.q2 = { issue: pa.q2.issue, impact: pa.q2.impact, tried: pa.q2.tried, support: pa.q2.support };
           a.q8.forEach(function (x) { var q = pa.q8.find(function (y) { return String(y.id) === String(x.id); }); if (q) { x.rating = q.rating; x.comment = q.comment; } });
           dirty = true;
-          toast('Copied your ' + monthLabel(prior.month) + ' answers — update anything that has changed, then Save draft.'); render(false);
-          dirty = true;
+          toast('Copied your ' + monthLabel(prior.month) + ' answers — update anything that has changed.'); render(false);
+          markDirty();   // and let auto-save store it
         } }) : h('div', { class: 'small muted', text: editable ? 'Nothing to copy from last month.' : (r.released ? 'Feedback released.' : 'This month is submitted.') })
       ])
     ]);
@@ -1688,6 +1696,10 @@ window.ESGOneToOne = function (ctx) {
       // order is set by dragging in the list; a new item (or one moved to another group/year) goes to the end of its group
       v.sort = editing && groupOf(editing) === groupOf(v) && editing.year === v.year ? editing.sort : nextSort(v);
       if (!v.title || !v.measures || !v.year) { toast('Title, measures and appraisal year are required.', true); return; }
+      // Flow 1 matches the year exactly (e.g. 2026/27), so anything else would never reach a review
+      if (!/^\d{4}\/\d{2}$/.test(v.year) || (Number(v.year.slice(2, 4)) + 1) % 100 !== Number(v.year.slice(5))) {
+        toast('Appraisal year must look like ' + CUR_YEAR + ' (April to March).', true); return;
+      }
       if (v.scope === 'Individual' && !v.tech) { toast(('Choose the ' + lc(L.one) + ' for an individual expectation.'), true); return; }
       if (v.scope === 'Individual' && !(TECH_INFO[v.tech] && TECH_INFO[v.tech].claims)) { toast(('That ' + lc(L.one) + ' has no account set in the ' + L.many + ' list.'), true); return; }
       if (v.active) {
@@ -1800,11 +1812,13 @@ window.ESGOneToOne = function (ctx) {
         function apply(status, closedOn) {
           var prev = { status: ac.status, closedOn: ac.closedOn };
           ac.status = status; ac.closedOn = closedOn;
+          var saved = false;
           busy('action', async function () {
             await spUpdate(CONFIG.lists.mgr, x.r.mrId, actionsSummary(x.r.fb.actions));
+            saved = true;   // the action itself is stored; only the "next due" summary date may still fail
             await writeDates(CONFIG.lists.mgr, x.r.mrId, { NextActionDue: nextActionDue(x.r.fb.actions) });
             render(false);
-          }).catch(function () { ac.status = prev.status; ac.closedOn = prev.closedOn; render(false); });
+          }).catch(function () { if (!saved) { ac.status = prev.status; ac.closedOn = prev.closedOn; } render(false); });
         }
         if (ac.status === 'Open') {
           confirmBox('Close out this action?', 'Confirm the close-out criteria have been met: "' + ac.criteria + '"', 'Close out', function () { apply('Closed', TODAY); });
@@ -1903,6 +1917,7 @@ window.ESGOneToOne = function (ctx) {
     function command(newState, okMsg) {
       saveFeedback().then(function () {
         return busy('state', async function () {
+          await autosave.settle();
           await spUpdate(CONFIG.lists.mgr, r.mrId, { ReviewState: newState });
           r.state = newState; r.released = true; toast(okMsg); render(false);
         });
@@ -1996,12 +2011,12 @@ window.ESGOneToOne = function (ctx) {
     if (!per || typeof per !== 'object' || Array.isArray(per)) { per = {}; }
     var personal = { circ: per.circ === 'Yes' || per.circ === 'No' ? per.circ : '' };
     WB_PERSONAL.concat(WB_MORE).forEach(function (f) { personal[f[0]] = str(per[f[0]]); });
-    var arr = safeJson(w.ArrangementsJson, []);
+    var arr = jsonList(w.ArrangementsJson);
     var status = str(w.AssessmentStatus);
     return {
       id: w.ID, tech: name, rawStatus: ['Open', 'Submitted', 'Completed'].indexOf(status) >= 0 ? status : 'Open',
       date: localDate(w.AssessmentDate), position: str(w.Position), empNo: str(w.EmployeeNumber), answers: answers, personal: personal,
-      arrangements: (Array.isArray(arr) ? arr : []).map(function (a) {
+      arrangements: arr.map(function (a) {
         return { id: str(a.id) || String(Math.random()).slice(2, 10), text: str(a.text), review: /^\d{4}-\d{2}-\d{2}$/.test(str(a.review)) ? str(a.review) : '',
           effective: a.effective === 'Yes' || a.effective === 'No' ? a.effective : '', next: str(a.next) };
       }),
@@ -2214,7 +2229,11 @@ window.ESGOneToOne = function (ctx) {
         await spUpdate(CONFIG.lists.wellbeing, w.id, { Position: w.position, EmployeeNumber: w.empNo, AnswersJson: JSON.stringify(a), PersonalJson: JSON.stringify(p), AssessmentStatus: status });
       })();
     }
-    function save(status) { return busy('wb', function () { return writeWb(status).then(function () { dirty = false; }); }); }
+    function save(status) {
+      return busy('wb', function () {
+        return (status === 'Open' ? Promise.resolve() : autosave.settle()).then(function () { return writeWb(status); }).then(function () { dirty = false; });
+      });
+    }
     var wbStatus = h('span', { class: 'autosave', role: 'status' });
     if (!IS_TL && wbState(w) === 'Open') { autosave.set(function () { return writeWb('Open'); }, wbStatus); }
     function goStep(i) {
@@ -2593,7 +2612,8 @@ window.ESGOneToOne = function (ctx) {
           await saveItem('Bands', 'itemId', JSON.stringify(newBands.map(function (b, i) { return { name: b.name, max: i === 3 ? null : b.max }; })));
           SETTINGS.bands = newBands;
         }
-        if (JSON.stringify(rem) !== JSON.stringify(SETTINGS.reminders)) { await saveItem('Reminders', 'remindersId', JSON.stringify(rem)); SETTINGS.reminders = rem.slice(); }
+        // also rewrites a stored value the flow can't read cleanly, even if the days shown are unchanged
+        if (JSON.stringify(rem) !== SETTINGS.remindersRaw) { await saveItem('Reminders', 'remindersId', JSON.stringify(rem)); SETTINGS.reminders = rem.slice(); SETTINGS.remindersRaw = JSON.stringify(rem); }
         var newL = parseLabels(JSON.stringify(labels));
         if (JSON.stringify(newL) !== JSON.stringify(L)) { await saveItem('Labels', 'labelsId', JSON.stringify(newL)); L = newL; }
         if (problems.length) { teamChanged = true; throw new Error('Some dates were not saved – ' + problems.join(' | ')); }

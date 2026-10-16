@@ -504,7 +504,11 @@
     function Client() {}
     Client.configurations = { v1: { mock: true } };
     Client.prototype.get = function (url, cfg, options) { return handle('GET', url, options); };
-    Client.prototype.post = function (url, cfg, options) { return handle('POST', url, options); };
+    // test hook: db.latency (ms) delays every POST, like a real server, so double clicks can be tested
+    Client.prototype.post = function (url, cfg, options) {
+      if (!db.latency) { return handle('POST', url, options); }
+      return new Promise(function (res) { setTimeout(function () { res(handle('POST', url, options)); }, db.latency); });
+    };
     return new Client();
   }
 

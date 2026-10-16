@@ -61,7 +61,7 @@ class FakeSP:
     # ------------------------------------------------------------------ model helpers
     def _new_list(self, title, url, desc):
         lid = str(uuid.uuid4())
-        base = {n: {'Type': t, 'Name': n} for n, t in (('ID', 'Counter'), ('Title', 'Text'), ('Created', 'DateTime'),
+        base = {n: dict({'Type': t, 'Name': n}, **({'Format': 'DateTime'} if n in ('Created', 'Modified') else {})) for n, t in (('ID', 'Counter'), ('Title', 'Text'), ('Created', 'DateTime'),
                                                        ('Modified', 'DateTime'), ('Author', 'User'), ('Editor', 'User'),
                                                        ('Attachments', 'Attachments'), ('ContentType', 'Computed'),
                                                        ('LinkTitle', 'Computed'))}

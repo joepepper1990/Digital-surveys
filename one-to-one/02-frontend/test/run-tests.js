@@ -116,7 +116,8 @@ async function main() {
 
   // ---------------------------------------------------------------- 4. draft save payload
   await page.locator('.q-head .seg button:has-text("No")').nth(0).click();
-  await page.locator('textarea').nth(1).fill('Waiting for spares');
+  await page.locator('section.card:has-text("Challenges, blockers") button:has-text("+ Add")').click();   // Q2 is folded while empty (v4.4)
+  await page.locator('section.card:has-text("Challenges, blockers") textarea').first().fill('Waiting for spares');
   await page.locator('.mood button[aria-label="Steady"]').click();
   await page.locator('.side-tile:has-text("Win of the month") textarea').fill('Closed two permits right first time');
   await page.locator('.pagehead button:has-text("Save draft")').click();
@@ -863,6 +864,71 @@ async function main() {
   await S.waitForTimeout(5500);
   ok('Auto-save: the wellbeing form saves itself too', (await db20()).writes.filter(function (w) { return w.list === 'Wellbeing Assessments'; }).length === wbw + 1);
   await c20.close();
+
+  // ---------------------------------------------------------------- 21. bugs found by adversarial testing (16-Oct-2026)
+  var c21 = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  var Q = await c21.newPage();
+  Q.on('dialog', function (d) { d.accept(); });
+  async function db21() { return Q.evaluate(function () { return JSON.parse(JSON.stringify(OTO_MOCK.current.db)); }); }
+  async function put21(body) { await Q.evaluate(function (b) { var d = OTO_MOCK.current.db; (new Function('d', b))(d); sessionStorage.setItem('oto-mock-db-v6', JSON.stringify(d)); }, body); }
+  await open(Q, { as: 'alex' }); await Q.evaluate(function () { OTO_MOCK.reset(); });
+  await open(Q, { as: 'alex' });
+  // details of a question switched to No and back to Yes are kept and saved
+  var q4c21 = Q.locator('section.card:has-text("wellbeing, workplace support")');
+  await q4c21.locator('button:has-text("Yes")').click();
+  await q4c21.locator('textarea').fill('Back pain after the long drive');
+  await q4c21.locator('button:has-text("No")').click();
+  await Q.locator('.pagehead button:has-text("Save draft")').click(); await Q.waitForTimeout(250);
+  await q4c21.locator('button:has-text("Yes")').click();
+  ok('Answers: details hidden by No and shown again by Yes are not lost', (await q4c21.locator('textarea').inputValue()) === 'Back pain after the long drive' &&
+    !/Q4 details/.test(await Q.locator('[data-oto-root]').innerText()));
+  await Q.locator('.pagehead button:has-text("Save draft")').click(); await Q.waitForTimeout(250);
+  ok('Answers: … and are saved', (await db21()).lists['Monthly Reviews'].find(function (x) { return x.Technician.indexOf('alex.') >= 0 && x.MonthKey === curMonth(); }).Q4WellbeingDetail === 'Back pain after the long drive');
+  // "Same as last month" is auto-saved
+  var w21 = (await db21()).writes.length;
+  var same = Q.locator('button:has-text("Same as last month")');
+  if (await same.count()) { await same.click(); await Q.waitForTimeout(5500); }
+  ok('Auto-save: "Same as last month" is saved without clicking Save', !(await same.count()) || (await db21()).writes.length > w21);
+  // a broken link no longer traps the technician
+  await open(Q, { as: 'alex', reviewId: '99999' });
+  await Q.locator('.topbar >> text=This month').click(); await Q.waitForTimeout(150);
+  ok('Links: after "Review not found", This month opens the current review', (await Q.locator('select[aria-label="Choose a month"]').count()) === 1);
+  // null entries in JSON columns and bad Bands don't stop the page loading
+  await put21("var rv = d.lists['Monthly Reviews'].find(function (x) { return x.Technician.indexOf('sam.') >= 0; }); rv.ExpectationsJson = '[null]';" +
+    "var mr = d.lists['Manager Reviews'][0]; mr.ActionsJson = '[null]'; mr.ExpectationFeedbackJson = '[null,1]'; mr.ExpectationSnapshotJson = '[null]';" +
+    "var w = d.lists['Wellbeing Assessments'][0]; if (w) { w.ArrangementsJson = '[null]'; }" +
+    "var b = d.lists['1-to-1 Settings'].find(function (x) { return x.Title === 'Bands'; }); b.Value = '[null,null,null,null]';");
+  var e21 = await open(Q, { as: 'tl' });
+  ok('Robustness: null entries in JSON columns and broken Bands do not stop the TL page', !e21.length && /Team – appraisal outlook/.test(await Q.locator('[data-oto-root]').innerText()), e21.join('; '));
+  var e21b = await open(Q, { as: 'sam' });
+  ok('Robustness: … nor the technician page', !e21b.length && (await Q.locator('select[aria-label="Choose a month"]').count()) === 1, e21b.join('; '));
+  // Reminders: the page reads the setting exactly as Flow 1 does, and Save rewrites an unreadable value
+  await put21("d.lists['1-to-1 Settings'].push({ ID: d.nextId['1-to-1 Settings']++, Title: 'Reminders', Value: 'nonsense' });");
+  await open(Q, { as: 'tl' });
+  ok('Reminders: an unreadable setting shows as off (as Flow 1 would behave)', /reminders off/.test(await Q.locator('.attn-card').innerText()));
+  await Q.locator('.topbar >> text=Settings').click(); await Q.locator('.modal button:has-text("Save settings")').click(); await Q.waitForTimeout(300);
+  ok('Reminders: Save rewrites it as a clean value', (await db21()).lists['1-to-1 Settings'].find(function (x) { return x.Title === 'Reminders'; }).Value === '[]');
+  // two people with the same name stay separate
+  await put21("d.lists['Technicians'].find(function (x) { return x.Title === 'Sam Patel'; }).Title = 'Alex Morgan';");
+  await open(Q, { as: 'tl' });
+  await Q.locator('.teammenu > summary').click();
+  var menu21 = await Q.locator('.teammenu .menu').innerText();
+  ok('Names: two people with the same name are listed separately', /Alex Morgan \(sam\.patel@example\.test\)/.test(menu21) && (menu21.match(/Alex Morgan/g) || []).length === 2, menu21);
+  // appraisal year must be in the form Flow 1 understands
+  await open(Q, { as: 'tl' });
+  await Q.locator('.topbar >> text=Expectations').click();
+  var n21 = (await db21()).lists['Appraisal Expectations'].length;
+  await Q.locator('#oto-x-title').fill('Year format check'); await Q.locator('#oto-x-meas').fill('m');
+  await Q.locator('#oto-x-year').fill('2026-27');
+  await Q.locator('button:has-text("Add expectation")').click(); await Q.waitForTimeout(250);
+  ok('Expectations: a year like 2026-27 is refused (Flow 1 needs 2026/27)', (await db21()).lists['Appraisal Expectations'].length === n21);
+  // double clicks don't create duplicates (slow server)
+  await Q.evaluate(function () { OTO_MOCK.current.db.latency = 400; });
+  await Q.locator('#oto-x-year').fill(await Q.evaluate(function () { var t = new Date(), y = t.getMonth() >= 3 ? t.getFullYear() : t.getFullYear() - 1; return y + '/' + String(y + 1).slice(2); }));
+  await Q.locator('button:has-text("Add expectation")').dblclick(); await Q.waitForTimeout(2500);
+  ok('Double click: Add expectation creates one item, not two', (await db21()).lists['Appraisal Expectations'].filter(function (x) { return x.Title === 'Year format check'; }).length === 1);
+  await Q.evaluate(function () { OTO_MOCK.current.db.latency = 0; });
+  await c21.close();
 
   // XSS: hostile feedback shown to the TL, and typed into the panel
   await open(page, { as: 'tl', xss: '1' });

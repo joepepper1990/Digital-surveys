@@ -642,6 +642,7 @@ def flow_daily():
         *load_ids(),
         ('Get_technicians', get_items('Technicians', 'Active eq 1', top=5000)),
         ('Get_expectations', get_items(LIST_TITLE['exp'], 'Active eq 1', top=500, order='SortOrder asc')),
+        ('Active_tech_emails', select("@body('Get_technicians')?['value']", "@toLower(coalesce(item()?['Technician']?['Email'], ''))", secure=True)),
         ('Each_technician', each_tech),
         ('Get_reminder_setting', get_items(SETTINGS, "Title eq 'Reminders'", top=1)),
         ('Reminder_days', compose("@if(empty(body('Get_reminder_setting')?['value']), '" + DEFAULT_REMINDERS + "', "
@@ -650,7 +651,9 @@ def flow_daily():
         ('Reminder_day', cond("@contains(concat(',', replace(replace(replace(string(outputs('Reminder_days')), '[', ''), ']', ''), ' ', ''), ','), "
                               "concat(',', string(outputs('Day')), ','))", seq(
             ('Outstanding', get_items(MGR, "MonthKey eq '@{outputs('MonthKey')}' and ReviewState eq 'Open'", top=5000)),
-            ('Outstanding_linked', query("@body('Outstanding')?['value']", "@not(empty(item()?['LinkSentOn']))", secure=True)),
+            # only people still active (a deactivated person has lost access and would get a link they can't open)
+            ('Outstanding_linked', query("@body('Outstanding')?['value']", "@and(not(empty(item()?['LinkSentOn'])), "
+                                         "contains(body('Active_tech_emails'), toLower(coalesce(item()?['Technician']?['Email'], '#none'))))", secure=True)),
             ('Each_outstanding', foreach("@body('Outstanding_linked')", seq(
                 ('Send_E2', email("@items('Each_outstanding')?['Technician']?['Email']",
                                   "Reminder: your 1-to-1 for @{outputs('MonthName')} is due @{outputs('DeadlineText')}", e2)),
@@ -664,14 +667,13 @@ def flow_daily():
                 # being saved/turned on until setup has created the list (upgrade from 1.0).
                 ('Get_wellbeing', http('GET', "_api/web/lists(guid'@{first(body('List_wellbeing'))?['Id']}')/items?$select=ID,NextReviewDate,CompletedOn,"
                                        "Technician/Title,Technician/EMail&$expand=Technician&$filter=AssessmentStatus eq 'Completed'&$top=5000")),
-                ('Active_emails', select("@body('Get_technicians')?['value']", "@toLower(coalesce(item()?['Technician']?['Email'], ''))", secure=True)),
                 ('Today', compose("@formatDateTime(outputs('ukNow'), 'yyyy-MM-dd')")),
                 ('In7', compose("@formatDateTime(addDays(outputs('ukNow'), 7), 'yyyy-MM-dd')")),
                 # only assessments the flow itself completed (CompletedOn is stamped by Flow 5), for someone still active
                 ('Reviews_due', query("@body('Get_wellbeing')?['value']",
                                       "@and(contains(createArray(outputs('Today'), outputs('In7')), " + local_date("item()?['NextReviewDate']") + "), "
                                       "not(empty(item()?['CompletedOn'])), "
-                                      "contains(body('Active_emails'), toLower(coalesce(item()?['Technician']?['EMail'], '#none'))))", secure=True)),
+                                      "contains(body('Active_tech_emails'), toLower(coalesce(item()?['Technician']?['EMail'], '#none'))))", secure=True)),
                 ('Each_review_due', foreach("@body('Reviews_due')", seq(
                     ('Send_E12', email('@' + TL_EMAIL, "Wellbeing review @{if(equals(" + local_date("items('Each_review_due')?['NextReviewDate']") +
                                        ", outputs('Today')), 'due today', 'due in 7 days')}: @{items('Each_review_due')?['Technician']?['Title']}", e12)),
@@ -718,7 +720,8 @@ def flow_submitted():
     MGRO = "outputs('Mgr')"
     e3_subject = ("@{if(startsWith(coalesce(" + TB + "?['Q9FollowUp']?['Value'], ''), 'Arrange a dedicated'), '[1-to-1 REQUESTED] ', '')}"
                   "1-to-1 submitted: @{" + MGRO + "?['Title']}")
-    e3 = ("<p>Submitted @{if(greater(ticks(utcNow()), ticks(" + MGRO + "?['DueDate'])), 'late', 'on time')}. "
+    AT = "outputs('Submitted_at')"
+    e3 = ("<p>Submitted @{if(greater(ticks(" + AT + "), ticks(" + MGRO + "?['DueDate'])), 'late', 'on time')}. "
           '<a href="' + link(TB + "?['ID']") + '"><b>Open review</b></a></p>')
     try_actions = seq(
         *load_ids(),
@@ -726,14 +729,18 @@ def flow_submitted():
         ('Unknown_item', cond("@equals(length(body('Find_mgr')?['value']), 0)", seq(('Not_a_flow_review', terminate('Cancelled'))))),
         ('Mgr', compose("@first(body('Find_mgr')?['value'])", secure=True)),
         ('PrevState', compose('@' + MGRO + "?['ReviewState']?['Value']")),
+        # When it was submitted: the item's Modified time, not when this flow ran (the trigger polls every 5 minutes, so a
+        # 23:58 submission would otherwise be stamped next month and late). Modified older than 30 minutes is not trusted.
+        ('Submitted_at', compose("@if(greater(ticks(coalesce(" + TB + "?['Modified'], '1900-01-01T00:00:00Z')), ticks(addMinutes(utcNow(), -30))), "
+                                 + TB + "?['Modified'], utcNow())")),
         ensure_user('Ensure_user', MGRO + "?['Technician']?['Claims']"),
         *setperm('', 'reviewsList', TB + "?['ID']", "outputs('Ids')?['read']", "body('Ensure_user')?['Id']"),
         ('First_submission', cond("@equals(outputs('PrevState'), 'Open')", seq(
             ('Stamp_submitted', patch_item(MGR, '@' + MGRO + "?['ID']", {
                 'Title': '@' + MGRO + "?['Title']",
                 'ReviewState/Value': 'Submitted',
-                'SubmittedOn': '@utcNow()',
-                'SubmittedLate': "@greater(ticks(utcNow()), ticks(" + MGRO + "?['DueDate']))",
+                'SubmittedOn': '@' + AT,
+                'SubmittedLate': "@greater(ticks(" + AT + "), ticks(" + MGRO + "?['DueDate']))",
                 'TechFollowUp': "@coalesce(" + TB + "?['Q9FollowUp']?['Value'], '')",
             })),
             ('Send_E3', email('@' + TL_EMAIL, e3_subject, e3)),
@@ -838,7 +845,12 @@ def flow_team():
         ('Get_members', http('GET', "_api/web/sitegroups(@{" + gid + "})/users?$select=Id")),
         ('Member_ids', select("@body('Get_members')?['value']", "@item()?['Id']", secure=True)),
         ('Is_member', compose("@contains(body('Member_ids'), body('Ensure_user')?['Id'])")),
-        ('Should_be_member', compose("@equals(" + TB + "?['Active'], true)")),
+        # the person keeps access while ANY of their rows is Active (e.g. a duplicate row being deactivated)
+        ('Get_active', get_items(LIST_TITLE['techs'], 'Active eq 1', top=5000)),
+        ('Active_logins', select("@body('Get_active')?['value']", "@toLower(coalesce(item()?['Technician']?['Claims'], '#none'))", secure=True)),
+        ('Active_emails', select("@body('Get_active')?['value']", "@toLower(coalesce(item()?['Technician']?['Email'], '#none'))", secure=True)),
+        ('Should_be_member', compose("@or(equals(" + TB + "?['Active'], true), contains(body('Active_logins'), toLower(" + TB + "?['Technician']?['Claims'])), "
+                                     "contains(body('Active_emails'), toLower(coalesce(" + TB + "?['Technician']?['Email'], '#none'))))")),
         ('Add_needed', cond("@and(outputs('Should_be_member'), not(outputs('Is_member')))", seq(
             ('Add_to_group', http('POST', "_api/web/sitegroups(@{" + gid + "})/users",
                                   '{"__metadata":{"type":"SP.User"},"LoginName":"@{' + TB + "?['Technician']?['Claims']}" + '"}', verbose=True)),
@@ -850,9 +862,6 @@ def flow_team():
         ))),
         # Full sync: the Technicians list is the single source of truth. Anyone left in the group without an Active row
         # (added by hand, the person on a row was changed, or a row was deleted) is removed and listed in one email.
-        ('Get_active', get_items(LIST_TITLE['techs'], 'Active eq 1', top=5000)),
-        ('Active_logins', select("@body('Get_active')?['value']", "@toLower(coalesce(item()?['Technician']?['Claims'], '#none'))", secure=True)),
-        ('Active_emails', select("@body('Get_active')?['value']", "@toLower(coalesce(item()?['Technician']?['Email'], '#none'))", secure=True)),
         ('Get_members_now', http('GET', "_api/web/sitegroups(@{" + gid + "})/users?$select=Id,Title,LoginName,Email,IsSiteAdmin")),
         ('Strays', query("@body('Get_members_now')?['value']",
                          "@and(not(equals(item()?['IsSiteAdmin'], true)), not(contains(body('Active_logins'), toLower(coalesce(item()?['LoginName'], '')))), "

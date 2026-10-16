@@ -344,6 +344,8 @@ def call(name, a, ctx):
         return iso(dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0))
     if name == 'addDays':
         return iso(parse_ts(a[0]) + timedelta(days=a[1]))
+    if name == 'addMinutes':
+        return iso(parse_ts(a[0]) + timedelta(minutes=a[1]))
     if name == 'addToTime':
         dt = parse_ts(a[0])
         if a[2] != 'Month':

@@ -665,6 +665,56 @@ def feedback_checks():
        11 not in it3['ra'], (st, it3['fields']))
 
 
+
+def qa_regression_checks():
+    """Bugs found by adversarial testing (16-Oct-2026)."""
+    sp = fsp.FakeSP()
+    run('0', sp, T('2026-10-14T09:00:00'))
+    techs, mr, mgr = sp.list_by_title('Technicians'), sp.list_by_title('Monthly Reviews'), sp.list_by_title('Manager Reviews')
+    gid = next(g for g, d in sp.groups.items() if d['Title'] == '1-to-1 Technicians')
+    alex = sp.write_item(techs, None, {'item/Title': 'Alex Morgan', 'item/Technician/Claims': sp.users[11]['Claims'], 'item/TechnicianAadId': 'aad-alex'})
+    sam = sp.write_item(techs, None, {'item/Title': 'Sam Patel', 'item/Technician/Claims': sp.users[12]['Claims'], 'item/TechnicianAadId': 'aad-sam'})
+    fire('4', sp, 'Technicians', alex['id'], T('2026-10-15T10:00:00'))
+    fire('4', sp, 'Technicians', sam['id'], T('2026-10-15T10:01:00'))
+    run('1', sp, T('2026-11-01T07:00:00'), overrides={'varTestDate': '2026-11-01T07:00:00'})
+    # deactivated people get no reminders
+    sp.write_item(techs, sam['id'], {'item/Active': False})
+    n = len(sp.emails)
+    run('1', sp, T('2026-11-20T07:00:00'), overrides={'varTestDate': '2026-11-20T07:00:00'})
+    rem = [e for e in sp.emails[n:] if e['subject'].startswith('Reminder:')]
+    ok('Flow 1: reminders go only to people still active (not to a deactivated person)', len(rem) == 1 and rem[0]['to'] == 'alex.morgan@example.test', rem)
+    sp.write_item(techs, sam['id'], {'item/Active': True})
+    # a duplicate row being deactivated must not remove a person who still has an Active row
+    dup = sp.write_item(techs, None, {'item/Title': 'Alex Morgan', 'item/Technician/Claims': sp.users[11]['Claims']})
+    fire('4', sp, 'Technicians', dup['id'], T('2026-11-21T10:00:00'))
+    sp.write_item(techs, dup['id'], {'item/Active': False})
+    n = len(sp.emails)
+    st, eng = fire('4', sp, 'Technicians', dup['id'], T('2026-11-21T10:05:00'))
+    ok('Flow 4: deactivating a duplicate row keeps access while another row is Active', st == 'Succeeded' and 11 in sp.groups[gid]['members'] and
+       not any('access removed' in e['subject'] for e in sp.emails[n:]), (st, eng and eng.log, [e['subject'] for e in sp.emails[n:]]))
+    # submitted at 23:58 on the deadline day, flow runs at 00:02 next month: on time, stamped with the submission time
+    r_alex = next(i for i in mr['items'].values() if i['fields'].get('TechnicianAadId', 'aad-alex') and i['fields'].get('Title', '').startswith('Alex'))
+    sp.me = 11
+    sp.write_item(mr, r_alex['id'], {'item/ReviewStatus/Value': 'Submitted'})
+    sp.me = 10
+    r_alex['fields']['Modified'] = '2026-11-30T23:58:00Z'
+    n = len(sp.emails)
+    st, eng = fire('2', sp, 'Monthly Reviews', r_alex['id'], T('2026-12-01T00:02:00'))
+    m_alex = next(i for i in mgr['items'].values() if str(i['fields'].get('ReviewItemId', '')).split('.')[0] == str(r_alex['id']))
+    ok('Flow 2: a submission just before the deadline is on time, even if the flow runs after midnight', st == 'Succeeded' and
+       m_alex['fields'].get('SubmittedLate') is False and str(m_alex['fields'].get('SubmittedOn', '')).startswith('2026-11-30T23:58') and
+       any('on time' in e['body'] for e in sp.emails[n:]), (st, eng and eng.log, m_alex['fields'].get('SubmittedOn'), m_alex['fields'].get('SubmittedLate')))
+    r_sam = next(i for i in mr['items'].values() if i['fields'].get('Title', '').startswith('Sam'))
+    sp.me = 12
+    sp.write_item(mr, r_sam['id'], {'item/ReviewStatus/Value': 'Submitted'})
+    sp.me = 10
+    r_sam['fields']['Modified'] = '2026-11-02T08:00:00Z'   # back-dated by the technician
+    st, eng = fire('2', sp, 'Monthly Reviews', r_sam['id'], T('2026-12-03T09:00:00'))
+    m_sam = next(i for i in mgr['items'].values() if str(i['fields'].get('ReviewItemId', '')).split('.')[0] == str(r_sam['id']))
+    ok('Flow 2: a Modified time more than 30 minutes old is not trusted (no back-dating)', st == 'Succeeded' and m_sam['fields'].get('SubmittedLate') is True,
+       (st, m_sam['fields'].get('SubmittedOn')))
+
+
 if __name__ == '__main__':
     site = setup_checks()
     partial_site_checks()
@@ -674,6 +724,7 @@ if __name__ == '__main__':
     extra_checks()
     team_and_wellbeing_checks()
     feedback_checks()
+    qa_regression_checks()
     passed = sum(1 for _, p in RESULTS if p)
     print('\n[{2}] {0} / {1} passed'.format(passed, len(RESULTS), MODE))
     sys.exit(0 if passed == len(RESULTS) else 1)
