@@ -17,7 +17,7 @@ window.ESGOneToOneReset = function (ctx) {
   // The only lists this tool reads or deletes from. Expectations are listed but never selected by default.
   var LISTS = [
     { key: 'reviews', title: 'Monthly Reviews', select: 'ID,Title,MonthKey,ReviewStatus,Created,Technician/Title', expand: 'Technician', who: 'Technician', month: 'MonthKey', status: 'ReviewStatus' },
-    { key: 'mgr', title: 'Manager Reviews', select: 'ID,Title,MonthKey,ReviewState,Created,Technician/Title', expand: 'Technician', who: 'Technician', month: 'MonthKey', status: 'ReviewState' },
+    { key: 'mgr', title: 'Manager Reviews', select: 'ID,Title,MonthKey,ReviewState,ReviewItemId,Created,Technician/Title', expand: 'Technician', who: 'Technician', month: 'MonthKey', status: 'ReviewState' },
     { key: 'wellbeing', title: 'Wellbeing Assessments', select: 'ID,Title,AssessmentStatus,AssessmentDate,Created,Technician/Title', expand: 'Technician', who: 'Technician', month: 'AssessmentDate', status: 'AssessmentStatus' },
     { key: 'feedback', title: '1-to-1 Feedback', select: 'ID,Title,FeedbackType,DeliveryStatus,Created,Author/Title', expand: 'Author', who: 'Author', month: 'Created', status: 'DeliveryStatus' },
     { key: 'challenges', title: '1-to-1 Challenges', select: 'ID,Title,MonthKey,ChallengeStatus,Created,Author/Title', expand: 'Author', who: 'Author', month: 'MonthKey', status: 'ChallengeStatus' },
@@ -96,7 +96,12 @@ window.ESGOneToOneReset = function (ctx) {
   }
 
   // ------------------------------------------------------------------ steps
-  function monthOf(v) { var s = str(v); return /^\d{4}-\d{2}/.test(s) ? s.slice(0, 7) : ''; }
+  // a date or time as its UK month (SharePoint returns date-only values as midnight UK time in UTC: 1 July = 30 June 23:00Z)
+  function monthOf(v) {
+    var s = str(v);
+    if (/T\d{2}:/.test(s)) { var d = new Date(s); if (!isNaN(d.getTime())) { return d.toLocaleDateString('en-CA', { timeZone: 'Europe/London' }).slice(0, 7); } }
+    return /^\d{4}-\d{2}/.test(s) ? s.slice(0, 7) : '';
+  }
   async function inventory() {
     var out = {};
     for (var i = 0; i < LISTS.length; i++) {
@@ -104,10 +109,24 @@ window.ESGOneToOneReset = function (ctx) {
       var rows = await getAll(l.title, '$select=' + l.select + '&$expand=' + l.expand + '&$orderby=ID');
       out[l.key] = { list: l, missing: rows === null, rows: (rows || []).map(function (x) {
         var w = x[l.who];
-        return { id: Number(x.ID), title: str(x.Title), who: str(w && w.Title), month: monthOf(x[l.month]), status: str(x[l.status] && x[l.status].Value !== undefined ? x[l.status].Value : x[l.status]) };
+        return { id: Number(x.ID), title: str(x.Title), who: str(w && w.Title), month: monthOf(x[l.month]), status: str(x[l.status] && x[l.status].Value !== undefined ? x[l.status].Value : x[l.status]),
+          pair: l.key === 'mgr' ? Number(x.ReviewItemId) || 0 : 0 };
       }) };
     }
     return out;
+  }
+  // A Monthly Review and its Manager Review are always kept or deleted together: half a pair left behind would stay
+  // visible, and Flow 1 would create the month again and email the link a second time.
+  function partnerOf(key, r) {
+    if (!inv) { return null; }
+    if (key === 'mgr' && r.pair) { var rv = inv.reviews.rows.find(function (x) { return x.id === r.pair; }); return rv ? { key: 'reviews', row: rv } : null; }
+    if (key === 'reviews') { var m = inv.mgr.rows.find(function (x) { return x.pair === r.id; }); return m ? { key: 'mgr', row: m } : null; }
+    return null;
+  }
+  function pick(key, r, on) {
+    picked[key + ':' + r.id] = on;
+    var p = partnerOf(key, r);
+    if (p) { picked[p.key + ':' + p.row.id] = on; }
   }
   function selected() {
     var out = [];
@@ -204,11 +223,11 @@ window.ESGOneToOneReset = function (ctx) {
       var rows = visible(l), nPicked = s.rows.filter(function (r) { return picked[l.key + ':' + r.id]; }).length;
       var all = h('input', { type: 'checkbox', 'aria-label': 'Select all shown in ' + l.title });
       all.checked = rows.length > 0 && rows.every(function (r) { return picked[l.key + ':' + r.id]; });
-      all.addEventListener('change', function () { rows.forEach(function (r) { picked[l.key + ':' + r.id] = all.checked; }); render(); });
+      all.addEventListener('change', function () { rows.forEach(function (r) { pick(l.key, r, all.checked); }); render(); });
       var body = rows.map(function (r) {
         var c = h('input', { type: 'checkbox', 'aria-label': 'Select ' + l.title + ' ' + r.id });
         c.checked = !!picked[l.key + ':' + r.id];
-        c.addEventListener('change', function () { picked[l.key + ':' + r.id] = c.checked; render(); });
+        c.addEventListener('change', function () { pick(l.key, r, c.checked); render(); });
         return h('tr', null, [h('td', null, c), h('td', { text: String(r.id) }), h('td', { text: r.title }), h('td', { text: r.who }), h('td', { text: r.month }), h('td', { text: r.status })]);
       });
       return h('details', { class: 'rs-list', open: nPicked > 0 || null }, [
@@ -220,7 +239,7 @@ window.ESGOneToOneReset = function (ctx) {
     });
     var sel = selected(), curSig = sig();
     wrap.appendChild(step(1, 'Inventory and choose', [h('div', { class: 'rs-filters' }, [whoSel, monSel,
-      btn('Select all shown (except expectations)', function () { LISTS.forEach(function (l) { if (!l.optIn && !inv[l.key].missing) { visible(l).forEach(function (r) { picked[l.key + ':' + r.id] = true; }); } }); render(); }),
+      btn('Select all shown (except expectations)', function () { LISTS.forEach(function (l) { if (!l.optIn && !inv[l.key].missing) { visible(l).forEach(function (r) { pick(l.key, r, true); }); } }); render(); }),
       btn('Clear selection', function () { picked = {}; render(); }),
       btn('Re-read', function () { act('Reading', async function () { inv = await inventory(); picked = {}; backup = dry = null; }); })])].concat(lists), sel.length ? 'done' : ''));
 
@@ -236,7 +255,7 @@ window.ESGOneToOneReset = function (ctx) {
     var dried = backed && dry && dry.sig === curSig;
     var per = LISTS.map(function (l) { var n = sel.filter(function (x) { return x.list.key === l.key; }).length; return n ? h('li', { text: l.title + ': ' + n }) : null; }).filter(Boolean);
     wrap.appendChild(step(3, 'Dry run', [
-      h('p', { text: 'Shows exactly what would be deleted. Nothing is changed.' }),
+      h('p', { text: 'Shows exactly what would be deleted. Nothing is changed. A monthly review and its manager review are always selected together.' }),
       btn('Run the dry run', function () { dry = { sig: curSig }; msg = { text: 'Dry run: ' + sel.length + ' records would be deleted. Nothing was changed.' }; render(); }, { disabled: !backed }),
       dried ? h('div', null, [h('ul', null, per), h('details', null, [h('summary', { text: 'Every record' }), h('ul', null, sel.map(function (x) { return h('li', { text: x.list.title + ' #' + x.row.id + ' – ' + x.row.title + (x.row.who ? ' (' + x.row.who + ')' : '') }); }))])]) : null
     ], dried ? 'done' : ''));

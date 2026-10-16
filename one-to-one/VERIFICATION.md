@@ -8,8 +8,8 @@
 
 | Check | How | Result |
 |---|---|---|
-| Frontend | `02-frontend`: `node tools/build-mock.js && node test/run-tests.js` (headless Chromium against the local mock) | **306 / 306** |
-| Reset tool | `02-frontend`: `node test/run-reset-tests.js` | **31 / 31** |
+| Frontend | `02-frontend`: `node tools/build-mock.js && node test/run-tests.js` (headless Chromium against the local mock) | **319 / 319** |
+| Reset tool | `02-frontend`: `node test/run-reset-tests.js` | **33 / 33** |
 | Solution build | `04-solution/tools/build.py`: generate `src/`, validate, pack with Microsoft's Power Platform CLI, unpack again and compare | Packs; round trip identical |
 | Static validator | Expressions, references, scopes, run-after chains, required connector parameters, list/column names, JSON request bodies, field XML / view CAML, schedule time zone, secured run history, no hidden failures; 1.4: REST MERGE (not connector writes) for columns added after their list was created, no `secureData` on variables | 8 flows clean (0–6, 8) |
 | Validator proof | `tools/test_validate.py`: deliberately broken copies of the flows | **34 / 34** caught |

@@ -661,7 +661,7 @@ window.ESGOneToOne = function (ctx) {
   function isoDay(v) { var d = localDate(v); return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : ''; }
   function uniqSorted(a) { return a.filter(function (x, i) { return x && a.indexOf(x) === i; }).sort(); }
   function parseHistory(raw) {
-    return jsonList(raw).map(function (x) { return { start: isoDay(x.start), completed: isoDay(x.completed), nextDue: isoDay(x.nextDue), recordedOn: str(x.recordedOn) }; })
+    return jsonList(raw).map(function (x) { return { start: isoDay(x.start), completed: isoDay(x.completed), nextDue: isoDay(x.nextDue), prevDue: isoDay(x.prevDue), recordedOn: str(x.recordedOn) }; })
       .filter(function (x) { return x.completed; }).sort(function (x, y) { return x.completed < y.completed ? -1 : 1; });
   }
   function parseBoundaries(raw) { var v = safeJson(raw, []); return Array.isArray(v) ? uniqSorted(v.map(function (x) { return isoDay(x); })) : []; }
@@ -706,6 +706,7 @@ window.ESGOneToOne = function (ctx) {
     return { months: periodMonths(p), rated: prs.filter(function (r) { return isRated(r, aud); }).length, missed: prs.filter(isMissed).length };
   }
   function periodLabel(p) {
+    if (p.noBaseline && p.closed) { return 'Up to ' + monthLabel(p.end) + ' (appraisal completed ' + fmtDate(p.endDate) + ')'; }
     if (p.noBaseline) { return 'All reviews so far – no period start set yet'; }
     var from = monthLabel(addMonths(p.start, 1));
     return p.closed ? from + ' – ' + monthLabel(p.end) + ' (appraisal completed ' + fmtDate(p.endDate) + ')'
@@ -1413,8 +1414,8 @@ window.ESGOneToOne = function (ctx) {
   async function recordCompletion(t, completed, nextDue) {
     var info = TECH_INFO[t], hist = (info.history || []).slice(), b = boundariesOf(t);
     var last = hist[hist.length - 1];
-    var entry = { start: b.length ? b[b.length - 1] : '', completed: completed, nextDue: nextDue, recordedOn: TODAY };
-    if (last && last.completed.slice(0, 7) === completed.slice(0, 7)) { entry.start = last.start; hist[hist.length - 1] = entry; }   // a correction
+    var entry = { start: b.length ? b[b.length - 1] : '', completed: completed, nextDue: nextDue, prevDue: info.appraisal || '', recordedOn: TODAY };
+    if (last && last.completed.slice(0, 7) === completed.slice(0, 7)) { entry.start = last.start; entry.prevDue = last.prevDue || ''; hist[hist.length - 1] = entry; }   // a correction
     else { hist.push(entry); }
     await spUpdate(CONFIG.lists.techs, info.itemId, { AppraisalHistoryJson: JSON.stringify(hist) });
     info.history = hist;
@@ -1430,8 +1431,9 @@ window.ESGOneToOne = function (ctx) {
     var start = hist.length ? hist[hist.length - 1].completed : gone.start;
     await spUpdate(CONFIG.lists.techs, info.itemId, { AppraisalHistoryJson: JSON.stringify(hist) });
     info.history = hist;
-    await writeDates(CONFIG.lists.techs, info.itemId, { AppraisalCycleStart: start || '' });
-    info.cycleStart = start || '';
+    var due = gone.prevDue && info.appraisal === gone.nextDue ? gone.prevDue : info.appraisal;   // only if not changed since
+    await writeDates(CONFIG.lists.techs, info.itemId, { AppraisalCycleStart: start || '', AppraisalDate: due || '' });
+    info.cycleStart = start || ''; info.appraisal = due || '';
     await writeBoundaries(t);
   }
   function techView() {
@@ -2067,7 +2069,7 @@ window.ESGOneToOne = function (ctx) {
   function buildAmendment(x) {
     var ch = safeJson(x.ChangesJson, []);
     return { id: x.ID, reviewId: Number(x.ReviewItemId) || 0, mrId: Number(x.ManagerReviewId) || 0, month: str(x.MonthKey), reason: str(x.Reason),
-      fields: str(x.ChangedFields), changes: Array.isArray(ch) ? ch.filter(function (c) { return c && typeof c === 'object' && AMEND_LABELS[c.f]; }) : [],
+      fields: str(x.ChangedFields), changes: Array.isArray(ch) ? ch.filter(function (c) { return c && typeof c === 'object' && Object.prototype.hasOwnProperty.call(AMEND_LABELS, c.f); }) : [],
       status: NOTIFY.indexOf(str(x.NotifyStatus)) >= 0 ? str(x.NotifyStatus) : 'Draft', notifiedOn: str(x.NotifiedOn), error: str(x.NotifyError),
       created: str(x.Created), modified: str(x.Modified), by: str(x.Author && x.Author.Title), tech: str(x.Technician && x.Technician.Title) };
   }
@@ -2091,6 +2093,7 @@ window.ESGOneToOne = function (ctx) {
   }
   // A Draft left behind (the page closed mid-save): has the review got the new values?
   function draftLanded(x) {
+    if (AMENDMENTS.some(function (y) { return y.reviewId === x.reviewId && y.created > x.created && y.status !== 'Draft' && y.status !== 'Cancelled'; })) { return false; }
     var r = REVIEWS.find(function (y) { return y.id === x.reviewId; });
     if (!r || !x.changes.length) { return false; }
     var now = amendValues(r, r.answers, r.fb);
@@ -2155,7 +2158,7 @@ window.ESGOneToOne = function (ctx) {
     var j = /Json$/.test(f) ? safeJson(v, null) : null;
     if (Array.isArray(j)) {
       if (!j.length) { return '(none)'; }
-      return j.map(function (e) {
+      return j.filter(function (e) { return e && typeof e === 'object'; }).map(function (e) {
         if (f === 'ActionsJson') { return '• ' + str(e.text) + ' – ' + str(e.owner) + ', due ' + (str(e.due) ? fmtDate(str(e.due)) : '—') + ', ' + str(e.status); }
         var sn = r && r.snapshot.find(function (x) { return String(x.id) === String(e.id); });
         var title = str(e.title) || (sn ? sn.title : 'Expectation');
@@ -2186,12 +2189,14 @@ window.ESGOneToOne = function (ctx) {
     function yn(v, detail) { return has ? (v || '(not answered)') + (v === 'Yes' && detail ? ' – ' + detail : '') : ''; }
     function tb(label, key, rows) { return textBox(label, a[key], function (v) { a[key] = v; }, false, rows || 2); }
     function ynEdit(key, title, details) {
-      return h('div', { class: 'stack amend-edit', style: 'gap:8px' }, [labelled(ynSeg(a[key], function (v) { a[key] = v; }), title + ' – ' + L.one + '\'s answer')].concat(details));
+      var box = h('div', { class: 'stack', style: 'gap:8px' }, details);
+      box.hidden = a[key] !== 'Yes';   // details are kept only with a Yes, as on the technician's form
+      return h('div', { class: 'stack amend-edit', style: 'gap:8px' }, [labelled(ynSeg(a[key], function (v) { a[key] = v; box.hidden = v !== 'Yes'; }), title + ' – ' + L.one + '\'s answer'), box]);
     }
     var wl = WORKLOAD.find(function (w) { return w.value === a.q3; });
     var main = [
       qCard(1, 'What has gone well', null, [amendTech ? tb(L.one + '\'s answer', 'q1', 3) : ans(has ? a.q1 : ''), fbBox('q1')]),
-      qCard(2, 'Challenges, blockers and support needed', null, [amending
+      qCard(2, 'Challenges, blockers and support needed', null, [amendTech
         ? h('div', { class: 'fgrid c4' }, [['Issue', 'issue'], ['Impact', 'impact'], ['Tried', 'tried'], ['Support needed', 'support']].map(function (p) {
           return textBox(p[0], a.q2[p[1]], function (v) { a.q2[p[1]] = v; }, false, 3); }))
         : has && (a.q2.issue || a.q2.impact || a.q2.tried || a.q2.support)
@@ -2209,7 +2214,7 @@ window.ESGOneToOne = function (ctx) {
         r.snapshot.map(function (e) {
           var x = a.q8.find(function (q) { return String(q.id) === String(e.id); }) || {};
           var lbl = h('div', { class: 'small muted', style: 'margin-top:4px', text: fb.expRating[e.id] ? PROGRESS[fb.expRating[e.id] - 1].title : 'Not rated' });
-          var techCell = amending
+          var techCell = amendTech
             ? [labelled(ratingSeg(x.rating, function (v) { x.rating = v; refreshSide(); }, false), L.one + '\'s rating for ' + e.title),
               h('div', { style: 'margin-top:6px' }, textBox(null, x.comment, function (v) { x.comment = v; }, false, 2, L.one + '\'s comment for ' + e.title))]
             : has ? [h('div', { style: 'font-weight:650', text: x.rating ? x.rating + ' – ' + PROGRESS[x.rating - 1].title : 'Not rated' }), x.comment ? h('div', { class: 'small', text: x.comment }) : null] : h('span', { class: 'muted', text: '—' });
@@ -2307,11 +2312,16 @@ window.ESGOneToOne = function (ctx) {
             // 1. nothing changed elsewhere since the amendment started
             var now = await stamps(r);
             if (now.rvMod !== base.rvMod || now.mrMod !== base.mrMod || now.state !== base.state) {
-              throw new Error('This 1-to-1 was changed elsewhere since you started amending. Cancel, Refresh, then amend again.');
+              throw new Error('This 1-to-1 was changed elsewhere since you started amending (if you have just completed it, the release takes a few minutes). Cancel, Refresh, then amend again.');
             }
             // 2. the audit record first, so no change is ever made without one
             var rec = { Title: r.tech + ' – ' + monthLabel(r.month), ReviewItemId: r.id, ManagerReviewId: r.mrId, MonthKey: r.month, Technician: personValue(info.claims),
               Reason: reason.trim(), ChangedFields: names.join('; '), ChangesJson: JSON.stringify(changes.map(function (c) { return { l: c.l, f: c.f, b: c.b, a: c.a }; })), NotifyStatus: 'Draft' };
+            if (base.failedAmId) {   // a failed attempt wrote nothing (it passed the check above): close its Draft
+              await spUpdate(CONFIG.lists.amendments, base.failedAmId, { NotifyStatus: 'Cancelled' });
+              var old = AMENDMENTS.find(function (x) { return x.id === base.failedAmId; }); if (old) { old.status = 'Cancelled'; }
+              base.failedAmId = 0;
+            }
             var amId = await spCreate(CONFIG.lists.amendments, rec);
             if (!amId) { throw new Error('The amendment record couldn\'t be created – nothing was changed.'); }
             var local = buildAmendment({ ID: amId, ReviewItemId: r.id, ManagerReviewId: r.mrId, MonthKey: r.month, Reason: rec.Reason, ChangedFields: rec.ChangedFields,
@@ -2329,6 +2339,7 @@ window.ESGOneToOne = function (ctx) {
               if (Object.keys(mr).length) { await spUpdate(CONFIG.lists.mgr, r.mrId, mr); }
               if (Object.keys(dates).length) { await writeDates(CONFIG.lists.mgr, r.mrId, dates); }
             } catch (e) {
+              base.failedAmId = amId;
               throw new Error('The amendment wasn\'t fully saved (' + (e && e.message ? e.message : e) + '). Nobody has been emailed – Refresh and check the 1-to-1; Needs your attention lists it.');
             }
             state.amend = null; dirty = false;
@@ -2988,7 +2999,7 @@ window.ESGOneToOne = function (ctx) {
         if (done > TODAY) { return 'The completion date can\'t be in the future.'; }
         var correction = last && last.completed.slice(0, 7) === done.slice(0, 7);
         var floor = correction ? last.start : cur;
-        if (floor && done <= floor) { return 'The completion date must be after the start of the period (' + fmtDate(floor) + ').'; }
+        if (floor && done.slice(0, 7) <= floor.slice(0, 7)) { return 'The completion must be in a later month than the start of the period (' + fmtDate(floor) + ') – to correct the start, change the period start instead.'; }
         if (next <= done) { return 'The next appraisal must be after the completion date.'; }
         return new Promise(function (resolve, reject) {
           confirmBox('Record ' + t + '\'s appraisal as completed on ' + fmtDate(done) + '?',
@@ -3007,10 +3018,10 @@ window.ESGOneToOne = function (ctx) {
     function undoCompleted(t) {
       var last = (TECH_INFO[t].history || []).slice(-1)[0];
       if (!last) { return; }
-      confirmBox('Undo the completion recorded for ' + fmtDate(last.completed) + '?', 'The period that started then is joined back onto the one before. No reviews or ratings are changed. Check the next appraisal date afterwards.', 'Undo', function () {
+      confirmBox('Undo the completion recorded for ' + fmtDate(last.completed) + '?', 'The period that started then is joined back onto the one before. No reviews or ratings are changed.' + (last.prevDue && apDateOf(t) === last.nextDue ? ' The next appraisal date goes back to ' + fmtDate(last.prevDue) + '.' : ' Check the next appraisal date afterwards.'), 'Undo', function () {
         busy('cycle', async function () {
           await undoCompletion(t);
-          dates[t].start = TECH_INFO[t].cycleStart || ''; teamChanged = true;
+          dates[t].start = TECH_INFO[t].cycleStart || ''; dates[t].ap = TECH_INFO[t].appraisal || ''; teamChanged = true;
           toast('Completion removed.'); draw();
         }).catch(function () {});
       });
@@ -3021,7 +3032,7 @@ window.ESGOneToOne = function (ctx) {
       out.push(h('p', { class: 'small muted', style: 'margin:0 0 10px', text: 'Everyone in this list gets a monthly 1-to-1 while Active. Adding someone gives them access to the 1-to-1 page within about 5 minutes; their first review is created at 07:00 the next morning (or run Flow 1 now). Deactivating stops new reviews and removes their access to the page; their records are kept.' }));
       var names = memberNames();
       if (!V14) { out.push(h('div', { class: 'banner amber', text: 'Run "ESG 1-to-1 | 0 Setup" again (solution 1.4) to add the wellbeing date and appraisal periods. Until then only the appraisal date can be set here.' })); }
-      out.push(h('div', { class: 'tbl-wrap' }, table(V14 ? [L.one, 'Status', 'Next appraisal', 'Days to go', 'Next wellbeing', 'Appraisal period', '']
+      out.push(table(V14 ? [L.one, 'Status', 'Next appraisal', 'Days to go', 'Next wellbeing', 'Appraisal period', '']
         : [L.one, 'Status', 'Appraisal date', 'Days to go', ''], names.map(function (t) {
         var info = TECH_INFO[t], d = dates[t];
         var daysTd = h('td'), perTd = h('td', { class: 'small' });
@@ -3063,7 +3074,7 @@ window.ESGOneToOne = function (ctx) {
         if (!V14) { return h('tr', { class: info.active ? null : 'retired' }, [nameTd, status, apTd, daysTd, h('td', null, toggle)]); }
         var wbTd = h('td', { style: 'min-width:170px' }, dateField(d.wb, function (v) { d.wb = v; }, 'Next wellbeing assessment date for ' + t, { noDirty: true }));
         return h('tr', { class: info.active ? null : 'retired' }, [nameTd, status, apTd, daysTd, wbTd, perTd, h('td', null, tools)]);
-      }), { empty: 'Nobody yet – add the first person below.' })));
+      }), { empty: 'Nobody yet – add the first person below.' }));
       out.push(h('p', { class: 'small muted', text: 'Dates never move by themselves. Change the next appraisal or wellbeing date here whenever it is brought forward or put back – it never changes which period a monthly 1-to-1 belongs to. When an appraisal has actually happened, use "Mark appraisal completed…" to start the new period.' }));
       // add a person
       var q = h('input', { type: 'text', id: 'oto-p-q', placeholder: 'Start typing a name or email…', autocomplete: 'off', 'aria-label': 'Search for a person to add' });
@@ -3173,6 +3184,8 @@ window.ESGOneToOne = function (ctx) {
         if (isNaN(bands[i].max) || bands[i].max <= lo || bands[i].max > 5) { cur = 'bands'; draw(); toast('Band limits must increase and sit between 1 and 5.', true); return; }
       }
       if (bands.some(function (b) { return !b.name.trim(); })) { cur = 'bands'; draw(); toast('Every band needs a name.', true); return; }
+      var lateStart = memberNames().filter(function (t) { return dates[t].start && dates[t].start > TODAY; })[0];
+      if (lateStart) { cur = 'team'; draw(); toast(lateStart + ': the period start is the date their last appraisal was done, so it can\'t be in the future.', true); return; }
       busy('settings', async function () {
         var problems = [];
         var names = memberNames();

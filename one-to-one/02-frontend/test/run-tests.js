@@ -1350,6 +1350,105 @@ async function main() {
   var e13t = await open(V, { as: 'alex' });
   ok('Upgrade order: before Setup 1.4 the technician\'s page loads', e13t.length === 0);
   await c25.close();
+  // ---------------------------------------------------------------- 28. v5: fixes from the break-it round
+  var c28 = await browser.newContext({ viewport: { width: 1366, height: 768 } });
+  var B = await c28.newPage();
+  B.on('dialog', function (d) { d.accept(); });
+  var errB = [];
+  B.on('pageerror', function (e) { errB.push(e.message); });
+  async function dbB() { return B.evaluate(function () { return JSON.parse(JSON.stringify(OTO_MOCK.current.db)); }); }
+  await open(B, { as: 'tl' }); await B.evaluate(function () { OTO_MOCK.reset(); }); await open(B, { as: 'tl' });
+  var d28 = await dbB();
+  // a review closed as not submitted: Amend changes only the TL's feedback, never the technician's answers
+  var closedRv = d28.lists['Monthly Reviews'].find(function (r) { return r.ReviewStatus === 'Closed - Not Submitted'; });
+  await open(B, { as: 'tl', reviewId: String(closedRv.ID) });
+  await B.locator('.pagehead button:has-text("Amend")').click(); await B.waitForTimeout(300);
+  var q8rows = await B.locator('section.card:has-text("Appraisal expectations") tbody tr').count();
+  ok('Break-it fix: amending a closed (not submitted) review never offers the technician\'s Q2 or Q8 answers',
+    (await B.locator('section.card:has-text("Challenges, blockers") textarea').count()) === 1 &&
+    (await B.locator('section.card:has-text("Appraisal expectations") .seg').count()) === q8rows && q8rows > 0);
+  await B.locator('.pagehead button:has-text("Cancel amendment")').click(); await B.waitForTimeout(200);
+  // a save that failed half-way and is retried: one record sent, the failed one closed, one email
+  var alexOld = d28.lists['Monthly Reviews'].filter(function (r) { return r.Technician === claims('alex.morgan@example.test') && r.ReviewStatus === 'Completed'; })[0];
+  await open(B, { as: 'tl', reviewId: String(alexOld.ID) });
+  await B.locator('.pagehead button:has-text("Amend")').click(); await B.waitForTimeout(300);
+  await B.locator('section.card:has-text("What has gone well") textarea').first().fill('Retried correction');
+  await B.evaluate(function () { OTO_MOCK.current.db.failWrites = 1; });
+  await B.locator('.pagehead button:has-text("Save amendment")').click();
+  var dlgB = B.locator('.modal:has-text("Save amendment")');
+  await dlgB.locator('textarea').fill('Retry test'); await dlgB.locator('button:has-text("Save amendment")').click(); await B.waitForTimeout(400);
+  ok('Break-it fix: a failed amendment save says so and keeps the dialog open', (await dlgB.count()) === 1 && /wasn't fully saved/.test(await B.locator('.toast').innerText()));
+  await dlgB.locator('button:has-text("Save amendment")').click(); await B.waitForTimeout(600);
+  var am28 = (await dbB()).lists['1-to-1 Amendments'].filter(function (x) { return x.ReviewItemId === alexOld.ID; });
+  ok('Break-it fix: retrying closes the failed Draft (Cancelled) and sends one email', am28.length === 2 && am28[0].NotifyStatus === 'Cancelled' && am28[1].NotifyStatus === 'Sent' &&
+    (await dbB()).emails.filter(function (e) { return e.template === 'E16' && e.reviewId === alexOld.ID; }).length === 1, JSON.stringify(am28.map(function (x) { return x.NotifyStatus; })));
+  // Settings → Team: same-month completion, a future period start, undo restores the due date
+  await open(B, { as: 'tl' });
+  await B.locator('.topbar >> text=Settings').click();
+  var alexT = d28.lists['Technicians'].find(function (t) { return t.Title === 'Alex Morgan'; });
+  var alexStart = new Date(alexT.AppraisalCycleStart).toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
+  await B.locator('.modal tr:has-text("Alex Morgan") button:has-text("Mark appraisal completed")').click();
+  var mcB = B.locator('.modal').last();
+  await mcB.locator('input.datef').nth(0).fill(fmt(alexStart.slice(0, 8) + '27')); await mcB.locator('input.datef').nth(0).press('Tab');
+  await mcB.locator('input.datef').nth(1).fill(fmt(futureIso(300))); await mcB.locator('input.datef').nth(1).press('Tab');
+  await mcB.locator('button:has-text("Record completion")').click();
+  ok('Break-it fix: a completion in the same month as the period start is refused', /later month than the start/.test(await mcB.innerText()));
+  await mcB.locator('button:has-text("Cancel")').click();
+  var jStart = B.locator('.modal input[aria-label="Appraisal period start for Jordan Lee"]');
+  await jStart.fill(fmt(futureIso(60))); await jStart.press('Tab');
+  await B.locator('.modal button:has-text("Save settings")').click(); await B.waitForTimeout(300);
+  ok('Break-it fix: a period start in the future is refused, nothing saved', /can't be in the future/.test(await B.locator('.toast').innerText()) &&
+    !(await dbB()).lists['Technicians'].find(function (t) { return t.Title === 'Jordan Lee'; }).AppraisalCycleStart);
+  await open(B, { as: 'tl' });
+  await B.locator('.topbar >> text=Settings').click();
+  var caseyBefore = (await dbB()).lists['Technicians'].find(function (t) { return t.Title === 'Casey Brooks'; }).AppraisalDate;
+  await B.locator('.modal tr:has-text("Casey Brooks") button:has-text("Mark appraisal completed")').click();
+  mcB = B.locator('.modal').last();
+  await mcB.locator('input.datef').nth(0).fill(fmt(futureIso(-3))); await mcB.locator('input.datef').nth(0).press('Tab');
+  await mcB.locator('input.datef').nth(1).fill(fmt(futureIso(370))); await mcB.locator('input.datef').nth(1).press('Tab');
+  await mcB.locator('button:has-text("Record completion")').click();
+  await B.locator('.modal:has-text("Record Casey Brooks") button:has-text("Record completion")').click(); await B.waitForTimeout(600);
+  await B.locator('.modal tr:has-text("Casey Brooks") button:has-text("Undo last")').click();
+  ok('Break-it fix: Undo says the next appraisal date goes back', /goes back to/.test(await B.locator('.modal').last().innerText()));
+  await B.locator('.modal').last().locator('button:has-text("Undo")').click(); await B.waitForTimeout(600);
+  var caseyAfter = (await dbB()).lists['Technicians'].find(function (t) { return t.Title === 'Casey Brooks'; });
+  ok('Break-it fix: Undo restores the next appraisal date and the history', caseyAfter.AppraisalDate === caseyBefore && JSON.parse(caseyAfter.AppraisalHistoryJson || '[]').length === 0);
+  // a closed period with no recorded start is labelled as completed, not "no period start"
+  var lbl = await B.evaluate(function () { return window.ESGOneToOne()._calc({ today: '2026-09-10', ap: '2027-06-30', history: [{ start: '', completed: '2026-06-15', nextDue: '2027-06-30' }], start: '2026-06-15',
+    reviews: [{ month: '2026-03' }, { month: '2026-04' }, { month: '2026-07' }] }); });
+  ok('Break-it fix: an earlier period with no start is labelled with its completion', /^Up to June 2026 \(appraisal completed/.test(lbl.periods[0].label), lbl.periods[0].label);
+  // amend: details for a No answer are hidden (they are never saved)
+  var jCur28 = d28.lists['Monthly Reviews'].find(function (r) { return r.Technician === claims('jordan.lee@example.test') && r.MonthKey === curMonth(); });
+  await open(B, { as: 'tl', reviewId: String(jCur28.ID) });
+  await B.locator('.pagehead button:has-text("Amend")').click(); await B.waitForTimeout(300);
+  var wbCard = B.locator('section.card:has-text("Wellbeing and support")');
+  var hiddenNo = (await wbCard.locator('textarea:visible').count()) === 1;
+  await wbCard.locator('.seg button:has-text("Yes")').click(); await B.waitForTimeout(100);
+  ok('Break-it fix: in amend mode the details box shows only with Yes', hiddenNo && (await wbCard.locator('textarea:visible').count()) === 2);
+  await B.locator('.pagehead button:has-text("Cancel amendment")').click(); await B.locator('.modal button:has-text("Discard")').click(); await B.waitForTimeout(200);
+  // malformed audit content never breaks the review page
+  await B.evaluate(function (id) {
+    var d = OTO_MOCK.current.db, old = new Date(Date.now() - 7200000).toISOString();
+    d.lists['1-to-1 Amendments'].push({ ID: 95, Title: 'x', ReviewItemId: id, ManagerReviewId: 0, MonthKey: '2026-01', Technician: 'i:0#.f|membership|jordan.lee@example.test', Reason: 'r',
+      ChangedFields: 'x', ChangesJson: JSON.stringify([{ f: '__proto__' }, null, { f: 'constructor', b: 1 }, { l: 'mr', f: 'ActionsJson', b: '[null]', a: '[null,{"text":"x"}]' }]),
+      NotifyStatus: 'Sent', Created: old, Modified: old, Author: 'i:0#.f|membership|team.leader@example.test' });
+    sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d));
+  }, jCur28.ID);
+  errB = [];
+  await open(B, { as: 'tl', reviewId: String(jCur28.ID) });
+  await B.locator('details.amend summary').last().click();
+  ok('Break-it fix: malformed amendment content is skipped, the page still renders', errB.length === 0 && (await B.locator('details.amend').count()) >= 1 &&
+    /• x/.test(await B.locator('details.amend').last().innerText()), errB.join('|'));
+  // Settings → Team buttons are reachable without sideways scrolling at common widths
+  for (var wi = 0; wi < 3; wi++) {
+    var wpx = [1366, 1600, 1920][wi];
+    await B.setViewportSize({ width: wpx, height: 900 });
+    await open(B, { as: 'tl' }); await B.locator('.topbar >> text=Settings').click(); await B.waitForTimeout(200);
+    var fit = await B.evaluate(function () { return Array.prototype.every.call(document.querySelectorAll('.modal .tbl-wrap'), function (w) { return w.scrollWidth <= w.clientWidth + 1; }); });
+    ok('Break-it fix: Settings → Team fits without sideways scrolling at ' + wpx + 'px', fit);
+  }
+  await c28.close();
+
   await sweep('amendment reason and before/after read by the TL', { as: 'tl', xss: '1' }, async function () {
     var dd = await db(page), rv = dd.lists['Monthly Reviews'].find(function (r) { return r.ReviewStatus === 'Completed'; });
     await page.evaluate(function (id) {

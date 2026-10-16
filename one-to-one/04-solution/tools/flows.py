@@ -1162,7 +1162,7 @@ def flow_amendment():
     CUR = "body('Get_current')"
     BASE = "_api/web/lists(guid'@{outputs('AmIds')?['amList']}')/items(@{" + TB + "?['ID']})"
     month = "@{formatDateTime(concat(" + CUR + "?['MonthKey'], '-01'), 'MMMM yyyy')}"
-    e16 = ('<p>Your Team Leader has amended your 1-to-1 for <b>' + month + '</b> after it was submitted. '
+    e16 = ('<p>Your Team Leader has amended your 1-to-1 for <b>' + month + '</b>. '
            'Open it to see the current version.</p>'
            '<p><a href="' + link(CUR + "?['ReviewItemId']") + '"><b>Open my 1-to-1</b></a></p>'
            '<p style="color:#666">The change and its reason are recorded. Speak to your Team Leader if you have a question about it.</p>')

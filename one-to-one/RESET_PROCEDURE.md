@@ -39,6 +39,8 @@ Use this **once**, before go-live, to clear 1-to-1 records that were created whi
    4. In **Page details → Permissions**, make sure only Owners can open it.
    5. Publish it.
 5. **Inventory and choose.** The tool reads every list and shows each record with its person, month and status. Use **Filter by person** and **Filter by month**, tick the records to remove, or use **Select all shown (except expectations)**.
+   - A monthly review and its manager review are always ticked (and unticked) together. Half a pair left behind would stay visible, and Flow 1 would create that month again and re-send the link.
+   - Months are UK months.
 6. **Back up.** Click **Download backup**. It saves a JSON file with every column of every ticked record. If you change the selection afterwards, you must download a new backup before going on.
 7. **Dry run.** Click **Run the dry run**. It lists exactly what would be deleted, per list and per record, and changes nothing. Check the list.
 8. **Confirm.**

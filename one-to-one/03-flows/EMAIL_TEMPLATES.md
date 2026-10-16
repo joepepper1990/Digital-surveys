@@ -138,7 +138,7 @@ E4 and E5 are written in the first person (they come from your mailbox), so they
 
 | # | Flow → to | Subject | Body (summary) |
 |---|---|---|---|
-| E16 | 8 Amendment notice → the person | `Your 1-to-1 for <Month yyyy> has been amended` | Your Team Leader has amended your 1-to-1 for **<Month yyyy>** after it was submitted; open it to see the current version. Link **Open my 1-to-1** (`?reviewId=<id>`). The change and its reason are recorded; speak to your Team Leader if you have a question. **It never contains the changed answers, the before/after values or the reason.** |
+| E16 | 8 Amendment notice → the person | `Your 1-to-1 for <Month yyyy> has been amended` | Your Team Leader has amended your 1-to-1 for **<Month yyyy>**; open it to see the current version. Link **Open my 1-to-1** (`?reviewId=<id>`). The change and its reason are recorded; speak to your Team Leader if you have a question. **It never contains the changed answers, the before/after values or the reason.** |
 | E16-notice | 8 Amendment notice → you | `Amendment email not sent – please resend from the 1-to-1 page` | The E16 to <name> for <Month yyyy> couldn't be sent. *Needs your attention* lets you send it again (Resend). No content. |
 | E17 | 1 Daily scheduler → you | `Appraisal due in 7 days: <name>` / `Appraisal due today: <name>` / `Appraisal overdue: <name>` | The appraisal for that person is due (or was due *n* days ago) on DD-MMM-YYYY, from **Settings → Team → Next appraisal**. When it's done, use *Mark appraisal completed*; to move it, change the date there. It is sent 7 days before, on the day, then every 7 days while overdue. |
 

@@ -54,6 +54,13 @@ async function main() {
   ok('Steps: backup, dry run and delete are disabled with nothing selected', await step(2).locator('button:has-text("Download backup")').isDisabled() &&
     await step(3).locator('button').isDisabled() && await step(4).locator('button.danger').isDisabled());
 
+  // a Monthly Review and its Manager Review are always picked together
+  await page.locator('details.rs-list:has-text("Manager Reviews") summary').click();
+  await page.locator('details.rs-list:has-text("Manager Reviews") tbody input[type="checkbox"]').first().check();
+  ok('Pairs: ticking a Manager Review also ticks its Monthly Review', /Monthly Reviews – \d+ records · 1 selected/.test(await page.locator('section.rs-step').first().innerText()) &&
+    (await step(4).locator('button.danger').innerText()) === 'Delete 2 records');
+  await page.locator('details.rs-list:has-text("Manager Reviews") tbody input[type="checkbox"]').first().uncheck();
+  ok('Pairs: unticking it unticks both', (await step(4).locator('button.danger').innerText()) === 'Delete 0 records');
   // choose: everything for Sam Patel, except expectations
   await page.locator('select[aria-label="Filter by person"]').selectOption('Sam Patel');
   await page.locator('button:has-text("Select all shown")').click();

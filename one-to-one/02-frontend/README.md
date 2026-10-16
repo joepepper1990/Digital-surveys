@@ -79,7 +79,7 @@ You need Node.js. For the automated tests you also need Playwright with Chromium
 ```bash
 cd one-to-one/02-frontend
 node tools/build-mock.js          # regenerates mock/index.html from one-to-one.html
-node test/run-tests.js            # 306 checks; exits non-zero on any failure
+node test/run-tests.js            # 319 checks; exits non-zero on any failure
 node test/run-reset-tests.js      # 31 checks of the reset tool
 ```
 

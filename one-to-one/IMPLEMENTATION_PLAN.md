@@ -5,7 +5,7 @@
 - **Stages 0A and 0B have passed in the live tenant.** Welcome runs the external script, authenticated REST works, and the item-level security model holds.
 - The visual design was agreed through prototype v7 ([`prototype/prototype.html`](prototype/prototype.html)).
 - **The production build files are produced:**
-  - the frontend [`02-frontend/`](02-frontend/README.md), with a local mock and 306 automated checks (plus 31 for the one-time reset tool);
+  - the frontend [`02-frontend/`](02-frontend/README.md), with a local mock and 319 automated checks (plus 33 for the one-time reset tool);
   - the list checklist [`01-sharepoint/lists.md`](01-sharepoint/lists.md);
   - **the importable Power Platform solution** [`04-solution/`](04-solution/IMPORT_GUIDE.md): seven flows (1–6 and 8) plus a setup flow that creates the eight lists, permission levels, group and list permissions exactly (v4.1; Flow 8 and the Amendments list from 1.4; Flow 7 and the Challenges list existed in v4.5 / 1.3 only and are retired);
   - the flow build sheets and email templates [`03-flows/`](03-flows/FLOW_BUILD_SHEETS.md), for reference or building by hand;
@@ -667,7 +667,7 @@ It opens in an in-page overlay with **Print / Save as PDF**. That opens a clean 
   - Flow 2 and Flow 3 effects emulated (5.0.0: also Flow 8, and the eight lists including 1-to-1 Amendments).
   - A switch for attack-string (XSS) data.
 - **`mock/index.html`:** generated from the production CSS by `tools/build-mock.js`. You can click through every view as any user.
-- **`test/run-tests.js`** (headless Chromium, 306 checks in 5.0.0; `test/run-reset-tests.js` adds 31 for the reset tool):
+- **`test/run-tests.js`** (headless Chromium, 319 checks in 5.0.0; `test/run-reset-tests.js` adds 33 for the reset tool):
   - static rules S1, S2, S4 and S5;
   - isolation for Test A and Test B, including direct REST attempts;
   - draft payload allow-list;
@@ -1564,7 +1564,7 @@ All of these are text, contain **no tenant names, credentials or personal data**
 | K7 | Test record | Use section H directly (F1–F56, P1–P30; in 1.4 F48 and P29 check that challenges are retired); add Pass/Fail, date, tester and screenshot columns |
 | K8 | Privacy notice | **Not needed.** The TL decided it's handled between the TL and each technician. |
 | K9 | [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) | **Produced (v4)** |
-| K10 | [`02-frontend/mock/`](02-frontend/mock/), [`02-frontend/test/`](02-frontend/test/), [`02-frontend/tools/`](02-frontend/tools/) | **Produced.** 306 checks passing (plus 31 for the reset tool). |
+| K10 | [`02-frontend/mock/`](02-frontend/mock/), [`02-frontend/test/`](02-frontend/test/), [`02-frontend/tools/`](02-frontend/tools/) | **Produced.** 319 checks passing (plus 33 for the reset tool). |
 | K11 | Frontend security notes for IT-13 | Section E.3–E.4 plus [`02-frontend/README.md`](02-frontend/README.md) (endpoints, rules, test evidence) |
 | — | [`prototype/prototype.html`](prototype/prototype.html) | Design baseline (prototype v7) |
 
