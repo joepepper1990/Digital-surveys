@@ -874,13 +874,20 @@ def v14_checks():
     st, eng = fire('2', sp, 'Monthly Reviews', r_alex['id'], T('2026-11-12T09:00:00'))
     ok('Flow 2 (1.4): a TL amendment after processing is cancelled – no email, no re-stamp, permissions unchanged', st == 'Cancelled' and len(sp.emails) == n and
        json.dumps({k: sorted(v) for k, v in r_alex['ra'].items()}) == ra_before, (st, eng and eng.log))
+    # an edit that claims to be the TL's (Editor) never skips the lock: a technician left with Edit by a failed step loses it
+    r_alex['ra'][11] = {sp.role_id('1-to-1 Edit')}
+    sp.write_item(mr, r_alex['id'], {'item/Q1WentWell': 'Edited after the lock failed'})   # sp.me is the TL: Editor = TL
+    st, eng = fire('2', sp, 'Monthly Reviews', r_alex['id'], T('2026-11-12T09:30:00'))
+    ok('Flow 2 (1.4): the lock is re-applied before an amendment run is cancelled (Edit taken back to Read)', st == 'Cancelled' and
+       r_alex['ra'].get(11) == {sp.role_id('1-to-1 Read')}, (st, r_alex['ra']))
     # Flow 1: a submitted review whose Manager Review is still Open (Flow 2 never ran) is reported
+    r_sam['fields']['Title'] = '<a href="https://evil.example/x">Open the run</a><img src=x>'
     r_sam['fields']['ReviewStatus'] = 'Submitted'
     m = len(sp.emails)
     run('1', sp, T('2026-11-12T07:00:00'), overrides={'varTestDate': '2026-11-12T07:00:00'})
     e7 = [e for e in sp.emails[m:] if e['subject'] == '1-to-1 system: action needed']
-    ok('Flow 1 (1.4): a submission Flow 2 never processed is reported to the TL', len(e7) == 1 and 'submitted but not processed' in e7[0]['body'] and
-       'Sam Patel' in e7[0]['body'], [e['body'][:200] for e in e7])
+    ok('Flow 1 (1.4): a submission Flow 2 never processed is reported to the TL, its (technician-editable) title escaped', len(e7) == 1 and 'submitted but not processed' in e7[0]['body'] and
+       '&lt;a href=' in e7[0]['body'] and 'evil.example/x">' not in e7[0]['body'] and '<img' not in e7[0]['body'], [e['body'][:300] for e in e7])
 
     # Flow 8: amendment notices
     def amend(status):

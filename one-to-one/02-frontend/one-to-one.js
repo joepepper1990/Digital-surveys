@@ -1396,7 +1396,8 @@ window.ESGOneToOne = function (ctx) {
     await spUpdate(CONFIG.lists.techs, info.itemId, { AppraisalBoundaries: list });
     var rs = reviewsOf(t);
     for (var i = 0; i < rs.length; i++) {
-      if (JSON.stringify(rs[i].boundaries) === list) { continue; }
+      // a submission still waiting for Flow 2 is left alone: Flow 2 times the submission from the item's last change
+      if (JSON.stringify(rs[i].boundaries) === list || rs[i].processing) { continue; }
       await spUpdate(CONFIG.lists.reviews, rs[i].id, { AppraisalBoundaries: list });
       rs[i].boundaries = JSON.parse(list);
     }
@@ -1420,7 +1421,7 @@ window.ESGOneToOne = function (ctx) {
     await writeDates(CONFIG.lists.techs, info.itemId, { AppraisalCycleStart: completed, AppraisalDate: nextDue });
     info.cycleStart = completed; info.appraisal = nextDue;
     var cr = currentOf(t);
-    if (cr) { await writeDates(CONFIG.lists.reviews, cr.id, { AppraisalDate: nextDue }); cr.appraisalDate = nextDue; }
+    if (cr && !cr.processing) { await writeDates(CONFIG.lists.reviews, cr.id, { AppraisalDate: nextDue }); cr.appraisalDate = nextDue; }
     await writeBoundaries(t);
   }
   async function undoCompletion(t) {
@@ -3183,7 +3184,8 @@ window.ESGOneToOne = function (ctx) {
               await writeDates(CONFIG.lists.techs, info.itemId, { AppraisalDate: d.ap });
               info.appraisal = d.ap;
               var cr = currentOf(t);
-              if (cr) { await writeDates(CONFIG.lists.reviews, cr.id, { AppraisalDate: d.ap }); cr.appraisalDate = d.ap; }
+              // not while a submission waits for Flow 2: it times the submission from the item's last change
+              if (cr && !cr.processing) { await writeDates(CONFIG.lists.reviews, cr.id, { AppraisalDate: d.ap }); cr.appraisalDate = d.ap; }
             }
             if (V14 && d.wb !== (info.nextWellbeing || '')) { await setWellbeingDate(t, d.wb); }
             if (V14 && d.start !== (info.cycleStart || '') && !(info.history || []).length) {

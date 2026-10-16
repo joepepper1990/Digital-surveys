@@ -36,6 +36,8 @@ function staticChecks() {
   ok('No email addresses or tenant hosts in shipped files', !/[\w.-]+@[\w-]+\.[\w.]+/.test(js + html) && !/sharepoint\.com/i.test(js + html));
   ok('Writes only through spUpdate/spCreate (single validateUpdateListItem + AddValidate path)',
     (code.match(/validateUpdateListItem/g) || []).length === 1 && (code.match(/AddValidateUpdateItemUsingPath/g) || []).length === 1);
+  ok('Deletes only through spRecycle: one recycle() endpoint, called only for retired expectations', (code.match(/recycle\(\)/g) || []).length === 1 &&
+    (code.match(/spRecycle\(/g) || []).length === 2 && /spRecycle\(CONFIG\.lists\.exp,/.test(code));
   ok('No permission endpoints called from the frontend', !/roleassignments|breakroleinheritance|resetroleinheritance|ensureuser/i.test(code.replace(/HasUniqueRoleAssignments/g, '')));
 }
 

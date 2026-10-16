@@ -215,6 +215,38 @@ def amendment_record_unsecured(fl):
     _, a = find(fl[7]['json']['properties']['definition'], 'Get_current')
     a.pop('runtimeConfiguration', None)
 
+
+# run-history leaks the security review showed the pattern-based rules missed (1.4)
+@mutation
+def compose_holds_audit_content(fl):
+    _, a = find(fl[7]['json']['properties']['definition'], 'AmIds')
+    a['inputs'] = "@triggerBody()?['ChangesJson']"
+
+
+@mutation
+def compose_holds_whole_trigger_item(fl):
+    _, a = find(fl[7]['json']['properties']['definition'], 'AmIds')
+    a['inputs'] = "@triggerBody()"
+
+
+@mutation
+def terminate_message_carries_reason(fl):
+    _, a = find(fl[7]['json']['properties']['definition'], 'Already_handled')
+    a['inputs'] = {'runStatus': 'Failed', 'runError': {'message': "@{triggerBody()?['Reason']}"}}
+
+
+@mutation
+def variable_holds_review_answer(fl):
+    _, a = find(fl[1]['json']['properties']['definition'], 'Set_varTechAad')
+    a['inputs']['value'] = "@items('Each_technician')?['Q1WentWell']"
+
+
+@mutation
+def exempt_step_carries_reason_in_uri(fl):
+    _, a = find(fl[7]['json']['properties']['definition'], 'Get_lists')
+    a['inputs']['parameters']['parameters/uri'] += "&r=@{triggerBody()?['Reason']}"
+
+
 if __name__ == '__main__':
     base = build_all()
     assert validate.validate_all(base) == [], 'baseline must be clean'

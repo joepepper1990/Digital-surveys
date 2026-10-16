@@ -1637,7 +1637,7 @@
                               "type": "AppendToArrayVariable",
                               "inputs": {
                                 "name": "varProblems",
-                                "value": "@concat(items('Each_unprocessed')?['Title'], ': submitted but not processed – is flow 2 on? The technician can still edit it until it is.')"
+                                "value": "@concat(replace(replace(replace(coalesce(items('Each_unprocessed')?['Title'], ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), ': submitted but not processed – is flow 2 on? The technician can still edit it until it is.')"
                               },
                               "runAfter": {}
                             }

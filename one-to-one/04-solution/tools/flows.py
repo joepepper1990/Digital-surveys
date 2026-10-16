@@ -755,7 +755,8 @@ def flow_daily():
                 ('Open_ids', select("@body('Open_mgr')?['value']", "@" + idstr("item()?['ReviewItemId']"), secure=True)),
                 ('Unprocessed', query("@body('Submitted_reviews')?['value']", "@contains(body('Open_ids'), string(item()?['ID']))", secure=True)),
                 ('Each_unprocessed', foreach("@body('Unprocessed')", seq(
-                    ('Note_unprocessed', append('varProblems', "@concat(items('Each_unprocessed')?['Title'], ': submitted but not processed – "
+                    # the review's Title is technician-editable: escaped before it goes into the HTML email
+                    ('Note_unprocessed', append('varProblems', "@concat(" + esc("items('Each_unprocessed')?['Title']") + ", ': submitted but not processed – "
                                                                "is flow 2 on? The technician can still edit it until it is.')")),
                 ))),
             ))),
@@ -814,16 +815,17 @@ def flow_submitted():
         ('Unknown_item', cond("@equals(length(body('Find_mgr')?['value']), 0)", seq(('Not_a_flow_review', terminate('Cancelled'))))),
         ('Mgr', compose("@first(body('Find_mgr')?['value'])", secure=True)),
         ('PrevState', compose('@' + MGRO + "?['ReviewState']?['Value']")),
-        # The Team Leader amending a review this flow has already processed (the page only allows it then) is not a
-        # submission: nothing to lock, stamp or email. A real submission (state still Open) is always processed.
-        ('Team_leader_amendment', cond("@and(equals(toLower(coalesce(" + TB + "?['Editor']?['Email'], '')), toLower(" + TL_EMAIL + ")), "
-                                       "not(equals(outputs('PrevState'), 'Open')))", seq(('Amendment_not_a_submission', terminate('Cancelled'))))),
         # When it was submitted: the item's Modified time, not when this flow ran (the trigger polls every 5 minutes, so a
         # 23:58 submission would otherwise be stamped next month and late). Modified older than 30 minutes is not trusted.
         ('Submitted_at', compose("@if(greater(ticks(coalesce(" + TB + "?['Modified'], '1900-01-01T00:00:00Z')), ticks(addMinutes(utcNow(), -30))), "
                                  + TB + "?['Modified'], utcNow())")),
         ensure_user('Ensure_user', MGRO + "?['Technician']?['Claims']"),
         *setperm('', 'reviewsList', TB + "?['ID']", "outputs('Ids')?['read']", "body('Ensure_user')?['Id']"),
+        # The Team Leader amending a review this flow has already processed (the page only allows it then) is not a
+        # submission: nothing to stamp or email. The lock above is always re-applied first (whoever the Editor says it
+        # was), and a real submission (state still Open) is always processed.
+        ('Team_leader_amendment', cond("@and(equals(toLower(coalesce(" + TB + "?['Editor']?['Email'], '')), toLower(" + TL_EMAIL + ")), "
+                                       "not(equals(outputs('PrevState'), 'Open')))", seq(('Amendment_not_a_submission', terminate('Cancelled'))))),
         ('First_submission', cond("@equals(outputs('PrevState'), 'Open')", seq(
             ('Stamp_submitted', patch_item(MGR, '@' + MGRO + "?['ID']", {
                 'Title': '@' + MGRO + "?['Title']",

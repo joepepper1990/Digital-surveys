@@ -386,8 +386,8 @@
     if (!mr) { return; }
     var u = userByClaims(mr.Technician);
     var prev = mr.ReviewState;
+    db.perms['Monthly Reviews'][rv.ID] = {}; db.perms['Monthly Reviews'][rv.ID][u.email] = 'read';   // the lock is always re-applied
     if (editor && editor.owner && prev !== 'Open') { db.flow2Cancelled = (db.flow2Cancelled || 0) + 1; return; }   // a Team Leader amendment
-    db.perms['Monthly Reviews'][rv.ID] = {}; db.perms['Monthly Reviews'][rv.ID][u.email] = 'read';
     if (prev === 'Open') {
       mr.ReviewState = 'Submitted'; mr.SubmittedOn = nowIso(); mr.SubmittedLate = Date.now() > Date.parse(mr.DueDate);
       mr.TechFollowUp = rv.Q9FollowUp || '';

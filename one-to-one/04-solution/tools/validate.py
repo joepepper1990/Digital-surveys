@@ -320,7 +320,25 @@ def check_secure(f):
                 re.match(r"^@first\(body\('[^']+'\)(\?\['value'\])?\)$", a['inputs']) and \
                 'inputs' not in (a.get('runtimeConfiguration') or {}).get('secureData', {}).get('properties', []):
             probs.append('[{0}] {1} holds a whole record but its inputs are not secured'.format(f['name'], n))
+        # sensitive values in a step whose inputs can't be (or aren't) secured: a whole item, or a review / audit column
+        if a.get('type') in {'Compose'} | (NO_SECURE_TYPES - {'If', 'Foreach', 'Scope', 'Switch', 'Until'}) or \
+                (a.get('type') == 'OpenApiConnection' and n in NO_PERSONAL_DATA):
+            can_secure = a.get('type') in ('Compose', 'OpenApiConnection')
+            if not (can_secure and secured_inputs(a)):
+                txt = json.dumps(a.get('inputs'))
+                if SENSITIVE_REF.search(txt) or WHOLE_ITEM.search(txt):
+                    probs.append('[{0}] {1} carries review or audit content in run history without secure inputs'.format(f['name'], n))
     return probs
+
+
+def secured_inputs(a):
+    return 'inputs' in (a.get('runtimeConfiguration') or {}).get('secureData', {}).get('properties', [])
+
+
+# review answers, feedback, wellbeing and amendment content (column references in expressions)
+SENSITIVE_REF = re.compile(r"\?\['(Reason|ChangesJson|ChangedFields|Q\d\w*|FB_\w+|\w+Json|Message|ManagerNotes|WinOfMonth|NotifyError)'\]")
+# a whole trigger item or a whole record from a read step
+WHOLE_ITEM = re.compile(r'"@(triggerBody\(\)|body\(\\?\'[^\']+\\?\'\)|first\(body\(\\?\'[^\']+\\?\'\)[^"]*\))"')
 
 
 # Lists added after 1.0. Power Automate checks a connector step's list exists when a flow is saved or turned on, so a
