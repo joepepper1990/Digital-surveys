@@ -207,6 +207,10 @@
   .SCOPE .oto details.how summary { cursor: pointer; color: var(--navy); font-weight: 650; }
   .SCOPE .oto details.how ol { margin: 8px 0; padding-left: 18px; }
   .SCOPE .oto details.how li { margin-bottom: 4px; }
+  .SCOPE .oto details.amend { border-top: 1px solid var(--line); padding: 8px 0; font-size: 13px; }
+  .SCOPE .oto details.amend summary { cursor: pointer; }
+  .SCOPE .oto .amend-val { white-space: pre-wrap; }
+  .SCOPE .oto .amending .amend-edit { border-left: 3px solid var(--accent); padding-left: 10px; }
   .SCOPE .oto .bandtbl { width: 100%; border-collapse: collapse; }
   .SCOPE .oto .bandtbl td { padding: 4px 6px; border-top: 1px solid #edf0f3; }
 
@@ -227,22 +231,17 @@
   .SCOPE .oto .pairbars .bar > i { display: block; height: 100%; border-radius: 0 4px 4px 0; }
   .SCOPE .oto .pairbars .v { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted); text-align: right; }
   .SCOPE .oto .pairbars.words .row { grid-template-columns: 210px 1fr 110px; }
-  /* challenges */
-  .SCOPE .oto .chflag { font: inherit; font-size: 12px; font-weight: 600; margin-top: 6px; padding: 2px 9px; border-radius: 12px; border: 1px solid var(--line); background: #fff; color: var(--muted); cursor: pointer; }
-  .SCOPE .oto .chflag:hover { border-color: var(--amber); color: var(--amber); }
-  .SCOPE .oto .chflag[aria-pressed="true"] { background: var(--amber-bg); border-color: var(--amber); color: var(--amber); }
-  .SCOPE .oto .chnote { margin-top: 6px; }
-  .SCOPE .oto .chbar { position: sticky; bottom: 12px; z-index: 5; display: flex; justify-content: space-between; align-items: center; gap: 12px; background: var(--amber-bg); border: 1px solid var(--amber); border-radius: 8px; padding: 8px 12px; font-weight: 600; box-shadow: 0 4px 14px rgba(0,0,0,.12); }
-  .SCOPE .oto .chbar[hidden] { display: none; }
-  .SCOPE .oto .chcard { border-left: 4px solid var(--amber); }
-  .SCOPE .oto .chcard.agreed { border-left-color: var(--green); }
-  .SCOPE .oto .chcard h3 { font-size: 15px; margin-bottom: 6px; }
-  .SCOPE .oto .chlist { margin: 4px 0 8px 18px; padding: 0; }
-  .SCOPE .oto .chlist li { margin: 3px 0; }
-  .SCOPE .oto .chlist li, .SCOPE .oto .feedback, .SCOPE .oto .answer, .SCOPE .oto .focus li, .SCOPE .oto .since li, .SCOPE .oto .attn-text { overflow-wrap: anywhere; }
-  .SCOPE .oto .chstatus { display: flex; gap: 18px; margin: 4px 0; font-weight: 600; }
-  .SCOPE .oto tr.challenged td:first-child { box-shadow: inset 3px 0 0 var(--amber); }
-  .SCOPE .oto section.card.challenged { border-left: 4px solid var(--amber); }
+  /* expectations: one compact section per group */
+  .SCOPE .oto .expgroups { display: flex; flex-direction: column; gap: 14px; }
+  .SCOPE .oto .expgroup { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #fff; }
+  .SCOPE .oto .expgroup > header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 8px 12px; background: var(--soft); border-bottom: 1px solid var(--line); border-left: 4px solid #1f7190; }
+  .SCOPE .oto .expgroup.ind > header { border-left-color: var(--accent); }
+  .SCOPE .oto .expgroup.orphan > header { border-left-color: var(--red); }
+  .SCOPE .oto .expgroup .eg-title { font-weight: 700; font-size: 14px; }
+  .SCOPE .oto .expgroup .tbl { margin: 0; }
+  .SCOPE .oto .expgroup .tbl td { border-top: 1px solid var(--line); }
+  .SCOPE .oto .expgroup .tbl tr:first-child td { border-top: none; }
+  .SCOPE .oto .feedback, .SCOPE .oto .answer, .SCOPE .oto .focus li, .SCOPE .oto .since li, .SCOPE .oto .attn-text { overflow-wrap: anywhere; }
   .SCOPE .oto .focus { margin-top: 12px; border-left: 3px solid var(--accent); background: var(--accent-bg); padding: 8px 11px; border-radius: 0 6px 6px 0; font-size: 13px; }
   .SCOPE .oto .focus ul { margin: 6px 0 0 18px; padding: 0; }
   .SCOPE .oto .focus .band { font-size: 11px; }
@@ -276,10 +275,6 @@
   .SCOPE .oto .list { display: flex; flex-direction: column; gap: 8px; }
   .SCOPE .oto .list .li { background: var(--soft); border-radius: 6px; padding: 7px 10px; }
   .SCOPE .oto .list .li b { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-  .SCOPE .oto .covbar { display: grid; grid-template-columns: 110px 1fr 46px; gap: 10px; align-items: center; font-size: 12px; margin-bottom: 7px; }
-  .SCOPE .oto .covbar .bar { display: flex; gap: 2px; height: 10px; }
-  .SCOPE .oto .covbar .bar > i { flex: 1; border-radius: 2px; background: #e6eaef; }
-  .SCOPE .oto .covbar .bar > i.s { background: var(--navy-2); } .SCOPE .oto .covbar .bar > i.o { background: var(--accent); }
   .SCOPE .oto .confetti { position: fixed; inset: 0; pointer-events: none; z-index: 97; overflow: hidden; }
   .SCOPE .oto .confetti i { position: absolute; width: 9px; height: 14px; top: -20px; border-radius: 2px; animation: otofall linear forwards; }
   @keyframes otofall { to { transform: translateY(calc(105vh / var(--z))) rotate(540deg); opacity: .9; } }
@@ -359,9 +354,9 @@
   .SCOPE .oto .report-wrap { z-index: 10000; }
   /* ---------- v4.3 feedback bubble (bottom-right, above the page, below dialogs) ---------- */
   .SCOPE .oto .fbk { position: fixed; right: 20px; bottom: 20px; z-index: 10005; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
-  .SCOPE .oto .fbk-bubble { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: 999px; width: 48px; height: 48px; padding: 0; background: var(--navy); color: #fff; font: inherit; font-weight: 650; font-size: 14px; cursor: pointer; box-shadow: 0 6px 18px rgba(14,66,87,.35); }
-  .SCOPE .oto .fbk-bubble span[aria-hidden] { font-size: 20px; line-height: 1; }
-  .SCOPE .oto .fbk-bubble .fbk-lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }   /* label for screen readers; the tooltip shows it */
+  .SCOPE .oto .fbk-bubble { display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; height: 34px; padding: 0 14px 0 11px; background: var(--navy); color: #fff; font: inherit; font-size: 13px; font-weight: 650; cursor: pointer; box-shadow: 0 3px 10px rgba(0,0,0,.18); }
+  .SCOPE .oto .fbk-bubble span[aria-hidden] { font-size: 15px; line-height: 1; }
+  .SCOPE .oto .fbk-bubble .fbk-lbl { white-space: nowrap; }   /* visible: makes it clear this is for feedback, not a chat */
   .SCOPE .oto .fbk-bubble:hover { background: var(--navy-2); }
   .SCOPE .oto .fbk-bubble:focus-visible { outline: 3px solid #ef7d3a; outline-offset: 2px; }
   .SCOPE .oto .fbk-bubble[aria-expanded="true"] { background: #0e4257; }

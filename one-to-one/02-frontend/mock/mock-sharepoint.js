@@ -7,11 +7,12 @@
 //     (technician: EDIT own open Monthly Review, READ own locked review and own RELEASED Manager Review,
 //      READ the 1-to-1 Settings list, nothing else; Team Leader: everything)
 //   * field validation for validateUpdateListItem (choices, numbers, dd/MM/yyyy dates, yes/no, people)
-//   * the observable effects of Flow 2 (submit → lock + stamp) and Flow 3 (complete/close → release)
+//   * the observable effects of Flow 2 (submit → lock + stamp; a Team Leader amendment is not a submission),
+//     Flow 3 (complete/close → release) and Flow 8 (amendment → email the technician, or Failed)
 // State persists in sessionStorage so you can switch user (TL ↔ Test A ↔ Test B) and carry on.
 (function () {
   'use strict';
-  var KEY = 'oto-mock-db-v7';
+  var KEY = 'oto-mock-db-v8';
   var SITE = 'https://contoso.example/sites/esg-1to1';
   var TZ = 'Europe/London';
 
@@ -30,15 +31,15 @@
     WbStatus: ['Open', 'Submitted', 'Completed'],
     FbType: ['Fault', 'Improvement', 'Suggestion'],
     FbStatus: ['Pending', 'Sent', 'Failed', 'Read', 'Held'],
-    ChState: ['Open', 'Agreed', 'Not agreed'],
-    ChStatus: ['Open', 'Agreed', 'Not agreed', 'Rejected']
+    Notify: ['Draft', 'Pending', 'Sending', 'Sent', 'Failed', 'Retry', 'Cancelled']
   };
   // ?locale=uk (default) | us | uk-noiso | us-noiso – how this pretend SharePoint reads typed dates
   var LOCALE = (function () { try { return new URL(window.location.href).searchParams.get('locale') || 'uk'; } catch (_) { return 'uk'; } })();
   // field schemas: t = text | note | num | choice | date | datetime | bool | person
   function F(t, extra) { var f = { t: t }; Object.keys(extra || {}).forEach(function (k) { f[k] = extra[k]; }); return f; }
   var SCHEMA = {
-    'Technicians': { Title: F('text'), Technician: F('person'), TechnicianAadId: F('text'), Active: F('bool'), AppraisalDate: F('date') },
+    'Technicians': { Title: F('text'), Technician: F('person'), TechnicianAadId: F('text'), Active: F('bool'), AppraisalDate: F('date'),
+      NextWellbeingDate: F('date', { v14: true }), AppraisalCycleStart: F('date', { v14: true }), AppraisalHistoryJson: F('note', { v14: true }), AppraisalBoundaries: F('note', { v14: true }) },
     'Appraisal Expectations': { Title: F('text'), Measures: F('note'), AppraisalYear: F('text'), AppliesTo: F('choice', { c: CHOICES.AppliesTo }),
       Technician: F('person'), SortOrder: F('num'), Active: F('bool') },
     'Monthly Reviews': { Title: F('text'), Technician: F('person'), MonthKey: F('text'), MonthStart: F('date'), DueDate: F('datetime'),
@@ -46,15 +47,13 @@
       Q3WorkloadRating: F('num', { min: 1, max: 5 }), Q3WorkloadComment: F('note'), Q4WellbeingRaise: F('choice', { c: CHOICES.YesNo }), Q4WellbeingDetail: F('note'),
       Q5PlanningRaise: F('choice', { c: CHOICES.YesNo }), Q5PlanningDetail: F('note'), Q6DevRaise: F('choice', { c: CHOICES.YesNo }), Q6DevWhat: F('note'), Q6DevWhy: F('note'),
       Q7ManagerFeedback: F('note'), ExpectationsJson: F('note'), Q9FollowUp: F('choice', { c: CHOICES.Follow }), Mood: F('num', { min: 1, max: 5 }), WinOfMonth: F('note'),
-      AppraisalDate: F('date') },
+      AppraisalDate: F('date'), AppraisalBoundaries: F('note', { v14: true }) },
     'Manager Reviews': { Title: F('text'), ReviewKey: F('text'), ReviewItemId: F('num'), Technician: F('person'), TechnicianAadId: F('text'), MonthKey: F('text'),
       DueDate: F('datetime'), ReviewState: F('choice', { c: CHOICES.ReviewState }), LinkSentOn: F('datetime'), SubmittedOn: F('datetime'), SubmittedLate: F('bool'),
       TechFollowUp: F('text'), ExpectationSnapshotJson: F('note'), FB_Q1: F('note'), FB_Q2: F('note'), FB_Q3: F('note'), FB_Q4: F('note'), FB_Q5: F('note'),
       FB_Q6: F('note'), FB_Q7: F('note'), FB_Q9: F('note'), FB_Overall: F('note'), ExpectationFeedbackJson: F('note'), FollowUpDecision: F('choice', { c: CHOICES.Follow }),
       MeetingDate: F('date'), ActionsJson: F('note'), ActionsStatus: F('choice', { c: CHOICES.ActionsStatus }), NextActionDue: F('date'), CompletedOn: F('datetime'),
-      CompletedBy: F('text'), ReleasedOn: F('datetime'), CorrectionLog: F('note'),
-      ChallengeState: F('choice', { c: CHOICES.ChState }), ChallengeSectionsJson: F('note'), ChallengeItemId: F('num'), ChallengeOpenedOn: F('datetime'),
-      ChallengeCloseBy: F('date'), ChallengeTlAgreedOn: F('datetime'), ChallengeTechAgreedOn: F('datetime'), ChallengeClosedOn: F('datetime') },
+      CompletedBy: F('text'), ReleasedOn: F('datetime'), CorrectionLog: F('note') },
     '1-to-1 Settings': { Title: F('text'), Value: F('note') },
     'Wellbeing Assessments': { Title: F('text'), Technician: F('person'), AssessmentStatus: F('choice', { c: CHOICES.WbStatus }), AssessmentDate: F('date'),
       Position: F('text'), EmployeeNumber: F('text'), AnswersJson: F('note'), PersonalJson: F('note'), ArrangementsJson: F('note'), ManagerNotes: F('note'),
@@ -63,9 +62,12 @@
     '1-to-1 Feedback': { Title: F('text'), FeedbackType: F('choice', { c: CHOICES.FbType }), Message: F('note'), PageName: F('text'), AppVersion: F('text'),
       DeliveryStatus: F('choice', { c: CHOICES.FbStatus }), SentOn: F('datetime'), Created: F('datetime'), Author: F('person'),
       HasUniqueRoleAssignments: F('bool') },   // set by 'Flow 6' when it locks the item (not writable from the page)
-    '1-to-1 Challenges': { Title: F('text'), ManagerReviewId: F('num'), MonthKey: F('text'), SectionsJson: F('note'), TechAgreedOn: F('datetime'),
-      TlPing: F('datetime'), ChallengeStatus: F('choice', { c: CHOICES.ChStatus }), Created: F('datetime'), Author: F('person') }
+    // Owners only (no group access). Created / Author are SharePoint's own.
+    '1-to-1 Amendments': { Title: F('text'), ReviewItemId: F('num'), ManagerReviewId: F('num'), MonthKey: F('text'), Technician: F('person'), Reason: F('note'),
+      ChangedFields: F('note'), ChangesJson: F('note'), NotifyStatus: F('choice', { c: CHOICES.Notify }), NotifiedOn: F('datetime'), NotifyError: F('text'),
+      Created: F('datetime'), Author: F('person') }
   };
+  var READ_ONLY = ['HasUniqueRoleAssignments', 'Author', 'Created', 'Modified'];
 
   // ---------------------------------------------------------------- people (fictional)
   var USERS = [
@@ -108,7 +110,7 @@
 
   // ---------------------------------------------------------------- seed
   function seed(xss) {
-    var db = { nextId: {}, lists: {}, perms: { 'Monthly Reviews': {}, 'Manager Reviews': {}, 'Wellbeing Assessments': {}, '1-to-1 Feedback': {}, '1-to-1 Challenges': {} }, fbFail: false, writes: [], emails: [], group: [], digest: 'MOCKDIGEST-' + Date.now() };
+    var db = { nextId: {}, lists: {}, perms: { 'Monthly Reviews': {}, 'Manager Reviews': {}, 'Wellbeing Assessments': {}, '1-to-1 Feedback': {} }, fbFail: false, writes: [], emails: [], recycled: [], group: [], digest: 'MOCKDIGEST-' + Date.now() };
     Object.keys(SCHEMA).forEach(function (l) { db.lists[l] = []; db.nextId[l] = 1; });
     function add(list, fields) { var id = db.nextId[list]++; var it = { ID: id }; Object.keys(fields).forEach(function (k) { it[k] = fields[k]; }); db.lists[list].push(it); return it; }
     var today = londonToday(), CUR = today.slice(0, 7);
@@ -117,9 +119,24 @@
     var apOffsets = { alex: [4, '12'], sam: [3, '05'], jordan: [2, '22'], casey: [1, '18'], riley: [5, '09'], taylor: [4, '26'] };
     var yearStart = (+CUR.slice(5, 7) >= 4 ? +CUR.slice(0, 4) : +CUR.slice(0, 4) - 1);
     var YEAR = yearStart + '/' + String(yearStart + 1).slice(2);
+    // Period starts: Sam's last appraisal was completed four months ago (an earlier period is in the history); Jordan has
+    // no start set yet; the others started before the first review. Next wellbeing dates: none for Sam.
+    var starts = { alex: [-9, '15'], casey: [-10, '02'], riley: [-8, '20'], taylor: [-11, '28'] };
+    var wbNext = { alex: 10, jordan: 280, casey: -5, riley: 60, taylor: 120 };
     techUsers.forEach(function (u) {
-      var o = apOffsets[u.key];
-      add('Technicians', { Title: u.title, Technician: claimsOf(u), TechnicianAadId: 'aad-' + u.key, Active: true, AppraisalDate: dateOnlyUtc(addMonths(CUR, o[0]) + '-' + o[1]) });
+      var o = apOffsets[u.key], st = starts[u.key];
+      var row = add('Technicians', { Title: u.title, Technician: claimsOf(u), TechnicianAadId: 'aad-' + u.key, Active: true, AppraisalDate: dateOnlyUtc(addMonths(CUR, o[0]) + '-' + o[1]) });
+      if (st) { row.AppraisalCycleStart = dateOnlyUtc(addMonths(CUR, st[0]) + '-' + st[1]); }
+      if (u.key === 'sam') {
+        var done = addMonths(CUR, -4) + '-10', began = addMonths(CUR, -16) + '-05';
+        row.AppraisalCycleStart = dateOnlyUtc(done);
+        row.AppraisalHistoryJson = JSON.stringify([{ start: began, completed: done, nextDue: addMonths(CUR, 3) + '-05', recordedOn: done }]);
+      }
+      if (wbNext[u.key] !== undefined) { row.NextWellbeingDate = dateOnlyUtc(new Date(Date.parse(today + 'T12:00:00Z') + wbNext[u.key] * 86400000).toISOString().slice(0, 10)); }
+      var b = [];
+      if (row.AppraisalHistoryJson) { JSON.parse(row.AppraisalHistoryJson).forEach(function (x) { b.push(x.start, x.completed); }); }
+      if (row.AppraisalCycleStart) { b.push(new Date(row.AppraisalCycleStart).toLocaleDateString('en-CA', { timeZone: TZ })); }
+      row.AppraisalBoundaries = JSON.stringify(b.filter(function (x, i) { return b.indexOf(x) === i; }).sort());
     });
     var EXP = [
       ['Complete annual safety refresher training', 'Course passed and certificate recorded by the end of Q4.', 'Shared', '', 10],
@@ -184,7 +201,7 @@
           ExpectationSnapshotJson: JSON.stringify(snap), ActionsStatus: 'None', ActionsJson: '[]', ExpectationFeedbackJson: '[]', ReleasedOn: null });
         var rv = add('Monthly Reviews', { Title: u.title + ' – ' + m, Technician: claimsOf(u), MonthKey: m, MonthStart: dateOnlyUtc(m + '-01'), DueDate: due,
           ReviewStatus: 'Not Started', ExpectationsJson: JSON.stringify(snap.map(function (e) { return { id: e.id, title: e.title, measures: e.measures, year: e.year, rating: null, comment: '' }; })),
-          AppraisalDate: techRow.AppraisalDate });
+          AppraisalDate: techRow.AppraisalDate, AppraisalBoundaries: techRow.AppraisalBoundaries });
         mr.ReviewItemId = rv.ID;
         db.perms['Monthly Reviews'][rv.ID] = {}; db.perms['Monthly Reviews'][rv.ID][u.email] = 'edit';
         if (mode === 'blank' || mode === 'missed') {
@@ -277,6 +294,9 @@
       var t = db.lists['Technicians'].find(function (x) { return x.Technician === claimsOf(USERS[5]); });
       t.Title = 'Riley ' + X[0];
     }
+    // every item carries SharePoint's Modified stamp
+    var stamp = new Date(Date.now() - 86400000).toISOString().replace(/\.\d{3}/, '');
+    Object.keys(db.lists).forEach(function (l) { db.lists[l].forEach(function (it) { it.Modified = stamp; }); });
     return db;
 
     function release(rv, mr, u) {
@@ -295,7 +315,7 @@
   // ---------------------------------------------------------------- permission model (D.4)
   function canSeeList(db, list, u) {
     if (u.owner) { return !!db.lists[list]; }
-    if (list === '1-to-1 Settings' || list === '1-to-1 Feedback' || list === '1-to-1 Challenges') { return true; }   // group: Read / Submit (own items only)
+    if (list === '1-to-1 Settings' || list === '1-to-1 Feedback') { return true; }   // group: Read / Submit (own items only)
     if (db.perms[list]) { return Object.keys(db.perms[list]).some(function (id) { return !!db.perms[list][id][u.email]; }); }
     return false;
   }
@@ -314,13 +334,14 @@
       if (sc[k] && sc[k].t === 'person') { out[k] = person(userByClaims(it[k])); } else { out[k] = it[k] === undefined ? null : it[k]; }
     });
     Object.keys(sc).forEach(function (k) { if (!(k in out)) { out[k] = sc[k].t === 'person' ? null : (sc[k].t === 'bool' ? false : null); } });
+    out.Modified = it.Modified || null;
     return out;
   }
 
   // ---------------------------------------------------------------- value coercion (validateUpdateListItem)
   function coerce(list, name, value) {
     var f = SCHEMA[list][name];
-    if (!f || name === 'HasUniqueRoleAssignments' || name === 'Author' || name === 'Created') { return { err: 'Column \'' + name + '\' does not exist or is read-only.' }; }
+    if (!f || READ_ONLY.indexOf(name) >= 0) { return { err: 'Column \'' + name + '\' does not exist or is read-only.' }; }
     var v = value === null || value === undefined ? '' : String(value);
     switch (f.t) {
       case 'text': if (v.length > 255) { return { err: 'Text too long (max 255)' }; } return { v: v };
@@ -359,12 +380,13 @@
   }
 
   // ---------------------------------------------------------------- flow effects
-  function flow2(db, rv) {
+  function flow2(db, rv, editor) {
     if (['Not Started', 'Draft'].indexOf(rv.ReviewStatus) >= 0) { return; }
     var mr = db.lists['Manager Reviews'].find(function (m) { return m.ReviewItemId === rv.ID; });
     if (!mr) { return; }
     var u = userByClaims(mr.Technician);
     var prev = mr.ReviewState;
+    if (editor && editor.owner && prev !== 'Open') { db.flow2Cancelled = (db.flow2Cancelled || 0) + 1; return; }   // a Team Leader amendment
     db.perms['Monthly Reviews'][rv.ID] = {}; db.perms['Monthly Reviews'][rv.ID][u.email] = 'read';
     if (prev === 'Open') {
       mr.ReviewState = 'Submitted'; mr.SubmittedOn = nowIso(); mr.SubmittedLate = Date.now() > Date.parse(mr.DueDate);
@@ -425,55 +447,15 @@
     db.emails.push({ to: 'TL', template: 'E13', fbId: it.ID, from: u.email, type: it.FeedbackType, page: it.PageName, message: it.Message });
   }
 
-  // Flow 7: challenges. The trusted state is on the Manager Review; the person holding the item is the trusted technician.
-  function lastDayOf(m) { var d = new Date(Date.UTC(+m.slice(0, 4), +m.slice(5, 7), 0)); return d.toISOString().slice(0, 10); }
-  function closeBy() {
-    var t = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' }), m = t.slice(0, 7), last = lastDayOf(m);
-    if ((Date.parse(last) - Date.parse(t)) / 86400000 < 7) { var n = new Date(Date.UTC(+m.slice(0, 4), +m.slice(5, 7), 1)).toISOString().slice(0, 7); last = lastDayOf(n); }
-    return dateOnlyUtc(last);
-  }
-  function flow7(db, it, u, created) {
-    var P = db.perms['1-to-1 Challenges'];
-    var mr = db.lists['Manager Reviews'].find(function (m) { return m.ID === it.ManagerReviewId; });
-    if (created) {
-      var owner = mr ? userByClaims(mr.Technician) : null;
-      var later = mr && db.lists['Manager Reviews'].some(function (m) { return m.Technician === mr.Technician && m.ReleasedOn && m.MonthKey > mr.MonthKey; });
-      var ok = !!(mr && mr.ReleasedOn && owner && owner.email === u.email && !mr.ChallengeState && !later && it.SectionsJson && /^\[[\s\S]*\]$/.test(it.SectionsJson.trim()) && it.SectionsJson.length <= 20000);
-      P[it.ID] = {};
-      if (!ok) { it.ChallengeStatus = 'Rejected'; return; }
-      P[it.ID][u.email] = 'edit';
-      mr.ChallengeState = 'Open'; mr.ChallengeSectionsJson = it.SectionsJson; mr.ChallengeItemId = it.ID; mr.ChallengeOpenedOn = nowIso(); mr.ChallengeCloseBy = closeBy();
-      mr.ChallengeTlAgreedOn = null; mr.ChallengeTechAgreedOn = null; mr.ChallengeClosedOn = null;
-      it.ChallengeStatus = 'Open'; it.MonthKey = mr.MonthKey; it.TechAgreedOn = null;
-      db.emails.push({ to: 'TL', template: 'E14', mrId: mr.ID }); return;
-    }
-    var holders = Object.keys(P[it.ID] || {});
-    if (holders.length !== 1 || !mr || mr.ChallengeItemId !== it.ID) { return; }
-    var email = holders[0], role = P[it.ID][email], owner2 = userByClaims(mr.Technician);
-    if (!owner2 || owner2.email !== email) { return; }
-    if (mr.ChallengeState === 'Open' && role === 'edit') {
-      // the topics are fixed when it is accepted
-      mr.ChallengeTechAgreedOn = it.TechAgreedOn ? (mr.ChallengeTechAgreedOn || nowIso()) : null;
-      if (it.TechAgreedOn && mr.ChallengeTlAgreedOn) { mr.ChallengeState = 'Agreed'; mr.ChallengeClosedOn = nowIso(); P[it.ID][email] = 'read'; it.ChallengeStatus = 'Agreed'; }
-    } else if (mr.ChallengeState === 'Open') {
-      P[it.ID][email] = 'edit'; it.TechAgreedOn = null; mr.ChallengeTechAgreedOn = null; it.ChallengeStatus = 'Open';
-      db.emails.push({ to: email, template: 'E15', mrId: mr.ID });
-    } else {
-      P[it.ID][email] = 'read'; if (mr.ChallengeState) { it.ChallengeStatus = mr.ChallengeState; }
-    }
-  }
-  // Flow 1's daily step: an open challenge past its close-by date closes as Not agreed and the item goes back to Read
-  function closeChallenges(db, todayIso) {
-    db.lists['Manager Reviews'].forEach(function (mr) {
-      if (mr.ChallengeState !== 'Open' || !mr.ChallengeCloseBy) { return; }
-      var cb = new Date(mr.ChallengeCloseBy).toLocaleDateString('en-CA', { timeZone: 'Europe/London' });   // the UK date, as Flow 1 reads it
-      if (cb >= todayIso) { return; }
-      mr.ChallengeState = mr.ChallengeTlAgreedOn && mr.ChallengeTechAgreedOn ? 'Agreed' : 'Not agreed'; mr.ChallengeClosedOn = nowIso();
-      var P = db.perms['1-to-1 Challenges'][mr.ChallengeItemId];
-      if (P) { Object.keys(P).forEach(function (e) { P[e] = 'read'; }); }
-      var item = db.lists['1-to-1 Challenges'].find(function (x) { return x.ID === mr.ChallengeItemId; });
-      if (item) { item.ChallengeStatus = mr.ChallengeState; }
-    });
+  // Flow 8: an amendment ready to send (Pending / Retry) → re-read, Sending, then Sent – or Failed and a notice to the TL.
+  // db.flow8Off: the flow is off (the item stays Pending). db.amFail: the email to the technician fails.
+  function flow8(db, it) {
+    if (db.flow8Off || ['Pending', 'Retry'].indexOf(it.NotifyStatus) < 0) { return; }
+    var u = userByClaims(it.Technician);
+    it.NotifyStatus = 'Sending';
+    if (db.amFail || !u) { it.NotifyStatus = 'Failed'; it.NotifyError = 'The email to the technician could not be sent.'; db.emails.push({ to: 'TL', template: 'E16-notice', amId: it.ID }); return; }
+    it.NotifyStatus = 'Sent'; it.NotifiedOn = nowIso(); it.NotifyError = '';
+    db.emails.push({ to: u.email, template: 'E16', amId: it.ID, reviewId: it.ReviewItemId, month: it.MonthKey });
   }
 
   // ---------------------------------------------------------------- REST router
@@ -500,7 +482,10 @@
       var m = /^\/_api\/web\/lists\/getbytitle\('([^']*(?:''[^']*)*)'\)(\/.*)?$/.exec(rest);
       if (!m) { return spError(404, 'Not found: ' + rest); }
       var list = decodeURIComponent(m[1]).replace(/''/g, "'"), tail = m[2] || '';
-      if (!db.lists[list]) { return spError(404, 'List \'' + list + '\' does not exist at site with URL \'' + SITE + '\'.'); }
+      if (!db.lists[list] || (db.v13 && list === '1-to-1 Amendments')) { return spError(404, 'List \'' + list + '\' does not exist at site with URL \'' + SITE + '\'.'); }
+      if (db.v13 && method === 'GET' && /AppraisalBoundaries|NextWellbeingDate|AppraisalCycleStart|AppraisalHistoryJson/.test(decodeURIComponent(q))) {   // test hook: Setup 1.4 not run yet
+        return resp(400, { 'odata.error': { code: '-1, System.ArgumentException', message: { lang: 'en-US', value: 'Column does not exist.' } } });
+      }
       if (!canSeeList(db, list, u)) { return spError(404, 'List \'' + list + '\' does not exist at site with URL \'' + SITE + '\'.'); }
       if (method === 'GET' && tail === '') { return u.owner ? resp(200, { Id: 'list-' + list.replace(/\W/g, '') }) : spError(403, 'Access denied.'); }
       if (method === 'GET' && tail === '/items' && list === 'Manager Reviews' && db.missingMrColumn && q.indexOf(db.missingMrColumn) >= 0) {   // test hook
@@ -510,14 +495,23 @@
         var rows = db.lists[list].filter(function (it) { return canRead(db, list, it.ID, u); }).map(function (it) { return serialize(list, it); });
         return resp(200, { value: rows });
       }
-      if (method === 'GET' && tail === '/RootFolder') { return u.owner || list === '1-to-1 Feedback' || list === '1-to-1 Challenges' ? resp(200, { ServerRelativeUrl: '/sites/esg-1to1/Lists/' + list.replace(/\W/g, '') }) : spError(403, 'Access denied.'); }
-      var im = /^\/items\((\d+)\)(\/validateUpdateListItem)?$/.exec(tail);
+      if (method === 'GET' && tail === '/RootFolder') { return u.owner || list === '1-to-1 Feedback' ? resp(200, { ServerRelativeUrl: '/sites/esg-1to1/Lists/' + list.replace(/\W/g, '') }) : spError(403, 'Access denied.'); }
+      var im = /^\/items\((\d+)\)(\/validateUpdateListItem|\/recycle\(\))?$/.exec(tail);
       if (im) {
         var id = Number(im[1]);
         var it = db.lists[list].find(function (x) { return x.ID === id; });
         if (!it || !canRead(db, list, id, u)) { return spError(404, 'Item does not exist. It may have been deleted by another user.'); }
         if (method === 'GET' && !im[2]) { return resp(200, serialize(list, it)); }
-        if (method === 'POST' && im[2]) {
+        if (method === 'POST' && im[2] === '/recycle()') {
+          if (headers['X-RequestDigest'] !== db.digest) { return spError(403, 'The security validation for this page is invalid.'); }
+          if (!u.owner) { return spError(403, 'Access denied. You do not have permission to perform this action or access this resource.'); }   // no Delete in the technicians' levels
+          db.lists[list] = db.lists[list].filter(function (x) { return x !== it; });
+          db.recycled.push({ list: list, item: it, by: u.key });
+          db.writes.push({ as: u.key, list: list, id: id, recycle: true, fields: [] });
+          saveDb(db);
+          return resp(200, { value: 'recycle-' + list.replace(/\W/g, '') + '-' + id });
+        }
+        if (method === 'POST' && im[2] === '/validateUpdateListItem') {
           if (headers['X-RequestDigest'] !== db.digest) { return spError(403, 'The security validation for this page is invalid.'); }
           if (!canWrite(db, list, id, u)) { return spError(403, 'Access denied. You do not have permission to perform this action or access this resource.'); }
           if (db.failWrites > 0) { db.failWrites--; return spError(500, 'Simulated server error'); }   // test hook
@@ -530,12 +524,13 @@
           });
           if (ok) {
             Object.keys(pending).forEach(function (k) { it[k] = pending[k]; });
+            it.Modified = nowIso();
             db.writes.push({ as: u.key, list: list, id: id, fields: Object.keys(pending), values: (body.formValues || []).reduce(function (o, fv) { o[fv.FieldName] = fv.FieldValue; return o; }, {}) });
-            if (list === 'Monthly Reviews' && 'ReviewStatus' in pending) { flow2(db, it); }
+            if (list === 'Monthly Reviews') { flow2(db, it, u); }   // runs on every change, as the real trigger does
             if (list === 'Manager Reviews' && 'ReviewState' in pending) { flow3(db, it); }
             if (list === 'Technicians' && 'Active' in pending) { flow4(db, it); }
             if (list === 'Wellbeing Assessments') { flow5(db, it, false); }
-            if (list === '1-to-1 Challenges') { flow7(db, it, u, false); }
+            if (list === '1-to-1 Amendments' && 'NotifyStatus' in pending) { flow8(db, it); }
             saveDb(db);
           }
           return resp(200, { value: results });
@@ -543,10 +538,10 @@
       }
       if (method === 'POST' && tail === '/AddValidateUpdateItemUsingPath') {
         if (headers['X-RequestDigest'] !== db.digest) { return spError(403, 'The security validation for this page is invalid.'); }
-        if (!u.owner && list !== '1-to-1 Feedback' && list !== '1-to-1 Challenges') { return spError(403, 'Access denied.'); }
+        if (!u.owner && list !== '1-to-1 Feedback') { return spError(403, 'Access denied.'); }
         var b = JSON.parse(options.body || '{}');
         if (!b.listItemCreateInfo || !b.listItemCreateInfo.FolderPath || !b.listItemCreateInfo.FolderPath.DecodedUrl) { return spError(400, 'listItemCreateInfo is required'); }
-        var item = { ID: db.nextId[list]++ }, res = [], good = true;
+        var item = { ID: db.nextId[list]++, Modified: nowIso() }, res = [], good = true;
         (b.formValues || []).forEach(function (fv) {
           var c = coerce(list, fv.FieldName, fv.FieldValue);
           if (c.err) { good = false; res.push({ FieldName: fv.FieldName, HasException: true, ErrorMessage: c.err }); } else { item[fv.FieldName] = c.v; res.push({ FieldName: fv.FieldName, HasException: false, ErrorMessage: null }); }
@@ -560,10 +555,7 @@
             db.perms[list][item.ID] = {}; db.perms[list][item.ID][u.email] = 'edit';   // item-level security: own item only
             flow6(db, item, u);
           }
-          if (list === '1-to-1 Challenges') {
-            item.Author = claimsOf(u); item.Created = nowIso();
-            flow7(db, item, u, true);
-          }
+          if (list === '1-to-1 Amendments') { item.Author = claimsOf(u); item.Created = nowIso(); flow8(db, item); }
           db.writes.push({ as: u.key, list: list, id: item.ID, create: true, fields: (b.formValues || []).map(function (fv) { return fv.FieldName; }), values: (b.formValues || []).reduce(function (o, fv) { o[fv.FieldName] = fv.FieldValue; return o; }, {}) });
           saveDb(db);
         } else { db.nextId[list]--; }
@@ -586,8 +578,8 @@
     SITE: SITE, USERS: USERS, X: X,
     db: function (xss) { return loadDb(xss); },
     reset: function () { try { sessionStorage.removeItem(KEY); } catch (_) { /* ignore */ } },
-    // test hook: run Flow 1's daily challenge close as if today were todayIso (yyyy-mm-dd)
-    closeChallenges: function (todayIso) { var db = window.OTO_MOCK.current.db; closeChallenges(db, todayIso); saveDb(db); },
+    // test hook: run Flow 8 for any amendment waiting (as if it had just been switched on)
+    runFlow8: function () { var db = window.OTO_MOCK.current.db; db.lists['1-to-1 Amendments'].forEach(function (it) { flow8(db, it); }); saveDb(db); },
     userByKey: function (k) { return USERS.find(function (u) { return u.key === k; }) || USERS[0]; },
     ctx: function (userKey, xss) {
       var db = loadDb(xss), u = window.OTO_MOCK.userByKey(userKey);

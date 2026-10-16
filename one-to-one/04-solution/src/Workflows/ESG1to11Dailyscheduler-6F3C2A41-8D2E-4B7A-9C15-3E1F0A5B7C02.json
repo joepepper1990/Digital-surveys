@@ -229,6 +229,15 @@
             ]
           }
         },
+        "AllowedYears": {
+          "type": "Compose",
+          "inputs": "@createArray(concat(string(sub(outputs('YearStart'), 0)), '/', substring(string(sub(add(outputs('YearStart'), 1), 0)), 2, 2)), concat(string(sub(outputs('YearStart'), 1)), '/', substring(string(sub(add(outputs('YearStart'), 1), 1)), 2, 2)), concat(string(sub(outputs('YearStart'), 2)), '/', substring(string(sub(add(outputs('YearStart'), 1), 2)), 2, 2)), concat(string(sub(outputs('YearStart'), 3)), '/', substring(string(sub(add(outputs('YearStart'), 1), 3)), 2, 2)), concat(string(sub(outputs('YearStart'), 4)), '/', substring(string(sub(add(outputs('YearStart'), 1), 4)), 2, 2)), concat(string(sub(outputs('YearStart'), 5)), '/', substring(string(sub(add(outputs('YearStart'), 1), 5)), 2, 2)))",
+          "runAfter": {
+            "AppraisalYear": [
+              "Succeeded"
+            ]
+          }
+        },
         "Try": {
           "type": "Scope",
           "actions": {
@@ -437,8 +446,8 @@
                   "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
                   "table": "Appraisal Expectations",
                   "$filter": "Active eq 1",
-                  "$orderby": "SortOrder asc",
-                  "$top": 500
+                  "$orderby": "AppliesTo desc,SortOrder asc",
+                  "$top": 5000
                 },
                 "authentication": "@parameters('$authentication')"
               },
@@ -488,13 +497,6 @@
                       "inputs": {
                         "name": "varTechAad",
                         "value": "@toLower(coalesce(items('Each_technician')?['TechnicianAadId'], ''))"
-                      },
-                      "runtimeConfiguration": {
-                        "secureData": {
-                          "properties": [
-                            "inputs"
-                          ]
-                        }
                       },
                       "runAfter": {}
                     },
@@ -632,7 +634,7 @@
                           "type": "Query",
                           "inputs": {
                             "from": "@body('Get_expectations')?['value']",
-                            "where": "@and(or(empty(trim(coalesce(item()?['AppraisalYear'], ''))), equals(trim(coalesce(item()?['AppraisalYear'], '')), outputs('AppraisalYear'))), or(equals(item()?['AppliesTo']?['Value'], 'Shared'), equals(toLower(coalesce(item()?['Technician']?['Email'], '')), toLower(items('Each_technician')?['Technician']?['Email']))))"
+                            "where": "@and(or(empty(trim(coalesce(item()?['AppraisalYear'], ''))), contains(outputs('AllowedYears'), trim(coalesce(item()?['AppraisalYear'], '')))), or(equals(item()?['AppliesTo']?['Value'], 'Shared'), equals(toLower(coalesce(item()?['Technician']?['Email'], '')), toLower(items('Each_technician')?['Technician']?['Email']))))"
                           },
                           "runtimeConfiguration": {
                             "secureData": {
@@ -644,32 +646,10 @@
                           },
                           "runAfter": {}
                         },
-                        "Too_many": {
-                          "type": "If",
-                          "expression": "@greater(length(body('My_expectations')), 10)",
-                          "actions": {
-                            "Note_too_many": {
-                              "type": "AppendToArrayVariable",
-                              "inputs": {
-                                "name": "varProblems",
-                                "value": "@concat(items('Each_technician')?['Title'], ': more than 10 active expectations – only the first 10 by SortOrder were used.')"
-                              },
-                              "runAfter": {}
-                            }
-                          },
-                          "else": {
-                            "actions": {}
-                          },
-                          "runAfter": {
-                            "My_expectations": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
                         "Snapshot": {
                           "type": "Select",
                           "inputs": {
-                            "from": "@take(body('My_expectations'), 10)",
+                            "from": "@body('My_expectations')",
                             "select": {
                               "id": "@item()?['ID']",
                               "title": "@item()?['Title']",
@@ -686,7 +666,7 @@
                             }
                           },
                           "runAfter": {
-                            "Too_many": [
+                            "My_expectations": [
                               "Succeeded"
                             ]
                           }
@@ -888,6 +868,70 @@
                           },
                           "runAfter": {
                             "Link_review": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Has_boundaries": {
+                          "type": "If",
+                          "expression": "@not(empty(trim(coalesce(items('Each_technician')?['AppraisalBoundaries'], ''))))",
+                          "actions": {
+                            "Boundaries_payload": {
+                              "type": "Compose",
+                              "inputs": {
+                                "AppraisalBoundaries": "@{items('Each_technician')?['AppraisalBoundaries']}"
+                              },
+                              "runtimeConfiguration": {
+                                "secureData": {
+                                  "properties": [
+                                    "inputs"
+                                  ]
+                                }
+                              },
+                              "runAfter": {}
+                            },
+                            "Copy_boundaries": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "connectionName": "shared_sharepointonline",
+                                  "operationId": "HttpRequest",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                },
+                                "parameters": {
+                                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                                  "parameters/method": "POST",
+                                  "parameters/uri": "_api/web/lists(guid'@{outputs('Ids')?['reviewsList']}')/items(@{body('Create_review')?['ID']})",
+                                  "parameters/headers": {
+                                    "Accept": "application/json;odata=nometadata",
+                                    "Content-Type": "application/json;odata=nometadata",
+                                    "X-HTTP-Method": "MERGE",
+                                    "IF-MATCH": "*"
+                                  },
+                                  "parameters/body": "@{string(outputs('Boundaries_payload'))}"
+                                },
+                                "authentication": "@parameters('$authentication')"
+                              },
+                              "runtimeConfiguration": {
+                                "secureData": {
+                                  "properties": [
+                                    "inputs",
+                                    "outputs"
+                                  ]
+                                }
+                              },
+                              "runAfter": {
+                                "Boundaries_payload": [
+                                  "Succeeded"
+                                ]
+                              }
+                            }
+                          },
+                          "else": {
+                            "actions": {}
+                          },
+                          "runAfter": {
+                            "Set_varReviewId_new": [
                               "Succeeded"
                             ]
                           }
@@ -1319,323 +1363,48 @@
                 ]
               }
             },
-            "List_wellbeing": {
-              "type": "Query",
-              "inputs": {
-                "from": "@body('Get_lists')?['value']",
-                "where": "@equals(item()?['RootFolder']?['Name'], 'WellbeingAssessments')"
-              },
-              "runtimeConfiguration": {
-                "secureData": {
-                  "properties": [
-                    "inputs",
-                    "outputs"
-                  ]
-                }
-              },
+            "Today": {
+              "type": "Compose",
+              "inputs": "@formatDateTime(outputs('ukNow'), 'yyyy-MM-dd')",
               "runAfter": {
                 "Reminder_day": [
                   "Succeeded"
                 ]
               }
             },
-            "Wellbeing_list_exists": {
+            "Reminders_by_date": {
               "type": "If",
-              "expression": "@not(empty(body('List_wellbeing')))",
+              "expression": "@equals(1, 1)",
               "actions": {
-                "WellbeingTry": {
+                "DatesTry": {
                   "type": "Scope",
                   "actions": {
-                    "Get_wellbeing": {
-                      "type": "OpenApiConnection",
-                      "inputs": {
-                        "host": {
-                          "connectionName": "shared_sharepointonline",
-                          "operationId": "HttpRequest",
-                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                        },
-                        "parameters": {
-                          "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
-                          "parameters/method": "GET",
-                          "parameters/uri": "_api/web/lists(guid'@{first(body('List_wellbeing'))?['Id']}')/items?$select=ID,NextReviewDate,CompletedOn,Technician/Title,Technician/EMail&$expand=Technician&$filter=AssessmentStatus eq 'Completed'&$top=5000",
-                          "parameters/headers": {
-                            "Accept": "application/json;odata=nometadata"
-                          }
-                        },
-                        "authentication": "@parameters('$authentication')"
-                      },
-                      "runtimeConfiguration": {
-                        "secureData": {
-                          "properties": [
-                            "inputs",
-                            "outputs"
-                          ]
-                        }
-                      },
-                      "runAfter": {}
-                    },
-                    "Today": {
-                      "type": "Compose",
-                      "inputs": "@formatDateTime(outputs('ukNow'), 'yyyy-MM-dd')",
-                      "runAfter": {
-                        "Get_wellbeing": [
-                          "Succeeded"
-                        ]
-                      }
-                    },
-                    "In7": {
-                      "type": "Compose",
-                      "inputs": "@formatDateTime(addDays(outputs('ukNow'), 7), 'yyyy-MM-dd')",
-                      "runAfter": {
-                        "Today": [
-                          "Succeeded"
-                        ]
-                      }
-                    },
-                    "Reviews_due": {
-                      "type": "Query",
-                      "inputs": {
-                        "from": "@body('Get_wellbeing')?['value']",
-                        "where": "@and(contains(createArray(outputs('Today'), outputs('In7')), if(contains(string(coalesce(item()?['NextReviewDate'], '')), 'T'), formatDateTime(convertFromUtc(coalesce(item()?['NextReviewDate'], '2000-01-01T00:00:00Z'), 'GMT Standard Time'), 'yyyy-MM-dd'), coalesce(item()?['NextReviewDate'], ''))), not(empty(item()?['CompletedOn'])), contains(body('Active_tech_emails'), toLower(coalesce(item()?['Technician']?['EMail'], '#none'))))"
-                      },
-                      "runtimeConfiguration": {
-                        "secureData": {
-                          "properties": [
-                            "inputs",
-                            "outputs"
-                          ]
-                        }
-                      },
-                      "runAfter": {
-                        "In7": [
-                          "Succeeded"
-                        ]
-                      }
-                    },
-                    "Each_review_due": {
+                    "Each_date_check": {
                       "type": "Foreach",
-                      "foreach": "@body('Reviews_due')",
+                      "foreach": "@body('Get_technicians')?['value']",
                       "actions": {
-                        "Send_E12": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_office365",
-                              "operationId": "SendEmailV2",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
-                            },
-                            "parameters": {
-                              "emailMessage/To": "@parameters('ESG 1-to-1 Team Leader email (esg_ManagerEmail)')",
-                              "emailMessage/Subject": "Wellbeing review @{if(equals(if(contains(string(coalesce(items('Each_review_due')?['NextReviewDate'], '')), 'T'), formatDateTime(convertFromUtc(coalesce(items('Each_review_due')?['NextReviewDate'], '2000-01-01T00:00:00Z'), 'GMT Standard Time'), 'yyyy-MM-dd'), coalesce(items('Each_review_due')?['NextReviewDate'], '')), outputs('Today')), 'due today', 'due in 7 days')}: @{items('Each_review_due')?['Technician']?['Title']}",
-                              "emailMessage/Body": "<p>The wellbeing review agreed with @{items('Each_review_due')?['Technician']?['Title']} is due on @{formatDateTime(if(contains(string(coalesce(items('Each_review_due')?['NextReviewDate'], '')), 'T'), formatDateTime(convertFromUtc(coalesce(items('Each_review_due')?['NextReviewDate'], '2000-01-01T00:00:00Z'), 'GMT Standard Time'), 'yyyy-MM-dd'), coalesce(items('Each_review_due')?['NextReviewDate'], '')), 'dd-MMM-yyyy')}. Arrange the review conversation, or start a new assessment if one is needed.</p><p><a href=\"@{concat(concat(if(endsWith(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), '/'), substring(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), 0, sub(length(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), 1)), parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), '/SitePages/OneToOne.aspx'), if(empty(first(split(string(coalesce(items('Each_review_due')?['ID'], '')), '.'))), '', concat('?wbId=', first(split(string(coalesce(items('Each_review_due')?['ID'], '')), '.')))))}\"><b>Open the last assessment</b></a></p>",
-                              "emailMessage/Importance": "Normal"
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runtimeConfiguration": {
-                            "secureData": {
-                              "properties": [
-                                "inputs",
-                                "outputs"
-                              ]
-                            }
-                          },
-                          "runAfter": {}
-                        }
-                      },
-                      "runtimeConfiguration": {
-                        "concurrency": {
-                          "repetitions": 1
-                        }
-                      },
-                      "runAfter": {
-                        "Reviews_due": [
-                          "Succeeded"
-                        ]
-                      }
-                    }
-                  },
-                  "runAfter": {}
-                },
-                "WellbeingCatch": {
-                  "type": "Scope",
-                  "actions": {
-                    "Note_wellbeing_failed": {
-                      "type": "AppendToArrayVariable",
-                      "inputs": {
-                        "name": "varProblems",
-                        "value": "Wellbeing review reminders could not be checked today. Open the run history for details."
-                      },
-                      "runAfter": {}
-                    }
-                  },
-                  "runAfter": {
-                    "WellbeingTry": [
-                      "Failed",
-                      "TimedOut"
-                    ]
-                  }
-                }
-              },
-              "else": {
-                "actions": {}
-              },
-              "runAfter": {
-                "List_wellbeing": [
-                  "Succeeded"
-                ]
-              }
-            },
-            "List_challenges": {
-              "type": "Query",
-              "inputs": {
-                "from": "@body('Get_lists')?['value']",
-                "where": "@equals(item()?['RootFolder']?['Name'], 'OneToOneChallenges')"
-              },
-              "runtimeConfiguration": {
-                "secureData": {
-                  "properties": [
-                    "inputs",
-                    "outputs"
-                  ]
-                }
-              },
-              "runAfter": {
-                "Wellbeing_list_exists": [
-                  "Succeeded"
-                ]
-              }
-            },
-            "Challenges_list_exists": {
-              "type": "If",
-              "expression": "@not(empty(body('List_challenges')))",
-              "actions": {
-                "ChallengeTry": {
-                  "type": "Scope",
-                  "actions": {
-                    "Open_challenges": {
-                      "type": "OpenApiConnection",
-                      "inputs": {
-                        "host": {
-                          "connectionName": "shared_sharepointonline",
-                          "operationId": "HttpRequest",
-                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                        },
-                        "parameters": {
-                          "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
-                          "parameters/method": "GET",
-                          "parameters/uri": "_api/web/lists(guid'@{outputs('Ids')?['mgrList']}')/items?$select=ID,Title,ChallengeCloseBy,ChallengeItemId,ChallengeTlAgreedOn,ChallengeTechAgreedOn,Technician/Name&$expand=Technician&$filter=ChallengeState eq 'Open'&$top=5000",
-                          "parameters/headers": {
-                            "Accept": "application/json;odata=nometadata"
-                          }
-                        },
-                        "authentication": "@parameters('$authentication')"
-                      },
-                      "runtimeConfiguration": {
-                        "secureData": {
-                          "properties": [
-                            "inputs",
-                            "outputs"
-                          ]
-                        }
-                      },
-                      "runAfter": {}
-                    },
-                    "ChToday": {
-                      "type": "Compose",
-                      "inputs": "@formatDateTime(outputs('ukNow'), 'yyyy-MM-dd')",
-                      "runAfter": {
-                        "Open_challenges": [
-                          "Succeeded"
-                        ]
-                      }
-                    },
-                    "Past_close_by": {
-                      "type": "Query",
-                      "inputs": {
-                        "from": "@body('Open_challenges')?['value']",
-                        "where": "@and(not(empty(item()?['ChallengeCloseBy'])), less(ticks(concat(if(contains(string(coalesce(item()?['ChallengeCloseBy'], '')), 'T'), formatDateTime(convertFromUtc(coalesce(item()?['ChallengeCloseBy'], '2000-01-01T00:00:00Z'), 'GMT Standard Time'), 'yyyy-MM-dd'), coalesce(item()?['ChallengeCloseBy'], '')), 'T00:00:00Z')), ticks(concat(outputs('ChToday'), 'T00:00:00Z'))))"
-                      },
-                      "runtimeConfiguration": {
-                        "secureData": {
-                          "properties": [
-                            "inputs",
-                            "outputs"
-                          ]
-                        }
-                      },
-                      "runAfter": {
-                        "ChToday": [
-                          "Succeeded"
-                        ]
-                      }
-                    },
-                    "Each_past_close_by": {
-                      "type": "Foreach",
-                      "foreach": "@body('Past_close_by')",
-                      "actions": {
-                        "Outcome": {
+                        "Wb_days": {
                           "type": "Compose",
-                          "inputs": "@if(and(not(empty(items('Each_past_close_by')?['ChallengeTlAgreedOn'])), not(empty(items('Each_past_close_by')?['ChallengeTechAgreedOn']))), 'Agreed', 'Not agreed')",
+                          "inputs": "@if(empty(if(contains(string(coalesce(items('Each_date_check')?['NextWellbeingDate'], '')), 'T'), formatDateTime(convertFromUtc(coalesce(items('Each_date_check')?['NextWellbeingDate'], '2000-01-01T00:00:00Z'), 'GMT Standard Time'), 'yyyy-MM-dd'), coalesce(items('Each_date_check')?['NextWellbeingDate'], ''))), 999999, div(sub(ticks(concat(if(empty(if(contains(string(coalesce(items('Each_date_check')?['NextWellbeingDate'], '')), 'T'), formatDateTime(convertFromUtc(coalesce(items('Each_date_check')?['NextWellbeingDate'], '2000-01-01T00:00:00Z'), 'GMT Standard Time'), 'yyyy-MM-dd'), coalesce(items('Each_date_check')?['NextWellbeingDate'], ''))), outputs('Today'), if(contains(string(coalesce(items('Each_date_check')?['NextWellbeingDate'], '')), 'T'), formatDateTime(convertFromUtc(coalesce(items('Each_date_check')?['NextWellbeingDate'], '2000-01-01T00:00:00Z'), 'GMT Standard Time'), 'yyyy-MM-dd'), coalesce(items('Each_date_check')?['NextWellbeingDate'], ''))), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000))",
                           "runAfter": {}
                         },
-                        "Close_not_agreed": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
-                              "parameters/method": "POST",
-                              "parameters/uri": "_api/web/lists(guid'@{outputs('Ids')?['mgrList']}')/items(@{items('Each_past_close_by')?['ID']})",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata",
-                                "Content-Type": "application/json;odata=nometadata",
-                                "X-HTTP-Method": "MERGE",
-                                "IF-MATCH": "*"
-                              },
-                              "parameters/body": "{\"ChallengeState\":\"@{outputs('Outcome')}\",\"ChallengeClosedOn\":\"@{utcNow()}\"}"
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runtimeConfiguration": {
-                            "secureData": {
-                              "properties": [
-                                "inputs",
-                                "outputs"
-                              ]
-                            }
-                          },
-                          "runAfter": {
-                            "Outcome": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Has_item": {
+                        "Wb_reminder": {
                           "type": "If",
-                          "expression": "@not(empty(first(split(string(coalesce(items('Each_past_close_by')?['ChallengeItemId'], '')), '.'))))",
+                          "expression": "@or(equals(outputs('Wb_days'), 7), equals(outputs('Wb_days'), 0), and(less(outputs('Wb_days'), 0), equals(mod(sub(0, outputs('Wb_days')), 7), 0)))",
                           "actions": {
-                            "Ensure_challenger": {
+                            "Send_E12": {
                               "type": "OpenApiConnection",
                               "inputs": {
                                 "host": {
-                                  "connectionName": "shared_sharepointonline",
-                                  "operationId": "HttpRequest",
-                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                  "connectionName": "shared_office365",
+                                  "operationId": "SendEmailV2",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
                                 },
                                 "parameters": {
-                                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
-                                  "parameters/method": "POST",
-                                  "parameters/uri": "_api/web/ensureuser",
-                                  "parameters/headers": {
-                                    "Accept": "application/json;odata=nometadata",
-                                    "Content-Type": "application/json;odata=nometadata"
-                                  },
-                                  "parameters/body": "{\"logonName\":\"@{items('Each_past_close_by')?['Technician']?['Name']}\"}"
+                                  "emailMessage/To": "@parameters('ESG 1-to-1 Team Leader email (esg_ManagerEmail)')",
+                                  "emailMessage/Subject": "Wellbeing assessment @{if(equals(outputs('Wb_days'), 7), 'due in 7 days', if(equals(outputs('Wb_days'), 0), 'due today', 'overdue'))}: @{items('Each_date_check')?['Title']}",
+                                  "emailMessage/Body": "<p>The next wellbeing assessment for @{items('Each_date_check')?['Title']} @{if(equals(outputs('Wb_days'), 7), 'is due in 7 days', if(equals(outputs('Wb_days'), 0), 'is due today', concat('was due ', string(sub(0, outputs('Wb_days'))), ' days ago')))} (@{formatDateTime(if(contains(string(coalesce(items('Each_date_check')?['NextWellbeingDate'], '')), 'T'), formatDateTime(convertFromUtc(coalesce(items('Each_date_check')?['NextWellbeingDate'], '2000-01-01T00:00:00Z'), 'GMT Standard Time'), 'yyyy-MM-dd'), coalesce(items('Each_date_check')?['NextWellbeingDate'], '')), 'dd-MMM-yyyy')}). Arrange the conversation and start the assessment from the Wellbeing tab, or change the date in ⚙ Settings → Team.</p><p><a href=\"@{concat(if(endsWith(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), '/'), substring(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), 0, sub(length(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), 1)), parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), '/SitePages/OneToOne.aspx')}\"><b>Open the 1-to-1 page</b></a></p>",
+                                  "emailMessage/Importance": "Normal"
                                 },
                                 "authentication": "@parameters('$authentication')"
                               },
@@ -1648,188 +1417,238 @@
                                 }
                               },
                               "runAfter": {}
-                            },
-                            "ChIds": {
-                              "type": "Compose",
-                              "inputs": {
-                                "chList": "@first(body('List_challenges'))?['Id']"
-                              },
-                              "runAfter": {
-                                "Ensure_challenger": [
-                                  "Succeeded"
-                                ]
-                              }
-                            },
-                            "Reset_X": {
-                              "type": "OpenApiConnection",
-                              "inputs": {
-                                "host": {
-                                  "connectionName": "shared_sharepointonline",
-                                  "operationId": "HttpRequest",
-                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                                },
-                                "parameters": {
-                                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
-                                  "parameters/method": "POST",
-                                  "parameters/uri": "_api/web/lists(guid'@{outputs('ChIds')?['chList']}')/items(@{int(first(split(string(coalesce(items('Each_past_close_by')?['ChallengeItemId'], '')), '.')))})/resetroleinheritance",
-                                  "parameters/headers": {
-                                    "Accept": "application/json;odata=nometadata"
-                                  }
-                                },
-                                "authentication": "@parameters('$authentication')"
-                              },
-                              "runtimeConfiguration": {
-                                "secureData": {
-                                  "properties": [
-                                    "inputs",
-                                    "outputs"
-                                  ]
-                                }
-                              },
-                              "runAfter": {
-                                "ChIds": [
-                                  "Succeeded"
-                                ]
-                              }
-                            },
-                            "Break_X": {
-                              "type": "OpenApiConnection",
-                              "inputs": {
-                                "host": {
-                                  "connectionName": "shared_sharepointonline",
-                                  "operationId": "HttpRequest",
-                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                                },
-                                "parameters": {
-                                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
-                                  "parameters/method": "POST",
-                                  "parameters/uri": "_api/web/lists(guid'@{outputs('ChIds')?['chList']}')/items(@{int(first(split(string(coalesce(items('Each_past_close_by')?['ChallengeItemId'], '')), '.')))})/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)",
-                                  "parameters/headers": {
-                                    "Accept": "application/json;odata=nometadata"
-                                  }
-                                },
-                                "authentication": "@parameters('$authentication')"
-                              },
-                              "runtimeConfiguration": {
-                                "secureData": {
-                                  "properties": [
-                                    "inputs",
-                                    "outputs"
-                                  ]
-                                }
-                              },
-                              "runAfter": {
-                                "Reset_X": [
-                                  "Succeeded"
-                                ]
-                              }
-                            },
-                            "AddOwners_X": {
-                              "type": "OpenApiConnection",
-                              "inputs": {
-                                "host": {
-                                  "connectionName": "shared_sharepointonline",
-                                  "operationId": "HttpRequest",
-                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                                },
-                                "parameters": {
-                                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
-                                  "parameters/method": "POST",
-                                  "parameters/uri": "_api/web/lists(guid'@{outputs('ChIds')?['chList']}')/items(@{int(first(split(string(coalesce(items('Each_past_close_by')?['ChallengeItemId'], '')), '.')))})/roleassignments/addroleassignment(principalid=@{outputs('Ids')?['owners']},roledefid=@{outputs('Ids')?['fullControl']})",
-                                  "parameters/headers": {
-                                    "Accept": "application/json;odata=nometadata"
-                                  }
-                                },
-                                "authentication": "@parameters('$authentication')"
-                              },
-                              "runtimeConfiguration": {
-                                "secureData": {
-                                  "properties": [
-                                    "inputs",
-                                    "outputs"
-                                  ]
-                                }
-                              },
-                              "runAfter": {
-                                "Break_X": [
-                                  "Succeeded"
-                                ]
-                              }
-                            },
-                            "AddTech_X": {
-                              "type": "OpenApiConnection",
-                              "inputs": {
-                                "host": {
-                                  "connectionName": "shared_sharepointonline",
-                                  "operationId": "HttpRequest",
-                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                                },
-                                "parameters": {
-                                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
-                                  "parameters/method": "POST",
-                                  "parameters/uri": "_api/web/lists(guid'@{outputs('ChIds')?['chList']}')/items(@{int(first(split(string(coalesce(items('Each_past_close_by')?['ChallengeItemId'], '')), '.')))})/roleassignments/addroleassignment(principalid=@{body('Ensure_challenger')?['Id']},roledefid=@{outputs('Ids')?['read']})",
-                                  "parameters/headers": {
-                                    "Accept": "application/json;odata=nometadata"
-                                  }
-                                },
-                                "authentication": "@parameters('$authentication')"
-                              },
-                              "runtimeConfiguration": {
-                                "secureData": {
-                                  "properties": [
-                                    "inputs",
-                                    "outputs"
-                                  ]
-                                }
-                              },
-                              "runAfter": {
-                                "AddOwners_X": [
-                                  "Succeeded"
-                                ]
-                              }
-                            },
-                            "Show_closed": {
-                              "type": "OpenApiConnection",
-                              "inputs": {
-                                "host": {
-                                  "connectionName": "shared_sharepointonline",
-                                  "operationId": "HttpRequest",
-                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                                },
-                                "parameters": {
-                                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
-                                  "parameters/method": "POST",
-                                  "parameters/uri": "_api/web/lists(guid'@{outputs('ChIds')?['chList']}')/items(@{int(first(split(string(coalesce(items('Each_past_close_by')?['ChallengeItemId'], '')), '.')))})",
-                                  "parameters/headers": {
-                                    "Accept": "application/json;odata=nometadata",
-                                    "Content-Type": "application/json;odata=nometadata",
-                                    "X-HTTP-Method": "MERGE",
-                                    "IF-MATCH": "*"
-                                  },
-                                  "parameters/body": "{\"ChallengeStatus\":\"@{outputs('Outcome')}\"}"
-                                },
-                                "authentication": "@parameters('$authentication')"
-                              },
-                              "runtimeConfiguration": {
-                                "secureData": {
-                                  "properties": [
-                                    "inputs",
-                                    "outputs"
-                                  ]
-                                }
-                              },
-                              "runAfter": {
-                                "AddTech_X": [
-                                  "Succeeded"
-                                ]
-                              }
                             }
                           },
                           "else": {
                             "actions": {}
                           },
                           "runAfter": {
-                            "Close_not_agreed": [
+                            "Wb_days": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Ap_days": {
+                          "type": "Compose",
+                          "inputs": "@if(empty(if(contains(string(coalesce(items('Each_date_check')?['AppraisalDate'], '')), 'T'), formatDateTime(convertFromUtc(coalesce(items('Each_date_check')?['AppraisalDate'], '2000-01-01T00:00:00Z'), 'GMT Standard Time'), 'yyyy-MM-dd'), coalesce(items('Each_date_check')?['AppraisalDate'], ''))), 999999, div(sub(ticks(concat(if(empty(if(contains(string(coalesce(items('Each_date_check')?['AppraisalDate'], '')), 'T'), formatDateTime(convertFromUtc(coalesce(items('Each_date_check')?['AppraisalDate'], '2000-01-01T00:00:00Z'), 'GMT Standard Time'), 'yyyy-MM-dd'), coalesce(items('Each_date_check')?['AppraisalDate'], ''))), outputs('Today'), if(contains(string(coalesce(items('Each_date_check')?['AppraisalDate'], '')), 'T'), formatDateTime(convertFromUtc(coalesce(items('Each_date_check')?['AppraisalDate'], '2000-01-01T00:00:00Z'), 'GMT Standard Time'), 'yyyy-MM-dd'), coalesce(items('Each_date_check')?['AppraisalDate'], ''))), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000))",
+                          "runAfter": {
+                            "Wb_reminder": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Ap_reminder": {
+                          "type": "If",
+                          "expression": "@or(equals(outputs('Ap_days'), 7), equals(outputs('Ap_days'), 0), and(less(outputs('Ap_days'), 0), equals(mod(sub(0, outputs('Ap_days')), 7), 0)))",
+                          "actions": {
+                            "Send_E17": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "connectionName": "shared_office365",
+                                  "operationId": "SendEmailV2",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                                },
+                                "parameters": {
+                                  "emailMessage/To": "@parameters('ESG 1-to-1 Team Leader email (esg_ManagerEmail)')",
+                                  "emailMessage/Subject": "Appraisal @{if(equals(outputs('Ap_days'), 7), 'due in 7 days', if(equals(outputs('Ap_days'), 0), 'due today', 'overdue'))}: @{items('Each_date_check')?['Title']}",
+                                  "emailMessage/Body": "<p>The appraisal for @{items('Each_date_check')?['Title']} @{if(equals(outputs('Ap_days'), 7), 'is due in 7 days', if(equals(outputs('Ap_days'), 0), 'is due today', concat('was due ', string(sub(0, outputs('Ap_days'))), ' days ago')))} (@{formatDateTime(if(contains(string(coalesce(items('Each_date_check')?['AppraisalDate'], '')), 'T'), formatDateTime(convertFromUtc(coalesce(items('Each_date_check')?['AppraisalDate'], '2000-01-01T00:00:00Z'), 'GMT Standard Time'), 'yyyy-MM-dd'), coalesce(items('Each_date_check')?['AppraisalDate'], '')), 'dd-MMM-yyyy')}). When it's done, use ⚙ Settings → Team → Mark appraisal completed; to move it, change the date there.</p><p><a href=\"@{concat(if(endsWith(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), '/'), substring(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), 0, sub(length(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), 1)), parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), '/SitePages/OneToOne.aspx')}\"><b>Open the 1-to-1 page</b></a></p>",
+                                  "emailMessage/Importance": "Normal"
+                                },
+                                "authentication": "@parameters('$authentication')"
+                              },
+                              "runtimeConfiguration": {
+                                "secureData": {
+                                  "properties": [
+                                    "inputs",
+                                    "outputs"
+                                  ]
+                                }
+                              },
+                              "runAfter": {}
+                            }
+                          },
+                          "else": {
+                            "actions": {}
+                          },
+                          "runAfter": {
+                            "Ap_days": [
+                              "Succeeded"
+                            ]
+                          }
+                        }
+                      },
+                      "runtimeConfiguration": {
+                        "concurrency": {
+                          "repetitions": 1
+                        }
+                      },
+                      "runAfter": {}
+                    }
+                  },
+                  "runAfter": {}
+                },
+                "DatesCatch": {
+                  "type": "Scope",
+                  "actions": {
+                    "Note_dates_failed": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "varProblems",
+                        "value": "Wellbeing / appraisal reminders could not all be checked today. Open the run history for details."
+                      },
+                      "runAfter": {}
+                    }
+                  },
+                  "runAfter": {
+                    "DatesTry": [
+                      "Failed",
+                      "TimedOut"
+                    ]
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {
+                "Today": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Reconcile_submissions": {
+              "type": "If",
+              "expression": "@equals(1, 1)",
+              "actions": {
+                "ReconcileTry": {
+                  "type": "Scope",
+                  "actions": {
+                    "PrevMonthKey": {
+                      "type": "Compose",
+                      "inputs": "@formatDateTime(addDays(startOfMonth(outputs('ukNow')), -1), 'yyyy-MM')",
+                      "runAfter": {}
+                    },
+                    "Each_recent_month": {
+                      "type": "Foreach",
+                      "foreach": "@createArray(outputs('MonthKey'), outputs('PrevMonthKey'))",
+                      "actions": {
+                        "Submitted_reviews": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "GetItems",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                              "table": "Monthly Reviews",
+                              "$filter": "MonthKey eq '@{items('Each_recent_month')}' and ReviewStatus eq 'Submitted'",
+                              "$top": 5000
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {}
+                        },
+                        "Open_mgr": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "GetItems",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                              "table": "Manager Reviews",
+                              "$filter": "MonthKey eq '@{items('Each_recent_month')}' and ReviewState eq 'Open'",
+                              "$top": 5000
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {
+                            "Submitted_reviews": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Open_ids": {
+                          "type": "Select",
+                          "inputs": {
+                            "from": "@body('Open_mgr')?['value']",
+                            "select": "@first(split(string(coalesce(item()?['ReviewItemId'], '')), '.'))"
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {
+                            "Open_mgr": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Unprocessed": {
+                          "type": "Query",
+                          "inputs": {
+                            "from": "@body('Submitted_reviews')?['value']",
+                            "where": "@contains(body('Open_ids'), string(item()?['ID']))"
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {
+                            "Open_ids": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Each_unprocessed": {
+                          "type": "Foreach",
+                          "foreach": "@body('Unprocessed')",
+                          "actions": {
+                            "Note_unprocessed": {
+                              "type": "AppendToArrayVariable",
+                              "inputs": {
+                                "name": "varProblems",
+                                "value": "@concat(items('Each_unprocessed')?['Title'], ': submitted but not processed – is flow 2 on? The technician can still edit it until it is.')"
+                              },
+                              "runAfter": {}
+                            }
+                          },
+                          "runtimeConfiguration": {
+                            "concurrency": {
+                              "repetitions": 1
+                            }
+                          },
+                          "runAfter": {
+                            "Unprocessed": [
                               "Succeeded"
                             ]
                           }
@@ -1841,7 +1660,7 @@
                         }
                       },
                       "runAfter": {
-                        "Past_close_by": [
+                        "PrevMonthKey": [
                           "Succeeded"
                         ]
                       }
@@ -1849,20 +1668,20 @@
                   },
                   "runAfter": {}
                 },
-                "ChallengeCatch": {
+                "ReconcileCatch": {
                   "type": "Scope",
                   "actions": {
-                    "Note_challenges_failed": {
+                    "Note_reconcile_failed": {
                       "type": "AppendToArrayVariable",
                       "inputs": {
                         "name": "varProblems",
-                        "value": "Challenges past their close-by date could not be closed today. Open the run history for details."
+                        "value": "Could not check for unprocessed submissions today. Open the run history for details."
                       },
                       "runAfter": {}
                     }
                   },
                   "runAfter": {
-                    "ChallengeTry": [
+                    "ReconcileTry": [
                       "Failed",
                       "TimedOut"
                     ]
@@ -1873,7 +1692,7 @@
                 "actions": {}
               },
               "runAfter": {
-                "List_challenges": [
+                "Reminders_by_date": [
                   "Succeeded"
                 ]
               }
@@ -1913,14 +1732,14 @@
                 "actions": {}
               },
               "runAfter": {
-                "Challenges_list_exists": [
+                "Reconcile_submissions": [
                   "Succeeded"
                 ]
               }
             }
           },
           "runAfter": {
-            "AppraisalYear": [
+            "AllowedYears": [
               "Succeeded"
             ]
           }

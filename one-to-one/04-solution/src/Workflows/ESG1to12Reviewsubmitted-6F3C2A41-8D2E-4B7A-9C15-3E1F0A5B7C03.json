@@ -327,11 +327,32 @@
                 ]
               }
             },
+            "Team_leader_amendment": {
+              "type": "If",
+              "expression": "@and(equals(toLower(coalesce(triggerBody()?['Editor']?['Email'], '')), toLower(parameters('ESG 1-to-1 Team Leader email (esg_ManagerEmail)'))), not(equals(outputs('PrevState'), 'Open')))",
+              "actions": {
+                "Amendment_not_a_submission": {
+                  "type": "Terminate",
+                  "inputs": {
+                    "runStatus": "Cancelled"
+                  },
+                  "runAfter": {}
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {
+                "PrevState": [
+                  "Succeeded"
+                ]
+              }
+            },
             "Submitted_at": {
               "type": "Compose",
               "inputs": "@if(greater(ticks(coalesce(triggerBody()?['Modified'], '1900-01-01T00:00:00Z')), ticks(addMinutes(utcNow(), -30))), triggerBody()?['Modified'], utcNow())",
               "runAfter": {
-                "PrevState": [
+                "Team_leader_amendment": [
                   "Succeeded"
                 ]
               }

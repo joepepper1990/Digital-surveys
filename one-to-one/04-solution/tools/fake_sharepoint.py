@@ -253,9 +253,13 @@ class FakeSP:
                     want = bool(want)
                 rows = [r for r in rows if (float(r['fields'].get(col)) if isinstance(want, float) and r['fields'].get(col) is not None
                                             else r['fields'].get(col)) == want]
-        if order:
-            col, _, d = order.partition(' ')
-            rows.sort(key=lambda r: (r['fields'].get(col) is None, r['fields'].get(col) or 0), reverse=(d == 'desc'))
+        if order:   # 'A desc,B asc' – applied right to left (stable sorts)
+            for part in reversed([p.strip() for p in order.split(',') if p.strip()]):
+                col, _, d = part.partition(' ')
+                if col not in lst['fields'] and col != 'ID':
+                    fail(400, 'order by column does not exist: ' + col)
+                rows.sort(key=lambda r: (r['fields'].get(col) is None, r['fields'].get(col) or 0) if col != 'ID' else r['id'],
+                          reverse=(d.strip() == 'desc'))
         if top:
             rows = rows[:int(top)]
         return [self.item_out(lst, r) for r in rows]
@@ -472,7 +476,34 @@ class FakeSP:
             if it is None:
                 fail(404, 'item')
             if not mg2.group(2):
-                return {'HasUniqueRoleAssignments': bool(it['unique'])}
+                args = dict(kv.split('=', 1) for kv in qs.split('&') if '=' in kv)
+                sel = [x for x in args.get('$select', 'HasUniqueRoleAssignments').split(',') if x]
+                out = {}
+                for f in sel:
+                    name, _, sub = f.partition('/')
+                    if name == 'HasUniqueRoleAssignments':
+                        out[name] = bool(it['unique'])
+                    elif name in ('Id', 'ID'):
+                        out[name] = it['id']
+                    elif name in lst['fields']:
+                        t = lst['fields'][name]
+                        v = it['fields'].get(name)
+                        if t['Type'] == 'User':
+                            if '$expand' not in args or name not in args['$expand']:
+                                fail(400, 'person column needs $expand ' + name)
+                            u = self.users.get(v) if v is not None else None
+                            if out.get(name, {}) is None:
+                                continue
+                            out.setdefault(name, {})
+                            if u:
+                                out[name][sub] = {'Title': u['Title'], 'EMail': u['Email'], 'Id': u['Id'], 'Name': u['Claims']}[sub]
+                            else:
+                                out[name] = None
+                        else:
+                            out[name] = v
+                    else:
+                        fail(400, 'column not found ' + name)
+                return out
             if 'Member' not in qs or 'RoleDefinitionBindings' not in qs:
                 fail(400, 'roleassignments needs $expand=Member,RoleDefinitionBindings')
             ra = it['ra'] if it['unique'] else (lst['ra'] if lst['unique'] else self.web_ra)

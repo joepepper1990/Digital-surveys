@@ -23,6 +23,7 @@ FEEDBACK_TYPES = ['Fault', 'Improvement', 'Suggestion']
 DELIVERY_STATUS = ['Pending', 'Sent', 'Failed', 'Read', 'Held']
 CHALLENGE_STATE = ['Open', 'Agreed', 'Not agreed']
 CHALLENGE_STATUS = ['Open', 'Agreed', 'Not agreed', 'Rejected']
+NOTIFY_STATUS = ['Draft', 'Pending', 'Sending', 'Sent', 'Failed', 'Retry', 'Cancelled']
 DEFAULT_REMINDERS = '[20,27]'
 
 DEFAULT_BANDS = ('[{"name":"Not met","max":1.5},{"name":"Partially met","max":2.25},'
@@ -93,6 +94,13 @@ def person(name):
                    "UserSelectionScope='0' Mult='FALSE' />".format(_attrs(name))}
 
 
+def since(field, version):
+    """The solution version that added a column to an existing list. A flow that is on during an upgrade must not name a
+    column newer than its list in a connector step (Power Automate rejects the generated parameters – 1.3.0.2)."""
+    field['since'] = version
+    return field
+
+
 def view(title, fields, query, row_limit=100):
     return {'title': title, 'fields': fields, 'query': query, 'rowLimit': row_limit}
 
@@ -113,7 +121,11 @@ LISTS = [
             person('Technician'),
             text('TechnicianAadId', indexed=True),
             yesno('Active', True, indexed=True),
-            date('AppraisalDate'),
+            date('AppraisalDate'),                          # next appraisal due
+            since(date('NextWellbeingDate'), '1.4'),        # next wellbeing assessment due (entered by the Team Leader)
+            since(date('AppraisalCycleStart'), '1.4'),      # start of the current appraisal period (last completion, or a baseline)
+            since(note('AppraisalHistoryJson'), '1.4'),     # [{start, completed, nextDue, recordedOn}] – the period boundaries
+            since(note('AppraisalBoundaries'), '1.4'),      # the same boundaries as a plain date list, copied to new reviews by Flow 1
         ],
         'views': [],
     },
@@ -161,6 +173,7 @@ LISTS = [
             number('Mood', 1, 5),
             note('WinOfMonth'),
             date('AppraisalDate'),
+            since(note('AppraisalBoundaries'), '1.4'),      # copy of the period boundaries for the technician's own view
         ],
         'views': [],
     },
@@ -194,14 +207,14 @@ LISTS = [
             date('ReleasedOn', with_time=True),
             note('CorrectionLog'),
             # challenge of the released feedback (Flow 7 / the Team Leader only – the technician can only read these)
-            choice('ChallengeState', CHALLENGE_STATE, indexed=True),
-            note('ChallengeSectionsJson'),
-            number('ChallengeItemId'),
-            date('ChallengeOpenedOn', with_time=True),
-            date('ChallengeCloseBy'),
-            date('ChallengeTlAgreedOn', with_time=True),
-            date('ChallengeTechAgreedOn', with_time=True),
-            date('ChallengeClosedOn', with_time=True),
+            since(choice('ChallengeState', CHALLENGE_STATE, indexed=True), '1.3'),
+            since(note('ChallengeSectionsJson'), '1.3'),
+            since(number('ChallengeItemId'), '1.3'),
+            since(date('ChallengeOpenedOn', with_time=True), '1.3'),
+            since(date('ChallengeCloseBy'), '1.3'),
+            since(date('ChallengeTlAgreedOn', with_time=True), '1.3'),
+            since(date('ChallengeTechAgreedOn', with_time=True), '1.3'),
+            since(date('ChallengeClosedOn', with_time=True), '1.3'),
         ],
         'views': [
             view('Overdue', ['LinkTitle', 'Technician', 'MonthKey', 'DueDate', 'ReviewState'],
@@ -213,7 +226,7 @@ LISTS = [
         ],
     },
     {
-        'key': 'wellbeing', 'url': 'WellbeingAssessments', 'title': 'Wellbeing Assessments', 'groupRead': False,
+        'key': 'wellbeing', 'url': 'WellbeingAssessments', 'title': 'Wellbeing Assessments', 'groupRead': False, 'since': '1.1',
         'description': 'ESG 1-to-1: wellbeing assessments. Each item is visible only to the line manager and that person (Flow 5).',
         'fields': [
             person('Technician'),
@@ -237,7 +250,7 @@ LISTS = [
     {
         # Anyone in the group may add an item (Contribute) but, with item-level security, sees and edits only their own;
         # Flow 6 then makes each item Owners-only and emails the line manager.
-        'key': 'feedback', 'url': 'OneToOneFeedback', 'title': '1-to-1 Feedback', 'groupRead': False,
+        'key': 'feedback', 'url': 'OneToOneFeedback', 'title': '1-to-1 Feedback', 'groupRead': False, 'since': '1.2',
         'groupContribute': True, 'readSecurity': 2, 'writeSecurity': 2,
         'description': 'ESG 1-to-1: faults and suggestions sent from the page. Each person sees only their own until Flow 6 emails it and makes it Owners-only.',
         'fields': [
@@ -251,10 +264,41 @@ LISTS = [
         'views': [],
     },
     {
+        # Team Leader amendments of submitted / released 1-to-1s: who (Author), when (Created), why, which fields, before and
+        # after. Owners only – technicians never see it. Flow 8 emails the technician (no contents) and records the outcome.
+        'key': 'amend', 'url': 'OneToOneAmendments', 'title': '1-to-1 Amendments', 'groupRead': False, 'since': '1.4',
+        'description': 'ESG 1-to-1: audit trail of Team Leader amendments (Owners only). Flow 8 notifies the technician.',
+        'fields': [
+            number('ReviewItemId', indexed=True),
+            number('ManagerReviewId'),
+            text('MonthKey'),
+            person('Technician'),
+            note('Reason'),
+            note('ChangedFields'),
+            note('ChangesJson'),
+            choice('NotifyStatus', NOTIFY_STATUS, default='Draft', indexed=True),
+            date('NotifiedOn', with_time=True),
+            text('NotifyError'),
+        ],
+        'views': [],
+    },
+    {
+        'key': 'settings', 'url': 'OneToOneSettings', 'title': '1-to-1 Settings', 'groupRead': True,
+        'description': 'ESG 1-to-1: bands, reminder days and on-screen names (no personal data). Technicians group: Read.',
+        'fields': [note('Value')],
+        'views': [],
+    },
+]
+
+
+# Retired in 1.4 (the challenge feature was removed). Setup no longer creates it; on a site that has it, Setup takes the
+# technicians' access away and closes any open challenge – the records themselves are kept.
+RETIRED_LISTS = [
+    {
         # A technician challenges parts of their latest released feedback. Same access as Feedback (each person sees only
         # their own); Flow 7 checks it, makes it private to them and the Owners, and keeps the trusted state on the
         # Manager Review, which the technician can only read.
-        'key': 'challenges', 'url': 'OneToOneChallenges', 'title': '1-to-1 Challenges', 'groupRead': False,
+        'key': 'challenges', 'url': 'OneToOneChallenges', 'title': '1-to-1 Challenges', 'groupRead': False, 'since': '1.3', 'retired': '1.4',
         'groupContribute': True, 'readSecurity': 2, 'writeSecurity': 2,
         'description': 'ESG 1-to-1: challenges of released feedback. Each person sees only their own; Flow 7 records the trusted state on the Manager Review.',
         'fields': [
@@ -265,12 +309,6 @@ LISTS = [
             date('TlPing', with_time=True),
             choice('ChallengeStatus', CHALLENGE_STATUS, default='Open'),
         ],
-        'views': [],
-    },
-    {
-        'key': 'settings', 'url': 'OneToOneSettings', 'title': '1-to-1 Settings', 'groupRead': True,
-        'description': 'ESG 1-to-1: bands, reminder days and on-screen names (no personal data). Technicians group: Read.',
-        'fields': [note('Value')],
         'views': [],
     },
 ]

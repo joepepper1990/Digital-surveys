@@ -1,0 +1,617 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_sharepointonline": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "esg_sharedsharepointonline_1to1"
+        },
+        "api": {
+          "name": "shared_sharepointonline"
+        }
+      },
+      "shared_office365": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "esg_sharedoffice365_1to1"
+        },
+        "api": {
+          "name": "shared_office365"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "ESG 1-to-1 Site URL (esg_SiteUrl)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "esg_SiteUrl",
+            "description": "Full address of the private 1-to-1 site, e.g. https://<tenant>.sharepoint.com/sites/<site> (no trailing slash)."
+          }
+        },
+        "ESG 1-to-1 Team Leader email (esg_ManagerEmail)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "esg_ManagerEmail",
+            "description": "The Team Leader's email address. Receives submissions and problem reports."
+          }
+        }
+      },
+      "triggers": {
+        "When_an_amendment_is_ready_to_send": {
+          "type": "OpenApiConnection",
+          "recurrence": {
+            "frequency": "Minute",
+            "interval": 5
+          },
+          "splitOn": "@triggerOutputs()?['body/value']",
+          "conditions": [
+            {
+              "expression": "@contains(createArray('Pending','Retry'), triggerBody()?['NotifyStatus']?['Value'])"
+            }
+          ],
+          "runtimeConfiguration": {
+            "secureData": {
+              "properties": [
+                "inputs",
+                "outputs"
+              ]
+            },
+            "concurrency": {
+              "runs": 1
+            }
+          },
+          "inputs": {
+            "host": {
+              "connectionName": "shared_sharepointonline",
+              "operationId": "GetOnUpdatedItems",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+            },
+            "parameters": {
+              "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+              "table": "1-to-1 Amendments"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        }
+      },
+      "actions": {
+        "Try": {
+          "type": "Scope",
+          "actions": {
+            "Get_owners_group": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/associatedownergroup?$select=Id,Title",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            },
+            "Get_role_definitions": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/roledefinitions?$select=Id,Name,RoleTypeKind",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Get_owners_group": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Role_full_control": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Get_role_definitions')?['value']",
+                "where": "@equals(item()?['RoleTypeKind'], 5)"
+              },
+              "runAfter": {
+                "Get_role_definitions": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Role_edit": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Get_role_definitions')?['value']",
+                "where": "@equals(item()?['Name'], '1-to-1 Edit')"
+              },
+              "runAfter": {
+                "Role_full_control": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Role_read": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Get_role_definitions')?['value']",
+                "where": "@equals(item()?['Name'], '1-to-1 Read')"
+              },
+              "runAfter": {
+                "Role_edit": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Get_lists": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/lists?$select=Id,Title,RootFolder/Name&$expand=RootFolder",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Role_read": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "List_monthly_reviews": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Get_lists')?['value']",
+                "where": "@equals(item()?['RootFolder']?['Name'], 'MonthlyReviews')"
+              },
+              "runAfter": {
+                "Get_lists": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "List_manager_reviews": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Get_lists')?['value']",
+                "where": "@equals(item()?['RootFolder']?['Name'], 'ManagerReviews')"
+              },
+              "runAfter": {
+                "List_monthly_reviews": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Ids": {
+              "type": "Compose",
+              "inputs": {
+                "owners": "@body('Get_owners_group')?['Id']",
+                "fullControl": "@first(body('Role_full_control'))?['Id']",
+                "edit": "@first(body('Role_edit'))?['Id']",
+                "read": "@first(body('Role_read'))?['Id']",
+                "reviewsList": "@first(body('List_monthly_reviews'))?['Id']",
+                "mgrList": "@first(body('List_manager_reviews'))?['Id']"
+              },
+              "runAfter": {
+                "List_manager_reviews": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Check_setup_has_run": {
+              "type": "If",
+              "expression": "@or(equals(outputs('Ids')?['owners'], null), equals(outputs('Ids')?['fullControl'], null), equals(outputs('Ids')?['edit'], null), equals(outputs('Ids')?['read'], null), equals(outputs('Ids')?['reviewsList'], null), equals(outputs('Ids')?['mgrList'], null))",
+              "actions": {
+                "STOP_run_the_setup_flow_first": {
+                  "type": "Compose",
+                  "inputs": "@int('The 1-to-1 permission levels or Owners group were not found. Run ESG 1-to-1 | 0 Setup first.')",
+                  "runAfter": {}
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {
+                "Ids": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "List_amendments": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Get_lists')?['value']",
+                "where": "@equals(item()?['RootFolder']?['Name'], 'OneToOneAmendments')"
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              },
+              "runAfter": {
+                "Check_setup_has_run": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "AmIds": {
+              "type": "Compose",
+              "inputs": {
+                "amList": "@first(body('List_amendments'))?['Id']"
+              },
+              "runAfter": {
+                "List_amendments": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Check_amendments_list": {
+              "type": "If",
+              "expression": "@equals(outputs('AmIds')?['amList'], null)",
+              "actions": {
+                "STOP_run_the_setup_flow_again": {
+                  "type": "Compose",
+                  "inputs": "@int('The 1-to-1 Amendments list was not found. Run ESG 1-to-1 | 0 Setup again.')",
+                  "runAfter": {}
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {
+                "AmIds": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Get_current": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/lists(guid'@{outputs('AmIds')?['amList']}')/items(@{triggerBody()?['ID']})?$select=Id,NotifyStatus,ReviewItemId,MonthKey,Technician/EMail,Technician/Title&$expand=Technician",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              },
+              "runAfter": {
+                "Check_amendments_list": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Still_to_send": {
+              "type": "If",
+              "expression": "@contains(createArray('Pending', 'Retry'), coalesce(body('Get_current')?['NotifyStatus'], ''))",
+              "actions": {},
+              "else": {
+                "actions": {
+                  "Already_handled": {
+                    "type": "Terminate",
+                    "inputs": {
+                      "runStatus": "Cancelled"
+                    },
+                    "runAfter": {}
+                  }
+                }
+              },
+              "runAfter": {
+                "Get_current": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Mark_sending": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                  "parameters/method": "POST",
+                  "parameters/uri": "_api/web/lists(guid'@{outputs('AmIds')?['amList']}')/items(@{triggerBody()?['ID']})",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata",
+                    "Content-Type": "application/json;odata=nometadata",
+                    "X-HTTP-Method": "MERGE",
+                    "IF-MATCH": "*"
+                  },
+                  "parameters/body": "{\"NotifyStatus\":\"Sending\"}"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              },
+              "runAfter": {
+                "Still_to_send": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Send_and_record": {
+              "type": "If",
+              "expression": "@equals(1, 1)",
+              "actions": {
+                "Send_E16": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_office365",
+                      "operationId": "SendEmailV2",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                    },
+                    "parameters": {
+                      "emailMessage/To": "@body('Get_current')?['Technician']?['EMail']",
+                      "emailMessage/Subject": "Your 1-to-1 for @{formatDateTime(concat(body('Get_current')?['MonthKey'], '-01'), 'MMMM yyyy')} has been amended",
+                      "emailMessage/Body": "<p>Your Team Leader has amended your 1-to-1 for <b>@{formatDateTime(concat(body('Get_current')?['MonthKey'], '-01'), 'MMMM yyyy')}</b> after it was submitted. Open it to see the current version.</p><p><a href=\"@{concat(concat(if(endsWith(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), '/'), substring(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), 0, sub(length(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), 1)), parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), '/SitePages/OneToOne.aspx'), if(empty(first(split(string(coalesce(body('Get_current')?['ReviewItemId'], '')), '.'))), '', concat('?reviewId=', first(split(string(coalesce(body('Get_current')?['ReviewItemId'], '')), '.')))))}\"><b>Open my 1-to-1</b></a></p><p style=\"color:#666\">The change and its reason are recorded. Speak to your Team Leader if you have a question about it.</p>",
+                      "emailMessage/Importance": "Normal"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs",
+                        "outputs"
+                      ]
+                    }
+                  },
+                  "runAfter": {}
+                },
+                "Mark_sent": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/lists(guid'@{outputs('AmIds')?['amList']}')/items(@{triggerBody()?['ID']})",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata",
+                        "Content-Type": "application/json;odata=nometadata",
+                        "X-HTTP-Method": "MERGE",
+                        "IF-MATCH": "*"
+                      },
+                      "parameters/body": "{\"NotifyStatus\":\"Sent\",\"NotifiedOn\":\"@{utcNow()}\",\"NotifyError\":\"\"}"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs",
+                        "outputs"
+                      ]
+                    }
+                  },
+                  "runAfter": {
+                    "Send_E16": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Mark_failed": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/lists(guid'@{outputs('AmIds')?['amList']}')/items(@{triggerBody()?['ID']})",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata",
+                        "Content-Type": "application/json;odata=nometadata",
+                        "X-HTTP-Method": "MERGE",
+                        "IF-MATCH": "*"
+                      },
+                      "parameters/body": "{\"NotifyStatus\":\"Failed\",\"NotifyError\":\"The email to the technician could not be sent.\"}"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs",
+                        "outputs"
+                      ]
+                    }
+                  },
+                  "runAfter": {
+                    "Send_E16": [
+                      "Failed",
+                      "TimedOut"
+                    ]
+                  }
+                },
+                "Send_E16_notice": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_office365",
+                      "operationId": "SendEmailV2",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                    },
+                    "parameters": {
+                      "emailMessage/To": "@parameters('ESG 1-to-1 Team Leader email (esg_ManagerEmail)')",
+                      "emailMessage/Subject": "Amendment email not sent – please resend from the 1-to-1 page",
+                      "emailMessage/Body": "<p>The amendment email (E16) to @{replace(replace(replace(coalesce(body('Get_current')?['Technician']?['Title'], ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')} for @{formatDateTime(concat(body('Get_current')?['MonthKey'], '-01'), 'MMMM yyyy')} could not be sent. Open their review on the 1-to-1 page – <b>Needs your attention</b> lets you send it again.</p>",
+                      "emailMessage/Importance": "Normal"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs",
+                        "outputs"
+                      ]
+                    }
+                  },
+                  "runAfter": {
+                    "Mark_failed": [
+                      "Succeeded",
+                      "Failed",
+                      "TimedOut"
+                    ]
+                  }
+                },
+                "Delivery_failed": {
+                  "type": "Terminate",
+                  "inputs": {
+                    "runStatus": "Failed",
+                    "runError": {
+                      "code": "ESG1to1",
+                      "message": "The amendment email (E16) could not be sent. The audit item is marked Failed."
+                    }
+                  },
+                  "runAfter": {
+                    "Send_E16_notice": [
+                      "Succeeded",
+                      "Failed",
+                      "TimedOut"
+                    ]
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {
+                "Mark_sending": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {}
+        },
+        "Catch": {
+          "type": "Scope",
+          "actions": {
+            "Email_TL_run_failed": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_office365",
+                  "operationId": "SendEmailV2",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                },
+                "parameters": {
+                  "emailMessage/To": "@parameters('ESG 1-to-1 Team Leader email (esg_ManagerEmail)')",
+                  "emailMessage/Subject": "1-to-1 system: action needed (ESG 1-to-1 | 8 Amendment notice)",
+                  "emailMessage/Body": "<p>The flow <b>ESG 1-to-1 | 8 Amendment notice</b> failed. Nothing further was sent for this run.</p><p><a href=\"@{concat('https://make.powerautomate.com/environments/', workflow()?['tags']?['environmentName'], '/flows/', workflow()?['name'], '/runs/', workflow()?['run']?['name'])}\">Open the failed run</a></p>",
+                  "emailMessage/Importance": "Normal"
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs",
+                    "outputs"
+                  ]
+                }
+              },
+              "runAfter": {}
+            },
+            "Terminate_failed": {
+              "type": "Terminate",
+              "inputs": {
+                "runStatus": "Failed",
+                "runError": {
+                  "code": "ESG1to1",
+                  "message": "The Try scope failed. See the failed action in the run history."
+                }
+              },
+              "runAfter": {
+                "Email_TL_run_failed": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Try": [
+              "Failed",
+              "TimedOut"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "schemaVersion": "1.0.0.0"
+}

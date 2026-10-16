@@ -198,7 +198,7 @@ async function main() {
   // ---------------------------------------------------------------- 9. settings (dates + bands) and BST-safe dates
   await open(page, { as: 'tl' });
   await page.locator('.topbar >> text=Settings').click();
-  var caseyIn = page.locator('.modal tr:has-text("Casey Brooks") input.datef');
+  var caseyIn = page.locator('.modal input[aria-label="Next appraisal date for Casey Brooks"]');
   await caseyIn.fill('31-Feb-2027'); await caseyIn.press('Tab');
   ok('Settings: impossible date is flagged', await caseyIn.evaluate(function (e) { return e.classList.contains('bad'); }));
   var summer = (new Date().getUTCFullYear() + 1) + '-06-15';
@@ -270,7 +270,7 @@ async function main() {
   await page.evaluate(function (a) {   // what a technician could do to their own open review through REST
     var rv = OTO_MOCK.current.db.lists['Monthly Reviews'].find(function (r) { return r.ID === a.id; });
     rv.MonthKey = '2099-01'; rv.DueDate = '2099-12-31T23:59:59Z'; rv.Technician = a.other;
-    sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(OTO_MOCK.current.db));
+    sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(OTO_MOCK.current.db));
   }, { id: target.ID, other: samClaims });
   errs = await open(page, { as: 'tl' });
   var rowT = await page.locator('.nw tr:has-text("' + tName + '")').innerText();
@@ -279,7 +279,7 @@ async function main() {
   await page.evaluate(function (a) {   // technician has submitted; Flow 2 has not run yet (5-minute polling window)
     var rv = OTO_MOCK.current.db.lists['Monthly Reviews'].find(function (r) { return r.ID === a.id; });
     rv.ReviewStatus = 'Submitted';
-    sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(OTO_MOCK.current.db));
+    sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(OTO_MOCK.current.db));
   }, { id: target.ID });
   errs = await open(page, { as: 'tl' });
   ok('Status: a submission waiting for Flow 2 shows "Submitted – processing", not "Not started"',
@@ -370,7 +370,7 @@ async function main() {
   var L3 = await layoutAt(1440, 900);
   await L3.pg.evaluate(function () {
     var d = OTO_MOCK.current.db; d.lists['Technicians'] = []; d.lists['Monthly Reviews'] = []; d.lists['Manager Reviews'] = [];
-    sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(d));
+    sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d));
   });
   await open(L3.pg, { as: 'tl' });
   var m3 = await L3.pg.evaluate(function () { var r = document.querySelector('[data-oto-root]'); return { h: r.getBoundingClientRect().height, vh: window.innerHeight, txt: r.innerText }; });
@@ -396,7 +396,7 @@ async function main() {
   function isoOf(utc) { return new Date(utc).toLocaleDateString('en-CA', { timeZone: 'Europe/London' }); }
   await o15({ as: 'tl' });
   await P.locator('.topbar >> text=Settings').click();
-  var ci = P.locator('.modal tr:has-text("Casey Brooks") input.datef');
+  var ci = P.locator('.modal input[aria-label="Next appraisal date for Casey Brooks"]');
   var yr = new Date().getUTCFullYear() + 1;
   var forms = [['15/07/' + yr, yr + '-07-15'], ['15-7-' + String(yr).slice(2), yr + '-07-15'], ['15 Jul ' + yr, yr + '-07-15'], ['15th July ' + yr, yr + '-07-15'], [yr + '-07-15', yr + '-07-15'], ['3.2.' + yr, yr + '-02-03']];
   var allOk = true;
@@ -405,12 +405,12 @@ async function main() {
     if ((await ci.inputValue()) !== fmt(forms[fi][1])) { allOk = false; }
   }
   ok('Dates: typed as 15/07/2027, 15-7-27, 15 Jul 2027, 15th July 2027, ISO or 3.2.2027 – all understood (day first)', allOk);
-  ok('Dates: the day is shown in words under the box', /Wednesday|Monday|Tuesday|Thursday|Friday|Saturday|Sunday/.test(await P.locator('.modal tr:has-text("Casey Brooks") .datehint').innerText()));
+  ok('Dates: the day is shown in words under the box', /Wednesday|Monday|Tuesday|Thursday|Friday|Saturday|Sunday/.test(await P.locator('.modal tr:has-text("Casey Brooks") .datehint >> nth=0').innerText()));
   await ci.fill('32/13/2027'); await ci.press('Tab');
-  ok('Dates: nonsense is flagged and not taken', await ci.evaluate(function (e) { return e.classList.contains('bad'); }) && /Not recognised/.test(await P.locator('.modal tr:has-text("Casey Brooks") .datehint').innerText()));
+  ok('Dates: nonsense is flagged and not taken', await ci.evaluate(function (e) { return e.classList.contains('bad'); }) && /Not recognised/.test(await P.locator('.modal tr:has-text("Casey Brooks") .datehint >> nth=0').innerText()));
   await P.locator('.modal button:has-text("Save settings")').click(); await P.waitForTimeout(200);
   ok('Dates: Save is refused while a date is flagged', (await P.locator('.modal').count()) === 1);
-  await P.locator('.modal tr:has-text("Casey Brooks") .dpick').evaluate(function (e, v) { e.value = v; e.dispatchEvent(new Event('change', { bubbles: true })); }, yr + '-08-20');
+  await P.locator('.modal tr:has-text("Casey Brooks") .dpick >> nth=0').evaluate(function (e, v) { e.value = v; e.dispatchEvent(new Event('change', { bubbles: true })); }, yr + '-08-20');
   ok('Dates: picking from the calendar fills the box', (await ci.inputValue()) === fmt(yr + '-08-20'));
   await P.locator('.modal button:has-text("Save settings")').click(); await P.waitForTimeout(400);
   var e15 = await db15();
@@ -423,7 +423,7 @@ async function main() {
     var loc = ['us', 'us-noiso', 'uk-noiso'][li];
     await o15({ as: 'tl', locale: loc });
     await P.locator('.topbar >> text=Settings').click();
-    var ri = P.locator('.modal tr:has-text("Riley Evans") input.datef');
+    var ri = P.locator('.modal input[aria-label^="Next appraisal date for Riley"]');
     await ri.fill('05/11/' + yr); await ri.press('Tab');
     await P.locator('.modal button:has-text("Save settings")').click(); await P.waitForTimeout(500);
     var el = await db15();
@@ -498,23 +498,17 @@ async function main() {
   await P.locator('#oto-x-scope').selectOption('Individual'); await P.locator('#oto-x-tech').selectOption('Jordan Lee');
   await P.locator('button:has-text("Add expectation")').click(); await P.waitForTimeout(300);
   var e21 = await db15();
-  ok('Expectations: a new individual one goes to the end of that person\'s list (after shared)', e21.lists['Appraisal Expectations'].find(function (x) { return x.Title === 'Support the area 2 outage'; }).SortOrder > 1000);
+  var jIndiv = e21.lists['Appraisal Expectations'].filter(function (x) { return x.AppliesTo === 'Individual' && x.Technician === claims('jordan.lee@example.test'); });
+  var jNew = jIndiv.find(function (x) { return x.Title === 'Support the area 2 outage'; });
+  ok('Expectations: a new individual one goes to the end of that person\'s list (shared always first)', jNew && jIndiv.every(function (x) { return x === jNew || x.SortOrder < jNew.SortOrder; }) &&
+    (await P.locator('section.expgroup:has-text("Jordan Lee") tr').last().innerText()).indexOf('Support the area 2 outage') >= 0);
   // team overview: attention, chart switcher, no Energy column, report footer
   await P.locator('.topbar >> text=Team overview').click();
   var tv = await P.locator('[data-oto-root]').innerText();
   ok('Overview: "Needs your attention" replaces the duplicate status card', tv.indexOf('Needs your attention') >= 0 && tv.indexOf('review status') < 0);
   ok('Overview: attention lists waiting reviews and wellbeing to review', /Sam Patel – .* review is waiting for you/.test(tv) && /Sam Patel's wellbeing assessment is ready for your review/.test(tv));
   ok('Overview: Energy column removed from the appraisal outlook', (await P.locator('.nw th').allInnerTexts()).every(function (t) { return t.toUpperCase() !== 'ENERGY'; }));
-  await P.locator('select.chartsel').selectOption('actions'); await P.waitForTimeout(150);
-  ok('Overview: chart switches to open actions', (await P.locator('.chartcard .sub').innerText()).indexOf('Open agreed actions') === 0);
-  await o15({ as: 'tl' });
-  ok('Overview: the chart choice is remembered', (await P.locator('select.chartsel').inputValue()) === 'actions');
-  for (var ck = 0; ck < 7; ck++) {
-    var opt = ['workload', 'energy', 'actions', 'ratings', 'outcome', 'ontime', 'days'][ck];
-    await P.locator('select.chartsel').selectOption(opt); await P.waitForTimeout(80);
-  }
-  ok('Overview: all 7 chart options draw without errors', (await P.locator('.chartcard svg').count()) >= 1);
-  await P.locator('select.chartsel').selectOption('workload');
+  ok('Overview: the chart switcher and its charts are gone (v5)', (await P.locator('select.chartsel').count()) === 0 && (await P.locator('.chartcard').count()) === 0);
   await openTeam(P, 'Jordan Lee'); await P.locator('button:has-text("Generate appraisal report")').click();
   ok('Report: new footer wording', (await P.locator('.report-doc .note').innerText()) === 'Generated from the monthly 1-to-1 records. Wellbeing answers are deliberately excluded. The expected outcome is a guide only.');
   // appraisal timing (v4.2.1): best done in the calendar month before; a passed date is Overdue
@@ -527,7 +521,7 @@ async function main() {
   ok('Appraisal: dates further out are not flagged yet', tA.indexOf('Aim to complete Alex Morgan') < 0);
   await P.evaluate(function (iso) {
     var d = OTO_MOCK.current.db; d.lists['Technicians'].find(function (t) { return t.Title === 'Alex Morgan'; }).AppraisalDate = iso + 'T12:00:00Z';
-    sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(d));
+    sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d));
   }, futureIso(-10));
   await o15({ as: 'tl' });
   var tO = await P.locator('[data-oto-root]').innerText();
@@ -611,10 +605,18 @@ async function main() {
   await open(W, { as: 'tl', wbId: String(samWb.ID) });
   ok('Wellbeing: ?wbId opens the assessment for the TL', (await W.locator('.pagehead h2').innerText()).indexOf('Sam Patel') >= 0);
   ok('Wellbeing: TL sees the areas flagged as an issue first', /3 areas flagged as an issue/.test(await W.locator('[data-oto-root]').innerText()));
-  ok('Wellbeing: next review defaults to one year on', (await W.locator('.wbpanel input#' + (await W.locator('.wbpanel input.datef').nth(1).getAttribute('id'))).inputValue()) !== '');
+  ok('Wellbeing: no next date is invented – Sam has none in Settings → Team, so the box is empty', (await W.locator('.wbpanel input.datef').nth(1).inputValue()) === '');
   await W.locator('.wbpanel button:has-text("+ Add arrangement")').click();
   await W.locator('.wbpanel .wbarr textarea').first().fill('Check-in call before lone-working jobs');
-  await W.locator('.wbpanel button:has-text("Complete")').click(); await W.locator('.modal button:has-text("Complete")').click(); await W.waitForTimeout(500);
+  await W.locator('.wbpanel button:has-text("Complete")').click();
+  var wbDlg = W.locator('.modal:has-text("wellbeing assessment")');
+  await wbDlg.locator('button:has-text("Complete")').click();
+  ok('Wellbeing: completing asks for the next assessment date (required, never set silently)', /Choose the next wellbeing assessment date/.test(await wbDlg.innerText()));
+  var wbNext = futureIso(365);
+  await wbDlg.locator('input.datef').fill(fmt(wbNext)); await wbDlg.locator('input.datef').press('Tab');
+  await wbDlg.locator('button:has-text("Complete")').click(); await W.waitForTimeout(600);
+  var samTech = (await W.evaluate(function () { return JSON.parse(JSON.stringify(OTO_MOCK.current.db)); })).lists['Technicians'].find(function (t) { return t.Title === 'Sam Patel'; });
+  ok('Wellbeing: the confirmed date becomes the Team record\'s next wellbeing date', new Date(samTech.NextWellbeingDate).toLocaleDateString('en-CA', { timeZone: 'Europe/London' }) === wbNext);
   var dW5 = await W.evaluate(function () { return JSON.parse(JSON.stringify(OTO_MOCK.current.db)); });
   var sam5 = dW5.lists['Wellbeing Assessments'].find(function (x) { return x.ID === samWb.ID; });
   ok('Wellbeing: Complete saves arrangements + next review and Flow 5 stamps CompletedOn', sam5.AssessmentStatus === 'Completed' && !!sam5.CompletedOn && JSON.parse(sam5.ArrangementsJson)[0].text.indexOf('Check-in') === 0 && !!sam5.NextReviewDate &&
@@ -644,7 +646,7 @@ async function main() {
   var R = await c18.newPage(), dlg18 = [];
   R.on('dialog', function (d) { dlg18.push(d.message()); d.accept(); });
   async function save18(fn, arg) {
-    await R.evaluate(function (a) { var d = OTO_MOCK.current.db; (new Function('d', 'arg', a.body))(d, a.arg); sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(d)); }, { body: fn, arg: arg });
+    await R.evaluate(function (a) { var d = OTO_MOCK.current.db; (new Function('d', 'arg', a.body))(d, a.arg); sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d)); }, { body: fn, arg: arg });
   }
   await open(R, { as: 'tl' }); await R.evaluate(function () { OTO_MOCK.reset(); });
   await open(R, { as: 'tl' });
@@ -690,7 +692,7 @@ async function main() {
     var rv = d.lists['Monthly Reviews'].find(function (x) { return x.Technician.indexOf('jordan.') >= 0 && x.MonthKey === pm; });
     var mr = d.lists['Manager Reviews'].find(function (x) { return x.ReviewItemId === rv.ID; });
     rv.ReviewStatus = 'Submitted'; mr.ReviewState = 'Open'; mr.ReleasedOn = null; mr.SubmittedOn = null;
-    sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(d)); return rv.ID; });
+    sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d)); return rv.ID; });
   await open(R, { as: 'tl', reviewId: String(prev18) });
   ok('Close – not submitted is disabled while the submission is being processed', await R.locator('button:has-text("Close – not submitted")').isDisabled());
   // toasts survive the redraw that follows a save
@@ -702,7 +704,7 @@ async function main() {
   await R.keyboard.press('Escape'); await R.waitForTimeout(100);
   ok('Accessibility: Escape closes the Settings dialog', (await R.locator('.modal').count()) === 0);
   await R.locator('.topbar >> text=Settings').click();
-  var ci18 = R.locator('.modal tr:has-text("Casey Brooks") input.datef');
+  var ci18 = R.locator('.modal input[aria-label="Next appraisal date for Casey Brooks"]');
   await ci18.fill('01/02/2031'); await ci18.press('Tab');
   dlg18 = [];
   await R.locator('.modal button:has-text("Close")').click(); await R.waitForTimeout(100);
@@ -747,7 +749,7 @@ async function main() {
     !d19.perms['1-to-1 Feedback'][fb19.ID] && (await api(B, 'GET', "/_api/web/lists/getbytitle('1-to-1 Feedback')/items")).json.value.length === 0);
   ok('Feedback: sending does not touch the unsaved form', (await B.locator('textarea').first().inputValue()) === q1v + ' (still typing)');
   // email fails → the TL sees it in Needs your attention and can read it
-  await B.evaluate(function () { var d = OTO_MOCK.current.db; d.fbFail = true; sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(d)); });
+  await B.evaluate(function () { var d = OTO_MOCK.current.db; d.fbFail = true; sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d)); });
   await open(B, { as: 'sam' });
   await B.locator('.fbk-bubble').click(); await B.locator('.fbk-types button:has-text("Suggestion")').click();
   await B.locator('#oto-fbk-text').fill('Could the report include last year too?'); await B.locator('.fbk-panel button:has-text("Send")').click(); await B.waitForTimeout(250);
@@ -763,7 +765,7 @@ async function main() {
   ok('Feedback: Mark as read removes it from the list and records Read', !/Feedback from Sam Patel/.test(await B.locator('[data-oto-root]').innerText()) &&
     d19b.lists['1-to-1 Feedback'].find(function (x) { return x.Message.indexOf('last year') >= 0; }).DeliveryStatus === 'Read');
   // a site where the Feedback list doesn't exist yet (solution not upgraded): a clear message, the text is kept
-  await B.evaluate(function () { var d = OTO_MOCK.current.db; delete d.lists['1-to-1 Feedback']; sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(d)); });
+  await B.evaluate(function () { var d = OTO_MOCK.current.db; delete d.lists['1-to-1 Feedback']; sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d)); });
   var e19c = await open(B, { as: 'tl' });
   ok('Feedback: the TL page still loads without the Feedback list', !e19c.length && (await B.locator('.attn-card').count()) === 1);
   await open(B, { as: 'jordan' });
@@ -817,7 +819,7 @@ async function main() {
   ok('Shorter form: a question answered No folds to one line', (await q4c.getAttribute('class')).indexOf('compact') >= 0);
   await q4c.locator('button:has-text("Yes")').click();
   ok('Shorter form: changing it to Yes opens it again', (await q4c.getAttribute('class')).indexOf('compact') < 0 && await q4c.locator('textarea').isVisible());
-  await S.evaluate(function (id) { var d = OTO_MOCK.current.db; d.lists['Monthly Reviews'].find(function (x) { return x.ID === id; }).Q2Issue = 'Van tyre slow puncture'; sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(d)); }, cur20.ID);
+  await S.evaluate(function (id) { var d = OTO_MOCK.current.db; d.lists['Monthly Reviews'].find(function (x) { return x.ID === id; }).Q2Issue = 'Van tyre slow puncture'; sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d)); }, cur20.ID);
   await open(S, { as: 'alex' });
   ok('Shorter form: Q2 with text is open on load', (await S.locator('section.card:has-text("Challenges, blockers") textarea').first().inputValue()) === 'Van tyre slow puncture' &&
     await S.locator('section.card:has-text("Challenges, blockers") textarea').first().isVisible());
@@ -835,7 +837,7 @@ async function main() {
     var d = OTO_MOCK.current.db, rv = d.lists['Monthly Reviews'].filter(function (x) { return x.Technician.indexOf('alex.') >= 0 && x.ID !== id; }).sort(function (x, y) { return x.MonthKey < y.MonthKey ? 1 : -1; })[0];
     rv.Q5PlanningRaise = 'Yes'; rv.Q5PlanningDetail = 'Leave in December';
     var mr = d.lists['Manager Reviews'].find(function (m) { return m.ReviewItemId === rv.ID; }); mr.FB_Q5 = 'UNRELEASED-REPLY'; mr.ReleasedOn = null; mr.ReviewState = 'Submitted';
-    sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(d));
+    sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d));
   }, cur20.ID);
   await open(S, { as: 'alex' });
   var since2 = await S.locator('.since').innerText();
@@ -852,10 +854,10 @@ async function main() {
   var relMr = d20b.lists['Manager Reviews'].find(function (m) { return m.ReleasedOn && m.ReviewItemId; });
   await open(S, { as: 'tl', reviewId: String(relMr.ReviewItemId) });
   var before20 = (await db20()).writes.length;
-  await S.locator('section.card:has-text("What has gone well") textarea').first().fill('Half-typed thought');
-  await S.waitForTimeout(5500);
-  ok('Auto-save (TL): never on a released review (it would go live half-typed)', (await db20()).writes.length === before20 &&
-    /changes save only when you click Save feedback/.test(await S.locator('[data-oto-root]').innerText()));
+  ok('Released review (v5): read-only – no auto-save and no editing outside Amend', await S.locator('section.card:has-text("What has gone well") textarea').first().isDisabled() &&
+    /Released – read-only\. Use Amend to change it/.test(await S.locator('[data-oto-root]').innerText()));
+  await S.waitForTimeout(500);
+  ok('Auto-save (TL): never on a released review (it would go live half-typed)', (await db20()).writes.length === before20);
   // the technician's wellbeing form
   await open(S, { as: 'alex' });
   await S.locator('.topbar >> text=Wellbeing').click(); await S.locator('button:has-text("Continue")').first().click(); await S.waitForTimeout(150);
@@ -870,7 +872,7 @@ async function main() {
   var Q = await c21.newPage();
   Q.on('dialog', function (d) { d.accept(); });
   async function db21() { return Q.evaluate(function () { return JSON.parse(JSON.stringify(OTO_MOCK.current.db)); }); }
-  async function put21(body) { await Q.evaluate(function (b) { var d = OTO_MOCK.current.db; (new Function('d', b))(d); sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(d)); }, body); }
+  async function put21(body) { await Q.evaluate(function (b) { var d = OTO_MOCK.current.db; (new Function('d', b))(d); sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d)); }, body); }
   await open(Q, { as: 'alex' }); await Q.evaluate(function () { OTO_MOCK.reset(); });
   await open(Q, { as: 'alex' });
   // details of a question switched to No and back to Yes are kept and saved
@@ -958,7 +960,7 @@ async function main() {
     var d = OTO_MOCK.current.db, x = OTO_MOCK.X.join(' ');
     d.lists['1-to-1 Feedback'].push({ ID: 900, Title: x.slice(0, 60), FeedbackType: 'Fault', Message: x, PageName: x, AppVersion: x, DeliveryStatus: 'Failed', HasUniqueRoleAssignments: true,
       Created: new Date().toISOString(), Author: 'i:0#.f|membership|riley.evans@example.test' });
-    sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(d));
+    sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d));
   });
   await sweep('TL reading hostile feedback', { as: 'tl', xss: '1' }, async function () { await page.locator('.attn-row:has-text("Feedback from") button').first().click(); });
   await sweep('Since last time with hostile earlier answers', { as: 'alex', xss: '1' }, async function () {
@@ -1059,114 +1061,6 @@ async function main() {
   ok('Focus areas: picks the 3 lowest averages and the next band up; top band says keep it up', !!fm && fm.ok, JSON.stringify(fm));
   await c22.close();
 
-  // ---------------------------------------------------------------- 23. v4.5: challenging released feedback
-  var c23 = await browser.newContext({ viewport: { width: 1366, height: 900 } });
-  var C = await c23.newPage();
-  C.on('dialog', function (d) { d.accept(); });
-  await open(C, { as: 'tl' }); await C.evaluate(function () { OTO_MOCK.reset(); });
-  async function dbC() { return C.evaluate(function () { return JSON.parse(JSON.stringify(OTO_MOCK.current.db)); }); }
-  var d23 = await dbC();
-  var jClaims = claims('jordan.lee@example.test');
-  var jMrs = d23.lists['Manager Reviews'].filter(function (m) { return m.Technician === jClaims; }).sort(function (x, y) { return x.MonthKey < y.MonthKey ? -1 : 1; });
-  var jCur = jMrs[jMrs.length - 1], jOld = jMrs.filter(function (m) { return m.ReleasedOn; })[0];
-  var alexMr = d23.lists['Manager Reviews'].find(function (m) { return m.Technician === claims('alex.morgan@example.test') && m.ReleasedOn; });
-  await open(C, { as: 'alex' });
-  ok('Challenge: nothing to challenge on an open (unreleased) review', (await C.locator('.chflag').count()) === 0);
-  await open(C, { as: 'jordan', reviewId: String(jOld.ReviewItemId) });
-  ok('Challenge: an older released review cannot be challenged (latest only)', jOld.ID !== jCur.ID && (await C.locator('.chflag').count()) === 0);
-  await open(C, { as: 'jordan' });
-  var nFlags = await C.locator('.chflag').count();
-  ok('Challenge: the latest released review offers a flag on each expectation rating, the overall feedback and the actions – nothing else', nFlags >= 2 &&
-    (await C.locator('section.card:has-text("What has gone well") .chflag').count()) === 0 && (await C.locator('section.card:has-text("Overall feedback and agreed actions") .chflag').count()) >= 1);
-  ok('Challenge: no bar until something is flagged', (await C.locator('.chbar:visible').count()) === 0);
-  await C.locator('td .chflag').first().click();
-  await C.locator('.chnote input').first().fill('I evidenced this in the permit audit');
-  await C.locator('section.card:has-text("Overall feedback and agreed actions") .chflag').first().click();
-  ok('Challenge: flagging shows a note box and the send bar', /2 parts flagged/.test(await C.locator('.chbar').innerText()));
-  await C.locator('.chbar button:has-text("Send challenge")').click();
-  await C.locator('.modal button:has-text("Send challenge")').click();
-  await C.waitForTimeout(400);
-  d23 = await dbC();
-  var chItem = d23.lists['1-to-1 Challenges'][0], jCurNow = d23.lists['Manager Reviews'].find(function (m) { return m.ID === jCur.ID; });
-  ok('Challenge: sent – Flow 7 opens it on the Manager Review, keeps it private and emails the TL (E14)', !!chItem && chItem.ChallengeStatus === 'Open' &&
-    jCurNow.ChallengeState === 'Open' && JSON.parse(jCurNow.ChallengeSectionsJson).length === 2 && d23.perms['1-to-1 Challenges'][chItem.ID]['jordan.lee@example.test'] === 'edit' &&
-    d23.emails.some(function (e) { return e.template === 'E14'; }), JSON.stringify(jCurNow.ChallengeState));
-  await open(C, { as: 'jordan' });
-  ok('Challenge: the technician sees the topics, the close-by date and "I agree" – and no more flags', (await C.locator('.chcard li').count()) === 2 &&
-    /closes as Not agreed/.test(await C.locator('.chcard').innerText()) && (await C.locator('.chcard button:has-text("I agree")').count()) === 1 && (await C.locator('.chflag').count()) === 0);
-  ok('Challenge: the note is shown with its topic', /permit audit/.test(await C.locator('.chcard').innerText()));
-  // the TL side
-  await open(C, { as: 'tl' });
-  ok('Challenge: Needs your attention tells the TL', /Jordan Lee challenged your/.test(await C.locator('.attn-card').innerText()));
-  await open(C, { as: 'tl', reviewId: String(jCur.ReviewItemId) });
-  ok('Challenge: the TL sees the banner and the challenged parts marked', (await C.locator('.chcard').count()) === 1 && (await C.locator('tr.challenged').count()) === 1 &&
-    (await C.locator('section.card.challenged').count()) === 1);
-  await C.locator('.chcard button:has-text("Agree – resolved")').click(); await C.waitForTimeout(300);
-  d23 = await dbC(); jCurNow = d23.lists['Manager Reviews'].find(function (m) { return m.ID === jCur.ID; });
-  ok('Challenge: the TL agreeing alone does not close it', !!jCurNow.ChallengeTlAgreedOn && jCurNow.ChallengeState === 'Open' && !!d23.lists['1-to-1 Challenges'][0].TlPing);
-  await open(C, { as: 'jordan' });
-  await C.locator('.chcard button:has-text("I agree")').click(); await C.waitForTimeout(300);
-  d23 = await dbC(); jCurNow = d23.lists['Manager Reviews'].find(function (m) { return m.ID === jCur.ID; });
-  ok('Challenge: both agreed – closed as Agreed and the item locked to Read', jCurNow.ChallengeState === 'Agreed' && !!jCurNow.ChallengeClosedOn &&
-    d23.perms['1-to-1 Challenges'][chItem.ID]['jordan.lee@example.test'] === 'read');
-  await open(C, { as: 'jordan' });
-  ok('Challenge: the technician sees it agreed, and cannot raise another on the same review', /Challenge agreed/.test(await C.locator('.chcard').innerText()) && (await C.locator('.chflag').count()) === 0);
-  // TL reopens
-  await open(C, { as: 'tl', reviewId: String(jCur.ReviewItemId) });
-  await C.locator('.chcard button:has-text("Reopen challenge")').click();
-  await C.locator('.modal button:has-text("Reopen")').click(); await C.waitForTimeout(400);
-  d23 = await dbC(); jCurNow = d23.lists['Manager Reviews'].find(function (m) { return m.ID === jCur.ID; });
-  ok('Challenge: the TL can reopen it – open again, agreements cleared, the technician can edit and is emailed (E15)', jCurNow.ChallengeState === 'Open' &&
-    !jCurNow.ChallengeTlAgreedOn && !jCurNow.ChallengeTechAgreedOn && d23.perms['1-to-1 Challenges'][chItem.ID]['jordan.lee@example.test'] === 'edit' &&
-    d23.emails.some(function (e) { return e.template === 'E15'; }));
-  // month end: not agreed, still flagged
-  await C.evaluate(function () { OTO_MOCK.closeChallenges('2999-01-01'); });
-  await open(C, { as: 'jordan' });
-  ok('Challenge: at its close-by date it closes as Not agreed and stays flagged', /not agreed/i.test(await C.locator('.chcard').innerText()) &&
-    /stays flagged/.test(await C.locator('.chcard').innerText()) && (await C.locator('.chcard button').count()) === 0);
-  await open(C, { as: 'tl' });
-  ok('Challenge: the TL sees "Not agreed – still flagged"', /closed as Not agreed – still flagged/.test(await C.locator('.attn-card').innerText()));
-  await C.locator('.topbar >> text=Monthly reviews').click();
-  ok('Challenge: the reviews table shows the flag', (await C.locator('td .chip:has-text("Not agreed")').count()) >= 1);
-  // static, contained attempts to get round it (the mock enforces SharePoint's permissions)
-  await open(C, { as: 'jordan' });
-  var forge1 = await api(C, 'POST', "/_api/web/lists/getbytitle('Manager%20Reviews')/items(" + jCur.ID + ')/validateUpdateListItem',
-    { formValues: [{ FieldName: 'ChallengeTlAgreedOn', FieldValue: '01/01/2026' }, { FieldName: 'ChallengeState', FieldValue: 'Agreed' }], bNewDocumentUpdate: false });
-  ok('Challenge security: the technician cannot set the TL\'s agreement or the state on the Manager Review', forge1.status === 403);
-  var chW = (await dbC()).writes.filter(function (w) { return w.list === '1-to-1 Challenges' || (w.list === 'Manager Reviews' && w.fields.some(function (f) { return /^Challenge/.test(f); })); });
-  ok('Challenge: the page writes only the challenge fields (technician: its own challenge; TL: the Challenge columns and TlPing)', chW.length >= 5 && chW.every(function (w) {
-    var allowed = w.list === 'Manager Reviews' ? /^Challenge(State|TlAgreedOn|TechAgreedOn|ClosedOn|CloseBy)$/ : w.as === 'tl' ? /^(TlPing|TechAgreedOn)$/ : /^(Title|ManagerReviewId|SectionsJson|TechAgreedOn)$/;
-    return w.fields.every(function (f) { return allowed.test(f); }) && (w.list !== 'Manager Reviews' || w.as === 'tl');
-  }), JSON.stringify(chW.map(function (w) { return w.as + ':' + w.list + ':' + w.fields.join('+'); })));
-  var rf = await api(C, 'GET', "/_api/web/lists/getbytitle('1-to-1%20Challenges')/RootFolder");
-  var forge2 = await api(C, 'POST', "/_api/web/lists/getbytitle('1-to-1%20Challenges')/AddValidateUpdateItemUsingPath", { listItemCreateInfo: { FolderPath: { DecodedUrl: rf.json.ServerRelativeUrl }, UnderlyingObjectType: 0 },
-    formValues: [{ FieldName: 'Title', FieldValue: 'x' }, { FieldName: 'ManagerReviewId', FieldValue: String(alexMr.ID) }, { FieldName: 'SectionsJson', FieldValue: '[{"key":"overall","note":"x"}]' }], bNewDocumentUpdate: false });
-  d23 = await dbC();
-  var forged = d23.lists['1-to-1 Challenges'].find(function (c) { return c.ManagerReviewId === alexMr.ID; });
-  ok('Challenge security: a challenge of someone else\'s review is rejected and hidden, and their review is untouched', forge2.status === 200 && !!forged && forged.ChallengeStatus === 'Rejected' &&
-    !d23.lists['Manager Reviews'].find(function (m) { return m.ID === alexMr.ID; }).ChallengeState &&
-    (await api(C, 'GET', "/_api/web/lists/getbytitle('1-to-1%20Challenges')/items(" + forged.ID + ')')).status === 404);
-  var forge3 = await api(C, 'POST', "/_api/web/lists/getbytitle('1-to-1%20Challenges')/AddValidateUpdateItemUsingPath", { listItemCreateInfo: { FolderPath: { DecodedUrl: rf.json.ServerRelativeUrl }, UnderlyingObjectType: 0 },
-    formValues: [{ FieldName: 'Title', FieldValue: 'x' }, { FieldName: 'ManagerReviewId', FieldValue: String(jCur.ID) }, { FieldName: 'SectionsJson', FieldValue: '[{"key":"overall"}]' }], bNewDocumentUpdate: false });
-  d23 = await dbC();
-  ok('Challenge security: a second challenge of the same review is rejected (only the TL can reopen)', forge3.status === 200 &&
-    d23.lists['1-to-1 Challenges'].filter(function (c) { return c.ManagerReviewId === jCur.ID; }).pop().ChallengeStatus === 'Rejected' &&
-    d23.lists['Manager Reviews'].find(function (m) { return m.ID === jCur.ID; }).ChallengeState === 'Not agreed');
-  var forge4 = await api(C, 'POST', "/_api/web/lists/getbytitle('1-to-1%20Challenges')/items(" + chItem.ID + ')/validateUpdateListItem',
-    { formValues: [{ FieldName: 'TechAgreedOn', FieldValue: '01/01/2026' }], bNewDocumentUpdate: false });
-  ok('Challenge security: once closed the technician can no longer change their challenge', forge4.status === 403);
-  // hostile text in a challenge note, read by the TL and the technician
-  await C.evaluate(function (id) {
-    var d = OTO_MOCK.current.db, x = OTO_MOCK.X.join(' ');
-    var m = d.lists['Manager Reviews'].find(function (y) { return y.ID === id; });
-    m.ChallengeState = 'Open'; m.ChallengeSectionsJson = JSON.stringify([{ key: 'overall', note: x }, { key: '<img src=x onerror=alert(1)>', note: x }, { key: 'actions', note: x }]);
-    m.ChallengeCloseBy = '2999-01-01';
-    sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(d));
-  }, jCur.ID);
-  await open(C, { as: 'tl', reviewId: String(jCur.ReviewItemId) });
-  ok('Challenge: an unknown section key is ignored', (await C.locator('.chcard li').count()) === 2);
-  await c23.close();
-
   // ---------------------------------------------------------------- 24. fixes from the final break-it round
   var c24 = await browser.newContext({ viewport: { width: 1366, height: 768 } });
   var K = await c24.newPage();
@@ -1180,57 +1074,8 @@ async function main() {
         get: function () { if (dec) { dec = false; return 1; } var v = !!sc[i++]; if (v) { dec = true; } return v ? 1 : 0; }, set: function () {} });
     }, sched);
   }
-  async function raiseChallenge() {
-    await open(K, { as: 'jordan' });
-    await K.locator('td .chflag').first().click();
-    await K.locator('.chbar button:has-text("Send challenge")').click(); await K.locator('.modal button:has-text("Send challenge")').click(); await K.waitForTimeout(300);
-  }
   await open(K, { as: 'tl' }); await K.evaluate(function () { OTO_MOCK.reset(); });
-  await raiseChallenge();
-  var d24 = await dbK(), jm = d24.lists['Manager Reviews'].find(function (m) { return m.ChallengeState === 'Open'; });
-  await open(K, { as: 'jordan' }); await K.locator('.chcard button:has-text("I agree")').click(); await K.waitForTimeout(300);
-  // H1: the TL's agree saves but the wake-up write fails -> both agreed, still open -> "Finish closing" closes it
-  await open(K, { as: 'tl', reviewId: String(jm.ReviewItemId) });
-  await failSchedule([false, true]);
-  await K.locator('.chcard button:has-text("Agree – resolved")').click(); await K.waitForTimeout(400);
-  await open(K, { as: 'tl', reviewId: String(jm.ReviewItemId) });
-  ok('Break-it fix: both agreed but the closing step was missed – the TL gets "Finish closing"', (await K.locator('.chcard button:has-text("Finish closing")').count()) === 1 &&
-    (await dbK()).lists['Manager Reviews'].find(function (m) { return m.ID === jm.ID; }).ChallengeState === 'Open');
-  await K.locator('.chcard button:has-text("Finish closing")').click(); await K.waitForTimeout(300);
-  ok('Break-it fix: … and it closes as Agreed', (await dbK()).lists['Manager Reviews'].find(function (m) { return m.ID === jm.ID; }).ChallengeState === 'Agreed');
-  // Flow 1 never closes an agreed-by-both challenge as Not agreed
-  await K.evaluate(function (id) { var d = OTO_MOCK.current.db, m = d.lists['Manager Reviews'].find(function (x) { return x.ID === id; });
-    m.ChallengeState = 'Open'; m.ChallengeTlAgreedOn = m.ChallengeTechAgreedOn = new Date().toISOString(); sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(d)); }, jm.ID);
-  await open(K, { as: 'tl' }); await K.evaluate(function () { OTO_MOCK.closeChallenges('2999-01-01'); });
-  ok('Break-it fix: at the close-by date, a challenge both agreed closes as Agreed', (await dbK()).lists['Manager Reviews'].find(function (m) { return m.ID === jm.ID; }).ChallengeState === 'Agreed');
-  // H2: reopen saves state and cleared stamps together; if the wake-up fails, "Send again"
-  await open(K, { as: 'tl', reviewId: String(jm.ReviewItemId) });
-  await failSchedule([false, false, true]);
-  await K.locator('.chcard button:has-text("Reopen challenge")').click(); await K.locator('.modal button:has-text("Reopen")').click(); await K.waitForTimeout(400);
-  var jm2 = (await dbK()).lists['Manager Reviews'].find(function (m) { return m.ID === jm.ID; });
-  ok('Break-it fix: reopen writes the state and clears the agreements in one save', jm2.ChallengeState === 'Open' && !jm2.ChallengeTlAgreedOn && !jm2.ChallengeTechAgreedOn && !jm2.ChallengeClosedOn);
-  await open(K, { as: 'tl', reviewId: String(jm.ReviewItemId) });
-  ok('Break-it fix: … the TL can send it again when the technician hasn\'t got access back yet', (await K.locator('.chcard button:has-text("Send again")').count()) === 1);
-  await open(K, { as: 'jordan' });
-  await K.locator('.chcard button:has-text("I agree")').click(); await K.waitForTimeout(400);
-  ok('Break-it fix: … meanwhile the technician gets a clear message, not "read-only"', /still being reopened/.test(await K.locator('.toast').innerText()));
-  await open(K, { as: 'tl', reviewId: String(jm.ReviewItemId) });
-  await K.locator('.chcard button:has-text("Send again")').click(); await K.waitForTimeout(300);
-  ok('Break-it fix: … "Send again" gives the technician access back', (await dbK()).perms['1-to-1 Challenges'][jm2.ChallengeItemId]['jordan.lee@example.test'] === 'edit');
-  // M1: an open challenge on an earlier month is shown on the technician's current form
-  await K.evaluate(function () { OTO_MOCK.reset(); });
-  await open(K, { as: 'alex' });
-  var dA = await dbK(), aPrev = dA.lists['Manager Reviews'].filter(function (m) { return m.Technician === claims('alex.morgan@example.test') && m.ReleasedOn; })
-    .sort(function (x, y) { return x.MonthKey < y.MonthKey ? 1 : -1; })[0];
-  await open(K, { as: 'alex', reviewId: String(aPrev.ReviewItemId) });
-  await K.locator('td .chflag').first().click();
-  await K.locator('.chnote input').first().fill('x'.repeat(500));   // a long note with no spaces (M3)
-  await K.locator('.chbar button:has-text("Send challenge")').click(); await K.locator('.modal button:has-text("Send challenge")').click(); await K.waitForTimeout(300);
-  await open(K, { as: 'alex' });
-  ok('Break-it fix: the technician\'s current form shows their open challenge on last month, with a link', /Your challenge on the .* feedback is open/.test(await K.locator('[data-oto-root]').innerText()) &&
-    (await K.locator('.chcard button:has-text("Open ")').count()) === 1);
-  await open(K, { as: 'alex', reviewId: String(aPrev.ReviewItemId) });
-  ok('Break-it fix: a long unbroken note wraps (no sideways scrolling)', await K.evaluate(function () { return document.documentElement.scrollWidth <= window.innerWidth + 1; }));
+  var dA = await dbK();
   // L1: auto-save paused on an incomplete action marks it
   var samCur = dA.lists['Monthly Reviews'].find(function (x) { return x.Technician.indexOf('sam.') >= 0 && x.MonthKey === curMonth(); });
   await open(K, { as: 'tl', reviewId: String(samCur.ID) });
@@ -1253,21 +1098,273 @@ async function main() {
     var segs = Array.prototype.every.call(r.querySelectorAll('.q-head .seg, td .seg'), function (g) { return !!g.getAttribute('aria-label'); });
     return tas && segs;
   }));
-  // suspicion: the Challenges list exists but a Manager Reviews challenge column doesn't – the page still loads
-  await K.evaluate(function () { var d = OTO_MOCK.current.db; d.missingMrColumn = 'ChallengeCloseBy'; sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(d)); });
-  var eK = await open(K, { as: 'tl' });
-  ok('Break-it fix: a missing challenge column doesn\'t stop the page loading', (await K.locator('.attn-card').count()) === 1 && eK.length === 0, eK.join('|'));
   await c24.close();
-  await sweep('Challenge notes read by the TL', { as: 'tl', xss: '1' }, async function () {
-    await page.evaluate(function () {
-      var d = OTO_MOCK.current.db, x = OTO_MOCK.X.join(' ');
-      var m = d.lists['Manager Reviews'].filter(function (y) { return y.ReleasedOn; })[0];
-      m.ChallengeState = 'Open'; m.ChallengeSectionsJson = JSON.stringify([{ key: 'overall', note: x }]); m.ChallengeCloseBy = '2999-01-01';
-      sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(d));
-    });
-    await open(page, { as: 'tl', xss: '1' });
-    await page.locator('.attn-row:has-text("challenged your") button').first().click();
-    if (!(await page.locator('.chcard').count())) { throw new Error('no challenge banner'); }
+
+  // ---------------------------------------------------------------- 25. v5: appraisal periods and missed months (calculations)
+  var c25 = await browser.newContext({ viewport: { width: 1366, height: 768 } });
+  var V = await c25.newPage();
+  V.on('dialog', function (d) { d.accept(); });
+  async function dbV() { return V.evaluate(function () { return JSON.parse(JSON.stringify(OTO_MOCK.current.db)); }); }
+  async function calc(m) { return V.evaluate(function (mm) { return window.ESGOneToOne()._calc(mm); }, m); }
+  function addM(key, n) { var y = +key.slice(0, 4), mo = +key.slice(5, 7) - 1 + n; y += Math.floor(mo / 12); mo = ((mo % 12) + 12) % 12; return y + '-' + (mo < 9 ? '0' : '') + (mo + 1); }
+  function monthsFrom(first, n, f) { var out = []; for (var i = 0; i < n; i++) { out.push(Object.assign({ month: addM(first, i), self: 3, tl: 3 }, f ? f(i) : {})); } return out; }
+  await open(V, { as: 'tl' }); await V.evaluate(function () { OTO_MOCK.reset(); });
+  // 12 months: completed 20-Apr-2026, the period before ran from the 10-Apr-2025 start
+  var p12 = await calc({ today: '2026-05-10', ap: '2027-04-30', history: [{ start: '2025-04-10', completed: '2026-04-20', nextDue: '2027-04-30' }], start: '2026-04-20',
+    reviews: monthsFrom('2025-05', 13) });
+  ok('Periods: a 12-month period holds May–Apr; the completion month belongs to the period it ends', p12.periods.length === 2 && p12.periods[0].months.length === 12 &&
+    p12.periods[0].months[0] === '2025-05' && p12.periods[0].months[11] === '2026-04' && p12.periods[1].months.join() === '2026-05', JSON.stringify(p12.periods.map(function (p) { return p.months; })));
+  ok('Periods: the new period starts with only its own reviews (no carry-over of ratings)', p12.periods[1].points === 1 && p12.periods[0].points === 12);
+  // 15 months
+  var p15 = await calc({ today: '2026-05-02', ap: '2027-03-31', history: [{ start: '2025-01-15', completed: '2026-04-15', nextDue: '2027-03-31' }], start: '2026-04-15', reviews: monthsFrom('2025-02', 15) });
+  ok('Periods: a 15-month period (completed later than a year) keeps all 15 reviews', p15.periods[0].months.length === 15 && p15.periods[0].counts.months === 15 && p15.periods[0].closed);
+  // 23 months, 17 rated, 5 missed, current month still open
+  var r23 = monthsFrom('2024-06', 23, function (i) {
+    if (i === 22) { return { state: 'Open', self: null, tl: null }; }
+    if ([3, 7, 11, 15, 19].indexOf(i) >= 0) { return { state: 'Closed - Not Submitted', self: null, tl: null }; }
+    return { late: i === 1 || i === 2 };
+  });
+  var p23 = await calc({ today: '2026-04-20', ap: '2026-06-30', start: '2024-05-10', reviews: r23 });
+  var cur23 = p23.periods[p23.periods.length - 1];
+  ok('Missed months: 23-month period shows "17 rated reviews of 23 months · 5 missed"', cur23.text === '17 rated reviews of 23 months · 5 missed', cur23.text);
+  ok('Missed months: the average and forecast use only the 17 rated reviews', cur23.points === 17 && Math.abs(cur23.current - 3) < 1e-9 && Math.abs(cur23.projected - 3) < 1e-9);
+  ok('Missed months: on time is out of the reviews submitted (15 of 17), not of 23 months', cur23.onTime.onTime === 15 && cur23.onTime.total === 17 && cur23.onTime.missed === 5);
+  ok('Missed months: a missed month neither extends nor breaks the on-time streak; a late one breaks it', p23.streak === 14, String(p23.streak));
+  var p23b = await calc({ today: '2026-04-20', ap: '2026-06-30', start: '2024-05-10', reviews: r23.filter(function (r) { return r.state !== 'Closed - Not Submitted'; }) });
+  var cur23b = p23b.periods[p23b.periods.length - 1];
+  ok('Missed months: removing the missed months entirely gives the same average and forecast', Math.abs(cur23b.current - cur23.current) < 1e-9 && Math.abs(cur23b.projected - cur23.projected) < 1e-9);
+  var allMissed = await calc({ today: '2026-04-20', ap: '2026-06-30', start: '2025-12-01', reviews: monthsFrom('2026-01', 3, function () { return { state: 'Closed - Not Submitted', self: null, tl: null }; }) });
+  var am = allMissed.periods[allMissed.periods.length - 1];
+  ok('Missed months: none submitted – no score, "0 rated reviews of 4 months · 3 missed", on time 0 of 0', am.current === null && am.projected === null && am.text === '0 rated reviews of 4 months · 3 missed' && am.onTime.total === 0, am.text);
+  // the next due date never changes membership
+  var hist2 = [{ start: '2024-05-10', completed: '2025-09-12', nextDue: '2026-09-30' }];
+  var later = await calc({ today: '2026-04-20', ap: '2027-12-31', history: hist2, start: '2025-09-12', reviews: monthsFrom('2024-06', 22) });
+  var sooner = await calc({ today: '2026-04-20', ap: '2026-05-31', history: hist2, start: '2025-09-12', reviews: monthsFrom('2024-06', 22) });
+  ok('Periods: postponing or bringing forward the next appraisal never moves a review between periods',
+    JSON.stringify(later.periods.map(function (p) { return p.months; })) === JSON.stringify(sooner.periods.map(function (p) { return p.months; })) && later.periods[0].months.length === 16);
+  // platform change: completed early (8 months in), next one 23 months later
+  var plat = await calc({ today: '2026-04-20', ap: '2028-02-29', history: [{ start: '2025-04-01', completed: '2025-12-05', nextDue: '2028-02-29' }], start: '2025-12-05', reviews: monthsFrom('2025-05', 12) });
+  ok('Periods: an early completion (role move) closes an 8-month period; the next runs towards a date 23 months away', plat.periods[0].months.length === 8 &&
+    plat.periods[1].months.join() === '2026-01,2026-02,2026-03,2026-04' && !plat.periods[1].closed);
+  // reviews from before the first recorded start are kept as their own earlier period
+  var pre = await calc({ today: '2026-04-20', ap: '2026-12-31', start: '2025-10-15', reviews: monthsFrom('2025-06', 11) });
+  ok('Periods: reviews before the first period start are kept together as an earlier, closed period', pre.periods.length === 2 && pre.periods[0].noBaseline && pre.periods[0].closed &&
+    pre.periods[0].months.join() === '2025-06,2025-07,2025-08,2025-09,2025-10' && pre.periods[1].months.length === 6);
+  var none = await calc({ today: '2026-04-20', ap: '2026-12-31', reviews: monthsFrom('2025-10', 6, function (i) { return { self: 2 + i * 0.4 > 5 ? 5 : Math.round(2 + i * 0.4), tl: Math.round(2 + i * 0.4) }; }) });
+  ok('Periods: with no period start there is one period and no forecast beyond the current score', none.periods.length === 1 && none.periods[0].noBaseline && none.periods[0].projected === none.periods[0].current);
+  // a completion stored as UK midnight in summer (23:00 the day before in UTC) stays on the 1st
+  var bst = await calc({ today: '2026-08-10', ap: '2027-06-30', history: [{ start: '2025-06-10', completed: '2026-05-31T23:00:00Z', nextDue: '2027-06-30' }], start: '2026-05-31T23:00:00Z', reviews: monthsFrom('2026-04', 4) });
+  ok('Periods: a completion on 1 June (BST) belongs to June, not May', bst.periods[bst.periods.length - 2].months.indexOf('2026-06') >= 0 && bst.periods[bst.periods.length - 1].months.join() === '2026-07', JSON.stringify(bst.periods.map(function (p) { return p.months; })));
+  // April–March boundary: the period and its reviews ignore the financial year
+  ok('Periods: a period crossing 1 April keeps every month on both sides', p12.periods[0].months.indexOf('2026-03') >= 0 && p12.periods[0].months.indexOf('2026-04') >= 0 && p15.periods[0].months.indexOf('2025-04') >= 0);
+
+  // ---------------------------------------------------------------- 26. v5: screens (Settings → Team, profile, overview, expectations, bubble)
+  await open(V, { as: 'tl' });
+  var root25 = await V.locator('[data-oto-root]').innerText();
+  ok('UI: no "Today dd-MMM-yyyy" in the title bar', !/Today\s+\d{2}-[A-Z][a-z]{2}-\d{4}/.test(await V.locator('.titlebar').innerText()));
+  ok('UI: Team overview has no "Expected appraisal outcomes" or "Workload this month" charts', !/Expected appraisal outcomes|Workload this month/.test(root25) && (await V.locator('.attn-card').count()) === 1);
+  ok('UI: the feedback bubble is a pill with a visible "Feedback" label', await V.evaluate(function () {
+    var b = document.querySelector('.fbk-btn, .fbk'); var l = document.querySelector('.fbk-lbl');
+    return !!l && l.offsetWidth > 0 && /Feedback/.test(l.textContent);
+  }));
+  ok('Attention: a person with no period start is listed (Jordan)', /Set the appraisal period start for Jordan Lee/.test(root25));
+  ok('Attention: a person with no next wellbeing date is listed (Sam)', /No next wellbeing date set for Sam Patel/.test(root25));
+  ok('Attention: an overdue wellbeing date from the Team record is listed (Casey)', /Casey Brooks's wellbeing assessment is overdue/.test(root25));
+  await V.locator('.nw a:has-text("Sam Patel")').click(); await V.waitForTimeout(200);
+  var prof = await V.locator('[data-oto-root]').innerText();
+  ok('Profile: Workload by month and Energy by month are gone', !/Workload by month|Energy by month/.test(prof));
+  ok('Profile: shows rated reviews of calendar months for the period', /\d+ rated reviews? of \d+ months?/.test(prof), prof.slice(0, 400));
+  var perSel = V.locator('select[aria-label="Appraisal period"], #oto-period');
+  ok('Profile: Sam has a period selector with the earlier period', (await perSel.count()) === 1 && (await perSel.locator('option').count()) >= 2);
+  // Settings → Team: wellbeing date and completion
+  await V.locator('.topbar >> text=Settings').click();
+  var samWbIn = V.locator('.modal input[aria-label^="Next wellbeing assessment date for Sam"]');
+  ok('Settings: each person has a next wellbeing date box (typed or calendar)', (await samWbIn.count()) === 1 && (await V.locator('.modal input[aria-label^="Next wellbeing assessment date for"]').count()) >= 6);
+  var wbDate = futureIso(40);
+  await samWbIn.fill(fmt(wbDate)); await samWbIn.press('Tab');
+  await V.locator('.modal button:has-text("Save settings")').click(); await V.waitForTimeout(500);
+  var d26 = await dbV();
+  var samT = d26.lists['Technicians'].find(function (t) { return t.Title === 'Sam Patel'; });
+  ok('Settings: the next wellbeing date is saved on the Technicians record (verified)', samT && new Date(samT.NextWellbeingDate).toLocaleDateString('en-CA', { timeZone: 'Europe/London' }) === wbDate);
+  var apBefore = d26.lists['Technicians'].find(function (t) { return t.Title === 'Riley Evans'; }).AppraisalDate;
+  await open(V, { as: 'tl' });
+  await V.locator('.topbar >> text=Settings').click();
+  await V.locator('.modal tr:has-text("Riley Evans") button:has-text("Mark appraisal completed")').click();
+  var mc = V.locator('.modal').last();
+  await mc.locator('input.datef').nth(0).fill(fmt(futureIso(3))); await mc.locator('input.datef').nth(0).press('Tab');
+  await mc.locator('input.datef').nth(1).fill(fmt(futureIso(400))); await mc.locator('input.datef').nth(1).press('Tab');
+  await mc.locator('button:has-text("Record completion")').click();
+  ok('Completion: a date in the future is refused', /can't be in the future/.test(await mc.innerText()));
+  var doneIso = futureIso(-2), nextIso = futureIso(380);
+  await mc.locator('input.datef').nth(0).fill(fmt(doneIso)); await mc.locator('input.datef').nth(0).press('Tab');
+  await mc.locator('input.datef').nth(1).fill(fmt(doneIso)); await mc.locator('input.datef').nth(1).press('Tab');
+  await mc.locator('button:has-text("Record completion")').click();
+  ok('Completion: the next appraisal must be after the completion', /must be after the completion/.test(await mc.innerText()));
+  await mc.locator('input.datef').nth(1).fill(fmt(nextIso)); await mc.locator('input.datef').nth(1).press('Tab');
+  await mc.locator('button:has-text("Record completion")').click();
+  await V.locator('.modal:has-text("Record Riley Evans") button:has-text("Record completion")').click(); await V.waitForTimeout(600);
+  var d26b = await dbV(), rileyT = d26b.lists['Technicians'].find(function (t) { return t.Title === 'Riley Evans'; });
+  var rh = JSON.parse(rileyT.AppraisalHistoryJson || '[]');
+  ok('Completion: history entry added with the actual date, start = completion, next due set', rh.length === 1 && rh[0].completed === doneIso &&
+    new Date(rileyT.AppraisalCycleStart).toLocaleDateString('en-CA', { timeZone: 'Europe/London' }) === doneIso &&
+    new Date(rileyT.AppraisalDate).toLocaleDateString('en-CA', { timeZone: 'Europe/London' }) === nextIso && rileyT.AppraisalDate !== apBefore, JSON.stringify(rh));
+  var rileyRevs = d26b.lists['Monthly Reviews'].filter(function (r) { return r.Technician === claims('riley.evans@example.test'); });
+  ok('Completion: every one of the person\'s reviews carries the new period boundaries (their own view)', rileyRevs.length > 0 && rileyRevs.every(function (r) { return JSON.parse(r.AppraisalBoundaries || '[]').indexOf(doneIso) >= 0; }));
+  ok('Completion: no ratings or reviews were changed (only boundaries and Technicians written)', d26b.writes.filter(function (w) { return w.as === 'tl' && w.list === 'Monthly Reviews' && w.fields.some(function (f) { return f !== 'AppraisalBoundaries' && f !== 'AppraisalDate'; }); }).length === 0 &&
+    d26b.writes.filter(function (w) { return w.list === 'Manager Reviews'; }).length === d26.writes.filter(function (w) { return w.list === 'Manager Reviews'; }).length);
+  // expectations: grouped cards, no cap, delete permanently
+  await open(V, { as: 'tl' });
+  await V.locator('.topbar >> text=Expectations').click();
+  var exText = await V.locator('[data-oto-root]').innerText();
+  ok('Expectations: the "New items go to the end…" sentence and the 10 limit are gone', !/New items go to the end|at most|\/\s*10\b/.test(exText));
+  ok('Expectations: a Shared section and one card per person', (await V.locator('section.expgroup').count()) >= 7 && /Shared/.test(await V.locator('section.expgroup').first().innerText()));
+  for (var ei = 0; ei < 9; ei++) {
+    await V.locator('#oto-x-title').fill('Extra shared expectation ' + (ei + 1));
+    await V.locator('#oto-x-meas').fill('Measure ' + (ei + 1));
+    await V.locator('#oto-x-scope').selectOption('Shared');
+    await V.locator('button:has-text("Add expectation")').click(); await V.waitForTimeout(150);
+  }
+  var d26c = await dbV(), sharedNow = d26c.lists['Appraisal Expectations'].filter(function (x) { return x.Active && x.AppliesTo === 'Shared'; });
+  var sorts = sharedNow.map(function (x) { return x.SortOrder; });
+  ok('Expectations: 13 shared expectations saved – no limit of 10', sharedNow.length === 13, String(sharedNow.length));
+  ok('Expectations: new items get unique SortOrders at the end of their own group', sorts.filter(function (v, i) { return sorts.indexOf(v) === i; }).length === sorts.length &&
+    Math.max.apply(null, sorts) === sharedNow.find(function (x) { return x.Title === 'Extra shared expectation 9'; }).SortOrder);
+  await V.locator('label:has-text("Show retired") input').check(); await V.waitForTimeout(200);
+  var retRow = V.locator('tr:has-text("Update local work instructions")');
+  ok('Expectations: "Delete permanently" is offered on retired items only', (await retRow.locator('button:has-text("Delete permanently")').count()) === 1 &&
+    (await V.locator('tr:has-text("Right-first-time paperwork") button:has-text("Delete permanently")').count()) === 0);
+  await retRow.locator('button:has-text("Delete permanently")').click();
+  ok('Expectations: the confirmation warns it is removed (recycle bin) and history is kept', /recycle bin/.test(await V.locator('.modal').innerText()) && /keep their own copy/.test(await V.locator('.modal').innerText()));
+  await V.locator('.modal button:has-text("Delete permanently")').click(); await V.waitForTimeout(300);
+  var d26d = await dbV();
+  ok('Expectations: deleted to the recycle bin, not from any review', d26d.recycled.length === 1 && d26d.recycled[0].item.Title === 'Update local work instructions' &&
+    !d26d.lists['Appraisal Expectations'].some(function (x) { return x.Title === 'Update local work instructions'; }));
+  await open(V, { as: 'alex' });
+  var tdel = await api(V, 'POST', "/_api/web/lists/getbytitle('Appraisal%20Expectations')/items(1)/recycle()", null);
+  ok('Security: a technician cannot delete anything (recycle → 403)', tdel.status === 403 || tdel.status === 404);
+  // historic snapshots keep a deleted expectation's title
+  ok('Expectations: reviews still hold their own copy of every expectation', d26d.lists['Monthly Reviews'].every(function (r) { return !r.ExpectationsJson || Array.isArray(JSON.parse(r.ExpectationsJson)); }));
+
+  // ---------------------------------------------------------------- 27. v5: Team Leader amendments
+  await open(V, { as: 'tl' }); await V.evaluate(function () { OTO_MOCK.reset(); });
+  await open(V, { as: 'tl' });
+  var d27 = await dbV();
+  var jRv = d27.lists['Monthly Reviews'].find(function (r) { return r.Technician === claims('jordan.lee@example.test') && r.MonthKey === curMonth(); });
+  var jMr = d27.lists['Manager Reviews'].find(function (m) { return m.ReviewItemId === jRv.ID; });
+  await open(V, { as: 'tl', reviewId: String(jRv.ID) });
+  ok('Amend: a released review is read-only – no Save feedback, an Amend button', (await V.locator('.pagehead button:has-text("Save feedback")').count()) === 0 &&
+    (await V.locator('.pagehead button:has-text("Amend")').count()) === 1 && await V.locator('section.card:has-text("Overall feedback") textarea').isDisabled());
+  await V.locator('.pagehead button:has-text("Amend")').click(); await V.waitForTimeout(300);
+  ok('Amend: amend mode makes the technician\'s answers editable', (await V.locator('section.card:has-text("What has gone well") textarea').count()) === 2 &&
+    !(await V.locator('section.card:has-text("Overall feedback") textarea').isDisabled()));
+  await V.locator('section.card:has-text("What has gone well") textarea').first().fill('Corrected: finished the calibration round.');
+  await V.locator('section.card:has-text("Overall feedback") textarea').fill('Overall feedback corrected after our chat.');
+  await V.locator('.pagehead button:has-text("Save amendment")').click();
+  var amModal = V.locator('.modal:has-text("Save amendment")');
+  ok('Amend: the dialog lists what changed', /Q1 What has gone well/.test(await amModal.innerText()) && /Overall feedback/.test(await amModal.innerText()));
+  await amModal.locator('button:has-text("Save amendment")').click();
+  ok('Amend: a reason is required', /give the reason/.test(await amModal.innerText()) && (await dbV()).lists['1-to-1 Amendments'].length === 0);
+  await amModal.locator('textarea').fill('Typo in the answer, agreed with Jordan in our meeting.');
+  await amModal.locator('button:has-text("Save amendment")').click(); await V.waitForTimeout(600);
+  var d27b = await dbV(), am1 = d27b.lists['1-to-1 Amendments'][0];
+  var ch1 = am1 ? JSON.parse(am1.ChangesJson) : [];
+  ok('Amend: audit record with reason, fields and before/after; who and when from SharePoint', !!am1 && am1.Reason.indexOf('Typo') === 0 && am1.Author === claims('team.leader@example.test') && !!am1.Created &&
+    ch1.some(function (c) { return c.f === 'Q1WentWell' && c.a === 'Corrected: finished the calibration round.' && c.b === jRv.Q1WentWell; }) &&
+    ch1.some(function (c) { return c.f === 'FB_Overall' && c.b === jMr.FB_Overall; }) && am1.Technician === claims('jordan.lee@example.test'), JSON.stringify(am1));
+  var rvNow = d27b.lists['Monthly Reviews'].find(function (r) { return r.ID === jRv.ID; }), mrNow = d27b.lists['Manager Reviews'].find(function (m) { return m.ID === jMr.ID; });
+  ok('Amend: the review and the Manager Review hold the new values', rvNow.Q1WentWell === 'Corrected: finished the calibration round.' && mrNow.FB_Overall === 'Overall feedback corrected after our chat.');
+  var aw = d27b.writes.slice(d27.writes.length);
+  var iCreate = aw.findIndex(function (w) { return w.list === '1-to-1 Amendments' && w.create; }), iRev = aw.findIndex(function (w) { return w.list === 'Monthly Reviews'; });
+  ok('Amend: the audit record is written first, then only the changed columns, then queued', iCreate === 0 && iRev > iCreate &&
+    aw.filter(function (w) { return w.list === 'Monthly Reviews'; }).every(function (w) { return w.fields.join() === 'Q1WentWell'; }) &&
+    aw.filter(function (w) { return w.list === 'Manager Reviews'; }).every(function (w) { return w.fields.join() === 'FB_Overall'; }) &&
+    aw[aw.length - 1].list === '1-to-1 Amendments' && aw[aw.length - 1].values.NotifyStatus === 'Pending', JSON.stringify(aw.map(function (w) { return w.list + ':' + w.fields.join('+'); })));
+  ok('Amend: not a resubmission – Flow 2 cancels, no "submitted" email, state and lock unchanged', d27b.flow2Cancelled >= 1 && !d27b.emails.slice(d27.emails.length).some(function (e) { return e.template === 'E3'; }) &&
+    mrNow.ReviewState === 'Completed' && d27b.perms['Monthly Reviews'][jRv.ID]['jordan.lee@example.test'] === 'read');
+  var e16 = d27b.emails.filter(function (e) { return e.template === 'E16'; });
+  ok('Amend: Flow 8 emails the technician once (E16) and marks it Sent', e16.length === 1 && e16[0].to === 'jordan.lee@example.test' && am1.NotifyStatus === 'Sent' && !!am1.NotifiedOn);
+  await open(V, { as: 'tl', reviewId: String(jRv.ID) });
+  ok('Amend: the review shows "Amended (1)" with the details for the TL', (await V.locator('.pagehead .chip:has-text("Amended (1)")').count()) === 1 &&
+    /Typo in the answer/.test(await V.locator('section.card:has-text("Amended (1)")').textContent()));
+  await open(V, { as: 'tl' }); await open(V, { as: 'tl' });
+  ok('Amend: reloading never sends the email again', (await dbV()).emails.filter(function (e) { return e.template === 'E16'; }).length === 1);
+  await open(V, { as: 'jordan' });
+  var jText = await V.evaluate(function () { var r = document.querySelector('[data-oto-root]'); return r.innerText + ' ' + Array.prototype.map.call(r.querySelectorAll('textarea'), function (t) { return t.value; }).join(' '); });
+  ok('Amend: the technician sees the amended review', /Corrected: finished the calibration round/.test(jText) && /Overall feedback corrected/.test(jText));
+  var amRead = await api(V, 'GET', "/_api/web/lists/getbytitle('1-to-1%20Amendments')/items", null);
+  ok('Security: a technician cannot read the amendment audit (list hidden)', amRead.status === 404 || amRead.status === 403);
+  var jForge = await api(V, 'POST', "/_api/web/lists/getbytitle('Monthly%20Reviews')/items(" + jRv.ID + ')/validateUpdateListItem', { formValues: [{ FieldName: 'Q1WentWell', FieldValue: 'tamper' }], bNewDocumentUpdate: false });
+  ok('Security: the technician still cannot edit the locked review (403)', jForge.status === 403);
+  // amending a submitted (not released) review: answers only, feedback keeps saving as normal
+  var rRv = d27.lists['Monthly Reviews'].find(function (r) { return r.Technician === claims('riley.evans@example.test') && r.MonthKey === curMonth(); });
+  await open(V, { as: 'tl', reviewId: String(rRv.ID) });
+  ok('Amend: a submitted review keeps Save feedback and Complete, plus "Amend answers"', (await V.locator('.pagehead button:has-text("Save feedback")').count()) === 1 &&
+    (await V.locator('.pagehead button:has-text("Amend answers")').count()) === 1);
+  await V.locator('.pagehead button:has-text("Amend answers")').click(); await V.waitForTimeout(300);
+  ok('Amend: on a submitted review only the answers are editable', await V.locator('section.card:has-text("Overall feedback") textarea').isDisabled() &&
+    !(await V.locator('section.card:has-text("What has gone well") textarea').first().isDisabled()));
+  // a change made elsewhere since the amendment started is refused
+  await V.locator('section.card:has-text("What has gone well") textarea').first().fill('Changed while someone else edited');
+  await V.evaluate(function (id) { var d = OTO_MOCK.current.db; d.lists['Manager Reviews'].find(function (m) { return m.ReviewItemId === id; }).Modified = '2099-01-01T00:00:00Z'; }, rRv.ID);
+  await V.locator('.pagehead button:has-text("Save amendment")').click();
+  await V.locator('.modal:has-text("Save amendment") textarea').fill('Test'); await V.locator('.modal:has-text("Save amendment") button:has-text("Save amendment")').click(); await V.waitForTimeout(400);
+  var d27c = await dbV();
+  ok('Amend: refused when the review changed elsewhere – nothing written, no audit record', /changed elsewhere/.test(await V.locator('.toast').innerText()) &&
+    d27c.lists['1-to-1 Amendments'].length === 1 && d27c.lists['Monthly Reviews'].find(function (r) { return r.ID === rRv.ID; }).Q1WentWell !== 'Changed while someone else edited');
+  // a failed email is visible and can be resent
+  await V.evaluate(function () { OTO_MOCK.current.db.amFail = true; });
+  var sRv = d27.lists['Monthly Reviews'].find(function (r) { return r.Technician === claims('sam.patel@example.test') && r.MonthKey === curMonth(); });
+  await open(V, { as: 'tl', reviewId: String(sRv.ID) });
+  await V.evaluate(function () { var d = OTO_MOCK.current.db; d.amFail = true; sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d)); });
+  await V.locator('.pagehead button:has-text("Amend answers")').click(); await V.waitForTimeout(300);
+  await V.locator('section.card:has-text("Feedback for") textarea').first().fill('Added after the meeting');
+  await V.locator('.pagehead button:has-text("Save amendment")').click();
+  await V.locator('.modal:has-text("Save amendment") textarea').fill('Sam asked me to add this'); await V.locator('.modal:has-text("Save amendment") button:has-text("Save amendment")').click(); await V.waitForTimeout(500);
+  await open(V, { as: 'tl' });
+  var failRow = V.locator('.attn-row:has-text("couldn\'t be sent")');
+  ok('Amend: a failed email shows in Needs your attention with Resend, and the TL got a notice', (await failRow.count()) === 1 && (await dbV()).emails.some(function (e) { return e.template === 'E16-notice'; }));
+  await V.evaluate(function () { var d = OTO_MOCK.current.db; d.amFail = false; sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d)); });
+  await failRow.locator('button:has-text("Resend")').click(); await V.waitForTimeout(400);
+  var d27d = await dbV(), am2 = d27d.lists['1-to-1 Amendments'][1];
+  ok('Amend: Resend sends it (Retry → Sent), one email for that amendment', am2.NotifyStatus === 'Sent' && d27d.emails.filter(function (e) { return e.template === 'E16' && e.amId === am2.ID; }).length === 1);
+  // left half-way (page closed after the audit record): Needs your attention explains it
+  await V.evaluate(function (ids) {
+    var d = OTO_MOCK.current.db, old = new Date(Date.now() - 3600000).toISOString();
+    d.lists['1-to-1 Amendments'].push({ ID: 90, Title: 'x', ReviewItemId: ids.r, ManagerReviewId: 0, MonthKey: ids.m, Technician: 'i:0#.f|membership|riley.evans@example.test', Reason: 'r',
+      ChangedFields: 'Q1 What has gone well', ChangesJson: JSON.stringify([{ l: 'rv', f: 'Q1WentWell', b: 'old', a: 'a value never saved' }]), NotifyStatus: 'Draft', Created: old, Modified: old, Author: 'i:0#.f|membership|team.leader@example.test' });
+    sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d));
+  }, { r: rRv.ID, m: curMonth() });
+  await open(V, { as: 'tl' });
+  var draftRow = V.locator('.attn-row:has-text("wasn\'t saved")');
+  ok('Amend: an amendment left unfinished is listed', (await draftRow.count()) === 1);
+  await draftRow.locator('button:has-text("Dismiss")').click(); await V.locator('.modal button:has-text("Dismiss")').click(); await V.waitForTimeout(300);
+  ok('Amend: dismissing marks it Cancelled and emails nobody', (await dbV()).lists['1-to-1 Amendments'].find(function (x) { return x.ID === 90; }).NotifyStatus === 'Cancelled' &&
+    (await dbV()).emails.filter(function (e) { return e.amId === 90; }).length === 0);
+  // before Setup 1.4 the page still loads and released reviews are read-only
+  await V.evaluate(function () { var d = OTO_MOCK.current.db; d.v13 = true; sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d)); });
+  var e13 = await open(V, { as: 'tl', reviewId: String(jRv.ID) });
+  ok('Upgrade order: before Setup 1.4 the page loads, released reviews are read-only and say why', e13.length === 0 && (await V.locator('.pagehead button:has-text("Amend")').count()) === 0 &&
+    /needs solution 1\.4/.test(await V.locator('[data-oto-root]').innerText()), e13.join('|'));
+  var e13t = await open(V, { as: 'alex' });
+  ok('Upgrade order: before Setup 1.4 the technician\'s page loads', e13t.length === 0);
+  await c25.close();
+  await sweep('amendment reason and before/after read by the TL', { as: 'tl', xss: '1' }, async function () {
+    var dd = await db(page), rv = dd.lists['Monthly Reviews'].find(function (r) { return r.ReviewStatus === 'Completed'; });
+    await page.evaluate(function (id) {
+      var d = OTO_MOCK.current.db, x = OTO_MOCK.X.join(' '), old = new Date(Date.now() - 7200000).toISOString();
+      d.lists['1-to-1 Amendments'].push({ ID: 91, Title: x, ReviewItemId: id, ManagerReviewId: 0, MonthKey: '2026-01', Technician: 'i:0#.f|membership|alex.morgan@example.test', Reason: x,
+        ChangedFields: x, ChangesJson: JSON.stringify([{ l: 'rv', f: 'Q1WentWell', b: x, a: x }, { l: 'mr', f: 'ActionsJson', b: '[]', a: JSON.stringify([{ text: x, owner: x, status: 'Open' }]) }]),
+        NotifyStatus: 'Failed', NotifyError: x, Created: old, Modified: old, Author: 'i:0#.f|membership|team.leader@example.test' });
+      sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d));
+    }, rv.ID);
+    await open(page, { as: 'tl', xss: '1', reviewId: String(rv.ID) });
+    await page.locator('details.amend summary').first().click();
+    if (!(await page.locator('details.amend').count())) { throw new Error('no amendment history'); }
+  });
+  await sweep('amend mode with hostile answers', { as: 'tl', xss: '1' }, async function () {
+    var dd = await db(page), rv = dd.lists['Monthly Reviews'].find(function (r) { return r.Technician === samClaims && r.MonthKey === CUR; });
+    await open(page, { as: 'tl', xss: '1', reviewId: String(rv.ID) });
+    await page.locator('.pagehead button:has-text("Amend answers")').click(); await page.waitForTimeout(300);
   });
 
   await browser.close();

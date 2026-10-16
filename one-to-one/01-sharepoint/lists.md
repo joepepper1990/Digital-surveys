@@ -4,11 +4,13 @@
 
 Build these **eight lists** on the private 1-to-1 site. The frontend (`one-to-one.js`) and the flows use the **internal column names** exactly as written here, so type them exactly, with no spaces. A machine-readable copy is in [`lists.csv`](lists.csv).
 
+**Solution 1.4 (page 5.0.0, marked 🆕 1.4):** four date / period columns on Technicians, `AppraisalBoundaries` on Monthly Reviews, a new Owners-only list **1-to-1 Amendments**, and the **1-to-1 Challenges** list retired (kept, no longer used – see section 8).
+
 **v4 changes from v3.2 (marked 🆕):** `AppraisalDate` on Technicians and Monthly Reviews; `Mood` and `WinOfMonth` on Monthly Reviews; `ActionsJson` and `NextActionDue` replace `AgreedActions` and `ActionsDueBy` on Manager Reviews; and a fifth list, **1-to-1 Settings**.
 
 ## Rules for every list
 
-- **Create with the internal name, then rename.** Create the list as `MonthlyReviews` (no space), then rename it to `Monthly Reviews` in List settings. The frontend and flows use the **display names**: `Technicians`, `Appraisal Expectations`, `Monthly Reviews`, `Manager Reviews`, `Wellbeing Assessments`, `1-to-1 Settings`, `1-to-1 Feedback`, `1-to-1 Challenges`.
+- **Create with the internal name, then rename.** Create the list as `MonthlyReviews` (no space), then rename it to `Monthly Reviews` in List settings. The frontend and flows use the **display names**: `Technicians`, `Appraisal Expectations`, `Monthly Reviews`, `Manager Reviews`, `Wellbeing Assessments`, `1-to-1 Settings`, `1-to-1 Feedback`, `1-to-1 Amendments`.
 - **Columns:** type the name exactly as shown (that becomes the permanent internal name). Leave every column **not required**, apart from Title.
 - **Choice columns:** one choice per line, exactly as written (including dashes). Turn **Can add values manually** off. Where the default is *(none)*, delete the default value.
 - **Multiple lines of text:** **plain text** (turn **Use enhanced rich text** off) and turn **Append changes to existing text** off.
@@ -37,7 +39,11 @@ Create as `Technicians`.
 | Technician | Person (people only, single) | — | Their Microsoft 365 account |
 | TechnicianAadId | Single line of text | — | **Leave empty** – Flow 1 fills it. **Indexed.** |
 | Active | Yes/No | Yes | **Indexed.** No for leavers and long absences. |
-| AppraisalDate 🆕 | Date only | — | Set from the app's **⚙ Settings**. Used for the expected appraisal outcome. |
+| AppraisalDate 🆕 | Date only | — | **Next appraisal due.** Set in ⚙ Settings → Team. Moving it never changes which period a review belongs to; it is the end point of the forecast and drives E17 reminders. |
+| NextWellbeingDate 🆕 1.4 | Date only | — | **Next wellbeing assessment due.** Set in ⚙ Settings → Team, or confirmed when completing an assessment. Drives dashboards, overdue flags and E12 reminders. Never changes by itself. |
+| AppraisalCycleStart 🆕 1.4 | Date only | — | Start of the current appraisal period: the date the last appraisal was actually completed, or the baseline the TL sets. |
+| AppraisalHistoryJson 🆕 1.4 | Multiple lines (plain) | — | Completed periods, written by **Mark appraisal completed**: `[{"start":"2025-04-10","completed":"2026-04-20","nextDue":"2027-04-30","recordedOn":"…"}]`. The source of truth for the TL's period calculations. |
+| AppraisalBoundaries 🆕 1.4 | Multiple lines (plain) | — | The same boundaries as a date list (`["2025-04-10","2026-04-20"]`); Flow 1 copies it to each new Monthly Review. |
 
 - [ ] Indexes: `TechnicianAadId`, `Active`
 - [ ] Permissions: Owners only
@@ -50,10 +56,10 @@ Create as `AppraisalExpectations`, rename to **Appraisal Expectations**. You nor
 |---|---|---|---|
 | Title | (built-in) | — | The expectation |
 | Measures | Multiple lines (plain) | — | How success is measured |
-| AppraisalYear | Single line of text | — | e.g. `2026/27` |
+| AppraisalYear | Single line of text | — | e.g. `2026/27` – the **first** appraisal year it applies to. It carries on into later years until it is retired (1.4: it no longer disappears in April); one entered for a later year stays hidden until then. Empty = always. |
 | AppliesTo | Choice: `Shared`, `Individual` | Shared | |
 | Technician | Person (people only, single) | — | Only when AppliesTo = Individual |
-| SortOrder | Number | 100 | Lower first |
+| SortOrder | Number | 100 | Lower first, **within its group** (Shared always come before Individual). No limit on how many (1.4). |
 | Active | Yes/No | Yes | **Indexed** |
 
 - [ ] Index: `Active`
@@ -92,6 +98,7 @@ Create as `MonthlyReviews`, rename to **Monthly Reviews**. The technician's work
 | Mood 🆕 | Number, min 1, max 5 | — | Energy check-in (shared with the TL) |
 | WinOfMonth 🆕 | Multiple lines (plain) | — | Win of the month |
 | AppraisalDate 🆕 | Date only | — | **Display copy** for the technician's outlook. Written by Flow 1 and by ⚙ Settings. Never used for any decision (plan D.7). |
+| AppraisalBoundaries 🆕 1.4 | Multiple lines (plain) | — | **Display copy** of the period boundaries, so the technician's own view groups their reviews by period. Written by Flow 1 and by Mark appraisal completed. The TL's views never read it (the technician can edit their open review). |
 
 - [ ] No extra indexes needed
 - [ ] Permissions: Owners only at list level (items get unique permissions from the flows)
@@ -138,6 +145,8 @@ Create as `ManagerReviews`, rename to **Manager Reviews**.
 | ChallengeClosedOn 🆕 v4.5 | **Date and time** | — | Flow 7, Flow 1 | |
 
 > **Not in v4:** `AgreedActions` and `ActionsDueBy` (replaced by `ActionsJson` and `NextActionDue`). Don't create them.
+>
+> **1.4:** the `Challenge*` columns are no longer read or written (challenges were removed). They are kept so no data is lost; Setup 1.4 sets any `ChallengeState = Open` to *Not agreed*.
 >
 > **v4.5:** the `Challenge*` columns are the trusted record of a challenge. The technician can only **read** their Manager Review, so they can never write these; their own input goes on the *1-to-1 Challenges* list and Flow 7 copies it here.
 
@@ -207,30 +216,39 @@ Created by the setup flow (solution 1.2) at `Lists/OneToOneFeedback`, display na
 
 ---
 
-## 8. 1-to-1 Challenges 🆕 v4.5 (same access as Feedback; Flow 7 makes each item private)
+## 8. 1-to-1 Amendments 🆕 1.4 (Owners only – the restricted audit of Team Leader amendments)
 
-Created by the setup flow (solution 1.3) at `Lists/OneToOneChallenges`, display name **1-to-1 Challenges**. One item per challenge, sent from the technician's **latest released** review (⚑ **Challenge** → **Send challenge**). Only the TL's judgement can be challenged: each expectation rating, the overall feedback and the agreed actions.
+Created by the setup flow (solution 1.4) at `Lists/OneToOneAmendments`, display name **1-to-1 Amendments**. One item per amendment the TL makes to a submitted or completed 1-to-1 (the page writes it **before** changing the review). Who made it and when are SharePoint's own **Created By** and **Created**; the page never sets them.
 
 | Column | Type | Notes |
 |---|---|---|
-| Title | (built-in) | e.g. *Name – month* |
-| ManagerReviewId | Number | **Indexed.** The Manager Review being challenged |
-| MonthKey | Single line of text | **Flow 7** sets it from the Manager Review |
-| SectionsJson | Multiple lines (plain) | The challenged parts and an optional note on each (20,000 characters at most) |
-| TechAgreedOn | Date and time | The technician agreed it's resolved. **Not trusted** until Flow 7 copies it to the Manager Review. |
-| TlPing | Date and time | Set by the TL's page (agree / reopen) to wake Flow 7 |
-| ChallengeStatus | Choice: Open / Agreed / Not agreed / Rejected (default Open) | **Display only** – the trusted state is `ChallengeState` on the Manager Review. *Rejected* = Flow 7 refused it (not their latest released review, already challenged, sent by someone else, or empty). |
+| Title | (built-in) | *Name – Month yyyy* |
+| ReviewItemId | Number | **Indexed.** The Monthly Review amended |
+| ManagerReviewId | Number | The Manager Review |
+| MonthKey | Single line of text | yyyy-MM |
+| Technician | Person | Whose 1-to-1 (Flow 8 emails them) |
+| Reason | Multiple lines (plain) | Why it was changed (required on the page) |
+| ChangedFields | Multiple lines (plain) | The fields changed, in words |
+| ChangesJson | Multiple lines (plain) | Before and after of each changed column: `[{"l":"rv","f":"Q1WentWell","b":"…","a":"…"}]` |
+| NotifyStatus | Choice: Draft / Pending / Sending / Sent / Failed / Retry / Cancelled (default Draft) | **Indexed.** *Draft* while the page is saving; *Pending* when saved, and Flow 8 then sends E16 (*Sending* → *Sent*, or *Failed*). *Retry* = Resend from the page. *Cancelled* = an amendment that was never saved, dismissed by the TL. |
+| NotifiedOn | Date and time | Flow 8 |
+| NotifyError | Single line of text | Flow 8 (no content, just that it failed) |
 
-- [ ] Advanced settings → **Item-level permissions:** *Read items that were created by the user*; *Create items and edit items that were created by the user*.
-- [ ] Permissions: **Owners – Full Control** and `1-to-1 Technicians` – **1-to-1 Submit** (as on 1-to-1 Feedback). Flow 7 makes each accepted item private to **Owners (Full Control)** and **that technician (1-to-1 Edit)**, and drops them to **1-to-1 Read** once it is closed. A rejected item becomes Owners-only.
+- [ ] Permissions: **Owners – Full Control only.** The technicians group has no access; technicians never see the reason or the before/after values (they get E16 with a link, and see the current version of their review).
+- [ ] Versioning on (100). The page never edits an item's reason or changes; only `NotifyStatus` moves on. **Honest limit:** site owners and site collection admins can always edit a list they own, so the audit is tamper-*evident* (full version history), not tamper-proof. The E16 email to the technician is an independent record.
+
+## 9. 1-to-1 Challenges – retired in 1.4
+
+The list made by solution 1.3 is **kept, not deleted**: no new challenges can be made and the page no longer reads it. Setup 1.4 removes the `1-to-1 Technicians` group from it, makes every item Owners-only, and closes any open challenge as *Not agreed*. A new site set up with 1.4 never gets this list. You may delete it later yourself, after exporting it, if you no longer need the records.
 
 ---
 
 ## Final checks
 
-- [ ] Site contents shows the eight lists (plus the Welcome libraries/lists).
+- [ ] Site contents shows the eight lists (plus the Welcome libraries/lists, and the retired 1-to-1 Challenges on a site upgraded from 1.3).
 - [ ] **Technicians, Appraisal Expectations, Monthly Reviews, Manager Reviews, Wellbeing Assessments:** permissions page shows **only Owners – Full Control**.
 - [ ] **1-to-1 Settings:** Owners – Full Control **and** `1-to-1 Technicians` – Read. Nothing else.
-- [ ] **1-to-1 Feedback** and **1-to-1 Challenges:** Owners – Full Control **and** `1-to-1 Technicians` – 1-to-1 Submit, with item-level permissions set to their own items only.
+- [ ] **1-to-1 Feedback:** Owners – Full Control **and** `1-to-1 Technicians` – 1-to-1 Submit, with item-level permissions set to their own items only.
+- [ ] **1-to-1 Amendments** (and the retired **1-to-1 Challenges**): **only Owners – Full Control**.
 - [ ] Versioning on, attachments off, search off, on every list.
 - [ ] Spot-check three internal names: open List settings → click the column → the URL ends `Field=Q9FollowUp` (etc.).

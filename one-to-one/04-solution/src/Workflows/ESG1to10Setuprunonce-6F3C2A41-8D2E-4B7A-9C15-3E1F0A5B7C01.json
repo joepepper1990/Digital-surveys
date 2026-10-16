@@ -131,6 +131,38 @@
                   "indexed": false,
                   "unique": false,
                   "xml": "<Field Type='DateTime' Name='AppraisalDate' StaticName='AppraisalDate' DisplayName='AppraisalDate' Required='FALSE' Format='DateOnly' FriendlyDisplayFormat='Disabled' />"
+                },
+                {
+                  "name": "NextWellbeingDate",
+                  "kind": "date",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='DateTime' Name='NextWellbeingDate' StaticName='NextWellbeingDate' DisplayName='NextWellbeingDate' Required='FALSE' Format='DateOnly' FriendlyDisplayFormat='Disabled' />",
+                  "since": "1.4"
+                },
+                {
+                  "name": "AppraisalCycleStart",
+                  "kind": "date",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='DateTime' Name='AppraisalCycleStart' StaticName='AppraisalCycleStart' DisplayName='AppraisalCycleStart' Required='FALSE' Format='DateOnly' FriendlyDisplayFormat='Disabled' />",
+                  "since": "1.4"
+                },
+                {
+                  "name": "AppraisalHistoryJson",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='AppraisalHistoryJson' StaticName='AppraisalHistoryJson' DisplayName='AppraisalHistoryJson' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />",
+                  "since": "1.4"
+                },
+                {
+                  "name": "AppraisalBoundaries",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='AppraisalBoundaries' StaticName='AppraisalBoundaries' DisplayName='AppraisalBoundaries' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />",
+                  "since": "1.4"
                 }
               ],
               "views": []
@@ -447,6 +479,14 @@
                   "indexed": false,
                   "unique": false,
                   "xml": "<Field Type='DateTime' Name='AppraisalDate' StaticName='AppraisalDate' DisplayName='AppraisalDate' Required='FALSE' Format='DateOnly' FriendlyDisplayFormat='Disabled' />"
+                },
+                {
+                  "name": "AppraisalBoundaries",
+                  "kind": "note",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Note' Name='AppraisalBoundaries' StaticName='AppraisalBoundaries' DisplayName='AppraisalBoundaries' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />",
+                  "since": "1.4"
                 }
               ],
               "views": []
@@ -709,14 +749,16 @@
                     "Not agreed"
                   ],
                   "default": null,
-                  "xml": "<Field Type='Choice' Name='ChallengeState' StaticName='ChallengeState' DisplayName='ChallengeState' Required='FALSE' Indexed='TRUE' Format='Dropdown' FillInChoice='FALSE'><CHOICES><CHOICE>Open</CHOICE><CHOICE>Agreed</CHOICE><CHOICE>Not agreed</CHOICE></CHOICES></Field>"
+                  "xml": "<Field Type='Choice' Name='ChallengeState' StaticName='ChallengeState' DisplayName='ChallengeState' Required='FALSE' Indexed='TRUE' Format='Dropdown' FillInChoice='FALSE'><CHOICES><CHOICE>Open</CHOICE><CHOICE>Agreed</CHOICE><CHOICE>Not agreed</CHOICE></CHOICES></Field>",
+                  "since": "1.3"
                 },
                 {
                   "name": "ChallengeSectionsJson",
                   "kind": "note",
                   "indexed": false,
                   "unique": false,
-                  "xml": "<Field Type='Note' Name='ChallengeSectionsJson' StaticName='ChallengeSectionsJson' DisplayName='ChallengeSectionsJson' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                  "xml": "<Field Type='Note' Name='ChallengeSectionsJson' StaticName='ChallengeSectionsJson' DisplayName='ChallengeSectionsJson' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />",
+                  "since": "1.3"
                 },
                 {
                   "name": "ChallengeItemId",
@@ -726,42 +768,48 @@
                   "min": null,
                   "max": null,
                   "default": null,
-                  "xml": "<Field Type='Number' Name='ChallengeItemId' StaticName='ChallengeItemId' DisplayName='ChallengeItemId' Required='FALSE' Decimals='0'></Field>"
+                  "xml": "<Field Type='Number' Name='ChallengeItemId' StaticName='ChallengeItemId' DisplayName='ChallengeItemId' Required='FALSE' Decimals='0'></Field>",
+                  "since": "1.3"
                 },
                 {
                   "name": "ChallengeOpenedOn",
                   "kind": "datetime",
                   "indexed": false,
                   "unique": false,
-                  "xml": "<Field Type='DateTime' Name='ChallengeOpenedOn' StaticName='ChallengeOpenedOn' DisplayName='ChallengeOpenedOn' Required='FALSE' Format='DateTime' FriendlyDisplayFormat='Disabled' />"
+                  "xml": "<Field Type='DateTime' Name='ChallengeOpenedOn' StaticName='ChallengeOpenedOn' DisplayName='ChallengeOpenedOn' Required='FALSE' Format='DateTime' FriendlyDisplayFormat='Disabled' />",
+                  "since": "1.3"
                 },
                 {
                   "name": "ChallengeCloseBy",
                   "kind": "date",
                   "indexed": false,
                   "unique": false,
-                  "xml": "<Field Type='DateTime' Name='ChallengeCloseBy' StaticName='ChallengeCloseBy' DisplayName='ChallengeCloseBy' Required='FALSE' Format='DateOnly' FriendlyDisplayFormat='Disabled' />"
+                  "xml": "<Field Type='DateTime' Name='ChallengeCloseBy' StaticName='ChallengeCloseBy' DisplayName='ChallengeCloseBy' Required='FALSE' Format='DateOnly' FriendlyDisplayFormat='Disabled' />",
+                  "since": "1.3"
                 },
                 {
                   "name": "ChallengeTlAgreedOn",
                   "kind": "datetime",
                   "indexed": false,
                   "unique": false,
-                  "xml": "<Field Type='DateTime' Name='ChallengeTlAgreedOn' StaticName='ChallengeTlAgreedOn' DisplayName='ChallengeTlAgreedOn' Required='FALSE' Format='DateTime' FriendlyDisplayFormat='Disabled' />"
+                  "xml": "<Field Type='DateTime' Name='ChallengeTlAgreedOn' StaticName='ChallengeTlAgreedOn' DisplayName='ChallengeTlAgreedOn' Required='FALSE' Format='DateTime' FriendlyDisplayFormat='Disabled' />",
+                  "since": "1.3"
                 },
                 {
                   "name": "ChallengeTechAgreedOn",
                   "kind": "datetime",
                   "indexed": false,
                   "unique": false,
-                  "xml": "<Field Type='DateTime' Name='ChallengeTechAgreedOn' StaticName='ChallengeTechAgreedOn' DisplayName='ChallengeTechAgreedOn' Required='FALSE' Format='DateTime' FriendlyDisplayFormat='Disabled' />"
+                  "xml": "<Field Type='DateTime' Name='ChallengeTechAgreedOn' StaticName='ChallengeTechAgreedOn' DisplayName='ChallengeTechAgreedOn' Required='FALSE' Format='DateTime' FriendlyDisplayFormat='Disabled' />",
+                  "since": "1.3"
                 },
                 {
                   "name": "ChallengeClosedOn",
                   "kind": "datetime",
                   "indexed": false,
                   "unique": false,
-                  "xml": "<Field Type='DateTime' Name='ChallengeClosedOn' StaticName='ChallengeClosedOn' DisplayName='ChallengeClosedOn' Required='FALSE' Format='DateTime' FriendlyDisplayFormat='Disabled' />"
+                  "xml": "<Field Type='DateTime' Name='ChallengeClosedOn' StaticName='ChallengeClosedOn' DisplayName='ChallengeClosedOn' Required='FALSE' Format='DateTime' FriendlyDisplayFormat='Disabled' />",
+                  "since": "1.3"
                 }
               ],
               "views": [
@@ -796,6 +844,7 @@
               "url": "WellbeingAssessments",
               "title": "Wellbeing Assessments",
               "groupRead": false,
+              "since": "1.1",
               "description": "ESG 1-to-1: wellbeing assessments. Each item is visible only to the line manager and that person (Flow 5).",
               "fields": [
                 {
@@ -909,6 +958,7 @@
               "url": "OneToOneFeedback",
               "title": "1-to-1 Feedback",
               "groupRead": false,
+              "since": "1.2",
               "groupContribute": true,
               "readSecurity": 2,
               "writeSecurity": 2,
@@ -974,24 +1024,32 @@
               "views": []
             },
             {
-              "key": "challenges",
-              "url": "OneToOneChallenges",
-              "title": "1-to-1 Challenges",
+              "key": "amend",
+              "url": "OneToOneAmendments",
+              "title": "1-to-1 Amendments",
               "groupRead": false,
-              "groupContribute": true,
-              "readSecurity": 2,
-              "writeSecurity": 2,
-              "description": "ESG 1-to-1: challenges of released feedback. Each person sees only their own; Flow 7 records the trusted state on the Manager Review.",
+              "since": "1.4",
+              "description": "ESG 1-to-1: audit trail of Team Leader amendments (Owners only). Flow 8 notifies the technician.",
               "fields": [
                 {
-                  "name": "ManagerReviewId",
+                  "name": "ReviewItemId",
                   "kind": "num",
                   "indexed": true,
                   "unique": false,
                   "min": null,
                   "max": null,
                   "default": null,
-                  "xml": "<Field Type='Number' Name='ManagerReviewId' StaticName='ManagerReviewId' DisplayName='ManagerReviewId' Required='FALSE' Decimals='0' Indexed='TRUE'></Field>"
+                  "xml": "<Field Type='Number' Name='ReviewItemId' StaticName='ReviewItemId' DisplayName='ReviewItemId' Required='FALSE' Decimals='0' Indexed='TRUE'></Field>"
+                },
+                {
+                  "name": "ManagerReviewId",
+                  "kind": "num",
+                  "indexed": false,
+                  "unique": false,
+                  "min": null,
+                  "max": null,
+                  "default": null,
+                  "xml": "<Field Type='Number' Name='ManagerReviewId' StaticName='ManagerReviewId' DisplayName='ManagerReviewId' Required='FALSE' Decimals='0'></Field>"
                 },
                 {
                   "name": "MonthKey",
@@ -1001,39 +1059,63 @@
                   "xml": "<Field Type='Text' Name='MonthKey' StaticName='MonthKey' DisplayName='MonthKey' Required='FALSE' MaxLength='255' />"
                 },
                 {
-                  "name": "SectionsJson",
+                  "name": "Technician",
+                  "kind": "person",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='User' Name='Technician' StaticName='Technician' DisplayName='Technician' Required='FALSE' List='UserInfo' ShowField='ImnName' UserSelectionMode='PeopleOnly' UserSelectionScope='0' Mult='FALSE' />"
+                },
+                {
+                  "name": "Reason",
                   "kind": "note",
                   "indexed": false,
                   "unique": false,
-                  "xml": "<Field Type='Note' Name='SectionsJson' StaticName='SectionsJson' DisplayName='SectionsJson' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
+                  "xml": "<Field Type='Note' Name='Reason' StaticName='Reason' DisplayName='Reason' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
                 },
                 {
-                  "name": "TechAgreedOn",
-                  "kind": "datetime",
+                  "name": "ChangedFields",
+                  "kind": "note",
                   "indexed": false,
                   "unique": false,
-                  "xml": "<Field Type='DateTime' Name='TechAgreedOn' StaticName='TechAgreedOn' DisplayName='TechAgreedOn' Required='FALSE' Format='DateTime' FriendlyDisplayFormat='Disabled' />"
+                  "xml": "<Field Type='Note' Name='ChangedFields' StaticName='ChangedFields' DisplayName='ChangedFields' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
                 },
                 {
-                  "name": "TlPing",
-                  "kind": "datetime",
+                  "name": "ChangesJson",
+                  "kind": "note",
                   "indexed": false,
                   "unique": false,
-                  "xml": "<Field Type='DateTime' Name='TlPing' StaticName='TlPing' DisplayName='TlPing' Required='FALSE' Format='DateTime' FriendlyDisplayFormat='Disabled' />"
+                  "xml": "<Field Type='Note' Name='ChangesJson' StaticName='ChangesJson' DisplayName='ChangesJson' Required='FALSE' NumLines='6' RichText='FALSE' RichTextMode='Compatible' AppendOnly='FALSE' IsolateStyles='FALSE' Sortable='FALSE' />"
                 },
                 {
-                  "name": "ChallengeStatus",
+                  "name": "NotifyStatus",
                   "kind": "choice",
-                  "indexed": false,
+                  "indexed": true,
                   "unique": false,
                   "choices": [
-                    "Open",
-                    "Agreed",
-                    "Not agreed",
-                    "Rejected"
+                    "Draft",
+                    "Pending",
+                    "Sending",
+                    "Sent",
+                    "Failed",
+                    "Retry",
+                    "Cancelled"
                   ],
-                  "default": "Open",
-                  "xml": "<Field Type='Choice' Name='ChallengeStatus' StaticName='ChallengeStatus' DisplayName='ChallengeStatus' Required='FALSE' Format='Dropdown' FillInChoice='FALSE'><Default>Open</Default><CHOICES><CHOICE>Open</CHOICE><CHOICE>Agreed</CHOICE><CHOICE>Not agreed</CHOICE><CHOICE>Rejected</CHOICE></CHOICES></Field>"
+                  "default": "Draft",
+                  "xml": "<Field Type='Choice' Name='NotifyStatus' StaticName='NotifyStatus' DisplayName='NotifyStatus' Required='FALSE' Indexed='TRUE' Format='Dropdown' FillInChoice='FALSE'><Default>Draft</Default><CHOICES><CHOICE>Draft</CHOICE><CHOICE>Pending</CHOICE><CHOICE>Sending</CHOICE><CHOICE>Sent</CHOICE><CHOICE>Failed</CHOICE><CHOICE>Retry</CHOICE><CHOICE>Cancelled</CHOICE></CHOICES></Field>"
+                },
+                {
+                  "name": "NotifiedOn",
+                  "kind": "datetime",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='DateTime' Name='NotifiedOn' StaticName='NotifiedOn' DisplayName='NotifiedOn' Required='FALSE' Format='DateTime' FriendlyDisplayFormat='Disabled' />"
+                },
+                {
+                  "name": "NotifyError",
+                  "kind": "text",
+                  "indexed": false,
+                  "unique": false,
+                  "xml": "<Field Type='Text' Name='NotifyError' StaticName='NotifyError' DisplayName='NotifyError' Required='FALSE' MaxLength='255' />"
                 }
               ],
               "views": []
@@ -2746,6 +2828,282 @@
                 ]
               }
             },
+            "Find_challenges_list": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Get_lists_final')?['value']",
+                "where": "@equals(item()?['RootFolder']?['Name'], 'OneToOneChallenges')"
+              },
+              "runAfter": {
+                "Get_lists_final": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Challenges_list_here": {
+              "type": "If",
+              "expression": "@not(empty(body('Find_challenges_list')))",
+              "actions": {
+                "RetireTry": {
+                  "type": "Scope",
+                  "actions": {
+                    "Challenges_base": {
+                      "type": "Compose",
+                      "inputs": "@concat('_api/web/lists(guid''', first(body('Find_challenges_list'))?['Id'], ''')')",
+                      "runAfter": {}
+                    },
+                    "Get_challenge_access": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                          "parameters/method": "GET",
+                          "parameters/uri": "@{outputs('Challenges_base')}/roleassignments?$select=PrincipalId",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata"
+                          }
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {
+                        "Challenges_base": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Challenge_principals": {
+                      "type": "Select",
+                      "inputs": {
+                        "from": "@body('Get_challenge_access')?['value']",
+                        "select": "@item()?['PrincipalId']"
+                      },
+                      "runAfter": {
+                        "Get_challenge_access": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Group_on_challenges": {
+                      "type": "If",
+                      "expression": "@contains(body('Challenge_principals'), outputs('Ids')?['group'])",
+                      "actions": {
+                        "Remove_group_from_challenges": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                              "parameters/method": "POST",
+                              "parameters/uri": "@{outputs('Challenges_base')}/roleassignments/getbyprincipalid(@{outputs('Ids')?['group']})",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata",
+                                "X-HTTP-Method": "DELETE",
+                                "IF-MATCH": "*"
+                              }
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runAfter": {}
+                        }
+                      },
+                      "else": {
+                        "actions": {}
+                      },
+                      "runAfter": {
+                        "Challenge_principals": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Get_challenge_items": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                          "parameters/method": "GET",
+                          "parameters/uri": "@{outputs('Challenges_base')}/items?$select=Id&$top=5000",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata"
+                          }
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {
+                        "Group_on_challenges": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Each_challenge_item": {
+                      "type": "Foreach",
+                      "foreach": "@body('Get_challenge_items')?['value']",
+                      "actions": {
+                        "Owners_only": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                              "parameters/method": "POST",
+                              "parameters/uri": "@{outputs('Challenges_base')}/items(@{items('Each_challenge_item')?['Id']})/resetroleinheritance",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata"
+                              }
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runAfter": {}
+                        }
+                      },
+                      "runtimeConfiguration": {
+                        "concurrency": {
+                          "repetitions": 1
+                        }
+                      },
+                      "runAfter": {
+                        "Get_challenge_items": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Find_mgr_list": {
+                      "type": "Query",
+                      "inputs": {
+                        "from": "@body('Get_lists_final')?['value']",
+                        "where": "@equals(item()?['RootFolder']?['Name'], 'ManagerReviews')"
+                      },
+                      "runAfter": {
+                        "Each_challenge_item": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Get_open_challenges": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                          "parameters/method": "GET",
+                          "parameters/uri": "_api/web/lists(guid'@{first(body('Find_mgr_list'))?['Id']}')/items?$select=Id&$filter=ChallengeState eq 'Open'&$top=5000",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata"
+                          }
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {
+                        "Find_mgr_list": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Each_open_challenge": {
+                      "type": "Foreach",
+                      "foreach": "@body('Get_open_challenges')?['value']",
+                      "actions": {
+                        "Close_challenge": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                              "parameters/method": "POST",
+                              "parameters/uri": "_api/web/lists(guid'@{first(body('Find_mgr_list'))?['Id']}')/items(@{items('Each_open_challenge')?['Id']})",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata",
+                                "Content-Type": "application/json;odata=nometadata",
+                                "X-HTTP-Method": "MERGE",
+                                "IF-MATCH": "*"
+                              },
+                              "parameters/body": "{\"ChallengeState\":\"Not agreed\",\"ChallengeClosedOn\":\"@{utcNow()}\"}"
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runAfter": {}
+                        }
+                      },
+                      "runtimeConfiguration": {
+                        "concurrency": {
+                          "repetitions": 1
+                        }
+                      },
+                      "runAfter": {
+                        "Get_open_challenges": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Log_challenges_retired": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "varLog",
+                        "value": "@concat('1-to-1 Challenges (retired in 1.4): technicians no longer have access; ', string(length(body('Get_open_challenges')?['value'])), ' open challenge(s) closed. The records are kept.')"
+                      },
+                      "runAfter": {
+                        "Each_open_challenge": [
+                          "Succeeded"
+                        ]
+                      }
+                    }
+                  },
+                  "runAfter": {}
+                },
+                "RetireCatch": {
+                  "type": "Scope",
+                  "actions": {
+                    "Warn_retire_challenges": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "varWarnings",
+                        "value": "@concat('Could not fully retire the 1-to-1 Challenges list – check its permissions by hand (Owners only) and turn off flow 7.')"
+                      },
+                      "runAfter": {}
+                    }
+                  },
+                  "runAfter": {
+                    "RetireTry": [
+                      "Failed",
+                      "TimedOut"
+                    ]
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {
+                "Find_challenges_list": [
+                  "Succeeded"
+                ]
+              }
+            },
             "Find_settings_list": {
               "type": "Query",
               "inputs": {
@@ -2753,7 +3111,7 @@
                 "where": "@equals(item()?['RootFolder']?['Name'], 'OneToOneSettings')"
               },
               "runAfter": {
-                "Get_lists_final": [
+                "Challenges_list_here": [
                   "Succeeded"
                 ]
               }
@@ -2952,7 +3310,7 @@
                 "parameters": {
                   "emailMessage/To": "@parameters('ESG 1-to-1 Team Leader email (esg_ManagerEmail)')",
                   "emailMessage/Subject": "ESG 1-to-1 setup: @{if(empty(variables('varWarnings')), 'complete', 'complete with items to check')}",
-                  "emailMessage/Body": "<p><b>ESG 1-to-1 setup finished.</b></p><p><b>Problems to fix by hand</b> (empty means none):</p><ul><li>@{join(variables('varWarnings'), '</li><li>')}</li></ul><p><b>What was done:</b></p><ul><li>@{join(variables('varLog'), '</li><li>')}</li></ul><p>Next: turn on flows 2, 3, 4, 5, 6 and then 1 (GO_LIVE_RUNBOOK Phase 7) and check each list's permissions page.</p>",
+                  "emailMessage/Body": "<p><b>ESG 1-to-1 setup finished.</b></p><p><b>Problems to fix by hand</b> (empty means none):</p><ul><li>@{join(variables('varWarnings'), '</li><li>')}</li></ul><p><b>What was done:</b></p><ul><li>@{join(variables('varLog'), '</li><li>')}</li></ul><p>Next: turn on flows 2, 3, 4, 5, 6 and 8, and then 1 (MIGRATION_1_4), and check each list's permissions page. If an old flow \"7 Challenge\" is still in the solution, leave it off.</p>",
                   "emailMessage/Importance": "Normal"
                 },
                 "authentication": "@parameters('$authentication')"

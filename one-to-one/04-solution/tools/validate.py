@@ -13,7 +13,7 @@ Checks, per flow:
 import json
 import re
 import xml.dom.minidom
-from schema import LISTS
+from schema import LISTS, RETIRED_LISTS
 
 FUNCS = set('''
 actions add addDays addHours addMinutes addSeconds addToTime and array base64 body bool coalesce concat contains convertFromUtc
@@ -325,14 +325,19 @@ def check_secure(f):
 
 # Lists added after 1.0. Power Automate checks a connector step's list exists when a flow is saved or turned on, so a
 # flow that is on during an upgrade (flows 1-4) must reach these lists by REST only, never by a connector step.
-NEW_LISTS = {l['title'] for l in LISTS if l['key'] in ('wellbeing', 'feedback', 'challenges')}
-NEW_URLS = {l['url'] for l in LISTS if l['key'] in ('wellbeing', 'feedback', 'challenges')}
-# Columns added to an existing list after 1.2 – a connector step in a flow that is on during the upgrade must not use them
-NEW_COLUMNS = [f['name'] for l in LISTS if l['key'] == 'mgr' for f in l['fields'] if f['name'].startswith('Challenge')]
+NEW_LISTS = {l['title'] for l in LISTS if l.get('since', '1.0') != '1.0'} | {l['title'] for l in RETIRED_LISTS}
+NEW_URLS = {l['url'] for l in LISTS if l.get('since', '1.0') != '1.0'} | {l['url'] for l in RETIRED_LISTS}
+# Columns added to a list after the list itself was created. Power Automate checks a connector Update/Create item step's
+# generated parameters against the list it knows, and rejected such a column at activation (1.3.0.2): write them by REST.
+LATE_COLUMNS = {(l['title'], f['name']) for l in LISTS for f in l['fields'] if f.get('since', l.get('since', '1.0')) != l.get('since', '1.0')}
+STANDARD_APIS = {'shared_sharepointonline', 'shared_office365', 'shared_office365users'}
+# Secure inputs/outputs aren't available on these (a secureData setting on Set variable stopped Flow 1 importing: 1.3.0.1)
+NO_SECURE_TYPES = {'SetVariable', 'InitializeVariable', 'AppendToArrayVariable', 'AppendToStringVariable', 'IncrementVariable',
+                   'DecrementVariable', 'If', 'Foreach', 'Scope', 'Terminate', 'Switch', 'Until'}
 
 
 def check_upgrade_safe(f):
-    if any(x in f['name'] for x in ('0 Setup', '5 Wellbeing', '6 Feedback', '7 Challenge')):   # imported Off; turned on after setup
+    if any(x in f['name'] for x in ('0 Setup', '5 Wellbeing', '6 Feedback', '7 Challenge', '8 Amendment')):   # imported Off; turned on after setup
         return []
     probs = []
     def walk(o, path):
@@ -344,13 +349,38 @@ def check_upgrade_safe(f):
                 if t in NEW_LISTS or any(u in json.dumps(params) for u in NEW_URLS):
                     probs.append('[{0}] {1} names the list "{2}" in a connector step – the flow would fail to turn on '
                                  'after an upgrade until Setup has created it; read it by REST instead'.format(f['name'], path, t))
-                if any(('item/' + c) in k for k in params for c in NEW_COLUMNS):
-                    probs.append('[{0}] {1} writes a column added in 1.3 with a connector step – use REST, as for a new list'.format(f['name'], path))
+                if o['inputs']['host'].get('operationId') in ('PatchItem', 'PostItem'):
+                    for k in params:
+                        col = k[5:].split('/')[0] if k.startswith('item/') else None
+                        if col and (t, col) in LATE_COLUMNS:
+                            probs.append('[{0}] {1} writes {2}, a column added after its list was created, with a connector step – '
+                                         'write it by REST (1.3.0.2)'.format(f['name'], path, col))
             for k, v in o.items():
                 walk(v, k)
         elif isinstance(o, list):
             for v in o:
                 walk(v, path)
+    walk(f['json']['properties']['definition'], 'definition')
+    return probs
+
+
+def check_platform(f):
+    """Standard connectors only, and no secureData where Power Automate doesn't support it."""
+    probs = []
+    def walk(o, name):
+        if isinstance(o, dict):
+            if o.get('type') in NO_SECURE_TYPES and 'secureData' in json.dumps(o.get('runtimeConfiguration') or {}):
+                probs.append('[{0}] {1}: secure inputs/outputs are not supported on a {2} action'.format(f['name'], name, o['type']))
+            api = ((o.get('inputs') or {}).get('host') or {}).get('connectionName') if o.get('type') in ('OpenApiConnection', 'OpenApiConnectionWebhook') else None
+            if api is not None and api not in STANDARD_APIS:
+                probs.append('[{0}] {1} uses {2}, which is not one of the standard connectors this solution allows'.format(f['name'], name, api))
+            if o.get('type') in ('Http', 'HttpWebhook', 'ApiConnection'):
+                probs.append('[{0}] {1} is a {2} action – premium or not allowed; use the SharePoint connector'.format(f['name'], name, o['type']))
+            for k, v in o.items():
+                walk(v, k if isinstance(v, dict) and 'type' in v else name)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v, name)
     walk(f['json']['properties']['definition'], 'definition')
     return probs
 
@@ -361,6 +391,7 @@ def validate_all(flows):
         probs += Flow(f['name'], f['json']['properties']['definition']).run()
         probs += check_secure(f)
         probs += check_upgrade_safe(f)
+        probs += check_platform(f)
         refs = f['json']['properties']['connectionReferences']
         used = set(re.findall(r'"connectionName": "([^"]+)"', json.dumps(f['json'])))
         if used - set(refs):

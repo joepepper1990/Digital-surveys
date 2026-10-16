@@ -352,6 +352,17 @@ def call(name, a, ctx):
             raise ExprError('unit ' + a[2])
         m = dt.month - 1 + a[1]
         return iso(dt.replace(year=dt.year + m // 12, month=m % 12 + 1))
+    if name in ('div', 'mod', 'mul'):
+        if not all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in a):
+            raise ExprError(name + ' needs numbers')
+        if name == 'mul':
+            return a[0] * a[1]
+        if a[1] == 0:
+            raise ExprError('division by zero')
+        if name == 'div':   # Logic Apps: integer division truncates towards zero
+            return int(a[0] / a[1]) if isinstance(a[0], int) and isinstance(a[1], int) else a[0] / a[1]
+        r = abs(a[0]) % abs(a[1])
+        return r if a[0] >= 0 else -r
     if name == 'dayOfMonth':
         return parse_ts(a[0]).day
     raise ExprError('function not implemented in simulator: ' + name)

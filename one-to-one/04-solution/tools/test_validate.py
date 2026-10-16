@@ -184,8 +184,35 @@ def new_column_by_connector_in_daily(fl):
 
 
 @mutation
-def unsecured_challenge_review(fl):
-    _, a = find(fl[7]['json']['properties']['definition'], 'Mr')
+def secure_set_variable(fl):
+    # 1.3.0.1: Set variable has no secure inputs; the setting stopped Flow 1 importing
+    _, a = find(fl[1]['json']['properties']['definition'], 'Set_varTechAad')
+    a['runtimeConfiguration'] = {'secureData': {'properties': ['inputs']}}
+
+
+@mutation
+def late_column_by_connector_create(fl):
+    # a 1.4 column on an existing list written by a connector Create item step (the 1.3.0.2 activation failure)
+    _, a = find(fl[1]['json']['properties']['definition'], 'Create_review')
+    a['inputs']['parameters']['item/AppraisalBoundaries'] = '[]'
+
+
+@mutation
+def premium_connector(fl):
+    _, a = find(fl[7]['json']['properties']['definition'], 'Send_E16')
+    a['inputs']['host']['connectionName'] = 'shared_webcontents'
+
+
+@mutation
+def premium_http_action(fl):
+    defn = fl[7]['json']['properties']['definition']
+    _, a = find(defn, 'Mark_sending')
+    a['type'] = 'Http'
+
+
+@mutation
+def amendment_record_unsecured(fl):
+    _, a = find(fl[7]['json']['properties']['definition'], 'Get_current')
     a.pop('runtimeConfiguration', None)
 
 if __name__ == '__main__':

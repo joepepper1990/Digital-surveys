@@ -4,6 +4,10 @@ Technicians,Technician,"Person (single, people only)",,,,
 Technicians,TechnicianAadId,Single line of text,,,Yes,Flow 1 fills
 Technicians,Active,Yes/No,,Yes,Yes,
 Technicians,AppraisalDate,Date only,,,,v4; set from Settings
+Technicians,NextWellbeingDate,Date only,,,,v5 next wellbeing assessment due (Settings → Team)
+Technicians,AppraisalCycleStart,Date only,,,,v5 start of the current appraisal period (last completion or a baseline)
+Technicians,AppraisalHistoryJson,Multiple lines (plain),,,,v5 period boundaries: [{start; completed; nextDue; recordedOn}]
+Technicians,AppraisalBoundaries,Multiple lines (plain),,,,v5 the boundary dates as a list – copied by Flow 1 to new reviews
 Appraisal Expectations,Title,Built-in,,,,
 Appraisal Expectations,Measures,Multiple lines (plain),,,,
 Appraisal Expectations,AppraisalYear,Single line of text,,,,e.g. 2026/27
@@ -37,6 +41,7 @@ Monthly Reviews,Q9FollowUp,Choice,"Everything has been covered — no further di
 Monthly Reviews,Mood,Number (0 dp),min 1 max 5,,,v4
 Monthly Reviews,WinOfMonth,Multiple lines (plain),,,,v4
 Monthly Reviews,AppraisalDate,Date only,,,,v4 display copy
+Monthly Reviews,AppraisalBoundaries,Multiple lines (plain),,,,v5 copy of the period boundaries for the technician's own view
 Manager Reviews,Title,Built-in,,,,
 Manager Reviews,ReviewKey,Single line of text,Enforce unique values,,Yes,
 Manager Reviews,ReviewItemId,Number (0 dp),,,Yes,
@@ -97,12 +102,16 @@ Wellbeing Assessments,CompletedOn,Date and time,,,,Flow 5
 1-to-1 Feedback,AppVersion,Single line of text,,,,Frontend version
 1-to-1 Feedback,DeliveryStatus,Choice,Pending|Sent|Failed|Read|Held,Pending,,Flow 6 (Read = opened on the page; Held = over 10 from one person in a day)
 1-to-1 Feedback,SentOn,Date and time,,,,Flow 6
-1-to-1 Challenges,Title,Built-in,,,,e.g. Name – month
-1-to-1 Challenges,ManagerReviewId,Number (0 dp),,,Yes,The Manager Review being challenged
-1-to-1 Challenges,MonthKey,Single line of text,,,,Set by Flow 7
-1-to-1 Challenges,SectionsJson,Multiple lines (plain),,,,Challenged parts and notes
-1-to-1 Challenges,TechAgreedOn,Date and time,,,,Technician agreed (not trusted until Flow 7 copies it)
-1-to-1 Challenges,TlPing,Date and time,,,,Set by the Team Leader's page to wake Flow 7
-1-to-1 Challenges,ChallengeStatus,Choice,Open|Agreed|Not agreed|Rejected,Open,,Display only – the trusted state is on the Manager Review
+1-to-1 Amendments,Title,Built-in,,,,Name – month
+1-to-1 Amendments,ReviewItemId,Number (0 dp),,,Yes,The Monthly Review amended
+1-to-1 Amendments,ManagerReviewId,Number (0 dp),,,,The Manager Review
+1-to-1 Amendments,MonthKey,Single line of text,,,,yyyy-MM
+1-to-1 Amendments,Technician,Person (single),,,,Whose 1-to-1
+1-to-1 Amendments,Reason,Multiple lines (plain),,,,Why it was changed (required)
+1-to-1 Amendments,ChangedFields,Multiple lines (plain),,,,Which fields changed
+1-to-1 Amendments,ChangesJson,Multiple lines (plain),,,,Before and after values (Owners only)
+1-to-1 Amendments,NotifyStatus,Choice,Draft|Pending|Sending|Sent|Failed|Retry|Cancelled,Draft,Yes,Flow 8 emails the technician when Pending / Retry
+1-to-1 Amendments,NotifiedOn,Date and time,,,,Flow 8
+1-to-1 Amendments,NotifyError,Single line of text,,,,Flow 8
 1-to-1 Settings,Title,Built-in,,,,Items: Bands; Reminders; Labels
 1-to-1 Settings,Value,Multiple lines (plain),,,,JSON

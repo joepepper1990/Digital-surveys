@@ -17,7 +17,7 @@
 window.ESGOneToOne = function (ctx) {
   'use strict';
 
-  var VERSION = '4.5.0';
+  var VERSION = '5.0.0';
 
   // ---------------------------------------------------------------------------------------------
   // CONFIG — normally nothing to change. List titles must match the lists you created.
@@ -31,10 +31,9 @@ window.ESGOneToOne = function (ctx) {
       settings: '1-to-1 Settings',
       wellbeing: 'Wellbeing Assessments',
       feedback: '1-to-1 Feedback',
-      challenges: '1-to-1 Challenges'
+      amendments: '1-to-1 Amendments'
     },
-    timeZone: 'Europe/London',     // must match the site's regional settings
-    maxExpectations: 10
+    timeZone: 'Europe/London'      // must match the site's regional settings
   };
   var MANAGE_PERMISSIONS_LOW = 0x02000000;
 
@@ -194,8 +193,8 @@ window.ESGOneToOne = function (ctx) {
   var SETTINGS = { bands: defaultBands(), itemId: 0, reminders: defaultReminders(), remindersId: 0, labelsId: 0 };
 
   var state = { view: '', reviewId: null, profileTech: null, backTo: '', month: '', techFilter: '', actFilter: 'open', actTech: '',
-    expYear: '', showRetired: false, expEdit: null, report: null };
-  var CH_AVAILABLE = false, CHALLENGES = [];
+    expYear: '', showRetired: false, expEdit: null, report: null, amend: null };
+  var V14 = false, AMENDMENTS = [];   // solution 1.4 columns / lists present (false until Setup 1.4 has run)
   var root = null, live = null, tipEl = null, http = null, httpConfig = null, siteUrl = '';
   var started = false, disposed = false, dirty = false, busyCount = 0;
 
@@ -326,6 +325,15 @@ window.ESGOneToOne = function (ctx) {
     return '(' + (res ? res.status : '?') + ')' + (msg ? ' ' + msg : '');
   }
   // Read every item of a list the signed-in user can see. Returns [] when SharePoint hides the list.
+  // Reads with the 1.4 columns, or without them if SharePoint says a column doesn't exist yet (Setup 1.4 not run)
+  async function getAllMaybe(list, select, extra, expand) {
+    if (!extra) { return spGetAll(list, select, expand); }
+    try { return await spGetAll(list, select + extra, expand); } catch (e) {
+      console.warn('ESG 1-to-1: newer columns not found on ' + list + ' – run 0 Setup (1.4) again.', e);
+      V14 = false;
+      return spGetAll(list, select, expand);
+    }
+  }
   async function spGetAll(list, select, expand) {
     var path = listPath(list) + '/items?$select=' + select + (expand ? '&$expand=' + expand : '') + '&$top=5000';
     var rows = [];
@@ -382,6 +390,15 @@ window.ESGOneToOne = function (ctx) {
     var idRow = ((res.json && res.json.value) || []).find(function (f) { return f.FieldName === 'Id'; });
     return idRow ? Number(idRow.FieldValue) : 0;
   }
+  // The ONLY delete: the Team Leader removing a retired expectation. It goes to the site recycle bin (restorable for about
+  // 93 days). Technicians can't delete anything – their permission levels have no Delete – so SharePoint refuses it for them.
+  async function spRecycle(list, id) {
+    if (!IS_TL) { throw new Error('Only the ' + L.mgr + ' can delete.'); }
+    if (!Number.isInteger(Number(id)) || Number(id) <= 0) { throw new Error('Invalid item'); }
+    var res = await req('POST', listPath(list) + '/items(' + Number(id) + ')/recycle()', null, { 'X-RequestDigest': await digest() });
+    if (res.status === 401 || res.status === 403) { throw new Error('SharePoint refused the delete.'); }
+    if (!res.ok) { throw new Error('Delete failed ' + errText(res)); }
+  }
   function personValue(claims) { return claims ? JSON.stringify([{ Key: claims }]) : ''; }
   // Date-only columns: write { Field: 'yyyy-mm-dd' or '' } and prove SharePoint stored the same calendar day.
   async function writeDates(list, id, dates) {
@@ -420,13 +437,16 @@ window.ESGOneToOne = function (ctx) {
     'SubmittedOn,CompletedOn,Technician/Id,Technician/Title,Technician/EMail';
   // Feedback list: only failed / undelivered items are read (line manager only), to show in Needs your attention.
   var FB_FIELDS = 'ID,Title,FeedbackType,Message,PageName,AppVersion,DeliveryStatus,SentOn,Created,HasUniqueRoleAssignments,Author/Title,Author/EMail';
-  // Challenge columns (solution 1.3): read only once Setup has created the Challenges list, so the page keeps working
-  // if it is uploaded before the solution upgrade
-  var MR_CH_FIELDS = ',ChallengeState,ChallengeSectionsJson,ChallengeItemId,ChallengeOpenedOn,ChallengeCloseBy,ChallengeTlAgreedOn,ChallengeTechAgreedOn,ChallengeClosedOn';
-  var CH_FIELDS = 'ID,Title,ManagerReviewId,MonthKey,SectionsJson,TechAgreedOn,ChallengeStatus,Created';
   var REV_FIELDS = 'ID,Title,MonthKey,DueDate,ReviewStatus,Q1WentWell,Q2Issue,Q2Impact,Q2Tried,Q2Support,Q3WorkloadRating,Q3WorkloadComment,' +
     'Q4WellbeingRaise,Q4WellbeingDetail,Q5PlanningRaise,Q5PlanningDetail,Q6DevRaise,Q6DevWhat,Q6DevWhy,Q7ManagerFeedback,ExpectationsJson,Q9FollowUp,' +
     'Mood,WinOfMonth,AppraisalDate,Technician/Id,Technician/Title,Technician/EMail';
+  // Columns added in solution 1.4. Read only when they exist, so the page still loads if it is uploaded before Setup 1.4 runs.
+  var REV_V14_FIELDS = ',AppraisalBoundaries';
+  var TECH_FIELDS = 'ID,Title,Active,AppraisalDate,TechnicianAadId,Technician/Id,Technician/Title,Technician/EMail,Technician/Name';
+  var TECH_V14_FIELDS = ',NextWellbeingDate,AppraisalCycleStart,AppraisalHistoryJson,AppraisalBoundaries';
+  // Amendments audit (Owners only): who and when come from SharePoint's own Author / Created
+  var AM_FIELDS = 'ID,Title,ReviewItemId,ManagerReviewId,MonthKey,Reason,ChangedFields,ChangesJson,NotifyStatus,NotifiedOn,NotifyError,Created,Modified,' +
+    'Author/Title,Technician/Title,Technician/EMail';
 
   // Ratings are whole numbers 1–5; anything else in an (editable) record is treated as not given.
   function r15(v) { var n = num(v); return n !== null && n >= 1 && n <= 5 && Math.floor(n) === n ? n : null; }
@@ -457,6 +477,7 @@ window.ESGOneToOne = function (ctx) {
       snapshot: snap,
       released: !!(mr && (mr.ReleasedOn || str(mr.ReviewState) === 'Completed' || str(mr.ReviewState) === 'Closed - Not Submitted')),
       appraisalDate: localDate(rv.AppraisalDate),
+      boundaries: parseBoundaries(rv.AppraisalBoundaries),
       answers: {
         mood: r15(rv.Mood), win: str(rv.WinOfMonth),
         q1: str(rv.Q1WentWell), q2: { issue: str(rv.Q2Issue), impact: str(rv.Q2Impact), tried: str(rv.Q2Tried), support: str(rv.Q2Support) },
@@ -485,45 +506,8 @@ window.ESGOneToOne = function (ctx) {
           closedOn: /^\d{4}-\d{2}-\d{2}$/.test(str(a.closedOn)) ? str(a.closedOn) : '' };
       });
       r.mrTechFollowUp = str(mr.TechFollowUp);
-      var cs = str(mr.ChallengeState);
-      if (CHALLENGE_STATES.indexOf(cs) >= 0) {
-        r.ch = { state: cs, sections: parseSections(mr.ChallengeSectionsJson, r), itemId: Number(idOf(mr.ChallengeItemId)) || 0,
-          openedOn: localDate(mr.ChallengeOpenedOn), closeBy: localDate(mr.ChallengeCloseBy), closedOn: localDate(mr.ChallengeClosedOn),
-          tlAgreed: !!mr.ChallengeTlAgreedOn, techAgreed: !!mr.ChallengeTechAgreedOn };
-      }
     }
     return r;
-  }
-  // ---- challenges: only the parts that are the line manager's judgement – expectation ratings, overall feedback, actions
-  var CHALLENGE_STATES = ['Open', 'Agreed', 'Not agreed'];
-  function idOf(v) { var n = num(v); return n === null ? '' : String(Math.floor(n)); }
-  function sectionOk(key, r) {
-    if (key === 'overall' || key === 'actions') { return true; }
-    return /^exp:/.test(key) && r.snapshot.some(function (e) { return 'exp:' + e.id === key; });
-  }
-  function parseSections(json, r) {
-    var seen = {};
-    return jsonList(json).filter(function (x) {
-      var k = str(x.key);
-      if (seen[k] || !sectionOk(k, r)) { return false; }
-      seen[k] = true; return true;
-    }).slice(0, 20).map(function (x) { return { key: str(x.key), note: str(x.note).slice(0, 500) }; });
-  }
-  function sectionName(r, key) {
-    if (key === 'overall') { return 'Overall feedback'; }
-    if (key === 'actions') { return 'Agreed actions'; }
-    var e = r.snapshot.find(function (x) { return 'exp:' + x.id === key; });
-    return e ? e.title + ' (rating)' : 'An expectation';
-  }
-  function challenged(r, key) { return !!(r.ch && r.ch.sections.some(function (x) { return x.key === key; })); }
-  // End of this month; if fewer than 7 days are left, the end of next month (same rule as Flow 7)
-  function closeByFrom(d) { var m = d.slice(0, 7), last = lastDay(m); return daysBetween(d, last) < 7 ? lastDay(addMonths(m, 1)) : last; }
-  function latestReleased(tech) { return reviewsOf(tech).filter(function (x) { return x.released; }).pop() || null; }
-  function canChallenge(r) {
-    return CH_AVAILABLE && !IS_TL && r.released && r.state === 'Completed' && !r.ch && !pendingChallenge(r) && latestReleased(r.tech) === r;
-  }
-  function pendingChallenge(r) {
-    return CHALLENGES.find(function (c) { return Number(idOf(c.ManagerReviewId)) === r.mrId && r.mrId; }) || null;
   }
   function parseBands(json) {
     var b = safeJson(json, null);
@@ -550,29 +534,23 @@ window.ESGOneToOne = function (ctx) {
       remindersRaw: remRow ? str(remRow.Value) : null };
     L = labRow ? parseLabels(labRow.Value) : defaultLabels();
 
-    var revs = await spGetAll(CONFIG.lists.reviews, REV_FIELDS, 'Technician');
-    CH_AVAILABLE = (await req('GET', listPath(CONFIG.lists.challenges) + '/items?$select=Id&$top=1')).ok;
-    var mrs;
-    try { mrs = await spGetAll(CONFIG.lists.mgr, MR_FIELDS + (CH_AVAILABLE ? MR_CH_FIELDS : ''), 'Technician'); } catch (e) {
-      if (!CH_AVAILABLE) { throw e; }
-      CH_AVAILABLE = false;   // a challenge column is missing (Setup only part-ran): carry on without challenges
-      console.warn('ESG 1-to-1: challenge columns not readable – run 0 Setup again.', e);
-      mrs = await spGetAll(CONFIG.lists.mgr, MR_FIELDS, 'Technician');
-    }
-    CHALLENGES = CH_AVAILABLE ? await spGetAll(CONFIG.lists.challenges, CH_FIELDS) : [];
+    V14 = IS_TL && (await req('GET', listPath(CONFIG.lists.amendments) + '/items?$select=Id&$top=1')).ok;
+    var revs = await getAllMaybe(CONFIG.lists.reviews, REV_FIELDS, REV_V14_FIELDS, 'Technician');
+    var mrs = await spGetAll(CONFIG.lists.mgr, MR_FIELDS, 'Technician');
     var mrByItem = {};
     mrs.forEach(function (m) { if (m.ReviewItemId) { mrByItem[Number(m.ReviewItemId)] = m; } });
 
     REVIEWS = []; TECHS = []; TECH_INFO = {}; MASTER_EXPECTATIONS = []; FEEDBACK_ISSUES = [];
     if (IS_TL) {
-      var techs = await spGetAll(CONFIG.lists.techs, 'ID,Title,Active,AppraisalDate,TechnicianAadId,Technician/Id,Technician/Title,Technician/EMail,Technician/Name', 'Technician');
+      var techs = await getAllMaybe(CONFIG.lists.techs, TECH_FIELDS, V14 ? TECH_V14_FIELDS : '', 'Technician');
       var byEmail = {};
       techs.forEach(function (t) {
         var name = str(t.Title) || str(t.Technician && t.Technician.Title);
         var email = str(t.Technician && t.Technician.EMail).toLowerCase();
         // two people with the same name are kept apart (everything on the page is keyed by this name)
         if (TECH_INFO[name] && TECH_INFO[name].email !== email) { name = name + ' (' + (email || ('item ' + t.ID)) + ')'; }
-        TECH_INFO[name] = { appraisal: localDate(t.AppraisalDate), itemId: t.ID, email: email, claims: str(t.Technician && t.Technician.Name), active: !!t.Active };
+        TECH_INFO[name] = { appraisal: localDate(t.AppraisalDate), itemId: t.ID, email: email, claims: str(t.Technician && t.Technician.Name), active: !!t.Active,
+          nextWellbeing: localDate(t.NextWellbeingDate), cycleStart: localDate(t.AppraisalCycleStart), history: parseHistory(t.AppraisalHistoryJson) };
         if (email) { byEmail[email] = name; }
         if (t.Active) { TECHS.push(name); }
       });
@@ -598,6 +576,7 @@ window.ESGOneToOne = function (ctx) {
           heldBy[k].items.push(f);
         } else if (!locked && age > 3600000) { FEEDBACK_ISSUES.push({ kind: 'pending', items: [f] }); }
       });
+      AMENDMENTS = V14 ? (await spGetAll(CONFIG.lists.amendments, AM_FIELDS, 'Author,Technician')).map(buildAmendment) : [];
       var exps = await spGetAll(CONFIG.lists.exp, 'ID,Title,Measures,AppraisalYear,AppliesTo,SortOrder,Active,Technician/Id,Technician/Title,Technician/EMail,Technician/Name', 'Technician');
       var wbChk = await req('GET', listPath(CONFIG.lists.wellbeing) + '?$select=Id');
       WB_AVAILABLE = wbChk.ok;
@@ -626,7 +605,7 @@ window.ESGOneToOne = function (ctx) {
       });
       TECHS = [ME];
       var latest = REVIEWS.slice().sort(function (x, y) { return x.month < y.month ? 1 : -1; })[0];
-      TECH_INFO[ME] = { appraisal: latest ? latest.appraisalDate : '' };
+      TECH_INFO[ME] = { appraisal: latest ? latest.appraisalDate : '', boundaries: latest ? latest.boundaries : [] };
       WB_AVAILABLE = true;
       WELLBEING = (await spGetAll(CONFIG.lists.wellbeing, WB_FIELDS, 'Technician')).filter(isMine).map(function (w) { return buildWb(w, ME); });
       if (dropped) { console.warn('ESG 1-to-1: ' + dropped + ' record(s) not belonging to you were readable and have been hidden. Tell the site owner.'); }
@@ -675,26 +654,79 @@ window.ESGOneToOne = function (ctx) {
     td.appendChild(h('div', { class: 'aimnote' + (apSoon(s) ? ' now' : ''), text: aimText(s) }));
     return td;
   }
-  function periodFor(tech) {
-    var ap = apDateOf(tech) || addDays(TODAY, 180);   // no date yet: assume six months ahead (shown as "not set")
-    var end = ap.slice(0, 7);
-    return { apDate: ap, set: !!apDateOf(tech), end: end, start: addMonths(end, -12) };
+  // ---- appraisal periods. A period runs from the date the previous appraisal was actually completed (or a baseline the
+  // Team Leader sets) to the next completion – any length, never an assumed 12 months. A monthly 1-to-1 belongs to the
+  // period by its own month: after the start's month, up to and including the completion's month. The next *due* date only
+  // moves the projection's end point; it never changes which period a review is in.
+  function isoDay(v) { var d = localDate(v); return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : ''; }
+  function uniqSorted(a) { return a.filter(function (x, i) { return x && a.indexOf(x) === i; }).sort(); }
+  function parseHistory(raw) {
+    return jsonList(raw).map(function (x) { return { start: isoDay(x.start), completed: isoDay(x.completed), nextDue: isoDay(x.nextDue), recordedOn: str(x.recordedOn) }; })
+      .filter(function (x) { return x.completed; }).sort(function (x, y) { return x.completed < y.completed ? -1 : 1; });
   }
-  function periodReviews(tech) { var p = periodFor(tech); return reviewsOf(tech).filter(function (r) { return r.month > p.start && r.month <= p.end; }); }
-  function latestSnapshot(tech) {
-    var rs = reviewsOf(tech);
+  function parseBoundaries(raw) { var v = safeJson(raw, []); return Array.isArray(v) ? uniqSorted(v.map(function (x) { return isoDay(x); })) : []; }
+  function boundariesOf(tech) {
+    var t = TECH_INFO[tech] || {};
+    if (!IS_TL) { return t.boundaries || []; }   // the technician's copy (the Team Leader never relies on it)
+    var b = [], hist = t.history || [];
+    if (hist.length && hist[0].start) { b.push(hist[0].start); }
+    hist.forEach(function (x) { b.push(x.completed); });
+    if (t.cycleStart) { b.push(t.cycleStart); }
+    return uniqSorted(b);
+  }
+  function periodsOf(tech) {
+    var b = boundariesOf(tech), ap = apDateOf(tech), out = [], all = reviewsOf(tech);
+    // reviews from before the first recorded start (no baseline was set then) are kept together, never dropped
+    if (b.length && all.length && all[0].month <= b[0].slice(0, 7)) {
+      out.push({ idx: 0, startDate: '', endDate: b[0], start: addMonths(all[0].month, -1), end: b[0].slice(0, 7), apDate: b[0], set: true, closed: true, noBaseline: true });
+    }
+    for (var i = 0; i + 1 < b.length; i++) {
+      out.push({ idx: out.length, startDate: b[i], endDate: b[i + 1], start: b[i].slice(0, 7), end: b[i + 1].slice(0, 7), apDate: b[i + 1], set: true, closed: true });
+    }
+    var first = all[0];
+    var start = b.length ? b[b.length - 1].slice(0, 7) : addMonths(first ? first.month : CUR, -1);
+    out.push({ idx: out.length, startDate: b.length ? b[b.length - 1] : '', endDate: '', start: start, end: ap ? ap.slice(0, 7) : '', apDate: ap, set: !!ap,
+      closed: false, noBaseline: !b.length });
+    return out;
+  }
+  // the current period, or one picked on the profile / report
+  function periodFor(tech, idx) {
+    var ps = periodsOf(tech);
+    return (idx !== undefined && idx !== null && ps[idx]) || ps[ps.length - 1];
+  }
+  function inPeriod(p, month) { return month > p.start && (!p.closed || month <= p.end); }
+  function periodReviews(tech, p) { p = p || periodFor(tech); return reviewsOf(tech).filter(function (r) { return inPeriod(p, r.month); }); }
+  // calendar months the period has run so far (or in total, once closed)
+  function periodMonths(p) { var last = p.closed ? p.end : CUR; return Math.max(0, monthDiff(p.start, last)); }
+  // A missed month (closed without a submission, or now overdue) is never a score and never in a denominator.
+  function isMissed(r) { return r.state === 'Closed - Not Submitted' || isOverdue(r); }
+  function isRated(r, aud) { return isIn(r) && (selfAvg(r) !== null || (canSeeTl(r, aud) && mgrAvg(r) !== null)); }
+  function periodCounts(tech, p, aud) {
+    var prs = periodReviews(tech, p);
+    return { months: periodMonths(p), rated: prs.filter(function (r) { return isRated(r, aud); }).length, missed: prs.filter(isMissed).length };
+  }
+  function periodLabel(p) {
+    if (p.noBaseline) { return 'All reviews so far – no period start set yet'; }
+    var from = monthLabel(addMonths(p.start, 1));
+    return p.closed ? from + ' – ' + monthLabel(p.end) + ' (appraisal completed ' + fmtDate(p.endDate) + ')'
+      : from + ' – now' + (p.set ? ' (appraisal due ' + fmtDate(p.apDate) + ')' : ' (next appraisal not set)');
+  }
+  function countsText(c) { return plural(c.rated, 'rated review') + ' of ' + plural(c.months, 'month') + (c.missed ? ' · ' + c.missed + ' missed' : ''); }
+  function latestSnapshot(tech, prs) {
+    var rs = prs && prs.some(function (r) { return r.snapshot.length; }) ? prs : reviewsOf(tech);
     for (var i = rs.length - 1; i >= 0; i--) { if (rs[i].snapshot.length) { return rs[i].snapshot; } }
     return [];
   }
 
   // Expected appraisal outcome (method explained to the Team Leader in Settings)
-  function expectedOutcome(tech, aud) {
-    var p = periodFor(tech), prs = periodReviews(tech);
+  function expectedOutcome(tech, aud, p) {
+    p = p || periodFor(tech);
+    var prs = periodReviews(tech, p);
     var pts = prs.filter(isIn).map(function (r) {
       var self = selfAvg(r), tl = canSeeTl(r, aud) ? mgrAvg(r) : null;
       return { month: r.month, self: self, tl: tl, used: tl !== null ? tl : self };
     }).filter(function (pt) { return pt.used !== null; });
-    var perExp = latestSnapshot(tech).map(function (e) {
+    var perExp = latestSnapshot(tech, prs).map(function (e) {
       var hist = [];
       prs.filter(isIn).forEach(function (r) {
         var q = r.answers.q8.find(function (x) { return String(x.id) === String(e.id); });
@@ -713,7 +745,8 @@ window.ESGOneToOne = function (ctx) {
     var current = sum / ws;
     var xs = pts.map(function (pt) { return monthDiff(p.start, pt.month); }), ys = pts.map(function (pt) { return pt.used; });
     var slope = 0, projected = current;
-    if (pts.length >= 3) {
+    // projection only towards a known appraisal date in a period with a real start
+    if (pts.length >= 3 && p.set && !p.noBaseline) {
       var mx = avg(xs), my = avg(ys), nu = 0, de = 0;
       xs.forEach(function (x, i) { nu += (x - mx) * (ys[i] - my); de += (x - mx) * (x - mx); });
       slope = de ? nu / de : 0;
@@ -741,17 +774,19 @@ window.ESGOneToOne = function (ctx) {
   }
   function trendWord(o) { return o.pts.length < 3 ? 'Too early to tell' : o.slope > 0.05 ? 'Improving ↗' : o.slope < -0.05 ? 'Dipping ↘' : 'Steady →'; }
   function progressWord(v) { return v ? PROGRESS[clamp(Math.round(v), 1, 5) - 1].title : 'not rated yet'; }
+  // Months on time in a row, newest first. A missed month neither extends nor breaks it; a late one breaks it.
   function streakOf(tech) {
     var ms = reviewsOf(tech).reverse(), n = 0;
     for (var i = 0; i < ms.length; i++) {
-      if (ms[i].state === 'Open' && !isOverdue(ms[i])) { continue; }
+      if (ms[i].state === 'Open' || isMissed(ms[i])) { continue; }
       if (isIn(ms[i]) && !ms[i].late) { n += 1; } else { break; }
     }
     return n;
   }
-  function onTimeOf(tech) {
-    var rs = periodReviews(tech).filter(function (r) { return r.state !== 'Open' || TODAY > r.due; });
-    return { onTime: rs.filter(function (r) { return isIn(r) && !r.late; }).length, total: rs.length };
+  // On time out of the reviews actually submitted in the period – missed months are not in the denominator
+  function onTimeOf(tech, p) {
+    var prs = periodReviews(tech, p), subs = prs.filter(isIn);
+    return { onTime: subs.filter(function (r) { return !r.late; }).length, total: subs.length, missed: prs.filter(isMissed).length };
   }
   function actionsOf(filterFn, aud) {
     var out = [];
@@ -893,6 +928,22 @@ window.ESGOneToOne = function (ctx) {
     ]));
     root.appendChild(back); ok.focus();
   }
+  // A small form dialog. onOk returns an error message (shown, dialog stays open) or a promise; it closes when that resolves.
+  function formBox(title, intro, fields, okText, onOk) {
+    var back = h('div', { class: 'modal-back' }), err = h('div', { class: 'small bad', role: 'alert' });
+    var ok = h('button', { class: 'btn primary', type: 'button', text: okText, onclick: function () {
+      err.textContent = '';
+      var res = onOk();
+      if (typeof res === 'string' && res) { err.textContent = res; return; }
+      Promise.resolve(res).then(function () { back.remove(); }, function () { /* the toast explains; stay open */ });
+    } });
+    back.appendChild(h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': title }, [
+      h('h3', { text: title }), intro ? h('p', { text: intro }) : null, h('div', { class: 'stack', style: 'gap:10px' }, fields), err,
+      h('div', { class: 'btn-row', style: 'margin-top:12px' }, [ok, h('button', { class: 'btn', type: 'button', text: 'Cancel', onclick: function () { back.remove(); } })])
+    ]));
+    root.appendChild(back);
+    return back;
+  }
   function confetti() {
     var wrap = h('div', { class: 'confetti', 'aria-hidden': 'true' });
     var cols = ['#ef7d3a', '#1f7190', '#2f9a63', '#d99a12', '#6a4fb0', '#2a78d6'];
@@ -926,7 +977,7 @@ window.ESGOneToOne = function (ctx) {
   function go(view, extra) {
     var discard = dirty;
     if (dirty && !window.confirm('You have unsaved changes. Leave this page without saving?')) { return false; }
-    dirty = false;
+    dirty = false; state.amend = null;
     state.view = view; Object.keys(extra || {}).forEach(function (k) { state[k] = extra[k]; });
     if (discard) { start().catch(loadFailed); } else { render(true); }
     return true;
@@ -1128,7 +1179,8 @@ window.ESGOneToOne = function (ctx) {
     return h('details', { class: 'how' }, [
       h('summary', { text: 'ⓘ How the expected outcome is worked out' }),
       h('ol', null, [
-        h('li', { text: ('The appraisal period is the 12 months up to each ' + lc(L.one) + '\'s appraisal date.') }),
+        h('li', { text: ('The appraisal period runs from the date the ' + lc(L.one) + '\'s previous appraisal was completed (Settings → Team → Mark appraisal completed, or the period start you set) up to their next one – any length. Changing the next appraisal date never moves a review into another period.') }),
+        h('li', { text: ('Only months with a submitted review count. A missed month is left out completely – it is not a zero, and it is not counted in averages, trends or the on-time figure.') }),
         h('li', { text: ('Each submitted month gets a score: the average of the 1–5 ratings across all expectations. Where you have rated, your rating is used; otherwise the self-rating. ' + L.many + ' only see your rating once a review is released.') }),
         h('li', { text: 'Current position = the average of those monthly scores, with recent months counting more.' }),
         h('li', { text: 'Projected = where the trend line puts them now, plus half of the trend carried forward to the appraisal date – a cautious estimate, never more than 0.75 from where they are now. With fewer than 3 months, the current position is used.' }),
@@ -1143,7 +1195,10 @@ window.ESGOneToOne = function (ctx) {
   // words: the technician's version – band names instead of the 1–5 axis, and no numbers in tooltips
   function trendChart(tech, o, height, words) {
     var p = o.period, months = [];
-    for (var k = 1; k <= 12; k++) { months.push(addMonths(p.start, k)); }
+    // every month of the period (any length), through to the appraisal month when it is still ahead
+    var last = p.closed ? p.end : (p.end && p.end > CUR ? p.end : CUR);
+    for (var k = 1; k <= Math.max(2, monthDiff(p.start, last)); k++) { months.push(addMonths(p.start, k)); }
+    var labelEvery = Math.max(1, Math.ceil(months.length / 13));
     var W = 640, H = height || 230, pl = words ? 96 : 30, pr = 14, pt = 10, pb = 24, iw = W - pl - pr, ih = H - pt - pb, n = months.length;
     var x = function (i) { return pl + i * iw / (n - 1); }, y = function (v) { return pt + (5 - v) / 4 * ih; };
     var svg = s('svg', { viewBox: '0 0 ' + W + ' ' + H, class: 'chart', role: 'img', 'aria-label': 'Monthly rating trend' });
@@ -1161,7 +1216,8 @@ window.ESGOneToOne = function (ctx) {
       if (!words) { svg.appendChild(s('text', { x: pl - 8, y: y(v) + 4, 'text-anchor': 'end', text: String(v) })); }
     });
     months.forEach(function (m, i) {
-      var t = s('text', { x: x(i), y: H - 6, 'text-anchor': 'middle', text: monthShort(m) });
+      if (i % labelEvery && m !== p.end && i !== months.length - 1) { return; }
+      var t = s('text', { x: x(i), y: H - 6, 'text-anchor': 'middle', text: monthShort(m) + (months.length > 13 ? ' ' + m.slice(2, 4) : '') });
       if (m === p.end) { t.setAttribute('font-weight', '700'); t.setAttribute('style', 'fill:#16222c'); }
       svg.appendChild(t);
     });
@@ -1332,138 +1388,50 @@ window.ESGOneToOne = function (ctx) {
     }
     return h('section', { class: 'card since' }, [h('div', { class: 'card-h' }, [h('h2', { text: 'Since last time' }), toggle]), body]);
   }
-  // ---------------------------------------------------------------------------------------------
-  // CHALLENGES – a technician flags parts of the released feedback to talk through; both agree, or it closes as Not agreed
-  // ---------------------------------------------------------------------------------------------
-  function chItem(c) { return CHALLENGES.find(function (x) { return Number(idOf(x.ID)) === c.itemId; }) || null; }
-  // A technician's open challenge on an earlier month, shown on their current form so it isn't missed
-  function openChallengeNote(r, mine) {
-    var o = mine.find(function (x) { return x !== r && x.ch && x.ch.state === 'Open'; });
-    if (!o) { return null; }
-    return h('section', { class: 'card chcard' }, [h('div', { class: 'card-h' }, [
-      h('div', null, [h('h3', { text: '⚑ Your challenge on the ' + monthLabel(o.month) + ' feedback is open' }),
-        h('div', { class: 'small muted', text: (o.ch.techAgreed ? 'You have agreed – waiting for your ' + L.mgr + '.' : 'Agree it once you have talked it through.') + ' Closes ' + fmtDate(o.ch.closeBy) + '.' })]),
-      h('button', { class: 'btn small', type: 'button', text: 'Open ' + monthLabel(o.month), onclick: function () { go('tech', { reviewId: o.id }); } })])]);
+  // ---- appraisal periods and next-due dates (Team Leader). Every write here is deliberate: dates never move by themselves.
+  function boundaryList(t) { return JSON.stringify(boundariesOf(t)); }
+  // The boundaries are copied to the person's own reviews so their My appraisal shows the same periods
+  async function writeBoundaries(t) {
+    var info = TECH_INFO[t], list = boundaryList(t);
+    await spUpdate(CONFIG.lists.techs, info.itemId, { AppraisalBoundaries: list });
+    var rs = reviewsOf(t);
+    for (var i = 0; i < rs.length; i++) {
+      if (JSON.stringify(rs[i].boundaries) === list) { continue; }
+      await spUpdate(CONFIG.lists.reviews, rs[i].id, { AppraisalBoundaries: list });
+      rs[i].boundaries = JSON.parse(list);
+    }
   }
-  function challengeChip(r) {
-    if (!r.ch) { return null; }
-    return h('span', { class: 'chip ' + (r.ch.state === 'Agreed' ? 'green' : 'amber'), text: r.ch.state === 'Open' ? '⚑ Challenged' : r.ch.state === 'Agreed' ? '✓ Challenge agreed' : '⚑ Not agreed' });
+  // The next wellbeing date lives on the person's Team record; the latest completed assessment shows the same date to them
+  async function setWellbeingDate(t, v) {
+    var info = TECH_INFO[t];
+    await writeDates(CONFIG.lists.techs, info.itemId, { NextWellbeingDate: v });
+    info.nextWellbeing = v;
+    var last = wbLastCompleted(t);
+    if (last && (last.nextReview || '') !== v) { await writeDates(CONFIG.lists.wellbeing, last.id, { NextReviewDate: v }); last.nextReview = v; }
   }
-  function challengeBanner(r, aud) {
-    var tl = aud === 'tl';
-    if (!r.ch) {
-      if (!tl && pendingChallenge(r)) {
-        return h('section', { class: 'card chcard' }, [h('h3', { text: '⚑ Challenge sent' }),
-          h('p', { class: 'small', text: 'It will show here once it has been recorded (usually within a few minutes). Your ' + L.mgr + ' is emailed.' })]);
-      }
-      return null;
-    }
-    var c = r.ch, kids = [];
-    var list = h('ul', { class: 'chlist' }, c.sections.map(function (x) {
-      return h('li', null, [h('b', { text: sectionName(r, x.key) }), x.note ? h('div', { class: 'small', text: x.note }) : null]);
-    }));
-    function agreeTl() {
-      busy('ch', async function () {
-        await writeDates(CONFIG.lists.mgr, r.mrId, { ChallengeTlAgreedOn: TODAY });
-        if (c.itemId) { await writeDates(CONFIG.lists.challenges, c.itemId, { TlPing: TODAY }); }
-        c.tlAgreed = true; toast(c.techAgreed ? 'Agreed – you both have, so it closes as agreed shortly.' : 'Agreed – waiting for ' + r.tech + ' to agree too.'); render(false);
-      }).catch(function () {});
-    }
-    function agreeTech() {
-      busy('ch', async function () {
-        try { await writeDates(CONFIG.lists.challenges, c.itemId, { TechAgreedOn: TODAY }); } catch (e) {
-          if (/read-only|refused/.test(String(e && e.message))) { throw new Error('This challenge is still being reopened – please try again in a few minutes.'); }
-          throw e;
-        }
-        c.techAgreed = true; toast('Thanks – recorded.'); render(false);
-      }).catch(function () {});
-    }
-    // wakes Flow 7 again (it runs every few minutes) – used when an earlier step didn't reach it
-    function nudge(msg) {
-      busy('ch', async function () {
-        await writeDates(CONFIG.lists.challenges, c.itemId, { TlPing: TODAY });
-        var it = chItem(c); if (it && c.state === 'Open') { it.ChallengeStatus = 'Open'; }
-        toast(msg); render(false);
-      }).catch(function () {});
-    }
-    function reopen() {
-      confirmBox('Reopen this challenge?', r.tech + ' is emailed and can agree again. If you don\'t both agree by ' + fmtDate(closeByFrom(TODAY)) + ' it closes as Not agreed.', 'Reopen', function () {
-        busy('ch', async function () {
-          // one write for the state and the cleared stamps, so a failure part-way never leaves it Open with old agreements
-          await spUpdate(CONFIG.lists.mgr, r.mrId, { ChallengeState: 'Open', ChallengeTlAgreedOn: '', ChallengeTechAgreedOn: '', ChallengeClosedOn: '' });
-          c.state = 'Open'; c.tlAgreed = false; c.techAgreed = false; c.closedOn = '';
-          await writeDates(CONFIG.lists.mgr, r.mrId, { ChallengeCloseBy: closeByFrom(TODAY) });
-          c.closeBy = closeByFrom(TODAY);
-          if (c.itemId) { await writeDates(CONFIG.lists.challenges, c.itemId, { TechAgreedOn: '', TlPing: TODAY }); }
-          toast('Reopened – ' + r.tech + ' has been emailed.'); render(false);
-        }).catch(function () {});
-      });
-    }
-    if (c.state === 'Open') {
-      kids.push(h('h3', { text: '⚑ Feedback challenged – to talk through at ' + (tl ? 'your 1-to-1 with ' + r.tech : 'your next 1-to-1') }));
-      kids.push(list);
-      kids.push(h('div', { class: 'chstatus small' }, [
-        h('span', { text: (tl ? 'You' : L.mgr) + ': ' + (c.tlAgreed ? 'agreed ✓' : 'not yet') }),
-        h('span', { text: (tl ? r.tech : 'You') + ': ' + (c.techAgreed ? 'agreed ✓' : 'not yet') })]));
-      kids.push(h('p', { class: 'small muted', text: 'It closes when you have both agreed. If not agreed by ' + fmtDate(c.closeBy) + ' it closes as Not agreed and stays flagged.' }));
-      var it = chItem(c), reopening = tl && it && it.ChallengeStatus && it.ChallengeStatus !== 'Open';
-      if (tl && !c.tlAgreed) { kids.push(h('div', { class: 'btn-row' }, [h('button', { class: 'btn primary small', type: 'button', text: 'Agree – resolved', onclick: agreeTl })])); }
-      if (!tl && !c.techAgreed && c.itemId) { kids.push(h('div', { class: 'btn-row' }, [h('button', { class: 'btn primary small', type: 'button', text: 'I agree – resolved', onclick: agreeTech })])); }
-      // both agreed but still open: the step that closes it didn't run (a failed save, or the flow was off) – finish it
-      if (c.tlAgreed && c.techAgreed && c.itemId) {
-        kids.push(h('div', { class: 'btn-row' }, [h('span', { class: 'small', text: 'You have both agreed – it should close within a few minutes.' }),
-          h('button', { class: 'btn small', type: 'button', text: 'Finish closing', onclick: function () { nudge('Sent – it closes as agreed within a few minutes.'); } })]));
-      } else if (reopening && c.itemId) {
-        kids.push(h('div', { class: 'btn-row' }, [h('span', { class: 'small', text: 'Reopening – ' + r.tech + ' gets access back within a few minutes.' }),
-          h('button', { class: 'btn small ghost', type: 'button', text: 'Send again', onclick: function () { nudge('Sent again.'); } })]));
-      }
-    } else {
-      kids.push(h('h3', { text: c.state === 'Agreed' ? '✓ Challenge agreed' + (c.closedOn ? ' on ' + fmtDate(c.closedOn) : '') : '⚑ Challenge not agreed' + (c.closedOn ? ' – closed ' + fmtDate(c.closedOn) : '') }));
-      if (c.state !== 'Agreed') { kids.push(h('p', { class: 'small', text: 'It stays flagged for future review' + (tl ? '. You can reopen it at any time.' : '.') })); }
-      kids.push(list);
-      if (tl) { kids.push(h('div', { class: 'btn-row' }, [h('button', { class: 'btn small', type: 'button', text: 'Reopen challenge', onclick: reopen })])); }
-    }
-    return h('section', { class: 'card chcard ' + (c.state === 'Agreed' ? 'agreed' : 'open') }, kids);
+  async function recordCompletion(t, completed, nextDue) {
+    var info = TECH_INFO[t], hist = (info.history || []).slice(), b = boundariesOf(t);
+    var last = hist[hist.length - 1];
+    var entry = { start: b.length ? b[b.length - 1] : '', completed: completed, nextDue: nextDue, recordedOn: TODAY };
+    if (last && last.completed.slice(0, 7) === completed.slice(0, 7)) { entry.start = last.start; hist[hist.length - 1] = entry; }   // a correction
+    else { hist.push(entry); }
+    await spUpdate(CONFIG.lists.techs, info.itemId, { AppraisalHistoryJson: JSON.stringify(hist) });
+    info.history = hist;
+    await writeDates(CONFIG.lists.techs, info.itemId, { AppraisalCycleStart: completed, AppraisalDate: nextDue });
+    info.cycleStart = completed; info.appraisal = nextDue;
+    var cr = currentOf(t);
+    if (cr) { await writeDates(CONFIG.lists.reviews, cr.id, { AppraisalDate: nextDue }); cr.appraisalDate = nextDue; }
+    await writeBoundaries(t);
   }
-  // The technician's flags: one per challengeable part, with an optional note; a bar to send them together
-  function challengePicker(r) {
-    var sel = {}, order = [];
-    var bar = h('div', { class: 'chbar', hidden: true });
-    function drawBar() {
-      bar.textContent = '';
-      bar.hidden = !order.length;
-      if (!order.length) { return; }
-      bar.appendChild(h('span', { text: plural(order.length, 'part') + ' flagged to talk through' }));
-      bar.appendChild(h('div', { class: 'btn-row' }, [
-        h('button', { class: 'btn small ghost', type: 'button', text: 'Cancel', onclick: function () { order.slice().forEach(function (k) { sel[k].toggle(false); }); } }),
-        h('button', { class: 'btn small primary', type: 'button', text: 'Send challenge', onclick: send })]));
-    }
-    function send() {
-      var list = order.map(function (k) { return { key: k, note: sel[k].note().slice(0, 500) }; });
-      confirmBox('Challenge this feedback?', 'Your ' + L.mgr + ' is emailed and the parts you flagged become the topics for your next 1-to-1. It closes when you both agree.', 'Send challenge', function () {
-        busy('chsend', async function () {
-          var id = await spCreate(CONFIG.lists.challenges, { Title: (ME + ' – ' + monthLabel(r.month)).slice(0, 255), ManagerReviewId: String(r.mrId), SectionsJson: JSON.stringify(list) });
-          CHALLENGES.push({ ID: id, ManagerReviewId: r.mrId, SectionsJson: JSON.stringify(list) });
-          toast('Challenge sent – your ' + L.mgr + ' will be emailed.'); render(false);
-        }).catch(function () {});
-      });
-    }
-    function flag(key) {
-      var note = h('input', { type: 'text', maxlength: '500', 'aria-label': 'What would you like to discuss? (optional)', placeholder: 'What would you like to discuss? (optional)' });
-      var noteWrap = h('div', { class: 'chnote', hidden: true }, note);
-      var btn = h('button', { class: 'chflag', type: 'button', 'aria-pressed': 'false', text: '⚑ Challenge', title: 'Flag this to talk through with your ' + L.mgr });
-      function toggle(on) {
-        btn.setAttribute('aria-pressed', on ? 'true' : 'false'); btn.textContent = on ? '⚑ Flagged' : '⚑ Challenge'; noteWrap.hidden = !on;
-        var i = order.indexOf(key);
-        if (on && i < 0) { order.push(key); } else if (!on && i >= 0) { order.splice(i, 1); }
-        if (on) { note.focus(); }
-        drawBar();
-      }
-      sel[key] = { toggle: toggle, note: function () { return note.value.trim(); } };
-      btn.addEventListener('click', function () { toggle(order.indexOf(key) < 0); });
-      return h('div', { class: 'chwrap' }, [btn, noteWrap]);
-    }
-    return { flag: flag, bar: bar };
+  async function undoCompletion(t) {
+    var info = TECH_INFO[t], hist = (info.history || []).slice(), gone = hist.pop();
+    if (!gone) { return; }
+    var start = hist.length ? hist[hist.length - 1].completed : gone.start;
+    await spUpdate(CONFIG.lists.techs, info.itemId, { AppraisalHistoryJson: JSON.stringify(hist) });
+    info.history = hist;
+    await writeDates(CONFIG.lists.techs, info.itemId, { AppraisalCycleStart: start || '' });
+    info.cycleStart = start || '';
+    await writeBoundaries(t);
   }
   function techView() {
     var mine = reviewsOf(ME).slice().reverse();
@@ -1531,7 +1499,7 @@ window.ESGOneToOne = function (ctx) {
     var dl = daysLeft(r);
     var head = h('div', { class: 'pagehead sticky', style: 'display:block' }, [
       h('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:16px' }, [
-        h('div', { class: 'ph-l' }, [h('h2', { text: 'Monthly 1-to-1' }), monthSel, chipFor(r), challengeChip(r),
+        h('div', { class: 'ph-l' }, [h('h2', { text: 'Monthly 1-to-1' }), monthSel, chipFor(r),
           editable ? h('span', { class: 'chip ' + (dl < 0 ? 'red' : dl <= 3 ? 'amber' : 'green'), text: dl < 0 ? plural(-dl, 'day') + ' overdue – you can still submit' : dl === 0 ? 'Due today' : plural(dl, 'day') + ' left' }) : null,
           h('span', { class: 'meta', text: 'Deadline 23:59, ' + fmtDate(r.due) })]),
         editable ? h('div', { class: 'btn-row' }, [h('div', { class: 'meterwrap' }, [meterTxt, saveStatus]), h('button', { class: 'btn', type: 'button', text: 'Save draft', onclick: function () { save().catch(function () {}); } }),
@@ -1544,10 +1512,6 @@ window.ESGOneToOne = function (ctx) {
     function fbBlock(text) { return r.released && text ? h('div', { class: 'feedback' }, [h('b', { text: L.mgr }), text]) : null; }
     var cards = [];
     if (editable) { var since = sinceLastTime(r, mine); if (since) { cards.push(since); } }
-    var picker = canChallenge(r) ? challengePicker(r) : null;
-    function chMark(key) { return picker ? picker.flag(key) : challenged(r, key) ? h('span', { class: 'chip amber', text: '⚑ Challenged' }) : null; }
-    if (r.released) { var chb = challengeBanner(r, 'tech'); if (chb) { cards.push(chb); } }
-    else { var chn = openChallengeNote(r, mine); if (chn) { cards.push(chn); } }
     cards.push(qCard(1, 'What has gone well for you this month?', null, [
       req('q1', textBox(null, a.q1, function (v) { a.q1 = v; refresh(); }, ro, 3, 'What has gone well for you this month?')), fbBlock(r.fb.q1)]));
     // Q2 is optional: folded while empty, so it takes one line unless there's something to say
@@ -1600,8 +1564,7 @@ window.ESGOneToOne = function (ctx) {
       ];
       if (r.released) {
         var tv = r.fb.expRating[e.id];
-        cells.push(h('td', { class: 'top', style: 'width:24%' }, [h('div', { style: 'font-weight:650', text: tv ? PROGRESS[tv - 1].title : 'Not rated' }), r.fb.exp[e.id] ? h('div', { class: 'small', text: r.fb.exp[e.id] }) : null,
-          tv || r.fb.exp[e.id] ? chMark('exp:' + e.id) : null]));
+        cells.push(h('td', { class: 'top', style: 'width:24%' }, [h('div', { style: 'font-weight:650', text: tv ? PROGRESS[tv - 1].title : 'Not rated' }), r.fb.exp[e.id] ? h('div', { class: 'small', text: r.fb.exp[e.id] }) : null]));
       }
       return h('tr', null, cells);
     });
@@ -1612,13 +1575,10 @@ window.ESGOneToOne = function (ctx) {
     if (r.released) {
       cards.push(card('Overall feedback and agreed actions', null, [
         h('div', { class: 'feedback', style: 'margin-top:0' }, [h('b', { text: 'Overall' }), r.fb.overall || '—']),
-        r.fb.overall ? chMark('overall') : null,
         h('div', { class: 'feedback' }, [h('b', { text: 'Follow-up' }), followOf(r) || '—']),
         r.fb.meeting ? h('div', { class: 'feedback' }, [h('b', { text: '1-to-1 meeting' }), fmtDate(r.fb.meeting)]) : null,
-        h('div', { style: 'margin-top:12px' }, actionsTable(r.fb.actions.map(function (ac) { return { ac: ac, r: r }; }), {})),
-        r.fb.actions.length ? chMark('actions') : null
+        h('div', { style: 'margin-top:12px' }, actionsTable(r.fb.actions.map(function (ac) { return { ac: ac, r: r }; }), {}))
       ]));
-      if (picker) { cards.push(picker.bar); }
     }
     if (editable) {
       cards.push(missingBox);
@@ -1680,17 +1640,24 @@ window.ESGOneToOne = function (ctx) {
   // PROFILE / MY APPRAISAL (technician sees their own; TL sees any technician)
   // ---------------------------------------------------------------------------------------------
   function profileView(tech, aud) {
-    var o = expectedOutcome(tech, aud), p = o.period;
-    var ot = onTimeOf(tech), acts = actionsOf(function (ac, r) { return r.tech === tech; }, aud);
+    var periods = periodsOf(tech), pIdx = state.periodTech === tech && periods[state.periodIdx] ? state.periodIdx : periods.length - 1;
+    var p0 = periods[pIdx], o = expectedOutcome(tech, aud, p0), p = o.period, counts = periodCounts(tech, p, aud);
+    var ot = onTimeOf(tech, p), acts = actionsOf(function (ac, r) { return r.tech === tech; }, aud);
+    var periodSel = periods.length > 1 ? h('select', { 'aria-label': 'Appraisal period', style: 'width:auto', onchange: function () {
+      state.periodTech = tech; state.periodIdx = Number(periodSel.value); render(false); } }, periods.slice().reverse().map(function (x) {
+      var op = h('option', { value: String(x.idx), text: x.closed ? 'Period to ' + fmtDate(x.endDate) : 'Current period' }); op.selected = x.idx === pIdx; return op;
+    })) : null;
     var openActs = acts.filter(function (x) { return x.ac.status === 'Open'; });
     var head = h('div', { class: 'pagehead' }, [
       h('div', { class: 'ph-l' }, [
         aud === 'tl' ? h('button', { class: 'btn small ghost', type: 'button', text: '← Team overview', onclick: function () { go('team'); } }) : null,
         h('h2', { text: aud === 'tl' ? tech : 'My appraisal' }),
-        h('span', { class: 'meta', text: 'Appraisal period ' + monthLabel(addMonths(p.start, 1)) + ' – ' + monthLabel(p.end) }),
-        h('span', { class: 'chip ' + (p.set ? 'blue' : 'amber'), text: p.set ? 'Appraisal ' + fmtDate(p.apDate) : 'Appraisal date not set' })
+        periodSel,
+        h('span', { class: 'meta', text: periodLabel(p) + ' · ' + countsText(counts) }),
+        p.closed ? h('span', { class: 'chip', text: 'Completed period' }) :
+          h('span', { class: 'chip ' + (p.set ? 'blue' : 'amber'), text: p.set ? 'Appraisal ' + fmtDate(p.apDate) : 'Appraisal date not set' })
       ]),
-      h('button', { class: 'btn primary', type: 'button', text: '📄 Generate appraisal report', onclick: function () { state.report = { tech: tech, aud: aud }; render(false); } })
+      h('button', { class: 'btn primary', type: 'button', text: '📄 Generate appraisal report', onclick: function () { state.report = { tech: tech, aud: aud, period: pIdx }; render(false); } })
     ]);
     var tiles = h('div', { class: 'tiles', style: 'margin-top:14px' }, [
       tile('Expected outcome', [bandChip(o.projected, true)], 'Projected at appraisal'),
@@ -1699,31 +1666,21 @@ window.ESGOneToOne = function (ctx) {
       aud === 'tl' ? tile('Current position', [f1(o.current), h('small', { text: ' / 5' })], 'Self ' + f1(o.selfAvg) + (' · ' + L.mgr + ' ') + f1(o.tlAvg))
         : tile('Where you are now', [bandChip(o.current, true)], 'Based on the months so far'),
       (function () {
+        if (p.closed) { return tile('Appraisal completed', fmtDate(p.endDate), 'End of this period'); }
         var s = p.set ? apStatus(p.apDate) : null;
         if (!s) { return tile('Days to appraisal', '—', 'Not set'); }
         if (s.state === 'overdue') { return tile('Days to appraisal', 'Overdue', fmtDate(s.ap) + ' · ' + (-s.days) + ' day' + (s.days === -1 ? '' : 's') + ' ago', 'bad'); }
         return tile('Days to appraisal', s.days === 0 ? 'Today' : String(s.days), fmtDate(s.ap) + ' · ' + (s.state === 'due' ? 'due this month' : 'aim for ' + monthName(s.aimMonth)), apSoon(s) ? 'warn' : '');
       })(),
-      tile('On-time submissions', [String(ot.onTime), h('small', { text: ' of ' + ot.total })], 'In the appraisal period'),
+      tile('On-time submissions', ot.total ? [String(ot.onTime), h('small', { text: ' of ' + ot.total })] : '–',
+        ot.total ? 'Of those submitted' + (ot.missed ? ' · ' + ot.missed + ' missed' : '') : (ot.missed ? ot.missed + ' missed – none submitted' : 'None submitted yet')),
       tile('Open actions', String(openActs.length), acts.filter(function (x) { return acOverdue(x.ac); }).length + ' overdue', acts.some(function (x) { return acOverdue(x.ac); }) ? 'bad' : '')
     ]);
     var rows = [h('div', { class: 'grid2' }, [
       card('Rating trend', aud === 'tl' ? 'Monthly score on the 1–5 scale; shading shows the bands' : 'Each month against the bands', [trendChart(tech, o, 300, aud !== 'tl')]),
       card('Expectations – where each one stands', 'Most recent rating in the period', [pairBars(o.perExp, aud !== 'tl'), focusBlock(focusAreas(o), aud === 'tl')])
     ])];
-    var prs = periodReviews(tech).filter(function (r) { return r.month <= CUR; });
-    if (aud === 'tl') {
-      rows.push(h('div', { class: 'grid2' }, [
-        card('Workload by month', '1 very light – 5 excessive', [colChart(prs.map(function (r) {
-          var v = isIn(r) ? r.answers.q3 : null;
-          return { label: monthShort(r.month), value: v, color: v >= 5 ? '#d14b4b' : v === 4 ? '#d99a12' : '#1f7190', tipText: monthLabel(r.month) + ': ' + (v ? WORKLOAD[v - 1].title : 'not submitted') };
-        }), 5, '#1f7190', 170, 'Workload by month')]),
-        card('Energy by month', '1 running low – 5 full charge', [colChart(prs.map(function (r) {
-          var v = r.answers.mood || null;
-          return { label: monthShort(r.month), value: v, tipText: monthLabel(r.month) + ': ' + moodEmoji(v) };
-        }), 5, '#6a4fb0', 170, 'Energy by month')])
-      ]));
-    }
+    var prs = periodReviews(tech, p).filter(function (r) { return r.month <= CUR; });
     var wins = prs.filter(function (r) { return r.answers.win; }).slice().reverse();
     rows.push(card('Actions', openActs.length + ' open · ' + (acts.length - openActs.length) + ' closed', [actionsTable(acts, { showMonth: true })]));
     rows.push(card('Wins & achievements', wins.length + ' logged in the period', [h('div', { class: 'list cols' }, wins.length ? wins.map(function (r) {
@@ -1751,16 +1708,12 @@ window.ESGOneToOne = function (ctx) {
       if (r.state === 'Submitted') { items.push({ pri: 1, ico: '📝', text: r.tech + ' – ' + monthLabel(r.month) + ' review is waiting for you', btn: 'Review', fn: open }); }
       else if (isOverdue(r)) { items.push({ pri: 2, ico: '⏰', text: r.tech + ' – ' + monthLabel(r.month) + ' review is overdue (not submitted)', btn: 'Open', fn: open }); }
       if (r.month === CUR && followOf(r) === DEDICATED && r.state !== 'Completed') { items.push({ pri: 1, ico: '🗓', text: r.tech + ' asked for a dedicated 1-to-1', btn: 'Open', fn: open }); }
-      if (r.ch && r.ch.state === 'Open') {
-        items.push({ pri: 1, ico: '⚑', btn: 'Open', fn: open, text: r.tech + ' challenged your ' + monthLabel(r.month) + ' feedback – talk it through' + (r.ch.tlAgreed ? ' (you have agreed; waiting for them)' : '') + ' · closes ' + fmtDate(r.ch.closeBy) });
-      } else if (r.ch && r.ch.state === 'Not agreed' && r.ch.closedOn && daysBetween(r.ch.closedOn, TODAY) <= 60) {
-        items.push({ pri: 3, ico: '⚑', btn: 'Open', fn: open, text: r.tech + '\'s challenge of the ' + monthLabel(r.month) + ' feedback closed as Not agreed – still flagged' });
-      }
     });
     actionsOf(function (ac, r) { return acOverdue(ac) && TECH_INFO[r.tech] && TECH_INFO[r.tech].active; }, 'tl').forEach(function (x) {
       items.push({ pri: 2, ico: '✅', text: 'Overdue action for ' + x.r.tech + ': ' + x.ac.text + ' (due ' + fmtDate(x.ac.due) + ')', btn: 'Actions', fn: function () { state.actFilter = 'overdue'; go('actions'); } });
     });
     wellbeingAttention().forEach(function (x) { items.push(x); });
+    amendmentAttention().forEach(function (x) { items.push(x); });
     FEEDBACK_ISSUES.forEach(function (g) {
       var f = g.items[0], who = str(f.Author && f.Author.Title) || 'someone';
       items.push({ pri: g.kind === 'failed' ? 1 : 2, ico: '💬', btn: 'Read', fn: function () { openFeedbackItem(g); },
@@ -1768,7 +1721,8 @@ window.ESGOneToOne = function (ctx) {
           : 'Feedback from ' + who + (g.kind === 'failed' ? ' couldn\'t be emailed' : ' hasn\'t been emailed yet') + ' – read it here' });
     });
     TECHS.forEach(function (t) {
-      var ap = apDateOf(t);
+      var ap = apDateOf(t), ti = TECH_INFO[t];
+      if (V14 && ti && !ti.cycleStart && !ti.history.length) { items.push({ pri: 3, ico: '📅', text: 'Set the appraisal period start for ' + t + ' (the date their last appraisal was completed)', btn: 'Set start', fn: function () { openSettings('team'); } }); }
       if (!ap) { items.push({ pri: 3, ico: '📅', text: 'No appraisal date set for ' + t, btn: 'Set date', fn: function () { openSettings('team'); } }); }
       else {
         var s = apStatus(ap), report = function () { state.report = { tech: t, aud: 'tl' }; render(false); };
@@ -1790,72 +1744,12 @@ window.ESGOneToOne = function (ctx) {
         h('button', { class: 'btn small', type: 'button', text: x.btn, onclick: x.fn })]);
     })) : h('div', { class: 'done', text: 'Nothing needs you right now ✓' })], 'attn-card', items.length ? h('span', { class: 'chip ' + (items.some(function (x) { return x.pri === 1; }) ? 'orange' : ''), text: String(items.length) }) : null);
   }
-  // Third chart: the line manager picks what it shows (remembered on this computer only).
-  var TEAM_CHARTS = [
-    ['workload', 'Workload this month'], ['energy', 'Energy this month'], ['actions', 'Open actions'], ['ratings', 'Self vs your rating (latest)'],
-    ['outcome', 'Expected outcome score'], ['ontime', 'On-time submissions (last 6 months)'], ['days', 'Days to appraisal']
-  ];
-  function chartPref(v) {
-    try { if (v) { window.localStorage.setItem('esg1to1.teamChart', v); return v; } return window.localStorage.getItem('esg1to1.teamChart') || 'workload'; } catch (_) { return v || state.teamChart || 'workload'; }
-  }
-  function teamChartCard(outs) {
-    var key = state.teamChart || chartPref();
-    if (!TEAM_CHARTS.some(function (c) { return c[0] === key; })) { key = 'workload'; }
-    var sel = h('select', { 'aria-label': 'Choose what this chart shows', class: 'chartsel', onchange: function () { state.teamChart = sel.value; chartPref(sel.value); render(false); } },
-      TEAM_CHARTS.map(function (c) { var o = h('option', { value: c[0], text: c[1] }); o.selected = c[0] === key; return o; }));
-    var sub = '', chart;
-    if (key === 'workload' || key === 'energy') {
-      var isW = key === 'workload';
-      sub = isW ? monthLabel(CUR) + ' · 1 very light – 5 excessive' : monthLabel(CUR) + ' · 1 running low – 5 full charge';
-      chart = colChart(TECHS.map(function (t) {
-        var r = currentOf(t), v = r ? (isW ? r.answers.q3 : r.answers.mood) || null : null;
-        return { label: first(t), value: v, color: isW ? (v >= 5 ? '#d14b4b' : v === 4 ? '#d99a12' : '#1f7190') : (v && v <= 2 ? '#d14b4b' : '#6a4fb0'),
-          tipText: t + ': ' + (v ? (isW ? WORKLOAD[v - 1].title : moodEmoji(v)) + (r && isIn(r) ? '' : ' (draft)') : 'not given yet') };
-      }), 5, '#1f7190', 170, sub, 420);
-    } else if (key === 'actions') {
-      var vals = TECHS.map(function (t) {
-        var oa = actionsOf(function (ac, rr) { return rr.tech === t && ac.status === 'Open'; }, 'tl'), od = oa.filter(function (x) { return acOverdue(x.ac); }).length;
-        return { label: first(t), value: oa.length, color: od ? '#d14b4b' : '#1f7190', tipText: t + ': ' + oa.length + ' open' + (od ? ', ' + od + ' overdue' : '') };
-      });
-      sub = 'Open agreed actions per person · red = has an overdue action';
-      chart = colChart(vals, Math.max(3, Math.max.apply(null, vals.map(function (v) { return v.value; }))), '#1f7190', 170, sub, 420);
-    } else if (key === 'ratings') {
-      sub = 'Latest submitted month · blue = self-rating, orange = your rating';
-      chart = pairChart(TECHS.map(function (t) {
-        var r = reviewsOf(t).filter(isIn).pop();
-        return { label: first(t), a: r ? selfAvg(r) : null, b: r ? mgrAvg(r) : null, tipText: t + (r ? ' – ' + monthLabel(r.month) + '\nSelf ' + f1(selfAvg(r)) + ' · You ' + f1(mgrAvg(r)) : ': nothing submitted yet') };
-      }), 5, C_SELF, C_TL, 420);
-    } else if (key === 'outcome') {
-      sub = 'Projected score at each appraisal date (1–5)';
-      chart = colChart(TECHS.map(function (t) {
-        var o = outs[t];
-        return { label: first(t), value: o.projected, color: o.band ? BAND_COL[o.band.cls] : '#9aa4ae', tipText: t + ': ' + (o.band ? f1(o.projected) + ' – ' + o.band.name : 'not enough data') };
-      }), 5, '#1f7190', 170, sub, 420);
-    } else if (key === 'ontime') {
-      sub = 'Of the last 6 months that were due';
-      chart = colChart(TECHS.map(function (t) {
-        var rs = reviewsOf(t).filter(function (r) { return r.month < CUR || TODAY > r.due; }).slice(-6);
-        var n = rs.filter(function (r) { return isIn(r) && !r.late; }).length;
-        return { label: first(t), value: rs.length ? n : null, color: rs.length && n < rs.length ? '#d99a12' : '#2f9a63', tipText: t + ': ' + n + ' of ' + rs.length + ' on time' };
-      }), 6, '#2f9a63', 170, sub, 420);
-    } else {
-      var dvals = TECHS.map(function (t) {
-        var ap = apDateOf(t), s = apStatus(ap);
-        return { label: first(t) + (s && s.state === 'overdue' ? ' ⚠' : ''), value: s && s.state !== 'overdue' ? s.days : null, color: apSoon(s) ? '#d99a12' : '#1f7190',
-          tipText: t + ': ' + (!s ? 'no date set' : s.state === 'overdue' ? overdueText(s).toLowerCase() + ' (' + fmtDate(ap) + ')' : daysToGo(s).toLowerCase() + ' (' + fmtDate(ap) + ') · ' + (s.state === 'due' ? 'due this month' : 'aim for ' + monthName(s.aimMonth))) };
-      });
-      var mx = Math.max(30, Math.max.apply(null, dvals.map(function (v) { return v.value || 0; })));
-      sub = 'Days until each appraisal · amber = in the aim month or due this month · ⚠ overdue';
-      chart = colChart(dvals, Math.ceil(mx / 30) * 30, '#1f7190', 170, sub, 420, 30);
-    }
-    return card(null, null, [h('div', { class: 'card-h' }, [h('div', null, [sel, h('div', { class: 'sub', text: sub })])]), chart], 'chartcard');
-  }
   function teamView() {
     if (!TECHS.length) {
       var steps = [
         ['Add your team', '⚙ Settings → Team → + Add a person. Search by name or email and click Add – access is set up for you.'],
         ['Set appraisal dates', '⚙ Settings → Team → each person\'s appraisal date (type it or use 📅) → Save settings.'],
-        ['Add expectations', 'Expectations → Shared ones for everyone and Individual ones per person (10 at most each). Drag to reorder.'],
+        ['Add expectations', 'Expectations → Shared ones for everyone and Individual ones per person. Drag to reorder.'],
         ['Start the month', 'Flow 1 creates each review and emails the link at 07:00 on the 1st – or run it now from Power Automate.']
       ];
       return h('div', { class: 'stack' }, [
@@ -1887,15 +1781,8 @@ window.ESGOneToOne = function (ctx) {
         return tile('Next appraisal', s ? daysToGo(s) : '—', s ? nextAp + ' · ' + fmtDate(s.ap) + (s.state === 'due' ? '' : ' · aim by ' + fmtDate(s.aimBy).slice(0, 6)) : 'Set dates in ⚙ Settings', apSoon(s) ? 'warn' : '');
       })()
     ]);
-    var bandCounts = SETTINGS.bands.map(function (b) {
-      var who = TECHS.filter(function (t) { return outs[t].band && outs[t].band.cls === b.cls; });
-      return { label: b.name, value: who.length, color: BAND_COL[b.cls], tipText: b.name + ': ' + (who.length ? who.join(', ') : 'nobody') };
-    });
-    var charts = h('div', { class: 'grid3', style: 'margin-top:14px' }, [
-      attentionCard(),
-      card('Expected appraisal outcomes', ('Number of ' + lc(L.many) + ' in each band'), [colChart(bandCounts, Math.max(3, Math.max.apply(null, bandCounts.map(function (b) { return b.value; }))), '#1f7190', 170, 'Expected outcome bands', 420)]),
-      teamChartCard(outs)
-    ]);
+    // Needs your attention takes the full width (the outcome and workload charts were duplicates of the table below)
+    var charts = h('div', { style: 'margin-top:14px' }, [attentionCard()]);
     var rows = TECHS.map(function (t) {
       var o = outs[t], r = currentOf(t), ap = apDateOf(t);
       var oa = actionsOf(function (ac, rr) { return rr.tech === t && ac.status === 'Open'; }, 'tl');
@@ -1935,7 +1822,7 @@ window.ESGOneToOne = function (ctx) {
       .sort(function (x, y) { return x.month === y.month ? (x.tech < y.tech ? -1 : 1) : (x.month < y.month ? 1 : -1); });
     var rows = rs.map(function (r) {
       var f = followOf(r);
-      return tr([r.tech, monthLabel(r.month), r.ch ? h('span', null, [chipFor(r), ' ', challengeChip(r)]) : chipFor(r),
+      return tr([r.tech, monthLabel(r.month), chipFor(r),
         r.submittedOn ? fmtDate(r.submittedOn) : '—', isIn(r) && r.answers.q3 ? r.answers.q3 + ' / 5' : '—', isIn(r) && r.answers.mood ? moodEmoji(r.answers.mood) : '—',
         isIn(r) ? f1(selfAvg(r)) : '—', isIn(r) ? f1(mgrAvg(r)) : '—',
         f === DEDICATED ? h('strong', { text: '1-to-1 requested' }) : (f ? f.replace(/\.$/, '').replace(/ —.*/, '') : '—'),
@@ -1952,12 +1839,15 @@ window.ESGOneToOne = function (ctx) {
   // TEAM LEADER – appraisal expectations
   // ---------------------------------------------------------------------------------------------
   function groupOf(e) { return e.scope === 'Shared' ? 'S' : 'I:' + e.tech; }
-  // Shared expectations are numbered 10, 20 … and individual ones 1010, 1020 … so shared always come first
-  // on a review form (Flow 1 copies them in SortOrder).
+  // SortOrder orders items within their own group only (Flow 1 puts every shared item before the individual ones), so any
+  // number of either can never collide. Older individual items numbered 1010, 1020 … still sort correctly.
   function nextSort(v) {
-    var g = groupOf(v), base = g === 'S' ? 0 : 1000;
-    return MASTER_EXPECTATIONS.filter(function (e) { return e.year === v.year && groupOf(e) === g; }).reduce(function (m, e) { return Math.max(m, e.sort); }, base) + 10;
+    var g = groupOf(v);
+    return MASTER_EXPECTATIONS.filter(function (e) { return groupOf(e) === g; }).reduce(function (m, e) { return Math.max(m, e.sort); }, 0) + 10;
   }
+  // An expectation's year is the first appraisal year it applies to; it carries on until it is retired (Flow 1 looks back five years)
+  function yearBack(y, n) { var a = +y.slice(0, 4) - n; return a + '/' + String(a + 1).slice(2); }
+  function appliesIn(e, y) { return !e.year || (e.year <= y && e.year >= yearBack(y, 5)); }
   function expectationsView() {
     if (!state.expYear) { state.expYear = CUR_YEAR; }
     var years = Array.from(new Set(MASTER_EXPECTATIONS.map(function (e) { return e.year; }).concat([CUR_YEAR]))).filter(Boolean).sort().reverse();
@@ -1969,15 +1859,15 @@ window.ESGOneToOne = function (ctx) {
       if (to < 0 || to >= arr.length || from === to) { return; }
       var list2 = arr.slice(), moved = list2.splice(from, 1)[0];
       list2.splice(to, 0, moved);
-      var base = groupOf(moved) === 'S' ? 0 : 1000, changes = [];
-      list2.forEach(function (e, k) { var ns = base + 10 * (k + 1); if (e.sort !== ns) { changes.push([e, ns]); } });
+      var changes = [];
+      list2.forEach(function (e, k) { var ns = 10 * (k + 1); if (e.sort !== ns) { changes.push([e, ns]); } });
       busy('order', async function () {
         for (var c = 0; c < changes.length; c++) { await spUpdate(CONFIG.lists.exp, changes[c][0].id, { SortOrder: String(changes[c][1]) }); changes[c][0].sort = changes[c][1]; }
         toast('Order saved – applies from the next monthly review.'); render(false);
       }).catch(function () { render(false); });
     }
-    function activeCount(t, year, excludeId) {
-      return MASTER_EXPECTATIONS.filter(function (e) { return e.active && e.year === year && e.id !== excludeId && (e.scope === 'Shared' || e.tech === t); }).length;
+    function activeCount(t, year, scope) {
+      return MASTER_EXPECTATIONS.filter(function (e) { return e.active && appliesIn(e, year) && (scope ? e.scope === scope && (scope === 'Shared' || e.tech === t) : (e.scope === 'Shared' || e.tech === t)); }).length;
     }
     var tIn = h('input', { type: 'text', id: 'oto-x-title', maxlength: '255' }); tIn.value = f.title;
     var mIn = h('textarea', { id: 'oto-x-meas', rows: 3 }); mIn.value = f.measures;
@@ -1993,19 +1883,15 @@ window.ESGOneToOne = function (ctx) {
     }
     function saveExp() {
       var v = { title: tIn.value.trim(), measures: mIn.value.trim(), year: yIn.value.trim(), scope: scSel.value, tech: scSel.value === 'Individual' ? teSel.value : '', active: acIn.checked };
-      // order is set by dragging in the list; a new item (or one moved to another group/year) goes to the end of its group
-      v.sort = editing && groupOf(editing) === groupOf(v) && editing.year === v.year ? editing.sort : nextSort(v);
+      // order is set by dragging in the list; a new item (or one moved to another group) goes to the end of its group
+      v.sort = editing && groupOf(editing) === groupOf(v) ? editing.sort : nextSort(v);
       if (!v.title || !v.measures || !v.year) { toast('Title, measures and appraisal year are required.', true); return; }
-      // Flow 1 matches the year exactly (e.g. 2026/27), so anything else would never reach a review
+      // the year must be exactly yyyy/yy (e.g. 2026/27): it is compared as text, so anything else would never reach a review
       if (!/^\d{4}\/\d{2}$/.test(v.year) || (Number(v.year.slice(2, 4)) + 1) % 100 !== Number(v.year.slice(5))) {
         toast('Appraisal year must look like ' + CUR_YEAR + ' (April to March).', true); return;
       }
       if (v.scope === 'Individual' && !v.tech) { toast(('Choose the ' + lc(L.one) + ' for an individual expectation.'), true); return; }
       if (v.scope === 'Individual' && !(TECH_INFO[v.tech] && TECH_INFO[v.tech].claims)) { toast(('That ' + lc(L.one) + ' has no account set in the ' + L.many + ' list.'), true); return; }
-      if (v.active) {
-        var over = (v.scope === 'Shared' ? TECHS : [v.tech]).filter(function (t) { return activeCount(t, v.year, editing ? editing.id : -1) + 1 > CONFIG.maxExpectations; });
-        if (over.length) { toast('Would take ' + over.join(', ') + ' over ' + CONFIG.maxExpectations + ' active expectations.', true); return; }
-      }
       busy('exp', async function () {
         if (editing) {
           await spUpdate(CONFIG.lists.exp, editing.id, fieldsFor(v));
@@ -2025,23 +1911,22 @@ window.ESGOneToOne = function (ctx) {
         h('div', null, [h('label', { class: 'field', for: 'oto-x-title', text: 'Expectation' }), tIn]),
         h('div', null, [h('label', { class: 'field', for: 'oto-x-meas', text: 'How success is measured' }), mIn]),
         h('div', { class: 'fgrid c2' }, [h('div', null, [h('label', { class: 'field', for: 'oto-x-scope', text: 'Applies to' }), scSel]), h('div', null, [h('label', { class: 'field', for: 'oto-x-tech', text: L.one }), teSel])]),
-        h('div', { class: 'fgrid c2' }, [h('div', null, [h('label', { class: 'field', for: 'oto-x-year', text: 'Appraisal year' }), yIn]), h('div', { class: 'small muted', style: 'align-self:end;padding-bottom:6px', text: 'New items go to the end of their list – drag ⋮⋮ to reorder.' })]),
+        h('div', { class: 'fgrid c2' }, [h('div', null, [h('label', { class: 'field', for: 'oto-x-year', text: 'First appraisal year it applies to' }), yIn]),
+          h('div', { class: 'small muted', style: 'align-self:end;padding-bottom:6px', text: 'It carries on into later years until you retire it.' })]),
         h('label', { class: 'small', style: 'display:flex;gap:8px;align-items:center;font-weight:600' }, [acIn, 'Active']),
         h('div', { class: 'btn-row' }, [h('button', { class: 'btn primary', type: 'button', text: editing ? 'Save changes' : 'Add expectation', onclick: saveExp }),
           editing ? h('button', { class: 'btn ghost', type: 'button', text: 'Cancel', onclick: function () { state.expEdit = null; render(false); } }) : null])
       ])
     ]);
-    var cov = card(('Active expectations per ' + lc(L.one)), state.expYear + ' · maximum ' + CONFIG.maxExpectations, [
-      legend([{ color: '#1f7190', label: 'Shared' }, { color: '#ef7d3a', label: 'Individual' }])
-    ].concat(TECHS.map(function (t) {
-      var sh = MASTER_EXPECTATIONS.filter(function (e) { return e.active && e.year === state.expYear && e.scope === 'Shared'; }).length;
-      var ow = MASTER_EXPECTATIONS.filter(function (e) { return e.active && e.year === state.expYear && e.scope === 'Individual' && e.tech === t; }).length;
-      var cells = []; for (var i = 0; i < CONFIG.maxExpectations; i++) { cells.push(h('i', { class: i < sh ? 's' : i < sh + ow ? 'o' : '' })); }
-      return tip(h('div', { class: 'covbar' }, [h('span', { text: t }), h('div', { class: 'bar' }, cells), h('b', { class: 'num', text: (sh + ow) + ' / ' + CONFIG.maxExpectations })]), t + ': ' + sh + ' shared + ' + ow + ' individual');
-    })));
+    var cov = card(('Active expectations per ' + lc(L.one)), 'In ' + state.expYear + ' · no limit', [table([L.one, 'Shared', 'Individual', 'Total'], TECHS.map(function (t) {
+      var sh = activeCount(t, state.expYear, 'Shared'), ow = activeCount(t, state.expYear, 'Individual');
+      return tr([h('b', { text: t }), String(sh), String(ow), h('b', { text: String(sh + ow) })]);
+    }), { empty: 'No ' + lc(L.many) + ' yet.' }),
+      MASTER_EXPECTATIONS.some(function (e) { return e.active; }) && TECHS.some(function (t) { return activeCount(t, state.expYear) > 30; })
+        ? h('div', { class: 'banner amber', style: 'margin-top:8px', text: 'More than 30 active for someone – that works, but each monthly form gets long.' }) : null]);
     var yearSel = h('select', { id: 'oto-x-yf', onchange: function () { state.expYear = yearSel.value; render(false); } }, years.map(function (y) { var o = h('option', { value: y, text: y }); o.selected = y === state.expYear; return o; }));
     var retChk = h('input', { type: 'checkbox', onchange: function () { state.showRetired = retChk.checked; render(false); } }); retChk.checked = state.showRetired;
-    var list = MASTER_EXPECTATIONS.filter(function (e) { return e.year === state.expYear && (state.showRetired || e.active); });
+    var list = MASTER_EXPECTATIONS.filter(function (e) { return appliesIn(e, state.expYear) && (state.showRetired || e.active); });
     function bySort(x, y) { return x.sort - y.sort || x.id - y.id; }
     function rowFor(e, i, arr) {
       var row = h('tr', { class: 'exprow' + (e.active ? '' : ' retired'), draggable: 'true', 'data-eid': String(e.id) });
@@ -2053,44 +1938,50 @@ window.ESGOneToOne = function (ctx) {
       [h('td', { class: 'dragcell' }, [h('span', { class: 'grip', title: 'Drag to reorder', 'aria-hidden': 'true', text: '⋮⋮' }),
         h('button', { class: 'mv', type: 'button', 'aria-label': 'Move ' + e.title + ' up', title: 'Move up', disabled: i === 0, text: '▲', onclick: function () { reorder(arr, i, i - 1); } }),
         h('button', { class: 'mv', type: 'button', 'aria-label': 'Move ' + e.title + ' down', title: 'Move down', disabled: i === arr.length - 1, text: '▼', onclick: function () { reorder(arr, i, i + 1); } })]),
-        h('td', { style: 'font-weight:650;width:30%', text: e.title }),
+        h('td', { style: 'font-weight:650;width:30%' }, [e.title, e.year && e.year !== state.expYear ? h('div', { class: 'small muted', style: 'font-weight:400', text: 'Since ' + e.year }) : null]),
         h('td', { class: 'small', text: e.measures }),
         h('td', null, h('span', { class: 'chip ' + (e.active ? 'green' : ''), text: e.active ? 'Active' : 'Retired' })),
-        h('td', { style: 'width:150px' }, h('div', { class: 'btn-row', style: 'flex-wrap:nowrap' }, [
+        h('td', { style: 'width:1%;white-space:nowrap' }, h('div', { class: 'btn-row', style: 'flex-wrap:nowrap' }, [
           h('button', { class: 'btn small', type: 'button', text: 'Edit', onclick: function () { state.expEdit = e.id; render(true); } }),
           h('button', { class: 'btn small ghost', type: 'button', text: e.active ? 'Retire' : 'Reactivate', onclick: function () {
-            if (!e.active) {
-              var over = (e.scope === 'Shared' ? TECHS : [e.tech]).filter(function (t) { return activeCount(t, e.year, e.id) + 1 > CONFIG.maxExpectations; });
-              if (over.length) { toast('Would take ' + over.join(', ') + ' over ' + CONFIG.maxExpectations + ' active expectations.', true); return; }
-            }
             busy('exp', async function () {
               await spUpdate(CONFIG.lists.exp, e.id, { Active: e.active ? '0' : '1' });
               e.active = !e.active; render(false);
             }).catch(function () {});
+          } }),
+          // only a retired item can be deleted – past reviews keep their own copy, so their history never changes
+          e.active ? null : h('button', { class: 'btn small danger', type: 'button', text: 'Delete permanently', onclick: function () {
+            confirmBox('Delete "' + e.title + '" permanently?', 'It is removed from the expectations list for good (SharePoint keeps it in the site recycle bin for about 93 days in case of a mistake). Past monthly reviews and reports keep their own copy and ratings – they are not changed.', 'Delete permanently', function () {
+              busy('expdel', async function () {
+                await spRecycle(CONFIG.lists.exp, e.id);
+                MASTER_EXPECTATIONS = MASTER_EXPECTATIONS.filter(function (x) { return x !== e; });
+                if (state.expEdit === e.id) { state.expEdit = null; }
+                toast('Deleted.'); render(false);
+              }).catch(function () {});
+            });
           } })]))
       ].forEach(function (c) { row.appendChild(c); });
       return row;
     }
-    var body = [];
+    // one compact section per group: Shared, then each person's own
+    function group(title, sub, kind, items, empty) {
+      return h('section', { class: 'expgroup ' + kind }, [
+        h('header', null, [h('span', { class: 'eg-title', text: title }), h('span', { class: 'small muted', text: sub })]),
+        items.length ? h('table', { class: 'tbl' }, h('tbody', null, items.map(rowFor))) : h('div', { class: 'muted small', style: 'padding:8px 12px', text: empty })
+      ]);
+    }
     var shared = list.filter(function (e) { return e.scope === 'Shared'; }).sort(bySort);
-    body.push(h('tr', { class: 'grp' }, h('td', { colspan: '5', text: ('Shared – applies to every ' + lc(L.one) + ' (') + shared.filter(function (e) { return e.active; }).length + ' active)' })));
-    body = body.concat(shared.length ? shared.map(rowFor) : [h('tr', null, h('td', { colspan: '5', class: 'muted', text: 'None.' }))]);
+    var groups = [group('Shared', 'Applies to every ' + lc(L.one) + ' · ' + shared.filter(function (e) { return e.active; }).length + ' active', 'shared', shared, 'None.')];
     TECHS.forEach(function (t) {
       var own = list.filter(function (e) { return e.scope === 'Individual' && e.tech === t; }).sort(bySort);
-      body.push(h('tr', { class: 'grp' }, h('td', { colspan: '5', text: t + ' – individual (' + activeCount(t, state.expYear, -1) + ' of ' + CONFIG.maxExpectations + ' active including shared)' })));
-      body = body.concat(own.length ? own.map(rowFor) : [h('tr', null, h('td', { colspan: '5', class: 'muted small', text: 'No individual expectations.' }))]);
+      groups.push(group(t, own.filter(function (e) { return e.active; }).length + ' individual · ' + activeCount(t, state.expYear) + ' in total with shared', 'ind', own, 'No individual expectations.'));
     });
-    var orphans = list.filter(function (e) { return e.scope === 'Individual' && TECHS.indexOf(e.tech) < 0; });
-    if (orphans.length) {
-      body.push(h('tr', { class: 'grp' }, h('td', { colspan: '5', text: ('Needs attention – individual expectations without an active ' + lc(L.one)) })));
-      body = body.concat(orphans.map(rowFor));
-    }
+    var orphans = list.filter(function (e) { return e.scope === 'Individual' && TECHS.indexOf(e.tech) < 0; }).sort(bySort);
+    if (orphans.length) { groups.push(group('Needs attention', 'Individual expectations without an active ' + lc(L.one), 'orphan', orphans, '')); }
     var listCard = card('Expectations – ' + state.expYear, list.length + ' shown', [
       h('div', { class: 'filters' }, [h('div', null, [h('label', { for: 'oto-x-yf', text: 'Appraisal year' }), yearSel]),
         h('label', { class: 'small', style: 'display:flex;gap:6px;align-items:center;font-weight:600;padding-bottom:8px' }, [retChk, 'Show retired'])]),
-      h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl' }, [
-        h('thead', null, h('tr', null, ['Order', 'Expectation', 'How success is measured', 'Status', ''].map(function (x) { return h('th', { text: x }); }))),
-        h('tbody', null, body)]))
+      h('div', { class: 'expgroups' }, groups)
     ]);
     return h('div', { class: 'layout left', style: 'margin-top:0' }, [h('div', { class: 'stack' }, [form, cov]), h('div', { class: 'stack' }, [listCard])]);
   }
@@ -2156,6 +2047,128 @@ window.ESGOneToOne = function (ctx) {
   }
 
   // ---------------------------------------------------------------------------------------------
+  // TL amendments: any change after release, or any change to a technician's submitted answers.
+  // Each is recorded first (Draft) in the Owners-only 1-to-1 Amendments list, then the review is written, then the
+  // record goes to Pending and Flow 8 emails the technician that it was amended (no content). Who and when are
+  // SharePoint's own Author and Created.
+  // ---------------------------------------------------------------------------------------------
+  var AMEND_LABELS = {
+    Q1WentWell: 'Q1 What has gone well', Q2Issue: 'Q2 Issue', Q2Impact: 'Q2 Impact', Q2Tried: 'Q2 What was tried', Q2Support: 'Q2 Support needed',
+    Q3WorkloadRating: 'Q3 Workload rating', Q3WorkloadComment: 'Q3 Workload comment', Q4WellbeingRaise: 'Q4 Wellbeing (Yes/No)', Q4WellbeingDetail: 'Q4 Wellbeing detail',
+    Q5PlanningRaise: 'Q5 Planning (Yes/No)', Q5PlanningDetail: 'Q5 Planning detail', Q6DevRaise: 'Q6 Development (Yes/No)', Q6DevWhat: 'Q6 Development – what',
+    Q6DevWhy: 'Q6 Development – why', Q7ManagerFeedback: 'Q7 Feedback for line manager', ExpectationsJson: 'Q8 Self-ratings and comments', Q9FollowUp: 'Q9 Follow-up preference',
+    Mood: 'Energy', WinOfMonth: 'Win of the month',
+    FB_Q1: 'Feedback on Q1', FB_Q2: 'Feedback on Q2', FB_Q3: 'Feedback on Q3', FB_Q4: 'Feedback on Q4', FB_Q5: 'Feedback on Q5', FB_Q6: 'Feedback on Q6',
+    FB_Q7: 'Response to Q7', FB_Q9: 'Comment on Q9', FB_Overall: 'Overall feedback', ExpectationFeedbackJson: 'Q8 Your ratings and feedback',
+    FollowUpDecision: 'Follow-up decision', ActionsJson: 'Agreed actions', ActionsStatus: 'Actions status', MeetingDate: '1-to-1 meeting date', NextActionDue: 'Next action deadline'
+  };
+  var NOTIFY = ['Draft', 'Pending', 'Sending', 'Sent', 'Failed', 'Retry', 'Cancelled'];
+  function buildAmendment(x) {
+    var ch = safeJson(x.ChangesJson, []);
+    return { id: x.ID, reviewId: Number(x.ReviewItemId) || 0, mrId: Number(x.ManagerReviewId) || 0, month: str(x.MonthKey), reason: str(x.Reason),
+      fields: str(x.ChangedFields), changes: Array.isArray(ch) ? ch.filter(function (c) { return c && typeof c === 'object' && AMEND_LABELS[c.f]; }) : [],
+      status: NOTIFY.indexOf(str(x.NotifyStatus)) >= 0 ? str(x.NotifyStatus) : 'Draft', notifiedOn: str(x.NotifiedOn), error: str(x.NotifyError),
+      created: str(x.Created), modified: str(x.Modified), by: str(x.Author && x.Author.Title), tech: str(x.Technician && x.Technician.Title) };
+  }
+  function amendmentsOf(r) { return AMENDMENTS.filter(function (x) { return x.reviewId === r.id; }).sort(function (p, q) { return p.created < q.created ? -1 : 1; }); }
+  function amendAge(x, fromChange) { var t = new Date(fromChange && x.modified ? x.modified : x.created).getTime(); return isNaN(t) ? 0 : Date.now() - t; }
+  // Every column an amendment can change, with its value now: the review's own columns and the Manager Review's.
+  function amendValues(r, answers, fb) {
+    var v = { answers: answers, fb: fb, snapshot: r.snapshot }, out = {};
+    var t = techFields(v, r.status), m = mgrFields(v), d = mgrDates(v);
+    delete t.ReviewStatus;
+    Object.keys(t).forEach(function (k) { out['rv:' + k] = String(t[k] === null || t[k] === undefined ? '' : t[k]); });
+    Object.keys(m).concat(Object.keys(d)).forEach(function (k) { var x = k in m ? m[k] : d[k]; out['mr:' + k] = String(x === null || x === undefined ? '' : x); });
+    return out;
+  }
+  function amendDiff(r, base) {
+    var b = amendValues(r, base.answers, base.fb), a = amendValues(r, r.answers, r.fb);
+    return Object.keys(a).filter(function (k) { return a[k] !== b[k]; }).map(function (k) {
+      var f = k.slice(3);
+      return { l: k.slice(0, 2), f: f, n: AMEND_LABELS[f] || f, b: b[k], a: a[k] };
+    });
+  }
+  // A Draft left behind (the page closed mid-save): has the review got the new values?
+  function draftLanded(x) {
+    var r = REVIEWS.find(function (y) { return y.id === x.reviewId; });
+    if (!r || !x.changes.length) { return false; }
+    var now = amendValues(r, r.answers, r.fb);
+    return x.changes.some(function (c) { var k = (c.l === 'mr' ? 'mr:' : 'rv:') + c.f; return k in now && now[k] === String(c.a) && String(c.a) !== String(c.b); });
+  }
+  function setNotify(x, status, msg) {
+    return busy('notify' + x.id, async function () {
+      await spUpdate(CONFIG.lists.amendments, x.id, { NotifyStatus: status });
+      x.status = status; x.modified = new Date().toISOString();
+      toast(msg); render(false);
+    }).catch(function () {});
+  }
+  function amendmentAttention() {
+    var items = [];
+    AMENDMENTS.forEach(function (x) {
+      var who = x.tech || 'a team member', when = monthLabel(x.month), age = amendAge(x), queued = amendAge(x, true);
+      if (x.status === 'Failed') {
+        items.push({ pri: 1, ico: '✉', btn: 'Resend', text: 'The amendment email to ' + who + ' (' + when + ') couldn\'t be sent' + (x.error ? ': ' + x.error.slice(0, 120) : ''),
+          fn: function () { setNotify(x, 'Retry', 'Sending the amendment email again.'); } });
+      } else if ((x.status === 'Pending' || x.status === 'Retry' || x.status === 'Sending') && queued > 3600000) {
+        items.push({ pri: 2, ico: '✉', btn: 'Resend', text: 'The amendment email to ' + who + ' (' + when + ') hasn\'t been sent yet – check Flow 8 is on',
+          fn: function () { setNotify(x, 'Retry', 'Sending the amendment email again.'); } });
+      } else if (x.status === 'Draft' && age > 600000) {
+        if (draftLanded(x)) {
+          items.push({ pri: 1, ico: '✎', btn: 'Send notice', text: 'An amendment to ' + who + '\'s ' + when + ' 1-to-1 was saved but ' + first(who) + ' wasn\'t told yet',
+            fn: function () { setNotify(x, 'Pending', first(who) + ' will be emailed that the 1-to-1 was amended.'); } });
+        } else {
+          items.push({ pri: 2, ico: '✎', btn: 'Dismiss', text: 'An amendment to ' + who + '\'s ' + when + ' 1-to-1 wasn\'t saved – open it and amend again if it is still needed',
+            fn: function () {
+              confirmBox('Dismiss the unsaved amendment?', 'The 1-to-1 still has its earlier answers. The record stays in the audit, marked Cancelled, and nobody is emailed.', 'Dismiss', function () {
+                setNotify(x, 'Cancelled', 'Dismissed.'); });
+            } });
+        }
+      }
+    });
+    return items;
+  }
+  function amendStatusChip(x) {
+    var cls = { Sent: 'green', Failed: 'red', Draft: 'amber', Cancelled: '' }[x.status];
+    var txt = { Draft: 'Not finished', Pending: 'Email queued', Retry: 'Email queued', Sending: 'Sending email', Sent: 'Emailed ' + (x.notifiedOn ? fmtDate(localDate(x.notifiedOn)) : ''), Failed: 'Email failed', Cancelled: 'Cancelled – not saved' }[x.status];
+    return h('span', { class: 'chip ' + (cls === undefined ? 'blue' : cls), text: txt });
+  }
+  function amendHistoryCard(r) {
+    var list = amendmentsOf(r);
+    if (!list.length) { return null; }
+    return card('Amended (' + list.length + ')', 'Restricted audit – only you can see this. ' + r.tech + ' is told it was amended, not what changed.', list.map(function (x) {
+      var when = new Date(x.created);
+      return h('details', { class: 'amend' }, [
+        h('summary', null, [h('b', { text: isNaN(when.getTime()) ? '—' : fmtDate(localDate(x.created)) + ' ' + when.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: CONFIG.timeZone }) }),
+          h('span', { text: ' · ' + (x.by || '—') + ' · ' + (x.fields || x.changes.map(function (c) { return c.n; }).join('; ')) + ' ' }), amendStatusChip(x)]),
+        h('div', { class: 'small', style: 'margin:6px 0' }, [h('b', { text: 'Reason: ' }), x.reason || '—']),
+        table(['Field', 'Before', 'After'], x.changes.map(function (c) {
+          return tr([AMEND_LABELS[c.f] || c.f, h('span', { class: 'amend-val', text: amendShow(c.f, c.b, r) }), h('span', { class: 'amend-val', text: amendShow(c.f, c.a, r) })]);
+        }), { empty: 'No details recorded.' })
+      ]);
+    }));
+  }
+  // Before/after values in words (JSON columns are shown as readable lines)
+  function amendShow(f, v, r) {
+    v = String(v === null || v === undefined ? '' : v);
+    if (!v) { return '(blank)'; }
+    var j = /Json$/.test(f) ? safeJson(v, null) : null;
+    if (Array.isArray(j)) {
+      if (!j.length) { return '(none)'; }
+      return j.map(function (e) {
+        if (f === 'ActionsJson') { return '• ' + str(e.text) + ' – ' + str(e.owner) + ', due ' + (str(e.due) ? fmtDate(str(e.due)) : '—') + ', ' + str(e.status); }
+        var sn = r && r.snapshot.find(function (x) { return String(x.id) === String(e.id); });
+        var title = str(e.title) || (sn ? sn.title : 'Expectation');
+        return '• ' + title + ': ' + (r15(e.rating) ? r15(e.rating) + ' – ' + PROGRESS[r15(e.rating) - 1].title : 'not rated') + (str(e.comment || e.feedback) ? ' – ' + str(e.comment || e.feedback) : '');
+      }).join('\n');
+    }
+    if (/Date$|Due$/.test(f) && /^\d{4}-\d{2}-\d{2}$/.test(v)) { return fmtDate(v); }
+    if (f === 'Mood') { return moodEmoji(Number(v)); }
+    if (f === 'Q3WorkloadRating') { var w = WORKLOAD.find(function (x) { return String(x.value) === v; }); return w ? w.title : v; }
+    return v;
+  }
+
+
+  // ---------------------------------------------------------------------------------------------
   // TEAM LEADER – review a technician's month
   // ---------------------------------------------------------------------------------------------
   function managerView() {
@@ -2163,59 +2176,82 @@ window.ESGOneToOne = function (ctx) {
     if (!r) { return card('Review not found', null, [h('p', { text: 'This review could not be found. It may have been deleted.' })]); }
     if (!r.mrId) { return card('Review record missing', null, [h('p', { text: 'There is no Manager Reviews record for this Monthly Review. Check Flow 1 ran correctly (see the configuration reference).' })]); }
     var a = r.answers, fb = r.fb, has = r.state !== 'Open';
+    // Released: read-only unless amending. Submitted (not released): your feedback saves as normal; the answers change only by amending.
+    var amending = !!(state.amend && state.amend.id === r.id), canAmend = V14 && (r.released || r.state === 'Submitted');
+    var amendTech = amending && r.state !== 'Closed - Not Submitted';
+    var editTl = r.released ? amending : !amending, ro = !editTl;
     function ans(text) { return h('div', { class: 'answer' + (text ? '' : ' empty'), text: text || (has ? '(left blank)' : '(not submitted yet)') }); }
-    function fbBox(key, label) { return h('div', { style: 'margin-top:10px' }, textBox(label || 'Your feedback', fb[key], function (v) { fb[key] = v; }, false, 2)); }
+    function fbBox(key, label) { return h('div', { style: 'margin-top:10px' }, textBox(label || 'Your feedback', fb[key], function (v) { fb[key] = v; }, ro, 2)); }
     function yn(v, detail) { return has ? (v || '(not answered)') + (v === 'Yes' && detail ? ' – ' + detail : '') : ''; }
+    function tb(label, key, rows) { return textBox(label, a[key], function (v) { a[key] = v; }, false, rows || 2); }
+    function ynEdit(key, title, details) {
+      return h('div', { class: 'stack amend-edit', style: 'gap:8px' }, [labelled(ynSeg(a[key], function (v) { a[key] = v; }), title + ' – ' + L.one + '\'s answer')].concat(details));
+    }
     var wl = WORKLOAD.find(function (w) { return w.value === a.q3; });
     var main = [
-      qCard(1, 'What has gone well', null, [ans(has ? a.q1 : ''), fbBox('q1')]),
-      qCard(2, 'Challenges, blockers and support needed', null, [has && (a.q2.issue || a.q2.impact || a.q2.tried || a.q2.support)
-        ? h('div', { class: 'fgrid c4' }, [['Issue', a.q2.issue], ['Impact', a.q2.impact], ['Tried', a.q2.tried], ['Support needed', a.q2.support]].map(function (p) {
-          return h('div', null, [h('div', { class: 'small muted', style: 'font-weight:600', text: p[0] }), ans(p[1])]); }))
-        : ans(''), fbBox('q2')]),
-      qCard(3, 'Workload', null, [ans(has && wl ? wl.title + ' – ' + wl.desc + (a.q3c ? '\n' + a.q3c : '') : ''), fbBox('q3')]),
-      qCard(4, 'Wellbeing and support', null, [ans(yn(a.q4, a.q4d)), fbBox('q4')]),
-      qCard(5, 'Upcoming planning', null, [ans(yn(a.q5, a.q5d)), fbBox('q5')]),
-      qCard(6, 'Development, training and aspirations', null, [ans(yn(a.q6, a.q6what ? a.q6what + (a.q6why ? ' (' + a.q6why + ')' : '') : '')), fbBox('q6')]),
-      qCard(7, 'Feedback for ' + lc(L.mgr), null, [ans(has ? a.q7 : ''), fbBox('q7', 'Your response')]),
+      qCard(1, 'What has gone well', null, [amendTech ? tb(L.one + '\'s answer', 'q1', 3) : ans(has ? a.q1 : ''), fbBox('q1')]),
+      qCard(2, 'Challenges, blockers and support needed', null, [amending
+        ? h('div', { class: 'fgrid c4' }, [['Issue', 'issue'], ['Impact', 'impact'], ['Tried', 'tried'], ['Support needed', 'support']].map(function (p) {
+          return textBox(p[0], a.q2[p[1]], function (v) { a.q2[p[1]] = v; }, false, 3); }))
+        : has && (a.q2.issue || a.q2.impact || a.q2.tried || a.q2.support)
+          ? h('div', { class: 'fgrid c4' }, [['Issue', a.q2.issue], ['Impact', a.q2.impact], ['Tried', a.q2.tried], ['Support needed', a.q2.support]].map(function (p) {
+            return h('div', null, [h('div', { class: 'small muted', style: 'font-weight:600', text: p[0] }), ans(p[1])]); }))
+          : ans(''), fbBox('q2')]),
+      qCard(3, 'Workload', null, [amendTech ? h('div', { class: 'stack amend-edit', style: 'gap:8px' }, [choiceGroup('Workload rating', WORKLOAD, a.q3, function (v) { a.q3 = v; }, false, 'c5'), tb('Comment', 'q3c')])
+        : ans(has && wl ? wl.title + ' – ' + wl.desc + (a.q3c ? '\n' + a.q3c : '') : ''), fbBox('q3')]),
+      qCard(4, 'Wellbeing and support', null, [amendTech ? ynEdit('q4', 'Wellbeing', [tb('Details', 'q4d')]) : ans(yn(a.q4, a.q4d)), fbBox('q4')]),
+      qCard(5, 'Upcoming planning', null, [amendTech ? ynEdit('q5', 'Planning', [tb('Details', 'q5d')]) : ans(yn(a.q5, a.q5d)), fbBox('q5')]),
+      qCard(6, 'Development, training and aspirations', null, [amendTech ? ynEdit('q6', 'Development', [h('div', { class: 'fgrid c2' }, [tb('What', 'q6what'), tb('Why', 'q6why')])])
+        : ans(yn(a.q6, a.q6what ? a.q6what + (a.q6why ? ' (' + a.q6why + ')' : '') : '')), fbBox('q6')]),
+      qCard(7, 'Feedback for ' + lc(L.mgr), null, [amendTech ? tb(L.one + '\'s answer', 'q7', 3) : ans(has ? a.q7 : ''), fbBox('q7', 'Your response')]),
       qCard(8, 'Appraisal expectations', h('span', { class: 'small muted', text: 'Your ratings feed the appraisal outlook' }), [r.snapshot.length ? table(['Expectation', L.one, 'Your rating', 'Your feedback'],
         r.snapshot.map(function (e) {
           var x = a.q8.find(function (q) { return String(q.id) === String(e.id); }) || {};
           var lbl = h('div', { class: 'small muted', style: 'margin-top:4px', text: fb.expRating[e.id] ? PROGRESS[fb.expRating[e.id] - 1].title : 'Not rated' });
-          return h('tr', { class: challenged(r, 'exp:' + e.id) ? 'challenged' : null }, [
-            h('td', { class: 'top', style: 'width:28%' }, [h('div', { style: 'font-weight:650', text: e.title }), h('div', { class: 'small muted', text: e.measures }),
-              challenged(r, 'exp:' + e.id) ? h('span', { class: 'chip amber', text: '⚑ Challenged' }) : null]),
-            h('td', { class: 'top', style: 'width:24%' }, has ? [h('div', { style: 'font-weight:650', text: x.rating ? x.rating + ' – ' + PROGRESS[x.rating - 1].title : 'Not rated' }), x.comment ? h('div', { class: 'small', text: x.comment }) : null] : h('span', { class: 'muted', text: '—' })),
-            h('td', { class: 'top', style: 'width:200px' }, [ratingSeg(fb.expRating[e.id], function (v) { fb.expRating[e.id] = v; lbl.textContent = PROGRESS[v - 1].title; refreshSide(); }, false), lbl]),
-            h('td', { class: 'top' }, textBox(null, fb.exp[e.id], function (v) { fb.exp[e.id] = v; }, false, 2))
+          var techCell = amending
+            ? [labelled(ratingSeg(x.rating, function (v) { x.rating = v; refreshSide(); }, false), L.one + '\'s rating for ' + e.title),
+              h('div', { style: 'margin-top:6px' }, textBox(null, x.comment, function (v) { x.comment = v; }, false, 2, L.one + '\'s comment for ' + e.title))]
+            : has ? [h('div', { style: 'font-weight:650', text: x.rating ? x.rating + ' – ' + PROGRESS[x.rating - 1].title : 'Not rated' }), x.comment ? h('div', { class: 'small', text: x.comment }) : null] : h('span', { class: 'muted', text: '—' });
+          return h('tr', null, [
+            h('td', { class: 'top', style: 'width:28%' }, [h('div', { style: 'font-weight:650', text: e.title }), h('div', { class: 'small muted', text: e.measures })]),
+            h('td', { class: 'top', style: amendTech ? 'width:220px' : 'width:24%' }, techCell),
+            h('td', { class: 'top', style: 'width:200px' }, [ratingSeg(fb.expRating[e.id], function (v) { fb.expRating[e.id] = v; lbl.textContent = PROGRESS[v - 1].title; refreshSide(); }, ro), lbl]),
+            h('td', { class: 'top' }, textBox(null, fb.exp[e.id], function (v) { fb.exp[e.id] = v; }, ro, 2, 'Your feedback on ' + e.title))
           ]);
         })) : h('p', { class: 'muted', text: 'No expectations were set for this month.' })]),
-      qCard(9, 'Follow-up', null, [ans(has ? (L.one + ' preference: ') + (a.q9 || r.mrTechFollowUp || '(not answered)') : ''), fbBox('q9', 'Your comment')]),
-      card('Agreed actions', 'Add as many as needed – each needs an owner, close-out criteria and a deadline', [actionsEditor(r)], challenged(r, 'actions') ? 'challenged' : '',
-        challenged(r, 'actions') ? h('span', { class: 'chip amber', text: '⚑ Challenged' }) : null),
-      card('Overall feedback', null, [textBox(null, fb.overall, function (v) { fb.overall = v; }, false, 3)], challenged(r, 'overall') ? 'challenged' : '',
-        challenged(r, 'overall') ? h('span', { class: 'chip amber', text: '⚑ Challenged' }) : null)
-    ];
-    var canComplete = r.state === 'Submitted', canClose = r.state === 'Open' && TODAY > r.due && !r.processing;
+      qCard(9, 'Follow-up', null, [amendTech ? h('div', { class: 'amend-edit' }, choiceGroup('Follow-up preference', FOLLOW.map(function (f) { return { value: f, title: f }; }), a.q9, function (v) { a.q9 = v; }, false, 'c3'))
+        : ans(has ? (L.one + ' preference: ') + (a.q9 || r.mrTechFollowUp || '(not answered)') : ''), fbBox('q9', 'Your comment')]),
+      amendTech ? card('Energy and win of the month', L.one + '\'s answers', [h('div', { class: 'stack amend-edit', style: 'gap:10px' }, [
+        labelled(seg([{ value: 0, text: 'Not given' }].concat(MOODS.map(function (m) { return { value: m.value, text: m.emo + ' ' + m.label }; })), a.mood || 0, function (v) { a.mood = v || null; refreshSide(); }, false, 'words'), 'Energy'),
+        tb('Win of the month', 'win')])]) : null,
+      card('Agreed actions', ro ? null : 'Add as many as needed – each needs an owner, close-out criteria and a deadline', [actionsEditor(r, ro)]),
+      card('Overall feedback', null, [textBox(null, fb.overall, function (v) { fb.overall = v; }, ro, 3, 'Overall feedback')]),
+      amendHistoryCard(r)
+    ].filter(Boolean);
+    var canComplete = r.state === 'Submitted' && !amending, canClose = r.state === 'Open' && TODAY > r.due && !r.processing;
     function incompleteActions() { return r.fb.actions.filter(function (ac) { return !ac.text.trim() || !ac.criteria.trim() || !ac.due; }).length; }
-    function saveFeedback() {
-      if (badDates(root)) { toast('A date isn\'t recognised – fix the highlighted date first.', true); return Promise.reject(new Error('bad date')); }
+    function checkForm() {
+      if (badDates(root)) { toast('A date isn\'t recognised – fix the highlighted date first.', true); return false; }
       var n = incompleteActions();
       if (n) {
         markActions(root, r);
         toast(n + ' action' + (n === 1 ? ' is' : 's are') + ' missing the action, close-out criteria or deadline (marked in red).', true);
-        return Promise.reject(new Error('incomplete'));
+        return false;
       }
+      return true;
+    }
+    function saveFeedback() {
+      if (r.released) { return Promise.resolve(); }   // released: changes go through Amend only
+      if (!checkForm()) { return Promise.reject(new Error('incomplete')); }
       return busy('fb', async function () {
         await spUpdate(CONFIG.lists.mgr, r.mrId, mgrFields(r));
         await writeDates(CONFIG.lists.mgr, r.mrId, mgrDates(r));
         dirty = false;
       });
     }
-    // Auto-save only before release: once released, every save is visible to the technician straight away,
-    // so half-typed text must never go live – that stays a deliberate Save.
+    // Auto-save only before release and never while amending: half-typed text must never reach the technician.
     var mgrStatus = h('span', { class: 'autosave', role: 'status' });
-    if (!r.released && (r.state === 'Open' || r.state === 'Submitted')) {
+    if (!r.released && !amending && (r.state === 'Open' || r.state === 'Submitted')) {
       autosave.set(function () {
         if (badDates(root)) { return 'skip'; }
         if (incompleteActions()) { markActions(root, r); return 'skip'; }
@@ -2231,22 +2267,103 @@ window.ESGOneToOne = function (ctx) {
         });
       }).catch(function () {});
     }
-    var actions = h('div', { class: 'btn-row' }, [
-      h('button', { class: 'btn', type: 'button', text: 'Save feedback', onclick: function () {
-        saveFeedback().then(function () { toast(r.released ? ('Saved – already released, so the ' + lc(L.one) + ' sees this change.') : ('Saved – not visible to the ' + lc(L.one) + ' until you complete the review.')); }).catch(function () {}); } }),
-      h('button', { class: 'btn primary', type: 'button', text: 'Complete & release', disabled: !canComplete, onclick: function () {
-        confirmBox('Complete this review?', 'Your feedback, ratings and actions will be released to ' + r.tech + ' and they will be emailed.', 'Complete & release', function () {
-          command('Completed', 'Completed – the feedback is being released.'); });
-      } }),
-      h('button', { class: 'btn danger', type: 'button', text: 'Close – not submitted', disabled: !canClose, onclick: function () {
-        confirmBox('Close as not submitted?', r.tech + ' will no longer be able to submit this review.', 'Close review', function () {
-          command('Closed - Not Submitted', 'Closed.'); });
-      } }),
-      h('button', { class: 'btn ghost', type: 'button', text: '← Back', onclick: function () { go(state.backTo === 'profile' ? 'profile' : (state.backTo || 'reviews')); } }),
-      r.released ? h('span', { class: 'small muted', text: 'Released – changes save only when you click Save feedback.' }) : mgrStatus
-    ]);
+    // Amend: re-read both records so the change starts from what SharePoint holds now
+    function startAmend() {
+      function go2() {
+        busy('amend-start', async function () {
+          await autosave.settle();
+          var f = await freshReview(r);
+          var i = REVIEWS.indexOf(r); if (i >= 0) { REVIEWS[i] = f.review; }
+          state.amend = { id: f.review.id, answers: clone(f.review.answers), fb: clone(f.review.fb), rvMod: f.rvMod, mrMod: f.mrMod, state: f.review.state };
+          dirty = false; render(false);
+        }).catch(function () {});
+      }
+      if (dirty && !r.released) { saveFeedback().then(go2).catch(function () {}); } else { go2(); }
+    }
+    function cancelAmend() {
+      var base = state.amend;
+      function undo() { r.answers = clone(base.answers); r.fb = clone(base.fb); state.amend = null; dirty = false; render(false); }
+      if (amendDiff(r, base).length) { confirmBox('Discard this amendment?', 'Nothing has been saved. The 1-to-1 stays as it was.', 'Discard', undo); } else { undo(); }
+    }
+    function saveAmend() {
+      if (!checkForm()) { return; }
+      var base = state.amend, changes = amendDiff(r, base);
+      if (!changes.length) { toast('Nothing has changed yet.'); return; }
+      var info = TECH_INFO[r.tech] || {};
+      if (!info.claims) { toast(r.tech + ' isn\'t in Settings → Team, so they can\'t be emailed – add them back first.', true); return; }
+      if (!r.released) {
+        var mgrOnly = changes.filter(function (c) { return c.l === 'mr'; });
+        if (mgrOnly.length === changes.length) { toast('Only your feedback changed – that saves normally until you release. Cancel the amendment and save it.', true); return; }
+      }
+      var reason = '';
+      var names = changes.filter(function (c) { return c.f !== 'ActionsStatus' && c.f !== 'NextActionDue'; }).map(function (c) { return c.n; });
+      var box = textBox('Reason (required – kept in the restricted audit, not emailed)', '', function (v) { reason = v; }, false, 3);
+      box.input.setAttribute('maxlength', '2000');
+      formBox('Save amendment', 'Changing: ' + names.join('; ') + '. ' + first(r.tech) + ' will be emailed that their ' + monthLabel(r.month) + ' 1-to-1 was amended by you (the email doesn\'t include the changes or the reason).',
+        [box], 'Save amendment', function () {
+          if (!reason.trim()) { box.input.classList.add('invalid'); return 'Please give the reason for the amendment.'; }
+          return busy('amend', async function () {
+            // 1. nothing changed elsewhere since the amendment started
+            var now = await stamps(r);
+            if (now.rvMod !== base.rvMod || now.mrMod !== base.mrMod || now.state !== base.state) {
+              throw new Error('This 1-to-1 was changed elsewhere since you started amending. Cancel, Refresh, then amend again.');
+            }
+            // 2. the audit record first, so no change is ever made without one
+            var rec = { Title: r.tech + ' – ' + monthLabel(r.month), ReviewItemId: r.id, ManagerReviewId: r.mrId, MonthKey: r.month, Technician: personValue(info.claims),
+              Reason: reason.trim(), ChangedFields: names.join('; '), ChangesJson: JSON.stringify(changes.map(function (c) { return { l: c.l, f: c.f, b: c.b, a: c.a }; })), NotifyStatus: 'Draft' };
+            var amId = await spCreate(CONFIG.lists.amendments, rec);
+            if (!amId) { throw new Error('The amendment record couldn\'t be created – nothing was changed.'); }
+            var local = buildAmendment({ ID: amId, ReviewItemId: r.id, ManagerReviewId: r.mrId, MonthKey: r.month, Reason: rec.Reason, ChangedFields: rec.ChangedFields,
+              ChangesJson: rec.ChangesJson, NotifyStatus: 'Draft', Created: new Date().toISOString(), Author: { Title: ME }, Technician: { Title: r.tech } });
+            AMENDMENTS.push(local);
+            // 3. only the columns that changed
+            var rv = {}, mr = {}, dates = {};
+            changes.forEach(function (c) {
+              if (c.l === 'rv') { rv[c.f] = c.f === 'Mood' || c.f === 'Q3WorkloadRating' ? (c.a ? Number(c.a) : '') : c.a; }
+              else if (c.f === 'MeetingDate' || c.f === 'NextActionDue') { dates[c.f] = c.a; }
+              else { mr[c.f] = c.a; }
+            });
+            try {
+              if (Object.keys(rv).length) { await spUpdate(CONFIG.lists.reviews, r.id, rv); }
+              if (Object.keys(mr).length) { await spUpdate(CONFIG.lists.mgr, r.mrId, mr); }
+              if (Object.keys(dates).length) { await writeDates(CONFIG.lists.mgr, r.mrId, dates); }
+            } catch (e) {
+              throw new Error('The amendment wasn\'t fully saved (' + (e && e.message ? e.message : e) + '). Nobody has been emailed – Refresh and check the 1-to-1; Needs your attention lists it.');
+            }
+            state.amend = null; dirty = false;
+            // 4. queue the email (Flow 8)
+            try { await spUpdate(CONFIG.lists.amendments, amId, { NotifyStatus: 'Pending' }); local.status = 'Pending'; }
+            catch (e) { toast('Saved, but the email to ' + first(r.tech) + ' isn\'t queued yet – use Send notice in Needs your attention.', true); render(false); return; }
+            toast('Amendment saved – ' + first(r.tech) + ' will be emailed that it was amended.'); render(false);
+          });
+        });
+    }
+    var buttons;
+    if (amending) {
+      buttons = [h('button', { class: 'btn primary', type: 'button', text: 'Save amendment…', onclick: saveAmend }),
+        h('button', { class: 'btn', type: 'button', text: 'Cancel amendment', onclick: cancelAmend }),
+        h('span', { class: 'small muted', text: 'Amending – nothing saves until you click Save amendment.' })];
+    } else {
+      buttons = [
+        r.released ? null : h('button', { class: 'btn', type: 'button', text: 'Save feedback', onclick: function () {
+          saveFeedback().then(function () { toast('Saved – not visible to the ' + lc(L.one) + ' until you complete the review.'); }).catch(function () {}); } }),
+        canAmend ? h('button', { class: 'btn', type: 'button', text: r.released ? 'Amend…' : 'Amend answers…', title: 'Change this 1-to-1 with a recorded reason – ' + first(r.tech) + ' is emailed that it was amended', onclick: startAmend }) : null,
+        r.released ? null : h('button', { class: 'btn primary', type: 'button', text: 'Complete & release', disabled: !canComplete, onclick: function () {
+          confirmBox('Complete this review?', 'Your feedback, ratings and actions will be released to ' + r.tech + ' and they will be emailed.', 'Complete & release', function () {
+            command('Completed', 'Completed – the feedback is being released.'); });
+        } }),
+        r.released ? null : h('button', { class: 'btn danger', type: 'button', text: 'Close – not submitted', disabled: !canClose, onclick: function () {
+          confirmBox('Close as not submitted?', r.tech + ' will no longer be able to submit this review.', 'Close review', function () {
+            command('Closed - Not Submitted', 'Closed.'); });
+        } }),
+        h('button', { class: 'btn ghost', type: 'button', text: '← Back', onclick: function () { go(state.backTo === 'profile' ? 'profile' : (state.backTo || 'reviews')); } }),
+        r.released ? h('span', { class: 'small muted', text: canAmend ? 'Released – read-only. Use Amend to change it.' : 'Released – read-only.' }) : mgrStatus
+      ];
+    }
+    var actions = h('div', { class: 'btn-row' }, buttons.filter(Boolean));
     var head = h('div', { class: 'pagehead sticky' }, [
-      h('div', { class: 'ph-l' }, [h('h2', { text: r.tech + ' – ' + monthLabel(r.month) }), chipFor(r), challengeChip(r),
+      h('div', { class: 'ph-l' }, [h('h2', { text: r.tech + ' – ' + monthLabel(r.month) }), chipFor(r),
+        amendmentsOf(r).length ? h('span', { class: 'chip', text: 'Amended (' + amendmentsOf(r).length + ')' }) : null,
         h('span', { class: 'meta', text: r.submittedOn ? 'Submitted ' + fmtDate(r.submittedOn) + (r.late ? ' (late)' : '') : 'Deadline ' + fmtDate(r.due) })]), actions]);
     var side = h('div', { class: 'stack' });
     function refreshSide() {
@@ -2264,18 +2381,41 @@ window.ESGOneToOne = function (ctx) {
         h('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px' }, [h('div', { class: 'big-score' }, [f1(o.projected), h('small', { text: ' / 5' })]), bandChip(o.projected, true)]),
         track(o.projected),
         h('dl', { class: 'kv' }, [h('dt', { text: 'Appraisal' }), h('dd', { text: o.period.set ? fmtDate(o.period.apDate) : 'Not set' }), h('dt', { text: 'Current' }), h('dd', { text: f1(o.current) })])]));
-      var followSel = h('select', { id: nid('s'), onchange: function () { fb.followOverride = followSel.value; markDirty(); } },
+      var followSel = h('select', { id: nid('s'), disabled: ro, onchange: function () { fb.followOverride = followSel.value; markDirty(); } },
         [h('option', { value: '', text: ('Accept ' + lc(L.one) + '\'s preference') })].concat(FOLLOW.map(function (x) { var op = h('option', { value: x, text: x }); op.selected = fb.followOverride === x; return op; })));
       var mid = nid('d'), meeting = dateField(fb.meeting, function (v) { fb.meeting = v; }, '1-to-1 meeting date', { id: mid, badText: fb.meetingRaw, onBad: function (t) { fb.meetingRaw = t; } });
+      if (ro) { lockControls(meeting); }
       side.appendChild(h('section', { class: 'card side-tile' }, [h('h3', { text: 'Follow-up decision' }),
         h('div', { class: 'stack', style: 'gap:8px' }, [followSel, h('div', null, [h('label', { class: 'field', for: mid, text: '1-to-1 meeting date (optional)' }), meeting])])]));
     }
     refreshSide();
     var banners = [];
-    var chBanner = challengeBanner(r, 'tl'); if (chBanner) { banners.push(chBanner); }
     if (followOf(r) === DEDICATED) { banners.push(h('div', { class: 'banner amber', text: 'Dedicated 1-to-1 discussion requested' })); }
-    if (r.state === 'Completed' || r.state === 'Closed - Not Submitted') { banners.push(h('div', { class: 'banner info', text: ('Already released – any change you save is visible to the ' + lc(L.one) + ' straight away. Record the reason in the Manager Reviews correction log.') })); }
-    return h('div', null, [head, h('div', { class: 'layout' }, [h('div', { class: 'stack' }, banners.concat(main)), h('aside', { class: 'side-sticky' }, side)])]);
+    if (amending) {
+      banners.push(h('div', { class: 'banner amber', text: 'Amending ' + first(r.tech) + '\'s ' + monthLabel(r.month) + ' 1-to-1. ' + (r.released ? 'Their answers and your feedback can be changed.' : 'Their answers can be changed; your feedback stays as saved.') +
+        ' When you save, you give a reason, the before and after are kept in a restricted audit, and ' + first(r.tech) + ' is emailed that it was amended. Nothing saves automatically.' }));
+    } else if (r.released) {
+      banners.push(h('div', { class: 'banner info', text: canAmend ? ('Released – ' + first(r.tech) + ' can see this. To change anything, click Amend: you give a reason, the change is kept in a restricted audit and ' + first(r.tech) + ' is emailed that it was amended.')
+        : 'Released – read-only. Changing a released 1-to-1 needs solution 1.4: run 0 Setup (1.4), then Refresh.' }));
+    }
+    return h('div', null, [head, h('div', { class: 'layout' }, [h('div', { class: 'stack' + (amending ? ' amending' : '') }, banners.concat(main)), h('aside', { class: 'side-sticky' }, side)])]);
+  }
+  function clone(x) { return JSON.parse(JSON.stringify(x)); }
+  function lockControls(el) { Array.prototype.forEach.call(el.querySelectorAll('input, button, select, textarea'), function (c) { c.disabled = true; }); return el; }
+  // Modified stamps and the trusted state, to refuse an amendment over a change made elsewhere
+  async function stamps(r) {
+    var a = await req('GET', listPath(CONFIG.lists.reviews) + '/items(' + Number(r.id) + ')?$select=Modified');
+    var b = await req('GET', listPath(CONFIG.lists.mgr) + '/items(' + Number(r.mrId) + ')?$select=Modified,ReviewState');
+    if (!a.ok || !a.json || !b.ok || !b.json) { throw new Error('Couldn\'t re-read this 1-to-1 ' + errText(a.ok ? b : a)); }
+    return { rvMod: str(a.json.Modified), mrMod: str(b.json.Modified), state: str(b.json.ReviewState) };
+  }
+  async function freshReview(r) {
+    var a = await req('GET', listPath(CONFIG.lists.reviews) + '/items(' + Number(r.id) + ')?$select=' + REV_FIELDS + (V14 ? REV_V14_FIELDS : '') + ',Modified&$expand=Technician');
+    var b = await req('GET', listPath(CONFIG.lists.mgr) + '/items(' + Number(r.mrId) + ')?$select=' + MR_FIELDS + ',Modified&$expand=Technician');
+    if (!a.ok || !a.json || !b.ok || !b.json) { throw new Error('Couldn\'t re-read this 1-to-1 ' + errText(a.ok ? b : a)); }
+    var f = buildReview(a.json, b.json, r.tech);
+    if (!(f.released || f.state === 'Submitted')) { throw new Error('This 1-to-1 is no longer submitted – Refresh the page.'); }
+    return { review: f, rvMod: str(a.json.Modified), mrMod: str(b.json.Modified) };
   }
   // Marks the empty parts of incomplete action rows in red (cleared as each is filled)
   function markActions(root, r) {
@@ -2289,10 +2429,11 @@ window.ESGOneToOne = function (ctx) {
     });
   }
   function clearInvalid(el) { el.classList.remove('invalid'); el.removeAttribute('aria-invalid'); }
-  function actionsEditor(r) {
+  function actionsEditor(r, readOnly) {
     var wrap = h('div');
     function draw() {
       wrap.textContent = '';
+      if (readOnly) { wrap.appendChild(actionsTable(r.fb.actions.map(function (ac) { return { ac: ac, r: r }; }), {})); return; }
       wrap.appendChild(h('div', { class: 'acgrid achead' }, ['#', 'Action', 'Owner', 'Deadline', 'Status', ''].map(function (x) { return h('span', { text: x }); })));
       if (!r.fb.actions.length) { wrap.appendChild(h('div', { class: 'muted small', style: 'padding:8px 10px', text: 'No actions yet.' })); }
       r.fb.actions.forEach(function (ac, i) {
@@ -2376,19 +2517,33 @@ window.ESGOneToOne = function (ctx) {
     if (!wbYouDone(w)) { m.push('About you – your circumstances'); }
     return m;
   }
+  // The next wellbeing date: the one the Team Leader keeps in Settings → Team (1.4). Before Setup 1.4, the last assessment's.
+  function wbNextDue(t) {
+    if (V14) { return (TECH_INFO[t] && TECH_INFO[t].nextWellbeing) || ''; }
+    var last = wbLastCompleted(t);
+    return last ? last.nextReview || '' : '';
+  }
   function wellbeingAttention() {
     if (!IS_TL || !WB_AVAILABLE) { return []; }
     var items = [];
     TECHS.forEach(function (t) {
-      var open = wbOpenOne(t), last = wbLastCompleted(t);
+      var open = wbOpenOne(t), last = wbLastCompleted(t), next = wbNextDue(t);
       var go1 = function (w) { return function () { go('wb', { wbId: w.id }); }; };
       if (open && wbState(open) === 'Submitted') { items.push({ pri: 1, ico: '💚', text: t + '\'s wellbeing assessment is ready for your review', btn: 'Open', fn: go1(open) }); }
-      if (last && last.nextReview && !open) {
-        var d = daysBetween(TODAY, last.nextReview);
-        if (d < 0) { items.push({ pri: 2, ico: '💚', text: 'Wellbeing review for ' + t + ' was due ' + fmtDate(last.nextReview), btn: 'Open', fn: go1(last) }); }
-        else if (d <= 14) { items.push({ pri: 2, ico: '💚', text: 'Wellbeing review for ' + t + ' is due in ' + d + ' day' + (d === 1 ? '' : 's'), btn: 'Open', fn: go1(last) }); }
+      if (next && !open) {
+        var d = daysBetween(TODAY, next);
+        if (d < 0) { items.push({ pri: 2, ico: '💚', text: t + '\'s wellbeing assessment is overdue (due ' + fmtDate(next) + ')', btn: 'Start', fn: function () { startWellbeing(t); } }); }
+        else if (d <= 14) { items.push({ pri: 2, ico: '💚', text: t + '\'s wellbeing assessment is due in ' + plural(d, 'day') + ' (' + fmtDate(next) + ')', btn: 'Start', fn: function () { startWellbeing(t); } }); }
       }
-      if (!open && (!last || (!last.nextReview && daysBetween(last.completedOn || last.date || TODAY, TODAY) > 365))) {
+      if (V14 && !next) {
+        if (last && last.nextReview) {
+          // a date from an earlier assessment – used only if the Team Leader says so
+          items.push({ pri: 3, ico: '💚', text: 'No next wellbeing date set for ' + t + ' – their last assessment says ' + fmtDate(last.nextReview), btn: 'Use it',
+            fn: function () { busy('wbdate', async function () { await setWellbeingDate(t, last.nextReview); toast(t + ': next wellbeing date set to ' + fmtDate(last.nextReview) + '.'); render(false); }).catch(function () {}); } });
+        } else {
+          items.push({ pri: 3, ico: '💚', text: 'No next wellbeing date set for ' + t, btn: 'Set date', fn: function () { openSettings('team'); } });
+        }
+      } else if (!V14 && !open && (!last || (!last.nextReview && daysBetween(last.completedOn || last.date || TODAY, TODAY) > 365))) {
         items.push({ pri: 3, ico: '💚', text: 'No wellbeing assessment for ' + t + ' in the last 12 months', btn: 'Start', fn: function () { startWellbeing(t); } });
       }
     });
@@ -2442,19 +2597,21 @@ window.ESGOneToOne = function (ctx) {
     }
     var submitted = WELLBEING.filter(function (w) { return wbState(w) === 'Submitted'; });
     var withThem = WELLBEING.filter(function (w) { return wbState(w) === 'Open' || wbState(w) === 'Processing'; });
-    var none = TECHS.filter(function (t) { var l = wbLastCompleted(t); return !wbOpenOne(t) && (!l || (l.nextReview ? daysBetween(TODAY, l.nextReview) < 0 : daysBetween(l.completedOn || l.date || TODAY, TODAY) > 365)); });
-    var due = TECHS.filter(function (t) { var l = wbLastCompleted(t); return l && l.nextReview && daysBetween(TODAY, l.nextReview) <= 30 && !wbOpenOne(t) && none.indexOf(t) < 0; });
+    var none = TECHS.filter(function (t) { var n = wbNextDue(t); return !wbOpenOne(t) && n && daysBetween(TODAY, n) < 0; });
+    var due = TECHS.filter(function (t) { var n = wbNextDue(t); return n && daysBetween(TODAY, n) >= 0 && daysBetween(TODAY, n) <= 30 && !wbOpenOne(t); });
+    var unset = TECHS.filter(function (t) { return !wbNextDue(t); });
     var tiles = h('div', { class: 'tiles t4' }, [
       tile('Ready for your review', String(submitted.length), 'Submitted by the person', submitted.length ? 'warn' : ''),
       tile('Being completed', String(withThem.length), 'Waiting for the person'),
-      tile('Reviews due in 30 days', String(due.length), 'Next review date coming up', due.length ? 'warn' : ''),
-      tile('Due an assessment', String(none.length), 'Review date passed, or none in 12 months', none.length ? 'bad' : '')
+      tile('Due in 30 days', String(due.length), 'Next wellbeing date coming up', due.length ? 'warn' : ''),
+      tile('Overdue', String(none.length), unset.length ? unset.length + ' with no date set' : 'Next wellbeing date passed', none.length ? 'bad' : (unset.length ? 'warn' : ''))
     ]);
     var rows = TECHS.map(function (t) {
-      var last = wbLastCompleted(t), open = wbOpenOne(t), d = last && last.nextReview ? daysBetween(TODAY, last.nextReview) : null;
+      var last = wbLastCompleted(t), open = wbOpenOne(t), next = wbNextDue(t), d = next ? daysBetween(TODAY, next) : null;
       return tr([h('b', { text: t }), last ? fmtDate(last.completedOn || last.date) : 'Never',
         open ? wbChip(open) : h('span', { class: 'muted', text: '—' }),
-        last && last.nextReview ? h('span', { class: d < 0 ? 'overdue' : '', text: fmtDate(last.nextReview) + (d < 0 ? ' – overdue' : d <= 30 ? ' (' + (d ? plural(d, 'day') : 'today') + ')' : '') }) : '—',
+        next ? h('span', { class: d < 0 ? 'overdue' : '', text: fmtDate(next) + (d < 0 ? ' – overdue' : d <= 30 ? ' (' + (d ? plural(d, 'day') : 'today') + ')' : '') })
+          : h('span', { class: 'muted', text: 'Not set' }),
         h('div', { class: 'btn-row', style: 'flex-wrap:nowrap' }, [
           open ? h('button', { class: 'btn small primary', type: 'button', text: 'Open', onclick: function () { go('wb', { wbId: open.id }); } })
             : h('button', { class: 'btn small', type: 'button', text: '+ Start', onclick: function () { startWellbeing(t); } }),
@@ -2463,7 +2620,7 @@ window.ESGOneToOne = function (ctx) {
     var all = WELLBEING.slice().sort(function (a, b) { return a.id < b.id ? 1 : -1; });
     var guide = h('details', { class: 'how' }, [h('summary', { text: 'ⓘ Guidance for ' + lc(L.mgr) + 's' })].concat(WB_INTRO_MGR.map(function (p) { return h('p', { text: p }); })).concat([h('p', { text: WB_STRESS })]));
     return h('div', { class: 'stack' }, [tiles,
-      card('Team wellbeing', 'Completed at least once a year · only you and each person can see their assessment', [guide,
+      card('Team wellbeing', 'Next dates are set in ⚙ Settings → Team · only you and each person can see their assessment', [guide,
         h('div', { style: 'margin-top:10px' }, table([L.one, 'Last completed', 'In progress', 'Next review', ''], rows, { empty: 'No ' + lc(L.many) + ' yet.' })),
         h('div', { style: 'margin-top:10px' }, h('button', { class: 'btn primary', type: 'button', text: '+ Start a wellbeing assessment', onclick: function () { startWellbeing(); } }))]),
       card('All assessments', all.length + ' recorded', [table([L.one, 'Meeting date', 'Status', 'Submitted', 'Completed', 'Issues flagged', ''], all.map(function (w) {
@@ -2659,7 +2816,8 @@ window.ESGOneToOne = function (ctx) {
     var st = wbState(w), can = st === 'Submitted' || st === 'Completed';
     var arr = w.arrangements.map(function (a) { return { id: a.id, text: a.text, review: a.review, effective: a.effective, next: a.next }; });
     // yearly by default; the line manager can bring it forward by choosing an earlier date
-    var notes = w.notes, date = w.date, next = w.nextReview || (st === 'Submitted' ? oneYearOn(date || TODAY) : '');
+    // 1.4: the next date is the one in Settings → Team, and is only changed when the Team Leader chooses to change it
+    var notes = w.notes, date = w.date, next = V14 ? (wbNextDue(w.tech) || w.nextReview || '') : (w.nextReview || (st === 'Submitted' ? oneYearOn(date || TODAY) : ''));
     var box = h('div', { class: 'stack', style: 'gap:10px' });
     function drawArr() {
       box.textContent = '';
@@ -2677,13 +2835,15 @@ window.ESGOneToOne = function (ctx) {
       if (can) { box.appendChild(h('button', { class: 'btn small', type: 'button', text: '+ Add arrangement', onclick: function () { arr.push({ id: String(Date.now()), text: '', review: '', effective: '', next: '' }); markDirty(); drawArr(); } })); }
     }
     drawArr();
-    function saveAll(complete) {
+    function saveAll(complete, chosenNext) {
+      if (complete && V14) { next = chosenNext; }
       if (badDates(root)) { toast('A date isn\'t recognised – fix the highlighted date first.', true); return; }
       if (arr.some(function (a) { return !a.text.trim(); })) { toast('Each arrangement needs a description (or remove the empty one).', true); return; }
       busy('wb', async function () {
         await spUpdate(CONFIG.lists.wellbeing, w.id, { ArrangementsJson: JSON.stringify(arr), ManagerNotes: notes });
         await writeDates(CONFIG.lists.wellbeing, w.id, { NextReviewDate: next || '', AssessmentDate: date || '' });
         w.arrangements = arr; w.notes = notes; w.nextReview = next; w.date = date; dirty = false;
+        if (V14 && (next || '') !== wbNextDue(w.tech)) { await setWellbeingDate(w.tech, next || ''); }
         if (complete) {
           await spUpdate(CONFIG.lists.wellbeing, w.id, { AssessmentStatus: 'Completed' });
           w.rawStatus = 'Completed'; w.completedOn = w.completedOn || TODAY;
@@ -2701,12 +2861,27 @@ window.ESGOneToOne = function (ctx) {
     if (can) {
       children.push(h('div', null, [h('div', { class: 'field', text: 'Agreed arrangements' }), box]));
       children.push(notesBox);
-      children.push(h('div', null, [h('label', { class: 'field', for: nid1, text: 'Next review date' }), dateField(next, function (v) { next = v; }, 'Next review date', { id: nid1 }),
-        h('div', { class: 'small muted', style: 'margin-top:3px', text: 'Once a year by default – bring it forward if you feel one is needed sooner. You\'re emailed a week before it is due.' })]));
+      children.push(h('div', null, [h('label', { class: 'field', for: nid1, text: V14 ? 'Next wellbeing assessment' : 'Next review date' }), dateField(next, function (v) { next = v; }, 'Next review date', { id: nid1 }),
+        h('div', { class: 'small muted', style: 'margin-top:3px', text: V14 ? 'The same date as in Settings → Team – changing it here changes it there. You\'re emailed a week before, on the day and weekly if overdue.'
+          : 'Once a year by default – bring it forward if you feel one is needed sooner. You\'re emailed a week before it is due.' })]));
     }
     children.push(h('div', { class: 'btn-row' }, [h('button', { class: 'btn', type: 'button', text: can ? 'Save' : 'Save meeting date', onclick: function () { saveAll(false); } }),
       st === 'Submitted' ? h('button', { class: 'btn primary', type: 'button', text: 'Complete', onclick: function () {
-        confirmBox('Complete this wellbeing assessment?', w.tech + ' will be emailed that the agreed record is ready to view. You can still update arrangements later (e.g. at the review).', 'Complete', function () { saveAll(true); });
+        if (!V14) {
+          confirmBox('Complete this wellbeing assessment?', w.tech + ' will be emailed that the agreed record is ready to view. You can still update arrangements later (e.g. at the review).', 'Complete', function () { saveAll(true); });
+          return;
+        }
+        // the next date is never changed silently: the Team Leader confirms it (or sets a new one) as part of completing
+        var cur = wbNextDue(w.tech), chosen = next || cur, fid = nid('wbnx');
+        formBox('Complete ' + first(w.tech) + '\'s wellbeing assessment', w.tech + ' will be emailed that the agreed record is ready to view.', [
+          h('div', null, [h('label', { class: 'field', for: fid, text: 'Next wellbeing assessment' }), dateField(chosen, function (v) { chosen = v; }, 'Next wellbeing assessment', { id: fid, noDirty: true }),
+            h('div', { class: 'small muted', style: 'margin-top:3px', text: cur ? 'Currently ' + fmtDate(cur) + ' in Settings → Team. Keep it, or change it.' : 'No date set yet – a year on would be ' + fmtDate(oneYearOn(date || TODAY)) + '.' })])
+        ], 'Complete', function () {
+          if (badDates(root)) { return 'The date isn\'t recognised.'; }
+          if (!chosen) { return 'Choose the next wellbeing assessment date.'; }
+          if (chosen <= TODAY) { return 'The next assessment must be after today.'; }
+          saveAll(true, chosen);
+        });
       } }) : null]));
     if (can) { children.push(h('div', { class: 'small muted', text: 'Everything here is visible to ' + w.tech + ' as soon as you save.' })); }
     return h('section', { class: 'card side-tile wbpanel' }, [h('h3', { text: 'Your part' })].concat([h('div', { class: 'stack', style: 'gap:12px' }, children)]));
@@ -2776,7 +2951,8 @@ window.ESGOneToOne = function (ctx) {
     var dates = {}, bands = SETTINGS.bands.map(function (b) { return { max: b.max, name: b.name, cls: b.cls }; });
     var rem = SETTINGS.reminders.slice(), labels = { app: L.app, mgr: L.mgr, one: L.one, many: L.many };
     var teamChanged = false;
-    memberNames().forEach(function (t) { dates[t] = apDateOf(t); });
+    memberNames().forEach(function (t) { var i = TECH_INFO[t]; dates[t] = { ap: apDateOf(t), wb: i.nextWellbeing || '', start: i.cycleStart || '' }; });
+    function dateChanged(t) { var i = TECH_INFO[t], d = dates[t]; return d.ap !== (apDateOf(t) || '') || d.wb !== (i.nextWellbeing || '') || d.start !== (i.cycleStart || ''); }
     var back = h('div', { class: 'modal-back' });
     var body = h('div', { class: 'settings-body' });
     var tabsBar = h('div', { class: 'stabs', role: 'tablist' });
@@ -2788,7 +2964,7 @@ window.ESGOneToOne = function (ctx) {
       });
     }
     function unsaved() {
-      return memberNames().some(function (t) { return (dates[t] || '') !== (apDateOf(t) || ''); }) || badDates(back) ||
+      return memberNames().some(dateChanged) || badDates(back) ||
         JSON.stringify(bands.map(function (b) { return [b.max, b.name]; })) !== JSON.stringify(SETTINGS.bands.map(function (b) { return [b.max, b.name]; })) ||
         rem.join(',') !== SETTINGS.reminders.join(',') || ['app', 'mgr', 'one', 'many'].some(function (k) { return labels[k] !== L[k]; });
     }
@@ -2796,19 +2972,70 @@ window.ESGOneToOne = function (ctx) {
       if (unsaved() && !window.confirm('Close Settings without saving your changes?')) { return; }
       back.remove(); if (teamChanged) { render(false); }
     }
+    function markCompleted(t) {
+      var info = TECH_INFO[t], b = boundariesOf(t), cur = b.length ? b[b.length - 1] : '', last = (info.history || []).slice(-1)[0];
+      var done = '', next = '';
+      var cid = nid('d'), nid2 = nid('d');
+      var fields = [
+        h('div', null, [h('label', { class: 'field', for: cid, text: 'Date the appraisal was actually completed' }), dateField('', function (v) { done = v; }, 'Completion date', { id: cid, noDirty: true })]),
+        h('div', null, [h('label', { class: 'field', for: nid2, text: 'Next appraisal due' }), dateField('', function (v) { next = v; }, 'Next appraisal date', { id: nid2, noDirty: true })]),
+        h('p', { class: 'small muted', text: 'This closes the current period (its reviews and ratings stay in its history and its report) and starts a new one with no ratings yet.' })
+      ];
+      formBox('Mark ' + t + '\'s appraisal completed', cur ? 'Current period started ' + fmtDate(cur) + '.' : 'No period start has been set yet – earlier reviews are kept together as one earlier period.', fields, 'Record completion', function () {
+        if (!done || !next) { return 'Enter both dates.'; }
+        if (badDates(root)) { return 'A date isn\'t recognised.'; }
+        if (done > TODAY) { return 'The completion date can\'t be in the future.'; }
+        var correction = last && last.completed.slice(0, 7) === done.slice(0, 7);
+        var floor = correction ? last.start : cur;
+        if (floor && done <= floor) { return 'The completion date must be after the start of the period (' + fmtDate(floor) + ').'; }
+        if (next <= done) { return 'The next appraisal must be after the completion date.'; }
+        return new Promise(function (resolve, reject) {
+          confirmBox('Record ' + t + '\'s appraisal as completed on ' + fmtDate(done) + '?',
+            (correction ? 'This replaces the completion already recorded for ' + monthLabel(done.slice(0, 7)) + '. ' : '') +
+            'Reviews up to ' + monthLabel(done.slice(0, 7)) + ' stay in the period that ends here. The new period starts with ' +
+            monthLabel(addMonths(done.slice(0, 7), 1)) + ', and the next appraisal is due ' + fmtDate(next) + '.', 'Record completion', function () {
+              busy('cycle', async function () {
+                await recordCompletion(t, done, next);
+                dates[t].ap = next; dates[t].start = done; teamChanged = true;
+                toast(t + ': appraisal completed ' + fmtDate(done) + ' – new period started.'); draw();
+              }).then(resolve, reject);
+            });
+        });
+      });
+    }
+    function undoCompleted(t) {
+      var last = (TECH_INFO[t].history || []).slice(-1)[0];
+      if (!last) { return; }
+      confirmBox('Undo the completion recorded for ' + fmtDate(last.completed) + '?', 'The period that started then is joined back onto the one before. No reviews or ratings are changed. Check the next appraisal date afterwards.', 'Undo', function () {
+        busy('cycle', async function () {
+          await undoCompletion(t);
+          dates[t].start = TECH_INFO[t].cycleStart || ''; teamChanged = true;
+          toast('Completion removed.'); draw();
+        }).catch(function () {});
+      });
+    }
     // ---- Team
     function teamTab() {
       var out = [];
       out.push(h('p', { class: 'small muted', style: 'margin:0 0 10px', text: 'Everyone in this list gets a monthly 1-to-1 while Active. Adding someone gives them access to the 1-to-1 page within about 5 minutes; their first review is created at 07:00 the next morning (or run Flow 1 now). Deactivating stops new reviews and removes their access to the page; their records are kept.' }));
       var names = memberNames();
-      out.push(table([L.one, 'Email', 'Status', 'Appraisal date', 'Days to go', 'Period covered', ''], names.map(function (t) {
-        var info = TECH_INFO[t];
-        var daysTd = h('td'), perTd = h('td', { class: 'small muted' });
+      if (!V14) { out.push(h('div', { class: 'banner amber', text: 'Run "ESG 1-to-1 | 0 Setup" again (solution 1.4) to add the wellbeing date and appraisal periods. Until then only the appraisal date can be set here.' })); }
+      out.push(h('div', { class: 'tbl-wrap' }, table(V14 ? [L.one, 'Status', 'Next appraisal', 'Days to go', 'Next wellbeing', 'Appraisal period', '']
+        : [L.one, 'Status', 'Appraisal date', 'Days to go', ''], names.map(function (t) {
+        var info = TECH_INFO[t], d = dates[t];
+        var daysTd = h('td'), perTd = h('td', { class: 'small' });
         function upd() {
-          if (!dates[t]) { apDaysCell(daysTd, ''); perTd.textContent = info.active ? 'Enter a date' : ''; return; }
-          var end = dates[t].slice(0, 7);
-          apDaysCell(daysTd, dates[t]);
-          perTd.textContent = monthLabel(addMonths(end, -11)) + ' – ' + monthLabel(end);
+          apDaysCell(daysTd, d.ap || '');
+          if (!V14) { return; }
+          perTd.textContent = '';
+          var hist = info.history || [];
+          if (hist.length) {
+            perTd.appendChild(h('div', { text: 'Since ' + fmtDate(info.cycleStart || hist[hist.length - 1].completed) }));
+            perTd.appendChild(h('div', { class: 'muted', text: 'Last appraisal completed ' + fmtDate(hist[hist.length - 1].completed) }));
+          } else {
+            perTd.appendChild(h('div', { class: 'small muted', text: 'Period start (until the first completion is recorded):' }));
+            perTd.appendChild(dateField(d.start, function (v) { d.start = v; }, 'Appraisal period start for ' + t, { noDirty: true }));
+          }
         }
         upd();
         var toggle = h('button', { class: 'btn small ' + (info.active ? 'ghost' : ''), type: 'button', text: info.active ? 'Deactivate' : 'Reactivate', onclick: function () {
@@ -2825,10 +3052,18 @@ window.ESGOneToOne = function (ctx) {
               }).catch(function () {});
             });
         } });
-        return h('tr', { class: info.active ? null : 'retired' }, [h('td', { style: 'font-weight:600', text: t }), h('td', { class: 'small', text: info.email || '—' }),
-          h('td', null, h('span', { class: 'chip ' + (info.active ? 'green' : ''), text: info.active ? 'Active' : 'Inactive' })),
-          h('td', { style: 'min-width:190px' }, dateField(dates[t], function (v) { dates[t] = v; upd(); }, 'Appraisal date for ' + t, { noDirty: true })), daysTd, perTd, h('td', null, toggle)]);
-      }), { empty: 'Nobody yet – add the first person below.' }));
+        var tools = h('div', { class: 'btn-row', style: 'flex-wrap:nowrap' }, [
+          V14 ? h('button', { class: 'btn small', type: 'button', text: 'Mark appraisal completed…', onclick: function () { markCompleted(t); } }) : null,
+          V14 && (info.history || []).length ? h('button', { class: 'btn small ghost', type: 'button', text: 'Undo last', title: 'Undo the last recorded completion', onclick: function () { undoCompleted(t); } }) : null,
+          toggle]);
+        var nameTd = h('td', null, [h('div', { style: 'font-weight:600', text: t }), h('div', { class: 'small muted', text: info.email || '—' })]);
+        var status = h('td', null, h('span', { class: 'chip ' + (info.active ? 'green' : ''), text: info.active ? 'Active' : 'Inactive' }));
+        var apTd = h('td', { style: 'min-width:180px' }, dateField(d.ap, function (v) { d.ap = v; upd(); }, 'Next appraisal date for ' + t, { noDirty: true }));
+        if (!V14) { return h('tr', { class: info.active ? null : 'retired' }, [nameTd, status, apTd, daysTd, h('td', null, toggle)]); }
+        var wbTd = h('td', { style: 'min-width:180px' }, dateField(d.wb, function (v) { d.wb = v; }, 'Next wellbeing assessment date for ' + t, { noDirty: true }));
+        return h('tr', { class: info.active ? null : 'retired' }, [nameTd, status, apTd, daysTd, wbTd, perTd, h('td', null, tools)]);
+      }), { empty: 'Nobody yet – add the first person below.' })));
+      out.push(h('p', { class: 'small muted', text: 'Dates never move by themselves. Change the next appraisal or wellbeing date here whenever it is brought forward or put back – it never changes which period a monthly 1-to-1 belongs to. When an appraisal has actually happened, use "Mark appraisal completed…" to start the new period.' }));
       // add a person
       var q = h('input', { type: 'text', id: 'oto-p-q', placeholder: 'Start typing a name or email…', autocomplete: 'off', 'aria-label': 'Search for a person to add' });
       var results = h('div', { class: 'presults', 'aria-live': 'polite' });
@@ -2941,13 +3176,21 @@ window.ESGOneToOne = function (ctx) {
         var problems = [];
         var names = memberNames();
         for (var k = 0; k < names.length; k++) {
-          var t = names[k], v = dates[t] || '';
-          if (v === apDateOf(t)) { continue; }
+          var t = names[k], d = dates[t], info = TECH_INFO[t];
+          if (!dateChanged(t)) { continue; }
           try {
-            await writeDates(CONFIG.lists.techs, TECH_INFO[t].itemId, { AppraisalDate: v });
-            TECH_INFO[t].appraisal = v;
-            var cr = currentOf(t);
-            if (cr) { await writeDates(CONFIG.lists.reviews, cr.id, { AppraisalDate: v }); cr.appraisalDate = v; }
+            if (d.ap !== (apDateOf(t) || '')) {
+              await writeDates(CONFIG.lists.techs, info.itemId, { AppraisalDate: d.ap });
+              info.appraisal = d.ap;
+              var cr = currentOf(t);
+              if (cr) { await writeDates(CONFIG.lists.reviews, cr.id, { AppraisalDate: d.ap }); cr.appraisalDate = d.ap; }
+            }
+            if (V14 && d.wb !== (info.nextWellbeing || '')) { await setWellbeingDate(t, d.wb); }
+            if (V14 && d.start !== (info.cycleStart || '') && !(info.history || []).length) {
+              await writeDates(CONFIG.lists.techs, info.itemId, { AppraisalCycleStart: d.start });
+              info.cycleStart = d.start;
+              await writeBoundaries(t);
+            }
           } catch (e) { problems.push(t + ': ' + (e && e.message ? e.message : e)); }
         }
         async function saveItem(title, idKey, value) {
@@ -2980,10 +3223,10 @@ window.ESGOneToOne = function (ctx) {
   // ---------------------------------------------------------------------------------------------
   // APPRAISAL REPORT (view in page; print / save as PDF from a clean window)
   // ---------------------------------------------------------------------------------------------
-  function reportDoc(tech, aud) {
-    var o = expectedOutcome(tech, aud), p = o.period;
-    var prs = periodReviews(tech).filter(function (r) { return r.month <= CUR; });
-    var subs = prs.filter(isIn), ot = onTimeOf(tech);
+  function reportDoc(tech, aud, idx) {
+    var o = expectedOutcome(tech, aud, periodFor(tech, idx)), p = o.period;
+    var prs = periodReviews(tech, p).filter(function (r) { return r.month <= CUR; });
+    var subs = prs.filter(isIn), ot = onTimeOf(tech, p), counts = periodCounts(tech, p, aud);
     var acts = actionsOf(function (ac, r) { return r.tech === tech; }, aud);
     var sorted = o.perExp.filter(function (x) { return x.latest; }).slice().sort(function (x, y) { return y.latest - x.latest; });
     var words = aud !== 'tl', fa = focusAreas(o);
@@ -2998,11 +3241,12 @@ window.ESGOneToOne = function (ctx) {
       h('div', { class: 'small muted', text: (L.app + ' · Appraisal evidence report · CONFIDENTIAL') }),
       h('h1', { text: tech }),
       h('div', { class: 'rmeta' }, [
-        h('div', null, [h('span', { text: 'Appraisal date' }), h('b', { text: p.set ? fmtDate(p.apDate) : 'Not set' })]),
-        h('div', null, [h('span', { text: 'Period covered' }), h('b', { text: monthLabel(addMonths(p.start, 1)) + ' – ' + monthLabel(p.end > CUR ? CUR : p.end) })]),
+        h('div', null, [h('span', { text: p.closed ? 'Appraisal completed' : 'Appraisal date' }), h('b', { text: p.closed ? fmtDate(p.endDate) : p.set ? fmtDate(p.apDate) : 'Not set' })]),
+        h('div', null, [h('span', { text: 'Period covered' }), h('b', { text: periodLabel(p) })]),
+        h('div', null, [h('span', { text: 'Reviews in the period' }), h('b', { text: countsText(counts) })]),
         h('div', null, [h('span', { text: 'Prepared for' }), h('b', { text: aud === 'tl' ? L.mgr : tech + ' (self)' })]),
         h('div', null, [h('span', { text: 'Generated' }), h('b', { text: fmtDate(TODAY) })]),
-        h('div', null, [h('span', { text: 'Monthly reviews submitted' }), h('b', { text: subs.length + ' (' + ot.onTime + ' of ' + ot.total + ' on time)' })]),
+        h('div', null, [h('span', { text: 'Monthly reviews submitted' }), h('b', { text: subs.length + (ot.total ? ' (' + ot.onTime + ' on time)' : '') })]),
         h('div', null, [h('span', { text: 'Agreed actions' }), h('b', { text: acts.length + ' (' + acts.filter(function (x) { return x.ac.status === 'Open'; }).length + ' open)' })])
       ]),
       rsec('1. Summary', [
@@ -3037,10 +3281,7 @@ window.ESGOneToOne = function (ctx) {
       rsec('6. Agreed actions', [rtable(['Raised', 'Action', 'Owner', 'Close-out criteria', 'Deadline', 'Status'], acts.map(function (x) {
         return [monthShort(x.r.month) + ' ' + x.r.month.slice(2, 4), x.ac.text, x.ac.owner, x.ac.criteria, fmtDate(x.ac.due), x.ac.status === 'Closed' ? 'Closed ' + fmtDate(x.ac.closedOn) : (acOverdue(x.ac) ? 'Open – overdue' : 'Open')];
       }))]),
-      rsec('7. ' + L.mgr + ' feedback', [rtable(['Month', 'Overall feedback'], prs.filter(function (r) { return r.state === 'Completed' && canSeeTl(r, aud) && r.fb.overall; }).map(function (r) { return [monthLabel(r.month), r.fb.overall]; }))]
-        .concat(prs.some(function (r) { return r.ch && canSeeTl(r, aud); }) ? [h('h3', { text: 'Challenges' }), rtable(['Month', 'Parts challenged', 'Outcome'], prs.filter(function (r) { return r.ch && canSeeTl(r, aud); }).map(function (r) {
-          return [monthLabel(r.month), r.ch.sections.map(function (x) { return sectionName(r, x.key); }).join('; '), r.ch.state === 'Open' ? 'Open' : r.ch.state + (r.ch.closedOn ? ' (' + fmtDate(r.ch.closedOn) + ')' : '')];
-        }))] : [])),
+      rsec('7. ' + L.mgr + ' feedback', [rtable(['Month', 'Overall feedback'], prs.filter(function (r) { return r.state === 'Completed' && canSeeTl(r, aud) && r.fb.overall; }).map(function (r) { return [monthLabel(r.month), r.fb.overall]; }))]),
       rsec('8. Submission record', [rtable(['Month', 'Status', 'Submitted'], prs.map(function (r) {
         return [monthLabel(r.month), r.state === 'Closed - Not Submitted' ? 'Not submitted' : r.state === 'Open' ? (isOverdue(r) ? 'Overdue' : 'In progress') : (r.late ? 'Submitted late' : 'Submitted'), r.submittedOn ? fmtDate(r.submittedOn) : ''];
       }))]),
@@ -3065,22 +3306,22 @@ window.ESGOneToOne = function (ctx) {
     '.note{font-size:11px;color:#5b6774;margin-top:24px;border-top:1px solid #d9dfe5;padding-top:8px}',
     '@media print{@page{size:A4;margin:12mm}.report-doc{padding:0}.rsec h2{break-after:avoid}.rt tr,.fgrid>div{break-inside:avoid}.rt td:nth-child(n+4){white-space:nowrap}}'
   ].join('\n');
-  function printReport(tech, aud) {
+  function printReport(tech, aud, idx) {
     var w = window.open('', '_blank');
     if (!w) { toast('Your browser blocked the print window – allow pop-ups for this site and try again.', true); return; }
     var d = w.document;
     d.title = 'Appraisal report – ' + tech;
     var style = d.createElement('style'); style.textContent = REPORT_CSS; d.head.appendChild(style);
-    d.body.appendChild(d.importNode(reportDoc(tech, aud), true));
+    d.body.appendChild(d.importNode(reportDoc(tech, aud, idx), true));
     w.focus();
     setTimeout(function () { try { w.print(); } catch (_) { /* user can print manually */ } }, 400);
   }
-  function reportView(tech, aud) {
+  function reportView(tech, aud, idx) {
     return h('div', { class: 'report-wrap', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Appraisal report' }, [
       h('div', { class: 'report-bar' }, [h('strong', { text: 'Appraisal report – ' + tech }), h('div', { class: 'btn-row' }, [
-        h('button', { class: 'btn primary', type: 'button', text: '🖨 Print / Save as PDF', onclick: function () { printReport(tech, aud); } }),
+        h('button', { class: 'btn primary', type: 'button', text: '🖨 Print / Save as PDF', onclick: function () { printReport(tech, aud, idx); } }),
         h('button', { class: 'btn', type: 'button', text: 'Close', onclick: function () { state.report = null; render(false); } })])]),
-      reportDoc(tech, aud)
+      reportDoc(tech, aud, idx)
     ]);
   }
 
@@ -3254,8 +3495,7 @@ window.ESGOneToOne = function (ctx) {
     var tt = titles[v] || ['', ''];
     if (v === 'profile') { tt = ['Team overview ›', state.profileTech]; }
     if (v === 'mgr') { var rv = REVIEWS.find(function (x) { return x.id === state.reviewId; }); tt = rv ? [(state.backTo === 'profile' ? rv.tech : state.backTo === 'team' ? 'Team overview' : 'Monthly reviews') + ' ›', rv.tech + ' – ' + monthLabel(rv.month)] : ['', 'Review']; }
-    var titlebar = h('div', { class: 'titlebar' }, [h('div', null, [tt[0] ? h('div', { class: 'crumb', text: tt[0] }) : null, h('h1', { text: tt[1] })]),
-      h('span', { class: 'small muted', text: 'Today ' + fmtDate(TODAY) })]);
+    var titlebar = h('div', { class: 'titlebar' }, [h('div', null, [tt[0] ? h('div', { class: 'crumb', text: tt[0] }) : null, h('h1', { text: tt[1] })])]);
     var main = h('main');
     try {
       main.appendChild(v === 'tech' ? techView() : v === 'myapp' ? profileView(ME, 'tech') : v === 'team' ? teamView() : v === 'reviews' ? reviewsView()
@@ -3267,7 +3507,7 @@ window.ESGOneToOne = function (ctx) {
     }
     root.appendChild(h('div', { class: 'shell' }, [topbar, h('div', { class: 'content' }, [titlebar, main])]));
     if (!state.report) { root.appendChild(feedbackWidget(tt[1] || v)); }
-    if (state.report) { root.appendChild(reportView(state.report.tech, state.report.aud)); }
+    if (state.report) { root.appendChild(reportView(state.report.tech, state.report.aud, state.report.period)); }
     root.appendChild(live);
     root.appendChild(tipEl);
     keep.forEach(function (c) { root.appendChild(c); });
@@ -3289,6 +3529,7 @@ window.ESGOneToOne = function (ctx) {
   }
 
   async function start() {
+    state.amend = null;   // a reload always leaves an amendment that wasn't saved
     message(L.app, 'Loading your 1-to-1…');
     TODAY = localDate(new Date().toISOString());
     CUR = TODAY.slice(0, 7);
@@ -3374,6 +3615,24 @@ window.ESGOneToOne = function (ctx) {
     },
     // exposed for the local test harness only (no data, no side effects)
     _version: VERSION,
-    _focusAreas: function (o) { return focusAreas(o); }
+    _focusAreas: function (o) { return focusAreas(o); },
+    // The period and statistics calculations run on a made-up model, in a fresh instance that has not loaded (no requests).
+    _calc: function (m) {
+      if (root) { throw new Error('test hook only'); }
+      IS_TL = m.tl !== false; V14 = true; TODAY = m.today; CUR = TODAY.slice(0, 7); CUR_YEAR = appraisalYearOf(TODAY);
+      SETTINGS = { bands: defaultBands(), reminders: [] }; L = defaultLabels();
+      TECH_INFO = {}; TECH_INFO.T = { appraisal: m.ap || '', cycleStart: isoDay(m.start || ''), history: parseHistory(JSON.stringify(m.history || [])), boundaries: m.boundaries || [], active: true };
+      REVIEWS = m.reviews.map(function (x, i) {
+        var st = x.state || 'Completed';
+        return { id: i + 1, mrId: i + 1, tech: 'T', month: x.month, due: lastDay(x.month), state: st, late: !!x.late, processing: false,
+          released: st === 'Completed' || st === 'Closed - Not Submitted', snapshot: [{ id: 1, title: 'E1', measures: '', year: '' }],
+          answers: { q8: [{ id: 1, rating: x.self || null, comment: '' }] }, fb: { exp: {}, expRating: x.tl ? { 1: x.tl } : {}, actions: [] } };
+      });
+      return { streak: streakOf('T'), periods: periodsOf('T').map(function (p) {
+        var o = expectedOutcome('T', 'tl', p), c = periodCounts('T', p, 'tl');
+        return { label: periodLabel(p), closed: p.closed, noBaseline: !!p.noBaseline, months: periodReviews('T', p).map(function (r) { return r.month; }),
+          counts: c, text: countsText(c), current: o.current, projected: o.projected, points: o.pts.length, onTime: onTimeOf('T', p) };
+      }) };
+    }
   };
 };

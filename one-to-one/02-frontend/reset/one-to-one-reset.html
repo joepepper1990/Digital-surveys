@@ -1,0 +1,52 @@
+<!--
+  ESG 1-to-1 – ONE-TIME TEST-DATA RESET TOOL (temporary). Welcome by Accelerator 365 layout.
+  Use only as described in RESET_PROCEDURE.md: upload this file and one-to-one-reset.js to the
+  "Welcome Web Part - Custom Layouts" library, put the Welcome web part with the layout "ESG 1-to-1 reset tool"
+  on a temporary page only the Team Leader can open, run it with Flow 1 off, then delete the page and both files.
+  Static markup only; all data is rendered by one-to-one-reset.js with textContent. No Handlebars expressions.
+-->
+<template
+    id="metadata"
+    data-name="ESG 1-to-1 reset tool"
+    data-description="One-time, controlled removal of 1-to-1 test records (temporary)">
+
+    <template id="layout">
+        <style>
+  .SCOPE .rs { font-family: "Segoe UI", system-ui, Arial, sans-serif; font-size: 14px; line-height: 1.45; color: #16222c; background: #eef2f5; padding: 20px 28px 40px; min-width: 1000px; }
+  .SCOPE .rs * { box-sizing: border-box; }
+  .SCOPE .rs h2, .SCOPE .rs h3, .SCOPE .rs h4 { margin: 0; }
+  .SCOPE .rs-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; }
+  .SCOPE .rs-head h2 { font-size: 20px; color: #13516b; }
+  .SCOPE .rs-ver { color: #5b6774; font-size: 12px; }
+  .SCOPE .rs-warn { background: #fff3d6; color: #8a5a00; border: 1px solid #f0d58a; border-radius: 8px; padding: 10px 14px; }
+  .SCOPE .rs-msg { background: #e7f0f6; border-radius: 8px; padding: 10px 14px; margin: 8px 0; font-weight: 600; }
+  .SCOPE .rs-msg.bad { background: #fde8e9; color: #a4262c; }
+  .SCOPE .rs-step { background: #fff; border: 1px solid #d9dfe5; border-radius: 10px; padding: 14px 18px; margin-top: 14px; }
+  .SCOPE .rs-step.done { border-left: 4px solid #1b7a45; }
+  .SCOPE .rs-step h3 { font-size: 16px; display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .SCOPE .rs-n { display: inline-flex; width: 26px; height: 26px; border-radius: 50%; background: #13516b; color: #fff; align-items: center; justify-content: center; font-size: 13px; }
+  .SCOPE .rs-filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  .SCOPE .rs select, .SCOPE .rs input[type="text"] { font: inherit; padding: 6px 8px; border: 1px solid #b8c2cc; border-radius: 6px; }
+  .SCOPE .rs input[type="text"] { width: 320px; margin-right: 8px; }
+  .SCOPE .rs-btn { font: inherit; font-weight: 600; padding: 6px 14px; border-radius: 6px; border: 1px solid #b8c2cc; background: #fff; cursor: pointer; margin-right: 8px; }
+  .SCOPE .rs-btn:disabled { opacity: .5; cursor: not-allowed; }
+  .SCOPE .rs-btn.danger { background: #a4262c; border-color: #a4262c; color: #fff; }
+  .SCOPE .rs-list { border-top: 1px solid #d9dfe5; padding: 8px 0; }
+  .SCOPE .rs-list summary { cursor: pointer; }
+  .SCOPE .rs-tbl { border-collapse: collapse; width: 100%; margin-top: 6px; font-size: 13px; }
+  .SCOPE .rs-tbl th, .SCOPE .rs-tbl td { border-bottom: 1px solid #eef1f4; padding: 4px 8px; text-align: left; overflow-wrap: anywhere; }
+  .SCOPE .rs-muted { color: #5b6774; }
+  .SCOPE .rs-ok { color: #1b7a45; font-weight: 600; }
+  .SCOPE .rs-bad { color: #a4262c; font-weight: 600; }
+  .SCOPE .rs-chk { display: flex; gap: 8px; align-items: center; font-weight: 600; }
+        </style>
+        <div class="rs-root" data-reset-root>
+            <p style="padding:24px;font-family:Segoe UI,Arial,sans-serif">Loading the reset tool…</p>
+        </div>
+        <script
+            src="one-to-one-reset.js"
+            data-layout
+            data-exports="ESGOneToOneReset">
+        </script>
+    </template>
+</template>

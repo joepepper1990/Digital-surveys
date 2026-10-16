@@ -131,17 +131,17 @@ E4 and E5 are written in the first person (they come from your mailbox), so they
 | E9 | 5 Wellbeing → the person | `Your wellbeing assessment is ready to complete` | You've started a wellbeing assessment; please complete their part before you meet (15–20 minutes, can save and come back); link `?wbId=<id>`; only the two of you can see it. |
 | E10 | 5 Wellbeing → you | `Wellbeing assessment submitted: <name>` | Arrange a private, hour-long conversation; link to the assessment. |
 | E11 | 5 Wellbeing → the person | `Your wellbeing assessment record is ready` | Thanks for the conversation; the agreed record (arrangements, review date) is ready to view; link. |
-| E12 | 1 Daily scheduler → you | `Wellbeing review due in 7 days: <name>` / `Wellbeing review due today: <name>` | The review agreed with that person is due on DD-MMM-YYYY; link to the last assessment. |
+| E12 | 1 Daily scheduler → you | `Wellbeing assessment due in 7 days: <name>` / `… due today: <name>` / `… overdue: <name>` | Changed in 1.4. The next wellbeing assessment for that person is due (or was due *n* days ago) on DD-MMM-YYYY, from **Settings → Team → Next wellbeing**. It is sent 7 days before, on the day, then every 7 days while overdue, for active people only. Links to the 1-to-1 page. |
 | E13 | 6 Feedback → you | `1-to-1 feedback (<Fault / Improvement / Suggestion>): <first 60 characters>` | Who sent it (name and email), the type, the page and version, the time, and their message (HTML-escaped, line breaks kept). If it can't be sent you get `1-to-1 feedback could not be delivered – please read it in the list` instead, with no content, and the item shows in *Needs your attention*. More than 10 from one person in 24 hours are kept but not emailed one by one (*Held*); they show as one row in *Needs your attention*. |
 
-## Solution 1.3 – challenge emails (Flow 7)
-
-Neither email contains the challenged parts or the technician's notes; they are read on the page.
+## Solution 1.4 – amendment and appraisal emails; the challenge emails are retired
 
 | # | Flow → to | Subject | Body (summary) |
 |---|---|---|---|
-| E14 | 7 Challenge → you | `1-to-1 feedback challenged: <name>, <Month yyyy>` | **<name>** has challenged part of your feedback on their <Month yyyy> 1-to-1; talk it through with them – the challenged parts are the topics for that conversation. Link **Open the review** (`?reviewId=<id>`). It closes when you have both agreed, or as *Not agreed* on DD-MMM-YYYY (it stays flagged, and you can reopen it at any time). |
-| E15 | 7 Challenge → the person | `Your 1-to-1 challenge has been reopened` | Your line manager has reopened the challenge on your <Month yyyy> 1-to-1 feedback; have a look and agree it when you are happy. Link **Open my review** (`?reviewId=<id>`). |
+| E16 | 8 Amendment notice → the person | `Your 1-to-1 for <Month yyyy> has been amended` | Your Team Leader has amended your 1-to-1 for **<Month yyyy>** after it was submitted; open it to see the current version. Link **Open my 1-to-1** (`?reviewId=<id>`). The change and its reason are recorded; speak to your Team Leader if you have a question. **It never contains the changed answers, the before/after values or the reason.** |
+| E16-notice | 8 Amendment notice → you | `Amendment email not sent – please resend from the 1-to-1 page` | The E16 to <name> for <Month yyyy> couldn't be sent. *Needs your attention* lets you send it again (Resend). No content. |
+| E17 | 1 Daily scheduler → you | `Appraisal due in 7 days: <name>` / `Appraisal due today: <name>` / `Appraisal overdue: <name>` | The appraisal for that person is due (or was due *n* days ago) on DD-MMM-YYYY, from **Settings → Team → Next appraisal**. When it's done, use *Mark appraisal completed*; to move it, change the date there. It is sent 7 days before, on the day, then every 7 days while overdue. |
 
-The exact HTML is in [`../04-solution/tools/flows.py`](../04-solution/tools/flows.py) (`flow_team`, `flow_wellbeing`, `flow_daily`, `flow_challenge`).
+E14 and E15 (challenges, Flow 7) are **no longer sent**: Flow 7 is not in solution 1.4 and is turned off and deleted during the upgrade (`MIGRATION_1_4.md`).
 
+The exact HTML is in [`../04-solution/tools/flows.py`](../04-solution/tools/flows.py) (`flow_team`, `flow_wellbeing`, `flow_daily`, `flow_amendment`).
