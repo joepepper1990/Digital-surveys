@@ -5,7 +5,7 @@
 - **Stages 0A and 0B have passed in the live tenant.** Welcome runs the external script, authenticated REST works, and the item-level security model holds.
 - The visual design was agreed through prototype v7 ([`prototype/prototype.html`](prototype/prototype.html)).
 - **The production build files are produced:**
-  - the frontend [`02-frontend/`](02-frontend/README.md), with a local mock and 305 automated checks (plus 31 for the one-time reset tool);
+  - the frontend [`02-frontend/`](02-frontend/README.md), with a local mock and 306 automated checks (plus 31 for the one-time reset tool);
   - the list checklist [`01-sharepoint/lists.md`](01-sharepoint/lists.md);
   - **the importable Power Platform solution** [`04-solution/`](04-solution/IMPORT_GUIDE.md): seven flows (1–6 and 8) plus a setup flow that creates the eight lists, permission levels, group and list permissions exactly (v4.1; Flow 8 and the Amendments list from 1.4; Flow 7 and the Challenges list existed in v4.5 / 1.3 only and are retired);
   - the flow build sheets and email templates [`03-flows/`](03-flows/FLOW_BUILD_SHEETS.md), for reference or building by hand;
@@ -43,7 +43,7 @@ The system has **eight lists** (five data lists, including Wellbeing Assessments
 | Removed | — | Private notes, ask-for-a-chat, workload trend, the occupational-health text (`eapText`), example text in boxes, and the "how it's worked out" panel for technicians |
 | Flows | — | Flow 1 copies `AppraisalDate` and initialises the two JSON columns. Email dates use `dd-MMM-yyyy`. E3's request tag uses `startsWith`. Flows 2 and 3 are unchanged. |
 | Security model | — | **Unchanged.** No new trust boundary: new technician fields are on the technician's own item; new TL data is on Manager Reviews (released by Flow 3); the Settings list holds no personal data. |
-| Delivery (v4.1) | Lists and flows built by hand from G Parts 3–8 | **Import one solution** ([`04-solution/ESGOneToOne_1_4_0_0_unmanaged.zip`](04-solution/IMPORT_GUIDE.md)), then run **ESG 1-to-1 \| 0 Setup**, which builds everything in C, D.2 and D.3. The flows look up group, role and list IDs at run time, so G Part 4 is no longer needed. The site URL and TL email are environment variables. For environments without Dataverse there is an offline legacy-package builder. Verified locally: a static validator, 29 mutation tests and 215 end-to-end simulations against a fake SharePoint (solution 1.4.0.0). |
+| Delivery (v4.1) | Lists and flows built by hand from G Parts 3–8 | **Import one solution** ([`04-solution/ESGOneToOne_1_4_0_0_unmanaged.zip`](04-solution/IMPORT_GUIDE.md)), then run **ESG 1-to-1 \| 0 Setup**, which builds everything in C, D.2 and D.3. The flows look up group, role and list IDs at run time, so G Part 4 is no longer needed. The site URL and TL email are environment variables. For environments without Dataverse there is an offline legacy-package builder. Verified locally: a static validator, 34 mutation tests and 216 end-to-end simulations against a fake SharePoint (solution 1.4.0.0). |
 
 
 ## Changes in v3
@@ -139,7 +139,7 @@ Added later (see the version sections before H): the **Wellbeing Assessments** l
 | **1 — Functional MVP** | Flow 1 (creation and links), the full frontend (all 9 questions including Q8, plus the TL views), Flows 2 and 3 | Test A drafts, submits and is locked. The TL reviews and completes, and A sees the feedback. Test B sees nothing of A's at any point. |
 | **2 — Monthly automation** | Flow 1 reminders and problem report. Schedule confirmed. | Date tests F13, F14, F19 and F20 pass |
 | **3 — Appraisal tracking** | Real expectations loaded. Rollover procedure written down. | F5–F7 pass |
-| **4 — Verification** | Dashboard view checked, **all privacy tests P1–P29**, clean-down, go-live | Every test in H passes |
+| **4 — Verification** | Dashboard view checked, **all privacy tests P1–P30** (P1–P29 before 1.4), clean-down, go-live | Every test in H passes |
 
 Q8 is part of the frontend file from Stage 1, because separating it costs more than it saves. Stage 3 is about loading and testing real expectation data.
 
@@ -440,7 +440,7 @@ The TL views (Team overview, Monthly reviews, manager review) take status **only
 
 **Accepted low risk:** a technician can trigger Flow 2 repeatedly by editing their own draft. Each run only re-applies permissions they already hold.
 
-**Amendments are not resubmissions (1.4).** When the editor is the TL and the Manager Review is no longer Open, Flow 2 cancels the run: no E3, no new stamp, no permission change. Flow 1 reports any submitted review Flow 2 never processed.
+**Amendments are not resubmissions (1.4).** When the editor is the TL and the Manager Review is no longer Open, Flow 2 re-applies the technician's Read lock (as on every run) and then cancels: no E3, no new stamp. A real submission (state still Open) is always processed. Flow 1 reports any submitted review Flow 2 never processed.
 
 ---
 
@@ -664,10 +664,10 @@ It opens in an in-page overlay with **Print / Save as PDF**. That opens a clean 
 - **`mock/mock-sharepoint.js`:** an in-memory SharePoint `_api` behind a fake Welcome context.
   - Five lists with field types and fictional users (TL, Test A, Test B and others).
   - Item permissions as in D.4.
-  - Flow 2 and Flow 3 effects emulated.
+  - Flow 2 and Flow 3 effects emulated (5.0.0: also Flow 8, and the eight lists including 1-to-1 Amendments).
   - A switch for attack-string (XSS) data.
 - **`mock/index.html`:** generated from the production CSS by `tools/build-mock.js`. You can click through every view as any user.
-- **`test/run-tests.js`** (headless Chromium, 273 checks):
+- **`test/run-tests.js`** (headless Chromium, 306 checks in 5.0.0; `test/run-reset-tests.js` adds 31 for the reset tool):
   - static rules S1, S2, S4 and S5;
   - isolation for Test A and Test B, including direct REST attempts;
   - draft payload allow-list;
@@ -677,7 +677,8 @@ It opens in an in-page overlay with **Print / Save as PDF**. That opens a clean 
   - creating and retiring expectations;
   - closing actions;
   - the report (8 sections, print popup);
-  - an XSS sweep over 11 views.
+  - an XSS sweep over 11 views;
+  - 5.0.0: appraisal periods, missed months, amendments (audit, Flow 2 / Flow 8 effects), Settings → Team dates, uncapped expectations and Delete permanently, and the screen clean-up.
 
 The local checks are **not** a substitute for the tenant tests in H.
 
@@ -1329,7 +1330,7 @@ Upgrade from 4.5.0 / 1.3.0.2 in the order given in [`MIGRATION_1_4.md`](MIGRATIO
 | Missed months | *Closed – Not Submitted* and overdue *Open* months are excluded from averages, the expected outcome / forecast, the trend and the on-time denominator (**on time = on-time ÷ submitted**). A missed month neither extends nor breaks the on-time streak; a late one breaks it. Tiles and reports show "N rated reviews of M months · K missed". | Display only. |
 | TL amendments | A released (Completed / Closed) review is **read-only** until the TL clicks **Amend…**; a submitted, not yet released review keeps normal feedback saving plus **Amend answers…** for the technician's answers. In amend mode nothing auto-saves. **Save amendment…** requires a reason and lists the changed fields. Save order: re-read *Modified* on both items (refuse if changed elsewhere) → create a **Draft** record in *1-to-1 Amendments* (before/after of the changed columns only) → write only the changed columns → set *NotifyStatus* = Pending. The review shows an **Amended (n)** card to the TL only. *Needs your attention* lists failed or stuck emails (**Resend** → Retry) and unfinished Drafts (**Send notice**, or **Dismiss** → Cancelled). Replaces the old "edit in SharePoint and write the reason in `CorrectionLog`" process. | *1-to-1 Amendments* is Owners only and versioned; who and when are SharePoint's Created By / Created, never set by the page. Tamper-**evident**, not tamper-proof: site owners and admins can always edit a list they own. The E16 email is an independent record. Technicians never see the reason or before/after values. |
 | Flow 8 *Amendment notice* | New; arrives **Off** at import. For a Pending (or Retry) record it re-reads the item, sends **E16** to the technician (the month and a link only – no content, no reason), marks it *Sent*; on failure marks it *Failed* and sends the TL a short notice. One run at a time, so one email per amendment; its own updates never start it again. | Secured run history like the other flows. |
-| Flow 2 / Flow 1 | Flow 2 cancels when the editor is the TL and the Manager Review is no longer Open – an amendment is **not** a resubmission (no E3, no new stamp, no permission change). Flow 1 reports any submitted review Flow 2 never processed (E7). | Needs Flow 2's trigger to carry **Editor** (tenant check T3). |
+| Flow 2 / Flow 1 | Flow 2 cancels when the editor is the TL and the Manager Review is no longer Open – an amendment is **not** a resubmission (the lock is re-applied first, then the run stops: no E3, no new stamp). Flow 1 reports any submitted review Flow 2 never processed (E7). | Needs Flow 2's trigger to carry **Editor** (tenant check T3). |
 | Wellbeing date | The next wellbeing assessment due date is `Technicians.NextWellbeingDate`, set in Settings → Team. Completing an assessment requires the TL to **confirm or set** the next date (must be after today) – never automatic, never invented. *Needs your attention* can suggest the date from the last assessment ("Use it"), applied only when the TL clicks it. | – |
 | Reminders | Flow 1: **E12** (wellbeing) now from `NextWellbeingDate`, and new **E17** (appraisal) from `AppraisalDate`: 7 days before, on the day, then weekly while overdue, active people only. | Emails to the TL only, no content. |
 | Expectations | **No limit of 10** (any number; a warning above 30 on one review because of the note column's size). Shared always come before Individual (Flow 1 orders AppliesTo desc, SortOrder asc); SortOrder is within each group and new items go to the end of their group. The expectation year is the **first** appraisal year it applies to and it carries on until retired (it no longer disappears in April); a later year stays hidden until it starts; a mistyped year is ignored safely. The page has a Shared card and one card per technician. Retired expectations can be **Delete permanently** (TL only, confirmation, site recycle bin for about 93 days; past reviews keep their own copies). | The only page delete is `recycle()` on a retired expectation; technicians' permission levels have no Delete (tenant check T5). |
@@ -1563,7 +1564,7 @@ All of these are text, contain **no tenant names, credentials or personal data**
 | K7 | Test record | Use section H directly (F1–F56, P1–P30; in 1.4 F48 and P29 check that challenges are retired); add Pass/Fail, date, tester and screenshot columns |
 | K8 | Privacy notice | **Not needed.** The TL decided it's handled between the TL and each technician. |
 | K9 | [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) | **Produced (v4)** |
-| K10 | [`02-frontend/mock/`](02-frontend/mock/), [`02-frontend/test/`](02-frontend/test/), [`02-frontend/tools/`](02-frontend/tools/) | **Produced.** 305 checks passing (plus 31 for the reset tool). |
+| K10 | [`02-frontend/mock/`](02-frontend/mock/), [`02-frontend/test/`](02-frontend/test/), [`02-frontend/tools/`](02-frontend/tools/) | **Produced.** 306 checks passing (plus 31 for the reset tool). |
 | K11 | Frontend security notes for IT-13 | Section E.3–E.4 plus [`02-frontend/README.md`](02-frontend/README.md) (endpoints, rules, test evidence) |
 | — | [`prototype/prototype.html`](prototype/prototype.html) | Design baseline (prototype v7) |
 

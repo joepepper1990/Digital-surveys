@@ -79,7 +79,7 @@ You need Node.js. For the automated tests you also need Playwright with Chromium
 ```bash
 cd one-to-one/02-frontend
 node tools/build-mock.js          # regenerates mock/index.html from one-to-one.html
-node test/run-tests.js            # 305 checks; exits non-zero on any failure
+node test/run-tests.js            # 306 checks; exits non-zero on any failure
 node test/run-reset-tests.js      # 31 checks of the reset tool
 ```
 
@@ -95,7 +95,7 @@ Or in one line: `node tools/build-mock.js && node test/run-tests.js` and `node t
 
 | Area | Checks |
 |---|---|
-| Static code rules | No `innerHTML` and similar; no `eval` or string timers; no external URLs (only the SVG namespace); no Handlebars; the factory export exists; no email addresses or tenant hosts; a single update path and a single create path; no permission endpoints |
+| Static code rules | No `innerHTML` and similar; no `eval` or string timers; no external URLs (only the SVG namespace); no Handlebars; the factory export exists; no email addresses or tenant hosts; a single update path and a single create path; one `recycle()` path, used only for retired expectations; no permission endpoints |
 | Isolation | TL loads everything. Test A sees only their own items, and direct REST reads of Test B's items, Technicians and Expectations are refused. Test B is likewise isolated. |
 | Technician writes | Draft payload contains only the allowed fields. Submit → locked → a further write is refused. |
 | TL journey | Review; Complete blocked by an incomplete action; feedback and state are separate writes; actions fields; TL ratings; release; technician sees the released feedback |

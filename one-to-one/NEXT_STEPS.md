@@ -18,9 +18,9 @@
 
   | File | What it is |
   |---|---|
-  | [`02-frontend/`](02-frontend/README.md) | Production frontend v5.0.0 (desktop only), local mock, 305 automated checks (all passing); one-time reset tool in `reset/` (31 checks) |
+  | [`02-frontend/`](02-frontend/README.md) | Production frontend v5.0.0 (desktop only), local mock, 306 automated checks (all passing); one-time reset tool in `reset/` (31 checks) |
   | [`01-sharepoint/lists.md`](01-sharepoint/lists.md) | Eight-list build checklist |
-  | [`04-solution/`](04-solution/IMPORT_GUIDE.md) | **Importable solution**: setup flow (creates the lists exactly) + Flows 1–6 and 8 (1.4.0.0; no Flow 7); offline legacy builder; validated (29 / 29 mutations caught) and simulated end to end (215 / 215) |
+  | [`04-solution/`](04-solution/IMPORT_GUIDE.md) | **Importable solution**: setup flow (creates the lists exactly) + Flows 1–6 and 8 (1.4.0.0; no Flow 7); offline legacy builder; validated (34 / 34 mutations caught) and simulated end to end (216 / 216) |
   | [`03-flows/`](03-flows/FLOW_BUILD_SHEETS.md) | Flow build sheets and email templates (reference / manual build) |
   | [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) | Operating manual |
   | [`MIGRATION_1_4.md`](MIGRATION_1_4.md) | Upgrade order from 4.5.0 / 1.3.0.2, going back, tenant-only checks T1–T11 |

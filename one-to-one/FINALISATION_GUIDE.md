@@ -15,8 +15,8 @@ Version: system v5.0.0 (frontend) · solution 1.4.0.0 · guide dated 16-Oct-2026
   - the `1-to-1 Technicians` group exists;
   - the `1-to-1 Edit` and `1-to-1 Read` permission levels exist.
 - **Everything to install is built and verified offline:**
-  - frontend: 305 automated checks (plus 31 for the one-time reset tool);
-  - flows: simulated end to end, 215 checks, and 29 deliberately broken copies all caught by the validator;
+  - frontend: 306 automated checks (plus 31 for the one-time reset tool);
+  - flows: simulated end to end, 216 checks, and 34 deliberately broken copies all caught by the validator;
   - independent review rounds fixed 55 defects (see VERIFICATION.md).
 
 **New in 5.0.0 / solution 1.4** (already on 4.5.0 / 1.3? §4.2 has the upgrade order):
@@ -105,7 +105,7 @@ Version: system v5.0.0 (frontend) · solution 1.4.0.0 · guide dated 16-Oct-2026
 2. [ ] Top right: pick the environment IT named for the flows.
 3. [ ] Left menu: **Solutions**.
    - If it asks to create a **Dataverse database**, or *Solutions* is missing, use §4.8 instead.
-4. [ ] **Import solution → Browse →** `ESGOneToOne_1_3_0_0_unmanaged.zip` → **Next → Next**.
+4. [ ] **Import solution → Browse →** `ESGOneToOne_1_4_0_0_unmanaged.zip` → **Next → Next**.
 5. [ ] **Connections.** For each of the three, pick yours or click **+ New connection**, signed in as you:
 
    | Connection reference | Connector |
