@@ -5,7 +5,7 @@
 - **Stages 0A and 0B have passed in the live tenant.** Welcome runs the external script, authenticated REST works, and the item-level security model holds.
 - The visual design was agreed through prototype v7 ([`prototype/prototype.html`](prototype/prototype.html)).
 - **The production build files are produced:**
-  - the frontend [`02-frontend/`](02-frontend/README.md), with a local mock and 182 automated checks;
+  - the frontend [`02-frontend/`](02-frontend/README.md), with a local mock and 219 automated checks;
   - the list checklist [`01-sharepoint/lists.md`](01-sharepoint/lists.md);
   - **the importable Power Platform solution** [`04-solution/`](04-solution/IMPORT_GUIDE.md): six flows plus a setup flow that creates the seven lists, permission levels, group and list permissions exactly (v4.1);
   - the flow build sheets and email templates [`03-flows/`](03-flows/FLOW_BUILD_SHEETS.md), for reference or building by hand;
@@ -644,7 +644,7 @@ It opens in an in-page overlay with **Print / Save as PDF**. That opens a clean 
   - Flow 2 and Flow 3 effects emulated.
   - A switch for attack-string (XSS) data.
 - **`mock/index.html`:** generated from the production CSS by `tools/build-mock.js`. You can click through every view as any user.
-- **`test/run-tests.js`** (headless Chromium, 182 checks):
+- **`test/run-tests.js`** (headless Chromium, 219 checks):
   - static rules S1, S2, S4 and S5;
   - isolation for Test A and Test B, including direct REST attempts;
   - draft payload allow-list;
@@ -1492,7 +1492,7 @@ All of these are text, contain **no tenant names, credentials or personal data**
 | K7 | Test record | Use section H directly (F1–F44, P1–P28); add Pass/Fail, date, tester and screenshot columns |
 | K8 | Privacy notice | **Not needed.** The TL decided it's handled between the TL and each technician. |
 | K9 | [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) | **Produced (v4)** |
-| K10 | [`02-frontend/mock/`](02-frontend/mock/), [`02-frontend/test/`](02-frontend/test/), [`02-frontend/tools/`](02-frontend/tools/) | **Produced.** 182 checks passing. |
+| K10 | [`02-frontend/mock/`](02-frontend/mock/), [`02-frontend/test/`](02-frontend/test/), [`02-frontend/tools/`](02-frontend/tools/) | **Produced.** 219 checks passing. |
 | K11 | Frontend security notes for IT-13 | Section E.3–E.4 plus [`02-frontend/README.md`](02-frontend/README.md) (endpoints, rules, test evidence) |
 | — | [`prototype/prototype.html`](prototype/prototype.html) | Design baseline (prototype v7) |
 
