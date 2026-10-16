@@ -552,7 +552,13 @@ window.ESGOneToOne = function (ctx) {
 
     var revs = await spGetAll(CONFIG.lists.reviews, REV_FIELDS, 'Technician');
     CH_AVAILABLE = (await req('GET', listPath(CONFIG.lists.challenges) + '/items?$select=Id&$top=1')).ok;
-    var mrs = await spGetAll(CONFIG.lists.mgr, MR_FIELDS + (CH_AVAILABLE ? MR_CH_FIELDS : ''), 'Technician');
+    var mrs;
+    try { mrs = await spGetAll(CONFIG.lists.mgr, MR_FIELDS + (CH_AVAILABLE ? MR_CH_FIELDS : ''), 'Technician'); } catch (e) {
+      if (!CH_AVAILABLE) { throw e; }
+      CH_AVAILABLE = false;   // a challenge column is missing (Setup only part-ran): carry on without challenges
+      console.warn('ESG 1-to-1: challenge columns not readable – run 0 Setup again.', e);
+      mrs = await spGetAll(CONFIG.lists.mgr, MR_FIELDS, 'Technician');
+    }
     CHALLENGES = CH_AVAILABLE ? await spGetAll(CONFIG.lists.challenges, CH_FIELDS) : [];
     var mrByItem = {};
     mrs.forEach(function (m) { if (m.ReviewItemId) { mrByItem[Number(m.ReviewItemId)] = m; } });
@@ -730,7 +736,7 @@ window.ESGOneToOne = function (ctx) {
     }).filter(function (x) { return x.avg !== null; });
     if (!rows.length) { return null; }
     rows.sort(function (x, y) { return x.avg - y.avg || x.i - y.i; });
-    var bi = SETTINGS.bands.findIndex(function (b) { return b.name === o.band.name; });
+    var bi = SETTINGS.bands.findIndex(function (b) { return b.cls === o.band.cls; });
     return { band: o.band, next: bi >= 0 ? SETTINGS.bands[bi + 1] || null : null, items: rows.slice(0, 3) };
   }
   function trendWord(o) { return o.pts.length < 3 ? 'Too early to tell' : o.slope > 0.05 ? 'Improving ↗' : o.slope < -0.05 ? 'Dipping ↘' : 'Steady →'; }
@@ -998,7 +1004,7 @@ window.ESGOneToOne = function (ctx) {
   }
   function focusBlock(f, showNums) {
     if (!f) { return null; }
-    if (!f.next) { return h('div', { class: 'focus' }, [h('b', { text: 'Keep it up' }), h('div', { class: 'small', text: "You're in the top band – keep doing what you're doing." })]); }
+    if (!f.next) { return h('div', { class: 'focus' }, [h('b', { text: showNums ? 'Top band' : 'Keep it up' }), h('div', { class: 'small', text: showNums ? 'Already in the top band.' : "You're in the top band – keep doing what you're doing." })]); }
     return h('div', { class: 'focus' }, [
       h('div', null, ['To move up to ', h('span', { class: 'band ' + f.next.cls, text: f.next.name }), ', focus on:']),
       h('ul', null, f.items.map(function (x) { return h('li', { text: x.e.title + (showNums ? ' (average ' + f1(x.avg) + ')' : '') }); }))
@@ -1013,9 +1019,9 @@ window.ESGOneToOne = function (ctx) {
     if (isOverdue(r)) { return h('span', { class: 'chip red', text: 'Overdue' }); }
     return h('span', { class: 'chip', text: r.draft ? 'Draft' : 'Not started' });
   }
-  function textBox(label, value, onInput, disabled, rows) {
+  function textBox(label, value, onInput, disabled, rows, ariaLabel) {
     var id = nid('t');
-    var ta = h('textarea', { id: id, rows: rows || 3 });
+    var ta = h('textarea', { id: id, rows: rows || 3, 'aria-label': label ? null : (ariaLabel || null) });
     ta.value = value || ''; ta.disabled = !!disabled;
     ta.addEventListener('input', function () { markDirty(); onInput(ta.value); });
     var w = h('div', null, [label ? h('label', { class: 'field', for: id, text: label }) : null, ta]);
@@ -1075,6 +1081,7 @@ window.ESGOneToOne = function (ctx) {
     });
     return g;
   }
+  function labelled(el, text) { el.setAttribute('aria-label', text); return el; }
   function ynSeg(value, onChange, disabled) { return seg([{ value: 'Yes', text: 'Yes' }, { value: 'No', text: 'No' }], value, onChange, disabled, true); }
   // words: the technician's version – the scale in words only (the 1–5 values stay in the stored data)
   function ratingSeg(value, onChange, disabled, words) {
@@ -1328,6 +1335,16 @@ window.ESGOneToOne = function (ctx) {
   // ---------------------------------------------------------------------------------------------
   // CHALLENGES – a technician flags parts of the released feedback to talk through; both agree, or it closes as Not agreed
   // ---------------------------------------------------------------------------------------------
+  function chItem(c) { return CHALLENGES.find(function (x) { return Number(idOf(x.ID)) === c.itemId; }) || null; }
+  // A technician's open challenge on an earlier month, shown on their current form so it isn't missed
+  function openChallengeNote(r, mine) {
+    var o = mine.find(function (x) { return x !== r && x.ch && x.ch.state === 'Open'; });
+    if (!o) { return null; }
+    return h('section', { class: 'card chcard' }, [h('div', { class: 'card-h' }, [
+      h('div', null, [h('h3', { text: '⚑ Your challenge on the ' + monthLabel(o.month) + ' feedback is open' }),
+        h('div', { class: 'small muted', text: (o.ch.techAgreed ? 'You have agreed – waiting for your ' + L.mgr + '.' : 'Agree it once you have talked it through.') + ' Closes ' + fmtDate(o.ch.closeBy) + '.' })]),
+      h('button', { class: 'btn small', type: 'button', text: 'Open ' + monthLabel(o.month), onclick: function () { go('tech', { reviewId: o.id }); } })])]);
+  }
   function challengeChip(r) {
     if (!r.ch) { return null; }
     return h('span', { class: 'chip ' + (r.ch.state === 'Agreed' ? 'green' : 'amber'), text: r.ch.state === 'Open' ? '⚑ Challenged' : r.ch.state === 'Agreed' ? '✓ Challenge agreed' : '⚑ Not agreed' });
@@ -1354,17 +1371,30 @@ window.ESGOneToOne = function (ctx) {
     }
     function agreeTech() {
       busy('ch', async function () {
-        await writeDates(CONFIG.lists.challenges, c.itemId, { TechAgreedOn: TODAY });
+        try { await writeDates(CONFIG.lists.challenges, c.itemId, { TechAgreedOn: TODAY }); } catch (e) {
+          if (/read-only|refused/.test(String(e && e.message))) { throw new Error('This challenge is still being reopened – please try again in a few minutes.'); }
+          throw e;
+        }
         c.techAgreed = true; toast('Thanks – recorded.'); render(false);
+      }).catch(function () {});
+    }
+    // wakes Flow 7 again (it runs every few minutes) – used when an earlier step didn't reach it
+    function nudge(msg) {
+      busy('ch', async function () {
+        await writeDates(CONFIG.lists.challenges, c.itemId, { TlPing: TODAY });
+        var it = chItem(c); if (it && c.state === 'Open') { it.ChallengeStatus = 'Open'; }
+        toast(msg); render(false);
       }).catch(function () {});
     }
     function reopen() {
       confirmBox('Reopen this challenge?', r.tech + ' is emailed and can agree again. If you don\'t both agree by ' + fmtDate(closeByFrom(TODAY)) + ' it closes as Not agreed.', 'Reopen', function () {
         busy('ch', async function () {
-          await spUpdate(CONFIG.lists.mgr, r.mrId, { ChallengeState: 'Open' });
-          await writeDates(CONFIG.lists.mgr, r.mrId, { ChallengeTlAgreedOn: '', ChallengeTechAgreedOn: '', ChallengeClosedOn: '', ChallengeCloseBy: closeByFrom(TODAY) });
+          // one write for the state and the cleared stamps, so a failure part-way never leaves it Open with old agreements
+          await spUpdate(CONFIG.lists.mgr, r.mrId, { ChallengeState: 'Open', ChallengeTlAgreedOn: '', ChallengeTechAgreedOn: '', ChallengeClosedOn: '' });
+          c.state = 'Open'; c.tlAgreed = false; c.techAgreed = false; c.closedOn = '';
+          await writeDates(CONFIG.lists.mgr, r.mrId, { ChallengeCloseBy: closeByFrom(TODAY) });
+          c.closeBy = closeByFrom(TODAY);
           if (c.itemId) { await writeDates(CONFIG.lists.challenges, c.itemId, { TechAgreedOn: '', TlPing: TODAY }); }
-          c.state = 'Open'; c.tlAgreed = false; c.techAgreed = false; c.closedOn = ''; c.closeBy = closeByFrom(TODAY);
           toast('Reopened – ' + r.tech + ' has been emailed.'); render(false);
         }).catch(function () {});
       });
@@ -1376,8 +1406,17 @@ window.ESGOneToOne = function (ctx) {
         h('span', { text: (tl ? 'You' : L.mgr) + ': ' + (c.tlAgreed ? 'agreed ✓' : 'not yet') }),
         h('span', { text: (tl ? r.tech : 'You') + ': ' + (c.techAgreed ? 'agreed ✓' : 'not yet') })]));
       kids.push(h('p', { class: 'small muted', text: 'It closes when you have both agreed. If not agreed by ' + fmtDate(c.closeBy) + ' it closes as Not agreed and stays flagged.' }));
+      var it = chItem(c), reopening = tl && it && it.ChallengeStatus && it.ChallengeStatus !== 'Open';
       if (tl && !c.tlAgreed) { kids.push(h('div', { class: 'btn-row' }, [h('button', { class: 'btn primary small', type: 'button', text: 'Agree – resolved', onclick: agreeTl })])); }
       if (!tl && !c.techAgreed && c.itemId) { kids.push(h('div', { class: 'btn-row' }, [h('button', { class: 'btn primary small', type: 'button', text: 'I agree – resolved', onclick: agreeTech })])); }
+      // both agreed but still open: the step that closes it didn't run (a failed save, or the flow was off) – finish it
+      if (c.tlAgreed && c.techAgreed && c.itemId) {
+        kids.push(h('div', { class: 'btn-row' }, [h('span', { class: 'small', text: 'You have both agreed – it should close within a few minutes.' }),
+          h('button', { class: 'btn small', type: 'button', text: 'Finish closing', onclick: function () { nudge('Sent – it closes as agreed within a few minutes.'); } })]));
+      } else if (reopening && c.itemId) {
+        kids.push(h('div', { class: 'btn-row' }, [h('span', { class: 'small', text: 'Reopening – ' + r.tech + ' gets access back within a few minutes.' }),
+          h('button', { class: 'btn small ghost', type: 'button', text: 'Send again', onclick: function () { nudge('Sent again.'); } })]));
+      }
     } else {
       kids.push(h('h3', { text: c.state === 'Agreed' ? '✓ Challenge agreed' + (c.closedOn ? ' on ' + fmtDate(c.closedOn) : '') : '⚑ Challenge not agreed' + (c.closedOn ? ' – closed ' + fmtDate(c.closedOn) : '') }));
       if (c.state !== 'Agreed') { kids.push(h('p', { class: 'small', text: 'It stays flagged for future review' + (tl ? '. You can reopen it at any time.' : '.') })); }
@@ -1508,8 +1547,9 @@ window.ESGOneToOne = function (ctx) {
     var picker = canChallenge(r) ? challengePicker(r) : null;
     function chMark(key) { return picker ? picker.flag(key) : challenged(r, key) ? h('span', { class: 'chip amber', text: '⚑ Challenged' }) : null; }
     if (r.released) { var chb = challengeBanner(r, 'tech'); if (chb) { cards.push(chb); } }
+    else { var chn = openChallengeNote(r, mine); if (chn) { cards.push(chn); } }
     cards.push(qCard(1, 'What has gone well for you this month?', null, [
-      req('q1', textBox(null, a.q1, function (v) { a.q1 = v; refresh(); }, ro, 3)), fbBlock(r.fb.q1)]));
+      req('q1', textBox(null, a.q1, function (v) { a.q1 = v; refresh(); }, ro, 3, 'What has gone well for you this month?')), fbBlock(r.fb.q1)]));
     // Q2 is optional: folded while empty, so it takes one line unless there's something to say
     var q2has = !!(a.q2.issue || a.q2.impact || a.q2.tried || a.q2.support);
     var q2grid = h('div', { class: 'fgrid c4' }, [
@@ -1533,7 +1573,7 @@ window.ESGOneToOne = function (ctx) {
     function ynCard(numb, title, key, detailFn) {
       var detail = h('div', { class: 'detail' }, detailFn());
       detail.hidden = a[key] !== 'Yes';
-      var c = qCard(numb, title, req(key, ynSeg(a[key], function (v) { a[key] = v; detail.hidden = v !== 'Yes'; c.classList.toggle('compact', v === 'No'); refresh(); }, ro)),
+      var c = qCard(numb, title, req(key, labelled(ynSeg(a[key], function (v) { a[key] = v; detail.hidden = v !== 'Yes'; c.classList.toggle('compact', v === 'No'); refresh(); }, ro), title)),
         [detail, fbBlock(r.fb[key])].filter(Boolean));
       if (a[key] === 'No') { c.classList.add('compact'); }   // answered No: one line
       return c;
@@ -1546,7 +1586,7 @@ window.ESGOneToOne = function (ctx) {
       return h('div', { class: 'fgrid c2' }, [req('q6what', textBox('What would you like?', a.q6what, function (v) { a.q6what = v; refresh(); }, ro, 3)),
         textBox('Why / what would it help with? (optional)', a.q6why, function (v) { a.q6why = v; }, ro, 3)]); }));
     cards.push(qCard(7, 'Do you have any feedback for your line manager?', h('span', { class: 'small muted', text: 'Optional' }), [
-      textBox(null, a.q7, function (v) { a.q7 = v; }, ro, 3), fbBlock(r.fb.q7)]));
+      textBox(null, a.q7, function (v) { a.q7 = v; }, ro, 3, 'Feedback for your line manager (optional)'), fbBlock(r.fb.q7)]));
 
     var expHead = ['Expectation', 'Your rating', 'Evidence / comments'];
     if (r.released) { expHead = expHead.concat([L.mgr]); }
@@ -1555,8 +1595,8 @@ window.ESGOneToOne = function (ctx) {
       var lbl = h('div', { class: 'small muted', style: 'margin-top:4px', text: ans.rating ? PROGRESS[ans.rating - 1].desc : 'Not rated yet' });
       var cells = [
         h('td', { class: 'top', style: 'width:30%' }, [h('div', { style: 'font-weight:650', text: e.title }), h('div', { class: 'small muted', text: e.measures })]),
-        h('td', { class: 'top', style: 'width:170px' }, [req('q8:' + e.id, ratingSeg(ans.rating, function (v) { ans.rating = v; lbl.textContent = PROGRESS[v - 1].desc; refresh(); }, ro, true)), lbl]),
-        h('td', { class: 'top' }, textBox(null, ans.comment, function (v) { ans.comment = v; }, ro, 2))
+        h('td', { class: 'top', style: 'width:170px' }, [req('q8:' + e.id, labelled(ratingSeg(ans.rating, function (v) { ans.rating = v; lbl.textContent = PROGRESS[v - 1].desc; refresh(); }, ro, true), 'Your rating for ' + e.title)), lbl]),
+        h('td', { class: 'top' }, textBox(null, ans.comment, function (v) { ans.comment = v; }, ro, 2, 'Evidence or comments for ' + e.title + ' (optional)'))
       ];
       if (r.released) {
         var tv = r.fb.expRating[e.id];
@@ -1632,7 +1672,7 @@ window.ESGOneToOne = function (ctx) {
       ])
     ]);
     var win = h('section', { class: 'card side-tile' }, [h('h3', { text: '🏅 Win of the month' }),
-      textBox(null, a.win, function (v) { a.win = v; }, !editable, 3)]);
+      textBox(null, a.win, function (v) { a.win = v; }, !editable, 3, 'Win of the month (optional)')]);
     return [energy, outlook, quick, win];
   }
 
@@ -2177,7 +2217,8 @@ window.ESGOneToOne = function (ctx) {
     var mgrStatus = h('span', { class: 'autosave', role: 'status' });
     if (!r.released && (r.state === 'Open' || r.state === 'Submitted')) {
       autosave.set(function () {
-        if (badDates(root) || incompleteActions()) { return 'skip'; }
+        if (badDates(root)) { return 'skip'; }
+        if (incompleteActions()) { markActions(root, r); return 'skip'; }
         return spUpdate(CONFIG.lists.mgr, r.mrId, mgrFields(r)).then(function () { return writeDates(CONFIG.lists.mgr, r.mrId, mgrDates(r)); });
       }, mgrStatus);
     }

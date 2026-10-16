@@ -20,7 +20,7 @@
   |---|---|
   | [`02-frontend/`](02-frontend/README.md) | Production frontend v4.5.0 (desktop only), local mock, 219 automated checks (all passing) |
   | [`01-sharepoint/lists.md`](01-sharepoint/lists.md) | Eight-list build checklist |
-  | [`04-solution/`](04-solution/IMPORT_GUIDE.md) | **Importable solution**: setup flow (creates the lists exactly) + Flows 1–7 (1.3.0.0); offline legacy builder; validated (25 / 25 mutations caught) and simulated end to end (213 / 213) |
+  | [`04-solution/`](04-solution/IMPORT_GUIDE.md) | **Importable solution**: setup flow (creates the lists exactly) + Flows 1–7 (1.3.0.0); offline legacy builder; validated (25 / 25 mutations caught) and simulated end to end (220 / 220) |
   | [`03-flows/`](03-flows/FLOW_BUILD_SHEETS.md) | Flow build sheets and email templates (reference / manual build) |
   | [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) | Operating manual |
 

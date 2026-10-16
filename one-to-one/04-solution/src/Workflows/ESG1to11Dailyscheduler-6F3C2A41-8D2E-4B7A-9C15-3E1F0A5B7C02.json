@@ -1524,7 +1524,7 @@
                         "parameters": {
                           "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
                           "parameters/method": "GET",
-                          "parameters/uri": "_api/web/lists(guid'@{outputs('Ids')?['mgrList']}')/items?$select=ID,Title,ChallengeCloseBy,ChallengeItemId,Technician/Name&$expand=Technician&$filter=ChallengeState eq 'Open'&$top=5000",
+                          "parameters/uri": "_api/web/lists(guid'@{outputs('Ids')?['mgrList']}')/items?$select=ID,Title,ChallengeCloseBy,ChallengeItemId,ChallengeTlAgreedOn,ChallengeTechAgreedOn,Technician/Name&$expand=Technician&$filter=ChallengeState eq 'Open'&$top=5000",
                           "parameters/headers": {
                             "Accept": "application/json;odata=nometadata"
                           }
@@ -1574,6 +1574,11 @@
                       "type": "Foreach",
                       "foreach": "@body('Past_close_by')",
                       "actions": {
+                        "Outcome": {
+                          "type": "Compose",
+                          "inputs": "@if(and(not(empty(items('Each_past_close_by')?['ChallengeTlAgreedOn'])), not(empty(items('Each_past_close_by')?['ChallengeTechAgreedOn']))), 'Agreed', 'Not agreed')",
+                          "runAfter": {}
+                        },
                         "Close_not_agreed": {
                           "type": "OpenApiConnection",
                           "inputs": {
@@ -1592,7 +1597,7 @@
                                 "X-HTTP-Method": "MERGE",
                                 "IF-MATCH": "*"
                               },
-                              "parameters/body": "{\"ChallengeState\":\"Not agreed\",\"ChallengeClosedOn\":\"@{utcNow()}\"}"
+                              "parameters/body": "{\"ChallengeState\":\"@{outputs('Outcome')}\",\"ChallengeClosedOn\":\"@{utcNow()}\"}"
                             },
                             "authentication": "@parameters('$authentication')"
                           },
@@ -1604,7 +1609,11 @@
                               ]
                             }
                           },
-                          "runAfter": {}
+                          "runAfter": {
+                            "Outcome": [
+                              "Succeeded"
+                            ]
+                          }
                         },
                         "Has_item": {
                           "type": "If",
@@ -1775,6 +1784,42 @@
                               },
                               "runAfter": {
                                 "AddOwners_X": [
+                                  "Succeeded"
+                                ]
+                              }
+                            },
+                            "Show_closed": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "connectionName": "shared_sharepointonline",
+                                  "operationId": "HttpRequest",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                },
+                                "parameters": {
+                                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                                  "parameters/method": "POST",
+                                  "parameters/uri": "_api/web/lists(guid'@{outputs('ChIds')?['chList']}')/items(@{int(first(split(string(coalesce(items('Each_past_close_by')?['ChallengeItemId'], '')), '.')))})",
+                                  "parameters/headers": {
+                                    "Accept": "application/json;odata=nometadata",
+                                    "Content-Type": "application/json;odata=nometadata",
+                                    "X-HTTP-Method": "MERGE",
+                                    "IF-MATCH": "*"
+                                  },
+                                  "parameters/body": "{\"ChallengeStatus\":\"@{outputs('Outcome')}\"}"
+                                },
+                                "authentication": "@parameters('$authentication')"
+                              },
+                              "runtimeConfiguration": {
+                                "secureData": {
+                                  "properties": [
+                                    "inputs",
+                                    "outputs"
+                                  ]
+                                }
+                              },
+                              "runAfter": {
+                                "AddTech_X": [
                                   "Succeeded"
                                 ]
                               }

@@ -820,7 +820,8 @@ def challenge_checks():
 
     # rejected: someone else's review, not the latest, not released, nothing in it
     for label, uid, target, sec in (('someone else\'s review', 12, nov_a['id'], None), ('an older review (not the latest released)', 11, oct_a['id'], None),
-                                    ('a review not yet released', 12, dec_s['id'], None), ('an empty challenge', 11, nov_a['id'], '  ')):
+                                    ('a review not yet released', 12, dec_s['id'], None), ('an empty challenge', 11, nov_a['id'], '  '),
+                                    ('a challenge that is not a list', 11, nov_a['id'], '{not json')):
         it, st, eng, mails = challenge(uid, target, sec if sec is not None else '[{"key":"overall"}]')
         tgt = mgr['items'][target]['fields']
         ok('Flow 7: a challenge of {0} is rejected – Owners only, nothing opened, no email'.format(label), st == 'Succeeded' and it['unique'] and
@@ -862,6 +863,12 @@ def challenge_checks():
     sp.write_item(ch, it['id'], {'item/TechAgreedOn': '2026-12-11T09:00:00Z', 'item/ChallengeStatus/Value': 'Agreed'})
     sp.me = 10
     st, eng = fire('7', sp, '1-to-1 Challenges', it['id'], T('2026-12-11T09:05:00'))
+    sp.me = 11
+    sp.write_item(ch, it['id'], {'item/SectionsJson': '[{"key":"actions","note":"swapped after the TL looked"}]'})
+    sp.me = 10
+    fire('7', sp, '1-to-1 Challenges', it['id'], T('2026-12-11T09:06:00'))
+    ok('Flow 7: the topics are fixed once accepted (rewriting them on the item changes nothing)', 'disagree' in f['ChallengeSectionsJson'] and
+       'swapped' not in f['ChallengeSectionsJson'], f['ChallengeSectionsJson'])
     ok('Flow 7: the technician agreeing (or writing Agreed on their item) does not close it without the TL', st == 'Succeeded' and f['ChallengeState'] == 'Open' and
        f.get('ChallengeTechAgreedOn') and it['ra'].get(11) == {EDIT}, (st, f))
     # the TL agrees on the Manager Review (the technician can only read that) and wakes the flow
@@ -902,8 +909,14 @@ def challenge_checks():
     ok('Flow 1: an open challenge past its close-by date closes as Not agreed and the item goes back to Read', st == 'Succeeded' and
        f['ChallengeState'] == 'Not agreed' and f.get('ChallengeClosedOn') and it['ra'].get(11) == {READ}, (st, eng and eng.log, f))
     ok('Flow 1: one not yet at its close-by date stays open', nov_s['fields']['ChallengeState'] == 'Open' and it3['ra'].get(12) == {EDIT})
+    ok('Flow 1: … and the challenge item shows Not agreed', it['fields'].get('ChallengeStatus') == 'Not agreed', it['fields'])
     st, _ = fire('7', sp, '1-to-1 Challenges', it['id'], T('2027-01-01T08:00:00'))
-    ok('Flow 7: after the close the item shows Not agreed', it['fields'].get('ChallengeStatus') == 'Not agreed', it['fields'])
+    ok('Flow 7: a run after the close changes nothing', st == 'Succeeded' and it['fields'].get('ChallengeStatus') == 'Not agreed' and it['ra'].get(11) == {READ})
+    # both agreed but the closing run never happened (the TL's wake-up failed, or Flow 7 was off): Flow 1 closes it as Agreed
+    sp.write_item(mgr, nov_s['id'], {'item/ChallengeTlAgreedOn': '2027-01-20T09:00:00Z', 'item/ChallengeTechAgreedOn': '2027-01-21T09:00:00Z'})
+    st, eng = run('1', sp, T('2027-02-01T07:00:00'), overrides={'varTestDate': '2027-02-01T07:00:00'})
+    ok('Flow 1: past its close-by date with both agreements recorded, it closes as Agreed (not Not agreed)', st == 'Succeeded' and
+       nov_s['fields']['ChallengeState'] == 'Agreed' and it3['fields'].get('ChallengeStatus') == 'Agreed' and it3['ra'].get(12) == {READ}, (st, eng and eng.log, nov_s['fields']))
     # before Setup has created the list (upgrade order): Flow 1 still runs
     sp2 = fsp.FakeSP()
     run('0', sp2, T('2026-10-01T06:00:00'))

@@ -1,6 +1,6 @@
-# ESG 1-to-1 — verification record (15-Oct-2026)
+# ESG 1-to-1 — verification record (16-Oct-2026)
 
-**Scope:** frontend v4.4.0, solution 1.2.1.0, the importable solution (setup flow + Flows 1–6), the legacy-package builder, the seven-list schema and all documents.
+**Scope:** frontend v4.5.0, solution 1.3.0.0, the importable solution (setup flow + Flows 1–7), the legacy-package builder, the eight-list schema and all documents.
 
 **What this record can and can't prove.** Everything here ran outside your tenant. It proves the files are well-formed, internally consistent and behave as specified against a strict model of SharePoint that follows Microsoft's documentation. Only the tenant can prove the import and real permissions (§5).
 
@@ -10,9 +10,9 @@
 |---|---|---|
 | Frontend | `02-frontend`: `node tools/build-mock.js && node test/run-tests.js` (headless Chromium against the local mock) | **219 / 219** |
 | Solution build | `04-solution/tools/build.py`: generate `src/`, validate, pack with Microsoft's Power Platform CLI, unpack again and compare | Packs; round trip identical |
-| Static validator | Expressions, references, scopes, run-after chains, required connector parameters, list/column names, JSON request bodies, field XML / view CAML, schedule time zone, secured run history, no hidden failures | 7 flows clean |
-| Validator proof | `tools/test_validate.py`: deliberately broken copies of the flows | **23 / 23** caught |
-| End-to-end simulation | `tools/simulate.py`: the real flow JSON executed against an in-memory SharePoint | **180 / 180** (solution) and **180 / 180** (legacy form) |
+| Static validator | Expressions, references, scopes, run-after chains, required connector parameters, list/column names, JSON request bodies, field XML / view CAML, schedule time zone, secured run history, no hidden failures | 8 flows clean |
+| Validator proof | `tools/test_validate.py`: deliberately broken copies of the flows | **25 / 25** caught |
+| End-to-end simulation | `tools/simulate.py`: the real flow JSON executed against an in-memory SharePoint | **220 / 220** (solution) and **220 / 220** (legacy form) |
 | Simulation proof | New scenarios run against the previously committed flows / frontend | 18 flow checks and 2 frontend checks fail on the old code, so the tests detect the bugs fixed in §3. Second review (§3a): 7 new flow checks fail on the 1.1.1.0 flows, and the new frontend checks fail on 4.2.1 (privacy ×3, robustness – the run then stops because the old profile page crashes) |
 | Legacy builder | `tools/test_builder.js` + `check_builder_zips.py` | Rejects bad input; no network requests; zips are standard and exactly as expected |
 | Microsoft schema | Flow definitions checked against Microsoft's published workflow-definition JSON schema | No error class that real exported Microsoft (PnP) flows don't also produce |
@@ -97,6 +97,23 @@ Three independent testers worked only on copies and the local mock/simulator (no
 - **Feedback sender forgery (P26).** Can a Contributor set `Author` on the Feedback list? The E13 sender is "as recorded by SharePoint".
 - **List metadata (P28).** Counts and dates may be visible to technicians, but no content.
 - **`1-to-1 Edit` keeps View Versions and Create Alerts.** The only versions are the technician's own drafts, and the TL writes nothing to an item while the technician holds Edit, so it was left unchanged to avoid "rights differ" warnings on existing sites.
+
+### 3c. Fourth round – new features, break-it and security testing (16-Oct-2026, frontend 4.5.0 / solution 1.3.0.0)
+
+New in this release: required questions marked orange until answered and red after a blocked Submit; technicians see bands and words, never numbers; "focus on these to move up"; and challenges of released feedback (Flow 7, the 1-to-1 Challenges list, Flow 1's month-end close). Two independent testers then worked only on copies and the local mock/simulator. Nobody could forge the line manager's agreement, challenge someone else's review, move a challenge onto another review, or inject script through a challenge. Fixed:
+
+| # | Finding | Severity | Fix | Covered by |
+|---|---|---|---|---|
+| 48 | A challenge with no review id made Flow 7 fail – and every failed run emails the line manager (proved: 15 items → 15 emails) | Medium (security) | A blank id is a quiet reject (proved: 15 → 0 emails) | Simulation |
+| 49 | Two challenges sent at the same moment could both be accepted | Low (security) | Looked at again just before accepting; a moved or duplicate item is locked | Simulation |
+| 50 | The line manager's Agree half-saved (or Flow 7 off): both agreed but stuck open, then closed as Not agreed | High | "Finish closing" button; Flow 1 closes a both-agreed challenge as Agreed | Frontend, simulation |
+| 51 | Reopen half-saved: left open with old agreements, or the technician still read-only | High | State and cleared agreements saved together; "Send again" while access is coming back; a clear message for the technician meanwhile | Frontend |
+| 52 | A technician rarely saw their open challenge (it is on last month's review) | Medium | Shown on their current form with a link | Frontend |
+| 53 | Topics could be changed after the line manager had agreed; a malformed list was accepted | Medium | Topics fixed when accepted; must be a list | Simulation (2) |
+| 54 | A long note with no spaces widened the page | Medium | Long text wraps | Frontend |
+| 55 | Smaller: auto-save "highlighted item" not highlighted; next band wrong with duplicate band names; "You're in the top band" shown to the line manager; unlabelled boxes and button groups; challenge list status not updated at month end; a missing challenge column would stop the page loading | Low | Fixed | Frontend, simulation |
+
+**Tenant check:** P26 (can `Author` be set when creating an item?) now also covers the Challenges list.
 
 ## 4. Confirmed against Microsoft documentation
 

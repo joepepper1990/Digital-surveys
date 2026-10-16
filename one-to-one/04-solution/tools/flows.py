@@ -694,21 +694,26 @@ def flow_daily():
             # reopen it). The person's access to their challenge goes back to Read. A failure is noted, never fatal.
             'ChallengeTry': after(scope(seq(
                 # REST only: this flow is on during an upgrade, before Setup has added these columns
-                ('Open_challenges', http('GET', "_api/web/lists(guid'@{outputs('Ids')?['mgrList']}')/items?$select=ID,Title,ChallengeCloseBy,ChallengeItemId,"
+                ('Open_challenges', http('GET', "_api/web/lists(guid'@{outputs('Ids')?['mgrList']}')/items?$select=ID,Title,ChallengeCloseBy,ChallengeItemId,ChallengeTlAgreedOn,ChallengeTechAgreedOn,"
                                          "Technician/Name&$expand=Technician&$filter=ChallengeState eq 'Open'&$top=5000")),
                 ('ChToday', compose("@formatDateTime(outputs('ukNow'), 'yyyy-MM-dd')")),
                 ('Past_close_by', query("@body('Open_challenges')?['value']",
                                         "@and(not(empty(item()?['ChallengeCloseBy'])), less(ticks(concat(" + local_date("item()?['ChallengeCloseBy']") + ", 'T00:00:00Z')), "
                                         "ticks(concat(outputs('ChToday'), 'T00:00:00Z'))))", secure=True)),
                 ('Each_past_close_by', foreach("@body('Past_close_by')", seq(
+                    # both had agreed but the closing step never ran (a failed save, or Flow 7 off): it closes as Agreed
+                    ('Outcome', compose("@if(and(not(empty(items('Each_past_close_by')?['ChallengeTlAgreedOn'])), "
+                                        "not(empty(items('Each_past_close_by')?['ChallengeTechAgreedOn']))), 'Agreed', 'Not agreed')")),
                     ('Close_not_agreed', http('POST', "_api/web/lists(guid'@{outputs('Ids')?['mgrList']}')/items(@{items('Each_past_close_by')?['ID']})",
-                                              '{"ChallengeState":"Not agreed","ChallengeClosedOn":"@{utcNow()}"}',
+                                              '{"ChallengeState":"@{outputs(\'Outcome\')}","ChallengeClosedOn":"@{utcNow()}"}',
                                               headers={'X-HTTP-Method': 'MERGE', 'IF-MATCH': '*'})),
                     ('Has_item', cond("@not(empty(" + idstr("items('Each_past_close_by')?['ChallengeItemId']") + "))", seq(
                         ensure_user('Ensure_challenger', "items('Each_past_close_by')?['Technician']?['Name']"),
                         ('ChIds', compose({'chList': "@first(body('List_challenges'))?['Id']"})),
                         *setperm('_X', 'chList', idnum("items('Each_past_close_by')?['ChallengeItemId']"), "outputs('Ids')?['read']",
                                  "body('Ensure_challenger')?['Id']", ids='ChIds'),
+                        ('Show_closed', http('POST', "_api/web/lists(guid'@{outputs('ChIds')?['chList']}')/items(@{" + idnum("items('Each_past_close_by')?['ChallengeItemId']") + "})",
+                                             '{"ChallengeStatus":"@{outputs(\'Outcome\')}"}', headers={'X-HTTP-Method': 'MERGE', 'IF-MATCH': '*'})),
                     ))),
                 ))),
             )), {}),
@@ -1131,8 +1136,8 @@ def flow_challenge():
     valid_first = ("@and(not(equals(" + MRO + ", null)), not(empty(" + MRO + "?['ReleasedOn'])), "
                    "equals(toLower(coalesce(" + TB + "?['Author']?['Email'], '#author')), toLower(coalesce(" + MRO + "?['Technician']?['Email'], '#tech'))), "
                    "empty(coalesce(" + MRO + "?['ChallengeState']?['Value'], '')), equals(length(body('Later_released')), 0), "
-                   "not(empty(trim(coalesce(" + TB + "?['SectionsJson'], '')))), less(length(coalesce(" + TB + "?['SectionsJson'], '')), 20001))")
-    sections_ok = "and(not(empty(trim(coalesce(" + TB + "?['SectionsJson'], '')))), less(length(coalesce(" + TB + "?['SectionsJson'], '')), 20001))"
+                   "startsWith(trim(coalesce(" + TB + "?['SectionsJson'], '')), '['), endsWith(trim(coalesce(" + TB + "?['SectionsJson'], '')), ']'), "
+                   "less(length(coalesce(" + TB + "?['SectionsJson'], '')), 20001))")
     try_actions = seq(
         *load_ids(),
         ('List_challenges', query("@body('Get_lists')?['value']", "@equals(item()?['RootFolder']?['Name'], 'OneToOneChallenges')", secure=True)),
@@ -1210,9 +1215,9 @@ def flow_challenge():
                     seq(
                         # the line manager's agreement is read only from the Manager Review (the technician can't write it)
                         ('Both_agreed', compose("@and(not(empty(" + TB + "?['TechAgreedOn'])), not(empty(" + MRO + "?['ChallengeTlAgreedOn'])))")),
+                        # the topics are fixed when it is accepted (what the line manager agrees to can't change afterwards)
                         ('Update_review', patch_item(MGR, '@' + MRO + "?['ID']", {
                             'Title': '@' + MRO + "?['Title']",
-                            'ChallengeSectionsJson': "@if(" + sections_ok + ", " + TB + "?['SectionsJson'], " + MRO + "?['ChallengeSectionsJson'])",
                             'ChallengeTechAgreedOn': "@if(empty(" + TB + "?['TechAgreedOn']), null, coalesce(" + MRO + "?['ChallengeTechAgreedOn'], utcNow()))",
                             'ChallengeState/Value': "@if(outputs('Both_agreed'), 'Agreed', 'Open')",
                             'ChallengeClosedOn': "@if(outputs('Both_agreed'), utcNow(), null)"})),

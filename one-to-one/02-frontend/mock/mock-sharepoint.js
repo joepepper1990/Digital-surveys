@@ -438,7 +438,7 @@
     if (created) {
       var owner = mr ? userByClaims(mr.Technician) : null;
       var later = mr && db.lists['Manager Reviews'].some(function (m) { return m.Technician === mr.Technician && m.ReleasedOn && m.MonthKey > mr.MonthKey; });
-      var ok = !!(mr && mr.ReleasedOn && owner && owner.email === u.email && !mr.ChallengeState && !later && it.SectionsJson && it.SectionsJson.trim() && it.SectionsJson.length <= 20000);
+      var ok = !!(mr && mr.ReleasedOn && owner && owner.email === u.email && !mr.ChallengeState && !later && it.SectionsJson && /^\[[\s\S]*\]$/.test(it.SectionsJson.trim()) && it.SectionsJson.length <= 20000);
       P[it.ID] = {};
       if (!ok) { it.ChallengeStatus = 'Rejected'; return; }
       P[it.ID][u.email] = 'edit';
@@ -452,7 +452,7 @@
     var email = holders[0], role = P[it.ID][email], owner2 = userByClaims(mr.Technician);
     if (!owner2 || owner2.email !== email) { return; }
     if (mr.ChallengeState === 'Open' && role === 'edit') {
-      if (it.SectionsJson && it.SectionsJson.length <= 20000) { mr.ChallengeSectionsJson = it.SectionsJson; }
+      // the topics are fixed when it is accepted
       mr.ChallengeTechAgreedOn = it.TechAgreedOn ? (mr.ChallengeTechAgreedOn || nowIso()) : null;
       if (it.TechAgreedOn && mr.ChallengeTlAgreedOn) { mr.ChallengeState = 'Agreed'; mr.ChallengeClosedOn = nowIso(); P[it.ID][email] = 'read'; it.ChallengeStatus = 'Agreed'; }
     } else if (mr.ChallengeState === 'Open') {
@@ -465,10 +465,14 @@
   // Flow 1's daily step: an open challenge past its close-by date closes as Not agreed and the item goes back to Read
   function closeChallenges(db, todayIso) {
     db.lists['Manager Reviews'].forEach(function (mr) {
-      if (mr.ChallengeState !== 'Open' || !mr.ChallengeCloseBy || String(mr.ChallengeCloseBy).slice(0, 10) >= todayIso) { return; }
-      mr.ChallengeState = 'Not agreed'; mr.ChallengeClosedOn = nowIso();
+      if (mr.ChallengeState !== 'Open' || !mr.ChallengeCloseBy) { return; }
+      var cb = new Date(mr.ChallengeCloseBy).toLocaleDateString('en-CA', { timeZone: 'Europe/London' });   // the UK date, as Flow 1 reads it
+      if (cb >= todayIso) { return; }
+      mr.ChallengeState = mr.ChallengeTlAgreedOn && mr.ChallengeTechAgreedOn ? 'Agreed' : 'Not agreed'; mr.ChallengeClosedOn = nowIso();
       var P = db.perms['1-to-1 Challenges'][mr.ChallengeItemId];
       if (P) { Object.keys(P).forEach(function (e) { P[e] = 'read'; }); }
+      var item = db.lists['1-to-1 Challenges'].find(function (x) { return x.ID === mr.ChallengeItemId; });
+      if (item) { item.ChallengeStatus = mr.ChallengeState; }
     });
   }
 
@@ -499,6 +503,9 @@
       if (!db.lists[list]) { return spError(404, 'List \'' + list + '\' does not exist at site with URL \'' + SITE + '\'.'); }
       if (!canSeeList(db, list, u)) { return spError(404, 'List \'' + list + '\' does not exist at site with URL \'' + SITE + '\'.'); }
       if (method === 'GET' && tail === '') { return u.owner ? resp(200, { Id: 'list-' + list.replace(/\W/g, '') }) : spError(403, 'Access denied.'); }
+      if (method === 'GET' && tail === '/items' && list === 'Manager Reviews' && db.missingMrColumn && q.indexOf(db.missingMrColumn) >= 0) {   // test hook
+        return resp(400, { 'odata.error': { code: '-1, System.ArgumentException', message: { lang: 'en-US', value: 'Column \'' + db.missingMrColumn + '\' does not exist.' } } });
+      }
       if (method === 'GET' && tail === '/items') {
         var rows = db.lists[list].filter(function (it) { return canRead(db, list, it.ID, u); }).map(function (it) { return serialize(list, it); });
         return resp(200, { value: rows });

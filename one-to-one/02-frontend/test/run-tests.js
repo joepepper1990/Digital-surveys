@@ -1166,6 +1166,98 @@ async function main() {
   await open(C, { as: 'tl', reviewId: String(jCur.ReviewItemId) });
   ok('Challenge: an unknown section key is ignored', (await C.locator('.chcard li').count()) === 2);
   await c23.close();
+
+  // ---------------------------------------------------------------- 24. fixes from the final break-it round
+  var c24 = await browser.newContext({ viewport: { width: 1366, height: 768 } });
+  var K = await c24.newPage();
+  K.on('dialog', function (d) { d.accept(); });
+  async function dbK() { return K.evaluate(function () { return JSON.parse(JSON.stringify(OTO_MOCK.current.db)); }); }
+  // schedule: one entry per validateUpdateListItem call, true = that call fails
+  async function failSchedule(sched) {
+    await K.evaluate(function (sc) {
+      var d = OTO_MOCK.current.db, i = 0, dec = false;
+      Object.defineProperty(d, 'failWrites', { configurable: true, enumerable: false,
+        get: function () { if (dec) { dec = false; return 1; } var v = !!sc[i++]; if (v) { dec = true; } return v ? 1 : 0; }, set: function () {} });
+    }, sched);
+  }
+  async function raiseChallenge() {
+    await open(K, { as: 'jordan' });
+    await K.locator('td .chflag').first().click();
+    await K.locator('.chbar button:has-text("Send challenge")').click(); await K.locator('.modal button:has-text("Send challenge")').click(); await K.waitForTimeout(300);
+  }
+  await open(K, { as: 'tl' }); await K.evaluate(function () { OTO_MOCK.reset(); });
+  await raiseChallenge();
+  var d24 = await dbK(), jm = d24.lists['Manager Reviews'].find(function (m) { return m.ChallengeState === 'Open'; });
+  await open(K, { as: 'jordan' }); await K.locator('.chcard button:has-text("I agree")').click(); await K.waitForTimeout(300);
+  // H1: the TL's agree saves but the wake-up write fails -> both agreed, still open -> "Finish closing" closes it
+  await open(K, { as: 'tl', reviewId: String(jm.ReviewItemId) });
+  await failSchedule([false, true]);
+  await K.locator('.chcard button:has-text("Agree – resolved")').click(); await K.waitForTimeout(400);
+  await open(K, { as: 'tl', reviewId: String(jm.ReviewItemId) });
+  ok('Break-it fix: both agreed but the closing step was missed – the TL gets "Finish closing"', (await K.locator('.chcard button:has-text("Finish closing")').count()) === 1 &&
+    (await dbK()).lists['Manager Reviews'].find(function (m) { return m.ID === jm.ID; }).ChallengeState === 'Open');
+  await K.locator('.chcard button:has-text("Finish closing")').click(); await K.waitForTimeout(300);
+  ok('Break-it fix: … and it closes as Agreed', (await dbK()).lists['Manager Reviews'].find(function (m) { return m.ID === jm.ID; }).ChallengeState === 'Agreed');
+  // Flow 1 never closes an agreed-by-both challenge as Not agreed
+  await K.evaluate(function (id) { var d = OTO_MOCK.current.db, m = d.lists['Manager Reviews'].find(function (x) { return x.ID === id; });
+    m.ChallengeState = 'Open'; m.ChallengeTlAgreedOn = m.ChallengeTechAgreedOn = new Date().toISOString(); sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(d)); }, jm.ID);
+  await open(K, { as: 'tl' }); await K.evaluate(function () { OTO_MOCK.closeChallenges('2999-01-01'); });
+  ok('Break-it fix: at the close-by date, a challenge both agreed closes as Agreed', (await dbK()).lists['Manager Reviews'].find(function (m) { return m.ID === jm.ID; }).ChallengeState === 'Agreed');
+  // H2: reopen saves state and cleared stamps together; if the wake-up fails, "Send again"
+  await open(K, { as: 'tl', reviewId: String(jm.ReviewItemId) });
+  await failSchedule([false, false, true]);
+  await K.locator('.chcard button:has-text("Reopen challenge")').click(); await K.locator('.modal button:has-text("Reopen")').click(); await K.waitForTimeout(400);
+  var jm2 = (await dbK()).lists['Manager Reviews'].find(function (m) { return m.ID === jm.ID; });
+  ok('Break-it fix: reopen writes the state and clears the agreements in one save', jm2.ChallengeState === 'Open' && !jm2.ChallengeTlAgreedOn && !jm2.ChallengeTechAgreedOn && !jm2.ChallengeClosedOn);
+  await open(K, { as: 'tl', reviewId: String(jm.ReviewItemId) });
+  ok('Break-it fix: … the TL can send it again when the technician hasn\'t got access back yet', (await K.locator('.chcard button:has-text("Send again")').count()) === 1);
+  await open(K, { as: 'jordan' });
+  await K.locator('.chcard button:has-text("I agree")').click(); await K.waitForTimeout(400);
+  ok('Break-it fix: … meanwhile the technician gets a clear message, not "read-only"', /still being reopened/.test(await K.locator('.toast').innerText()));
+  await open(K, { as: 'tl', reviewId: String(jm.ReviewItemId) });
+  await K.locator('.chcard button:has-text("Send again")').click(); await K.waitForTimeout(300);
+  ok('Break-it fix: … "Send again" gives the technician access back', (await dbK()).perms['1-to-1 Challenges'][jm2.ChallengeItemId]['jordan.lee@example.test'] === 'edit');
+  // M1: an open challenge on an earlier month is shown on the technician's current form
+  await K.evaluate(function () { OTO_MOCK.reset(); });
+  await open(K, { as: 'alex' });
+  var dA = await dbK(), aPrev = dA.lists['Manager Reviews'].filter(function (m) { return m.Technician === claims('alex.morgan@example.test') && m.ReleasedOn; })
+    .sort(function (x, y) { return x.MonthKey < y.MonthKey ? 1 : -1; })[0];
+  await open(K, { as: 'alex', reviewId: String(aPrev.ReviewItemId) });
+  await K.locator('td .chflag').first().click();
+  await K.locator('.chnote input').first().fill('x'.repeat(500));   // a long note with no spaces (M3)
+  await K.locator('.chbar button:has-text("Send challenge")').click(); await K.locator('.modal button:has-text("Send challenge")').click(); await K.waitForTimeout(300);
+  await open(K, { as: 'alex' });
+  ok('Break-it fix: the technician\'s current form shows their open challenge on last month, with a link', /Your challenge on the .* feedback is open/.test(await K.locator('[data-oto-root]').innerText()) &&
+    (await K.locator('.chcard button:has-text("Open ")').count()) === 1);
+  await open(K, { as: 'alex', reviewId: String(aPrev.ReviewItemId) });
+  ok('Break-it fix: a long unbroken note wraps (no sideways scrolling)', await K.evaluate(function () { return document.documentElement.scrollWidth <= window.innerWidth + 1; }));
+  // L1: auto-save paused on an incomplete action marks it
+  var samCur = dA.lists['Monthly Reviews'].find(function (x) { return x.Technician.indexOf('sam.') >= 0 && x.MonthKey === curMonth(); });
+  await open(K, { as: 'tl', reviewId: String(samCur.ID) });
+  await K.locator('button:has-text("+ Add action")').click();
+  await K.locator('.acrow').last().locator('input[aria-label="Action"]').fill('Half done');
+  await K.waitForTimeout(5500);
+  ok('Break-it fix: "auto-save paused – finish the highlighted item" really highlights it', (await K.locator('.acrow').last().locator('input.invalid').count()) === 2);
+  // L2 / L3: next band by position, not name; third person for the TL
+  var bandsFix = await K.evaluate(function () {
+    var fa = window.ESGOneToOne()._focusAreas, pe = [{ e: { id: 1, title: 'A' }, hist: [{ self: 2, tl: null }] }];
+    var r = fa({ band: { name: 'Developing', cls: 'b0' }, perExp: pe });
+    return { next: r && r.next ? r.next.cls : null };
+  });
+  ok('Break-it fix: the next band is found by position (two bands with the same name)', bandsFix.next === 'b1', JSON.stringify(bandsFix));
+  // L4: required controls have accessible names
+  await open(K, { as: 'alex' });
+  ok('Break-it fix: required boxes and button groups have accessible names', await K.evaluate(function () {
+    var r = document.querySelector('[data-oto-root]');
+    var tas = Array.prototype.every.call(r.querySelectorAll('textarea'), function (t) { return t.getAttribute('aria-label') || (t.id && r.querySelector('label[for="' + t.id + '"]')); });
+    var segs = Array.prototype.every.call(r.querySelectorAll('.q-head .seg, td .seg'), function (g) { return !!g.getAttribute('aria-label'); });
+    return tas && segs;
+  }));
+  // suspicion: the Challenges list exists but a Manager Reviews challenge column doesn't – the page still loads
+  await K.evaluate(function () { var d = OTO_MOCK.current.db; d.missingMrColumn = 'ChallengeCloseBy'; sessionStorage.setItem('oto-mock-db-v7', JSON.stringify(d)); });
+  var eK = await open(K, { as: 'tl' });
+  ok('Break-it fix: a missing challenge column doesn\'t stop the page loading', (await K.locator('.attn-card').count()) === 1 && eK.length === 0, eK.join('|'));
+  await c24.close();
   await sweep('Challenge notes read by the TL', { as: 'tl', xss: '1' }, async function () {
     await page.evaluate(function () {
       var d = OTO_MOCK.current.db, x = OTO_MOCK.X.join(' ');

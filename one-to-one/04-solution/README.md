@@ -32,10 +32,10 @@ tools/run_all.sh
 |---|---|
 | `build.py` | **Generates the files:** `src/` and the builder page. **Validates every flow:** expressions parse and use real functions; every reference points at an existing action, variable, parameter or enclosing loop; `runAfter` chains are complete; SharePoint/Outlook actions have their required parameters; list and column names exist in the schema; REST bodies are valid JSON; field XML and view CAML are well-formed; a time-zoned schedule has a start time. **Packs** with `pac` and **unpacks** again; the flow JSON must survive the round trip unchanged. |
 | `test_validate.py` | 25 deliberately broken copies of the flows; the validator must reject every one |
-| `simulate.py` (solution and legacy) | 213 end-to-end checks against the fake SharePoint, grouped below |
+| `simulate.py` (solution and legacy) | 220 end-to-end checks against the fake SharePoint, grouped below |
 | `test_builder.js` + `check_builder_zips.py` | The builder rejects bad input, makes no network requests, and produces standard zips whose contents are exactly the templates with the values filled in |
 
-**The 213 simulation checks** cover:
+**The 220 simulation checks** cover:
 
 - **Setup builds exactly the lists in [`../01-sharepoint/lists.csv`](../01-sharepoint/lists.csv):** column types, choices, defaults, ranges, indexes, unique key, views, settings and permissions.
 - **The lists hold every column the frontend reads or writes.**

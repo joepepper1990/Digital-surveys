@@ -391,7 +391,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
                   "table": "Manager Reviews",
-                  "$filter": "ID eq @{int(first(split(string(coalesce(triggerBody()?['ManagerReviewId'], '')), '.')))}",
+                  "$filter": "ID eq @{if(empty(first(split(string(coalesce(triggerBody()?['ManagerReviewId'], '')), '.'))), '0', first(split(string(coalesce(triggerBody()?['ManagerReviewId'], '')), '.')))}",
                   "$top": 1
                 },
                 "authentication": "@parameters('$authentication')"
@@ -500,25 +500,21 @@
               "actions": {
                 "Accept": {
                   "type": "If",
-                  "expression": "@and(not(equals(outputs('Mr'), null)), not(empty(outputs('Mr')?['ReleasedOn'])), equals(toLower(coalesce(triggerBody()?['Author']?['Email'], '#author')), toLower(coalesce(outputs('Mr')?['Technician']?['Email'], '#tech'))), empty(coalesce(outputs('Mr')?['ChallengeState']?['Value'], '')), equals(length(body('Later_released')), 0), not(empty(trim(coalesce(triggerBody()?['SectionsJson'], '')))), less(length(coalesce(triggerBody()?['SectionsJson'], '')), 20001))",
+                  "expression": "@and(not(equals(outputs('Mr'), null)), not(empty(outputs('Mr')?['ReleasedOn'])), equals(toLower(coalesce(triggerBody()?['Author']?['Email'], '#author')), toLower(coalesce(outputs('Mr')?['Technician']?['Email'], '#tech'))), empty(coalesce(outputs('Mr')?['ChallengeState']?['Value'], '')), equals(length(body('Later_released')), 0), startsWith(trim(coalesce(triggerBody()?['SectionsJson'], '')), '['), endsWith(trim(coalesce(triggerBody()?['SectionsJson'], '')), ']'), less(length(coalesce(triggerBody()?['SectionsJson'], '')), 20001))",
                   "actions": {
-                    "Ensure_user": {
+                    "Recheck_mr": {
                       "type": "OpenApiConnection",
                       "inputs": {
                         "host": {
                           "connectionName": "shared_sharepointonline",
-                          "operationId": "HttpRequest",
+                          "operationId": "GetItems",
                           "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
                         },
                         "parameters": {
                           "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
-                          "parameters/method": "POST",
-                          "parameters/uri": "_api/web/ensureuser",
-                          "parameters/headers": {
-                            "Accept": "application/json;odata=nometadata",
-                            "Content-Type": "application/json;odata=nometadata"
-                          },
-                          "parameters/body": "{\"logonName\":\"@{triggerBody()?['Author']?['Claims']}\"}"
+                          "table": "Manager Reviews",
+                          "$filter": "ID eq @{outputs('Mr')?['ID']}",
+                          "$top": 1
                         },
                         "authentication": "@parameters('$authentication')"
                       },
@@ -532,231 +528,367 @@
                       },
                       "runAfter": {}
                     },
-                    "Reset": {
-                      "type": "OpenApiConnection",
-                      "inputs": {
-                        "host": {
-                          "connectionName": "shared_sharepointonline",
-                          "operationId": "HttpRequest",
-                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    "Still_unchallenged": {
+                      "type": "If",
+                      "expression": "@empty(coalesce(first(body('Recheck_mr')?['value'])?['ChallengeState']?['Value'], ''))",
+                      "actions": {
+                        "Ensure_user": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                              "parameters/method": "POST",
+                              "parameters/uri": "_api/web/ensureuser",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata",
+                                "Content-Type": "application/json;odata=nometadata"
+                              },
+                              "parameters/body": "{\"logonName\":\"@{triggerBody()?['Author']?['Claims']}\"}"
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {}
                         },
-                        "parameters": {
-                          "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
-                          "parameters/method": "POST",
-                          "parameters/uri": "_api/web/lists(guid'@{outputs('ChIds')?['chList']}')/items(@{triggerBody()?['ID']})/resetroleinheritance",
-                          "parameters/headers": {
-                            "Accept": "application/json;odata=nometadata"
+                        "Reset": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                              "parameters/method": "POST",
+                              "parameters/uri": "_api/web/lists(guid'@{outputs('ChIds')?['chList']}')/items(@{triggerBody()?['ID']})/resetroleinheritance",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata"
+                              }
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {
+                            "Ensure_user": [
+                              "Succeeded"
+                            ]
                           }
                         },
-                        "authentication": "@parameters('$authentication')"
-                      },
-                      "runtimeConfiguration": {
-                        "secureData": {
-                          "properties": [
-                            "inputs",
-                            "outputs"
-                          ]
-                        }
-                      },
-                      "runAfter": {
-                        "Ensure_user": [
-                          "Succeeded"
-                        ]
-                      }
-                    },
-                    "Break": {
-                      "type": "OpenApiConnection",
-                      "inputs": {
-                        "host": {
-                          "connectionName": "shared_sharepointonline",
-                          "operationId": "HttpRequest",
-                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                        },
-                        "parameters": {
-                          "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
-                          "parameters/method": "POST",
-                          "parameters/uri": "_api/web/lists(guid'@{outputs('ChIds')?['chList']}')/items(@{triggerBody()?['ID']})/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)",
-                          "parameters/headers": {
-                            "Accept": "application/json;odata=nometadata"
+                        "Break": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                              "parameters/method": "POST",
+                              "parameters/uri": "_api/web/lists(guid'@{outputs('ChIds')?['chList']}')/items(@{triggerBody()?['ID']})/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata"
+                              }
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {
+                            "Reset": [
+                              "Succeeded"
+                            ]
                           }
                         },
-                        "authentication": "@parameters('$authentication')"
-                      },
-                      "runtimeConfiguration": {
-                        "secureData": {
-                          "properties": [
-                            "inputs",
-                            "outputs"
-                          ]
-                        }
-                      },
-                      "runAfter": {
-                        "Reset": [
-                          "Succeeded"
-                        ]
-                      }
-                    },
-                    "AddOwners": {
-                      "type": "OpenApiConnection",
-                      "inputs": {
-                        "host": {
-                          "connectionName": "shared_sharepointonline",
-                          "operationId": "HttpRequest",
-                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                        },
-                        "parameters": {
-                          "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
-                          "parameters/method": "POST",
-                          "parameters/uri": "_api/web/lists(guid'@{outputs('ChIds')?['chList']}')/items(@{triggerBody()?['ID']})/roleassignments/addroleassignment(principalid=@{outputs('Ids')?['owners']},roledefid=@{outputs('Ids')?['fullControl']})",
-                          "parameters/headers": {
-                            "Accept": "application/json;odata=nometadata"
+                        "AddOwners": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                              "parameters/method": "POST",
+                              "parameters/uri": "_api/web/lists(guid'@{outputs('ChIds')?['chList']}')/items(@{triggerBody()?['ID']})/roleassignments/addroleassignment(principalid=@{outputs('Ids')?['owners']},roledefid=@{outputs('Ids')?['fullControl']})",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata"
+                              }
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {
+                            "Break": [
+                              "Succeeded"
+                            ]
                           }
                         },
-                        "authentication": "@parameters('$authentication')"
-                      },
-                      "runtimeConfiguration": {
-                        "secureData": {
-                          "properties": [
-                            "inputs",
-                            "outputs"
-                          ]
-                        }
-                      },
-                      "runAfter": {
-                        "Break": [
-                          "Succeeded"
-                        ]
-                      }
-                    },
-                    "AddTech": {
-                      "type": "OpenApiConnection",
-                      "inputs": {
-                        "host": {
-                          "connectionName": "shared_sharepointonline",
-                          "operationId": "HttpRequest",
-                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                        },
-                        "parameters": {
-                          "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
-                          "parameters/method": "POST",
-                          "parameters/uri": "_api/web/lists(guid'@{outputs('ChIds')?['chList']}')/items(@{triggerBody()?['ID']})/roleassignments/addroleassignment(principalid=@{body('Ensure_user')?['Id']},roledefid=@{outputs('Ids')?['edit']})",
-                          "parameters/headers": {
-                            "Accept": "application/json;odata=nometadata"
+                        "AddTech": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                              "parameters/method": "POST",
+                              "parameters/uri": "_api/web/lists(guid'@{outputs('ChIds')?['chList']}')/items(@{triggerBody()?['ID']})/roleassignments/addroleassignment(principalid=@{body('Ensure_user')?['Id']},roledefid=@{outputs('Ids')?['edit']})",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata"
+                              }
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {
+                            "AddOwners": [
+                              "Succeeded"
+                            ]
                           }
                         },
-                        "authentication": "@parameters('$authentication')"
+                        "Open_on_review": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "PatchItem",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                              "table": "Manager Reviews",
+                              "id": "@outputs('Mr')?['ID']",
+                              "item/Title": "@outputs('Mr')?['Title']",
+                              "item/ChallengeState/Value": "Open",
+                              "item/ChallengeSectionsJson": "@triggerBody()?['SectionsJson']",
+                              "item/ChallengeItemId": "@triggerBody()?['ID']",
+                              "item/ChallengeOpenedOn": "@utcNow()",
+                              "item/ChallengeCloseBy": "@outputs('CloseBy')",
+                              "item/ChallengeTlAgreedOn": null,
+                              "item/ChallengeTechAgreedOn": null,
+                              "item/ChallengeClosedOn": null
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {
+                            "AddTech": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Mark_open": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "PatchItem",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                              "table": "1-to-1 Challenges",
+                              "id": "@triggerBody()?['ID']",
+                              "item/Title": "@triggerBody()?['Title']",
+                              "item/ChallengeStatus/Value": "Open",
+                              "item/TechAgreedOn": null,
+                              "item/MonthKey": "@outputs('Mr')?['MonthKey']"
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {
+                            "Open_on_review": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Send_E14": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_office365",
+                              "operationId": "SendEmailV2",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                            },
+                            "parameters": {
+                              "emailMessage/To": "@parameters('ESG 1-to-1 Team Leader email (esg_ManagerEmail)')",
+                              "emailMessage/Subject": "1-to-1 feedback challenged: @{outputs('Mr')?['Technician']?['DisplayName']}, @{formatDateTime(concat(outputs('Mr')?['MonthKey'], '-01'), 'MMMM yyyy')}",
+                              "emailMessage/Body": "<p><b>@{replace(replace(replace(coalesce(outputs('Mr')?['Technician']?['DisplayName'], ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</b> has challenged part of your feedback on their @{formatDateTime(concat(outputs('Mr')?['MonthKey'], '-01'), 'MMMM yyyy')} 1-to-1. Talk it through with them – the challenged parts are the topics for that conversation.</p><p><a href=\"@{concat(concat(if(endsWith(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), '/'), substring(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), 0, sub(length(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), 1)), parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), '/SitePages/OneToOne.aspx'), if(empty(first(split(string(coalesce(outputs('Mr')?['ReviewItemId'], '')), '.'))), '', concat('?reviewId=', first(split(string(coalesce(outputs('Mr')?['ReviewItemId'], '')), '.')))))}\"><b>Open the review</b></a></p><p style=\"color:#666\">It closes when you have both agreed, or as Not agreed on @{formatDateTime(outputs('CloseBy'), 'dd-MMM-yyyy')} (it stays flagged, and you can reopen it at any time).</p>",
+                              "emailMessage/Importance": "Normal"
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {
+                            "Mark_open": [
+                              "Succeeded"
+                            ]
+                          }
+                        }
                       },
-                      "runtimeConfiguration": {
-                        "secureData": {
-                          "properties": [
-                            "inputs",
-                            "outputs"
-                          ]
+                      "else": {
+                        "actions": {
+                          "Late_break": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "host": {
+                                "connectionName": "shared_sharepointonline",
+                                "operationId": "HttpRequest",
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                              },
+                              "parameters": {
+                                "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                                "parameters/method": "POST",
+                                "parameters/uri": "_api/web/lists(guid'@{outputs('ChIds')?['chList']}')/items(@{triggerBody()?['ID']})/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)",
+                                "parameters/headers": {
+                                  "Accept": "application/json;odata=nometadata"
+                                }
+                              },
+                              "authentication": "@parameters('$authentication')"
+                            },
+                            "runtimeConfiguration": {
+                              "secureData": {
+                                "properties": [
+                                  "inputs",
+                                  "outputs"
+                                ]
+                              }
+                            },
+                            "runAfter": {}
+                          },
+                          "Late_owners": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "host": {
+                                "connectionName": "shared_sharepointonline",
+                                "operationId": "HttpRequest",
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                              },
+                              "parameters": {
+                                "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                                "parameters/method": "POST",
+                                "parameters/uri": "_api/web/lists(guid'@{outputs('ChIds')?['chList']}')/items(@{triggerBody()?['ID']})/roleassignments/addroleassignment(principalid=@{outputs('Ids')?['owners']},roledefid=@{outputs('Ids')?['fullControl']})",
+                                "parameters/headers": {
+                                  "Accept": "application/json;odata=nometadata"
+                                }
+                              },
+                              "authentication": "@parameters('$authentication')"
+                            },
+                            "runtimeConfiguration": {
+                              "secureData": {
+                                "properties": [
+                                  "inputs",
+                                  "outputs"
+                                ]
+                              }
+                            },
+                            "runAfter": {
+                              "Late_break": [
+                                "Succeeded"
+                              ]
+                            }
+                          },
+                          "Mark_late_rejected": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "host": {
+                                "connectionName": "shared_sharepointonline",
+                                "operationId": "PatchItem",
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                              },
+                              "parameters": {
+                                "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                                "table": "1-to-1 Challenges",
+                                "id": "@triggerBody()?['ID']",
+                                "item/Title": "@triggerBody()?['Title']",
+                                "item/ChallengeStatus/Value": "Rejected"
+                              },
+                              "authentication": "@parameters('$authentication')"
+                            },
+                            "runtimeConfiguration": {
+                              "secureData": {
+                                "properties": [
+                                  "inputs",
+                                  "outputs"
+                                ]
+                              }
+                            },
+                            "runAfter": {
+                              "Late_owners": [
+                                "Succeeded"
+                              ]
+                            }
+                          }
                         }
                       },
                       "runAfter": {
-                        "AddOwners": [
-                          "Succeeded"
-                        ]
-                      }
-                    },
-                    "Open_on_review": {
-                      "type": "OpenApiConnection",
-                      "inputs": {
-                        "host": {
-                          "connectionName": "shared_sharepointonline",
-                          "operationId": "PatchItem",
-                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                        },
-                        "parameters": {
-                          "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
-                          "table": "Manager Reviews",
-                          "id": "@outputs('Mr')?['ID']",
-                          "item/Title": "@outputs('Mr')?['Title']",
-                          "item/ChallengeState/Value": "Open",
-                          "item/ChallengeSectionsJson": "@triggerBody()?['SectionsJson']",
-                          "item/ChallengeItemId": "@triggerBody()?['ID']",
-                          "item/ChallengeOpenedOn": "@utcNow()",
-                          "item/ChallengeCloseBy": "@outputs('CloseBy')",
-                          "item/ChallengeTlAgreedOn": null,
-                          "item/ChallengeTechAgreedOn": null,
-                          "item/ChallengeClosedOn": null
-                        },
-                        "authentication": "@parameters('$authentication')"
-                      },
-                      "runtimeConfiguration": {
-                        "secureData": {
-                          "properties": [
-                            "inputs",
-                            "outputs"
-                          ]
-                        }
-                      },
-                      "runAfter": {
-                        "AddTech": [
-                          "Succeeded"
-                        ]
-                      }
-                    },
-                    "Mark_open": {
-                      "type": "OpenApiConnection",
-                      "inputs": {
-                        "host": {
-                          "connectionName": "shared_sharepointonline",
-                          "operationId": "PatchItem",
-                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                        },
-                        "parameters": {
-                          "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
-                          "table": "1-to-1 Challenges",
-                          "id": "@triggerBody()?['ID']",
-                          "item/Title": "@triggerBody()?['Title']",
-                          "item/ChallengeStatus/Value": "Open",
-                          "item/TechAgreedOn": null,
-                          "item/MonthKey": "@outputs('Mr')?['MonthKey']"
-                        },
-                        "authentication": "@parameters('$authentication')"
-                      },
-                      "runtimeConfiguration": {
-                        "secureData": {
-                          "properties": [
-                            "inputs",
-                            "outputs"
-                          ]
-                        }
-                      },
-                      "runAfter": {
-                        "Open_on_review": [
-                          "Succeeded"
-                        ]
-                      }
-                    },
-                    "Send_E14": {
-                      "type": "OpenApiConnection",
-                      "inputs": {
-                        "host": {
-                          "connectionName": "shared_office365",
-                          "operationId": "SendEmailV2",
-                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
-                        },
-                        "parameters": {
-                          "emailMessage/To": "@parameters('ESG 1-to-1 Team Leader email (esg_ManagerEmail)')",
-                          "emailMessage/Subject": "1-to-1 feedback challenged: @{outputs('Mr')?['Technician']?['DisplayName']}, @{formatDateTime(concat(outputs('Mr')?['MonthKey'], '-01'), 'MMMM yyyy')}",
-                          "emailMessage/Body": "<p><b>@{replace(replace(replace(coalesce(outputs('Mr')?['Technician']?['DisplayName'], ''), '&', '&amp;'), '<', '&lt;'), '>', '&gt;')}</b> has challenged part of your feedback on their @{formatDateTime(concat(outputs('Mr')?['MonthKey'], '-01'), 'MMMM yyyy')} 1-to-1. Talk it through with them – the challenged parts are the topics for that conversation.</p><p><a href=\"@{concat(concat(if(endsWith(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), '/'), substring(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)'), 0, sub(length(parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), 1)), parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')), '/SitePages/OneToOne.aspx'), if(empty(first(split(string(coalesce(outputs('Mr')?['ReviewItemId'], '')), '.'))), '', concat('?reviewId=', first(split(string(coalesce(outputs('Mr')?['ReviewItemId'], '')), '.')))))}\"><b>Open the review</b></a></p><p style=\"color:#666\">It closes when you have both agreed, or as Not agreed on @{formatDateTime(outputs('CloseBy'), 'dd-MMM-yyyy')} (it stays flagged, and you can reopen it at any time).</p>",
-                          "emailMessage/Importance": "Normal"
-                        },
-                        "authentication": "@parameters('$authentication')"
-                      },
-                      "runtimeConfiguration": {
-                        "secureData": {
-                          "properties": [
-                            "inputs",
-                            "outputs"
-                          ]
-                        }
-                      },
-                      "runAfter": {
-                        "Mark_open": [
+                        "Recheck_mr": [
                           "Succeeded"
                         ]
                       }
@@ -924,12 +1056,150 @@
                     "type": "If",
                     "expression": "@or(equals(outputs('Mr'), null), not(equals(first(split(string(coalesce(outputs('Mr')?['ChallengeItemId'], '')), '.')), string(triggerBody()?['ID']))), not(equals(toLower(coalesce(outputs('Holder')?['Member']?['Email'], '#holder')), toLower(coalesce(outputs('Mr')?['Technician']?['Email'], '#tech')))))",
                     "actions": {
+                      "Mismatch_lock": {
+                        "type": "If",
+                        "expression": "@contains(string(outputs('Holder')?['RoleDefinitionBindings']), '1-to-1 Edit')",
+                        "actions": {
+                          "Reset_M": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "host": {
+                                "connectionName": "shared_sharepointonline",
+                                "operationId": "HttpRequest",
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                              },
+                              "parameters": {
+                                "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                                "parameters/method": "POST",
+                                "parameters/uri": "_api/web/lists(guid'@{outputs('ChIds')?['chList']}')/items(@{triggerBody()?['ID']})/resetroleinheritance",
+                                "parameters/headers": {
+                                  "Accept": "application/json;odata=nometadata"
+                                }
+                              },
+                              "authentication": "@parameters('$authentication')"
+                            },
+                            "runtimeConfiguration": {
+                              "secureData": {
+                                "properties": [
+                                  "inputs",
+                                  "outputs"
+                                ]
+                              }
+                            },
+                            "runAfter": {}
+                          },
+                          "Break_M": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "host": {
+                                "connectionName": "shared_sharepointonline",
+                                "operationId": "HttpRequest",
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                              },
+                              "parameters": {
+                                "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                                "parameters/method": "POST",
+                                "parameters/uri": "_api/web/lists(guid'@{outputs('ChIds')?['chList']}')/items(@{triggerBody()?['ID']})/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)",
+                                "parameters/headers": {
+                                  "Accept": "application/json;odata=nometadata"
+                                }
+                              },
+                              "authentication": "@parameters('$authentication')"
+                            },
+                            "runtimeConfiguration": {
+                              "secureData": {
+                                "properties": [
+                                  "inputs",
+                                  "outputs"
+                                ]
+                              }
+                            },
+                            "runAfter": {
+                              "Reset_M": [
+                                "Succeeded"
+                              ]
+                            }
+                          },
+                          "AddOwners_M": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "host": {
+                                "connectionName": "shared_sharepointonline",
+                                "operationId": "HttpRequest",
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                              },
+                              "parameters": {
+                                "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                                "parameters/method": "POST",
+                                "parameters/uri": "_api/web/lists(guid'@{outputs('ChIds')?['chList']}')/items(@{triggerBody()?['ID']})/roleassignments/addroleassignment(principalid=@{outputs('Ids')?['owners']},roledefid=@{outputs('Ids')?['fullControl']})",
+                                "parameters/headers": {
+                                  "Accept": "application/json;odata=nometadata"
+                                }
+                              },
+                              "authentication": "@parameters('$authentication')"
+                            },
+                            "runtimeConfiguration": {
+                              "secureData": {
+                                "properties": [
+                                  "inputs",
+                                  "outputs"
+                                ]
+                              }
+                            },
+                            "runAfter": {
+                              "Break_M": [
+                                "Succeeded"
+                              ]
+                            }
+                          },
+                          "AddTech_M": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "host": {
+                                "connectionName": "shared_sharepointonline",
+                                "operationId": "HttpRequest",
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                              },
+                              "parameters": {
+                                "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                                "parameters/method": "POST",
+                                "parameters/uri": "_api/web/lists(guid'@{outputs('ChIds')?['chList']}')/items(@{triggerBody()?['ID']})/roleassignments/addroleassignment(principalid=@{outputs('Holder')?['Member']?['Id']},roledefid=@{outputs('Ids')?['read']})",
+                                "parameters/headers": {
+                                  "Accept": "application/json;odata=nometadata"
+                                }
+                              },
+                              "authentication": "@parameters('$authentication')"
+                            },
+                            "runtimeConfiguration": {
+                              "secureData": {
+                                "properties": [
+                                  "inputs",
+                                  "outputs"
+                                ]
+                              }
+                            },
+                            "runAfter": {
+                              "AddOwners_M": [
+                                "Succeeded"
+                              ]
+                            }
+                          }
+                        },
+                        "else": {
+                          "actions": {}
+                        },
+                        "runAfter": {}
+                      },
                       "Ignore_mismatch": {
                         "type": "Terminate",
                         "inputs": {
                           "runStatus": "Cancelled"
                         },
-                        "runAfter": {}
+                        "runAfter": {
+                          "Mismatch_lock": [
+                            "Succeeded"
+                          ]
+                        }
                       }
                     },
                     "else": {
@@ -981,7 +1251,6 @@
                             "table": "Manager Reviews",
                             "id": "@outputs('Mr')?['ID']",
                             "item/Title": "@outputs('Mr')?['Title']",
-                            "item/ChallengeSectionsJson": "@if(and(not(empty(trim(coalesce(triggerBody()?['SectionsJson'], '')))), less(length(coalesce(triggerBody()?['SectionsJson'], '')), 20001)), triggerBody()?['SectionsJson'], outputs('Mr')?['ChallengeSectionsJson'])",
                             "item/ChallengeTechAgreedOn": "@if(empty(triggerBody()?['TechAgreedOn']), null, coalesce(outputs('Mr')?['ChallengeTechAgreedOn'], utcNow()))",
                             "item/ChallengeState/Value": "@if(outputs('Both_agreed'), 'Agreed', 'Open')",
                             "item/ChallengeClosedOn": "@if(outputs('Both_agreed'), utcNow(), null)"

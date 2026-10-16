@@ -19,7 +19,7 @@ This runbook takes you from where you are now to technicians receiving their fir
 
 - Site, page, Welcome and the `1-to-1 Technicians` group are built.
 - **Stage 0A and 0B have passed.**
-- **All build files are produced** and tested locally (219 frontend checks, 213 flow simulations).
+- **All build files are produced** and tested locally (219 frontend checks, 220 flow simulations).
 
 **Legend:**
 
