@@ -1143,7 +1143,8 @@ def flow_challenge():
         ('Get_assignments', http('GET', BASE + '/roleassignments?$expand=Member,RoleDefinitionBindings&$select=PrincipalId,Member/Id,'
                                  'Member/Title,Member/LoginName,Member/Email,Member/PrincipalType,RoleDefinitionBindings/Name')),
         ('Holders', query("@body('Get_assignments')?['value']", CHALLENGE_HOLDERS, secure=True)),
-        ('Get_mr', get_items(MGR, "ID eq @{" + idnum(TB + "?['ManagerReviewId']") + "}", top=1)),
+        # a blank id must take the normal (silent) reject path, not fail the run (that would email the TL every time)
+        ('Get_mr', get_items(MGR, "ID eq @{if(empty(" + idstr(TB + "?['ManagerReviewId']") + "), '0', " + idstr(TB + "?['ManagerReviewId']") + ")}", top=1)),
         ('Mr', compose("@first(body('Get_mr')?['value'])", secure=True)),
         ('Get_same_person', get_items(MGR, "TechnicianAadId eq '@{coalesce(" + MRO + "?['TechnicianAadId'], '#none')}'", top=500)),
         ('Later_released', query("@body('Get_same_person')?['value']",
@@ -1155,6 +1156,10 @@ def flow_challenge():
             seq(
                 ('Accept', cond(valid_first,
                     seq(
+                      # two challenges sent at once: look again just before accepting, so only the first is taken
+                      ('Recheck_mr', get_items(MGR, "ID eq @{" + MRO + "?['ID']}", top=1)),
+                      ('Still_unchallenged', cond("@empty(coalesce(first(body('Recheck_mr')?['value'])?['ChallengeState']?['Value'], ''))",
+                       seq(
                         ensure_user('Ensure_user', TB + "?['Author']?['Claims']"),
                         *setperm('', 'chList', TB + "?['ID']", "outputs('Ids')?['edit']", "body('Ensure_user')?['Id']", ids='ChIds'),
                         ('Open_on_review', patch_item(MGR, '@' + MRO + "?['ID']", {
@@ -1168,6 +1173,13 @@ def flow_challenge():
                         ('Mark_open', patch_item(CH, '@' + TB + "?['ID']", {'Title': '@' + TB + "?['Title']", 'ChallengeStatus/Value': 'Open',
                                                                           'TechAgreedOn': None, 'MonthKey': '@' + MRO + "?['MonthKey']"})),
                         ('Send_E14', email('@' + TL_EMAIL, "1-to-1 feedback challenged: @{" + MRO + "?['Technician']?['DisplayName']}, " + month, e14)),
+                       ),
+                       seq(
+                        ('Late_break', http('POST', BASE + '/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)')),
+                        ('Late_owners', http('POST', BASE + "/roleassignments/addroleassignment(principalid=@{outputs('Ids')?['owners']},"
+                                                          "roledefid=@{outputs('Ids')?['fullControl']})")),
+                        ('Mark_late_rejected', patch_item(CH, '@' + TB + "?['ID']", {'Title': '@' + TB + "?['Title']", 'ChallengeStatus/Value': 'Rejected'})),
+                       ))),
                     ),
                     seq(
                         # not from this review's technician, not their latest released review, already challenged, or empty:
@@ -1187,7 +1199,11 @@ def flow_challenge():
                 # the item must still be the one the review points at (they could have changed ManagerReviewId)
                 ('Not_this_review', cond("@or(equals(" + MRO + ", null), not(equals(" + idstr(MRO + "?['ChallengeItemId']") + ", string(" + TB + "?['ID']))), "
                                          "not(equals(toLower(coalesce(" + H + "?['Member']?['Email'], '#holder')), toLower(coalesce(" + MRO + "?['Technician']?['Email'], '#tech')))))",
-                                         seq(('Ignore_mismatch', terminate('Cancelled'))))),
+                                         seq(
+                                             ('Mismatch_lock', cond("@contains(string(" + H + "?['RoleDefinitionBindings']), '1-to-1 Edit')", seq(
+                                                 *setperm('_M', 'chList', TB + "?['ID']", "outputs('Ids')?['read']", H + "?['Member']?['Id']", ids='ChIds'),
+                                             ))),
+                                             ('Ignore_mismatch', terminate('Cancelled'))))),
                 ('Holder_can_edit', compose("@contains(string(" + H + "?['RoleDefinitionBindings']), '1-to-1 Edit')")),
                 ('Is_open', compose("@equals(" + MRO + "?['ChallengeState']?['Value'], 'Open')")),
                 ('While_open', cond("@and(outputs('Is_open'), outputs('Holder_can_edit'))",

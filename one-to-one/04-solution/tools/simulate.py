@@ -828,6 +828,18 @@ def challenge_checks():
         st2, _ = fire('7', sp, '1-to-1 Challenges', it['id'], T('2026-12-10T09:05:00'))
         ok('Flow 7: … and its own update does not run it again ({0})'.format(label), st2 == 'Cancelled', st2)
 
+    # a blank or missing review id is a quiet reject, never a failed run (each failure emails the TL – a flood)
+    n = len(sp.emails)
+    for k in range(12):
+        sp.me = 11
+        bad = sp.write_item(ch, None, dict({'item/Title': 'x', 'item/SectionsJson': '[{"key":"overall"}]'}, **({'item/ManagerReviewId': ''} if k % 2 else {})))
+        sp.me = 10
+        st, eng = fire('7', sp, '1-to-1 Challenges', bad['id'], T('2026-12-10T08:00:00'))
+        if st != 'Succeeded' or bad['fields'].get('ChallengeStatus') != 'Rejected' or 11 in bad['ra']:
+            break
+    ok('Flow 7: challenges with no review id are rejected quietly – 12 of them send the TL nothing', st == 'Succeeded' and len(sp.emails) == n and
+       bad['fields'].get('ChallengeStatus') == 'Rejected', (st, eng and eng.log, len(sp.emails) - n))
+
     # accepted
     it, st, eng, mails = challenge(11, nov_a['id'])
     f = nov_a['fields']
@@ -879,7 +891,9 @@ def challenge_checks():
     sp.me = 10
     st, _ = fire('7', sp, '1-to-1 Challenges', it['id'], T('2026-12-13T09:15:00'))
     ok('Flow 7: pointing a challenge at another review is ignored', st == 'Cancelled' and not nov_s['fields'].get('ChallengeState'), st)
+    ok('Flow 7: … and the moved item is locked to Read', it['ra'].get(11) == {READ}, it['ra'])
     sp.write_item(ch, it['id'], {'item/ManagerReviewId': nov_a['id']})
+    it['ra'][11] = {EDIT}   # (as the TL's reopen left it)
     # last 7 days of a month: runs to the end of next month
     it3, st, _, _ = challenge(12, nov_s['id'], when='2026-12-27T09:00:00')
     ok('Flow 7: raised in the last 7 days of a month – closes at the end of next month', nov_s['fields'].get('ChallengeCloseBy') == '2027-01-31', nov_s['fields'])
