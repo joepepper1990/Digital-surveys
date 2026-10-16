@@ -6,15 +6,15 @@
 
 | Path | What it is |
 |---|---|
-| `ESGOneToOne_1_2_1_0_unmanaged.zip` | **The importable solution**, packed by Microsoft's Power Platform CLI (`pac solution pack`) |
+| `ESGOneToOne_1_3_0_0_unmanaged.zip` | **The importable solution**, packed by Microsoft's Power Platform CLI (`pac solution pack`) |
 | `legacy-package-builder.html` | Offline page that makes legacy (non-solution) packages, for environments without Dataverse |
 | `src/` | The unpacked solution, in the same layout `pac solution unpack` produces. **Generated – do not edit by hand.** |
 | `tools/schema.py` | **The SharePoint schema, defined once:** lists, columns (field XML), indexes, views, permission levels |
-| `tools/flows.py` | **The seven flows**, as Power Automate flow definitions |
+| `tools/flows.py` | **The eight flows**, as Power Automate flow definitions |
 | `tools/legacy.py` | Legacy package templates and the builder page |
 | `tools/build.py` | Generates `src/`, validates, packs the zip, unpacks it again to prove the round trip |
 | `tools/validate.py` | Static checks for every flow |
-| `tools/test_validate.py` | Proves the validator catches mistakes (23 deliberate breakages) |
+| `tools/test_validate.py` | Proves the validator catches mistakes (25 deliberate breakages) |
 | `tools/wdl.py`, `tools/fake_sharepoint.py`, `tools/simulate.py` | Run the real flow JSON against an in-memory SharePoint, end to end |
 | `tools/test_builder.js`, `tools/check_builder_zips.py` | Browser test of the legacy builder and checks on the zips it makes |
 | `tools/run_all.sh` | Everything above, in order |
@@ -31,11 +31,11 @@ tools/run_all.sh
 | Step | Checks |
 |---|---|
 | `build.py` | **Generates the files:** `src/` and the builder page. **Validates every flow:** expressions parse and use real functions; every reference points at an existing action, variable, parameter or enclosing loop; `runAfter` chains are complete; SharePoint/Outlook actions have their required parameters; list and column names exist in the schema; REST bodies are valid JSON; field XML and view CAML are well-formed; a time-zoned schedule has a start time. **Packs** with `pac` and **unpacks** again; the flow JSON must survive the round trip unchanged. |
-| `test_validate.py` | 23 deliberately broken copies of the flows; the validator must reject every one |
-| `simulate.py` (solution and legacy) | 180 end-to-end checks against the fake SharePoint, grouped below |
+| `test_validate.py` | 25 deliberately broken copies of the flows; the validator must reject every one |
+| `simulate.py` (solution and legacy) | 213 end-to-end checks against the fake SharePoint, grouped below |
 | `test_builder.js` + `check_builder_zips.py` | The builder rejects bad input, makes no network requests, and produces standard zips whose contents are exactly the templates with the values filled in |
 
-**The 180 simulation checks** cover:
+**The 213 simulation checks** cover:
 
 - **Setup builds exactly the lists in [`../01-sharepoint/lists.csv`](../01-sharepoint/lists.csv):** column types, choices, defaults, ranges, indexes, unique key, views, settings and permissions.
 - **The lists hold every column the frontend reads or writes.**
@@ -47,6 +47,7 @@ tools/run_all.sh
 - **Team members (Flow 4):** access follows the Technicians list, including a full sync that removes anyone without an Active row.
 - **Wellbeing (Flow 5) and its reminders:** private to one person, locked on submit, manager fields protected; E12 7 days before and on the day (also in summer time).
 - **Feedback (Flow 6):** each item is locked to Owners before anything is emailed; the message is HTML-escaped; if the email fails the item is marked Failed, a short notice is tried and the run ends Failed; the flow's own updates never re-run it. Pre-set delivery columns can't stop the lock or email; more than 10 in a day from one person are Held; the Feedback list uses the `1-to-1 Submit` level (no alerts).
+- **Challenges (Flow 7) and Flow 1's close:** a challenge is accepted only from the review's own technician, on their latest released review, once, and not empty or oversized – anything else is Rejected and Owners-only with no email; an accepted one is private to the technician (Edit) and the Owners, opened on the Manager Review with the right close-by date (end of the month, or of the next month in the last 7 days) and E14 carries no challenge text; the technician's agreement alone can't close it; both agreed → Agreed and the item locked to Read; the TL reopening gives Edit back with E15; two holders fail the run and an item pointed at another review is ignored; Flow 1 closes open challenges past their close-by date as Not agreed (item back to Read) and runs normally on a site without the Challenges list.
 - **Third-round regressions:** reminders only to active people; a duplicate deactivated row doesn't remove access; a 23:58 submission stays on time; wellbeing labels and stamps restored while open; a used assessment is never re-shared.
 
 **What the fake can't prove.** It follows SharePoint Online's documented behaviour, but it is not SharePoint. The import (§2) and the setup run (§3) in [`IMPORT_GUIDE.md`](IMPORT_GUIDE.md), plus plan section H, are the real tests.
@@ -66,11 +67,11 @@ tools/run_all.sh
 **Nothing tenant-specific is in these files.**
 
 - The site and the TL email are environment variables, set at import.
-- Group and permission-level IDs, and the three list GUIDs used for item permissions (Monthly Reviews, Manager Reviews, Wellbeing Assessments), are looked up by name each run. There is no Config sheet of IDs to copy.
+- Group and permission-level IDs, and the list GUIDs used for item permissions (Monthly Reviews, Manager Reviews, Wellbeing Assessments, 1-to-1 Feedback, 1-to-1 Challenges), are looked up by name each run. There is no Config sheet of IDs to copy.
 
 **Setup only adds.** It never deletes a list, column or item. It never changes an existing permission level; it warns instead. On lists it removes only the site Members/Visitors groups and your own direct entry, so that Owners stays the only entry, as plan D.2 requires.
 
-**Flows 4 (Team members) and 5 (Wellbeing)** are new in 1.1 (`flow_team`, `flow_wellbeing` in `tools/flows.py`). They are in the solution and in the legacy packages, but have no by-hand build sheet; they are covered by `tools/simulate.py`. Flow 4 does a full sync: anyone in the `1-to-1 Technicians` group without an Active row in Technicians is removed.
+**Flows 4 (Team members) and 5 (Wellbeing)** are new in 1.1 (`flow_team`, `flow_wellbeing` in `tools/flows.py`). Flows 6 (Feedback, 1.2) and 7 (Challenge, 1.3) followed (`flow_feedback`, `flow_challenge`). They are all in the solution and in the legacy packages, but have no by-hand build sheet; they are covered by `tools/simulate.py`. Flow 4 does a full sync: anyone in the `1-to-1 Technicians` group without an Active row in Technicians is removed.
 
 **Flows 1–3 match** [`../03-flows/FLOW_BUILD_SHEETS.md`](../03-flows/FLOW_BUILD_SHEETS.md) step for step, with two improvements:
 
