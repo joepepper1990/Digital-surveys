@@ -133,7 +133,7 @@ The attacker in each case is Technician A, holding `1-to-1 Edit` on their own op
 | IT-4 | Are site owners allowed to create **custom permission levels**? | No-delete and no-version-history access |
 | IT-5 | Do all technicians' licences include **Power Apps use rights**? | Technicians can't open the app without them |
 | IT-6 | Two **test accounts** with mailboxes and Power Apps rights, which may build a personal flow for the API tests | Privacy testing can't be proven with the TL account |
-| IT-7 | Do **Conditional Access** rules allow `apps.powerapps.com` on work phones and laptops? | Opening links on a phone |
+| IT-7 | ~~Do **Conditional Access** rules allow `apps.powerapps.com` on work phones and laptops?~~ **Not needed (v4.5):** desktop only, confirmed by the TL – phones are out of scope. | – |
 | IT-8 | Is there a **sensitivity label** for HR or confidential sites? Is external sharing off for new sites? | Hardening |
 | IT-9 | (Information only) Acknowledge that M365, SharePoint and Power Platform administrators can technically access this data. | Privacy notice |
 

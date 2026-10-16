@@ -19,7 +19,7 @@ This runbook takes you from where you are now to technicians receiving their fir
 
 - Site, page, Welcome and the `1-to-1 Technicians` group are built.
 - **Stage 0A and 0B have passed.**
-- **All build files are produced** and tested locally (219 frontend checks, 180 flow simulations).
+- **All build files are produced** and tested locally (219 frontend checks, 213 flow simulations).
 
 **Legend:**
 
@@ -51,11 +51,11 @@ Stage 0A and 0B passed in the live tenant. Two findings are built into the setup
 
 | File | What it is |
 |---|---|
-| `04-solution/ESGOneToOne_1_2_1_0_unmanaged.zip` | **The seven flows as one importable solution**, including the setup flow that creates the lists |
-| `02-frontend/one-to-one.html`, `one-to-one.js` | The app, v4.4.0. **Nothing to edit.** |
+| `04-solution/ESGOneToOne_1_3_0_0_unmanaged.zip` | **The eight flows as one importable solution** (1.3.0.0), including the setup flow that creates the lists |
+| `02-frontend/one-to-one.html`, `one-to-one.js` | The app, v4.5.0 (desktop only). **Nothing to edit.** |
 | `01-sharepoint/lists.md`, `lists.csv` | Column-by-column list checklist |
 | `03-flows/FLOW_BUILD_SHEETS.md` | Flows 1–3, step by step |
-| `03-flows/EMAIL_TEMPLATES.md` | E1–E5, E7–E12 (there is no E6) |
+| `03-flows/EMAIL_TEMPLATES.md` | E1–E5, E7–E15 (there is no E6) |
 | `CONFIG_REFERENCE.md` | Config sheet, do-not-rename list, procedures, troubleshooting |
 | `prototype/prototype.html` | The agreed design, for reference |
 
@@ -63,24 +63,24 @@ Stage 0A and 0B passed in the live tenant. Two findings are built into the setup
 
 ## Phase 4 — Import the solution and run setup 🧑 ⏱ about 30 min
 
-Follow [`04-solution/IMPORT_GUIDE.md`](04-solution/IMPORT_GUIDE.md) §1–§4.
+Follow [`04-solution/IMPORT_GUIDE.md`](04-solution/IMPORT_GUIDE.md) §1–§4. **Already imported an earlier version?** Upgrade instead (IMPORT_GUIDE §0): import `ESGOneToOne_1_3_0_0_unmanaged.zip` as an **Upgrade**, re-run **0 Setup** (creates the *1-to-1 Challenges* list and the new Manager Reviews columns), turn on **Flow 7** (and check flows 1–6 are On), then upload the new page files (Phase 6) and **Reset layout cache**.
 
-- [ ] **Solutions → Import solution** → `04-solution/ESGOneToOne_1_2_1_0_unmanaged.zip`.
+- [ ] **Solutions → Import solution** → `04-solution/ESGOneToOne_1_3_0_0_unmanaged.zip`.
   - Pick your three connections.
   - Enter the **Site URL** (no trailing slash) and **your email**.
-- [ ] Run **ESG 1-to-1 | 0 Setup (run once)**. It creates the seven lists exactly as [`01-sharepoint/lists.md`](01-sharepoint/lists.md) describes, the two permission levels, the `1-to-1 Technicians` group (if missing), list permissions and the `Bands` and `Reminders` settings.
+- [ ] Run **ESG 1-to-1 | 0 Setup (run once)**. It creates the eight lists exactly as [`01-sharepoint/lists.md`](01-sharepoint/lists.md) describes, the three permission levels, the `1-to-1 Technicians` group (if missing), list permissions and the `Bands` and `Reminders` settings.
 - [ ] Read the summary email.
   - *"complete"*: carry on.
   - *"complete with items to check"*: fix the listed items, then re-run setup. It's safe to re-run.
 
 > **No Dataverse in your environment?** Use the offline [`04-solution/legacy-package-builder.html`](04-solution/legacy-package-builder.html) instead (IMPORT_GUIDE §6).
 >
-> **Prefer to build by hand?** [`01-sharepoint/lists.md`](01-sharepoint/lists.md) describes the lists exactly; [`03-flows/FLOW_BUILD_SHEETS.md`](03-flows/FLOW_BUILD_SHEETS.md) covers Flows 1–3 as they were in 1.0 only (no Flows 4–5, Reminders setting or wellbeing reminders). The solution is the supported route.
+> **Prefer to build by hand?** [`01-sharepoint/lists.md`](01-sharepoint/lists.md) describes the lists exactly; [`03-flows/FLOW_BUILD_SHEETS.md`](03-flows/FLOW_BUILD_SHEETS.md) covers Flows 1–3 as they were in 1.0 only (no Flows 4–7, Reminders setting, wellbeing reminders or challenges). The solution is the supported route.
 
 **⛔ Gate:** check the permissions on each list.
 
 - The five data lists (including **Wellbeing Assessments**) show **only Owners – Full Control**.
-- **1-to-1 Feedback** shows Owners – Full Control plus `1-to-1 Technicians` – **1-to-1 Submit** (Contribute without delete, versions, alerts or personal views), with item-level permissions set to their own items only.
+- **1-to-1 Feedback** and **1-to-1 Challenges** show Owners – Full Control plus `1-to-1 Technicians` – **1-to-1 Submit** (Contribute without delete, versions, alerts or personal views), with item-level permissions set to their own items only.
 - **1-to-1 Settings** shows Owners plus `1-to-1 Technicians` – Read.
 
 ## Phase 5 — (no longer needed) Record the IDs ✅
@@ -99,11 +99,11 @@ Follow [`02-frontend/README.md`](02-frontend/README.md) §Install.
   - **Republish**.
 - [ ] Make `OneToOne` the home page.
 - [ ] The group has Read on the page, the layouts library and the Welcome Errors list. Setup already granted it on 1-to-1 Settings.
-- [ ] As TL: **Team overview** opens, the top menu bar shows **Team ▾** and **⚙ Settings**, and its right-hand end shows **v4.4.0**. The 💬 **Feedback** button sits bottom-right.
+- [ ] As TL: **Team overview** opens, the top menu bar shows **Team ▾** and **⚙ Settings**, and its right-hand end shows **v4.5.0**. The 💬 **Feedback** button sits bottom-right.
 
-## Phase 7 — Turn on flows 1 to 6 🧑 ⏱ 2 min
+## Phase 7 — Turn on flows 1 to 7 🧑 ⏱ 2 min
 
-- [ ] Only after the Setup summary email: **Solutions → ESG 1-to-1** → turn on **2 Review submitted**, **3 Manager decision**, **4 Team members**, **5 Wellbeing**, **6 Feedback**, and **1 Daily scheduler** last (IMPORT_GUIDE §5).
+- [ ] Only after the Setup summary email: **Solutions → ESG 1-to-1** → turn on **2 Review submitted**, **3 Manager decision**, **4 Team members**, **5 Wellbeing**, **6 Feedback**, **7 Challenge**, and **1 Daily scheduler** last (IMPORT_GUIDE §5).
 - [ ] Secure inputs/outputs, sequential runs and Try/Catch are already set in the imported flows.
 
 ## Phase 8 — Add technicians and appraisal dates 🧑 ⏱ 30 min
@@ -146,23 +146,25 @@ With **only Test A and Test B** in Technicians:
   3. Add **two or more actions**, each with close-out criteria and a deadline.
   4. Click **Complete & release**.
 - [ ] **As Test A:** E4 arrives. Feedback, ratings and actions are visible. **My appraisal** and **Appraisal report** work.
+- [ ] **As Test A:** the form marks unanswered required questions orange, and **Submit** with gaps turns them red; ratings, outlook and report show **words and bands, no numbers**, with *To move up to …, focus on* three expectations.
+- [ ] **As Test A:** on the released review, ⚑ **Challenge** a rating and the overall feedback → **Send challenge**. You get E14; both press *agree – resolved*; it closes as **Agreed** (plan F48 also covers *Not agreed* and **Reopen challenge**).
 - [ ] **As TL:**
   - The **Actions** page closes an action.
   - The **Appraisal report** for A prints or saves as PDF.
 - [ ] **As Test B:** throughout, B never sees anything of A's.
-- [ ] Run plan **section H**: F1–F44 and **every P test (P1–P28)**. The XSS test P15 is release-blocking.
+- [ ] Run plan **section H**: F1–F48 and **every P test (P1–P29)**. The XSS test P15 is release-blocking.
 
 **⛔ Gate:** every P test passes and the journey works end to end.
 
 Then clean down:
 
 1. Delete the test reviews from both lists, then empty both recycle bins.
-2. ⚙ Settings → Team → **Deactivate** Test A and Test B (Flow 4 removes them from the group), then delete their Technicians and Wellbeing Assessments items.
+2. ⚙ Settings → Team → **Deactivate** Test A and Test B (Flow 4 removes them from the group), then delete their Technicians, Wellbeing Assessments, 1-to-1 Feedback and 1-to-1 Challenges items.
 
 ## Phase 11 — Go live 🧑 ⏱ 15 min
 
 - [ ] Add the real technicians (Phase 8), then set their appraisal dates in ⚙ Settings.
-- [ ] Flows 1–6 are **On**.
+- [ ] Flows 1–7 are **On**.
 - [ ] **Flow 1 → Run** to start the current month now. Alternatively, wait for 07:00 on the 1st.
 - [ ] Check:
   - each technician has one review and got exactly one email;
@@ -173,7 +175,7 @@ Then clean down:
 | When | What happens / what you do |
 |---|---|
 | 1st, 07:00 | Flow 1 creates the reviews and emails links. Glance at Team overview. |
-| During the month | You get E3 per submission. Review, rate, add actions, then **Complete & release**. |
+| During the month | You get E3 per submission. Review, rate, add actions, then **Complete & release**. E14 if someone challenges their feedback: talk it through, then **Agree – resolved**. |
 | Your reminder days (default 20th and 27th) | Automatic reminders to anyone who hasn't submitted |
 | Last day, 23:59 | Deadline. Unsubmitted reviews show as overdue, and you can **Close – not submitted**. |
 | Any time | **Actions** page: close completed actions. **⚙ Settings**: appraisal dates. |

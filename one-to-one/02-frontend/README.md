@@ -1,4 +1,4 @@
-# ESG 1-to-1 — frontend (v4.4.0)
+# ESG 1-to-1 — frontend (v4.5.0)
 
 | File | What it is |
 |---|---|
@@ -11,6 +11,8 @@
 
 **There is nothing to edit before installing.**
 
+**Desktop only.** Confirmed by the TL: phones are out of scope, and there is no phone layout.
+
 - The site is taken from the page.
 - The Team Leader is recognised from SharePoint permissions: whoever has *Manage permissions* on the site, which means the site owner and Site Collection Admin.
 - List names are in `CONFIG` at the top of `one-to-one.js`. Change them only if you renamed a list.
@@ -19,7 +21,7 @@
 
 Prerequisites:
 
-- The seven lists are built ([`../01-sharepoint/lists.md`](../01-sharepoint/lists.md)).
+- The eight lists are built ([`../01-sharepoint/lists.md`](../01-sharepoint/lists.md)). If the page is uploaded before Setup 1.3 has created *1-to-1 Challenges*, nothing breaks: challenges are simply not offered until it exists.
 - The `1-to-1 Technicians` group exists.
 
 Steps:
@@ -47,7 +49,7 @@ Steps:
 
 | # | As | Do | Expect |
 |---|---|---|---|
-| 1 | TL | Open the site | **Team overview**. The top menu bar has Team overview, Monthly reviews, Expectations, Actions, Wellbeing, **Team ▾** (the team list) and **⚙ Settings**, and shows **v4.4.0** at its right-hand end. |
+| 1 | TL | Open the site | **Team overview**. The top menu bar has Team overview, Monthly reviews, Expectations, Actions, Wellbeing, **Team ▾** (the team list) and **⚙ Settings**, and shows **v4.5.0** at its right-hand end. |
 | 2 | TL | ⚙ Settings → set an appraisal date (e.g. `15-Jul-2027`) → Save → reopen | Same date shown, and the Technicians list shows 15/07/2027 |
 | 3 | TL | Expectations → add a Shared one, then an Individual one, then retire one | Items appear in the list. Retired = Active **No**. |
 | 4 | Test A | Open the E1 link | Their review. The menu bar has only *This month · My appraisal · Appraisal report · Wellbeing*. |
@@ -58,6 +60,10 @@ Steps:
 | 9 | Test A | 💬 Feedback → Fault → message → Send | "Thank you. Your feedback has been submitted to your Team Leader." The TL gets E13 within about 5 minutes. |
 | 10 | Test A | Type an answer, wait ~5 s, reload | *Saved hh:mm* shows; the answer is kept; still a Draft |
 | 11 | Test A | Month two: open the new form | **Since last time** shows last month's raised items, released replies and actions |
+| 12 | Test A | Leave required questions empty → **Submit**; then answer them | Before Submit they have a subtle orange border (Yes/No and rating buttons too); Submit turns them red and jumps to the first; each clears as it's answered. Optional questions are never marked. |
+| 13 | Test A | Look at the rating buttons, the outlook tile, **My appraisal** and the appraisal report | Words and bands only (*Not started … Fully met*, band chip and coloured bar, *Improving / Steady / Dipping / Too early to tell*) – no numbers. The TL's screens still show the numbers. |
+| 14 | Test A / TL | Outlook, **My appraisal** / profile, report section 1 | *To move up to <next band>, focus on:* three expectations (*Keep it up* in the top band). The TL also sees the averages in brackets. |
+| 15 | Test A, then TL | Latest released review → ⚑ **Challenge** a rating → **Send challenge**; TL: E14 → **Agree – resolved**; Test A: *I agree – resolved* | Banner with the topics and close-by date; the TL sees the parts in amber and the challenge in *Needs your attention*; after both agree it shows **Agreed**. Older reviews offer no ⚑ Challenge. |
 
 If anything fails, press **F12 → Console**, copy the red errors (remove the site address), and use the prompt in [`../NEXT_STEPS.md`](../NEXT_STEPS.md).
 
@@ -89,6 +95,9 @@ node test/run-tests.js            # 219 checks; exits non-zero on any failure
 | Expectations | Create (including the person value), edit, retire |
 | Actions | Close-out from the Actions page |
 | Report | 8 sections; print popup |
+| Clearer forms (v4.5) | Orange border on unanswered required questions, red after Submit with a jump to the first, cleared as answered; wellbeing steps and TL action rows likewise |
+| Words not numbers (v4.5) | No numeric rating or score anywhere a technician looks (form, outlook, My appraisal, chart axis and tooltips, report); the TL still sees numbers; focus areas listed |
+| Challenge (v4.5) | Offered only on the latest released review, only on ratings, overall feedback and actions; send bar and notes; the item written to *1-to-1 Challenges* |
 | XSS sweep | Attack strings in every field, over 11 views for TL and technician. No script runs and no markup is injected. |
 
 The mock emulates permissions (plan D.4) and the effects of Flows 2 and 3, but it is **not SharePoint**. The tenant tests in plan section H are still required.
@@ -113,7 +122,7 @@ The mock emulates permissions (plan D.4) and the effects of Flows 2 and 3, but i
 | Request digest | `/_api/contextinfo` |
 | Reads | `/_api/web/lists/getbytitle('<list>')/items` |
 | Updates | `…/items(<id>)/validateUpdateListItem` |
-| Creates | `…/AddValidateUpdateItemUsingPath` – TL: expectations, settings, team members in the Technicians list, wellbeing assessments. **Everyone:** feedback from the 💬 bubble into *1-to-1 Feedback* (the only list the group can add to; each person sees only their own item until Flow 6 makes it Owners-only) |
+| Creates | `…/AddValidateUpdateItemUsingPath` – TL: expectations, settings, team members in the Technicians list, wellbeing assessments. **Everyone:** feedback from the 💬 bubble into *1-to-1 Feedback*, and a technician's challenge into *1-to-1 Challenges* (the only two lists the group can add to; each person sees only their own items, and Flows 6 and 7 then make them private) |
 | People search (TL only, ⚙ Settings → Team) | `/_api/SP.UI.ApplicationPages.ClientPeoplePickerWebServiceInterface.clientPeoplePickerSearchUser` – read-only search; adding someone only creates a Technicians item, and Flow 4 grants access |
 | Folder path for creates | `…/RootFolder` |
 
