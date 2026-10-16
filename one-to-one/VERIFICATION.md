@@ -8,7 +8,7 @@
 
 | Check | How | Result |
 |---|---|---|
-| Frontend | `02-frontend`: `node tools/build-mock.js && node test/run-tests.js` (headless Chromium against the local mock) | **219 / 219** |
+| Frontend | `02-frontend`: `node tools/build-mock.js && node test/run-tests.js` (headless Chromium against the local mock) | **273 / 273** |
 | Solution build | `04-solution/tools/build.py`: generate `src/`, validate, pack with Microsoft's Power Platform CLI, unpack again and compare | Packs; round trip identical |
 | Static validator | Expressions, references, scopes, run-after chains, required connector parameters, list/column names, JSON request bodies, field XML / view CAML, schedule time zone, secured run history, no hidden failures | 8 flows clean |
 | Validator proof | `tools/test_validate.py`: deliberately broken copies of the flows | **25 / 25** caught |
