@@ -1,13 +1,13 @@
 # ESG Monthly Technician 1-to-1 — Implementation Plan (v4)
 
-**Status:** v4.5, dated 16-Oct-2026 (frontend 4.5.0, solution 1.3.0.0 – see *v4.2 additions* and *v4.3*–*v4.5* below). **Current position and next actions:** [`NEXT_STEPS.md`](NEXT_STEPS.md).
+**Status:** v5.0, dated 16-Oct-2026 (frontend **5.0.0**, solution **1.4.0.0** – see *v4.2 additions*, *v4.3*–*v4.5* and **v5.0.0 / solution 1.4** below; upgrade order in [`MIGRATION_1_4.md`](MIGRATION_1_4.md)). **Current position and next actions:** [`NEXT_STEPS.md`](NEXT_STEPS.md).
 
 - **Stages 0A and 0B have passed in the live tenant.** Welcome runs the external script, authenticated REST works, and the item-level security model holds.
 - The visual design was agreed through prototype v7 ([`prototype/prototype.html`](prototype/prototype.html)).
 - **The production build files are produced:**
-  - the frontend [`02-frontend/`](02-frontend/README.md), with a local mock and 273 automated checks;
+  - the frontend [`02-frontend/`](02-frontend/README.md), with a local mock and 305 automated checks (plus 31 for the one-time reset tool);
   - the list checklist [`01-sharepoint/lists.md`](01-sharepoint/lists.md);
-  - **the importable Power Platform solution** [`04-solution/`](04-solution/IMPORT_GUIDE.md): seven flows plus a setup flow that creates the eight lists, permission levels, group and list permissions exactly (v4.1; Flow 7 and the Challenges list from v4.5);
+  - **the importable Power Platform solution** [`04-solution/`](04-solution/IMPORT_GUIDE.md): seven flows (1–6 and 8) plus a setup flow that creates the eight lists, permission levels, group and list permissions exactly (v4.1; Flow 8 and the Amendments list from 1.4; Flow 7 and the Challenges list existed in v4.5 / 1.3 only and are retired);
   - the flow build sheets and email templates [`03-flows/`](03-flows/FLOW_BUILD_SHEETS.md), for reference or building by hand;
   - the operating manual [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md).
 - **What remains is the tenant build and go-live** ([`GO_LIVE_RUNBOOK.md`](GO_LIVE_RUNBOOK.md)).
@@ -24,9 +24,9 @@
 | D4 | **No backup owner**, subject to corporate governance |
 | D5 | **No private notes** for technicians. The TL is Site Collection Admin and could read them, so the feature would be misleading. (v4) |
 | D6 | **No "ask for a chat" button.** A technician uses Q9 or simply talks to the TL. (v4) |
-| D7 | The **TL sets each technician's appraisal date** and the appraisal band thresholds in ⚙ Settings, visible only to line managers. Dates are shown as **DD-MMM-YYYY**. (v4) |
+| D7 | The **TL sets each technician's appraisal date** and the appraisal band thresholds in ⚙ Settings, visible only to line managers. Dates are shown as **DD-MMM-YYYY**. (v4; from 1.4 also the **next wellbeing date** and the **appraisal period start**, and actual completions are recorded with *Mark appraisal completed* – nothing is ever set automatically) |
 
-The system has **eight lists** (five data lists, including Wellbeing Assessments from v4.2, a small settings list, the 1-to-1 Feedback list from v4.3 and the 1-to-1 Challenges list from v4.5), seven flows plus a setup flow, three custom permission levels (`1-to-1 Submit` from v4.3), and one SharePoint page carrying a custom Welcome layout (the frontend). The flows use standard connectors only.
+The system has **eight lists** (five data lists, including Wellbeing Assessments from v4.2, a small settings list, the 1-to-1 Feedback list from v4.3 and the Owners-only 1-to-1 Amendments list from 1.4; the 1-to-1 Challenges list of v4.5 is retired and kept on upgraded sites only), seven flows (1–6 and 8) plus a setup flow, three custom permission levels (`1-to-1 Submit` from v4.3), and one SharePoint page carrying a custom Welcome layout (the frontend). The flows use standard connectors only.
 
 ## Changes in v4
 
@@ -43,7 +43,7 @@ The system has **eight lists** (five data lists, including Wellbeing Assessments
 | Removed | — | Private notes, ask-for-a-chat, workload trend, the occupational-health text (`eapText`), example text in boxes, and the "how it's worked out" panel for technicians |
 | Flows | — | Flow 1 copies `AppraisalDate` and initialises the two JSON columns. Email dates use `dd-MMM-yyyy`. E3's request tag uses `startsWith`. Flows 2 and 3 are unchanged. |
 | Security model | — | **Unchanged.** No new trust boundary: new technician fields are on the technician's own item; new TL data is on Manager Reviews (released by Flow 3); the Settings list holds no personal data. |
-| Delivery (v4.1) | Lists and flows built by hand from G Parts 3–8 | **Import one solution** ([`04-solution/ESGOneToOne_1_3_0_0_unmanaged.zip`](04-solution/IMPORT_GUIDE.md)), then run **ESG 1-to-1 \| 0 Setup**, which builds everything in C, D.2 and D.3. The flows look up group, role and list IDs at run time, so G Part 4 is no longer needed. The site URL and TL email are environment variables. For environments without Dataverse there is an offline legacy-package builder. Verified locally: a static validator, 25 mutation tests and 220 end-to-end simulations against a fake SharePoint (solution 1.3.0.0). |
+| Delivery (v4.1) | Lists and flows built by hand from G Parts 3–8 | **Import one solution** ([`04-solution/ESGOneToOne_1_4_0_0_unmanaged.zip`](04-solution/IMPORT_GUIDE.md)), then run **ESG 1-to-1 \| 0 Setup**, which builds everything in C, D.2 and D.3. The flows look up group, role and list IDs at run time, so G Part 4 is no longer needed. The site URL and TL email are environment variables. For environments without Dataverse there is an offline legacy-package builder. Verified locally: a static validator, 29 mutation tests and 215 end-to-end simulations against a fake SharePoint (solution 1.4.0.0). |
 
 
 ## Changes in v3
@@ -122,7 +122,7 @@ POWER AUTOMATE (TL connection; standard connectors)
 | AS2 | If the answer is **No**, any hidden detail text is **cleared when saving**. Hidden fields are never validated or stored. |
 | AS3 | Emails contain **links only**, never answers or feedback. |
 | AS4 | Expectations apply when **Active = Yes**, and are snapshotted when the month's review is created. Changes made mid-month apply from next month. |
-| AS5 | **Correction process:** the TL corrects a submitted record directly in SharePoint, at the technician's request, and writes the reason in `CorrectionLog`. Version history is the audit trail. There's no in-app "reopen". |
+| AS5 | **Correction process (1.4):** the TL amends a submitted or released 1-to-1 **in the app** (*Amend…* / *Amend answers…*) with a required reason. The page writes the reason and the before/after values to the Owners-only *1-to-1 Amendments* list before it changes the review, and Flow 8 tells the technician (E16, no content). The technician is never reopened for editing and never re-submits. (Until 1.3 the TL edited SharePoint directly and wrote the reason in `CorrectionLog`; that column is no longer used.) |
 | AS6 | **Agreed actions** are rows in `ActionsJson` on the TL's record. Each has action, owner, close-out criteria, deadline and Open/Closed status. `ActionsStatus` and `NextActionDue` summarise them for list views. (v4) |
 | AS7 | The **expected appraisal outcome** is a guide calculated from monthly ratings. It is never a decision, and wellbeing answers are never part of it or of the report. (v4) |
 
@@ -172,7 +172,11 @@ Q8 is part of the frontend file from Stage 1, because separating it costs more t
 | Technician | Person or Group (people only, single) | — | Their Microsoft 365 account |
 | TechnicianAadId | Single line of text | — | **Leave empty.** Flow 1 fills in the Entra object ID. **Indexed.** |
 | Active | Yes/No | Yes | **Indexed.** Set to No for leavers and long absences. |
-| AppraisalDate 🆕 | Date only | — | Set by the TL in ⚙ Settings. Drives the appraisal period (E.7). |
+| AppraisalDate 🆕 | Date only | — | **Next appraisal due.** Set by the TL in ⚙ Settings → Team. The end point of the forecast (E.7) and the source of E17 reminders; moving it never changes which period a review belongs to. |
+| NextWellbeingDate (1.4) | Date only | — | Next wellbeing assessment due. Set in Settings → Team, or confirmed when completing an assessment. Drives the wellbeing dashboards and E12. |
+| AppraisalCycleStart (1.4) | Date only | — | Start of the current appraisal period (last actual completion, or the baseline the TL sets) |
+| AppraisalHistoryJson (1.4) | Multiple lines | — | Completed periods (`start`, `completed`, `nextDue`, `recordedOn`), written by *Mark appraisal completed*. The source of truth for the TL's period calculations. |
+| AppraisalBoundaries (1.4) | Multiple lines | — | The boundaries as a date list; Flow 1 copies it to each new Monthly Review |
 
 ### C.2 `AppraisalExpectations` → display name **Appraisal Expectations** (manager only)
 
@@ -194,7 +198,7 @@ Q8 is part of the frontend file from Stage 1, because separating it costs more t
 | *Needs attention* | AppliesTo = Individual and Technician is empty |
 | *Retired* | Active = No |
 
-**Rule:** each technician gets every active Shared expectation plus their own active Individual expectations, in SortOrder, **up to 10**. Flow 1 tells the TL if more than 10 apply.
+**Rule (1.4):** each technician gets every active Shared expectation, then their own active Individual expectations, each group in SortOrder (Flow 1 orders by AppliesTo descending, then SortOrder). There is **no limit** on how many; the page warns above 30 on one review because of the note column's size. `AppraisalYear` is the **first** appraisal year an expectation applies to: it carries on into later years until it is retired, one entered for a later year stays hidden until that year starts, and a mistyped year is ignored safely. (Until 1.3: at most 10, and an expectation disappeared when its year ended in April.)
 
 ### C.3 `MonthlyReviews` → display name **Monthly Reviews**
 
@@ -228,6 +232,7 @@ This list is the technician's workspace. Everything here can be edited by the te
 | Mood 🆕 | Number, 0 dp, min 1, max 5 | — | Energy check-in |
 | WinOfMonth 🆕 | Multiple lines | — | Win of the month |
 | AppraisalDate 🆕 | Date only | — | **Display copy** of Technicians.AppraisalDate, so the technician can see their own outlook. Written by Flow 1 and by ⚙ Settings. Never used for a decision (D.7). |
+| AppraisalBoundaries (1.4) | Multiple lines | — | **Display copy** of the period boundaries, so the technician's own view groups their reviews by period. Written by Flow 1 and by *Mark appraisal completed*. The TL's views never read it. |
 
 Example of `ExpectationsJson`:
 
@@ -264,7 +269,9 @@ Example of `ExpectationsJson`:
 | CompletedOn | Date and time | — | Flow 3 | |
 | CompletedBy | Single line of text | — | Flow 3 | Email of the person who completed it |
 | ReleasedOn | Date and time | — | Flow 3 | |
-| CorrectionLog | Multiple lines | — | TL | Reason for any correction made after submission |
+| CorrectionLog | Multiple lines | — | TL | Until 1.3: reason for a correction after submission. **Not used from 1.4** (amendments are recorded in *1-to-1 Amendments*, C.4b); kept so no data is lost. |
+
+(Solution 1.3 also added `Challenge…` columns here; they are no longer read or written from 1.4 and are kept unchanged.)
 
 **Views**
 
@@ -282,6 +289,10 @@ Example of `ExpectationsJson`:
 | Value | Multiple lines | JSON. Default: `[{"name":"Not met","max":1.5},{"name":"Partially met","max":2.25},{"name":"Met","max":4},{"name":"Exceeded","max":null}]` |
 
 It holds no personal data. The `1-to-1 Technicians` group gets **Read** so each technician's outlook uses the same bands as the TL's. Only the TL can change it.
+
+### C.4b `OneToOneAmendments` → display name **1-to-1 Amendments** (1.4, Owners only)
+
+The restricted audit of TL amendments: one item per amendment, written by the page **before** it changes the review. Columns: `ReviewItemId` (indexed), `ManagerReviewId`, `MonthKey`, `Technician`, `Reason`, `ChangedFields`, `ChangesJson` (before and after of each changed column only), `NotifyStatus` (Draft / Pending / Sending / Sent / Failed / Retry / Cancelled, indexed), `NotifiedOn`, `NotifyError`. Who and when are SharePoint's own **Created By** / **Created**. Owners – Full Control only, versioning on. Full specification: [`01-sharepoint/lists.md`](01-sharepoint/lists.md) §8.
 
 ### C.5 Relationships
 
@@ -314,7 +325,7 @@ The 1-to-1 Settings list is standalone. There are no lookup columns, so nothing 
 
 ### D.2 Lists
 
-Break inheritance on all eight lists so that only **Owners (Full Control)** remains. Then add **`1-to-1 Technicians` – Read** on **1-to-1 Settings**, and **`1-to-1 Submit`** (own items only) on **1-to-1 Feedback** and **1-to-1 Challenges**.
+Break inheritance on all eight lists so that only **Owners (Full Control)** remains. Then add **`1-to-1 Technicians` – Read** on **1-to-1 Settings**, and **`1-to-1 Submit`** (own items only) on **1-to-1 Feedback**. **1-to-1 Amendments** stays Owners only. (In 1.3 the group also had `1-to-1 Submit` on **1-to-1 Challenges**; Setup 1.4 removes it and makes those items Owners-only.)
 
 ### D.3 Custom permission levels
 
@@ -322,7 +333,7 @@ Break inheritance on all eight lists so that only **Owners (Full Control)** rema
 |---|---|---|---|
 | **`1-to-1 Edit`** | Contribute | Add Items, Delete Items, Delete Versions, Manage Personal Views, Add/Remove Personal Web Parts, Update Personal Web Parts | Technician on **their own open** Monthly Review |
 | **`1-to-1 Read`** | Read | **View Versions**, Create Alerts | Technician on their submitted review and on their **released** Manager Review. Without View Versions, they can't see the TL's earlier drafts. |
-| **`1-to-1 Submit`** (v4.3, setup 1.2.1) | Contribute | Delete Items, View Versions, Delete Versions, **Create Alerts**, Manage Personal Views, Add/Remove and Update Personal Web Parts | The group on the **1-to-1 Feedback** list and (v4.5, setup 1.3) the **1-to-1 Challenges** list only, both with "own items only" item-level settings. No alerts, so nobody can be emailed someone else's new item before Flow 6 or Flow 7 locks it. Setup creates it. |
+| **`1-to-1 Submit`** (v4.3, setup 1.2.1) | Contribute | Delete Items, View Versions, Delete Versions, **Create Alerts**, Manage Personal Views, Add/Remove and Update Personal Web Parts | The group on the **1-to-1 Feedback** list only, with "own items only" item-level settings (in 1.3 also the since-retired **1-to-1 Challenges** list). No alerts, so nobody can be emailed someone else's new item before Flow 6 locks it. Setup creates it. |
 
 Keep **Use Remote Interfaces** ticked in both, because the frontend's REST calls need it.
 
@@ -337,8 +348,8 @@ Keep **Use Remote Interfaces** ticked in both, because the frontend's REST calls
 | Anyone else's items | **None** | — |
 | Technicians, Appraisal Expectations | **None** | — |
 | 1-to-1 Settings (band thresholds only) | **Read**, through the `1-to-1 Technicians` group | TL, at build (v4) |
-| Own challenge (1-to-1 Challenges, v4.5) | Can **add** one (`1-to-1 Submit`, own items only). Once accepted: `1-to-1 Edit` while open, `1-to-1 Read` once closed; Owners-only if rejected | Flow 7 (Flow 1 at the close-by date) |
-| `Challenge…` columns on own Manager Review | **Read only** (with the rest of the released review) | Flow 7, Flow 1 and the TL |
+| 1-to-1 Amendments (1.4) | **None.** Technicians never see the reason or the before/after values; they get E16 with a link and see the current version of their review. | Setup (list permissions) |
+| Retired 1-to-1 Challenges (1.3 sites only) | **None** from 1.4 (group removed, every item Owners-only) | Setup 1.4 |
 
 **The permission routine (`SETPERM`, four REST calls).** This routine is the same everywhere it's used. It's idempotent, and it builds exactly the intended permissions:
 
@@ -409,7 +420,9 @@ Technicians now need to open one SharePoint page. That's set up without making t
 | Workflow state | `Manager Reviews.ReviewState` only |
 | Due date and lateness | `Manager Reviews.DueDate`; `SubmittedOn` is stamped by Flow 2 with server time |
 | Expectation wording | `Manager Reviews.ExpectationSnapshotJson` |
-| Audit of corrections | `Manager Reviews.CorrectionLog` plus Manager Reviews versions. Monthly Reviews version history is not relied on. |
+| Audit of amendments (1.4) | **1-to-1 Amendments** (Owners only, versioned): reason, changed fields and before/after values, written before the review changes; who and when from SharePoint's Created By / Created. Tamper-*evident*, not tamper-proof (site owners and admins can edit lists they own); the E16 email to the technician is an independent record. Until 1.3: `CorrectionLog` plus Manager Reviews versions. Monthly Reviews version history is not relied on. |
+| Appraisal periods (1.4) | `Technicians.AppraisalCycleStart` and `AppraisalHistoryJson`. The `AppraisalBoundaries` copy on Monthly Reviews is display only, for the technician's own view. |
+| Next wellbeing date (1.4) | `Technicians.NextWellbeingDate` |
 | Appraisal date (v4) | `Technicians.AppraisalDate`. The copy on Monthly Reviews is display only: a technician who edits it changes only their own view. |
 | TL ratings and actions (v4) | `Manager Reviews.ExpectationFeedbackJson` / `ActionsJson`. Technicians can't write them. |
 
@@ -424,6 +437,8 @@ Technicians now need to open one SharePoint page. That's set up without making t
 The TL views (Team overview, Monthly reviews, manager review) take status **only** from `ReviewState`. `ReviewStatus` on Monthly Reviews is used only as a "draft started" hint, and as the technician's submit signal that Flow 2 re-validates.
 
 **Accepted low risk:** a technician can trigger Flow 2 repeatedly by editing their own draft. Each run only re-applies permissions they already hold.
+
+**Amendments are not resubmissions (1.4).** When the editor is the TL and the Manager Review is no longer Open, Flow 2 cancels the run: no E3, no new stamp, no permission change. Flow 1 reports any submitted review Flow 2 never processed.
 
 ---
 
@@ -473,8 +488,10 @@ There is nothing to fill in. The CONFIG block only holds the list titles and the
 ```js
 var CONFIG = {
   lists: { reviews: 'Monthly Reviews', mgr: 'Manager Reviews', techs: 'Technicians',
-           exp: 'Appraisal Expectations', settings: '1-to-1 Settings' },
-  timeZone: 'Europe/London', maxExpectations: 10 };
+           exp: 'Appraisal Expectations', settings: '1-to-1 Settings',
+           wellbeing: 'Wellbeing Assessments', feedback: '1-to-1 Feedback',
+           amendments: '1-to-1 Amendments' },
+  timeZone: 'Europe/London' };   // 5.0.0: no maxExpectations – there is no limit
 ```
 
 The site comes from `pageContext.web.absoluteUrl`. The file contains no secrets, URLs, emails or IDs.
@@ -554,7 +571,7 @@ Charts are drawn as **inline SVG** with `createElementNS`. The printable report 
 
 **My appraisal.**
 
-- The expected appraisal outcome (E.7) for the 12 months up to their appraisal date, as a band chip with current and projected scores.
+- The expected appraisal outcome (E.7) for the current appraisal period, as a band chip with current and projected scores (5.0.0: words and bands only for technicians, and "N rated reviews of M months · K missed").
 - A trend chart (self in blue, released TL ratings in orange).
 - Per-expectation progress, their actions, and a submission streak.
 
@@ -568,26 +585,27 @@ There is **no "how it's worked out" panel** for technicians.
 
 | View | Content | Writes |
 |---|---|---|
-| **Team overview** | KPI tiles (submitted, awaiting review, overdue, open/overdue actions, dedicated 1-to-1s requested); a status chart; a team table (technician, this month's status, energy, expected band and projected score, appraisal date, open actions, flags) | — |
+| **Team overview** | KPI tiles (submitted, awaiting review, overdue, open/overdue actions, dedicated 1-to-1s requested); *Needs your attention* at full width (5.0.0: the chart switcher, *Expected appraisal outcomes* and *Workload this month* were removed); a team table (technician, this month's status, energy, expected band and projected score, appraisal date, open actions, flags) | — |
 | **Monthly reviews** | All reviews with month, technician and status filters | — |
-| **Manager review** (`?reviewId=`) | The technician's answers, read-only. TL feedback per question. Q8 shows the trusted `ExpectationSnapshotJson` wording, the technician's rating and comment, **TL feedback and TL rating (1–5)**. Follow-up override, meeting date, overall feedback. **Actions table** (add rows: action, owner, close-out criteria, deadline, status). | Manager Reviews: FB_Q1–FB_Q7, FB_Q9, FB_Overall, ExpectationFeedbackJson `[{id,feedback,rating}]`, FollowUpDecision, MeetingDate, ActionsJson, ActionsStatus, NextActionDue. Then, **as a separate write**, ReviewState = `Completed` or `Closed - Not Submitted`. |
-| **Expectations** | Grouped by Shared / per technician, with add, edit and retire (never delete). A "Show retired" toggle. | Appraisal Expectations: Title, Measures, AppraisalYear, AppliesTo, Technician (person), SortOrder, Active |
+| **Manager review** (`?reviewId=`) | The technician's answers, read-only (5.0.0: changed only through **Amend answers…** / **Amend…**, see the v5.0.0 section; an **Amended (n)** card for the TL only). TL feedback per question. Q8 shows the trusted `ExpectationSnapshotJson` wording, the technician's rating and comment, **TL feedback and TL rating (1–5)**. Follow-up override, meeting date, overall feedback. **Actions table** (add rows: action, owner, close-out criteria, deadline, status). | Manager Reviews: FB_Q1–FB_Q7, FB_Q9, FB_Overall, ExpectationFeedbackJson `[{id,feedback,rating}]`, FollowUpDecision, MeetingDate, ActionsJson, ActionsStatus, NextActionDue. Then, **as a separate write**, ReviewState = `Completed` or `Closed - Not Submitted`. |
+| **Expectations** | A **Shared** card and one card per technician, with add, edit and retire. A "Show retired" toggle. 5.0.0: a retired expectation can be **Delete permanently** (TL only, with confirmation, to the site recycle bin for about 93 days; past reviews keep their own copies). | Appraisal Expectations: Title, Measures, AppraisalYear, AppliesTo, Technician (person), SortOrder, Active |
 | **Actions** | Every action across all reviews, grouped open/overdue/done, with close and reopen | Manager Reviews: ActionsJson, ActionsStatus, NextActionDue |
-| **Technician profile** (from the **Team ▾** menu or the outlook table) | Outlook, trend chart, expectations, actions and history for one person; report button | — |
-| **⚙ Settings** (modal, TL only) | Appraisal date per technician (DD-MMM-YYYY); the four band names and thresholds; how the outlook is worked out | Technicians.AppraisalDate, **plus** the technician's current Monthly Review AppraisalDate (display copy). 1-to-1 Settings `Bands` item (created if missing). |
+| **Technician profile** (from the **Team ▾** menu or the outlook table) | Outlook, trend chart, expectations, actions and history for one person; report button. 5.0.0: a period selector (current + each past period); the *Workload by month* and *Energy by month* charts were removed. | — |
+| **⚙ Settings** (modal, TL only) | Appraisal date per technician (DD-MMM-YYYY); the four band names and thresholds; how the outlook is worked out. 5.0.0, **Team** tab, per person: Next appraisal, Days to go, Next wellbeing, Appraisal period start (editable while there is no history), **Mark appraisal completed…** and **Undo last**. | Technicians.AppraisalDate, **plus** the technician's current Monthly Review AppraisalDate (display copy). 1-to-1 Settings `Bands` item (created if missing). |
 
 **Complete & release rules.**
 
 - **Complete & release** is offered only when the review is Submitted. It is blocked while any action is missing its close-out criteria or deadline.
 - **Close – not submitted** is offered only when the review is Open and past its deadline.
 - Flow 3 re-validates both.
-- After release, a banner reminds the TL that further changes are visible straight away and belong in the correction log.
+- After release, the review is **read-only** until the TL clicks **Amend…** (5.0.0). An amendment needs a reason and is recorded in *1-to-1 Amendments*; the old "record it in the correction log" banner is gone.
 
 ### E.7 Expected appraisal outcome
 
 Calculated in the browser from items the viewer can already read.
 
-1. **Period:** the 12 months up to the technician's appraisal date. If no date is set, the page assumes six months ahead and says "not set".
+1. **Period (5.0.0):** from the date the previous appraisal was actually completed (or the period start the TL sets in Settings → Team) to the next completion – any length. A monthly review belongs to a period by its month: after the start's month, up to and including the completion month. The next appraisal due date is only the projection's end point; changing it never moves a review. Reviews before the first period start form a closed earlier period. With no start set there is no forecast beyond the current score. (Until 4.5: the 12 months up to the appraisal date.)
+   - **Missed months** (*Closed – Not Submitted*, or *Open* and overdue) are left out of the monthly scores, the current position, the projection, the trend and the on-time figure (on time ÷ submitted). They still show as overdue and in the submission record.
 2. **Monthly score:**
    - Use the average of the **TL's expectation ratings** for that month when the viewer can see them. The TL always can; a technician can only once that month is released.
    - Otherwise use the technician's own average Q8 rating.
@@ -609,13 +627,13 @@ This is an **aid to writing the appraisal, not a decision**. The page says so, a
 
 ### E.8 Appraisal report
 
-Available to the TL (any technician) and to the technician (themselves). It covers the 12 months to the appraisal date and has eight sections:
+Available to the TL (any technician) and to the technician (themselves). It covers one appraisal period (5.0.0: a period selector, current or any past period; until 4.5 the 12 months to the appraisal date) and has eight sections:
 
 1. Summary (band, scores, chart)
 2. Appraisal expectations (per-month self and TL ratings, comments, feedback)
 3. Achievements (win of the month, what went well)
 4. Development and training
-5. Challenges and support
+5. Challenges and support (the Q2 answers: issues and support needed)
 6. Agreed actions
 7. Line manager feedback
 8. Submission record
@@ -1114,7 +1132,7 @@ Lists and checks:
 - [ ] **Monthly Reviews** (C.3)
 - [ ] **Manager Reviews** (C.4)
 - [ ] **1-to-1 Settings** (C.4a)
-- [ ] **Check:** Site contents shows eight lists. The data lists' permissions pages show only Owners (Wellbeing Assessments, 1-to-1 Feedback and 1-to-1 Challenges are added later by setup 1.1, 1.2 and 1.3). 1-to-1 Settings shows Owners plus `1-to-1 Technicians` – Read.
+- [ ] **Check:** Site contents shows eight lists. The data lists' permissions pages show only Owners (Wellbeing Assessments, 1-to-1 Feedback and 1-to-1 Amendments are added later by setup 1.1, 1.2 and 1.4). 1-to-1 Settings shows Owners plus `1-to-1 Technicians` – Read.
 
 ### Part 4 — Record the four IDs ⏱ 10 min
 
@@ -1184,7 +1202,7 @@ You don't build any screens, and **there is nothing to edit in the files**. Full
 4. [ ] **Site Pages:** `OneToOne` → **… → Make homepage**.
 5. [ ] Permissions check (D.6): `1-to-1 Technicians` has **Read** on the page, the layouts library, the Welcome Errors list and **1-to-1 Settings**.
 6. [ ] Check that `varPageLink` in the flows matches the page link.
-7. [ ] **Check as the TL:** the site opens on **Team overview**, with the top menu bar showing Team ▾ and ⚙ Settings. The menu bar shows **v4.5.0** at its right-hand end.
+7. [ ] **Check as the TL:** the site opens on **Team overview**, with the top menu bar showing Team ▾ and ⚙ Settings. The menu bar shows **v5.0.0** at its right-hand end.
 8. [ ] **Check as the TL:** open ⚙ **Settings**, enter each test technician's appraisal date (DD-MMM-YYYY), and save.
 9. [ ] **Check as Test A:** the E1 link opens **their** review. The menu bar shows only *This month · My appraisal · Appraisal report · Wellbeing*.
 
@@ -1230,7 +1248,7 @@ Run **H** tests F1–F4, F8–F12 and F18, plus **P1, P2, P3, P5, P8 and P15**. 
 3. [ ] Run **all of section H**, including **every P test**. Any failed P test **blocks go-live**.
 4. [ ] In each flow, open the trigger and every **Get items** action and turn on **Secure inputs** and **Secure outputs** in Settings. Save.
 5. [ ] **Clean-down:**
-   1. Delete all test items in Monthly Reviews and Manager Reviews (and in Wellbeing Assessments, 1-to-1 Feedback and 1-to-1 Challenges), then empty both recycle bins.
+   1. Delete all test items in Monthly Reviews and Manager Reviews (and in Wellbeing Assessments, 1-to-1 Feedback and 1-to-1 Amendments), then empty both recycle bins. On a live site use the one-time reset tool instead ([`RESET_PROCEDURE.md`](RESET_PROCEDURE.md)).
    2. Remove Test A and Test B from Technicians.
    3. **Remove Test A and Test B from the `1-to-1 Technicians` group.**
 6. [ ] **Go-live:**
@@ -1287,14 +1305,14 @@ These are in [`CONFIG_REFERENCE.md`](CONFIG_REFERENCE.md) §4:
 | Since last time | Top of the current form: what the technician raised last month, the TL's replies (only once released) and their open / recently done actions. | Built only from the technician's own loaded records; unreleased feedback is never shown. |
 
 
-### v4.5 – clearer forms, words not numbers, focus areas, challenges (frontend 4.5.0, solution 1.3.0.0)
+### v4.5 – clearer forms, words not numbers, focus areas, challenges (frontend 4.5.0, solution 1.3.0.0; challenges removed in 1.4)
 
 | Area | What changed | Security notes |
 |---|---|---|
 | Clearer forms | Required questions not yet answered have a subtle **orange** border (Yes/No and rating buttons too). **Submit** with gaps turns them **red** and focuses / scrolls to the first; each clears as it's answered. The wellbeing form's Submit jumps to the first unanswered step (its step pill turns red); the TL's action rows mark an empty action, criteria or deadline red when saving is blocked. Optional questions are never marked. | Display only. |
 | Words, not numbers | Technicians never see numeric ratings or scores: rating buttons are words (*Not started, Early progress, On track, Strong progress, Fully met*); the outlook shows a band chip and a coloured bar, and the trend as *Improving / Steady / Dipping / Too early to tell*; *My appraisal*, charts (band-labelled axis and tooltips), expectation bars and their appraisal report use words and bands only. The TL's screens keep the numbers. The coloured bar follows the bands in ⚙ Settings (it was hard-coded to the defaults). | Display only; the stored values are unchanged (1–5). |
 | Focus areas | *To move up to <next band>, focus on: A · B · C* – the three expectations with the lowest average rating over the appraisal period (the TL's rating once released, otherwise the self-rating); *Keep it up* in the top band. On the technician's outlook, *My appraisal* / profile and report section 1 (*Areas to focus on*, replacing the old logic). The TL sees the averages in brackets. | Built only from records the viewer can already read; unreleased TL ratings are never used for a technician. |
-| ⚑ Challenge | On their **latest released** review only, a technician can flag the TL's judgement – each expectation rating, the overall feedback, the agreed actions (nothing else) – with an optional note each, then **Send challenge**. A banner shows the topics, who has agreed and the close-by date; both press *agree – resolved* to close it as **Agreed**. Not agreed by the close-by date (end of the UK month it was raised; end of the next month if fewer than 7 days were left) → **Not agreed**, still flagged; the TL can **Reopen challenge**. TL: challenged parts marked amber, *Needs your attention* (open ones, and Not agreed ones for 60 days), a chip on Monthly reviews, report section 7. If the page is uploaded before Setup is re-run, challenges are simply not offered. | New list **1-to-1 Challenges** (same access as Feedback: `1-to-1 Submit`, own items only). **Flow 7** accepts a challenge only from the review's own technician (item Author), on their latest released, never-challenged review, with non-empty sections ≤ 20,000 characters; it makes the item private (Owners + that person, `1-to-1 Edit`) and records the trusted state in new `Challenge…` columns on the **Manager Review**, which the technician can only read. Anything else is *Rejected* and Owners-only, with no email. The TL's agreement is recorded only on the Manager Review. More than one holder fails the run; an item pointed at another review is ignored. E14 / E15 carry no challenge text. **Flow 1** closes overdue ones (REST only, skipped if the list doesn't exist yet; a failure is noted in E7, never fatal). |
+| ⚑ Challenge (**removed in 1.4** – see below) | On their **latest released** review only, a technician can flag the TL's judgement – each expectation rating, the overall feedback, the agreed actions (nothing else) – with an optional note each, then **Send challenge**. A banner shows the topics, who has agreed and the close-by date; both press *agree – resolved* to close it as **Agreed**. Not agreed by the close-by date (end of the UK month it was raised; end of the next month if fewer than 7 days were left) → **Not agreed**, still flagged; the TL can **Reopen challenge**. TL: challenged parts marked amber, *Needs your attention* (open ones, and Not agreed ones for 60 days), a chip on Monthly reviews, report section 7. If the page is uploaded before Setup is re-run, challenges are simply not offered. | New list **1-to-1 Challenges** (same access as Feedback: `1-to-1 Submit`, own items only). **Flow 7** accepts a challenge only from the review's own technician (item Author), on their latest released, never-challenged review, with non-empty sections ≤ 20,000 characters; it makes the item private (Owners + that person, `1-to-1 Edit`) and records the trusted state in new `Challenge…` columns on the **Manager Review**, which the technician can only read. Anything else is *Rejected* and Owners-only, with no email. The TL's agreement is recorded only on the Manager Review. More than one holder fails the run; an item pointed at another review is ignored. E14 / E15 carry no challenge text. **Flow 1** closes overdue ones (REST only, skipped if the list doesn't exist yet; a failure is noted in E7, never fatal). |
 | Desktop only | Confirmed by the TL: phones are out of scope (no phone layout). IT-7 is **not needed**. | – |
 
 

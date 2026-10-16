@@ -1,6 +1,6 @@
 # ESG 1-to-1 — verification record (16-Oct-2026)
 
-**Scope:** frontend v4.5.0, solution 1.3.0.0, the importable solution (setup flow + Flows 1–7), the legacy-package builder, the eight-list schema and all documents.
+**Scope:** frontend **v5.0.0**, solution **1.4.0.0**, the importable solution (setup flow + Flows 1–6 and 8), the one-time reset tool, the legacy-package builder, the eight-list schema and all documents. Earlier rounds (§3–§3c) are kept as the record for 4.x / 1.3; the 1.4 checks are in §3d.
 
 **What this record can and can't prove.** Everything here ran outside your tenant. It proves the files are well-formed, internally consistent and behave as specified against a strict model of SharePoint that follows Microsoft's documentation. Only the tenant can prove the import and real permissions (§5).
 
@@ -8,11 +8,12 @@
 
 | Check | How | Result |
 |---|---|---|
-| Frontend | `02-frontend`: `node tools/build-mock.js && node test/run-tests.js` (headless Chromium against the local mock) | **273 / 273** |
+| Frontend | `02-frontend`: `node tools/build-mock.js && node test/run-tests.js` (headless Chromium against the local mock) | **305 / 305** |
+| Reset tool | `02-frontend`: `node test/run-reset-tests.js` | **31 / 31** |
 | Solution build | `04-solution/tools/build.py`: generate `src/`, validate, pack with Microsoft's Power Platform CLI, unpack again and compare | Packs; round trip identical |
-| Static validator | Expressions, references, scopes, run-after chains, required connector parameters, list/column names, JSON request bodies, field XML / view CAML, schedule time zone, secured run history, no hidden failures | 8 flows clean |
-| Validator proof | `tools/test_validate.py`: deliberately broken copies of the flows | **25 / 25** caught |
-| End-to-end simulation | `tools/simulate.py`: the real flow JSON executed against an in-memory SharePoint | **220 / 220** (solution) and **220 / 220** (legacy form) |
+| Static validator | Expressions, references, scopes, run-after chains, required connector parameters, list/column names, JSON request bodies, field XML / view CAML, schedule time zone, secured run history, no hidden failures; 1.4: REST MERGE (not connector writes) for columns added after their list was created, no `secureData` on variables | 8 flows clean (0–6, 8) |
+| Validator proof | `tools/test_validate.py`: deliberately broken copies of the flows | **29 / 29** caught |
+| End-to-end simulation | `tools/simulate.py`: the real flow JSON executed against an in-memory SharePoint | **215 / 215** (solution) and **215 / 215** (legacy form). Fewer than 1.3's 220 because the Flow 7 challenge scenarios were removed with the flow; the 1.4 scenarios were added. |
 | Simulation proof | New scenarios run against the previously committed flows / frontend | 18 flow checks and 2 frontend checks fail on the old code, so the tests detect the bugs fixed in §3. Second review (§3a): 7 new flow checks fail on the 1.1.1.0 flows, and the new frontend checks fail on 4.2.1 (privacy ×3, robustness – the run then stops because the old profile page crashes) |
 | Legacy builder | `tools/test_builder.js` + `check_builder_zips.py` | Rejects bad input; no network requests; zips are standard and exactly as expected |
 | Microsoft schema | Flow definitions checked against Microsoft's published workflow-definition JSON schema | No error class that real exported Microsoft (PnP) flows don't also produce |
@@ -100,7 +101,7 @@ Three independent testers worked only on copies and the local mock/simulator (no
 
 ### 3c. Fourth round – new features, break-it and security testing (16-Oct-2026, frontend 4.5.0 / solution 1.3.0.0)
 
-New in this release: required questions marked orange until answered and red after a blocked Submit; technicians see bands and words, never numbers; "focus on these to move up"; and challenges of released feedback (Flow 7, the 1-to-1 Challenges list, Flow 1's month-end close). Two independent testers then worked only on copies and the local mock/simulator. Nobody could forge the line manager's agreement, challenge someone else's review, move a challenge onto another review, or inject script through a challenge. Fixed:
+New in this release: required questions marked orange until answered and red after a blocked Submit; technicians see bands and words, never numbers; "focus on these to move up"; and challenges of released feedback (Flow 7, the 1-to-1 Challenges list, Flow 1's month-end close – all **removed in 1.4**, see §3d and `MIGRATION_1_4.md`; findings 48–53 are kept as history). Two independent testers then worked only on copies and the local mock/simulator. Nobody could forge the line manager's agreement, challenge someone else's review, move a challenge onto another review, or inject script through a challenge. Fixed:
 
 | # | Finding | Severity | Fix | Covered by |
 |---|---|---|---|---|
@@ -113,7 +114,26 @@ New in this release: required questions marked orange until answered and red aft
 | 54 | A long note with no spaces widened the page | Medium | Long text wraps | Frontend |
 | 55 | Smaller: auto-save "highlighted item" not highlighted; next band wrong with duplicate band names; "You're in the top band" shown to the line manager; unlabelled boxes and button groups; challenge list status not updated at month end; a missing challenge column would stop the page loading | Low | Fixed | Frontend, simulation |
 
-**Tenant check:** P26 (can `Author` be set when creating an item?) now also covers the Challenges list.
+**Tenant check:** P26 (can `Author` be set when creating an item?) also covered the Challenges list while it was in use (1.3 only).
+
+### 3d. Solution 1.4.0.0 / page 5.0.0 (16-Oct-2026)
+
+New in this release: variable-length appraisal periods, missed months excluded from the statistics, Team Leader amendments with a restricted audit (*1-to-1 Amendments*, Flow 8, E16), next wellbeing and appraisal dates in Settings → Team with E12 / E17 reminders, uncapped expectations, the challenge feature removed, a screen clean-up and the one-time reset tool. What the local checks prove:
+
+| Area | Verified | Covered by |
+|---|---|---|
+| Appraisal periods | A period runs from the previous actual completion (or the period start you set) to the next, any length (12, 15, 23 and 8 months tested). A review belongs to a period by its month: after the start's month, up to and including the completion month (also for a 1 June completion in summer time). Moving the next due date never moves a review. Reviews before the first start form a closed earlier period; with no start there is no forecast. A second completion in the same month replaces the first; Undo last reverses it. | Frontend |
+| Missed months | *Closed – Not Submitted* and overdue *Open* months are left out of averages, the expected outcome and forecast, trend and on-time (on time ÷ submitted). A missed month neither extends nor breaks the streak; a late one breaks it. Tiles and reports show "N rated reviews of M months · K missed". Removing the missed months gives identical figures. | Frontend |
+| Amendments | A released review is read-only until **Amend…**; a submitted one keeps Save feedback plus **Amend answers…**. No auto-save in amend mode; a reason is required and the changed fields are listed. Order: re-read both items (refuse if changed elsewhere) → Draft audit record (before/after of changed columns only; who/when from SharePoint) → only the changed columns written → Pending. Flow 2 cancels (not a resubmission); Flow 8 sends exactly one E16 with no content or reason, marks it Sent, and on failure marks it Failed and tells the TL; Resend / Send notice / Dismiss in *Needs your attention*. A technician can't read the audit list. | Frontend, simulation |
+| Flow 1 | No limit of 10 expectations; Shared before Individual (AppliesTo desc, SortOrder asc); an earlier year carries on, a later or mistyped year stays out, also across 1 April; boundaries copied to new reviews; E12 / E17 7 days before, on the day, weekly while overdue, active people only; a submission Flow 2 never processed is reported in E7. | Simulation |
+| Setup 1.4 | Adds the four Technicians columns, `AppraisalBoundaries` on Monthly Reviews and the Owners-only, versioned Amendments list; retires 1-to-1 Challenges (group removed, items Owners-only, open challenges *Not agreed*, nothing deleted); a re-run changes nothing. | Simulation |
+| Expectations | No cap (warning above 30); Shared card plus one card per person; new items at the end of their group; **Delete permanently** only for retired items, by the TL, to the recycle bin, with past reviews keeping their copy; a technician's `recycle()` is refused (403). | Frontend |
+| Reset tool | Inventory, filters, backup required before the dry run, typed confirmation with Flow 1 off, deletes only ticked records on the allowed lists, expectations opt-in only, Technicians and Settings never touched, report after verification; refused for a technician. | Reset-tool tests |
+| Challenges removed | No challenge UI anywhere on the page; Flow 7 is not in the solution; E14 / E15 no longer sent. | Frontend, build |
+
+**Honest limits.** The amendment audit is tamper-*evident* (version history on the list), not tamper-proof: site owners and site collection admins can always edit a list they own. The E16 email to the technician is an independent record.
+
+**Tenant-only for 1.4:** checks **T1–T11** in [`MIGRATION_1_4.md`](MIGRATION_1_4.md#tenant-only-checks) – flows 2–6 and 8 activate after import; Setup says *complete*; Flow 2's trigger carries **Editor**; Flow 8 sends one E16 per amendment; `recycle()` allowed for the TL and refused for a technician; versioning and Owners-only access on 1-to-1 Amendments (and a technician can't open it); the reset layout appears and is removed afterwards; real dates entered after migration; date-only round trips on the live regional settings.
 
 ## 4. Confirmed against Microsoft documentation
 
@@ -144,5 +164,6 @@ From the platform audit, with sources in the audit notes:
 | Real item permissions, emails and timings | Plan section H (F1–F44, P1–P28), with Test A / Test B |
 | Personal-regional-settings date round trip (R16) | Test F27 |
 | Limited-access lockdown mode not active | NEXT_STEPS "Things to verify early" |
+| Solution 1.4 / page 5.0.0 upgrade (T1–T11) | [`MIGRATION_1_4.md`](MIGRATION_1_4.md) → *Tenant-only checks* |
 
-To repeat every automated check: `04-solution/tools/run_all.sh`, plus the frontend command above.
+To repeat every automated check: `04-solution/tools/run_all.sh`, plus the two frontend commands above (`node tools/build-mock.js && node test/run-tests.js`, and `node test/run-reset-tests.js`).
