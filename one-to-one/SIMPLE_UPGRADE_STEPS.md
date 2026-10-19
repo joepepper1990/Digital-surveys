@@ -141,7 +141,7 @@ Skip this part if 5.0.0 was already installed and the dates are in.
 3. As the test person, click **Ready to close…** then **Ask to close**. You get one email: *Close-out requested*.
 4. On the **Actions** page, click **Agree & close**.
 
-✅ **Done when:** all four worked. The full list of checks is in `MIGRATION_1_5.md` (T1–T14).
+✅ **Done when:** all four worked. The full list of checks is in `MIGRATION_1_5.md` (T1–T16).
 
 ## Later, with separate approval
 

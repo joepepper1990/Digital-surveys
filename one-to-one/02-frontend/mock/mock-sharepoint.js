@@ -117,7 +117,16 @@
   function lastDay(key) { return key + '-' + pad(new Date(Date.UTC(+key.slice(0, 4), +key.slice(5, 7), 0)).getUTCDate()); }
   function offsetHours(iso) { var hr = new Date(iso + 'T12:00:00Z').toLocaleString('en-GB', { timeZone: TZ, hour: '2-digit', hour12: false }); return Number(hr) - 12; }
   // SharePoint stores a date-only value as midnight site time, returned as a UTC instant.
-  function dateOnlyUtc(iso) { var off = offsetHours(iso); return new Date(Date.parse(iso + 'T00:00:00Z') - off * 3600000).toISOString().replace('.000', ''); }
+  // midnight UK time, checked at midnight itself (the clocks change at 01:00 GMT in March and 02:00 BST in October)
+  function dateOnlyUtc(iso) {
+    var base = Date.parse(iso + 'T00:00:00Z');
+    for (var off = 1; off >= 0; off--) {
+      var t = new Date(base - off * 3600000);
+      var loc = t.toLocaleString('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+      if (loc.slice(0, 10) === iso && /00:00$/.test(loc)) { return t.toISOString().replace('.000', ''); }
+    }
+    return new Date(base).toISOString().replace('.000', '');
+  }
   function endOfDayUtc(iso) { var off = offsetHours(iso); return new Date(Date.parse(iso + 'T23:59:59Z') - off * 3600000).toISOString().replace('.000', ''); }
   function nowIso() { return new Date().toISOString().replace(/\.\d{3}/, ''); }
   function rng(seed) { var t0 = seed >>> 0; return function () { t0 = (t0 + 0x6D2B79F5) >>> 0; var t = t0; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -379,7 +388,7 @@
     var email = dir === root + '/' + folder && /^u\d+$/.test(folder) ? db.folders[folder] : null, sender = email ? userByEmail(email) : null;
     var ac = db.lists['1-to-1 Actions'].find(function (x) { return x.ID === Number(up.ActionId); });
     var kind = up.Kind || '', msg = String(up.Message || '').trim(), oc = up.Outcome || '';
-    var verdict = !sender || ('u' + sender.id) !== folder ? 'Not sent from your own update folder' : !ac ? 'Action not found' : ac.Technician !== claimsOf(sender) ? 'Not your action'
+    var verdict = !sender || ('u' + sender.id) !== folder ? 'Not sent from your own update folder' : !ac || ac.Technician !== claimsOf(sender) ? 'Not your action'
       : ac.Status === 'Closed' ? 'The action is closed' : CHOICES.UpdKind.indexOf(kind) < 0 ? 'Unknown kind of update'
       : (kind === 'progress' || kind === 'waiting') && !msg ? 'The update is empty' : kind === 'followup' && CHOICES.Outcome.indexOf(oc) < 0 ? 'Unknown follow-up outcome'
       : CLOSE_REQ(kind, oc) && ac.Owner !== 'Technician' ? 'Only the Team Leader closes their own actions' : '';
@@ -390,7 +399,7 @@
     if (!hist.some(function (e) { return e && e.id === 'u' + up.ID; })) {
       var text = msg.slice(0, 2000);
       hist.push({ id: 'u' + up.ID, at: nowIso(), by: sender.title, kind: kind, outcome: oc, text: text, waitingUntil: up.WaitingUntil || '', key: String(up.ClientKey || '').slice(0, 60) });
-      ac.Status = CLOSE_REQ(kind, oc) ? 'Ready for close-out' : kind === 'waiting' ? 'Waiting' : (ac.Status === 'Open' || ac.Status === 'Waiting') ? 'In progress' : ac.Status;
+      ac.Status = CLOSE_REQ(kind, oc) ? 'Ready for close-out' : kind === 'waiting' ? 'Waiting' : (kind === 'progress' && (ac.Status === 'Open' || ac.Status === 'Waiting')) ? 'In progress' : ac.Status;
       if (text) { ac.LatestProgress = text; }
       ac.LastUpdateOn = nowIso(); ac.LastUpdateBy = sender.title;
       if (kind === 'waiting') { ac.WaitingReason = text; ac.WaitingUntil = up.WaitingUntil || ''; } else if (kind === 'progress') { ac.WaitingReason = ''; ac.WaitingUntil = ''; }

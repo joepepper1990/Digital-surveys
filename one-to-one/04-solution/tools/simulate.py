@@ -1101,6 +1101,42 @@ def v15_checks():
     ok('Flow 10: nothing is recorded on a closed action', u8['fields']['ProcessState'] == 'Rejected' and u8['fields']['ProcessNote'] == 'The action is closed')
     sp.write_item(act, a2['id'], {'item/Status/Value': 'Open'})
 
+    # review round: Flow 10 checks the rules again after a 412 – the Team Leader may have closed it or taken it over meanwhile
+    sp.write_item(act, a1['id'], {'item/Status/Value': 'In progress'})
+    sp.bump_once = {('1-to-1 Actions', a1['id']): {'fields': {'item/Status/Value': 'Closed', 'item/ClosedOn': '2026-11-25'}}}
+    r1, st, _ = send(11, 'u11', {'ActionId': a1['id'], 'Kind/Value': 'waiting', 'Message': 'Waiting for the provider'})
+    ok('Flow 10 (review fix): closed by the Team Leader between read and write – the update is rejected, the action stays Closed',
+       r1['fields']['ProcessState'] == 'Rejected' and r1['fields']['ProcessNote'] == 'The action is closed' and a1['fields']['Status'] == 'Closed' and
+       a1['fields'].get('ClosedOn') == '2026-11-25' and 'u{0}'.format(r1['id']) not in a1['fields']['HistoryJson'], (r1['fields'], a1['fields']['Status']))
+    sp.write_item(act, a1['id'], {'item/Status/Value': 'In progress', 'item/ClosedOn': None})
+    sp.bump_once = {('1-to-1 Actions', a1['id']): {'fields': {'item/Owner/Value': 'Team Leader'}}}
+    r2, st, _ = send(11, 'u11', {'ActionId': a1['id'], 'Kind/Value': 'closeRequest', 'Message': 'done'})
+    ok('Flow 10 (review fix): taken over by the Team Leader meanwhile – a close-out request is rejected, no E19',
+       r2['fields']['ProcessState'] == 'Rejected' and a1['fields']['Status'] == 'In progress' and
+       not [i for i in notc['items'].values() if i['fields'].get('NoticeKey') == 'E19-u{0}'.format(r2['id'])])
+    sp.write_item(act, a1['id'], {'item/Owner/Value': 'Technician'})
+    good_hist = a1['fields']['HistoryJson']
+    sp.write_item(act, a1['id'], {'item/HistoryJson': '[{"id": broken'})
+    r3, st, _ = send(11, 'u11', {'ActionId': a1['id'], 'Kind/Value': 'progress', 'Message': 'after a bad edit'})
+    ok('Flow 10 (review fix): an unreadable history rejects the update with a clear note (no endless retry loop)',
+       st == 'Succeeded' and r3['fields']['ProcessState'] == 'Rejected' and 'history could not be read' in r3['fields']['ProcessNote'], (st, r3['fields']))
+    sp.write_item(act, a1['id'], {'item/HistoryJson': good_hist})
+    nxt = max(upd['items']) + 2
+    send(11, 'u11', {'ActionId': a1['id'], 'Kind/Value': 'progress', 'Message': 'decoy', 'ClientKey': 'u{0}'.format(nxt)})
+    r5, st, _ = send(11, 'u11', {'ActionId': a1['id'], 'Kind/Value': 'progress', 'Message': 'the real one'})
+    ok('Flow 10 (review fix): a client key that looks like the next update id does not make it count as already recorded',
+       r5['id'] == nxt and r5['fields']['ProcessState'] == 'Applied' and a1['fields']['LatestProgress'] == 'the real one')
+    sp.write_item(act, a1['id'], {'item/Status/Value': 'Waiting', 'item/WaitingReason': 'Parts on order'})
+    send(11, 'u11', {'ActionId': a1['id'], 'Kind/Value': 'followup', 'Outcome/Value': 'Support', 'Message': 'need a chaser'})
+    ok('Flow 10 (review fix): a follow-up outcome leaves the status alone (Waiting stays Waiting, with its reason)',
+       a1['fields']['Status'] == 'Waiting' and a1['fields']['WaitingReason'] == 'Parts on order')
+    sp.write_item(act, a1['id'], {'item/Status/Value': 'In progress', 'item/WaitingReason': ''})
+    folder['ra'][12] = {submit}
+    fire('9', sp, '1-to-1 Actions', a1['id'], T('2026-11-25T12:00:00'))
+    ok('Flow 9 (review fix): repairing a folder keeps its recorded updates locked (Read only)',
+       others(folder['ra']) == {3: {fsp.FULL}, 11: {submit}} and u1['unique'] and others(u1['ra']) == {3: {fsp.FULL}, 11: {read}}, (folder['ra'], u1['ra']))
+    sp.write_item(act, a1['id'], {'item/Status/Value': 'Ready for close-out'})   # as the E19 below expects
+
     # Flow 11: emails
     n19 = e19[0]
     m = len(sp.emails)
@@ -1183,6 +1219,50 @@ def v15_checks():
        stuck['fields']['ProcessNote'] == 'Retried by the daily run')
     st, _ = fire('10', sp, '1-to-1 Action Updates', stuck['id'], T('2027-07-01T07:20:00'))
     ok('… and is then recorded', stuck['fields']['ProcessState'] == 'Applied' and a2['fields']['LatestProgress'] == 'stuck one')
+
+    # review round: a reminder for a deadline that has since moved, or whose date has passed, is not sent
+    set_due(a1, '2027-08-11')
+    daily('2027-08-04')
+    n_old = next(i for i in e20_for(a1) if i['fields']['NoticeKey'].endswith('2027-08-11'))
+    set_due(a1, '2027-08-20')
+    m = len(sp.emails)
+    fire('11', sp, '1-to-1 Action Notices', n_old['id'], T('2027-08-04T07:10:00'))
+    ok('Flow 11 (review fix): a reminder for a deadline that has moved is cancelled, not sent with the new date', n_old['fields']['Status'] == 'Cancelled' and len(sp.emails) == m)
+    daily('2027-08-13')
+    n_new = next(i for i in e20_for(a1) if i['fields']['NoticeKey'].endswith('2027-08-20'))
+    fire('11', sp, '1-to-1 Action Notices', n_new['id'], T('2027-08-21T07:10:00'))
+    ok('Flow 11 (review fix): a late retry after the deadline date sends nothing (Cancelled)', n_new['fields']['Status'] == 'Cancelled' and len(sp.emails) == m)
+
+    # review round: one review that can't be added never stops the reminders or the rest of the daily work; older entries'
+    # owner comes from the name (the Team Leader's stays the Team Leader's)
+    sp.write_item(mgr, None, {'item/Title': 'Alex – 2027-08', 'item/ReviewKey': 'test-noid', 'item/MonthKey': '2027-08',
+                              'item/Technician/Claims': sp.users[11]['Claims'], 'item/ReviewState/Value': 'Completed', 'item/ReleasedOn': '2027-08-30T10:00:00Z',
+                              'item/ActionsJson': '[{"text":"no id here","owner":"Alex Morgan","criteria":"x","due":"2027-10-01","status":"Open"}]'})
+    legacy = sp.write_item(mgr, None, {'item/Title': 'Alex – 2027-07', 'item/ReviewKey': 'test-legacy', 'item/MonthKey': '2027-07',
+                                       'item/Technician/Claims': sp.users[11]['Claims'], 'item/ReviewState/Value': 'Completed', 'item/ReleasedOn': '2027-08-30T11:00:00Z',
+                                       'item/ActionsJson': '[{"id":"L1","text":"legacy TL one","owner":"Team Leader","criteria":"x","due":"2027-10-01","status":"Open"},'
+                                                           '{"id":"L2","text":"legacy own one","owner":"Alex Morgan","criteria":"x","due":"2027-10-01","status":"Open"}]'})
+    set_due(a1, '2027-09-08')
+    m = len(sp.emails)
+    st, eng = daily('2027-09-01')
+    probs = [e for e in sp.emails[m:] if e['subject'] == '1-to-1 system: action needed']
+    owners = {i['fields']['Title']: i['fields']['Owner'] for i in act['items'].values() if i['fields'].get('Title', '').startswith('legacy')}
+    ok('Flow 1 (review fix): a review that can\'t be added is reported by name, and the other review and the day\'s reminder still go ahead',
+       any(i['fields']['NoticeKey'].endswith('2027-09-08') for i in e20_for(a1)) and len(probs) == 1 and 'Alex – 2027-08' in probs[0]['body'] and
+       legacy['fields'].get('ActionsSyncedOn'), (st, [e['body'][:300] for e in probs]))
+    ok('Flow 3 / 1 (review fix): an older entry without ownerRole keeps its owner – the Team Leader\'s stays the Team Leader\'s',
+       owners == {'legacy TL one': 'Team Leader', 'legacy own one': 'Technician'}, owners)
+
+    # security review: a folder renamed or otherwise changed by its holder is never trusted (it could pose as someone else's)
+    sp.me = 11
+    sp.write_item(upd, folder['id'], {'item/Title': 'u11'})   # any change by the technician makes them its last editor
+    sp.me = 10
+    r6, st, _ = send(11, 'u11', {'ActionId': a1['id'], 'Kind/Value': 'progress', 'Message': 'from a changed folder'})
+    ok('Security (review fix): an update in a folder changed by anyone but the flow is rejected', r6['fields']['ProcessState'] == 'Rejected' and
+       r6['fields']['ProcessNote'] == 'Not sent from your own update folder' and a1['fields']['LatestProgress'] != 'from a changed folder')
+    st, eng = fire('9', sp, '1-to-1 Actions', a1['id'], T('2027-09-01T12:00:00'))
+    ok('Security (review fix): flow 9 never adopts a changed folder – it closes it to Owners and the run fails, so the Team Leader is told',
+       st == 'Failed' and folder['unique'] and others(folder['ra']) == {3: {fsp.FULL}}, (st, folder['ra']))
 
     # a 1.4 site without the action lists: flows 1 and 3 still work
     sp2 = fsp.FakeSP()

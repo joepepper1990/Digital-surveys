@@ -1,6 +1,6 @@
-# ESG 1-to-1 — verification record (16-Oct-2026)
+# ESG 1-to-1 — verification record (19-Oct-2026)
 
-**Scope:** frontend **v5.0.0**, solution **1.4.0.0**, the importable solution (setup flow + Flows 1–6 and 8), the one-time reset tool, the legacy-package builder, the eight-list schema and all documents. Earlier rounds (§3–§3c) are kept as the record for 4.x / 1.3; the 1.4 checks are in §3d.
+**Scope:** frontend **v5.1.0**, solution **1.5.0.0**, the importable solution (setup flow + Flows 1–6 and 8–11), the one-time reset tool (1.1.0), the legacy-package builder, the eleven-list schema and all documents. Earlier rounds (§3–§3d) are kept as the record for 4.x / 1.3 / 1.4; the 1.5 checks are in §3e and `TEST_REPORT_1_5.md`.
 
 **What this record can and can't prove.** Everything here ran outside your tenant. It proves the files are well-formed, internally consistent and behave as specified against a strict model of SharePoint that follows Microsoft's documentation. Only the tenant can prove the import and real permissions (§5).
 
@@ -9,11 +9,12 @@
 | Check | How | Result |
 |---|---|---|
 | Frontend | `02-frontend`: `node tools/build-mock.js && node test/run-tests.js` (headless Chromium against the local mock) | **319 / 319** |
-| Reset tool | `02-frontend`: `node test/run-reset-tests.js` | **33 / 33** |
+| Action tracker (1.5) | `02-frontend`: `node test/run-action-tests.js` | **108 / 108** |
+| Reset tool | `02-frontend`: `node test/run-reset-tests.js` | **45 / 45** |
 | Solution build | `04-solution/tools/build.py`: generate `src/`, validate, pack with Microsoft's Power Platform CLI, unpack again and compare | Packs; round trip identical |
-| Static validator | Expressions, references, scopes, run-after chains, required connector parameters, list/column names, JSON request bodies, field XML / view CAML, schedule time zone, secured run history, no hidden failures; 1.4: REST MERGE (not connector writes) for columns added after their list was created, no `secureData` on variables | 8 flows clean (0–6, 8) |
-| Validator proof | `tools/test_validate.py`: deliberately broken copies of the flows | **34 / 34** caught |
-| End-to-end simulation | `tools/simulate.py`: the real flow JSON executed against an in-memory SharePoint | **216 / 216** (solution) and **216 / 216** (legacy form). Fewer than 1.3's 220 because the Flow 7 challenge scenarios were removed with the flow; the 1.4 scenarios were added. |
+| Static validator | Expressions, references, scopes, run-after chains, required connector parameters, list/column names, JSON request bodies, field XML / view CAML, schedule time zone, secured run history, no hidden failures; 1.4: REST MERGE (not connector writes) for columns added after their list was created, no `secureData` on variables | 11 flows clean (0–6, 8–11) |
+| Validator proof | `tools/test_validate.py`: deliberately broken copies of the flows | **38 / 38** caught |
+| End-to-end simulation | `tools/simulate.py`: the real flow JSON executed against an in-memory SharePoint | **294 / 294** (solution) and **294 / 294** (legacy form) |
 | Simulation proof | New scenarios run against the previously committed flows / frontend | 18 flow checks and 2 frontend checks fail on the old code, so the tests detect the bugs fixed in §3. Second review (§3a): 7 new flow checks fail on the 1.1.1.0 flows, and the new frontend checks fail on 4.2.1 (privacy ×3, robustness – the run then stops because the old profile page crashes) |
 | Legacy builder | `tools/test_builder.js` + `check_builder_zips.py` | Rejects bad input; no network requests; zips are standard and exactly as expected |
 | Microsoft schema | Flow definitions checked against Microsoft's published workflow-definition JSON schema | No error class that real exported Microsoft (PnP) flows don't also produce |
@@ -136,6 +137,23 @@ New in this release: variable-length appraisal periods, missed months excluded f
 **Honest limits.** The amendment audit is tamper-*evident* (version history on the list), not tamper-proof: site owners and site collection admins can always edit a list they own. The E16 email to the technician is an independent record.
 
 **Tenant-only for 1.4:** checks **T1–T11** in [`MIGRATION_1_4.md`](MIGRATION_1_4.md#tenant-only-checks) – flows 2–6 and 8 activate after import; Setup says *complete*; Flow 2's trigger carries **Editor**; Flow 8 sends one E16 per amendment; `recycle()` allowed for the TL and refused for a technician; versioning and Owners-only access on 1-to-1 Amendments (and a technician can't open it); the reset layout appears and is removed afterwards; real dates entered after migration; date-only round trips on the live regional settings.
+
+### 3e. Solution 1.5.0.0 / page 5.1.0 – enhanced action tracking (19-Oct-2026)
+
+New in this release: the action tracker (three lists, flows 9–11, flow 1 and 3 additions), *My actions*, the rebuilt Actions page, carry-forward with follow-up outcomes, E19 / E20, and the reset tool's separately authorised action group. Full evidence and both review rounds: [`TEST_REPORT_1_5.md`](TEST_REPORT_1_5.md).
+
+| Area | Verified | Covered by |
+|---|---|---|
+| Creation at release | Server-side (flow 3), unique `ActionKey`, only after the tracker start, idempotent; an interrupted release is finished by flow 1; one bad review never blocks the others or the reminders | Simulation; action tests §29–§30 |
+| Identity and permissions | Updates only from the technician's own top-level folder, found by exact path and trusted only if the flow made it and nobody has changed it; forged ActionId / Author rejected; flow 9 sets and repairs the exact permission set without unlocking recorded updates | Simulation; action tests §31 |
+| Concurrency | Page MERGE with the etag it read (412 → reload, nothing overwritten); flow 10 retries once and re-checks the rules; history appended once (exact id match) | Simulation; action tests §29–§30 |
+| Emails | E19 once per request; E20 5 working days before (weekday / Saturday / Sunday rules, catch-up, BST), one per action and deadline, none after the deadline, stale ones cancelled; Failed → Retry → Sent; delivery unknown shown | Simulation; action tests §32 |
+| Page | Statuses, waiting never extends a deadline, overdue-while-waiting, no scores, carry-forward, outcomes, UK dates across clock changes, 1366 px | Action tests §29–§37 |
+| Compatibility | All 5.0 tests pass; before Setup 1.5 the page behaves as 5.0; released actions read-only (amend mode too); the Actions page never writes Manager Reviews | Frontend; action tests §34 |
+
+**Independent reviews (security, break-it):** 21 findings (3 high in break-it, 1 high in security), all fixed with tests – see `TEST_REPORT_1_5.md`.
+
+**Tenant-only for 1.5:** checks **T1–T16** in [`MIGRATION_1_5.md`](MIGRATION_1_5.md#tenant-only-checks).
 
 ## 4. Confirmed against Microsoft documentation
 

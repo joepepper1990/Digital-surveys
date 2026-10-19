@@ -1024,7 +1024,7 @@
                               "actions": {
                                 "R_STOP_action_without_id": {
                                   "type": "Compose",
-                                  "inputs": "@int('An agreed action has no id – open the review on the 5.1 page and save it again.')",
+                                  "inputs": "@int('An agreed action in this review has no id (it was edited by hand), so it cannot be added safely. Add it on the Actions page with + New action, and give it an id in the review record (ActionsJson) so this stops.')",
                                   "runAfter": {}
                                 }
                               },
@@ -1093,7 +1093,7 @@
                                     "Title": "@take(string(coalesce(items('R_Each_agreed')?['text'], '')), 250)",
                                     "ActionKey": "@{outputs('R_Key')}",
                                     "TechnicianId": "@body('R_Ensure_user')?['Id']",
-                                    "Owner": "@if(equals(items('R_Each_agreed')?['ownerRole'], 'tl'), 'Team Leader', 'Technician')",
+                                    "Owner": "@if(equals(items('R_Each_agreed')?['ownerRole'], 'tl'), 'Team Leader', if(equals(items('R_Each_agreed')?['ownerRole'], 'tech'), 'Technician', if(equals(toLower(trim(string(coalesce(items('R_Each_agreed')?['owner'], '')))), toLower(trim(string(coalesce(first(body('Get_current')?['value'])?['Technician']?['DisplayName'], first(body('Get_current')?['value'])?['Technician']?['Title'], ''))))), 'Technician', 'Team Leader')))",
                                     "Criteria": "@{coalesce(items('R_Each_agreed')?['criteria'], '')}",
                                     "OriginReviewId": "@int(concat('0', first(split(string(coalesce(first(body('Get_current')?['value'])?['ReviewItemId'], '')), '.'))))",
                                     "OriginMgrId": "@int(concat('0', first(split(string(coalesce(first(body('Get_current')?['value'])?['ID'], '')), '.'))))",

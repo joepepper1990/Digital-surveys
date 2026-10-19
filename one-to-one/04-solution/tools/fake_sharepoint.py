@@ -254,7 +254,15 @@ class FakeSP:
             return it['fields'].get('Title') if it.get('fsobj') == 1 else '{0}_.000'.format(it['id'])
         if name == 'FileDirRef':
             return SITE_REL + '/Lists/' + lst['url'] + ('/' + it['dir'] if it.get('dir') else '')
+        if name == 'FileRef':
+            return self.pseudo(lst, it, 'FileDirRef') + '/' + self.pseudo(lst, it, 'FileLeafRef')
         raise KeyError(name)
+
+    def author_editor(self, it, name, sub):
+        """Created By / Modified By as REST returns them with $expand (who made the item, who last changed it)."""
+        uid = it.get('author', 10) if name == 'Author' else it.get('editor', it.get('author', 10))
+        u = self.users.get(uid)
+        return {'Id': uid, 'Title': u['Title'] if u else '', 'EMail': u['Email'] if u else ''}.get(sub)
 
     def item_out(self, lst, it):
         o = {'ID': it['id'], 'Id': it['id']}
@@ -295,7 +303,7 @@ class FakeSP:
                 if col == 'ID':
                     rows = [r for r in rows if r['id'] == int(float(m.group(3)))]
                     continue
-                if col in ('FSObjType', 'FileLeafRef', 'FileDirRef'):
+                if col in ('FSObjType', 'FileLeafRef', 'FileDirRef', 'FileRef'):
                     want = m.group(2).replace("''", "'") if m.group(2) is not None else int(float(m.group(3)))
                     rows = [r for r in rows if self.pseudo(lst, r, col) == want]
                     continue
@@ -500,8 +508,13 @@ class FakeSP:
                     if name == 'Title':
                         o['Title'] = r.get('Title')
                         continue
-                    if name in ('FSObjType', 'FileLeafRef', 'FileDirRef'):
+                    if name in ('FSObjType', 'FileLeafRef', 'FileDirRef', 'FileRef'):
                         o[name] = self.pseudo(lst, lst['items'][r['ID']], name)
+                        continue
+                    if name in ('Author', 'Editor'):
+                        if '$expand' not in args or name not in args['$expand']:
+                            fail(400, 'person column needs $expand ' + name)
+                        o.setdefault(name, {})[sub] = self.author_editor(lst['items'][r['ID']], name, sub)
                         continue
                     if name not in lst['fields']:
                         fail(400, 'column not found ' + name)
@@ -557,7 +570,7 @@ class FakeSP:
                         out[name] = bool(it['unique'])
                     elif name in ('Id', 'ID'):
                         out[name] = it['id']
-                    elif name in ('FSObjType', 'FileLeafRef', 'FileDirRef'):
+                    elif name in ('FSObjType', 'FileLeafRef', 'FileDirRef', 'FileRef'):
                         out[name] = self.pseudo(lst, it, name)
                     elif name in lst['fields']:
                         t = lst['fields'][name]
@@ -608,8 +621,13 @@ class FakeSP:
             if op == '/resetroleinheritance':
                 it['unique'], it['ra'] = False, {}
                 return {}
-            if op == '/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)':
+            if op in ('/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)',
+                      '/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=false)'):
                 it['unique'], it['ra'] = True, {self.me: {FULL}}
+                if it.get('fsobj') == 1 and op.endswith('clearSubscopes=true)'):   # items inside lose their own permissions
+                    for ch in lst['items'].values():
+                        if ch.get('dir') == it['fields'].get('Title') and ch is not it:
+                            ch['unique'], ch['ra'] = False, {}
                 return {}
             mra = re.match(r'^/roleassignments/(add|remove)roleassignment\(principalid=(\d+),roledefid=(\d+)\)$', op)
             if mra:

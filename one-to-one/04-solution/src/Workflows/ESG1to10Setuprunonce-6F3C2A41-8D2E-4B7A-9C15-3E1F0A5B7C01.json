@@ -1311,6 +1311,7 @@
               "groupRead": false,
               "since": "1.5",
               "folders": true,
+              "writeSecurity": 2,
               "description": "ESG 1-to-1: progress updates sent by technicians on their actions (one folder per person, Flow 10 records them).",
               "fields": [
                 {

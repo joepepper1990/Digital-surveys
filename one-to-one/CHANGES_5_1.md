@@ -101,10 +101,11 @@ Previous versions: page 5.0.0 and solution 1.4.0.0. To install, see `MIGRATION_1
   - the folder: Owners Full Control + that technician 1-to-1 Submit.
 
   It repairs anything else, creates missing folders, and is safe to re-run.
+- **Folders are trusted only if flow 9 made them and nobody has changed them since.** Technicians can edit only items they created, so they can't rename their folder; a folder anyone else has created or changed is closed to Owners and reported, never adopted. Folders are found by their exact path.
 - **Flow 10 (Action update)** takes the sender's identity from the folder the update is in, never from *Created By* or the action id. It:
   - claims the update with its etag (one run only);
   - checks the rules (own action, not closed, waiting needs a reason, close-out requests only on their own actions);
-  - applies it with the action's etag, retrying once if the Team Leader saved in between;
+  - applies it with the action's etag, retrying once if the Team Leader saved in between – and checking the rules again on the fresh copy, so a close or takeover in between is never undone;
   - records it once (the update's id is in the history);
   - then locks the update to Read.
 - **The page writes actions only with REST MERGE and the etag it read** (never `*`), and only to 1-to-1 Actions. Every action date is read back after saving.

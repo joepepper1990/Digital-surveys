@@ -15,8 +15,8 @@ Version: system v5.1.0 (frontend) · solution 1.5.0.0 · guide dated 19-Oct-2026
   - the `1-to-1 Technicians` group exists;
   - the `1-to-1 Edit` and `1-to-1 Read` permission levels exist.
 - **Everything to install is built and verified offline:**
-  - frontend: 319 automated checks, 101 more for the action tracker, and 45 for the one-time reset tool;
-  - flows: simulated end to end, 282 checks, and 38 deliberately broken copies all caught by the validator;
+  - frontend: 319 automated checks, 108 more for the action tracker, and 45 for the one-time reset tool;
+  - flows: simulated end to end, 294 checks, and 38 deliberately broken copies all caught by the validator;
   - independent review rounds fixed 55 defects (see VERIFICATION.md).
 
 **New in 5.1.0 / solution 1.5 – action tracking** (already on an earlier version? §4.2 has the upgrade order):
@@ -97,7 +97,7 @@ Version: system v5.1.0 (frontend) · solution 1.5.0.0 · guide dated 19-Oct-2026
 
 ### 4.2 Import the solution (10 min)
 
-> **Already on 1.4.0.0 / page 5.0.0?** Upgrade to 1.5.0.0 in this order, each step with approval: back up Manager Reviews and 1-to-1 Settings; turn off *1 Daily scheduler*; import `ESGOneToOne_1_5_0_0_unmanaged.zip` as an upgrade (flows 9, 10 and 11 arrive Off); run **0 Setup** and wait for *complete*; turn on flows **2, 3, 4, 5, 6, 8, 9, 10 and 11**; upload page 5.1.0 (Replace, Reset layout cache, Republish – the top bar shows **v5.1.0**); turn on Flow 1. Nothing is imported: the tracker starts empty. (Full order, going back and checks T1–T14: `MIGRATION_1_5.md`.)
+> **Already on 1.4.0.0 / page 5.0.0?** Upgrade to 1.5.0.0 in this order, each step with approval: back up Manager Reviews and 1-to-1 Settings; turn off *1 Daily scheduler*; import `ESGOneToOne_1_5_0_0_unmanaged.zip` as an upgrade (flows 9, 10 and 11 arrive Off); run **0 Setup** and wait for *complete*; turn on flows **2, 3, 4, 5, 6, 8, 9, 10 and 11**; upload page 5.1.0 (Replace, Reset layout cache, Republish – the top bar shows **v5.1.0**); turn on Flow 1. Nothing is imported: the tracker starts empty. (Full order, going back and checks T1–T16: `MIGRATION_1_5.md`.)
 >
 > **Already imported an earlier version (1.3.0.x / page 4.5.0 or before)?** Upgrade in this order (written for 1.4 – use the 1.5 zip and page 5.1.0, and in step 5 also turn on flows 9, 10 and 11), each step with approval:
 >
@@ -438,7 +438,7 @@ Only if §4.2 step 3 showed that solutions can't be imported:
 | P32 (1.5) | **Write an action directly** | A: POST `…getbytitle('1-to-1%20Actions')/items(<A's action>)` with `X-HTTP-Method: MERGE` and `{"Status":"Closed"}`; `…/validateUpdateListItem` setting `CurrentDue`; `…/AddValidateUpdateItemUsingPath` on 1-to-1 Actions | All denied (403); nothing changes. Only the TL (and flows 9/10) write actions. |  |  |  |
 | P33 (1.5) | **Send an update as someone else** | A: `…getbytitle('1-to-1%20Action%20Updates')/AddValidateUpdateItemUsingPath` into B's folder `…/OneToOneActionUpdates/u<B's id>`, into the list root, and into a made-up folder; and into A's own folder with `ActionId` = B's action and `Author` = B | Every create outside A's folder is denied; `Author` can't be written; the one in A's folder with B's action id is *Rejected – Not your action* and B's action is untouched. |  |  |  |
 | P34 (1.5) | **Close or bend the rules** | A, in A's own folder: Kind `closeRequest` on your (TL-owned) action; Kind `waiting` with an empty message; an update on a closed action; then edit or recycle A's own recorded update | Rejected with the reason (*Only the Team Leader closes their own actions*, *The update is empty*, *The action is closed*); the recorded update can't be edited or deleted (403). |  |  |  |
-| P35 (1.5) | **Folder and sharing tamper** | As the TL, add a second person to A's folder (or to an action) in *Manage access*, then change the action | Flow 9 removes the extra person; an update in a folder with a second principal is rejected (identity can't be proven). |  |  |  |
+| P35 (1.5) | **Folder and sharing tamper** | A: rename A's own folder `u<A>` (to another person's `u<id>`) in the list and by REST `validateUpdateListItem` (`FileLeafRef`). As the TL: add a second person to A's folder (or to an action) in *Manage access*, then change the action | A's rename is refused (edit only own items – the folder is the flow's). Flow 9 removes the extra person; an update in a folder with a second principal, or in a folder anyone but the flow has changed, is rejected – and flow 9 closes such a folder to Owners and reports it rather than adopting it (tenant check T15). |  |  |  |
 | P36 (1.5) | **Script injection in the tracker** | A puts the P15 attack strings in an update, a waiting reason and a follow-up detail; the TL puts them in a progress note, a decision note and a new action | Shown as plain text on the Actions page, the Update dialog, the history, *My actions*, *Outstanding actions* and the report; E19 / E20 show them escaped. No alert ever appears. |  |  |  |
 | P17 | **No data leaves the tenant** | As the TL, open each view with F12 → **Network** recording (ask IT if developer tools are blocked) | Every request carrying list data goes to `<tenant>.sharepoint.com`. Record any other host contacted (for example the web part's own code CDN) for IT-11. None of them may receive review content. |  |  |  |
 
@@ -606,6 +606,7 @@ Thanks,
 | (1.5) An update shows *not recorded: Not sent from your own update folder* | Someone changed the folder's permissions or moved the item | Click **Repair sharing** on one of their actions (flow 9 resets the folder); the technician sends it again |
 | (1.5) *Agreed actions … aren't all in the tracker yet* | Flow 3 couldn't finish (or was off) | Check flows 3 and 1 are On; flow 1 adds the missing ones the next morning (or run it now). Nothing is ever added twice. |
 | (1.5) *This action was updated since you opened it* | A technician's update (or another tab) changed it first | Nothing was saved; the page has reloaded it. Make your change again. |
+| (1.5) *"action needed"* from **9 Action access** naming `STOP_folder_changed_by_someone_else` | A technician's update folder was renamed or changed by someone other than flow 9, so it was closed to Owners | Open 1-to-1 Action Updates, rename that folder (e.g. add `-old`) or delete it, then **Repair sharing** on one of that person's actions: flow 9 makes a fresh folder. Their recorded history is on the actions, not lost. |
 | (1.5) An action email shows *delivery unknown* | Flow 11 stopped part-way through sending | Check with the person; **Resend** if needed (it may arrive twice). |
 
 ### 11.3 Getting a fix
@@ -647,7 +648,7 @@ If a list title ever has to change, edit `CONFIG.lists` at the top of `one-to-on
 | Flow | Starts | Job |
 |---|---|---|
 | ESG 1-to-1 \| 0 Setup (run once) | by hand | Creates or completes the lists, columns, indexes, views, permission levels, group, list permissions and the Bands and Reminders settings. Safe to re-run; never deletes data; emails a summary. |
-| ESG 1-to-1 \| 1 Daily scheduler | 07:00 UK daily | Creates each month's reviews (with every expectation that applies, Shared first), makes them private, emails each technician their own link, sends reminders on your reminder days (default 20th and 27th), emails you 7 days before, on the day and weekly while overdue for each person's next wellbeing (E12) and appraisal (E17) dates, and reports problems to you – including a submitted review that was never processed From 1.5 it also adds agreed actions Flow 3 couldn't, creates the E20 deadline reminders, and puts stuck action updates and failed action emails back in the queue |
+| ESG 1-to-1 \| 1 Daily scheduler | 07:00 UK daily | Creates each month's reviews (with every expectation that applies, Shared first), makes them private, emails each technician their own link, sends reminders on your reminder days (default 20th and 27th), emails you 7 days before, on the day and weekly while overdue for each person's next wellbeing (E12) and appraisal (E17) dates, and reports problems to you – including a submitted review that was never processed. From 1.5 it also adds agreed actions Flow 3 couldn't, creates the E20 deadline reminders, and puts stuck action updates and failed action emails back in the queue |
 | ESG 1-to-1 \| 2 Review submitted | when a technician submits | Locks the review (read-only), stamps the trusted record, emails you. Your own amendments are not treated as a new submission. |
 | ESG 1-to-1 \| 3 Manager decision | when you Complete / Close | Validates, locks, releases your feedback to that technician only, emails them; from 1.5, adds the review's agreed actions to the action tracker (once each) |
 | ESG 1-to-1 \| 4 Team members | when you add or deactivate someone (checks every 5 min) | Gives or removes access to the page; removes anyone in the group without an Active row; emails you |

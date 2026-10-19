@@ -368,7 +368,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/lists(guid'@{outputs('ActIds')?['notc']}')/items(@{triggerBody()?['ID']})?$select=Id,Kind,ActionId,Status,Attempts",
+                  "parameters/uri": "_api/web/lists(guid'@{outputs('ActIds')?['notc']}')/items(@{triggerBody()?['ID']})?$select=Id,Kind,NoticeKey,ActionId,Status,Attempts",
                   "parameters/headers": {
                     "Accept": "application/json;odata=minimalmetadata"
                   }
@@ -478,9 +478,29 @@
                 ]
               }
             },
+            "Today_uk": {
+              "type": "Compose",
+              "inputs": "@formatDateTime(convertFromUtc(utcNow(), 'GMT Standard Time'), 'yyyy-MM-dd')",
+              "runAfter": {
+                "Get_action": [
+                  "Succeeded",
+                  "Failed",
+                  "TimedOut"
+                ]
+              }
+            },
+            "Key_due": {
+              "type": "Compose",
+              "inputs": "@if(equals(body('Get_notice')?['Kind'], 'E20'), substring(concat('0000000000', string(coalesce(body('Get_notice')?['NoticeKey'], ''))), length(string(coalesce(body('Get_notice')?['NoticeKey'], ''))), 10), outputs('Today_uk'))",
+              "runAfter": {
+                "Today_uk": [
+                  "Succeeded"
+                ]
+              }
+            },
             "Not_needed": {
               "type": "If",
-              "expression": "@or(empty(string(coalesce(body('Get_action')?['Id'], ''))), equals(body('Get_action')?['Status'], 'Closed'), and(equals(body('Get_notice')?['Kind'], 'E19'), not(equals(body('Get_action')?['Status'], 'Ready for close-out'))))",
+              "expression": "@or(empty(string(coalesce(body('Get_action')?['Id'], ''))), equals(body('Get_action')?['Status'], 'Closed'), and(equals(body('Get_notice')?['Kind'], 'E19'), not(equals(body('Get_action')?['Status'], 'Ready for close-out'))), and(equals(body('Get_notice')?['Kind'], 'E20'), or(not(equals(outputs('Key_due'), if(contains(string(coalesce(body('Get_action')?['CurrentDue'], '')), 'T'), formatDateTime(convertFromUtc(coalesce(body('Get_action')?['CurrentDue'], '2000-01-01T00:00:00Z'), 'GMT Standard Time'), 'yyyy-MM-dd'), coalesce(body('Get_action')?['CurrentDue'], '')))), less(int(concat('0', replace(outputs('Key_due'), '-', ''))), int(replace(outputs('Today_uk'), '-', ''))))))",
               "actions": {
                 "Mark_not_needed": {
                   "type": "OpenApiConnection",
@@ -530,10 +550,8 @@
                 "actions": {}
               },
               "runAfter": {
-                "Get_action": [
-                  "Succeeded",
-                  "Failed",
-                  "TimedOut"
+                "Key_due": [
+                  "Succeeded"
                 ]
               }
             },

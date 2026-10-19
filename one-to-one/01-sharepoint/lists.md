@@ -285,6 +285,7 @@ Technicians' progress updates. **Append-only:** each update is a new item; flow 
 | ProcessNote | Single line of text | Why it was rejected |
 
 - [ ] **Folders on** (Advanced settings → *Make "New Folder" command available*: Yes – Setup does it).
+- [ ] **Item-level permissions → Create and Edit access: "Create items and edit items that were created by the user"** (Setup does it). A technician can then never rename or change their folder, which flow 9 made. Flow 9 and flow 10 also refuse any folder that anyone but the flow's own account has created or changed.
 - [ ] Permissions: **Owners – Full Control only** at list level (no group access). Flow 9 creates one folder per technician, named `u<their site user id>`, with unique permissions: Owners Full Control + **that technician 1-to-1 Submit**. Who sent an update is taken from the folder it is in – never from *Created By* or *ActionId*.
 - [ ] After processing, flow 10 gives each update its own permissions: Owners + the sender *1-to-1 Read*. A technician can never delete an update (no Delete in any 1-to-1 level).
 

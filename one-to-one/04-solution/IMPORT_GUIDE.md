@@ -34,7 +34,7 @@ Flows 1–6 and 8–11 are imported **off**, because the lists don't exist until
 
 ## 0. Already imported an earlier version? Upgrade to 1.5.0.0 (about 30 min)
 
-**From 1.4.0.0:** follow [`../MIGRATION_1_5.md`](../MIGRATION_1_5.md) – back up, turn off Flow 1, import `ESGOneToOne_1_5_0_0_unmanaged.zip`, run 0 Setup, turn on flows 2, 3, 4, 5, 6, 8, 9, 10 and 11, upload page 5.1.0, turn on Flow 1, then run its checks T1–T14. The action tracker starts empty: nothing is imported.
+**From 1.4.0.0:** follow [`../MIGRATION_1_5.md`](../MIGRATION_1_5.md) – back up, turn off Flow 1, import `ESGOneToOne_1_5_0_0_unmanaged.zip`, run 0 Setup, turn on flows 2, 3, 4, 5, 6, 8, 9, 10 and 11, upload page 5.1.0, turn on Flow 1, then run its checks T1–T16. The action tracker starts empty: nothing is imported.
 
 **From 1.3.x:** the steps below (written for 1.4) still apply with the 1.5 zip and page 5.1.0; in step 5 also turn on **9, 10 and 11**. Then do the 1.5 checks.
 

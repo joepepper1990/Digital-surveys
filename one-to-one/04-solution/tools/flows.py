@@ -278,12 +278,14 @@ def ensure_user(name, claims_expr):
     return (name, http('POST', '_api/web/ensureuser', '{"logonName":"@{' + claims_expr + '}"}'))
 
 
-def setperm(suffix, list_key, item_expr, role_expr, principal_expr, ids='Ids'):
-    """list_key: 'reviewsList' or 'mgrList' – the list GUID looked up by load_ids() (or 'wbList' in WbIds)."""
+def setperm(suffix, list_key, item_expr, role_expr, principal_expr, ids='Ids', clear_sub=True):
+    """list_key: 'reviewsList' or 'mgrList' – the list GUID looked up by load_ids() (or 'wbList' in WbIds).
+    clear_sub=False keeps the permissions of items inside a folder (flow 9 repairing an update folder must never unlock the
+    updates flow 10 has locked)."""
     base = "_api/web/lists(guid'@{{outputs('{2}')?['{0}']}}')/items(@{{{1}}})".format(list_key, item_expr, ids)
     return [
         ('Reset' + suffix, http('POST', base + '/resetroleinheritance')),
-        ('Break' + suffix, http('POST', base + '/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)')),
+        ('Break' + suffix, http('POST', base + '/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=' + ('true' if clear_sub else 'false') + ')')),
         ('AddOwners' + suffix, http('POST', base + "/roleassignments/addroleassignment(principalid=@{outputs('Ids')?['owners']},"
                                                    "roledefid=@{outputs('Ids')?['fullControl']})")),
         ('AddTech' + suffix, http('POST', base + '/roleassignments/addroleassignment(principalid=@{' + principal_expr +
@@ -1297,7 +1299,9 @@ def action_create(prefix, mr, released_expr, start_prefix=None):
         'Title': "@take(" + text + ", 250)",
         'ActionKey': "@{outputs('" + P + "Key')}",
         'TechnicianId': "@body('" + P + "Ensure_user')?['Id']",
-        'Owner': "@if(equals(" + E + "?['ownerRole'], 'tl'), 'Team Leader', 'Technician')",
+        # ownerRole (page 5.1); an older entry: the technician's own name means theirs, anything else the Team Leader's
+        'Owner': "@if(equals(" + E + "?['ownerRole'], 'tl'), 'Team Leader', if(equals(" + E + "?['ownerRole'], 'tech'), 'Technician', "
+                 "if(equals(toLower(trim(string(coalesce(" + E + "?['owner'], '')))), toLower(trim(string(coalesce(" + mr + "?['Technician']?['DisplayName'], " + mr + "?['Technician']?['Title'], ''))))), 'Technician', 'Team Leader')))",
         'Criteria': "@{coalesce(" + E + "?['criteria'], '')}",
         'OriginReviewId': "@int(concat('0', " + idstr(mr + "?['ReviewItemId']") + "))",
         'OriginMgrId': "@int(concat('0', " + mid + "))",
@@ -1315,7 +1319,7 @@ def action_create(prefix, mr, released_expr, start_prefix=None):
             (P + 'Each_agreed', foreach("@outputs('" + P + "Agreed')", seq(
                 (P + 'Key', compose(key)),
                 (P + 'Has_id', cond("@empty(string(coalesce(" + E + "?['id'], '')))", seq(
-                    (P + 'STOP_action_without_id', compose("@int('An agreed action has no id – open the review on the 5.1 page and save it again.')")),
+                    (P + 'STOP_action_without_id', compose("@int('An agreed action in this review has no id (it was edited by hand), so it cannot be added safely. Add it on the Actions page with + New action, and give it an id in the review record (ActionsJson) so this stops.')")),
                 ))),
                 (P + 'Find', http('GET', find)),
                 (P + 'Not_yet', cond("@empty(body('" + P + "Find')?['value'])", {
@@ -1390,7 +1394,9 @@ def flow_action_access():
             *setperm('_A', 'act', TB + "?['ID']", "outputs('Ids')?['read']", TECH, ids='ActIds'),
         ))),
         ('Folder_name', compose("@concat('u', string(" + TECH + "))")),
-        ('Find_folder', http('GET', act_uri('upd', "/items?$select=Id&$filter=FSObjType eq 1 and FileLeafRef eq '@{outputs('Folder_name')}'"))),
+        # the folder at exactly <list>/u<id> (a folder of that name deeper down is someone's decoy, never theirs)
+        ('Find_folder', http('GET', act_uri('upd', "/items?$select=Id,Author/Id,Editor/Id&$expand=Author,Editor&$filter=FSObjType eq 1 and "
+                                                     "FileRef eq '@{outputs('ActIds')?['updRoot']}/@{outputs('Folder_name')}'"))),
         ('Folder_missing', cond("@empty(body('Find_folder')?['value'])", seq(
             ('Create_folder', http('POST', act_uri('upd', '/AddValidateUpdateItemUsingPath'),
                                    '{"listItemCreateInfo":{"FolderPath":{"DecodedUrl":"@{outputs(\'ActIds\')?[\'updRoot\']}"},'
@@ -1400,12 +1406,19 @@ def flow_action_access():
             ('Set_folder_from_create', set_var('varFolderId', "@int(first(body('Created_id'))?['FieldValue'])")),
         ), seq(
             ('Set_folder_found', set_var('varFolderId', "@first(body('Find_folder')?['value'])?['Id']")),
+            # only this flow makes or changes these folders: one created or changed by anyone else (renamed by its holder to
+            # pass as someone else's) is never adopted – it is closed to Owners, with whatever was put in it, and reported
+            ('Folder_trusted', cond("@and(equals(first(body('Find_folder')?['value'])?['Author']?['Id'], body('Get_flow_account')?['Id']), "
+                                    "equals(first(body('Find_folder')?['value'])?['Editor']?['Id'], body('Get_flow_account')?['Id']))", None, seq(
+                *owners_only('_Q', 'upd', "variables('varFolderId')"),
+                ('STOP_folder_changed_by_someone_else', compose("@int(concat('The update folder ', outputs('Folder_name'), ' was changed by someone other than this flow, so it has been closed to Owners. Rename or delete it in 1-to-1 Action Updates, then use Repair sharing.'))")),
+            ))),
         ))),
         ('Get_folder_scope', http('GET', act_uri('upd', "/items(@{variables('varFolderId')})?$select=HasUniqueRoleAssignments"))),
         ('Get_folder_access', http('GET', act_uri('upd', "/items(@{variables('varFolderId')})/roleassignments?$expand=Member,RoleDefinitionBindings"))),
         *grants('Folder_grants', 'Get_folder_access'),
         ('Folder_access_ok', cond(exact_access('Get_folder_scope', 'Folder_grants', TECH, '1-to-1 Submit'), None, seq(
-            *setperm('_F', 'upd', "variables('varFolderId')", "outputs('Ids')?['submit']", TECH, ids='ActIds'),
+            *setperm('_F', 'upd', "variables('varFolderId')", "outputs('Ids')?['submit']", TECH, ids='ActIds', clear_sub=False),
         ))),
         ('Shared_changed', cond("@not(equals(toLower(coalesce(" + A + "?['SharedWith'], '')), toLower(coalesce(" + A + "?['Technician']?['EMail'], ''))))", seq(
             ('Mark_shared', http('POST', act_uri('act', "/items(@{" + TB + "?['ID']})"),
@@ -1442,19 +1455,27 @@ def flow_action_update():
     SENDER = "outputs('Sender_id')"
     CLOSE_REQ = "or(equals(" + KIND + ", 'closeRequest'), and(equals(" + KIND + ", 'followup'), equals(" + OUTCOME + ", 'Ready')))"
     upd_base = "/items(@{" + TB + "?['ID']})"
-    verdict = ("@if(not(outputs('Sender_ok')), 'Not sent from your own update folder', "
-               "if(not(equals(outputs('Action_found'), true)), 'Action not found', "
-               "if(not(equals(string(" + A + "?['Technician']?['Id']), string(" + SENDER + "))), 'Not your action', "
-               "if(equals(" + A + "?['Status'], 'Closed'), 'The action is closed', "
-               "if(not(contains(createArray('progress', 'waiting', 'followup', 'closeRequest'), " + KIND + ")), 'Unknown kind of update', "
-               "if(and(contains(createArray('progress', 'waiting'), " + KIND + "), empty(" + MSG + ")), 'The update is empty', "
-               "if(and(equals(" + KIND + ", 'followup'), not(contains(createArray('Satisfactory', 'Support', 'Ready'), " + OUTCOME + "))), 'Unknown follow-up outcome', "
-               "if(and(" + CLOSE_REQ + ", not(equals(" + A + "?['Owner'], 'Technician'))), 'Only the Team Leader closes their own actions', ''))))))))")
+
+    def verdict_of(AB, history_step):
+        # an action that doesn't exist and someone else's get the same answer (no hint which ids exist)
+        return ("@if(not(outputs('Sender_ok')), 'Not sent from your own update folder', "
+                "if(empty(string(coalesce(" + AB + "?['Id'], ''))), 'Not your action', "
+                "if(not(equals(string(" + AB + "?['Technician']?['Id']), string(" + SENDER + "))), 'Not your action', "
+                "if(equals(" + AB + "?['Status'], 'Closed'), 'The action is closed', "
+                "if(not(contains(createArray('progress', 'waiting', 'followup', 'closeRequest'), " + KIND + ")), 'Unknown kind of update', "
+                "if(and(contains(createArray('progress', 'waiting'), " + KIND + "), empty(" + MSG + ")), 'The update is empty', "
+                "if(and(equals(" + KIND + ", 'followup'), not(contains(createArray('Satisfactory', 'Support', 'Ready'), " + OUTCOME + "))), 'Unknown follow-up outcome', "
+                "if(and(" + CLOSE_REQ + ", not(equals(" + AB + "?['Owner'], 'Technician'))), 'Only the Team Leader closes their own actions', "
+                "if(not(equals(actions('" + history_step + "')?['status'], 'Succeeded')), 'The action history could not be read – tell your Team Leader', '')))))))))")
+    verdict = verdict_of(A, 'Parse_history')
+    # "already recorded": this update's own history entry id, exactly ("id":"u<id>" – a key or text that contains u<id> doesn't count)
+    def recorded(AB):
+        return "@contains(string(coalesce(" + AB + "?['HistoryJson'], '')), concat('\"id\":\"u', string(" + TB + "?['ID']), '\"'))"
 
     def patch_steps(sfx, action_body):
         AB = action_body
         status = ("@if(" + CLOSE_REQ + ", 'Ready for close-out', if(equals(" + KIND + ", 'waiting'), 'Waiting', "
-                  "if(contains(createArray('Open', 'Waiting'), " + AB + "?['Status']), 'In progress', " + AB + "?['Status'])))")
+                  "if(and(equals(" + KIND + ", 'progress'), contains(createArray('Open', 'Waiting'), " + AB + "?['Status'])), 'In progress', " + AB + "?['Status'])))")
         text = "take(" + MSG + ", 2000)"
         return [
             ('Entry' + sfx, compose({'id': "@{concat('u', string(" + TB + "?['ID']))}", 'at': '@{utcNow()}',
@@ -1482,17 +1503,27 @@ def flow_action_update():
     # the action changed between reading and writing (e.g. the Team Leader saved): read it again and apply once more
     apply['Get_action_again'] = after(http('GET', act_uri('act', "/items(@{" + idstr(U + "?['ActionId']") + "})" + sel),
                                            headers={'Accept': 'application/json;odata=minimalmetadata'}), {'Apply': FAILED})
-    apply['Not_recorded_meanwhile'] = after(cond(
-        "@contains(string(coalesce(body('Get_action_again')?['HistoryJson'], '')), concat('\"u', string(" + TB + "?['ID']), '\"'))", None, seq(
-            *patch_steps('_again', "body('Get_action_again')"),
-            ('Apply_again', http('POST', act_uri('act', "/items(@{" + idstr(U + "?['ActionId']") + "})"), "@{string(outputs('Patch_again'))}",
-                                 headers={'X-HTTP-Method': 'MERGE', 'IF-MATCH': "@{body('Get_action_again')?['odata.etag']}"})),
+    # ...and checked again: the Team Leader may have closed it or taken it over in between – then it is not applied
+    apply['Not_recorded_meanwhile'] = after(cond(recorded("body('Get_action_again')"), None, seq(
+            ('Parse_history_again', compose("@json(coalesce(body('Get_action_again')?['HistoryJson'], '[]'))", secure=True)),
+            ('Verdict_again', after(compose(verdict_of("body('Get_action_again')", 'Parse_history_again'), secure=True), {'Parse_history_again': TOLERANT})),
+            ('Still_allowed', cond("@empty(outputs('Verdict_again'))", seq(
+                *patch_steps('_again', "body('Get_action_again')"),
+                ('Apply_again', http('POST', act_uri('act', "/items(@{" + idstr(U + "?['ActionId']") + "})"), "@{string(outputs('Patch_again'))}",
+                                     headers={'X-HTTP-Method': 'MERGE', 'IF-MATCH': "@{body('Get_action_again')?['odata.etag']}"})),
+            ), seq(
+                ('Set_not_allowed_now', set_var('varLate', "@outputs('Verdict_again')")),
+            ))),
         )), {'Get_action_again': OK})
 
     accepted = seq(
-        ('Already_recorded', cond("@contains(string(coalesce(" + A + "?['HistoryJson'], '')), concat('\"u', string(" + TB + "?['ID']), '\"'))",
-                                  None, apply)),
+        ('Already_recorded', cond(recorded(A), None, apply)),
         *setperm('_U', 'upd', TB + "?['ID']", "outputs('Ids')?['read']", SENDER, ids='ActIds'),
+        ('Applied_or_not_now', cond("@empty(variables('varLate'))", None, seq(
+            ('Mark_rejected_now', http('POST', act_uri('upd', upd_base), '{"ProcessState":"Rejected","ProcessNote":"@{variables(\'varLate\')}"}',
+                                       headers={'X-HTTP-Method': 'MERGE', 'IF-MATCH': '*'})),
+            ('Done_not_now', terminate('Succeeded')),
+        ))),
         ('Mark_applied', http('POST', act_uri('upd', upd_base), '{"ProcessState":"Applied","ProcessNote":""}',
                               headers={'X-HTTP-Method': 'MERGE', 'IF-MATCH': '*'})),
         ('Is_close_request', cond("@" + CLOSE_REQ, seq(
@@ -1529,8 +1560,12 @@ def flow_action_update():
         ('In_own_folder', compose("@and(equals(string(" + U + "?['FileDirRef']), concat(outputs('ActIds')?['updRoot'], '/', outputs('Folder_name'))), "
                                   "startsWith(outputs('Folder_name'), 'u'))")),
         ('Sender_id', compose("@if(outputs('In_own_folder'), replace(outputs('Folder_name'), 'u', ''), '0')")),
-        ('Find_folder', http('GET', act_uri('upd', "/items?$select=Id&$filter=FSObjType eq 1 and FileLeafRef eq '@{outputs('Folder_name')}'"))),
-        ('Folder_found', cond("@and(outputs('In_own_folder'), not(empty(body('Find_folder')?['value'])))", seq(
+        ('Find_folder', http('GET', act_uri('upd', "/items?$select=Id,Author/Id,Editor/Id&$expand=Author,Editor&$filter=FSObjType eq 1 and "
+                                                     "FileRef eq '@{outputs('ActIds')?['updRoot']}/@{outputs('Folder_name')}'"))),
+        # the folder must be one this flow's account made and nobody has changed since (flow 9), and hold exactly Owners + that person
+        ('Folder_found', cond("@and(outputs('In_own_folder'), not(empty(body('Find_folder')?['value'])), "
+                              "equals(first(body('Find_folder')?['value'])?['Author']?['Id'], body('Get_flow_account')?['Id']), "
+                              "equals(first(body('Find_folder')?['value'])?['Editor']?['Id'], body('Get_flow_account')?['Id']))", seq(
             ('Get_folder_scope', http('GET', act_uri('upd', "/items(@{first(body('Find_folder')?['value'])?['Id']})?$select=HasUniqueRoleAssignments"))),
             ('Get_folder_access', http('GET', act_uri('upd', "/items(@{first(body('Find_folder')?['value'])?['Id']})/roleassignments?$expand=Member,RoleDefinitionBindings"))),
             *grants('Folder_grants', 'Get_folder_access'),
@@ -1540,11 +1575,13 @@ def flow_action_update():
         ('Get_action', http('GET', act_uri('act', "/items(@{" + idstr(U + "?['ActionId']") + "})" + sel),
                             headers={'Accept': 'application/json;odata=minimalmetadata'})),
         ('Action_found', after(compose("@not(empty(string(coalesce(" + A + "?['Id'], ''))))"), {'Get_action': TOLERANT})),
-        ('Verdict', compose(verdict, secure=True)),
+        ('Parse_history', compose("@json(coalesce(" + A + "?['HistoryJson'], '[]'))", secure=True)),
+        ('Verdict', after(compose(verdict, secure=True), {'Parse_history': TOLERANT})),
         ('Accepted', cond("@empty(outputs('Verdict'))", accepted, rejected)),
     )
-    actions = seq(('Initialize_varSenderOk', init_var('varSenderOk', 'boolean', False)))
-    actions['Try'] = after(scope(try_actions), {'Initialize_varSenderOk': OK})
+    actions = seq(('Initialize_varSenderOk', init_var('varSenderOk', 'boolean', False)),
+                  ('Initialize_varLate', init_var('varLate', 'string', '')))
+    actions['Try'] = after(scope(try_actions), {'Initialize_varLate': OK})
     actions['Catch'] = catch('ESG 1-to-1 | 10 Action update')
     triggers = {'When_a_technician_sends_an_update': {
         'type': 'OpenApiConnection',
@@ -1584,7 +1621,7 @@ def flow_action_notice():
         *load_ids(), *act_ids(),
         ('Tracker_ready', cond("@or(equals(outputs('ActIds')?['act'], null), equals(outputs('ActIds')?['notc'], null))",
                                seq(('Run_setup_first', terminate('Failed', 'The 1-to-1 action lists were not found. Run ESG 1-to-1 | 0 Setup (1.5).'))))),
-        ('Get_notice', http('GET', act_uri('notc', base + '?$select=Id,Kind,ActionId,Status,Attempts'),
+        ('Get_notice', http('GET', act_uri('notc', base + '?$select=Id,Kind,NoticeKey,ActionId,Status,Attempts'),
                             headers={'Accept': 'application/json;odata=minimalmetadata'})),
         ('Still_to_send', cond("@contains(createArray('Pending', 'Retry'), coalesce(" + N + "?['Status'], ''))", None, seq(
             ('Already_handled', terminate('Cancelled'))))),
@@ -1592,12 +1629,19 @@ def flow_action_notice():
                        headers={'X-HTTP-Method': 'MERGE', 'IF-MATCH': "@{" + N + "?['odata.etag']}"})),
         ('Get_action', http('GET', act_uri('act', "/items(@{" + idstr(N + "?['ActionId']") + "})?$select=Id,Title,Status,Owner,CurrentDue,"
                                            "Technician/Title,Technician/EMail&$expand=Technician"))),
+        # an E20 is for one deadline (E20-a<id>-<yyyy-MM-dd>): if the deadline has moved, or that date has passed (a late
+        # retry or Resend), it is not sent – the new deadline gets its own reminder
+        ('Today_uk', after(compose("@formatDateTime(convertFromUtc(utcNow(), 'GMT Standard Time'), 'yyyy-MM-dd')"), {'Get_action': TOLERANT})),
+        ('Key_due', compose("@if(equals(" + N + "?['Kind'], 'E20'), substring(concat('0000000000', string(coalesce(" + N + "?['NoticeKey'], ''))), "
+                            "length(string(coalesce(" + N + "?['NoticeKey'], ''))), 10), outputs('Today_uk'))")),
         ('Not_needed', after(cond("@or(empty(string(coalesce(" + A + "?['Id'], ''))), equals(" + A + "?['Status'], 'Closed'), and(equals(" + N + "?['Kind'], 'E19'), "
-                            "not(equals(" + A + "?['Status'], 'Ready for close-out'))))", seq(
+                            "not(equals(" + A + "?['Status'], 'Ready for close-out'))), and(equals(" + N + "?['Kind'], 'E20'), "
+                            "or(not(equals(outputs('Key_due'), " + local_date(A + "?['CurrentDue']") + ")), "
+                            "less(int(concat('0', replace(outputs('Key_due'), '-', ''))), int(replace(outputs('Today_uk'), '-', ''))))))", seq(
             ('Mark_not_needed', http('POST', act_uri('notc', base), '{"Status":"Cancelled","LastError":"Not sent – no longer needed"}',
                                      headers={'X-HTTP-Method': 'MERGE', 'IF-MATCH': '*'})),
             ('Done_not_needed', terminate('Succeeded')),
-        )), {'Get_action': TOLERANT})),
+        )), {'Key_due': OK})),
         ('Send_and_record', cond("@equals(1, 1)", {
             'Send': after(cond("@equals(" + N + "?['Kind'], 'E19')",
                                seq(('Send_E19', email('@' + TL_EMAIL, "Close-out requested: @{" + esc(A + "?['Technician']?['Title']") + '}', e19))),
@@ -1645,64 +1689,87 @@ def action_daily_steps():
     return seq(
         *act_ids(),
         ('Tracker_here', cond("@not(equals(outputs('ActIds')?['act'], null))", seq(
-            *tracker_start('D_'),
-            ('Mgr_for_actions', get_items(MGR, None, top=5000)),
-            ('To_sync', query("@body('Mgr_for_actions')?['value']",
-                              "@and(not(empty(item()?['ReleasedOn'])), empty(item()?['ActionsSyncedOn']), "
-                              "not(empty(outputs('D_Tracker_start'))), "
-                              "greaterOrEquals(ticks(coalesce(item()?['ReleasedOn'], '2000-01-01T00:00:00Z')), "
-                              "ticks(if(empty(outputs('D_Tracker_start')), '2100-01-01T00:00:00Z', outputs('D_Tracker_start')))))", secure=True)),
-            ('Each_to_sync', foreach("@body('To_sync')", seq(
-                *action_create('S_', "items('Each_to_sync')", "items('Each_to_sync')?['ReleasedOn']", 'D_'),
-            ))),
-            ('Get_open_actions', http('GET', act_uri('act', '/items?$select=Id,Status,CurrentDue&$top=5000'))),
-            ('Open_actions', query("@body('Get_open_actions')?['value']", "@not(equals(item()?['Status'], 'Closed'))")),
-            ('Each_open_action', foreach("@body('Open_actions')", seq(
-                ('Due', compose('@' + local_date(O + "?['CurrentDue']"))),
-                ('Has_due', cond("@not(empty(" + due + "))", seq(
-                    ('Due_dow', compose("@dayOfWeek(concat(if(empty(" + due + "), '2000-01-01', " + due + "), 'T12:00:00Z'))")),
-                    ('Remind_from', compose(remind_from)),
-                    ('In_window', cond(in_window, seq(
-                        ('Notice_key', compose(nkey)),
-                        ('Find_notice', http('GET', nfind)),
-                        ('No_notice_yet', cond("@empty(body('Find_notice')?['value'])", {
-                            'Notice_item': after(compose({'__metadata': {'type': "@{outputs('ActIds')?['notcType']}"},
-                                                          'Title': "@{outputs('Notice_key')}", 'NoticeKey': "@{outputs('Notice_key')}",
-                                                          'Kind': 'E20', 'ActionId': "@int(" + idstr(O + "?['Id']") + ")",
-                                                          'Status': 'Pending', 'Attempts': 0}), {}),
-                            'Create_notice': after(http('POST', act_uri('notc', '/items'), "@{string(outputs('Notice_item'))}",
-                                                        verbose=True), {'Notice_item': OK}),
-                            # a manual re-run at the same moment may have created it (the key is unique): fine if it's there
-                            'Recheck_notice': after(http('GET', nfind), {'Create_notice': FAILED}),
-                            'Notice_missing': after(cond("@empty(body('Recheck_notice')?['value'])", seq(
-                                ('STOP_notice_not_created', compose("@int('A deadline reminder could not be queued.')")),
-                            )), {'Recheck_notice': OK}),
-                        })),
+            ('Sync_part', after(scope(seq(
+                *tracker_start('D_'),
+                ('Mgr_for_actions', get_items(MGR, None, top=5000)),
+                ('To_sync', query("@body('Mgr_for_actions')?['value']",
+                                  "@and(not(empty(item()?['ReleasedOn'])), empty(item()?['ActionsSyncedOn']), "
+                                  "not(empty(outputs('D_Tracker_start'))), "
+                                  "greaterOrEquals(ticks(coalesce(item()?['ReleasedOn'], '2000-01-01T00:00:00Z')), "
+                                  "ticks(if(empty(outputs('D_Tracker_start')), '2100-01-01T00:00:00Z', outputs('D_Tracker_start')))))", secure=True)),
+                # one review at a time: a review that can't be finished is reported and retried tomorrow, the others still go in
+                ('Each_to_sync', foreach("@body('To_sync')", {
+                    'Sync_one': after(scope(seq(
+                        *action_create('S_', "items('Each_to_sync')", "items('Each_to_sync')?['ReleasedOn']", 'D_'),
+                    )), {}),
+                    'Sync_one_failed': after(scope(seq(
+                        ('Note_sync_failed', append('varProblems', "@concat('Agreed actions from ', " + esc("items('Each_to_sync')?['Title']") + ", "
+                                                                   "' could not all be added to the action tracker – the daily run tries again tomorrow (the run history names the step).')")),
+                    )), {'Sync_one': FAILED}),
+                })),
+            )), {})),
+            ('Sync_part_failed', after(scope(seq(
+                ('Note_sync_part_failed', append('varProblems', 'Action tracker: the released reviews could not be checked for agreed actions today – the daily run tries again tomorrow.')),
+            )), {'Sync_part': FAILED})),
+            # the reminders and the retries run whatever happened above, each on its own
+            ('Reminder_part', after(scope(seq(
+                ('Get_open_actions', http('GET', act_uri('act', '/items?$select=Id,Status,CurrentDue&$top=5000'))),
+                ('Open_actions', query("@body('Get_open_actions')?['value']", "@not(equals(item()?['Status'], 'Closed'))")),
+                ('Each_open_action', foreach("@body('Open_actions')", seq(
+                    ('Due', compose('@' + local_date(O + "?['CurrentDue']"))),
+                    ('Has_due', cond("@not(empty(" + due + "))", seq(
+                        ('Due_dow', compose("@dayOfWeek(concat(if(empty(" + due + "), '2000-01-01', " + due + "), 'T12:00:00Z'))")),
+                        ('Remind_from', compose(remind_from)),
+                        ('In_window', cond(in_window, seq(
+                            ('Notice_key', compose(nkey)),
+                            ('Find_notice', http('GET', nfind)),
+                            ('No_notice_yet', cond("@empty(body('Find_notice')?['value'])", {
+                                'Notice_item': after(compose({'__metadata': {'type': "@{outputs('ActIds')?['notcType']}"},
+                                                              'Title': "@{outputs('Notice_key')}", 'NoticeKey': "@{outputs('Notice_key')}",
+                                                              'Kind': 'E20', 'ActionId': "@int(" + idstr(O + "?['Id']") + ")",
+                                                              'Status': 'Pending', 'Attempts': 0}), {}),
+                                'Create_notice': after(http('POST', act_uri('notc', '/items'), "@{string(outputs('Notice_item'))}",
+                                                            verbose=True), {'Notice_item': OK}),
+                                # a manual re-run at the same moment may have created it (the key is unique): fine if it's there
+                                'Recheck_notice': after(http('GET', nfind), {'Create_notice': FAILED}),
+                                'Notice_missing': after(cond("@empty(body('Recheck_notice')?['value'])", seq(
+                                    ('STOP_notice_not_created', compose("@int('A deadline reminder could not be queued.')")),
+                                )), {'Recheck_notice': OK}),
+                            })),
+                        ))),
                     ))),
                 ))),
-            ))),
-            # an update stuck mid-way (Processing over an hour) or not picked up (Pending over an hour): wake Flow 10 again
-            ('Get_stuck_updates', http('GET', upd_items('Processing'))),
-            ('Stuck_updates', query("@body('Get_stuck_updates')?['value']", old)),
-            ('Each_stuck', foreach("@body('Stuck_updates')", seq(
-                ('Retry_stuck', http('POST', act_uri('upd', "/items(@{items('Each_stuck')?['Id']})"),
-                                     '{"ProcessState":"Pending","ProcessNote":"Retried by the daily run"}',
-                                     headers={'X-HTTP-Method': 'MERGE', 'IF-MATCH': '*'})),
-            ))),
-            ('Get_waiting_updates', http('GET', upd_items('Pending'))),
-            ('Waiting_updates', query("@body('Get_waiting_updates')?['value']", old)),
-            ('Each_waiting', foreach("@body('Waiting_updates')", seq(
-                ('Wake_waiting', http('POST', act_uri('upd', "/items(@{items('Each_waiting')?['Id']})"),
-                                      '{"ProcessNote":"Retried by the daily run"}',
-                                      headers={'X-HTTP-Method': 'MERGE', 'IF-MATCH': '*'})),
-            ))),
-            # a failed email is retried (up to 3 attempts in all); after that it stays in Needs your attention
-            ('Get_failed_notices', http('GET', act_uri('notc', "/items?$select=Id,Attempts&$filter=Status eq 'Failed'&$top=5000"))),
-            ('Retry_notices', query("@body('Get_failed_notices')?['value']", "@less(coalesce(item()?['Attempts'], 0), 3)")),
-            ('Each_retry_notice', foreach("@body('Retry_notices')", seq(
-                ('Retry_notice', http('POST', act_uri('notc', "/items(@{items('Each_retry_notice')?['Id']})"), '{"Status":"Retry"}',
-                                      headers={'X-HTTP-Method': 'MERGE', 'IF-MATCH': '*'})),
-            ))),
+            )), {'Sync_part': TOLERANT})),
+            ('Reminder_part_failed', after(scope(seq(
+                ('Note_reminders_failed', append('varProblems', 'Action tracker: some deadline reminders could not be queued today – the daily run tries again tomorrow.')),
+            )), {'Reminder_part': FAILED})),
+            ('Retry_part', after(scope(seq(
+                # an update stuck mid-way (Processing over an hour) or not picked up (Pending over an hour): wake Flow 10 again
+                ('Get_stuck_updates', http('GET', upd_items('Processing'))),
+                ('Stuck_updates', query("@body('Get_stuck_updates')?['value']", old)),
+                ('Each_stuck', foreach("@body('Stuck_updates')", seq(
+                    ('Retry_stuck', http('POST', act_uri('upd', "/items(@{items('Each_stuck')?['Id']})"),
+                                         '{"ProcessState":"Pending","ProcessNote":"Retried by the daily run"}',
+                                         headers={'X-HTTP-Method': 'MERGE', 'IF-MATCH': '*'})),
+                ))),
+                ('Get_waiting_updates', http('GET', upd_items('Pending'))),
+                ('Waiting_updates', query("@body('Get_waiting_updates')?['value']", old)),
+                ('Each_waiting', foreach("@body('Waiting_updates')", seq(
+                    ('Wake_waiting', http('POST', act_uri('upd', "/items(@{items('Each_waiting')?['Id']})"),
+                                          '{"ProcessNote":"Retried by the daily run"}',
+                                          headers={'X-HTTP-Method': 'MERGE', 'IF-MATCH': '*'})),
+                ))),
+                # a failed email is retried (up to 3 attempts in all); after that it stays in Needs your attention
+                ('Get_failed_notices', http('GET', act_uri('notc', "/items?$select=Id,Attempts&$filter=Status eq 'Failed'&$top=5000"))),
+                ('Retry_notices', query("@body('Get_failed_notices')?['value']", "@less(coalesce(item()?['Attempts'], 0), 3)")),
+                ('Each_retry_notice', foreach("@body('Retry_notices')", seq(
+                    ('Retry_notice', http('POST', act_uri('notc', "/items(@{items('Each_retry_notice')?['Id']})"), '{"Status":"Retry"}',
+                                          headers={'X-HTTP-Method': 'MERGE', 'IF-MATCH': '*'})),
+                ))),
+            )), {'Reminder_part': TOLERANT})),
+            ('Retry_part_failed', after(scope(seq(
+                ('Note_retries_failed', append('varProblems', 'Action tracker: stuck updates or failed action emails could not all be put back in the queue today.')),
+            )), {'Retry_part': FAILED})),
         ))),
     )
 

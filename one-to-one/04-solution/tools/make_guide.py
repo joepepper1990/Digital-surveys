@@ -92,8 +92,8 @@ Version: system v5.1.0 (frontend) · solution 1.5.0.0 · guide dated 19-Oct-2026
   - the `1-to-1 Technicians` group exists;
   - the `1-to-1 Edit` and `1-to-1 Read` permission levels exist.
 - **Everything to install is built and verified offline:**
-  - frontend: 319 automated checks, 101 more for the action tracker, and 45 for the one-time reset tool;
-  - flows: simulated end to end, 282 checks, and 38 deliberately broken copies all caught by the validator;
+  - frontend: 319 automated checks, 108 more for the action tracker, and 45 for the one-time reset tool;
+  - flows: simulated end to end, 294 checks, and 38 deliberately broken copies all caught by the validator;
   - independent review rounds fixed 55 defects (see VERIFICATION.md).
 
 **New in 5.1.0 / solution 1.5 – action tracking** (already on an earlier version? §4.2 has the upgrade order):
@@ -174,7 +174,7 @@ Version: system v5.1.0 (frontend) · solution 1.5.0.0 · guide dated 19-Oct-2026
 
 ### 4.2 Import the solution (10 min)
 
-> **Already on 1.4.0.0 / page 5.0.0?** Upgrade to 1.5.0.0 in this order, each step with approval: back up Manager Reviews and 1-to-1 Settings; turn off *1 Daily scheduler*; import `ESGOneToOne_1_5_0_0_unmanaged.zip` as an upgrade (flows 9, 10 and 11 arrive Off); run **0 Setup** and wait for *complete*; turn on flows **2, 3, 4, 5, 6, 8, 9, 10 and 11**; upload page 5.1.0 (Replace, Reset layout cache, Republish – the top bar shows **v5.1.0**); turn on Flow 1. Nothing is imported: the tracker starts empty. (Full order, going back and checks T1–T14: `MIGRATION_1_5.md`.)
+> **Already on 1.4.0.0 / page 5.0.0?** Upgrade to 1.5.0.0 in this order, each step with approval: back up Manager Reviews and 1-to-1 Settings; turn off *1 Daily scheduler*; import `ESGOneToOne_1_5_0_0_unmanaged.zip` as an upgrade (flows 9, 10 and 11 arrive Off); run **0 Setup** and wait for *complete*; turn on flows **2, 3, 4, 5, 6, 8, 9, 10 and 11**; upload page 5.1.0 (Replace, Reset layout cache, Republish – the top bar shows **v5.1.0**); turn on Flow 1. Nothing is imported: the tracker starts empty. (Full order, going back and checks T1–T16: `MIGRATION_1_5.md`.)
 >
 > **Already imported an earlier version (1.3.0.x / page 4.5.0 or before)?** Upgrade in this order (written for 1.4 – use the 1.5 zip and page 5.1.0, and in step 5 also turn on flows 9, 10 and 11), each step with approval:
 >

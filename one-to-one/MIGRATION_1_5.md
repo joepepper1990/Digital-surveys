@@ -46,7 +46,7 @@ The action tracker **starts empty**. There is no import tool and no import step.
    2. On the 1-to-1 page: **Edit → Welcome web part → Reset layout cache → Republish**.
    3. The top bar should show **v5.1.0**, and the Team Leader's **Actions** page shows the *What needs you* tiles.
 7. **Turn on Flow 1.**
-8. **Run the tenant-only checks** below (T1–T14). The quickest way is one test release with a test technician.
+8. **Run the tenant-only checks** below (T1–T16). The quickest way is one test release with a test technician.
 
 **Coming straight from 1.3.0.2 / page 4.5.0 (1.4 never installed):** import 1.5 directly – Setup 1.5 also does everything Setup 1.4 did (the 1.4 columns, the Amendments list, retiring challenges). Follow the order above, with these additions from `MIGRATION_1_4.md`:
 - in step 1, back up every list;
@@ -89,3 +89,5 @@ These can't be proven in the local tests (see `TEST_REPORT_1_5.md` for what was)
 | T12 | Date-only values round-trip on the live regional settings (UK, London) | Change a test action's deadline on the Actions page and reload: same day. The page also reads every action date back after saving and says if it differs. |
 | T13 | The reset tool lists the tracker group only after its own tick box | `RESET_PROCEDURE.md`, step 5. Look only – don't delete anything without separate approval. |
 | T14 | The Welcome layout loads 5.1.0 for a technician | As the test technician: *My actions* tab present, no other person's names anywhere. |
+| T15 | A technician can't rename or change their update folder | 1-to-1 Action Updates → List settings → Advanced settings: *Create and Edit access* = "Create items and edit items that were created by the user". As the test technician, try to rename their `u<id>` folder (and a REST `validateUpdateListItem` on it): refused. |
+| T16 | The history column's real limit | List settings → HistoryJson is *Multiple lines of text*, plain text. Optional: on a test action, send 50 updates and check the action still saves. |

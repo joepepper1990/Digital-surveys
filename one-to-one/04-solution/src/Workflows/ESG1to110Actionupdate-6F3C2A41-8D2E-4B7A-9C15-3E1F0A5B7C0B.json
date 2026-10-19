@@ -104,6 +104,23 @@
           },
           "runAfter": {}
         },
+        "Initialize_varLate": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varLate",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_varSenderOk": [
+              "Succeeded"
+            ]
+          }
+        },
         "Try": {
           "type": "Scope",
           "actions": {
@@ -532,7 +549,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/lists(guid'@{outputs('ActIds')?['upd']}')/items?$select=Id&$filter=FSObjType eq 1 and FileLeafRef eq '@{outputs('Folder_name')}'",
+                  "parameters/uri": "_api/web/lists(guid'@{outputs('ActIds')?['upd']}')/items?$select=Id,Author/Id,Editor/Id&$expand=Author,Editor&$filter=FSObjType eq 1 and FileRef eq '@{outputs('ActIds')?['updRoot']}/@{outputs('Folder_name')}'",
                   "parameters/headers": {
                     "Accept": "application/json;odata=nometadata"
                   }
@@ -555,7 +572,7 @@
             },
             "Folder_found": {
               "type": "If",
-              "expression": "@and(outputs('In_own_folder'), not(empty(body('Find_folder')?['value'])))",
+              "expression": "@and(outputs('In_own_folder'), not(empty(body('Find_folder')?['value'])), equals(first(body('Find_folder')?['value'])?['Author']?['Id'], body('Get_flow_account')?['Id']), equals(first(body('Find_folder')?['value'])?['Editor']?['Id'], body('Get_flow_account')?['Id']))",
               "actions": {
                 "Get_folder_scope": {
                   "type": "OpenApiConnection",
@@ -715,9 +732,9 @@
                 ]
               }
             },
-            "Verdict": {
+            "Parse_history": {
               "type": "Compose",
-              "inputs": "@if(not(outputs('Sender_ok')), 'Not sent from your own update folder', if(not(equals(outputs('Action_found'), true)), 'Action not found', if(not(equals(string(body('Get_action')?['Technician']?['Id']), string(outputs('Sender_id')))), 'Not your action', if(equals(body('Get_action')?['Status'], 'Closed'), 'The action is closed', if(not(contains(createArray('progress', 'waiting', 'followup', 'closeRequest'), string(coalesce(body('Get_update')?['Kind'], '')))), 'Unknown kind of update', if(and(contains(createArray('progress', 'waiting'), string(coalesce(body('Get_update')?['Kind'], ''))), empty(trim(string(coalesce(body('Get_update')?['Message'], ''))))), 'The update is empty', if(and(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'followup'), not(contains(createArray('Satisfactory', 'Support', 'Ready'), string(coalesce(body('Get_update')?['Outcome'], ''))))), 'Unknown follow-up outcome', if(and(or(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'closeRequest'), and(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'followup'), equals(string(coalesce(body('Get_update')?['Outcome'], '')), 'Ready'))), not(equals(body('Get_action')?['Owner'], 'Technician'))), 'Only the Team Leader closes their own actions', ''))))))))",
+              "inputs": "@json(coalesce(body('Get_action')?['HistoryJson'], '[]'))",
               "runtimeConfiguration": {
                 "secureData": {
                   "properties": [
@@ -731,13 +748,31 @@
                 ]
               }
             },
+            "Verdict": {
+              "type": "Compose",
+              "inputs": "@if(not(outputs('Sender_ok')), 'Not sent from your own update folder', if(empty(string(coalesce(body('Get_action')?['Id'], ''))), 'Not your action', if(not(equals(string(body('Get_action')?['Technician']?['Id']), string(outputs('Sender_id')))), 'Not your action', if(equals(body('Get_action')?['Status'], 'Closed'), 'The action is closed', if(not(contains(createArray('progress', 'waiting', 'followup', 'closeRequest'), string(coalesce(body('Get_update')?['Kind'], '')))), 'Unknown kind of update', if(and(contains(createArray('progress', 'waiting'), string(coalesce(body('Get_update')?['Kind'], ''))), empty(trim(string(coalesce(body('Get_update')?['Message'], ''))))), 'The update is empty', if(and(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'followup'), not(contains(createArray('Satisfactory', 'Support', 'Ready'), string(coalesce(body('Get_update')?['Outcome'], ''))))), 'Unknown follow-up outcome', if(and(or(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'closeRequest'), and(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'followup'), equals(string(coalesce(body('Get_update')?['Outcome'], '')), 'Ready'))), not(equals(body('Get_action')?['Owner'], 'Technician'))), 'Only the Team Leader closes their own actions', if(not(equals(actions('Parse_history')?['status'], 'Succeeded')), 'The action history could not be read – tell your Team Leader', '')))))))))",
+              "runtimeConfiguration": {
+                "secureData": {
+                  "properties": [
+                    "inputs"
+                  ]
+                }
+              },
+              "runAfter": {
+                "Parse_history": [
+                  "Succeeded",
+                  "Failed",
+                  "TimedOut"
+                ]
+              }
+            },
             "Accepted": {
               "type": "If",
               "expression": "@empty(outputs('Verdict'))",
               "actions": {
                 "Already_recorded": {
                   "type": "If",
-                  "expression": "@contains(string(coalesce(body('Get_action')?['HistoryJson'], '')), concat('\"u', string(triggerBody()?['ID']), '\"'))",
+                  "expression": "@contains(string(coalesce(body('Get_action')?['HistoryJson'], '')), concat('\"id\":\"u', string(triggerBody()?['ID']), '\"'))",
                   "actions": {},
                   "else": {
                     "actions": {
@@ -765,7 +800,7 @@
                       "Patch": {
                         "type": "Compose",
                         "inputs": {
-                          "Status": "@if(or(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'closeRequest'), and(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'followup'), equals(string(coalesce(body('Get_update')?['Outcome'], '')), 'Ready'))), 'Ready for close-out', if(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'waiting'), 'Waiting', if(contains(createArray('Open', 'Waiting'), body('Get_action')?['Status']), 'In progress', body('Get_action')?['Status'])))",
+                          "Status": "@if(or(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'closeRequest'), and(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'followup'), equals(string(coalesce(body('Get_update')?['Outcome'], '')), 'Ready'))), 'Ready for close-out', if(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'waiting'), 'Waiting', if(and(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'progress'), contains(createArray('Open', 'Waiting'), body('Get_action')?['Status'])), 'In progress', body('Get_action')?['Status'])))",
                           "LatestProgress": "@if(empty(trim(string(coalesce(body('Get_update')?['Message'], '')))), coalesce(body('Get_action')?['LatestProgress'], ''), take(trim(string(coalesce(body('Get_update')?['Message'], ''))), 2000))",
                           "LastUpdateOn": "@{utcNow()}",
                           "LastUpdateBy": "@{coalesce(body('Get_action')?['Technician']?['Title'], '')}",
@@ -857,22 +892,13 @@
                       },
                       "Not_recorded_meanwhile": {
                         "type": "If",
-                        "expression": "@contains(string(coalesce(body('Get_action_again')?['HistoryJson'], '')), concat('\"u', string(triggerBody()?['ID']), '\"'))",
+                        "expression": "@contains(string(coalesce(body('Get_action_again')?['HistoryJson'], '')), concat('\"id\":\"u', string(triggerBody()?['ID']), '\"'))",
                         "actions": {},
                         "else": {
                           "actions": {
-                            "Entry_again": {
+                            "Parse_history_again": {
                               "type": "Compose",
-                              "inputs": {
-                                "id": "@{concat('u', string(triggerBody()?['ID']))}",
-                                "at": "@{utcNow()}",
-                                "by": "@{coalesce(body('Get_action_again')?['Technician']?['Title'], '')}",
-                                "kind": "@{string(coalesce(body('Get_update')?['Kind'], ''))}",
-                                "outcome": "@{string(coalesce(body('Get_update')?['Outcome'], ''))}",
-                                "text": "@{take(trim(string(coalesce(body('Get_update')?['Message'], ''))), 2000)}",
-                                "waitingUntil": "@{coalesce(body('Get_update')?['WaitingUntil'], '')}",
-                                "key": "@{take(string(coalesce(body('Get_update')?['ClientKey'], '')), 60)}"
-                              },
+                              "inputs": "@json(coalesce(body('Get_action_again')?['HistoryJson'], '[]'))",
                               "runtimeConfiguration": {
                                 "secureData": {
                                   "properties": [
@@ -882,17 +908,9 @@
                               },
                               "runAfter": {}
                             },
-                            "Patch_again": {
+                            "Verdict_again": {
                               "type": "Compose",
-                              "inputs": {
-                                "Status": "@if(or(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'closeRequest'), and(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'followup'), equals(string(coalesce(body('Get_update')?['Outcome'], '')), 'Ready'))), 'Ready for close-out', if(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'waiting'), 'Waiting', if(contains(createArray('Open', 'Waiting'), body('Get_action_again')?['Status']), 'In progress', body('Get_action_again')?['Status'])))",
-                                "LatestProgress": "@if(empty(trim(string(coalesce(body('Get_update')?['Message'], '')))), coalesce(body('Get_action_again')?['LatestProgress'], ''), take(trim(string(coalesce(body('Get_update')?['Message'], ''))), 2000))",
-                                "LastUpdateOn": "@{utcNow()}",
-                                "LastUpdateBy": "@{coalesce(body('Get_action_again')?['Technician']?['Title'], '')}",
-                                "WaitingReason": "@if(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'waiting'), take(trim(string(coalesce(body('Get_update')?['Message'], ''))), 2000), if(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'progress'), '', coalesce(body('Get_action_again')?['WaitingReason'], '')))",
-                                "WaitingUntil": "@if(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'waiting'), coalesce(body('Get_update')?['WaitingUntil'], ''), if(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'progress'), '', coalesce(body('Get_action_again')?['WaitingUntil'], '')))",
-                                "HistoryJson": "@{string(union(json(coalesce(body('Get_action_again')?['HistoryJson'], '[]')), createArray(outputs('Entry_again'))))}"
-                              },
+                              "inputs": "@if(not(outputs('Sender_ok')), 'Not sent from your own update folder', if(empty(string(coalesce(body('Get_action_again')?['Id'], ''))), 'Not your action', if(not(equals(string(body('Get_action_again')?['Technician']?['Id']), string(outputs('Sender_id')))), 'Not your action', if(equals(body('Get_action_again')?['Status'], 'Closed'), 'The action is closed', if(not(contains(createArray('progress', 'waiting', 'followup', 'closeRequest'), string(coalesce(body('Get_update')?['Kind'], '')))), 'Unknown kind of update', if(and(contains(createArray('progress', 'waiting'), string(coalesce(body('Get_update')?['Kind'], ''))), empty(trim(string(coalesce(body('Get_update')?['Message'], ''))))), 'The update is empty', if(and(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'followup'), not(contains(createArray('Satisfactory', 'Support', 'Ready'), string(coalesce(body('Get_update')?['Outcome'], ''))))), 'Unknown follow-up outcome', if(and(or(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'closeRequest'), and(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'followup'), equals(string(coalesce(body('Get_update')?['Outcome'], '')), 'Ready'))), not(equals(body('Get_action_again')?['Owner'], 'Technician'))), 'Only the Team Leader closes their own actions', if(not(equals(actions('Parse_history_again')?['status'], 'Succeeded')), 'The action history could not be read – tell your Team Leader', '')))))))))",
                               "runtimeConfiguration": {
                                 "secureData": {
                                   "properties": [
@@ -901,43 +919,113 @@
                                 }
                               },
                               "runAfter": {
-                                "Entry_again": [
-                                  "Succeeded"
+                                "Parse_history_again": [
+                                  "Succeeded",
+                                  "Failed",
+                                  "TimedOut"
                                 ]
                               }
                             },
-                            "Apply_again": {
-                              "type": "OpenApiConnection",
-                              "inputs": {
-                                "host": {
-                                  "connectionName": "shared_sharepointonline",
-                                  "operationId": "HttpRequest",
-                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                                },
-                                "parameters": {
-                                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
-                                  "parameters/method": "POST",
-                                  "parameters/uri": "_api/web/lists(guid'@{outputs('ActIds')?['act']}')/items(@{first(split(string(coalesce(body('Get_update')?['ActionId'], '')), '.'))})",
-                                  "parameters/headers": {
-                                    "Accept": "application/json;odata=nometadata",
-                                    "Content-Type": "application/json;odata=nometadata",
-                                    "X-HTTP-Method": "MERGE",
-                                    "IF-MATCH": "@{body('Get_action_again')?['odata.etag']}"
+                            "Still_allowed": {
+                              "type": "If",
+                              "expression": "@empty(outputs('Verdict_again'))",
+                              "actions": {
+                                "Entry_again": {
+                                  "type": "Compose",
+                                  "inputs": {
+                                    "id": "@{concat('u', string(triggerBody()?['ID']))}",
+                                    "at": "@{utcNow()}",
+                                    "by": "@{coalesce(body('Get_action_again')?['Technician']?['Title'], '')}",
+                                    "kind": "@{string(coalesce(body('Get_update')?['Kind'], ''))}",
+                                    "outcome": "@{string(coalesce(body('Get_update')?['Outcome'], ''))}",
+                                    "text": "@{take(trim(string(coalesce(body('Get_update')?['Message'], ''))), 2000)}",
+                                    "waitingUntil": "@{coalesce(body('Get_update')?['WaitingUntil'], '')}",
+                                    "key": "@{take(string(coalesce(body('Get_update')?['ClientKey'], '')), 60)}"
                                   },
-                                  "parameters/body": "@{string(outputs('Patch_again'))}"
+                                  "runtimeConfiguration": {
+                                    "secureData": {
+                                      "properties": [
+                                        "inputs"
+                                      ]
+                                    }
+                                  },
+                                  "runAfter": {}
                                 },
-                                "authentication": "@parameters('$authentication')"
+                                "Patch_again": {
+                                  "type": "Compose",
+                                  "inputs": {
+                                    "Status": "@if(or(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'closeRequest'), and(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'followup'), equals(string(coalesce(body('Get_update')?['Outcome'], '')), 'Ready'))), 'Ready for close-out', if(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'waiting'), 'Waiting', if(and(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'progress'), contains(createArray('Open', 'Waiting'), body('Get_action_again')?['Status'])), 'In progress', body('Get_action_again')?['Status'])))",
+                                    "LatestProgress": "@if(empty(trim(string(coalesce(body('Get_update')?['Message'], '')))), coalesce(body('Get_action_again')?['LatestProgress'], ''), take(trim(string(coalesce(body('Get_update')?['Message'], ''))), 2000))",
+                                    "LastUpdateOn": "@{utcNow()}",
+                                    "LastUpdateBy": "@{coalesce(body('Get_action_again')?['Technician']?['Title'], '')}",
+                                    "WaitingReason": "@if(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'waiting'), take(trim(string(coalesce(body('Get_update')?['Message'], ''))), 2000), if(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'progress'), '', coalesce(body('Get_action_again')?['WaitingReason'], '')))",
+                                    "WaitingUntil": "@if(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'waiting'), coalesce(body('Get_update')?['WaitingUntil'], ''), if(equals(string(coalesce(body('Get_update')?['Kind'], '')), 'progress'), '', coalesce(body('Get_action_again')?['WaitingUntil'], '')))",
+                                    "HistoryJson": "@{string(union(json(coalesce(body('Get_action_again')?['HistoryJson'], '[]')), createArray(outputs('Entry_again'))))}"
+                                  },
+                                  "runtimeConfiguration": {
+                                    "secureData": {
+                                      "properties": [
+                                        "inputs"
+                                      ]
+                                    }
+                                  },
+                                  "runAfter": {
+                                    "Entry_again": [
+                                      "Succeeded"
+                                    ]
+                                  }
+                                },
+                                "Apply_again": {
+                                  "type": "OpenApiConnection",
+                                  "inputs": {
+                                    "host": {
+                                      "connectionName": "shared_sharepointonline",
+                                      "operationId": "HttpRequest",
+                                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                    },
+                                    "parameters": {
+                                      "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                                      "parameters/method": "POST",
+                                      "parameters/uri": "_api/web/lists(guid'@{outputs('ActIds')?['act']}')/items(@{first(split(string(coalesce(body('Get_update')?['ActionId'], '')), '.'))})",
+                                      "parameters/headers": {
+                                        "Accept": "application/json;odata=nometadata",
+                                        "Content-Type": "application/json;odata=nometadata",
+                                        "X-HTTP-Method": "MERGE",
+                                        "IF-MATCH": "@{body('Get_action_again')?['odata.etag']}"
+                                      },
+                                      "parameters/body": "@{string(outputs('Patch_again'))}"
+                                    },
+                                    "authentication": "@parameters('$authentication')"
+                                  },
+                                  "runtimeConfiguration": {
+                                    "secureData": {
+                                      "properties": [
+                                        "inputs",
+                                        "outputs"
+                                      ]
+                                    }
+                                  },
+                                  "runAfter": {
+                                    "Patch_again": [
+                                      "Succeeded"
+                                    ]
+                                  }
+                                }
                               },
-                              "runtimeConfiguration": {
-                                "secureData": {
-                                  "properties": [
-                                    "inputs",
-                                    "outputs"
-                                  ]
+                              "else": {
+                                "actions": {
+                                  "Set_not_allowed_now": {
+                                    "type": "SetVariable",
+                                    "inputs": {
+                                      "name": "varLate",
+                                      "value": "@outputs('Verdict_again')"
+                                    },
+                                    "runAfter": {}
+                                  }
                                 }
                               },
                               "runAfter": {
-                                "Patch_again": [
+                                "Verdict_again": [
                                   "Succeeded"
                                 ]
                               }
@@ -1082,6 +1170,63 @@
                     ]
                   }
                 },
+                "Applied_or_not_now": {
+                  "type": "If",
+                  "expression": "@empty(variables('varLate'))",
+                  "actions": {},
+                  "else": {
+                    "actions": {
+                      "Mark_rejected_now": {
+                        "type": "OpenApiConnection",
+                        "inputs": {
+                          "host": {
+                            "connectionName": "shared_sharepointonline",
+                            "operationId": "HttpRequest",
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                          },
+                          "parameters": {
+                            "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                            "parameters/method": "POST",
+                            "parameters/uri": "_api/web/lists(guid'@{outputs('ActIds')?['upd']}')/items(@{triggerBody()?['ID']})",
+                            "parameters/headers": {
+                              "Accept": "application/json;odata=nometadata",
+                              "Content-Type": "application/json;odata=nometadata",
+                              "X-HTTP-Method": "MERGE",
+                              "IF-MATCH": "*"
+                            },
+                            "parameters/body": "{\"ProcessState\":\"Rejected\",\"ProcessNote\":\"@{variables('varLate')}\"}"
+                          },
+                          "authentication": "@parameters('$authentication')"
+                        },
+                        "runtimeConfiguration": {
+                          "secureData": {
+                            "properties": [
+                              "inputs",
+                              "outputs"
+                            ]
+                          }
+                        },
+                        "runAfter": {}
+                      },
+                      "Done_not_now": {
+                        "type": "Terminate",
+                        "inputs": {
+                          "runStatus": "Succeeded"
+                        },
+                        "runAfter": {
+                          "Mark_rejected_now": [
+                            "Succeeded"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "AddTech_U": [
+                      "Succeeded"
+                    ]
+                  }
+                },
                 "Mark_applied": {
                   "type": "OpenApiConnection",
                   "inputs": {
@@ -1113,7 +1258,7 @@
                     }
                   },
                   "runAfter": {
-                    "AddTech_U": [
+                    "Applied_or_not_now": [
                       "Succeeded"
                     ]
                   }
@@ -1508,7 +1653,7 @@
             }
           },
           "runAfter": {
-            "Initialize_varSenderOk": [
+            "Initialize_varLate": [
               "Succeeded"
             ]
           }

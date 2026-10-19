@@ -328,7 +328,8 @@ LISTS = [
         # can add to (Flow 9); the folder, not the editable Author column, says who sent an update. Flow 10 checks it,
         # applies it to the action and locks the item to Read.
         'key': 'actionUpdates', 'url': 'OneToOneActionUpdates', 'title': '1-to-1 Action Updates', 'groupRead': False, 'since': '1.5',
-        'folders': True,
+        # writeSecurity 2: people edit only items they created – never their folder (made by flow 9), so they can't rename it
+        'folders': True, 'writeSecurity': 2,
         'description': 'ESG 1-to-1: progress updates sent by technicians on their actions (one folder per person, Flow 10 records them).',
         'fields': [
             number('ActionId', indexed=True),

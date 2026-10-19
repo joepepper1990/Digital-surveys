@@ -490,6 +490,51 @@ async function main() {
   await shot('1366-tech-my-actions');
   await open(page, { as: 'alex' }); await shot('1366-tech-form-carry-forward');
 
+  // ================================================================ 37. fixes from the independent reviews
+  await open(page, { as: 'tl' }); await nav('Actions'); await page.locator('#oto-a-st').selectOption('all');
+  var rf = (await db()).lists[A].find(function (x) { return x.Title === 'Update the area 2 checklist'; });
+  await page.locator('tr[data-action="' + rf.ID + '"] button:has-text("Update")').click();
+  await page.locator('.modal input[aria-label="Deadline"]').fill('28/03/2027'); await page.locator('.modal input[aria-label="Deadline"]').press('Tab');
+  await page.locator('.modal div:has(> label:has-text("Why the deadline")) textarea').fill('Clock-change test');
+  await page.locator('.modal button:has-text("Save")').click(); await page.waitForTimeout(400);
+  var rf2 = (await db()).lists[A].find(function (x) { return x.ID === rf.ID; });
+  ok('§37 Dates: a deadline on the last Sunday of March (clocks change) is stored as that UK day', london(rf2.CurrentDue) === '2027-03-28' && rf2.CurrentDue === '2027-03-28T00:00:00Z' &&
+    (await page.locator('.modal').count()) === 0, rf2.CurrentDue);
+  await page.locator('tr[data-action="' + rf.ID + '"] button:has-text("Update")').click();
+  await page.locator('.modal input[aria-label="Deadline"]').fill('25/10/2026'); await page.locator('.modal input[aria-label="Deadline"]').press('Tab');
+  await page.locator('.modal div:has(> label:has-text("Why the deadline")) textarea').fill('Clock-change test 2');
+  await page.locator('.modal button:has-text("Save")').click(); await page.waitForTimeout(400);
+  var rf3 = (await db()).lists[A].find(function (x) { return x.ID === rf.ID; });
+  ok('§37 Dates: and on the last Sunday of October', london(rf3.CurrentDue) === '2026-10-25' && rf3.CurrentDue === '2026-10-24T23:00:00Z', rf3.CurrentDue);
+  // an update created as "Applied" by its sender (never processed) is not shown as recorded
+  await open(page, { as: 'sam' });
+  var samOpen2 = (await db()).lists[A].find(function (x) { return x.Title === 'Arrange an RPS mentor'; });
+  await page.evaluate(function () { OTO_MOCK.current.db.flow10Off = true; });
+  var selfA = await createUpd('u12', upd('progress', samOpen2.ID, 'Self-marked as applied', 'up-selfapplied', { ProcessState: 'Applied' }));
+  ok('§37 Fixture: the self-marked update was created', selfA.status === 200 && !(selfA.json.value || []).some(function (f) { return f.HasException; }), JSON.stringify(selfA));
+  await page.evaluate(function () { OTO_MOCK.current.db.flow10Off = false; sessionStorage.setItem('oto-mock-db-v9', JSON.stringify(OTO_MOCK.current.db)); });
+  await open(page, { as: 'sam' }); await nav('My actions');
+  var sc = await page.locator('.actcard[data-action="' + samOpen2.ID + '"]').innerText();
+  ok('§37 States: "recorded ✓" only once the update is in the action\'s history (its state alone is not trusted)', /received – being recorded/.test(sc) && !/recorded ✓/.test(sc), sc.slice(0, 500));
+  // unsent drafts are kept at most 7 days
+  await page.evaluate(function (id) {
+    localStorage.setItem('esg1to1.unsentUpdates', JSON.stringify([{ key: 'up-old', actionId: id, kind: 'progress', outcome: '', message: 'Old draft', waitingUntil: '', month: '', at: new Date(Date.now() - 9 * 86400000).toISOString(), owner: 12 }]));
+  }, samOpen2.ID);
+  await open(page, { as: 'sam' }); await nav('My actions');
+  ok('§37 Privacy: an unsent update older than 7 days is no longer offered (or kept)', !/Old draft|not sent/.test(await page.locator('.actcard[data-action="' + samOpen2.ID + '"]').innerText()));
+  // the Team Leader's own "ready" isn't shown as the technician asking; a waiting action past its next check is flagged
+  await mutate(function (d, id) {
+    var a = d.lists['1-to-1 Actions'].find(function (x) { return x.ID === id; }), h = JSON.parse(a.HistoryJson || '[]');
+    h.push({ id: 'tready', at: new Date().toISOString(), by: 'Team Leader (mock)', role: 'tl', kind: 'status', from: 'In progress', to: 'Ready for close-out' });
+    a.HistoryJson = JSON.stringify(h); a.Status = 'Ready for close-out'; a.__v++;
+    var w = d.lists['1-to-1 Actions'].find(function (x) { return x.Title === 'Replace the faulty area 3 monitor head'; });
+    if (w) { w.Status = 'Waiting'; w.WaitingUntil = '2000-01-01'; w.__v++; }
+  }, rf.ID);
+  await open(page, { as: 'tl' });
+  var at = await page.locator('.attn-card').innerText();
+  ok('§37 Attention: an action you marked ready says so (not "<name> asked to close")', /you marked it ready\) – Jordan Lee: Update the area 2 checklist/.test(at) && !/Jordan Lee asked to close/.test(at), at.slice(0, 800));
+  ok('§37 Attention: a waiting action past its next check date is flagged', /waiting action past its next check date/.test(at));
+
   // ================================================================ 36. XSS – attack strings in every tracker field
   async function sweep(label, params, steps) {
     var e = await open(page, params);

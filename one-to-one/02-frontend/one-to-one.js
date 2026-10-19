@@ -2069,10 +2069,18 @@ window.ESGOneToOne = function (ctx) {
   function isoOk(v) { return /^\d{4}-\d{2}-\d{2}$/.test(str(v)) ? str(v) : ''; }
   function ukMonthOf(instant) { var d = localDate(instant); return d ? d.slice(0, 7) : ''; }
   // midnight UK time on that day, as the UTC instant SharePoint stores for a date-only column (BST: 23:00 the day before)
+  // (checked at midnight itself: on the last Sunday of March midnight is still GMT, on the last Sunday of October still BST)
   function ukMidnightUtc(iso) {
-    var off = 0;
-    try { off = Number(new Intl.DateTimeFormat('en-GB', { timeZone: CONFIG.timeZone, hour: '2-digit', hour12: false }).format(new Date(iso + 'T12:00:00Z'))) - 12; } catch (_) { off = 0; }
-    return new Date(Date.parse(iso + 'T00:00:00Z') - off * 3600000).toISOString().replace('.000', '');
+    var base = Date.parse(iso + 'T00:00:00Z');
+    for (var off = 1; off >= 0; off--) {
+      var t = new Date(base - off * 3600000), p = {};
+      try {
+        new Intl.DateTimeFormat('en-GB', { timeZone: CONFIG.timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+          .formatToParts(t).forEach(function (x) { p[x.type] = x.value; });
+      } catch (_) { break; }
+      if (p.year + '-' + p.month + '-' + p.day === iso && p.hour === '00' && p.minute === '00') { return t.toISOString().replace('.000', ''); }
+    }
+    return new Date(base).toISOString().replace('.000', '');
   }
   function addWorkingDays(iso, n) {
     var d = iso, left = n;
@@ -2113,6 +2121,12 @@ window.ESGOneToOne = function (ctx) {
   function acOverdue(ac) { return acOpen(ac) && !!ac.due && ac.due < TODAY; }
   function acSoon(ac) { return acOpen(ac) && !acOverdue(ac) && !!ac.due && ac.due <= addWorkingDays(TODAY, 10); }
   function acStale(ac) { return acOpen(ac) && ac.status !== 'Waiting' && ac.status !== 'Ready for close-out' && !!ac.lastActivity && daysBetween(localDate(ac.lastActivity), TODAY) > 30; }
+  function acCheckDue(ac) { return acOpen(ac) && ac.status === 'Waiting' && !!ac.waitingUntil && ac.waitingUntil < TODAY; }
+  // who put it forward for close-out: the technician (a request) or the Team Leader (marked ready)
+  function readyByTl(ac) {
+    var e = ac.history.slice().reverse().find(function (x) { return x.kind === 'closeRequest' || (x.kind === 'followup' && x.outcome === 'Ready') || (x.kind === 'status' && x.to === 'Ready for close-out'); });
+    return !!e && e.role === 'tl';
+  }
   function acShared(ac) { return !!ac.techEmail && ac.shared === ac.techEmail; }
   function dueText(ac) {
     if (!ac.due) { return 'No deadline'; }
@@ -2145,8 +2159,9 @@ window.ESGOneToOne = function (ctx) {
   function actionsForPeriod(tech, p, aud) {
     return actionsOf(function (ac, r) {
       if (r.tech !== tech) { return false; }
-      if (!V15 || acOpen(ac)) { return true; }
+      if (!V15) { return true; }
       var c = (ac.closedOn || '').slice(0, 7), o = ac.originMonth;
+      if (acOpen(ac)) { return !p.closed || !o || o <= p.end; }   // a past period never lists actions raised after it
       return (c && c > p.start && (!p.closed || c <= p.end)) || (o && inPeriod(p, o));
     }, aud);
   }
@@ -2226,7 +2241,13 @@ window.ESGOneToOne = function (ctx) {
       month: m ? m[1] : '', state: str(u.ProcessState) || 'Pending', note: str(u.ProcessNote), created: str(u.Created), folder: str(u.FileDirRef) };
   }
   // ---- per-viewer convenience: an update whose send was interrupted (refresh, network) is offered again with the same key
-  function unsentUpdates() { try { var v = JSON.parse(window.localStorage.getItem(UPD_KEY) || '[]'); return Array.isArray(v) ? v.filter(function (x) { return x && typeof x.key === 'string' && x.owner === MY_ID; }) : []; } catch (_) { return []; } }
+  // kept at most 7 days, and only until SharePoint has it
+  function unsentUpdates() {
+    try {
+      var v = JSON.parse(window.localStorage.getItem(UPD_KEY) || '[]');
+      return Array.isArray(v) ? v.filter(function (x) { return x && typeof x.key === 'string' && x.owner === MY_ID && Date.now() - (Date.parse(x.at) || 0) < 7 * 86400000; }) : [];
+    } catch (_) { return []; }
+  }
   function rememberUnsent(u) { try { var v = unsentUpdates().filter(function (x) { return x.key !== u.key; }); v.push(u); window.localStorage.setItem(UPD_KEY, JSON.stringify(v.slice(-20))); } catch (_) { /* not available */ } }
   function forgetUnsent(key) { try { window.localStorage.setItem(UPD_KEY, JSON.stringify(unsentUpdates().filter(function (x) { return x.key !== key; }))); } catch (_) { /* not available */ } }
 
@@ -2468,7 +2489,7 @@ window.ESGOneToOne = function (ctx) {
   function trackerView() {
     var needs = trackerNeeds(), all = ACTIONS.slice();
     var NEEDS = [['close', 'Awaiting close-out', 'Asked to close', 'warn'], ['overdue', 'Overdue', 'Past the deadline', 'bad'], ['soon', 'Due soon', 'In the next 10 working days', ''],
-      ['waiting', 'Waiting', 'On something outside the action', ''], ['stale', 'No recent progress', 'Nothing for 30 days', ''], ['problems', 'Needs a fix', 'Emails or sharing', 'bad']];
+      ['waiting', 'Waiting', needs.waiting.filter(acCheckDue).length ? needs.waiting.filter(acCheckDue).length + ' past the next check' : 'On something outside the action', needs.waiting.some(acCheckDue) ? 'warn' : ''], ['stale', 'No recent progress', 'Nothing for 30 days', ''], ['problems', 'Needs a fix', 'Emails or sharing', 'bad']];
     var nProblems = needs.notices.length + needs.access.length;
     var strip = h('div', { class: 'tiles needs' }, NEEDS.map(function (n) {
       var count = n[0] === 'problems' ? nProblems : needs[n[0]].length;
@@ -2553,8 +2574,11 @@ window.ESGOneToOne = function (ctx) {
     var items = [], open = ACTIONS.filter(acOpen);
     var go2 = function (need, id) { return function () { state.actNeed = need; state.actFocus = id || null; go('actions'); }; };
     open.filter(function (a) { return a.status === 'Ready for close-out'; }).forEach(function (a) {
-      items.push({ pri: 1, ico: '✅', text: a.tech + ' asked to close an action: ' + clipText(a.text, 90), btn: 'Decide', fn: go2('close', a.id) });
+      items.push({ pri: 1, ico: '✅', text: (readyByTl(a) ? 'Ready for your close-out (you marked it ready) – ' + a.tech + ': ' : a.tech + ' asked to close an action: ') + clipText(a.text, 90),
+        btn: 'Decide', fn: go2('close', a.id) });
     });
+    var checks = open.filter(acCheckDue);
+    if (checks.length) { items.push({ pri: 3, ico: '🔎', text: plural(checks.length, 'waiting action') + ' past ' + (checks.length === 1 ? 'its' : 'their') + ' next check date', btn: 'Show', fn: go2('waiting') }); }
     open.filter(function (a) { return acOverdue(a) && a.status !== 'Ready for close-out' && TECH_INFO[a.tech] && TECH_INFO[a.tech].active; }).forEach(function (a) {
       items.push({ pri: 2, ico: '⏰', text: (a.status === 'Waiting' ? 'Overdue – waiting on ' + clipText(a.waitingReason, 60) + ': ' : 'Overdue action for ') + a.tech + ': ' + clipText(a.text, 80) + ' (due ' + fmtDate(a.due) + ')', btn: 'Actions', fn: go2('overdue', a.id) });
     });
@@ -2578,8 +2602,13 @@ window.ESGOneToOne = function (ctx) {
   }
 
   // ---- Technician: My actions
-  function myUpdatesFor(ac) { return MY_UPDATES.filter(function (u) { return u.actionId === ac.id; }).sort(function (x, y) { return (x.created || '') < (y.created || '') ? -1 : 1; }); }
-  function updState(u) {
+  function myUpdatesFor(ac) {
+    return MY_UPDATES.filter(function (u) { return u.actionId === ac.id; })
+      .sort(function (x, y) { return (Date.parse(x.created) || 0) - (Date.parse(y.created) || 0) || (x.id || 1e12) - (y.id || 1e12); });
+  }
+  function updState(u, ac) {
+    // "recorded" only once it is in the action's own history (the update's state alone could be set by anyone holding it)
+    if (u.state === 'Applied' && ac && !ac.history.some(function (e) { return e.id === 'u' + u.id; })) { u = Object.assign({}, u, { state: 'Pending' }); }
     if (u.state === 'Sending') { return h('div', { class: 'updstate', role: 'status', text: 'Sending…' }); }
     if (u.state === 'Unsent') {
       return h('div', { class: 'updstate bad', role: 'status' }, [h('span', { text: UPD_KIND[u.kind] + ' not sent' + (u.note ? ' – ' + u.note : '') + '. ' }),
@@ -2679,8 +2708,9 @@ window.ESGOneToOne = function (ctx) {
   }
   function actionCard(ac) {
     var ups = myUpdatesFor(ac), last = ups[ups.length - 1];
-    var shownStates = ups.filter(function (u) { return u.state !== 'Applied'; });
-    if (last && last.state === 'Applied' && Date.now() - new Date(last.created || 0).getTime() < 7 * 86400000) { shownStates.push(last); }
+    var inHist = function (u) { return ac.history.some(function (e) { return e.id === 'u' + u.id; }); };
+    var shownStates = ups.filter(function (u) { return u.state !== 'Applied' || !inHist(u); });
+    if (last && last.state === 'Applied' && inHist(last) && Date.now() - new Date(last.created || 0).getTime() < 7 * 86400000) { shownStates.push(last); }
     var kv = [['Deadline', dueText(ac)], ['Close-out criteria', ac.criteria || '—'], ['Raised', ac.fromReview && ac.originMonth ? monthLabel(ac.originMonth) + ' 1-to-1' : 'Added by your ' + lc(L.mgr) + (ac.originMonth ? ' (' + monthLabel(ac.originMonth) + ')' : '')]];
     if (ac.status === 'Waiting') { kv.push(['Waiting on', ac.waitingReason + (ac.waitingUntil ? ' (next check ' + fmtDate(ac.waitingUntil) + ')' : '')]); }
     if (ac.latest) { kv.push(['Latest progress', ac.latest + (ac.lastOn ? ' – ' + fmtDate(localDate(ac.lastOn)) + (ac.lastBy ? ', ' + ac.lastBy : '') : '')]); }
@@ -2693,7 +2723,7 @@ window.ESGOneToOne = function (ctx) {
       h('dl', { class: 'actkv' }, [].concat.apply([], kv.map(function (p) { return [h('dt', { text: p[0] }), h('dd', { text: p[1] })]; }))),
       acOverdue(ac) && ac.status === 'Waiting' ? h('div', { class: 'small muted', text: 'Past the deadline while waiting on something outside the action – your ' + lc(L.mgr) + ' can see what it is waiting on.' }) : null,
       ac.status === 'Ready for close-out' ? h('div', { class: 'small', text: 'You asked to close this – your ' + lc(L.mgr) + ' will agree the close-out or say what is still needed.' }) : null,
-      h('div', null, shownStates.map(updState)),
+      h('div', null, shownStates.map(function (u) { return updState(u, ac); })),
       acOpen(ac) ? quickUpdate(ac) : null,
       historyBlock(ac, focus)
     ]);
@@ -2718,14 +2748,16 @@ window.ESGOneToOne = function (ctx) {
   function carryForwardCard(r, aud) {
     if (!V15) { return null; }
     var prev = reviewsOf(r.tech).filter(function (x) { return x.month < r.month; }).pop();
-    var since = prev ? prev.month + '-01' : '';
+    // "since the previous review": from when it was released (or its meeting), not the start of its month
+    var since = prev ? (localDate(prev.releasedOn) || prev.fb.meeting || prev.month + '-01') : '';
     var list = ACTIONS.filter(function (a) {
       if (a.tech !== r.tech || (r.mrId && a.originMgrId === r.mrId)) { return false; }
       if (acOpen(a)) { return !a.originMonth || a.originMonth <= r.month; }
       return !!a.closedOn && a.closedOn >= (since || r.month + '-01');
     }).sort(function (x, y) { return (acOpen(x) ? 0 : 1) - (acOpen(y) ? 0 : 1) || ((x.due || '9') < (y.due || '9') ? -1 : 1); });
     var latest = currentOf(r.tech);
-    var canAct = aud === 'tech' ? r.state === 'Open' : (!!latest && latest.id === r.id);
+    // the Team Leader can record outcomes on the latest review, or last month's (a meeting held early the next month)
+    var canAct = aud === 'tech' ? r.state === 'Open' : (!!latest && (latest.id === r.id || r.month >= addMonths(CUR, -1)));
     var body = list.length ? list.map(function (a) { return carryRow(a, r, aud, canAct, since, prev); })
       : [h('p', { class: 'small muted', style: 'margin:0', text: 'No actions carried forward.' })];
     return card('Outstanding actions', 'Carried forward from earlier 1-to-1s' + (prev ? ' – what changed since the ' + monthLabel(prev.month) + ' review' : '') + (canAct ? ' · a follow-up outcome is optional' : ''),
@@ -2756,7 +2788,7 @@ window.ESGOneToOne = function (ctx) {
       });
     }
     var ups = aud === 'tech' ? myUpdatesFor(a).filter(function (u) { return u.kind === 'followup' && u.month === r.month && u.state !== 'Applied'; }) : [];
-    return h('div', { class: 'carry-row' + (acOverdue(a) ? ' od' : '') }, [info, outs, ups.length ? h('div', null, ups.map(updState)) : null]);
+    return h('div', { class: 'carry-row' + (acOverdue(a) ? ' od' : '') }, [info, outs, ups.length ? h('div', null, ups.map(function (u) { return updState(u, a); })) : null]);
   }
   function outcomeText(e) { var o = OUTCOMES.find(function (x) { return x.value === e.outcome; }); return (o ? o.text : e.outcome) + (e.text ? ' – ' + e.text : ''); }
   function techOutcome(a, r, value) {
@@ -3200,7 +3232,7 @@ window.ESGOneToOne = function (ctx) {
       wrap.appendChild(h('div', { class: 'acgrid achead' }, ['#', 'Action', 'Owner', 'Deadline', 'Status', ''].map(function (x) { return h('span', { text: x }); })));
       if (!r.fb.actions.length) { wrap.appendChild(h('div', { class: 'muted small', style: 'padding:8px 10px', text: 'No actions yet.' })); }
       r.fb.actions.forEach(function (ac, i) {
-        var t = h('input', { type: 'text', 'aria-label': 'Action', maxlength: '300' }); t.value = ac.text; t.addEventListener('input', function () { ac.text = t.value; if (t.value.trim()) { clearInvalid(t); } markDirty(); });
+        var t = h('input', { type: 'text', 'aria-label': 'Action', maxlength: '250' }); t.value = ac.text; t.addEventListener('input', function () { ac.text = t.value; if (t.value.trim()) { clearInvalid(t); } markDirty(); });
         var owners = [r.tech, L.mgr];
         if (ac.owner && owners.indexOf(ac.owner) < 0) { owners.push(ac.owner); }
         var ow = h('select', { 'aria-label': 'Owner' }, owners.map(function (v) { var o = h('option', { value: v, text: v }); o.selected = ac.owner === v; return o; }));

@@ -705,7 +705,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/lists(guid'@{outputs('ActIds')?['upd']}')/items?$select=Id&$filter=FSObjType eq 1 and FileLeafRef eq '@{outputs('Folder_name')}'",
+                  "parameters/uri": "_api/web/lists(guid'@{outputs('ActIds')?['upd']}')/items?$select=Id,Author/Id,Editor/Id&$expand=Author,Editor&$filter=FSObjType eq 1 and FileRef eq '@{outputs('ActIds')?['updRoot']}/@{outputs('Folder_name')}'",
                   "parameters/headers": {
                     "Accept": "application/json;odata=nometadata"
                   }
@@ -794,6 +794,121 @@
                       "value": "@first(body('Find_folder')?['value'])?['Id']"
                     },
                     "runAfter": {}
+                  },
+                  "Folder_trusted": {
+                    "type": "If",
+                    "expression": "@and(equals(first(body('Find_folder')?['value'])?['Author']?['Id'], body('Get_flow_account')?['Id']), equals(first(body('Find_folder')?['value'])?['Editor']?['Id'], body('Get_flow_account')?['Id']))",
+                    "actions": {},
+                    "else": {
+                      "actions": {
+                        "Reset_Q": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                              "parameters/method": "POST",
+                              "parameters/uri": "_api/web/lists(guid'@{outputs('ActIds')?['upd']}')/items(@{variables('varFolderId')})/resetroleinheritance",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata"
+                              }
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {}
+                        },
+                        "Break_Q": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                              "parameters/method": "POST",
+                              "parameters/uri": "_api/web/lists(guid'@{outputs('ActIds')?['upd']}')/items(@{variables('varFolderId')})/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata"
+                              }
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {
+                            "Reset_Q": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "AddOwners_Q": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                              "parameters/method": "POST",
+                              "parameters/uri": "_api/web/lists(guid'@{outputs('ActIds')?['upd']}')/items(@{variables('varFolderId')})/roleassignments/addroleassignment(principalid=@{outputs('Ids')?['owners']},roledefid=@{outputs('Ids')?['fullControl']})",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata"
+                              }
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {
+                            "Break_Q": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "STOP_folder_changed_by_someone_else": {
+                          "type": "Compose",
+                          "inputs": "@int(concat('The update folder ', outputs('Folder_name'), ' was changed by someone other than this flow, so it has been closed to Owners. Rename or delete it in 1-to-1 Action Updates, then use Repair sharing.'))",
+                          "runAfter": {
+                            "AddOwners_Q": [
+                              "Succeeded"
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    "runAfter": {
+                      "Set_folder_found": [
+                        "Succeeded"
+                      ]
+                    }
                   }
                 }
               },
@@ -936,7 +1051,7 @@
                       "parameters": {
                         "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
                         "parameters/method": "POST",
-                        "parameters/uri": "_api/web/lists(guid'@{outputs('ActIds')?['upd']}')/items(@{variables('varFolderId')})/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)",
+                        "parameters/uri": "_api/web/lists(guid'@{outputs('ActIds')?['upd']}')/items(@{variables('varFolderId')})/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=false)",
                         "parameters/headers": {
                           "Accept": "application/json;odata=nometadata"
                         }

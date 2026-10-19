@@ -125,6 +125,7 @@ Record every change in the change log below.
 | (1.5) An update shows *not recorded: Not sent from your own update folder* | Someone changed the folder's permissions or moved the item | Click **Repair sharing** on one of their actions (flow 9 resets the folder); the technician sends it again |
 | (1.5) *Agreed actions … aren't all in the tracker yet* | Flow 3 couldn't finish (or was off) | Check flows 3 and 1 are On; flow 1 adds the missing ones the next morning (or run it now). Nothing is ever added twice. |
 | (1.5) *This action was updated since you opened it* | A technician's update (or another tab) changed it first | Nothing was saved; the page has reloaded it. Make your change again. |
+| (1.5) *"action needed"* from **9 Action access** naming `STOP_folder_changed_by_someone_else` | A technician's update folder was renamed or changed by someone other than flow 9, so it was closed to Owners | Open 1-to-1 Action Updates, rename that folder (e.g. add `-old`) or delete it, then **Repair sharing** on one of that person's actions: flow 9 makes a fresh folder. Their recorded history is on the actions, not lost. |
 | (1.5) An action email shows *delivery unknown* | Flow 11 stopped part-way through sending | Check with the person; **Resend** if needed (it may arrive twice). |
 
 ## 7. Frontend change log
