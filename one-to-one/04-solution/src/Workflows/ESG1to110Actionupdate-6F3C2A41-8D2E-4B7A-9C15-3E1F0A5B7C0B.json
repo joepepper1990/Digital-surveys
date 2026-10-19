@@ -416,7 +416,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/lists(guid'@{outputs('ActIds')?['upd']}')/items(@{triggerBody()?['ID']})?$select=Id,ActionId,Kind,Outcome,Message,WaitingUntil,ProcessState,FileDirRef,FSObjType",
+                  "parameters/uri": "_api/web/lists(guid'@{outputs('ActIds')?['upd']}')/items(@{triggerBody()?['ID']})?$select=Id,ActionId,Kind,Outcome,Message,WaitingUntil,ClientKey,ProcessState,FileDirRef,FSObjType",
                   "parameters/headers": {
                     "Accept": "application/json;odata=minimalmetadata"
                   }
@@ -750,7 +750,8 @@
                           "kind": "@{string(coalesce(body('Get_update')?['Kind'], ''))}",
                           "outcome": "@{string(coalesce(body('Get_update')?['Outcome'], ''))}",
                           "text": "@{take(trim(string(coalesce(body('Get_update')?['Message'], ''))), 2000)}",
-                          "waitingUntil": "@{coalesce(body('Get_update')?['WaitingUntil'], '')}"
+                          "waitingUntil": "@{coalesce(body('Get_update')?['WaitingUntil'], '')}",
+                          "key": "@{take(string(coalesce(body('Get_update')?['ClientKey'], '')), 60)}"
                         },
                         "runtimeConfiguration": {
                           "secureData": {
@@ -869,7 +870,8 @@
                                 "kind": "@{string(coalesce(body('Get_update')?['Kind'], ''))}",
                                 "outcome": "@{string(coalesce(body('Get_update')?['Outcome'], ''))}",
                                 "text": "@{take(trim(string(coalesce(body('Get_update')?['Message'], ''))), 2000)}",
-                                "waitingUntil": "@{coalesce(body('Get_update')?['WaitingUntil'], '')}"
+                                "waitingUntil": "@{coalesce(body('Get_update')?['WaitingUntil'], '')}",
+                                "key": "@{take(string(coalesce(body('Get_update')?['ClientKey'], '')), 60)}"
                               },
                               "runtimeConfiguration": {
                                 "secureData": {

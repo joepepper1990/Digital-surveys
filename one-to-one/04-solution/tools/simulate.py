@@ -90,7 +90,7 @@ def frontend_fields():
         '1-to-1 Feedback': names(strings_after(js, 'var FB_FIELDS')) - {'HasUniqueRoleAssignments'},   # an item property, not a column
         '1-to-1 Amendments': names(strings_after(js, 'var AM_FIELDS')) - {'Created', 'Modified', 'Author'},   # built-in columns
         '1-to-1 Actions': names(strings_after(js, 'var ACT_FIELDS')) - {'Created', 'Modified', 'Author'},
-        '1-to-1 Action Updates': names(strings_after(js, 'var UPD_FIELDS')) - {'Created', 'Modified', 'Author', 'FileDirRef'},
+        '1-to-1 Action Updates': names(strings_after(js, 'var UPD_FIELDS')) - {'Created', 'Modified', 'Author', 'FileDirRef', 'FSObjType'},
         '1-to-1 Action Notices': names(strings_after(js, 'var NOTICE_FIELDS')) - {'Created', 'Modified'},
     }
     need['Monthly Reviews'] |= set(re.findall(r"'([^']+)'", strings_after(tests, 'var TECH_ALLOWED', ']')))
@@ -1046,6 +1046,7 @@ def v15_checks():
        st == 'Succeeded' and u1['fields']['ProcessState'] == 'Applied' and a1['fields']['Status'] == 'In progress' and
        a1['fields']['LatestProgress'] == 'Course found, waiting for dates' and a1['fields']['LastUpdateBy'] == 'Alex Morgan' and
        hist[-1]['id'] == 'u{0}'.format(u1['id']) and hist[-1]['by'] == 'Alex Morgan', (st, eng and eng.log, a1['fields']))
+    ok('Flow 10: the history entry keeps the update\'s client key (the page reads the follow-up month from it)', hist[-1].get('key') == 'k{0}'.format(seq_no[0]), hist[-1])
     ok('Flow 10: the update is then locked – the technician can read it but no longer change it', u1['unique'] and others(u1['ra']) == {3: {fsp.FULL}, 11: {read}})
     stale = dict(sp.item_out(upd, u1), ProcessState={'Value': 'Pending'})
     st, _ = run('10', sp, T('2026-11-25T10:01:00'), stale)
