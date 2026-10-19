@@ -247,6 +247,37 @@ def exempt_step_carries_reason_in_uri(fl):
     a['inputs']['parameters']['parameters/uri'] += "&r=@{triggerBody()?['Reason']}"
 
 
+# 1.5 action tracker
+@mutation
+def action_update_patch_unsecured(fl):
+    _, a = find(fl[9]['json']['properties']['definition'], 'Patch')
+    a.pop('runtimeConfiguration', None)
+
+
+@mutation
+def daily_reads_new_action_list_by_connector(fl):
+    _, a = find(fl[1]['json']['properties']['definition'], 'Get_open_actions')
+    a.clear()
+    a.update({'type': 'OpenApiConnection', 'runAfter': {'Each_to_sync': ['Succeeded']},
+              'inputs': {'host': {'connectionName': 'shared_sharepointonline', 'operationId': 'GetItems',
+                                  'apiId': '/providers/Microsoft.PowerApps/apis/shared_sharepointonline'},
+                         'parameters': {'dataset': "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')", 'table': '1-to-1 Actions'},
+                         'authentication': "@parameters('$authentication')"},
+              'runtimeConfiguration': {'secureData': {'properties': ['inputs', 'outputs']}}})
+
+
+@mutation
+def action_email_premium_connector(fl):
+    _, a = find(fl[10]['json']['properties']['definition'], 'Send_E20')
+    a['inputs']['host']['connectionName'] = 'shared_sendgrid'
+
+
+@mutation
+def verdict_shows_progress_text(fl):
+    _, a = find(fl[9]['json']['properties']['definition'], 'Verdict')
+    a.pop('runtimeConfiguration', None)
+
+
 if __name__ == '__main__':
     base = build_all()
     assert validate.validate_all(base) == [], 'baseline must be clean'

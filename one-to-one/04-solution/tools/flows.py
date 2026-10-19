@@ -130,10 +130,11 @@ def post_item(table, fields):
     return sp('PostItem', p)
 
 
-def email(to, subject, body):
-    return _conn('shared_office365', MAIL_API, 'SendEmailV2',
-                 {'emailMessage/To': to, 'emailMessage/Subject': subject, 'emailMessage/Body': body,
-                  'emailMessage/Importance': 'Normal'}, True)
+def email(to, subject, body, cc=None):
+    p = {'emailMessage/To': to, 'emailMessage/Subject': subject, 'emailMessage/Body': body, 'emailMessage/Importance': 'Normal'}
+    if cc:
+        p['emailMessage/Cc'] = cc
+    return _conn('shared_office365', MAIL_API, 'SendEmailV2', p, True)
 
 
 def user_profile(email_expr):
@@ -252,13 +253,16 @@ def load_ids():
         ('Role_full_control', query('@' + roles, "@equals(item()?['RoleTypeKind'], 5)")),
         ('Role_edit', query('@' + roles, "@equals(item()?['Name'], '1-to-1 Edit')")),
         ('Role_read', query('@' + roles, "@equals(item()?['Name'], '1-to-1 Read')")),
-        ('Get_lists', http('GET', '_api/web/lists?$select=Id,Title,RootFolder/Name&$expand=RootFolder', secure=False)),
+        ('Role_submit', query('@' + roles, "@equals(item()?['Name'], '1-to-1 Submit')")),
+        ('Get_lists', http('GET', '_api/web/lists?$select=Id,Title,ListItemEntityTypeFullName,RootFolder/Name,RootFolder/ServerRelativeUrl'
+                                  '&$expand=RootFolder', secure=False)),
         ('List_monthly_reviews', query("@body('Get_lists')?['value']", "@equals(item()?['RootFolder']?['Name'], 'MonthlyReviews')")),
         ('List_manager_reviews', query("@body('Get_lists')?['value']", "@equals(item()?['RootFolder']?['Name'], 'ManagerReviews')")),
         ('Ids', compose({'owners': "@body('Get_owners_group')?['Id']",
                          'fullControl': "@first(body('Role_full_control'))?['Id']",
                          'edit': "@first(body('Role_edit'))?['Id']",
                          'read': "@first(body('Role_read'))?['Id']",
+                         'submit': "@first(body('Role_submit'))?['Id']",
                          'reviewsList': "@first(body('List_monthly_reviews'))?['Id']",
                          'mgrList': "@first(body('List_manager_reviews'))?['Id']"})),
         ('Check_setup_has_run', cond(
@@ -405,7 +409,9 @@ def flow_setup():
                                     '"EnableAttachments":false,"NoCrawl":true,"OnQuickLaunch":false,'
                                     # item-level security: 2 = only their own items (feedback list); 1 = all items (default)
                                     '"ReadSecurity":@{coalesce(items(\'Each_list\')?[\'readSecurity\'], 1)},'
-                                    '"WriteSecurity":@{coalesce(items(\'Each_list\')?[\'writeSecurity\'], 1)}}')),
+                                    '"WriteSecurity":@{coalesce(items(\'Each_list\')?[\'writeSecurity\'], 1)},'
+                                    # 1.5 Action Updates: one folder per technician (Flow 9 creates them)
+                                    '"EnableFolderCreation":@{if(equals(items(\'Each_list\')?[\'folders\'], true), \'true\', \'false\')}}')),
         ('Set_offline_off', after(merge(LBASE, '{"__metadata":{"type":"SP.List"},"ExcludeFromOfflineClient":true}'),
                                   {'Set_list_settings': TOLERANT})),
         ('Warn_settings', after(warn("@concat(" + L + "?['title'], ': could not apply list settings – set versioning 100, attachments off, "
@@ -466,7 +472,7 @@ def flow_setup():
     summary = ('<p><b>ESG 1-to-1 setup finished.</b></p>'
                '<p><b>Problems to fix by hand</b> (empty means none):</p><ul><li>@{join(variables(\'varWarnings\'), \'</li><li>\')}</li></ul>'
                '<p><b>What was done:</b></p><ul><li>@{join(variables(\'varLog\'), \'</li><li>\')}</li></ul>'
-               '<p>Next: turn on flows 2, 3, 4, 5, 6 and 8, and then 1 (MIGRATION_1_4), and check each list\'s permissions page. '
+               '<p>Next: turn on flows 2, 3, 4, 5, 6, 8, 9, 10 and 11, and then 1 (MIGRATION_1_5), and check each list\'s permissions page. '
                'If an old flow "7 Challenge" is still in the solution, leave it off.</p>')
 
     try_actions = seq(
@@ -567,6 +573,16 @@ def flow_setup():
             ('Create_reminders_item', http('POST', "_api/web/lists(guid'@{outputs('Settings_list')?['Id']}')/items",
                                            "@{string(outputs('Reminders_item'))}", verbose=True, secure=False)),
             ('Log_reminders', append(G, 'Added the Reminders item to 1-to-1 Settings (20th and 27th)')),
+        ))),
+        # 1.5: the action tracker starts now. Only reviews released from this moment on have their agreed actions added to
+        # it (Flow 3 / Flow 1); earlier actions stay in their reviews. Written once – a re-run keeps the original time.
+        ('Find_tracker_start', query("@body('Get_settings_items')?['value']", "@equals(item()?['Title'], 'ActionsTrackerStart')")),
+        ('Tracker_start_missing', cond("@empty(body('Find_tracker_start'))", seq(
+            ('Tracker_start_item', compose({'__metadata': {'type': "@{outputs('Settings_list')?['ListItemEntityTypeFullName']}"},
+                                            'Title': 'ActionsTrackerStart', 'Value': '@{utcNow()}'})),
+            ('Create_tracker_start', http('POST', "_api/web/lists(guid'@{outputs('Settings_list')?['Id']}')/items",
+                                          "@{string(outputs('Tracker_start_item'))}", verbose=True, secure=False)),
+            ('Log_tracker_start', append(G, 'Action tracker started: actions agreed in reviews released from now on are tracked (earlier ones stay in their reviews)')),
         ))),
         ('Email_summary', email('@' + TL_EMAIL, 'ESG 1-to-1 setup: @{if(empty(variables(\'varWarnings\')), \'complete\', '
                                                 '\'complete with items to check\')}', summary)),
@@ -765,6 +781,13 @@ def flow_daily():
             ('Note_reconcile_failed', append('varProblems', 'Could not check for unprocessed submissions today. Open the run history for details.')),
           )), {'ReconcileTry': FAILED}),
         })),
+        ('Action_tracker', cond("@equals(1, 1)", {
+            'ActionTry': after(scope(action_daily_steps()), {}),
+            'ActionCatch': after(scope(seq(
+                ('Note_actions_failed', append('varProblems', 'Action tracker: adding agreed actions, deadline reminders or retries '
+                                                              'could not all be done today. Open the run history for details.')),
+            )), {'ActionTry': FAILED}),
+        })),
         ('Any_problems', cond("@greater(length(variables('varProblems')), 0)", seq(
             ('Send_E7', email('@' + TL_EMAIL, '1-to-1 system: action needed', e7)),
         ))),
@@ -899,6 +922,13 @@ def flow_decision():
                                                      "Feedback on your 1-to-1 (@{" + month + "}) is ready", e4))),
                                seq(('Send_E5', email('@' + TB + "?['Technician']?['Email']",
                                                      "Your 1-to-1 (@{" + month + "}) has been closed", e5))))),
+        # 1.5: the agreed actions go into the action tracker (once each). If anything here fails the release still
+        # stands; the daily run (Flow 1) finishes it, and the page shows it until then.
+        ('Agreed_actions', cond("@equals(1, 1)", {
+            'ActionsTry': after(scope(seq(*act_ids(), *tracker_start('R_'),
+                                          *action_create('R_', "first(body('Get_current')?['value'])", 'utcNow()'))), {}),
+            'ActionsLater': after(compose('Left for the daily run to finish'), {'ActionsTry': FAILED}),
+        })),
     )
     actions = {'Try': after(scope(try_actions), {}), 'Catch': catch('ESG 1-to-1 | 3 Manager decision')}
     triggers = {'When_a_manager_review_is_created_or_modified': {
@@ -1206,10 +1236,480 @@ def flow_amendment():
     return definition(triggers, actions)
 
 
+# --------------------------------------------------------------------------------------------- 1.5 action tracker
+# The three 1.5 lists are reached by REST only (flows 1 and 3 are on during an upgrade; a connector step naming a list
+# that doesn't exist yet would stop them saving). Their GUIDs come from Get_lists in load_ids().
+def act_ids(name='ActIds'):
+    lists = "body('Get_lists')?['value']"
+    def find(step, url):
+        return (step, query('@' + lists, "@equals(item()?['RootFolder']?['Name'], '" + url + "')"))
+    return [
+        find('List_actions', 'OneToOneActions'),
+        find('List_action_updates', 'OneToOneActionUpdates'),
+        find('List_action_notices', 'OneToOneActionNotices'),
+        find('List_settings', 'OneToOneSettings'),
+        (name, compose({'act': "@first(body('List_actions'))?['Id']",
+                        'actType': "@first(body('List_actions'))?['ListItemEntityTypeFullName']",
+                        'upd': "@first(body('List_action_updates'))?['Id']",
+                        'updRoot': "@first(body('List_action_updates'))?['RootFolder']?['ServerRelativeUrl']",
+                        'notc': "@first(body('List_action_notices'))?['Id']",
+                        'notcType': "@first(body('List_action_notices'))?['ListItemEntityTypeFullName']",
+                        'settings': "@first(body('List_settings'))?['Id']"})),
+    ]
+
+
+def act_uri(key, rest=''):
+    return "_api/web/lists(guid'@{outputs('ActIds')?['" + key + "']}')" + rest
+
+
+def uk_midnight(expr):
+    """A yyyy-MM-dd date as the UTC instant of UK midnight (how SharePoint stores a date-only value). Safe when empty,
+    because if() evaluates both branches."""
+    s = "string(coalesce(" + expr + ", ''))"
+    return ("if(empty(" + s + "), null, convertToUtc(concat(if(empty(" + s + "), '2000-01-01', " + s + "), 'T00:00:00'), "
+            "'GMT Standard Time'))")
+
+
+def tracker_start(prefix):
+    """The action tracker's start (Settings item ActionsTrackerStart, written once by Setup 1.5)."""
+    return [
+        (prefix + 'Get_tracker_start', http('GET', act_uri('settings', "/items?$select=Id,Title,Value&$filter=Title eq 'ActionsTrackerStart'"))),
+        (prefix + 'Tracker_start', compose("@coalesce(first(body('" + prefix + "Get_tracker_start')?['value'])?['Value'], '')")),
+    ]
+
+
+def action_create(prefix, mr, released_expr, start_prefix=None):
+    """Adds a released review's agreed actions to 1-to-1 Actions – once each (unique ActionKey mr<id>-<action id>), and
+    only for reviews released after the tracker started – then stamps the Manager Review ActionsSyncedOn. Any failure
+    leaves it unstamped, so the daily run (Flow 1) finishes it. Used by Flow 3 at release and by Flow 1."""
+    P = prefix
+    E = "items('" + P + "Each_agreed')"
+    START = "outputs('" + (start_prefix or P) + "Tracker_start')"
+    mid = idstr(mr + "?['ID']")
+    eligible = ("@and(not(equals(outputs('ActIds')?['act'], null)), not(empty(" + START + ")), "
+                "greaterOrEquals(ticks(coalesce(" + released_expr + ", '2000-01-01T00:00:00Z')), ticks(if(empty(" + START + "), "
+                "'2100-01-01T00:00:00Z', " + START + "))))")
+    key = "@concat('mr', " + mid + ", '-', string(coalesce(" + E + "?['id'], '')))"
+    find = act_uri('act', "/items?$select=Id&$filter=ActionKey eq '@{outputs('" + P + "Key')}'")
+    text = "string(coalesce(" + E + "?['text'], ''))"
+    new_item = {
+        '__metadata': {'type': "@{outputs('ActIds')?['actType']}"},
+        'Title': "@take(" + text + ", 250)",
+        'ActionKey': "@{outputs('" + P + "Key')}",
+        'TechnicianId': "@body('" + P + "Ensure_user')?['Id']",
+        'Owner': "@if(equals(" + E + "?['ownerRole'], 'tl'), 'Team Leader', 'Technician')",
+        'Criteria': "@{coalesce(" + E + "?['criteria'], '')}",
+        'OriginReviewId': "@int(concat('0', " + idstr(mr + "?['ReviewItemId']") + "))",
+        'OriginMgrId': "@int(concat('0', " + mid + "))",
+        'OriginMonth': "@{" + mr + "?['MonthKey']}",
+        'OriginalDue': '@' + uk_midnight(E + "?['due']"),
+        'CurrentDue': '@' + uk_midnight(E + "?['due']"),
+        'Status': "@if(equals(" + E + "?['status'], 'Closed'), 'Closed', 'Open')",
+        'ClosedOn': "@if(equals(" + E + "?['status'], 'Closed'), " + uk_midnight(E + "?['closedOn']") + ", null)",
+        'HistoryJson': "@{string(createArray(outputs('" + P + "Created_entry')))}",
+    }
+    return [
+        (P + 'Eligible', cond(eligible, seq(
+            ensure_user(P + 'Ensure_user', mr + "?['Technician']?['Claims']"),
+            (P + 'Agreed', compose("@json(coalesce(" + mr + "?['ActionsJson'], '[]'))", secure=True)),
+            (P + 'Each_agreed', foreach("@outputs('" + P + "Agreed')", seq(
+                (P + 'Key', compose(key)),
+                (P + 'Has_id', cond("@empty(string(coalesce(" + E + "?['id'], '')))", seq(
+                    (P + 'STOP_action_without_id', compose("@int('An agreed action has no id – open the review on the 5.1 page and save it again.')")),
+                ))),
+                (P + 'Find', http('GET', find)),
+                (P + 'Not_yet', cond("@empty(body('" + P + "Find')?['value'])", {
+                    P + 'Created_entry': after(compose({'id': 'c', 'at': '@{utcNow()}', 'kind': 'created', 'month': "@{" + mr + "?['MonthKey']}",
+                                                        'by': 'Agreed at the monthly 1-to-1'}), {}),
+                    P + 'New_item': after(compose(new_item, secure=True), {P + 'Created_entry': OK}),
+                    P + 'Create': after(http('POST', act_uri('act', '/items'), "@{string(outputs('" + P + "New_item'))}", verbose=True),
+                                        {P + 'New_item': OK}),
+                    # a parallel run may have added it a moment ago (the key is unique): fine if it is there now
+                    P + 'Recheck': after(http('GET', find), {P + 'Create': FAILED}),
+                    P + 'Still_missing': after(cond("@empty(body('" + P + "Recheck')?['value'])", seq(
+                        (P + 'STOP_could_not_add', compose("@int('An agreed action could not be added to the tracker.')")),
+                    )), {P + 'Recheck': OK}),
+                })),
+            ))),
+            (P + 'Stamp_synced', http('POST', "_api/web/lists(guid'@{outputs('Ids')?['mgrList']}')/items(@{" + mid + "})",
+                                      '{"ActionsSyncedOn":"@{utcNow()}"}', headers={'X-HTTP-Method': 'MERGE', 'IF-MATCH': '*'})),
+        ))),
+    ]
+
+
+def grants(step, from_step):
+    """Each role assignment as 'principal:role:count' – compared with what it must be (exact, nothing extra). The flow's
+    own account is left out: breaking inheritance always leaves it with Full Control, and it is the Team Leader's."""
+    return [
+        (step + '_others', query("@body('" + from_step + "')?['value']", "@not(equals(item()?['PrincipalId'], body('Get_flow_account')?['Id']))")),
+        (step, select("@body('" + step + "_others')",
+                      "@concat(string(item()?['PrincipalId']), ':', string(first(item()?['RoleDefinitionBindings'])?['Name']), ':', "
+                      "string(length(item()?['RoleDefinitionBindings'])))")),
+    ]
+
+
+FULL_NAME = "first(body('Role_full_control'))?['Name']"
+
+
+def exact_access(scope_step, grants_step, principal_expr, role_name):
+    return ("@and(equals(body('" + scope_step + "')?['HasUniqueRoleAssignments'], true), equals(length(body('" + grants_step + "')), 2), "
+            "contains(body('" + grants_step + "'), concat(string(outputs('Ids')?['owners']), ':', " + FULL_NAME + ", ':1')), "
+            "contains(body('" + grants_step + "'), concat(string(" + principal_expr + "), ':" + role_name + ":1')))")
+
+
+def owners_only(suffix, list_key, item_expr):
+    base = "_api/web/lists(guid'@{{outputs('ActIds')?['{0}']}}')/items(@{{{1}}})".format(list_key, item_expr)
+    return [
+        ('Reset' + suffix, http('POST', base + '/resetroleinheritance')),
+        ('Break' + suffix, http('POST', base + '/breakroleinheritance(copyRoleAssignments=false,clearSubscopes=true)')),
+        ('AddOwners' + suffix, http('POST', base + "/roleassignments/addroleassignment(principalid=@{outputs('Ids')?['owners']},"
+                                                   "roledefid=@{outputs('Ids')?['fullControl']})")),
+    ]
+
+
+# --------------------------------------------------------------------------------------------- Flow 9
+def flow_action_access():
+    """Keeps each action private to the Team Leader (Owners) and its technician (Read), and the technician's update
+    folder theirs alone (1-to-1 Submit). It checks the permissions actually on the item and the folder – not a flag – and
+    repairs anything missing or extra. Safe to repeat; it writes the action only when SharedWith changes."""
+    TB = 'triggerBody()'
+    A = "body('Get_action')"
+    TECH = "outputs('Tech_id')"
+    try_actions = seq(
+        *load_ids(), *act_ids(),
+        ('Get_flow_account', http('GET', '_api/web/currentuser?$select=Id')),
+        ('Tracker_ready', cond("@or(equals(outputs('ActIds')?['act'], null), equals(outputs('ActIds')?['upd'], null))",
+                               seq(('Run_setup_first', terminate('Failed', 'The 1-to-1 action lists were not found. Run ESG 1-to-1 | 0 Setup (1.5).'))))),
+        ('Get_action', http('GET', act_uri('act', "/items(@{" + TB + "?['ID']})?$select=Id,SharedWith,Technician/Id,Technician/EMail&$expand=Technician"))),
+        ('No_technician', cond("@empty(" + A + "?['Technician'])", seq(('Nobody_to_share_with', terminate('Cancelled'))))),
+        ('Tech_id', compose("@" + A + "?['Technician']?['Id']")),
+        ('Get_action_scope', http('GET', act_uri('act', "/items(@{" + TB + "?['ID']})?$select=HasUniqueRoleAssignments"))),
+        ('Get_action_access', http('GET', act_uri('act', "/items(@{" + TB + "?['ID']})/roleassignments?$expand=Member,RoleDefinitionBindings"))),
+        *grants('Action_grants', 'Get_action_access'),
+        ('Action_access_ok', cond(exact_access('Get_action_scope', 'Action_grants', TECH, '1-to-1 Read'), None, seq(
+            *setperm('_A', 'act', TB + "?['ID']", "outputs('Ids')?['read']", TECH, ids='ActIds'),
+        ))),
+        ('Folder_name', compose("@concat('u', string(" + TECH + "))")),
+        ('Find_folder', http('GET', act_uri('upd', "/items?$select=Id&$filter=FSObjType eq 1 and FileLeafRef eq '@{outputs('Folder_name')}'"))),
+        ('Folder_missing', cond("@empty(body('Find_folder')?['value'])", seq(
+            ('Create_folder', http('POST', act_uri('upd', '/AddValidateUpdateItemUsingPath'),
+                                   '{"listItemCreateInfo":{"FolderPath":{"DecodedUrl":"@{outputs(\'ActIds\')?[\'updRoot\']}"},'
+                                   '"LeafName":"@{outputs(\'Folder_name\')}","UnderlyingObjectType":1},'
+                                   '"formValues":[{"FieldName":"Title","FieldValue":"@{outputs(\'Folder_name\')}"}],"bNewDocumentUpdate":false}')),
+            ('Created_id', query("@body('Create_folder')?['value']", "@equals(item()?['FieldName'], 'Id')")),
+            ('Set_folder_from_create', set_var('varFolderId', "@int(first(body('Created_id'))?['FieldValue'])")),
+        ), seq(
+            ('Set_folder_found', set_var('varFolderId', "@first(body('Find_folder')?['value'])?['Id']")),
+        ))),
+        ('Get_folder_scope', http('GET', act_uri('upd', "/items(@{variables('varFolderId')})?$select=HasUniqueRoleAssignments"))),
+        ('Get_folder_access', http('GET', act_uri('upd', "/items(@{variables('varFolderId')})/roleassignments?$expand=Member,RoleDefinitionBindings"))),
+        *grants('Folder_grants', 'Get_folder_access'),
+        ('Folder_access_ok', cond(exact_access('Get_folder_scope', 'Folder_grants', TECH, '1-to-1 Submit'), None, seq(
+            *setperm('_F', 'upd', "variables('varFolderId')", "outputs('Ids')?['submit']", TECH, ids='ActIds'),
+        ))),
+        ('Shared_changed', cond("@not(equals(toLower(coalesce(" + A + "?['SharedWith'], '')), toLower(coalesce(" + A + "?['Technician']?['EMail'], ''))))", seq(
+            ('Mark_shared', http('POST', act_uri('act', "/items(@{" + TB + "?['ID']})"),
+                                 '{"SharedWith":"@{toLower(' + A + "?['Technician']?['EMail'])}\"}",
+                                 headers={'X-HTTP-Method': 'MERGE', 'IF-MATCH': '*'})),
+        ))),
+    )
+    actions = seq(('Initialize_varFolderId', init_var('varFolderId', 'integer', 0)))
+    actions['Try'] = after(scope(try_actions), {'Initialize_varFolderId': OK})
+    actions['Catch'] = catch('ESG 1-to-1 | 9 Action access')
+    triggers = {'When_an_action_is_created_or_modified': {
+        'type': 'OpenApiConnection',
+        'recurrence': {'frequency': 'Minute', 'interval': 5},
+        'splitOn': "@triggerOutputs()?['body/value']",
+        'runtimeConfiguration': {'secureData': {'properties': ['inputs', 'outputs']}, 'concurrency': {'runs': 1}},
+        'inputs': {'host': {'connectionName': 'shared_sharepointonline', 'operationId': 'GetOnUpdatedItems', 'apiId': SP_API},
+                   'parameters': {'dataset': '@' + SITE, 'table': LIST_TITLE['actions']},
+                   'authentication': "@parameters('$authentication')"}}}
+    return definition(triggers, actions)
+
+
+# --------------------------------------------------------------------------------------------- Flow 10
+def flow_action_update():
+    """Records a technician's progress update on their action. Who sent it comes from where SharePoint let it be created
+    – their own update folder, which only they can add to – never from the editable Author or ActionId columns. The
+    update is claimed with its etag (one run only), checked, applied to the action with the action's etag (so a Team
+    Leader change in between is never overwritten), then locked to Read. Re-running it changes nothing."""
+    TB = 'triggerBody()'
+    U = "body('Get_update')"
+    A = "body('Get_action')"
+    KIND = "string(coalesce(" + U + "?['Kind'], ''))"
+    MSG = "trim(string(coalesce(" + U + "?['Message'], '')))"
+    OUTCOME = "string(coalesce(" + U + "?['Outcome'], ''))"
+    SENDER = "outputs('Sender_id')"
+    CLOSE_REQ = "or(equals(" + KIND + ", 'closeRequest'), and(equals(" + KIND + ", 'followup'), equals(" + OUTCOME + ", 'Ready')))"
+    upd_base = "/items(@{" + TB + "?['ID']})"
+    verdict = ("@if(not(outputs('Sender_ok')), 'Not sent from your own update folder', "
+               "if(not(equals(outputs('Action_found'), true)), 'Action not found', "
+               "if(not(equals(string(" + A + "?['Technician']?['Id']), string(" + SENDER + "))), 'Not your action', "
+               "if(equals(" + A + "?['Status'], 'Closed'), 'The action is closed', "
+               "if(not(contains(createArray('progress', 'waiting', 'followup', 'closeRequest'), " + KIND + ")), 'Unknown kind of update', "
+               "if(and(contains(createArray('progress', 'waiting'), " + KIND + "), empty(" + MSG + ")), 'The update is empty', "
+               "if(and(equals(" + KIND + ", 'followup'), not(contains(createArray('Satisfactory', 'Support', 'Ready'), " + OUTCOME + "))), 'Unknown follow-up outcome', "
+               "if(and(" + CLOSE_REQ + ", not(equals(" + A + "?['Owner'], 'Technician'))), 'Only the Team Leader closes their own actions', ''))))))))")
+
+    def patch_steps(sfx, action_body):
+        AB = action_body
+        status = ("@if(" + CLOSE_REQ + ", 'Ready for close-out', if(equals(" + KIND + ", 'waiting'), 'Waiting', "
+                  "if(contains(createArray('Open', 'Waiting'), " + AB + "?['Status']), 'In progress', " + AB + "?['Status'])))")
+        text = "take(" + MSG + ", 2000)"
+        return [
+            ('Entry' + sfx, compose({'id': "@{concat('u', string(" + TB + "?['ID']))}", 'at': '@{utcNow()}',
+                                     'by': "@{coalesce(" + AB + "?['Technician']?['Title'], '')}", 'kind': '@{' + KIND + '}',
+                                     'outcome': '@{' + OUTCOME + '}', 'text': '@{' + text + '}',
+                                     'waitingUntil': "@{coalesce(" + U + "?['WaitingUntil'], '')}"}, secure=True)),
+            ('Patch' + sfx, compose({
+                'Status': status,
+                'LatestProgress': "@if(empty(" + MSG + "), coalesce(" + AB + "?['LatestProgress'], ''), " + text + ")",
+                'LastUpdateOn': '@{utcNow()}',
+                'LastUpdateBy': "@{coalesce(" + AB + "?['Technician']?['Title'], '')}",
+                'WaitingReason': "@if(equals(" + KIND + ", 'waiting'), " + text + ", if(equals(" + KIND + ", 'progress'), '', coalesce(" + AB + "?['WaitingReason'], '')))",
+                'WaitingUntil': "@if(equals(" + KIND + ", 'waiting'), coalesce(" + U + "?['WaitingUntil'], ''), if(equals(" + KIND + ", 'progress'), '', coalesce(" + AB + "?['WaitingUntil'], '')))",
+                'HistoryJson': "@{string(union(json(coalesce(" + AB + "?['HistoryJson'], '[]')), createArray(outputs('Entry" + sfx + "'))))}",
+            }, secure=True)),
+        ]
+
+    sel = '?$select=Id,Title,Status,Owner,LatestProgress,WaitingReason,WaitingUntil,HistoryJson,Technician/Id,Technician/Title&$expand=Technician'
+    apply = seq(
+        *patch_steps('', A),
+        ('Apply', http('POST', act_uri('act', "/items(@{" + idstr(U + "?['ActionId']") + "})"), "@{string(outputs('Patch'))}",
+                       headers={'X-HTTP-Method': 'MERGE', 'IF-MATCH': "@{" + A + "?['odata.etag']}"})),
+    )
+    # the action changed between reading and writing (e.g. the Team Leader saved): read it again and apply once more
+    apply['Get_action_again'] = after(http('GET', act_uri('act', "/items(@{" + idstr(U + "?['ActionId']") + "})" + sel),
+                                           headers={'Accept': 'application/json;odata=minimalmetadata'}), {'Apply': FAILED})
+    apply['Not_recorded_meanwhile'] = after(cond(
+        "@contains(string(coalesce(body('Get_action_again')?['HistoryJson'], '')), concat('\"u', string(" + TB + "?['ID']), '\"'))", None, seq(
+            *patch_steps('_again', "body('Get_action_again')"),
+            ('Apply_again', http('POST', act_uri('act', "/items(@{" + idstr(U + "?['ActionId']") + "})"), "@{string(outputs('Patch_again'))}",
+                                 headers={'X-HTTP-Method': 'MERGE', 'IF-MATCH': "@{body('Get_action_again')?['odata.etag']}"})),
+        )), {'Get_action_again': OK})
+
+    accepted = seq(
+        ('Already_recorded', cond("@contains(string(coalesce(" + A + "?['HistoryJson'], '')), concat('\"u', string(" + TB + "?['ID']), '\"'))",
+                                  None, apply)),
+        *setperm('_U', 'upd', TB + "?['ID']", "outputs('Ids')?['read']", SENDER, ids='ActIds'),
+        ('Mark_applied', http('POST', act_uri('upd', upd_base), '{"ProcessState":"Applied","ProcessNote":""}',
+                              headers={'X-HTTP-Method': 'MERGE', 'IF-MATCH': '*'})),
+        ('Is_close_request', cond("@" + CLOSE_REQ, seq(
+            ('Notice_key', compose("@concat('E19-u', string(" + TB + "?['ID']))")),
+            ('Find_notice', http('GET', act_uri('notc', "/items?$select=Id&$filter=NoticeKey eq '@{outputs('Notice_key')}'"))),
+            ('No_notice_yet', cond("@empty(body('Find_notice')?['value'])", seq(
+                ('Notice_item', compose({'__metadata': {'type': "@{outputs('ActIds')?['notcType']}"}, 'Title': "@{outputs('Notice_key')}",
+                                         'NoticeKey': "@{outputs('Notice_key')}", 'Kind': 'E19',
+                                         'ActionId': "@int(" + idstr(U + "?['ActionId']") + ")", 'Status': 'Pending', 'Attempts': 0})),
+                ('Create_notice', http('POST', act_uri('notc', '/items'), "@{string(outputs('Notice_item'))}", verbose=True)),
+            ))),
+        ))),
+    )
+    rejected = seq(
+        ('Sender_known', cond("@outputs('Sender_ok')",
+                              seq(*setperm('_R', 'upd', TB + "?['ID']", "outputs('Ids')?['read']", SENDER, ids='ActIds')),
+                              seq(*owners_only('_O', 'upd', TB + "?['ID']")))),
+        ('Mark_rejected', http('POST', act_uri('upd', upd_base), '{"ProcessState":"Rejected","ProcessNote":"@{outputs(\'Verdict\')}"}',
+                               headers={'X-HTTP-Method': 'MERGE', 'IF-MATCH': '*'})),
+    )
+    try_actions = seq(
+        *load_ids(), *act_ids(),
+        ('Get_flow_account', http('GET', '_api/web/currentuser?$select=Id')),
+        ('Tracker_ready', cond("@or(equals(outputs('ActIds')?['act'], null), equals(outputs('ActIds')?['upd'], null))",
+                               seq(('Run_setup_first', terminate('Failed', 'The 1-to-1 action lists were not found. Run ESG 1-to-1 | 0 Setup (1.5).'))))),
+        ('Get_update', http('GET', act_uri('upd', upd_base + '?$select=Id,ActionId,Kind,Outcome,Message,WaitingUntil,ProcessState,FileDirRef,FSObjType'),
+                            headers={'Accept': 'application/json;odata=minimalmetadata'})),
+        ('Still_pending', cond("@and(equals(" + U + "?['ProcessState'], 'Pending'), equals(" + U + "?['FSObjType'], 0))", None, seq(
+            ('Nothing_to_do', terminate('Cancelled'))))),
+        # one run only: claim it with its etag (a second run, or a trigger for an older version, gets 412 and stops)
+        ('Claim', http('POST', act_uri('upd', upd_base), '{"ProcessState":"Processing"}',
+                       headers={'X-HTTP-Method': 'MERGE', 'IF-MATCH': "@{" + U + "?['odata.etag']}"})),
+        ('Folder_name', compose("@last(split(string(" + U + "?['FileDirRef']), '/'))")),
+        ('In_own_folder', compose("@and(equals(string(" + U + "?['FileDirRef']), concat(outputs('ActIds')?['updRoot'], '/', outputs('Folder_name'))), "
+                                  "startsWith(outputs('Folder_name'), 'u'))")),
+        ('Sender_id', compose("@if(outputs('In_own_folder'), replace(outputs('Folder_name'), 'u', ''), '0')")),
+        ('Find_folder', http('GET', act_uri('upd', "/items?$select=Id&$filter=FSObjType eq 1 and FileLeafRef eq '@{outputs('Folder_name')}'"))),
+        ('Folder_found', cond("@and(outputs('In_own_folder'), not(empty(body('Find_folder')?['value'])))", seq(
+            ('Get_folder_scope', http('GET', act_uri('upd', "/items(@{first(body('Find_folder')?['value'])?['Id']})?$select=HasUniqueRoleAssignments"))),
+            ('Get_folder_access', http('GET', act_uri('upd', "/items(@{first(body('Find_folder')?['value'])?['Id']})/roleassignments?$expand=Member,RoleDefinitionBindings"))),
+            *grants('Folder_grants', 'Get_folder_access'),
+            ('Set_sender_ok', set_var('varSenderOk', exact_access('Get_folder_scope', 'Folder_grants', SENDER, '1-to-1 Submit'))),
+        ))),
+        ('Sender_ok', compose("@variables('varSenderOk')")),
+        ('Get_action', http('GET', act_uri('act', "/items(@{" + idstr(U + "?['ActionId']") + "})" + sel),
+                            headers={'Accept': 'application/json;odata=minimalmetadata'})),
+        ('Action_found', after(compose("@not(empty(string(coalesce(" + A + "?['Id'], ''))))"), {'Get_action': TOLERANT})),
+        ('Verdict', compose(verdict, secure=True)),
+        ('Accepted', cond("@empty(outputs('Verdict'))", accepted, rejected)),
+    )
+    actions = seq(('Initialize_varSenderOk', init_var('varSenderOk', 'boolean', False)))
+    actions['Try'] = after(scope(try_actions), {'Initialize_varSenderOk': OK})
+    actions['Catch'] = catch('ESG 1-to-1 | 10 Action update')
+    triggers = {'When_a_technician_sends_an_update': {
+        'type': 'OpenApiConnection',
+        'recurrence': {'frequency': 'Minute', 'interval': 5},
+        'splitOn': "@triggerOutputs()?['body/value']",
+        'conditions': [{'expression': "@equals(triggerBody()?['ProcessState']?['Value'], 'Pending')"},
+                       {'expression': "@not(equals(triggerBody()?['{IsFolder}'], true))"}],
+        'runtimeConfiguration': {'secureData': {'properties': ['inputs', 'outputs']}, 'concurrency': {'runs': 1}},
+        'inputs': {'host': {'connectionName': 'shared_sharepointonline', 'operationId': 'GetOnUpdatedItems', 'apiId': SP_API},
+                   'parameters': {'dataset': '@' + SITE, 'table': LIST_TITLE['actionUpdates']},
+                   'authentication': "@parameters('$authentication')"}}}
+    return definition(triggers, actions)
+
+
+# --------------------------------------------------------------------------------------------- Flow 11
+def flow_action_notice():
+    """Sends the action emails waiting in 1-to-1 Action Notices: E19 (a technician asks the Team Leader to close an action)
+    and E20 (deadline in 5 working days – to the technician, copy to the Team Leader). The notice is claimed with its etag
+    (Sending) before the email, then marked Sent or Failed. A run that dies mid-send leaves it Sending, which the page shows
+    as 'delivery unknown' – never as sent. Email can't promise exactly once; this sends at most once per claim."""
+    TB = 'triggerBody()'
+    N = "body('Get_notice')"
+    A = "body('Get_action')"
+    base = "/items(@{" + TB + "?['ID']})"
+    title = esc(A + "?['Title']")
+    due = "@{formatDateTime(" + local_date(A + "?['CurrentDue']") + ", 'dd-MMM-yyyy')}"
+    alink = "@{concat(" + PAGE + ", '?actionId=', " + idstr(A + "?['Id']") + ")}"
+    e19 = ('<p>@{' + esc(A + "?['Technician']?['Title']") + '} has asked you to close out this action:</p>'
+           '<p><b>@{' + title + '}</b></p>'
+           '<p><a href="' + alink + '"><b>Review it on the Actions page</b></a> – accept, or say why it is not finished yet.</p>')
+    e20 = ('<p>This action is due on <b>' + due + '</b> (in 5 working days):</p><p><b>@{' + title + '}</b></p>'
+           '<p>Owner: @{if(equals(' + A + "?['Owner'], 'Team Leader'), 'Team Leader', " + esc(A + "?['Technician']?['Title']") + ')}. '
+           'If it is on track, nothing else is needed; if not, add an update or agree a new date.</p>'
+           '<p><a href="' + alink + '"><b>Open the action</b></a></p>')
+    attempts = "add(coalesce(" + N + "?['Attempts'], 0), 1)"
+    try_actions = seq(
+        *load_ids(), *act_ids(),
+        ('Tracker_ready', cond("@or(equals(outputs('ActIds')?['act'], null), equals(outputs('ActIds')?['notc'], null))",
+                               seq(('Run_setup_first', terminate('Failed', 'The 1-to-1 action lists were not found. Run ESG 1-to-1 | 0 Setup (1.5).'))))),
+        ('Get_notice', http('GET', act_uri('notc', base + '?$select=Id,Kind,ActionId,Status,Attempts'),
+                            headers={'Accept': 'application/json;odata=minimalmetadata'})),
+        ('Still_to_send', cond("@contains(createArray('Pending', 'Retry'), coalesce(" + N + "?['Status'], ''))", None, seq(
+            ('Already_handled', terminate('Cancelled'))))),
+        ('Claim', http('POST', act_uri('notc', base), '{"Status":"Sending"}',
+                       headers={'X-HTTP-Method': 'MERGE', 'IF-MATCH': "@{" + N + "?['odata.etag']}"})),
+        ('Get_action', http('GET', act_uri('act', "/items(@{" + idstr(N + "?['ActionId']") + "})?$select=Id,Title,Status,Owner,CurrentDue,"
+                                           "Technician/Title,Technician/EMail&$expand=Technician"))),
+        ('Not_needed', after(cond("@or(empty(string(coalesce(" + A + "?['Id'], ''))), equals(" + A + "?['Status'], 'Closed'), and(equals(" + N + "?['Kind'], 'E19'), "
+                            "not(equals(" + A + "?['Status'], 'Ready for close-out'))))", seq(
+            ('Mark_not_needed', http('POST', act_uri('notc', base), '{"Status":"Cancelled","LastError":"Not sent – no longer needed"}',
+                                     headers={'X-HTTP-Method': 'MERGE', 'IF-MATCH': '*'})),
+            ('Done_not_needed', terminate('Succeeded')),
+        )), {'Get_action': TOLERANT})),
+        ('Send_and_record', cond("@equals(1, 1)", {
+            'Send': after(cond("@equals(" + N + "?['Kind'], 'E19')",
+                               seq(('Send_E19', email('@' + TL_EMAIL, "Close-out requested: @{" + esc(A + "?['Technician']?['Title']") + '}', e19))),
+                               seq(('Send_E20', email('@' + A + "?['Technician']?['EMail']", 'Action due in 5 working days', e20,
+                                                      cc='@' + TL_EMAIL)))), {}),
+            'Mark_sent': after(http('POST', act_uri('notc', base),
+                                    '{"Status":"Sent","SentOn":"@{utcNow()}","Attempts":@{' + attempts + '},"LastError":""}',
+                                    headers={'X-HTTP-Method': 'MERGE', 'IF-MATCH': '*'}), {'Send': OK}),
+            'Mark_failed': after(http('POST', act_uri('notc', base),
+                                      '{"Status":"Failed","Attempts":@{' + attempts + '},"LastError":"The email could not be sent."}',
+                                      headers={'X-HTTP-Method': 'MERGE', 'IF-MATCH': '*'}), {'Send': FAILED}),
+            'Delivery_failed': after(terminate('Failed', 'The action email could not be sent. The notice is marked Failed; the daily run retries it.'),
+                                     {'Mark_failed': TOLERANT}),
+        })),
+    )
+    actions = {'Try': after(scope(try_actions), {}), 'Catch': catch('ESG 1-to-1 | 11 Action notice')}
+    triggers = {'When_an_action_email_is_ready_to_send': {
+        'type': 'OpenApiConnection',
+        'recurrence': {'frequency': 'Minute', 'interval': 5},
+        'splitOn': "@triggerOutputs()?['body/value']",
+        'conditions': [{'expression': "@contains(createArray('Pending','Retry'), triggerBody()?['Status']?['Value'])"}],
+        'runtimeConfiguration': {'secureData': {'properties': ['inputs', 'outputs']}, 'concurrency': {'runs': 1}},
+        'inputs': {'host': {'connectionName': 'shared_sharepointonline', 'operationId': 'GetOnUpdatedItems', 'apiId': SP_API},
+                   'parameters': {'dataset': '@' + SITE, 'table': LIST_TITLE['actionNotices']},
+                   'authentication': "@parameters('$authentication')"}}}
+    return definition(triggers, actions)
+
+
+def action_daily_steps():
+    """Flow 1's action tracker work: finish adding agreed actions (reviews released after the tracker started), create the
+    5-working-day deadline reminders (one per action and deadline), and retry stuck updates and failed emails."""
+    O = "items('Each_open_action')"
+    due = "outputs('Due')"
+    remind_from = ("@formatDateTime(addDays(concat(" + due + ", 'T12:00:00Z'), mul(-1, if(equals(outputs('Due_dow'), 6), 5, "
+                   "if(equals(outputs('Due_dow'), 0), 6, 7)))), 'yyyy-MM-dd')")
+    in_window = ("@and(lessOrEquals(ticks(concat(outputs('Remind_from'), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), "
+                 "lessOrEquals(ticks(concat(outputs('Today'), 'T00:00:00Z')), ticks(concat(" + due + ", 'T00:00:00Z'))))")
+    nkey = "@concat('E20-a', " + idstr(O + "?['Id']") + ", '-', " + due + ")"
+    nfind = act_uri('notc', "/items?$select=Id&$filter=NoticeKey eq '@{outputs('Notice_key')}'")
+    hour_ago = "ticks(addMinutes(utcNow(), -60))"
+    old = "@less(ticks(coalesce(item()?['Modified'], utcNow())), " + hour_ago + ")"
+    def upd_items(state):
+        return act_uri('upd', "/items?$select=Id,ProcessState,Modified&$filter=FSObjType eq 0 and ProcessState eq '" + state + "'&$top=5000")
+
+    return seq(
+        *act_ids(),
+        ('Tracker_here', cond("@not(equals(outputs('ActIds')?['act'], null))", seq(
+            *tracker_start('D_'),
+            ('Mgr_for_actions', get_items(MGR, None, top=5000)),
+            ('To_sync', query("@body('Mgr_for_actions')?['value']",
+                              "@and(not(empty(item()?['ReleasedOn'])), empty(item()?['ActionsSyncedOn']), "
+                              "not(empty(outputs('D_Tracker_start'))), "
+                              "greaterOrEquals(ticks(coalesce(item()?['ReleasedOn'], '2000-01-01T00:00:00Z')), "
+                              "ticks(if(empty(outputs('D_Tracker_start')), '2100-01-01T00:00:00Z', outputs('D_Tracker_start')))))", secure=True)),
+            ('Each_to_sync', foreach("@body('To_sync')", seq(
+                *action_create('S_', "items('Each_to_sync')", "items('Each_to_sync')?['ReleasedOn']", 'D_'),
+            ))),
+            ('Get_open_actions', http('GET', act_uri('act', '/items?$select=Id,Status,CurrentDue&$top=5000'))),
+            ('Open_actions', query("@body('Get_open_actions')?['value']", "@not(equals(item()?['Status'], 'Closed'))")),
+            ('Each_open_action', foreach("@body('Open_actions')", seq(
+                ('Due', compose('@' + local_date(O + "?['CurrentDue']"))),
+                ('Has_due', cond("@not(empty(" + due + "))", seq(
+                    ('Due_dow', compose("@dayOfWeek(concat(if(empty(" + due + "), '2000-01-01', " + due + "), 'T12:00:00Z'))")),
+                    ('Remind_from', compose(remind_from)),
+                    ('In_window', cond(in_window, seq(
+                        ('Notice_key', compose(nkey)),
+                        ('Find_notice', http('GET', nfind)),
+                        ('No_notice_yet', cond("@empty(body('Find_notice')?['value'])", {
+                            'Notice_item': after(compose({'__metadata': {'type': "@{outputs('ActIds')?['notcType']}"},
+                                                          'Title': "@{outputs('Notice_key')}", 'NoticeKey': "@{outputs('Notice_key')}",
+                                                          'Kind': 'E20', 'ActionId': "@int(" + idstr(O + "?['Id']") + ")",
+                                                          'Status': 'Pending', 'Attempts': 0}), {}),
+                            'Create_notice': after(http('POST', act_uri('notc', '/items'), "@{string(outputs('Notice_item'))}",
+                                                        verbose=True), {'Notice_item': OK}),
+                            # a manual re-run at the same moment may have created it (the key is unique): fine if it's there
+                            'Recheck_notice': after(http('GET', nfind), {'Create_notice': FAILED}),
+                            'Notice_missing': after(cond("@empty(body('Recheck_notice')?['value'])", seq(
+                                ('STOP_notice_not_created', compose("@int('A deadline reminder could not be queued.')")),
+                            )), {'Recheck_notice': OK}),
+                        })),
+                    ))),
+                ))),
+            ))),
+            # an update stuck mid-way (Processing over an hour) or not picked up (Pending over an hour): wake Flow 10 again
+            ('Get_stuck_updates', http('GET', upd_items('Processing'))),
+            ('Stuck_updates', query("@body('Get_stuck_updates')?['value']", old)),
+            ('Each_stuck', foreach("@body('Stuck_updates')", seq(
+                ('Retry_stuck', http('POST', act_uri('upd', "/items(@{items('Each_stuck')?['Id']})"),
+                                     '{"ProcessState":"Pending","ProcessNote":"Retried by the daily run"}',
+                                     headers={'X-HTTP-Method': 'MERGE', 'IF-MATCH': '*'})),
+            ))),
+            ('Get_waiting_updates', http('GET', upd_items('Pending'))),
+            ('Waiting_updates', query("@body('Get_waiting_updates')?['value']", old)),
+            ('Each_waiting', foreach("@body('Waiting_updates')", seq(
+                ('Wake_waiting', http('POST', act_uri('upd', "/items(@{items('Each_waiting')?['Id']})"),
+                                      '{"ProcessNote":"Retried by the daily run"}',
+                                      headers={'X-HTTP-Method': 'MERGE', 'IF-MATCH': '*'})),
+            ))),
+            # a failed email is retried (up to 3 attempts in all); after that it stays in Needs your attention
+            ('Get_failed_notices', http('GET', act_uri('notc', "/items?$select=Id,Attempts&$filter=Status eq 'Failed'&$top=5000"))),
+            ('Retry_notices', query("@body('Get_failed_notices')?['value']", "@less(coalesce(item()?['Attempts'], 0), 3)")),
+            ('Each_retry_notice', foreach("@body('Retry_notices')", seq(
+                ('Retry_notice', http('POST', act_uri('notc', "/items(@{items('Each_retry_notice')?['Id']})"), '{"Status":"Retry"}',
+                                      headers={'X-HTTP-Method': 'MERGE', 'IF-MATCH': '*'})),
+            ))),
+        ))),
+    )
+
+
 FLOWS = [
     {'id': '6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c01', 'name': 'ESG 1-to-1 | 0 Setup (run once)', 'build': flow_setup,
      'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': True,
-     'description': 'Creates or completes the eight lists (and retires the 1.3 challenge list), columns, indexes, views, permission levels, group and list permissions. Safe to re-run.'},
+     'description': 'Creates or completes the eleven lists (and retires the 1.3 challenge list), columns, indexes, views, permission levels, group and list permissions. Safe to re-run.'},
     {'id': '6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c02', 'name': 'ESG 1-to-1 | 1 Daily scheduler', 'build': flow_daily,
      'connectors': ['shared_sharepointonline', 'shared_office365', 'shared_office365users'], 'on': False,
      'description': 'Daily 07:00 UK: creates each month\'s reviews, makes them private, emails links and reminders.'},
@@ -1231,6 +1731,15 @@ FLOWS = [
     {'id': '6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c09', 'name': 'ESG 1-to-1 | 8 Amendment notice', 'build': flow_amendment,
      'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': False,
      'description': 'Team Leader amendments: emails the technician that their 1-to-1 was amended (no contents) and records whether it was sent.'},
+    {'id': '6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c0a', 'name': 'ESG 1-to-1 | 9 Action access', 'build': flow_action_access,
+     'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': False,
+     'description': 'Action tracker: keeps each action visible only to the Team Leader and its technician, and each technician\'s update folder theirs alone (checks and repairs the permissions).'},
+    {'id': '6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c0b', 'name': 'ESG 1-to-1 | 10 Action update', 'build': flow_action_update,
+     'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': False,
+     'description': 'Action tracker: checks a technician\'s progress update (sender from their own folder), records it on the action and locks it; queues the close-out email.'},
+    {'id': '6f3c2a41-8d2e-4b7a-9c15-3e1f0a5b7c0c', 'name': 'ESG 1-to-1 | 11 Action notice', 'build': flow_action_notice,
+     'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': False,
+     'description': 'Action tracker: sends close-out requests (to the Team Leader) and 5-working-day deadline reminders (technician, copy to the Team Leader), recording Sent or Failed.'},
 ]
 
 

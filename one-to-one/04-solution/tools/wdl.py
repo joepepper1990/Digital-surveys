@@ -365,6 +365,21 @@ def call(name, a, ctx):
         return r if a[0] >= 0 else -r
     if name == 'dayOfMonth':
         return parse_ts(a[0]).day
+    if name == 'dayOfWeek':   # 0 = Sunday … 6 = Saturday
+        return (parse_ts(a[0]).weekday() + 1) % 7
+    if name in ('lessOrEquals', 'greaterOrEquals'):
+        if not all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in a):
+            raise ExprError(name + ' needs numbers')
+        return a[0] <= a[1] if name == 'lessOrEquals' else a[0] >= a[1]
+    if name == 'union':   # arrays: keep order, drop duplicates
+        if not all(isinstance(x, list) for x in a):
+            raise ExprError('union() expects arrays')
+        out = []
+        for arr in a:
+            for x in arr:
+                if x not in out:
+                    out.append(x)
+        return out
     raise ExprError('function not implemented in simulator: ' + name)
 
 

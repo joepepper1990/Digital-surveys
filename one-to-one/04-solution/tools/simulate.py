@@ -22,7 +22,7 @@ import fake_sharepoint as fsp  # noqa: E402
 HERE = os.path.dirname(__file__)
 REPO = os.path.abspath(os.path.join(HERE, '..', '..'))
 PARAMS = {ENV_SITE: fsp.SITE, ENV_MAIL: 'team.leader@example.test'}
-FLOWS = {f['name'].split('|')[1].strip()[0]: f for f in build_all()}  # '0', '1', '2', '3'
+FLOWS = {f['name'].split('|')[1].split()[0]: f for f in build_all()}  # '0', '1', … '10', '11'
 MODE = os.environ.get('ESG_SIM_MODE', 'solution')
 if MODE == 'legacy':  # the same flows as the legacy builder page produces them (literal site URL and email)
     from legacy import literalise, fill
@@ -81,7 +81,7 @@ def frontend_fields():
     def names(s):
         return {x.split('/')[0] for x in s.split(',') if x}
     need = {
-        'Manager Reviews': names(strings_after(js, 'var MR_FIELDS')),
+        'Manager Reviews': names(strings_after(js, 'var MR_FIELDS')) | names(strings_after(js, 'var MR_V15_FIELDS')),
         'Monthly Reviews': names(strings_after(js, 'var REV_FIELDS')) | names(strings_after(js, 'var REV_V14_FIELDS')),
         'Technicians': names(strings_after(js, 'var TECH_FIELDS')) | names(strings_after(js, 'var TECH_V14_FIELDS')),
         'Appraisal Expectations': names(re.search(r"spGetAll\(CONFIG\.lists\.exp, '([^']+)'", js).group(1)),
@@ -89,6 +89,9 @@ def frontend_fields():
         'Wellbeing Assessments': names(strings_after(js, 'var WB_FIELDS')),
         '1-to-1 Feedback': names(strings_after(js, 'var FB_FIELDS')) - {'HasUniqueRoleAssignments'},   # an item property, not a column
         '1-to-1 Amendments': names(strings_after(js, 'var AM_FIELDS')) - {'Created', 'Modified', 'Author'},   # built-in columns
+        '1-to-1 Actions': names(strings_after(js, 'var ACT_FIELDS')) - {'Created', 'Modified', 'Author'},
+        '1-to-1 Action Updates': names(strings_after(js, 'var UPD_FIELDS')) - {'Created', 'Modified', 'Author', 'FileDirRef'},
+        '1-to-1 Action Notices': names(strings_after(js, 'var NOTICE_FIELDS')) - {'Created', 'Modified'},
     }
     need['Monthly Reviews'] |= set(re.findall(r"'([^']+)'", strings_after(tests, 'var TECH_ALLOWED', ']')))
     need['Manager Reviews'] |= set(re.findall(r"'([^']+)'", strings_after(tests, 'var MGR_ALLOWED', ']')))
@@ -125,7 +128,7 @@ def setup_checks():
         ok('Setup: {0} display name'.format(spec['title']), l['Title'] == spec['title'], l['Title'])
         ok('Setup: {0} settings (versioning 100, no attachments, not in search, offline off, not on quick launch)'.format(spec['title']),
            l['props'] == {'EnableVersioning': True, 'MajorVersionLimit': 100, 'EnableAttachments': False, 'NoCrawl': True,
-                          'OnQuickLaunch': False, 'ExcludeFromOfflineClient': True,
+                          'OnQuickLaunch': False, 'ExcludeFromOfflineClient': True, 'EnableFolderCreation': bool(spec.get('folders')),
                           'ReadSecurity': spec.get('readSecurity', 1), 'WriteSecurity': spec.get('writeSecurity', 1)}, l['props'])
         csvl = ref[spec['title']]
         made = {n: f for n, f in l['fields'].items() if n not in ('ID', 'Created', 'Modified', 'Author', 'Editor', 'Attachments',
@@ -929,6 +932,267 @@ def v14_checks():
         ok('Flow 8: {0} never triggers a send'.format(status), fire('8', sp, '1-to-1 Amendments', a3['id'], T('2026-11-12T12:00:00'))[0] == 'NotTriggered')
 
 
+def v15_checks():
+    """Solution 1.5 – the action tracker: Setup, Flow 3 / Flow 1 adding agreed actions (after the tracker started only,
+    once each, finishing a partial release), Flow 9 permissions, Flow 10 technician updates (identity from the folder,
+    forged ids, etag concurrency, retries), Flow 11 emails (claim, Sent / Failed / Retry), Flow 1 deadline reminders."""
+    sp = fsp.FakeSP()
+    sp.clock = '2026-10-31T09:00:00Z'
+    run('0', sp, T('2026-10-31T09:00:00'))
+    act, upd, notc = (sp.list_by_title(t) for t in ('1-to-1 Actions', '1-to-1 Action Updates', '1-to-1 Action Notices'))
+    techs, mgr, mr, settings = (sp.list_by_title(t) for t in ('Technicians', 'Manager Reviews', 'Monthly Reviews', '1-to-1 Settings'))
+    start = [i for i in settings['items'].values() if i['fields'].get('Title') == 'ActionsTrackerStart']
+    ok('Setup 1.5: the action lists exist – Owners only, unique keys, folders allowed for updates',
+       act['ra'] == {3: {fsp.FULL}} and upd['ra'] == {3: {fsp.FULL}} and notc['ra'] == {3: {fsp.FULL}} and
+       act['fields']['ActionKey']['EnforceUniqueValues'] and upd['fields']['ClientKey']['EnforceUniqueValues'] and
+       notc['fields']['NoticeKey']['EnforceUniqueValues'] and upd['props']['EnableFolderCreation'] is True and
+       'ActionsSyncedOn' in mgr['fields'], (act['ra'], upd['props']))
+    ok('Setup 1.5: the tracker start is recorded once', len(start) == 1 and start[0]['fields']['Value'].startswith('2026-10-31T09:00'))
+    run('0', sp, T('2026-11-02T09:00:00'))
+    start2 = [i for i in settings['items'].values() if i['fields'].get('Title') == 'ActionsTrackerStart']
+    ok('Setup 1.5: a re-run keeps the original start (nothing old is pulled in later)', len(start2) == 1 and start2[0]['fields']['Value'] == start[0]['fields']['Value'])
+
+    alex = sp.write_item(techs, None, {'item/Title': 'Alex Morgan', 'item/Technician/Claims': sp.users[11]['Claims'], 'item/TechnicianAadId': 'aad-alex',
+                                       'item/AppraisalDate': '2027-06-30'})
+    sp.write_item(techs, None, {'item/Title': 'Sam Patel', 'item/Technician/Claims': sp.users[12]['Claims'], 'item/TechnicianAadId': 'aad-sam'})
+    # a review released BEFORE the tracker started, with actions: never imported
+    old = sp.write_item(mgr, None, {'item/Title': 'Alex – 2026-09', 'item/ReviewKey': 'aad-alex_2026-09', 'item/MonthKey': '2026-09',
+                                    'item/Technician/Claims': sp.users[11]['Claims'], 'item/ReviewState/Value': 'Completed',
+                                    'item/ReleasedOn': '2026-10-01T10:00:00Z',
+                                    'item/ActionsJson': '[{"id":"old1","text":"Old test action","owner":"Alex Morgan","ownerRole":"tech","criteria":"x","due":"2026-11-01","status":"Open"}]'})
+    sp.clock = None
+    run('1', sp, T('2026-11-01T07:00:00'), overrides={'varTestDate': '2026-11-01T07:00:00'})
+    ok('Flow 1: a review released before the tracker started is never imported (its actions stay in the review)',
+       not act['items'] and not old['fields'].get('ActionsSyncedOn'))
+    m_alex = next(i for i in mgr['items'].values() if i['fields'].get('Technician') == 11 and i['fields'].get('MonthKey') == '2026-11')
+    m_sam = next(i for i in mgr['items'].values() if i['fields'].get('Technician') == 12 and i['fields'].get('MonthKey') == '2026-11')
+    agreed = ('[{"id":"1730000000001","text":"Book the RPS course","owner":"Alex Morgan","ownerRole":"tech","criteria":"Course date confirmed",'
+              '"due":"2026-12-09","status":"Open"},{"id":"1730000000002","text":"Order the spare monitor <b>now</b>","owner":"Team Leader",'
+              '"ownerRole":"tl","criteria":"Delivery date known","due":"2027-06-10","status":"Open"}]')
+    for m in (m_alex, m_sam):
+        m['fields']['SubmittedOn'] = '2026-11-20T10:00:00Z'
+        m['fields']['ReviewState'] = 'Submitted'
+        sp.write_item(mgr, m['id'], {'item/ActionsJson': agreed, 'item/ReviewState/Value': 'Completed'})
+    st, eng = fire('3', sp, 'Manager Reviews', m_alex['id'], T('2026-11-21T09:00:00'))
+    items = sorted(act['items'].values(), key=lambda i: i['id'])
+    ok('Flow 3: releasing a review adds each agreed action to the tracker once, with owner, deadlines and origin', st == 'Succeeded' and len(items) == 2 and
+       items[0]['fields']['ActionKey'] == 'mr{0}-1730000000001'.format(m_alex['id']) and items[0]['fields']['Owner'] == 'Technician' and
+       items[1]['fields']['Owner'] == 'Team Leader' and items[0]['fields']['Technician'] == 11 and items[0]['fields']['OriginalDue'] == '2026-12-09' and
+       items[0]['fields']['CurrentDue'] == '2026-12-09' and items[1]['fields']['CurrentDue'] == '2027-06-10' and items[0]['fields']['Status'] == 'Open' and
+       int(items[0]['fields']['OriginMgrId']) == m_alex['id'] and items[0]['fields']['OriginMonth'] == '2026-11' and
+       '"kind": "created"' in items[0]['fields']['HistoryJson'].replace('":"', '": "') and m_alex['fields'].get('ActionsSyncedOn'),
+       (st, eng and eng.log, [i['fields'] for i in items]))
+    ok('Flow 3: a BST deadline (10 June) is stored as that UK day', items[1]['fields']['CurrentDue'] == '2027-06-10')
+    st2, _ = fire('3', sp, 'Manager Reviews', m_alex['id'], T('2026-11-21T09:10:00'))
+    run('1', sp, T('2026-11-22T07:00:00'), overrides={'varTestDate': '2026-11-22T07:00:00'})
+    ok('Flow 3 / Flow 1: running again (or the daily sync) never duplicates an action', st2 == 'NotTriggered' and len(act['items']) == 2)
+    # a release interrupted: the tracker write fails, the release stands, the daily run finishes it
+    sp.fail_uris = ["lists(guid'" + act['Id'] + "')/items"]
+    st, eng = fire('3', sp, 'Manager Reviews', m_sam['id'], T('2026-11-21T09:20:00'))
+    sp.fail_uris = []
+    ok('Flow 3: if adding the actions fails, the release still completes and the review is left unsynced', st == 'Succeeded' and
+       m_sam['fields'].get('ReleasedOn') and not m_sam['fields'].get('ActionsSyncedOn') and len(act['items']) == 2, (st, eng and eng.log[-3:]))
+    # one of the two already there (a partial earlier attempt): only the other is added
+    sp.write_item(act, None, {'item/Title': 'Book the RPS course', 'item/ActionKey': 'mr{0}-1730000000001'.format(m_sam['id']),
+                              'item/Technician/Id': 12, 'item/Status/Value': 'Open'})
+    m = len(sp.emails)
+    st, eng = run('1', sp, T('2026-11-22T07:00:00'), overrides={'varTestDate': '2026-11-22T07:00:00'})
+    sam_actions = [i for i in act['items'].values() if i['fields'].get('Technician') == 12]
+    ok('Flow 1: the daily sync finishes an interrupted release – only the missing action is added, then the review is stamped',
+       st == 'Succeeded' and len(sam_actions) == 2 and m_sam['fields'].get('ActionsSyncedOn') and
+       len({i['fields']['ActionKey'] for i in sam_actions}) == 2, (st, eng.log[-5:]))
+    ok('Flow 1: nothing to report when all went well', not any(e['subject'] == '1-to-1 system: action needed' for e in sp.emails[m:]))
+
+    # Flow 9: access
+    a1, a2 = items
+    s1 = next(i for i in sam_actions if i['fields']['ActionKey'].endswith('1730000000001'))
+    read, submit = sp.role_id('1-to-1 Read'), sp.role_id('1-to-1 Submit')
+    for a in (a1, a2, s1):
+        st, eng = fire('9', sp, '1-to-1 Actions', a['id'], T('2026-11-21T10:00:00'))
+    folder = next(i for i in upd['items'].values() if i.get('fsobj') == 1 and i['fields']['Title'] == 'u11')
+    sfolder = next(i for i in upd['items'].values() if i.get('fsobj') == 1 and i['fields']['Title'] == 'u12')
+    def others(ra):
+        return {k: v for k, v in ra.items() if k != 10}
+    ok('Flow 9: each action is visible to its technician (Read) and the Owners only', a1['unique'] and others(a1['ra']) == {3: {fsp.FULL}, 11: {read}} and
+       others(s1['ra']) == {3: {fsp.FULL}, 12: {read}} and 12 not in a1['ra'] and a1['fields']['SharedWith'] == 'alex.morgan@example.test', a1['ra'])
+    ok('Flow 9: each technician gets their own update folder that only they can add to (1-to-1 Submit)',
+       folder['unique'] and others(folder['ra']) == {3: {fsp.FULL}, 11: {submit}} and others(sfolder['ra']) == {3: {fsp.FULL}, 12: {submit}}, folder['ra'])
+    v = a1['version']
+    fire('9', sp, '1-to-1 Actions', a1['id'], T('2026-11-21T10:05:00'))
+    ok('Flow 9: running again changes nothing (no write to the action, no extra folder)', a1['version'] == v and
+       len([i for i in upd['items'].values() if i.get('fsobj') == 1]) == 2)
+    a1['ra'][12] = {read}
+    folder['ra'][12] = {submit}
+    fire('9', sp, '1-to-1 Actions', a1['id'], T('2026-11-21T10:10:00'))
+    ok('Flow 9: a wrongly shared action or folder is repaired (the other technician removed)', 12 not in a1['ra'] and 12 not in folder['ra'] and
+       others(a1['ra']) == {3: {fsp.FULL}, 11: {read}}, (a1['ra'], folder['ra']))
+
+    # Flow 10: updates
+    seq_no = [0]
+    def send(as_user, folder_name, fields):
+        seq_no[0] += 1
+        sp.me = as_user
+        try:
+            p = {'item/Title': 'update', 'item/ClientKey': 'k{0}'.format(seq_no[0])}
+            p.update({'item/' + k: v for k, v in fields.items()})
+            it = sp.add_in_folder(upd, folder_name, p)
+        finally:
+            sp.me = 10
+        st_, eng_ = fire('10', sp, '1-to-1 Action Updates', it['id'], T('2026-11-25T10:00:00'))
+        return it, st_, eng_
+    u1, st, eng = send(11, 'u11', {'ActionId': a1['id'], 'Kind/Value': 'progress', 'Message': 'Course found, waiting for dates'})
+    hist = json.loads(a1['fields']['HistoryJson'])
+    ok('Flow 10: a technician update is recorded on their action – status In progress, latest progress, who and when',
+       st == 'Succeeded' and u1['fields']['ProcessState'] == 'Applied' and a1['fields']['Status'] == 'In progress' and
+       a1['fields']['LatestProgress'] == 'Course found, waiting for dates' and a1['fields']['LastUpdateBy'] == 'Alex Morgan' and
+       hist[-1]['id'] == 'u{0}'.format(u1['id']) and hist[-1]['by'] == 'Alex Morgan', (st, eng and eng.log, a1['fields']))
+    ok('Flow 10: the update is then locked – the technician can read it but no longer change it', u1['unique'] and others(u1['ra']) == {3: {fsp.FULL}, 11: {read}})
+    stale = dict(sp.item_out(upd, u1), ProcessState={'Value': 'Pending'})
+    st, _ = run('10', sp, T('2026-11-25T10:01:00'), stale)
+    ok('Flow 10: a second (stale) trigger for the same update records nothing more', st == 'Cancelled' and len(json.loads(a1['fields']['HistoryJson'])) == len(hist))
+    blocked = False
+    try:
+        sp.me = 12
+        sp.add_in_folder(upd, 'u11', {'item/Title': 'x', 'item/ClientKey': 'evil', 'item/ActionId': a1['id'], 'item/Message': 'pwned'})
+    except Exception:
+        blocked = True
+    finally:
+        sp.me = 10
+    ok('Security: a technician cannot add an update to another technician\'s folder', blocked)
+    u2, st, _ = send(12, 'u12', {'ActionId': a1['id'], 'Kind/Value': 'closeRequest', 'Message': 'done (not really)'})
+    ok('Security: an update naming someone else\'s action (forged ActionId) is rejected – their action is untouched', u2['fields']['ProcessState'] == 'Rejected' and
+       u2['fields']['ProcessNote'] == 'Not your action' and a1['fields']['Status'] == 'In progress' and others(u2['ra']) == {3: {fsp.FULL}, 12: {read}})
+    sp.me = 11
+    root_item = sp.write_item(upd, None, {'item/Title': 'x', 'item/ClientKey': 'root1', 'item/ActionId': a1['id'], 'item/Kind/Value': 'closeRequest'})
+    sp.me = 10
+    st, _ = fire('10', sp, '1-to-1 Action Updates', root_item['id'], T('2026-11-25T10:05:00'))
+    ok('Security: an update not in the sender\'s own folder (identity unknown) is rejected and made Owners-only', root_item['fields']['ProcessState'] == 'Rejected' and
+       others(root_item['ra']) == {3: {fsp.FULL}} and a1['fields']['Status'] == 'In progress', (st, root_item['fields']))
+    folder['ra'][12] = {submit}
+    u3, st, _ = send(11, 'u11', {'ActionId': a1['id'], 'Kind/Value': 'progress', 'Message': 'more'})
+    ok('Security: if the folder has been shared with anyone else, the update is rejected (the sender can\'t be proved)', u3['fields']['ProcessState'] == 'Rejected')
+    del folder['ra'][12]
+    u4, st, _ = send(11, 'u11', {'ActionId': a1['id'], 'Kind/Value': 'waiting', 'Message': ''})
+    u5, st, _ = send(11, 'u11', {'ActionId': a1['id'], 'Kind/Value': 'waiting', 'Message': 'Waiting for training dates', 'WaitingUntil': '2026-12-15'})
+    ok('Flow 10: Waiting needs a reason; with one, the action is Waiting with the reason and next date, deadline unchanged',
+       u4['fields']['ProcessState'] == 'Rejected' and u5['fields']['ProcessState'] == 'Applied' and a1['fields']['Status'] == 'Waiting' and
+       a1['fields']['WaitingReason'] == 'Waiting for training dates' and a1['fields']['WaitingUntil'] == '2026-12-15' and a1['fields']['CurrentDue'] == '2026-12-09')
+    u6, st, _ = send(11, 'u11', {'ActionId': a2['id'], 'Kind/Value': 'closeRequest', 'Message': 'I think this is done'})
+    ok('Flow 10: a technician cannot ask to close the Team Leader\'s own action', u6['fields']['ProcessState'] == 'Rejected' and
+       a2['fields']['Status'] == 'Open' and u6['fields']['ProcessNote'] == 'Only the Team Leader closes their own actions')
+    # concurrency: the Team Leader saves the action between Flow 10 reading and writing it – both changes survive
+    sp.bump_once = {('1-to-1 Actions', a1['id']): {'fields': {'item/DecisionNote': 'TL note added meanwhile'}}}
+    u7, st, eng = send(11, 'u11', {'ActionId': a1['id'], 'Kind/Value': 'closeRequest', 'Message': 'Course booked for 3 Dec'})
+    hist = json.loads(a1['fields']['HistoryJson'])
+    ok('Flow 10: a Team Leader change in between (stale etag) is kept, and the update is still recorded – once',
+       st == 'Succeeded' and a1['fields']['DecisionNote'] == 'TL note added meanwhile' and a1['fields']['Status'] == 'Ready for close-out' and
+       [h['id'] for h in hist].count('u{0}'.format(u7['id'])) == 1, (st, eng and eng.log))
+    e19 = [i for i in notc['items'].values() if i['fields'].get('NoticeKey') == 'E19-u{0}'.format(u7['id'])]
+    ok('Flow 10: a close-out request queues one E19 email', len(e19) == 1 and e19[0]['fields']['Status'] == 'Pending' and e19[0]['fields']['Kind'] == 'E19')
+    # a run that stopped after recording but before finishing: retried, nothing duplicated
+    u7['fields']['ProcessState'] = 'Pending'
+    st, _ = fire('10', sp, '1-to-1 Action Updates', u7['id'], T('2026-11-25T11:00:00'))
+    ok('Flow 10: a retried update is not recorded twice and queues no second email', st == 'Succeeded' and
+       [h['id'] for h in json.loads(a1['fields']['HistoryJson'])].count('u{0}'.format(u7['id'])) == 1 and
+       len([i for i in notc['items'].values() if i['fields'].get('NoticeKey') == 'E19-u{0}'.format(u7['id'])]) == 1)
+    sp.write_item(act, a2['id'], {'item/Status/Value': 'Closed'})
+    u8, st, _ = send(11, 'u11', {'ActionId': a2['id'], 'Kind/Value': 'progress', 'Message': 'late note'})
+    ok('Flow 10: nothing is recorded on a closed action', u8['fields']['ProcessState'] == 'Rejected' and u8['fields']['ProcessNote'] == 'The action is closed')
+    sp.write_item(act, a2['id'], {'item/Status/Value': 'Open'})
+
+    # Flow 11: emails
+    n19 = e19[0]
+    m = len(sp.emails)
+    st, eng = fire('11', sp, '1-to-1 Action Notices', n19['id'], T('2026-11-25T11:05:00'))
+    mails = sp.emails[m:]
+    ok('Flow 11: E19 goes to the Team Leader once, and the notice is marked Sent', st == 'Succeeded' and len(mails) == 1 and
+       mails[0]['to'] == 'team.leader@example.test' and 'Close-out requested' in mails[0]['subject'] and
+       '?actionId={0}"'.format(a1['id']) in mails[0]['body'] and n19['fields']['Status'] == 'Sent' and n19['fields'].get('SentOn'), (st, eng and eng.log, mails))
+    st, _ = fire('11', sp, '1-to-1 Action Notices', n19['id'], T('2026-11-25T11:10:00'))
+    stale = dict(sp.item_out(notc, n19), Status={'Value': 'Pending'})
+    st2, _ = run('11', sp, T('2026-11-25T11:11:00'), stale)
+    ok('Flow 11: a Sent notice never sends again (its own update, or a stale trigger)', st == 'NotTriggered' and st2 == 'Cancelled' and len(sp.emails) == m + 1)
+
+    # Flow 1: 5-working-day reminders (to the technician, copy to the Team Leader)
+    def set_due(a, d):
+        sp.write_item(act, a['id'], {'item/CurrentDue': d, 'item/Status/Value': 'In progress'})
+    def e20_for(a):
+        return [i for i in notc['items'].values() if i['fields'].get('Kind') == 'E20' and int(i['fields']['ActionId']) == a['id']]
+    def daily(day):
+        st_, eng_ = run('1', sp, T(day + 'T07:00:00'), overrides={'varTestDate': day + 'T07:00:00'})
+        return st_, eng_
+    set_due(a1, '2026-12-09')   # Wednesday
+    daily('2026-12-01')
+    none_before = not e20_for(a1)
+    daily('2026-12-02')
+    first_day = len(e20_for(a1)) == 1 and e20_for(a1)[0]['fields']['NoticeKey'] == 'E20-a{0}-2026-12-09'.format(a1['id'])
+    daily('2026-12-02')
+    daily('2026-12-03')
+    ok('Flow 1: E20 is queued 5 working days before a weekday deadline (Wed → previous Wed), once only',
+       none_before and first_day and len(e20_for(a1)) == 1, [i['fields'] for i in e20_for(a1)])
+    n20 = e20_for(a1)[0]
+    m = len(sp.emails)
+    st, eng = fire('11', sp, '1-to-1 Action Notices', n20['id'], T('2026-12-02T07:10:00'))
+    ok('Flow 11: E20 goes to the technician with the Team Leader copied, the title escaped', st == 'Succeeded' and len(sp.emails) == m + 1 and
+       sp.emails[-1]['to'] == 'alex.morgan@example.test' and sp.emails[-1]['cc'] == 'team.leader@example.test' and
+       '09-Dec-2026' in sp.emails[-1]['body'] and n20['fields']['Status'] == 'Sent', (st, eng and eng.log, sp.emails[m:]))
+    set_due(a1, '2026-12-19')   # Saturday → Monday 14th
+    daily('2026-12-11')
+    sat_before = len(e20_for(a1)) == 1
+    daily('2026-12-14')
+    ok('Flow 1: a Saturday deadline is reminded on the Monday 5 working days before; a changed deadline gets one new reminder',
+       sat_before and len(e20_for(a1)) == 2 and any(i['fields']['NoticeKey'].endswith('2026-12-19') for i in e20_for(a1)))
+    set_due(a1, '2026-12-20')   # Sunday → Monday 14th as well; flow was "off" that day → caught up on the 16th
+    daily('2026-12-16')
+    ok('Flow 1: a Sunday deadline counts back to Monday; a missed day is caught up (once)', len(e20_for(a1)) == 3)
+    set_due(a1, '2026-12-17')
+    daily('2026-12-18')
+    ok('Flow 1: no reminder once the deadline has passed (overdue shows on the page instead)', len(e20_for(a1)) == 3)
+    sp.dates_as_instants = True
+    set_due(a2, '2027-06-10')
+    daily('2027-06-02')
+    early = not e20_for(a2)
+    daily('2027-06-03')
+    sp.dates_as_instants = False
+    ok('Flow 1 (BST): a 10 June deadline returned as 9 June 23:00Z is reminded on 3 June, not before', early and len(e20_for(a2)) == 1, [i['fields'] for i in e20_for(a2)])
+    sp.write_item(act, a2['id'], {'item/Status/Value': 'Closed'})
+    n_closed = e20_for(a2)[0]
+    st, _ = fire('11', sp, '1-to-1 Action Notices', n_closed['id'], T('2027-06-03T07:10:00'))
+    ok('Flow 11: a reminder for an action closed meanwhile is not sent (Cancelled)', n_closed['fields']['Status'] == 'Cancelled')
+
+    # failures and housekeeping
+    sp.write_item(act, a2['id'], {'item/Status/Value': 'In progress', 'item/CurrentDue': '2027-07-07'})
+    daily('2027-06-30')
+    n_fail = next(i for i in e20_for(a2) if i['fields']['NoticeKey'].endswith('2027-07-07'))
+    sp.fail_mail = ['Action due']
+    st, eng = fire('11', sp, '1-to-1 Action Notices', n_fail['id'], T('2027-06-30T07:10:00'))
+    sp.fail_mail = []
+    ok('Flow 11: a failed email is marked Failed with the attempt counted (run Failed)', st == 'Failed' and n_fail['fields']['Status'] == 'Failed' and
+       int(n_fail['fields']['Attempts']) == 1 and n_fail['fields'].get('LastError'), (st, n_fail['fields']))
+    daily('2027-07-01')
+    retried = n_fail['fields']['Status'] == 'Retry'
+    st, _ = fire('11', sp, '1-to-1 Action Notices', n_fail['id'], T('2027-07-01T07:10:00'))
+    ok('Flow 1 retries a failed email (Retry), and it is then sent', retried and n_fail['fields']['Status'] == 'Sent' and int(n_fail['fields']['Attempts']) == 2)
+    sp.clock = '2027-07-01T05:00:00Z'
+    stuck = sp.add_in_folder(upd, 'u11', {'item/Title': 'u', 'item/ClientKey': 'stuck1', 'item/ActionId': a2['id'], 'item/Kind/Value': 'progress',
+                                          'item/Message': 'stuck one', 'item/ProcessState/Value': 'Processing'})
+    sp.clock = None
+    daily('2027-07-01')
+    ok('Flow 1: an update stuck mid-way for over an hour is put back to Pending (Flow 10 picks it up again)', stuck['fields']['ProcessState'] == 'Pending' and
+       stuck['fields']['ProcessNote'] == 'Retried by the daily run')
+    st, _ = fire('10', sp, '1-to-1 Action Updates', stuck['id'], T('2027-07-01T07:20:00'))
+    ok('… and is then recorded', stuck['fields']['ProcessState'] == 'Applied' and a2['fields']['LatestProgress'] == 'stuck one')
+
+    # a 1.4 site without the action lists: flows 1 and 3 still work
+    sp2 = fsp.FakeSP()
+    run('0', sp2, T('2026-10-14T09:00:00'))
+    for t in ('1-to-1 Actions', '1-to-1 Action Updates', '1-to-1 Action Notices'):
+        del sp2.lists[sp2.list_by_title(t)['Id']]
+    st, eng = run('1', sp2, T('2026-11-01T07:00:00'), overrides={'varTestDate': '2026-11-01T07:00:00'})
+    ok('Upgrade order: before Setup 1.5 adds the action lists, Flow 1 still runs cleanly', st == 'Succeeded' and
+       not any(e['subject'] == '1-to-1 system: action needed' for e in sp2.emails), eng.log[-5:])
+
+
 if __name__ == '__main__':
     site = setup_checks()
     partial_site_checks()
@@ -941,6 +1205,7 @@ if __name__ == '__main__':
     qa_regression_checks()
     wellbeing_hardening_checks()
     v14_checks()
+    v15_checks()
     passed = sum(1 for _, p in RESULTS if p)
     print('\n[{2}] {0} / {1} passed'.format(passed, len(RESULTS), MODE))
     sys.exit(0 if passed == len(RESULTS) else 1)

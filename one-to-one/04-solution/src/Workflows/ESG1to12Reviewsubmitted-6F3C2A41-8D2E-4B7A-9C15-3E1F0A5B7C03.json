@@ -168,6 +168,18 @@
                 ]
               }
             },
+            "Role_submit": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Get_role_definitions')?['value']",
+                "where": "@equals(item()?['Name'], '1-to-1 Submit')"
+              },
+              "runAfter": {
+                "Role_read": [
+                  "Succeeded"
+                ]
+              }
+            },
             "Get_lists": {
               "type": "OpenApiConnection",
               "inputs": {
@@ -179,7 +191,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/lists?$select=Id,Title,RootFolder/Name&$expand=RootFolder",
+                  "parameters/uri": "_api/web/lists?$select=Id,Title,ListItemEntityTypeFullName,RootFolder/Name,RootFolder/ServerRelativeUrl&$expand=RootFolder",
                   "parameters/headers": {
                     "Accept": "application/json;odata=nometadata"
                   }
@@ -187,7 +199,7 @@
                 "authentication": "@parameters('$authentication')"
               },
               "runAfter": {
-                "Role_read": [
+                "Role_submit": [
                   "Succeeded"
                 ]
               }
@@ -223,6 +235,7 @@
                 "fullControl": "@first(body('Role_full_control'))?['Id']",
                 "edit": "@first(body('Role_edit'))?['Id']",
                 "read": "@first(body('Role_read'))?['Id']",
+                "submit": "@first(body('Role_submit'))?['Id']",
                 "reviewsList": "@first(body('List_monthly_reviews'))?['Id']",
                 "mgrList": "@first(body('List_manager_reviews'))?['Id']"
               },

@@ -82,6 +82,7 @@ Manager Reviews,ChallengeCloseBy,Date only,,,,v4.5 closes as Not agreed after th
 Manager Reviews,ChallengeTlAgreedOn,Date and time,,,,v4.5 Team Leader agreed
 Manager Reviews,ChallengeTechAgreedOn,Date and time,,,,v4.5 technician agreed (copied by Flow 7)
 Manager Reviews,ChallengeClosedOn,Date and time,,,,v4.5
+Manager Reviews,ActionsSyncedOn,Date and time,,,,1.5: every agreed action of a review released after the tracker started is in 1-to-1 Actions (Flow 3 / Flow 1)
 Wellbeing Assessments,Title,Built-in,,,,e.g. Name – wellbeing assessment
 Wellbeing Assessments,Technician,"Person (single, people only)",,,,The person (Flow 5 grants them access)
 Wellbeing Assessments,AssessmentStatus,Choice,Open|Submitted|Completed,Open,Yes,
@@ -113,5 +114,42 @@ Wellbeing Assessments,CompletedOn,Date and time,,,,Flow 5
 1-to-1 Amendments,NotifyStatus,Choice,Draft|Pending|Sending|Sent|Failed|Retry|Cancelled,Draft,Yes,Flow 8 emails the technician when Pending / Retry
 1-to-1 Amendments,NotifiedOn,Date and time,,,,Flow 8
 1-to-1 Amendments,NotifyError,Single line of text,,,,Flow 8
+1-to-1 Actions,Title,Built-in,,,,The action as agreed
+1-to-1 Actions,ActionKey,Single line of text,Enforce unique values,,Yes,mr<ManagerReviewId>-<action id> or tl-<id>: one item per action
+1-to-1 Actions,Technician,"Person (single, people only)",,,,Whose action it is
+1-to-1 Actions,Owner,Choice,Technician|Team Leader,Technician,,Who is responsible
+1-to-1 Actions,Criteria,Multiple lines (plain),,,,Agreed close-out criteria
+1-to-1 Actions,OriginReviewId,Number (0 dp),,,Yes,Monthly Review it was agreed in (empty = added between reviews)
+1-to-1 Actions,OriginMgrId,Number (0 dp),,,,Manager Review it was agreed in
+1-to-1 Actions,OriginMonth,Single line of text,,,,yyyy-MM
+1-to-1 Actions,OriginalDue,Date only,,,,Deadline as first agreed (never changes)
+1-to-1 Actions,CurrentDue,Date only,,,,Deadline now agreed
+1-to-1 Actions,Status,Choice,Open|In progress|Waiting|Ready for close-out|Closed,Open,Yes,
+1-to-1 Actions,WaitingReason,Multiple lines (plain),,,,What it is waiting for
+1-to-1 Actions,WaitingUntil,Single line of text,,,,yyyy-MM-dd: next review of a waiting action
+1-to-1 Actions,LatestProgress,Multiple lines (plain),,,,
+1-to-1 Actions,LastUpdateOn,Date and time,,,,
+1-to-1 Actions,LastUpdateBy,Single line of text,,,,
+1-to-1 Actions,ClosedOn,Date only,,,,
+1-to-1 Actions,DecisionNote,Multiple lines (plain),,,,Team Leader's reason (close-out rejected / reopened)
+1-to-1 Actions,HistoryJson,Multiple lines (plain),,,,Every change with who and when
+1-to-1 Actions,SharedWith,Single line of text,,,,Flow 9
+1-to-1 Action Updates,Title,Built-in,,,,
+1-to-1 Action Updates,ActionId,Number (0 dp),,,Yes,The action (checked by Flow 10 – never trusted)
+1-to-1 Action Updates,Kind,Choice,progress|waiting|followup|closeRequest,progress,,
+1-to-1 Action Updates,Outcome,Choice,Satisfactory|Support|Ready,,,Follow-up outcome at a monthly 1-to-1
+1-to-1 Action Updates,Message,Multiple lines (plain),,,,Progress / waiting reason
+1-to-1 Action Updates,WaitingUntil,Single line of text,,,,yyyy-MM-dd
+1-to-1 Action Updates,ClientKey,Single line of text,Enforce unique values,,Yes,One per submission (no duplicates on retry)
+1-to-1 Action Updates,ProcessState,Choice,Pending|Processing|Applied|Rejected,Pending,Yes,Flow 10
+1-to-1 Action Updates,ProcessNote,Single line of text,,,,Flow 10
+1-to-1 Action Notices,Title,Built-in,,,,
+1-to-1 Action Notices,NoticeKey,Single line of text,Enforce unique values,,Yes,E19-u<update id> / E20-a<action id>-<deadline>
+1-to-1 Action Notices,Kind,Choice,E19|E20,E20,,
+1-to-1 Action Notices,ActionId,Number (0 dp),,,Yes,
+1-to-1 Action Notices,Status,Choice,Pending|Sending|Sent|Failed|Retry|Cancelled,Pending,Yes,Flow 11
+1-to-1 Action Notices,Attempts,Number (0 dp),,0,,
+1-to-1 Action Notices,LastError,Single line of text,,,,
+1-to-1 Action Notices,SentOn,Date and time,,,,
 1-to-1 Settings,Title,Built-in,,,,Items: Bands; Reminders; Labels
 1-to-1 Settings,Value,Multiple lines (plain),,,,JSON

@@ -321,6 +321,18 @@
                 ]
               }
             },
+            "Role_submit": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Get_role_definitions')?['value']",
+                "where": "@equals(item()?['Name'], '1-to-1 Submit')"
+              },
+              "runAfter": {
+                "Role_read": [
+                  "Succeeded"
+                ]
+              }
+            },
             "Get_lists": {
               "type": "OpenApiConnection",
               "inputs": {
@@ -332,7 +344,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/lists?$select=Id,Title,RootFolder/Name&$expand=RootFolder",
+                  "parameters/uri": "_api/web/lists?$select=Id,Title,ListItemEntityTypeFullName,RootFolder/Name,RootFolder/ServerRelativeUrl&$expand=RootFolder",
                   "parameters/headers": {
                     "Accept": "application/json;odata=nometadata"
                   }
@@ -340,7 +352,7 @@
                 "authentication": "@parameters('$authentication')"
               },
               "runAfter": {
-                "Role_read": [
+                "Role_submit": [
                   "Succeeded"
                 ]
               }
@@ -376,6 +388,7 @@
                 "fullControl": "@first(body('Role_full_control'))?['Id']",
                 "edit": "@first(body('Role_edit'))?['Id']",
                 "read": "@first(body('Role_read'))?['Id']",
+                "submit": "@first(body('Role_submit'))?['Id']",
                 "reviewsList": "@first(body('List_monthly_reviews'))?['Id']",
                 "mgrList": "@first(body('List_manager_reviews'))?['Id']"
               },
@@ -1697,6 +1710,1065 @@
                 ]
               }
             },
+            "Action_tracker": {
+              "type": "If",
+              "expression": "@equals(1, 1)",
+              "actions": {
+                "ActionTry": {
+                  "type": "Scope",
+                  "actions": {
+                    "List_actions": {
+                      "type": "Query",
+                      "inputs": {
+                        "from": "@body('Get_lists')?['value']",
+                        "where": "@equals(item()?['RootFolder']?['Name'], 'OneToOneActions')"
+                      },
+                      "runAfter": {}
+                    },
+                    "List_action_updates": {
+                      "type": "Query",
+                      "inputs": {
+                        "from": "@body('Get_lists')?['value']",
+                        "where": "@equals(item()?['RootFolder']?['Name'], 'OneToOneActionUpdates')"
+                      },
+                      "runAfter": {
+                        "List_actions": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "List_action_notices": {
+                      "type": "Query",
+                      "inputs": {
+                        "from": "@body('Get_lists')?['value']",
+                        "where": "@equals(item()?['RootFolder']?['Name'], 'OneToOneActionNotices')"
+                      },
+                      "runAfter": {
+                        "List_action_updates": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "List_settings": {
+                      "type": "Query",
+                      "inputs": {
+                        "from": "@body('Get_lists')?['value']",
+                        "where": "@equals(item()?['RootFolder']?['Name'], 'OneToOneSettings')"
+                      },
+                      "runAfter": {
+                        "List_action_notices": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "ActIds": {
+                      "type": "Compose",
+                      "inputs": {
+                        "act": "@first(body('List_actions'))?['Id']",
+                        "actType": "@first(body('List_actions'))?['ListItemEntityTypeFullName']",
+                        "upd": "@first(body('List_action_updates'))?['Id']",
+                        "updRoot": "@first(body('List_action_updates'))?['RootFolder']?['ServerRelativeUrl']",
+                        "notc": "@first(body('List_action_notices'))?['Id']",
+                        "notcType": "@first(body('List_action_notices'))?['ListItemEntityTypeFullName']",
+                        "settings": "@first(body('List_settings'))?['Id']"
+                      },
+                      "runAfter": {
+                        "List_settings": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Tracker_here": {
+                      "type": "If",
+                      "expression": "@not(equals(outputs('ActIds')?['act'], null))",
+                      "actions": {
+                        "D_Get_tracker_start": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                              "parameters/method": "GET",
+                              "parameters/uri": "_api/web/lists(guid'@{outputs('ActIds')?['settings']}')/items?$select=Id,Title,Value&$filter=Title eq 'ActionsTrackerStart'",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata"
+                              }
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {}
+                        },
+                        "D_Tracker_start": {
+                          "type": "Compose",
+                          "inputs": "@coalesce(first(body('D_Get_tracker_start')?['value'])?['Value'], '')",
+                          "runAfter": {
+                            "D_Get_tracker_start": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Mgr_for_actions": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "GetItems",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                              "table": "Manager Reviews",
+                              "$top": 5000
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {
+                            "D_Tracker_start": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "To_sync": {
+                          "type": "Query",
+                          "inputs": {
+                            "from": "@body('Mgr_for_actions')?['value']",
+                            "where": "@and(not(empty(item()?['ReleasedOn'])), empty(item()?['ActionsSyncedOn']), not(empty(outputs('D_Tracker_start'))), greaterOrEquals(ticks(coalesce(item()?['ReleasedOn'], '2000-01-01T00:00:00Z')), ticks(if(empty(outputs('D_Tracker_start')), '2100-01-01T00:00:00Z', outputs('D_Tracker_start')))))"
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {
+                            "Mgr_for_actions": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Each_to_sync": {
+                          "type": "Foreach",
+                          "foreach": "@body('To_sync')",
+                          "actions": {
+                            "S_Eligible": {
+                              "type": "If",
+                              "expression": "@and(not(equals(outputs('ActIds')?['act'], null)), not(empty(outputs('D_Tracker_start'))), greaterOrEquals(ticks(coalesce(items('Each_to_sync')?['ReleasedOn'], '2000-01-01T00:00:00Z')), ticks(if(empty(outputs('D_Tracker_start')), '2100-01-01T00:00:00Z', outputs('D_Tracker_start')))))",
+                              "actions": {
+                                "S_Ensure_user": {
+                                  "type": "OpenApiConnection",
+                                  "inputs": {
+                                    "host": {
+                                      "connectionName": "shared_sharepointonline",
+                                      "operationId": "HttpRequest",
+                                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                    },
+                                    "parameters": {
+                                      "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                                      "parameters/method": "POST",
+                                      "parameters/uri": "_api/web/ensureuser",
+                                      "parameters/headers": {
+                                        "Accept": "application/json;odata=nometadata",
+                                        "Content-Type": "application/json;odata=nometadata"
+                                      },
+                                      "parameters/body": "{\"logonName\":\"@{items('Each_to_sync')?['Technician']?['Claims']}\"}"
+                                    },
+                                    "authentication": "@parameters('$authentication')"
+                                  },
+                                  "runtimeConfiguration": {
+                                    "secureData": {
+                                      "properties": [
+                                        "inputs",
+                                        "outputs"
+                                      ]
+                                    }
+                                  },
+                                  "runAfter": {}
+                                },
+                                "S_Agreed": {
+                                  "type": "Compose",
+                                  "inputs": "@json(coalesce(items('Each_to_sync')?['ActionsJson'], '[]'))",
+                                  "runtimeConfiguration": {
+                                    "secureData": {
+                                      "properties": [
+                                        "inputs"
+                                      ]
+                                    }
+                                  },
+                                  "runAfter": {
+                                    "S_Ensure_user": [
+                                      "Succeeded"
+                                    ]
+                                  }
+                                },
+                                "S_Each_agreed": {
+                                  "type": "Foreach",
+                                  "foreach": "@outputs('S_Agreed')",
+                                  "actions": {
+                                    "S_Key": {
+                                      "type": "Compose",
+                                      "inputs": "@concat('mr', first(split(string(coalesce(items('Each_to_sync')?['ID'], '')), '.')), '-', string(coalesce(items('S_Each_agreed')?['id'], '')))",
+                                      "runAfter": {}
+                                    },
+                                    "S_Has_id": {
+                                      "type": "If",
+                                      "expression": "@empty(string(coalesce(items('S_Each_agreed')?['id'], '')))",
+                                      "actions": {
+                                        "S_STOP_action_without_id": {
+                                          "type": "Compose",
+                                          "inputs": "@int('An agreed action has no id – open the review on the 5.1 page and save it again.')",
+                                          "runAfter": {}
+                                        }
+                                      },
+                                      "else": {
+                                        "actions": {}
+                                      },
+                                      "runAfter": {
+                                        "S_Key": [
+                                          "Succeeded"
+                                        ]
+                                      }
+                                    },
+                                    "S_Find": {
+                                      "type": "OpenApiConnection",
+                                      "inputs": {
+                                        "host": {
+                                          "connectionName": "shared_sharepointonline",
+                                          "operationId": "HttpRequest",
+                                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                        },
+                                        "parameters": {
+                                          "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                                          "parameters/method": "GET",
+                                          "parameters/uri": "_api/web/lists(guid'@{outputs('ActIds')?['act']}')/items?$select=Id&$filter=ActionKey eq '@{outputs('S_Key')}'",
+                                          "parameters/headers": {
+                                            "Accept": "application/json;odata=nometadata"
+                                          }
+                                        },
+                                        "authentication": "@parameters('$authentication')"
+                                      },
+                                      "runtimeConfiguration": {
+                                        "secureData": {
+                                          "properties": [
+                                            "inputs",
+                                            "outputs"
+                                          ]
+                                        }
+                                      },
+                                      "runAfter": {
+                                        "S_Has_id": [
+                                          "Succeeded"
+                                        ]
+                                      }
+                                    },
+                                    "S_Not_yet": {
+                                      "type": "If",
+                                      "expression": "@empty(body('S_Find')?['value'])",
+                                      "actions": {
+                                        "S_Created_entry": {
+                                          "type": "Compose",
+                                          "inputs": {
+                                            "id": "c",
+                                            "at": "@{utcNow()}",
+                                            "kind": "created",
+                                            "month": "@{items('Each_to_sync')?['MonthKey']}",
+                                            "by": "Agreed at the monthly 1-to-1"
+                                          },
+                                          "runAfter": {}
+                                        },
+                                        "S_New_item": {
+                                          "type": "Compose",
+                                          "inputs": {
+                                            "__metadata": {
+                                              "type": "@{outputs('ActIds')?['actType']}"
+                                            },
+                                            "Title": "@take(string(coalesce(items('S_Each_agreed')?['text'], '')), 250)",
+                                            "ActionKey": "@{outputs('S_Key')}",
+                                            "TechnicianId": "@body('S_Ensure_user')?['Id']",
+                                            "Owner": "@if(equals(items('S_Each_agreed')?['ownerRole'], 'tl'), 'Team Leader', 'Technician')",
+                                            "Criteria": "@{coalesce(items('S_Each_agreed')?['criteria'], '')}",
+                                            "OriginReviewId": "@int(concat('0', first(split(string(coalesce(items('Each_to_sync')?['ReviewItemId'], '')), '.'))))",
+                                            "OriginMgrId": "@int(concat('0', first(split(string(coalesce(items('Each_to_sync')?['ID'], '')), '.'))))",
+                                            "OriginMonth": "@{items('Each_to_sync')?['MonthKey']}",
+                                            "OriginalDue": "@if(empty(string(coalesce(items('S_Each_agreed')?['due'], ''))), null, convertToUtc(concat(if(empty(string(coalesce(items('S_Each_agreed')?['due'], ''))), '2000-01-01', string(coalesce(items('S_Each_agreed')?['due'], ''))), 'T00:00:00'), 'GMT Standard Time'))",
+                                            "CurrentDue": "@if(empty(string(coalesce(items('S_Each_agreed')?['due'], ''))), null, convertToUtc(concat(if(empty(string(coalesce(items('S_Each_agreed')?['due'], ''))), '2000-01-01', string(coalesce(items('S_Each_agreed')?['due'], ''))), 'T00:00:00'), 'GMT Standard Time'))",
+                                            "Status": "@if(equals(items('S_Each_agreed')?['status'], 'Closed'), 'Closed', 'Open')",
+                                            "ClosedOn": "@if(equals(items('S_Each_agreed')?['status'], 'Closed'), if(empty(string(coalesce(items('S_Each_agreed')?['closedOn'], ''))), null, convertToUtc(concat(if(empty(string(coalesce(items('S_Each_agreed')?['closedOn'], ''))), '2000-01-01', string(coalesce(items('S_Each_agreed')?['closedOn'], ''))), 'T00:00:00'), 'GMT Standard Time')), null)",
+                                            "HistoryJson": "@{string(createArray(outputs('S_Created_entry')))}"
+                                          },
+                                          "runtimeConfiguration": {
+                                            "secureData": {
+                                              "properties": [
+                                                "inputs"
+                                              ]
+                                            }
+                                          },
+                                          "runAfter": {
+                                            "S_Created_entry": [
+                                              "Succeeded"
+                                            ]
+                                          }
+                                        },
+                                        "S_Create": {
+                                          "type": "OpenApiConnection",
+                                          "inputs": {
+                                            "host": {
+                                              "connectionName": "shared_sharepointonline",
+                                              "operationId": "HttpRequest",
+                                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                            },
+                                            "parameters": {
+                                              "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                                              "parameters/method": "POST",
+                                              "parameters/uri": "_api/web/lists(guid'@{outputs('ActIds')?['act']}')/items",
+                                              "parameters/headers": {
+                                                "Accept": "application/json;odata=nometadata",
+                                                "Content-Type": "application/json;odata=verbose"
+                                              },
+                                              "parameters/body": "@{string(outputs('S_New_item'))}"
+                                            },
+                                            "authentication": "@parameters('$authentication')"
+                                          },
+                                          "runtimeConfiguration": {
+                                            "secureData": {
+                                              "properties": [
+                                                "inputs",
+                                                "outputs"
+                                              ]
+                                            }
+                                          },
+                                          "runAfter": {
+                                            "S_New_item": [
+                                              "Succeeded"
+                                            ]
+                                          }
+                                        },
+                                        "S_Recheck": {
+                                          "type": "OpenApiConnection",
+                                          "inputs": {
+                                            "host": {
+                                              "connectionName": "shared_sharepointonline",
+                                              "operationId": "HttpRequest",
+                                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                            },
+                                            "parameters": {
+                                              "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                                              "parameters/method": "GET",
+                                              "parameters/uri": "_api/web/lists(guid'@{outputs('ActIds')?['act']}')/items?$select=Id&$filter=ActionKey eq '@{outputs('S_Key')}'",
+                                              "parameters/headers": {
+                                                "Accept": "application/json;odata=nometadata"
+                                              }
+                                            },
+                                            "authentication": "@parameters('$authentication')"
+                                          },
+                                          "runtimeConfiguration": {
+                                            "secureData": {
+                                              "properties": [
+                                                "inputs",
+                                                "outputs"
+                                              ]
+                                            }
+                                          },
+                                          "runAfter": {
+                                            "S_Create": [
+                                              "Failed",
+                                              "TimedOut"
+                                            ]
+                                          }
+                                        },
+                                        "S_Still_missing": {
+                                          "type": "If",
+                                          "expression": "@empty(body('S_Recheck')?['value'])",
+                                          "actions": {
+                                            "S_STOP_could_not_add": {
+                                              "type": "Compose",
+                                              "inputs": "@int('An agreed action could not be added to the tracker.')",
+                                              "runAfter": {}
+                                            }
+                                          },
+                                          "else": {
+                                            "actions": {}
+                                          },
+                                          "runAfter": {
+                                            "S_Recheck": [
+                                              "Succeeded"
+                                            ]
+                                          }
+                                        }
+                                      },
+                                      "else": {
+                                        "actions": {}
+                                      },
+                                      "runAfter": {
+                                        "S_Find": [
+                                          "Succeeded"
+                                        ]
+                                      }
+                                    }
+                                  },
+                                  "runtimeConfiguration": {
+                                    "concurrency": {
+                                      "repetitions": 1
+                                    }
+                                  },
+                                  "runAfter": {
+                                    "S_Agreed": [
+                                      "Succeeded"
+                                    ]
+                                  }
+                                },
+                                "S_Stamp_synced": {
+                                  "type": "OpenApiConnection",
+                                  "inputs": {
+                                    "host": {
+                                      "connectionName": "shared_sharepointonline",
+                                      "operationId": "HttpRequest",
+                                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                    },
+                                    "parameters": {
+                                      "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                                      "parameters/method": "POST",
+                                      "parameters/uri": "_api/web/lists(guid'@{outputs('Ids')?['mgrList']}')/items(@{first(split(string(coalesce(items('Each_to_sync')?['ID'], '')), '.'))})",
+                                      "parameters/headers": {
+                                        "Accept": "application/json;odata=nometadata",
+                                        "Content-Type": "application/json;odata=nometadata",
+                                        "X-HTTP-Method": "MERGE",
+                                        "IF-MATCH": "*"
+                                      },
+                                      "parameters/body": "{\"ActionsSyncedOn\":\"@{utcNow()}\"}"
+                                    },
+                                    "authentication": "@parameters('$authentication')"
+                                  },
+                                  "runtimeConfiguration": {
+                                    "secureData": {
+                                      "properties": [
+                                        "inputs",
+                                        "outputs"
+                                      ]
+                                    }
+                                  },
+                                  "runAfter": {
+                                    "S_Each_agreed": [
+                                      "Succeeded"
+                                    ]
+                                  }
+                                }
+                              },
+                              "else": {
+                                "actions": {}
+                              },
+                              "runAfter": {}
+                            }
+                          },
+                          "runtimeConfiguration": {
+                            "concurrency": {
+                              "repetitions": 1
+                            }
+                          },
+                          "runAfter": {
+                            "To_sync": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Get_open_actions": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                              "parameters/method": "GET",
+                              "parameters/uri": "_api/web/lists(guid'@{outputs('ActIds')?['act']}')/items?$select=Id,Status,CurrentDue&$top=5000",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata"
+                              }
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {
+                            "Each_to_sync": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Open_actions": {
+                          "type": "Query",
+                          "inputs": {
+                            "from": "@body('Get_open_actions')?['value']",
+                            "where": "@not(equals(item()?['Status'], 'Closed'))"
+                          },
+                          "runAfter": {
+                            "Get_open_actions": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Each_open_action": {
+                          "type": "Foreach",
+                          "foreach": "@body('Open_actions')",
+                          "actions": {
+                            "Due": {
+                              "type": "Compose",
+                              "inputs": "@if(contains(string(coalesce(items('Each_open_action')?['CurrentDue'], '')), 'T'), formatDateTime(convertFromUtc(coalesce(items('Each_open_action')?['CurrentDue'], '2000-01-01T00:00:00Z'), 'GMT Standard Time'), 'yyyy-MM-dd'), coalesce(items('Each_open_action')?['CurrentDue'], ''))",
+                              "runAfter": {}
+                            },
+                            "Has_due": {
+                              "type": "If",
+                              "expression": "@not(empty(outputs('Due')))",
+                              "actions": {
+                                "Due_dow": {
+                                  "type": "Compose",
+                                  "inputs": "@dayOfWeek(concat(if(empty(outputs('Due')), '2000-01-01', outputs('Due')), 'T12:00:00Z'))",
+                                  "runAfter": {}
+                                },
+                                "Remind_from": {
+                                  "type": "Compose",
+                                  "inputs": "@formatDateTime(addDays(concat(outputs('Due'), 'T12:00:00Z'), mul(-1, if(equals(outputs('Due_dow'), 6), 5, if(equals(outputs('Due_dow'), 0), 6, 7)))), 'yyyy-MM-dd')",
+                                  "runAfter": {
+                                    "Due_dow": [
+                                      "Succeeded"
+                                    ]
+                                  }
+                                },
+                                "In_window": {
+                                  "type": "If",
+                                  "expression": "@and(lessOrEquals(ticks(concat(outputs('Remind_from'), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), lessOrEquals(ticks(concat(outputs('Today'), 'T00:00:00Z')), ticks(concat(outputs('Due'), 'T00:00:00Z'))))",
+                                  "actions": {
+                                    "Notice_key": {
+                                      "type": "Compose",
+                                      "inputs": "@concat('E20-a', first(split(string(coalesce(items('Each_open_action')?['Id'], '')), '.')), '-', outputs('Due'))",
+                                      "runAfter": {}
+                                    },
+                                    "Find_notice": {
+                                      "type": "OpenApiConnection",
+                                      "inputs": {
+                                        "host": {
+                                          "connectionName": "shared_sharepointonline",
+                                          "operationId": "HttpRequest",
+                                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                        },
+                                        "parameters": {
+                                          "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                                          "parameters/method": "GET",
+                                          "parameters/uri": "_api/web/lists(guid'@{outputs('ActIds')?['notc']}')/items?$select=Id&$filter=NoticeKey eq '@{outputs('Notice_key')}'",
+                                          "parameters/headers": {
+                                            "Accept": "application/json;odata=nometadata"
+                                          }
+                                        },
+                                        "authentication": "@parameters('$authentication')"
+                                      },
+                                      "runtimeConfiguration": {
+                                        "secureData": {
+                                          "properties": [
+                                            "inputs",
+                                            "outputs"
+                                          ]
+                                        }
+                                      },
+                                      "runAfter": {
+                                        "Notice_key": [
+                                          "Succeeded"
+                                        ]
+                                      }
+                                    },
+                                    "No_notice_yet": {
+                                      "type": "If",
+                                      "expression": "@empty(body('Find_notice')?['value'])",
+                                      "actions": {
+                                        "Notice_item": {
+                                          "type": "Compose",
+                                          "inputs": {
+                                            "__metadata": {
+                                              "type": "@{outputs('ActIds')?['notcType']}"
+                                            },
+                                            "Title": "@{outputs('Notice_key')}",
+                                            "NoticeKey": "@{outputs('Notice_key')}",
+                                            "Kind": "E20",
+                                            "ActionId": "@int(first(split(string(coalesce(items('Each_open_action')?['Id'], '')), '.')))",
+                                            "Status": "Pending",
+                                            "Attempts": 0
+                                          },
+                                          "runAfter": {}
+                                        },
+                                        "Create_notice": {
+                                          "type": "OpenApiConnection",
+                                          "inputs": {
+                                            "host": {
+                                              "connectionName": "shared_sharepointonline",
+                                              "operationId": "HttpRequest",
+                                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                            },
+                                            "parameters": {
+                                              "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                                              "parameters/method": "POST",
+                                              "parameters/uri": "_api/web/lists(guid'@{outputs('ActIds')?['notc']}')/items",
+                                              "parameters/headers": {
+                                                "Accept": "application/json;odata=nometadata",
+                                                "Content-Type": "application/json;odata=verbose"
+                                              },
+                                              "parameters/body": "@{string(outputs('Notice_item'))}"
+                                            },
+                                            "authentication": "@parameters('$authentication')"
+                                          },
+                                          "runtimeConfiguration": {
+                                            "secureData": {
+                                              "properties": [
+                                                "inputs",
+                                                "outputs"
+                                              ]
+                                            }
+                                          },
+                                          "runAfter": {
+                                            "Notice_item": [
+                                              "Succeeded"
+                                            ]
+                                          }
+                                        },
+                                        "Recheck_notice": {
+                                          "type": "OpenApiConnection",
+                                          "inputs": {
+                                            "host": {
+                                              "connectionName": "shared_sharepointonline",
+                                              "operationId": "HttpRequest",
+                                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                            },
+                                            "parameters": {
+                                              "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                                              "parameters/method": "GET",
+                                              "parameters/uri": "_api/web/lists(guid'@{outputs('ActIds')?['notc']}')/items?$select=Id&$filter=NoticeKey eq '@{outputs('Notice_key')}'",
+                                              "parameters/headers": {
+                                                "Accept": "application/json;odata=nometadata"
+                                              }
+                                            },
+                                            "authentication": "@parameters('$authentication')"
+                                          },
+                                          "runtimeConfiguration": {
+                                            "secureData": {
+                                              "properties": [
+                                                "inputs",
+                                                "outputs"
+                                              ]
+                                            }
+                                          },
+                                          "runAfter": {
+                                            "Create_notice": [
+                                              "Failed",
+                                              "TimedOut"
+                                            ]
+                                          }
+                                        },
+                                        "Notice_missing": {
+                                          "type": "If",
+                                          "expression": "@empty(body('Recheck_notice')?['value'])",
+                                          "actions": {
+                                            "STOP_notice_not_created": {
+                                              "type": "Compose",
+                                              "inputs": "@int('A deadline reminder could not be queued.')",
+                                              "runAfter": {}
+                                            }
+                                          },
+                                          "else": {
+                                            "actions": {}
+                                          },
+                                          "runAfter": {
+                                            "Recheck_notice": [
+                                              "Succeeded"
+                                            ]
+                                          }
+                                        }
+                                      },
+                                      "else": {
+                                        "actions": {}
+                                      },
+                                      "runAfter": {
+                                        "Find_notice": [
+                                          "Succeeded"
+                                        ]
+                                      }
+                                    }
+                                  },
+                                  "else": {
+                                    "actions": {}
+                                  },
+                                  "runAfter": {
+                                    "Remind_from": [
+                                      "Succeeded"
+                                    ]
+                                  }
+                                }
+                              },
+                              "else": {
+                                "actions": {}
+                              },
+                              "runAfter": {
+                                "Due": [
+                                  "Succeeded"
+                                ]
+                              }
+                            }
+                          },
+                          "runtimeConfiguration": {
+                            "concurrency": {
+                              "repetitions": 1
+                            }
+                          },
+                          "runAfter": {
+                            "Open_actions": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Get_stuck_updates": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                              "parameters/method": "GET",
+                              "parameters/uri": "_api/web/lists(guid'@{outputs('ActIds')?['upd']}')/items?$select=Id,ProcessState,Modified&$filter=FSObjType eq 0 and ProcessState eq 'Processing'&$top=5000",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata"
+                              }
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {
+                            "Each_open_action": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Stuck_updates": {
+                          "type": "Query",
+                          "inputs": {
+                            "from": "@body('Get_stuck_updates')?['value']",
+                            "where": "@less(ticks(coalesce(item()?['Modified'], utcNow())), ticks(addMinutes(utcNow(), -60)))"
+                          },
+                          "runAfter": {
+                            "Get_stuck_updates": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Each_stuck": {
+                          "type": "Foreach",
+                          "foreach": "@body('Stuck_updates')",
+                          "actions": {
+                            "Retry_stuck": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "connectionName": "shared_sharepointonline",
+                                  "operationId": "HttpRequest",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                },
+                                "parameters": {
+                                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                                  "parameters/method": "POST",
+                                  "parameters/uri": "_api/web/lists(guid'@{outputs('ActIds')?['upd']}')/items(@{items('Each_stuck')?['Id']})",
+                                  "parameters/headers": {
+                                    "Accept": "application/json;odata=nometadata",
+                                    "Content-Type": "application/json;odata=nometadata",
+                                    "X-HTTP-Method": "MERGE",
+                                    "IF-MATCH": "*"
+                                  },
+                                  "parameters/body": "{\"ProcessState\":\"Pending\",\"ProcessNote\":\"Retried by the daily run\"}"
+                                },
+                                "authentication": "@parameters('$authentication')"
+                              },
+                              "runtimeConfiguration": {
+                                "secureData": {
+                                  "properties": [
+                                    "inputs",
+                                    "outputs"
+                                  ]
+                                }
+                              },
+                              "runAfter": {}
+                            }
+                          },
+                          "runtimeConfiguration": {
+                            "concurrency": {
+                              "repetitions": 1
+                            }
+                          },
+                          "runAfter": {
+                            "Stuck_updates": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Get_waiting_updates": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                              "parameters/method": "GET",
+                              "parameters/uri": "_api/web/lists(guid'@{outputs('ActIds')?['upd']}')/items?$select=Id,ProcessState,Modified&$filter=FSObjType eq 0 and ProcessState eq 'Pending'&$top=5000",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata"
+                              }
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {
+                            "Each_stuck": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Waiting_updates": {
+                          "type": "Query",
+                          "inputs": {
+                            "from": "@body('Get_waiting_updates')?['value']",
+                            "where": "@less(ticks(coalesce(item()?['Modified'], utcNow())), ticks(addMinutes(utcNow(), -60)))"
+                          },
+                          "runAfter": {
+                            "Get_waiting_updates": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Each_waiting": {
+                          "type": "Foreach",
+                          "foreach": "@body('Waiting_updates')",
+                          "actions": {
+                            "Wake_waiting": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "connectionName": "shared_sharepointonline",
+                                  "operationId": "HttpRequest",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                },
+                                "parameters": {
+                                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                                  "parameters/method": "POST",
+                                  "parameters/uri": "_api/web/lists(guid'@{outputs('ActIds')?['upd']}')/items(@{items('Each_waiting')?['Id']})",
+                                  "parameters/headers": {
+                                    "Accept": "application/json;odata=nometadata",
+                                    "Content-Type": "application/json;odata=nometadata",
+                                    "X-HTTP-Method": "MERGE",
+                                    "IF-MATCH": "*"
+                                  },
+                                  "parameters/body": "{\"ProcessNote\":\"Retried by the daily run\"}"
+                                },
+                                "authentication": "@parameters('$authentication')"
+                              },
+                              "runtimeConfiguration": {
+                                "secureData": {
+                                  "properties": [
+                                    "inputs",
+                                    "outputs"
+                                  ]
+                                }
+                              },
+                              "runAfter": {}
+                            }
+                          },
+                          "runtimeConfiguration": {
+                            "concurrency": {
+                              "repetitions": 1
+                            }
+                          },
+                          "runAfter": {
+                            "Waiting_updates": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Get_failed_notices": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                              "parameters/method": "GET",
+                              "parameters/uri": "_api/web/lists(guid'@{outputs('ActIds')?['notc']}')/items?$select=Id,Attempts&$filter=Status eq 'Failed'&$top=5000",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata"
+                              }
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runtimeConfiguration": {
+                            "secureData": {
+                              "properties": [
+                                "inputs",
+                                "outputs"
+                              ]
+                            }
+                          },
+                          "runAfter": {
+                            "Each_waiting": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Retry_notices": {
+                          "type": "Query",
+                          "inputs": {
+                            "from": "@body('Get_failed_notices')?['value']",
+                            "where": "@less(coalesce(item()?['Attempts'], 0), 3)"
+                          },
+                          "runAfter": {
+                            "Get_failed_notices": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Each_retry_notice": {
+                          "type": "Foreach",
+                          "foreach": "@body('Retry_notices')",
+                          "actions": {
+                            "Retry_notice": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "connectionName": "shared_sharepointonline",
+                                  "operationId": "HttpRequest",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                },
+                                "parameters": {
+                                  "dataset": "@parameters('ESG 1-to-1 Site URL (esg_SiteUrl)')",
+                                  "parameters/method": "POST",
+                                  "parameters/uri": "_api/web/lists(guid'@{outputs('ActIds')?['notc']}')/items(@{items('Each_retry_notice')?['Id']})",
+                                  "parameters/headers": {
+                                    "Accept": "application/json;odata=nometadata",
+                                    "Content-Type": "application/json;odata=nometadata",
+                                    "X-HTTP-Method": "MERGE",
+                                    "IF-MATCH": "*"
+                                  },
+                                  "parameters/body": "{\"Status\":\"Retry\"}"
+                                },
+                                "authentication": "@parameters('$authentication')"
+                              },
+                              "runtimeConfiguration": {
+                                "secureData": {
+                                  "properties": [
+                                    "inputs",
+                                    "outputs"
+                                  ]
+                                }
+                              },
+                              "runAfter": {}
+                            }
+                          },
+                          "runtimeConfiguration": {
+                            "concurrency": {
+                              "repetitions": 1
+                            }
+                          },
+                          "runAfter": {
+                            "Retry_notices": [
+                              "Succeeded"
+                            ]
+                          }
+                        }
+                      },
+                      "else": {
+                        "actions": {}
+                      },
+                      "runAfter": {
+                        "ActIds": [
+                          "Succeeded"
+                        ]
+                      }
+                    }
+                  },
+                  "runAfter": {}
+                },
+                "ActionCatch": {
+                  "type": "Scope",
+                  "actions": {
+                    "Note_actions_failed": {
+                      "type": "AppendToArrayVariable",
+                      "inputs": {
+                        "name": "varProblems",
+                        "value": "Action tracker: adding agreed actions, deadline reminders or retries could not all be done today. Open the run history for details."
+                      },
+                      "runAfter": {}
+                    }
+                  },
+                  "runAfter": {
+                    "ActionTry": [
+                      "Failed",
+                      "TimedOut"
+                    ]
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {
+                "Reconcile_submissions": [
+                  "Succeeded"
+                ]
+              }
+            },
             "Any_problems": {
               "type": "If",
               "expression": "@greater(length(variables('varProblems')), 0)",
@@ -1732,7 +2804,7 @@
                 "actions": {}
               },
               "runAfter": {
-                "Reconcile_submissions": [
+                "Action_tracker": [
                   "Succeeded"
                 ]
               }

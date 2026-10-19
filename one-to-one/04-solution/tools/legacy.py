@@ -197,7 +197,7 @@ BUILDER_HTML = r'''<!doctype html>
       list.appendChild(li);
       a.click();
     });
-    say('Four packages created. If your browser blocked some downloads, click the links below.');
+    say(templates.length + ' packages created. If your browser blocked some downloads (most allow 10 at a time), click the links below.');
   });
 })();
 </script>

@@ -70,7 +70,7 @@ class FakeSP:
         self.lists[lid] = {'Id': lid, 'Title': title, 'url': url, 'Description': desc, 'fields': base,
                            'views': ['All Items'], 'view_defs': {}, 'items': {}, 'next': 1, 'unique': False, 'ra': {},
                            'props': {'EnableVersioning': False, 'MajorVersionLimit': 0, 'EnableAttachments': True,
-                                     'NoCrawl': False, 'OnQuickLaunch': True, 'ExcludeFromOfflineClient': False,
+                                     'NoCrawl': False, 'OnQuickLaunch': True, 'ExcludeFromOfflineClient': False, 'EnableFolderCreation': False,
                                      'ReadSecurity': 1, 'WriteSecurity': 1},
                            'entity': entity}
         return self.lists[lid]
@@ -113,7 +113,7 @@ class FakeSP:
             assert op == 'SendEmailV2', op
             if any(x in p['emailMessage/Subject'] for x in self.fail_mail):   # test hook: the mail service refuses this email
                 fail(500, 'simulated mail failure')
-            self.emails.append({'to': p['emailMessage/To'], 'subject': p['emailMessage/Subject'], 'body': p['emailMessage/Body']})
+            self.emails.append({'to': p['emailMessage/To'], 'cc': p.get('emailMessage/Cc', ''), 'subject': p['emailMessage/Subject'], 'body': p['emailMessage/Body']})
             return {}
         if api == 'shared_office365users':
             assert op == 'UserProfile_V2', op
@@ -146,6 +146,10 @@ class FakeSP:
         if value is None or value == '':
             return None
         if t == 'User':
+            if sub == 'Id':   # REST: <Name>Id = the site user id
+                if int(value) not in self.users:
+                    fail(400, 'user id not found ' + str(value))
+                return int(value)
             if sub != 'Claims':
                 fail(400, 'person fields are written as /Claims')
             return self.user_by_claims(value)['Id']
@@ -170,6 +174,10 @@ class FakeSP:
             s = str(value)
             if not re.match(r'^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d+)?Z?)?$', s):
                 fail(400, 'bad date for {0}: {1}'.format(name, s))
+            if f.get('Format') != 'DateTime' and 'T' in s and s.endswith('Z'):   # an instant: SharePoint keeps the site-local date
+                from datetime import datetime
+                from zoneinfo import ZoneInfo
+                return datetime.fromisoformat(s.replace('Z', '+00:00')).astimezone(ZoneInfo('Europe/London')).strftime('%Y-%m-%d')
             return s if f.get('Format') == 'DateTime' else s[:10]
         return str(value)
 
@@ -195,17 +203,58 @@ class FakeSP:
                     fields[name] = self.coerce(lst, name, 'Value' if f['Type'] == 'Choice' else None,
                                                {'1': True, '0': False}.get(f['Default'], f['Default'])
                                                if f['Type'] == 'Boolean' else f['Default'])
-            lst['items'][item_id] = {'id': item_id, 'fields': fields, 'unique': False, 'ra': {}, 'author': self.me}
+            lst['items'][item_id] = {'id': item_id, 'fields': fields, 'unique': False, 'ra': {}, 'author': self.me,
+                                     'dir': getattr(self, '_new_dir', ''), 'fsobj': getattr(self, '_new_fsobj', 0), 'version': 0}
             if self.clock:
                 fields['Created'] = self.clock
         it = lst['items'].get(item_id)
         if it is None:
             fail(404, 'item not found')
         it['fields'].update(vals)
+        it['version'] = it.get('version', 0) + 1
         it['editor'] = self.me
         if self.clock:
             it['fields']['Modified'] = self.clock
         return it
+
+    def add_in_folder(self, lst, folder, p):
+        """A person creating an item inside a folder (the page's AddValidateUpdateItemUsingPath with a FolderPath). SharePoint
+        refuses it unless they hold Add on that folder."""
+        fold = next((x for x in lst['items'].values() if x.get('fsobj') == 1 and x['fields'].get('Title') == folder and not x.get('dir')), None)
+        if fold is None:
+            fail(404, 'folder not found')
+        if self.me not in (10,) and not (self.roles_on_item(self.me, lst, fold) & {self.role_id('1-to-1 Submit'), FULL, EDIT, CONTRIB}):
+            fail(403, 'Access denied')
+        self._new_dir = folder
+        try:
+            return self.write_item(lst, None, p)
+        finally:
+            self._new_dir = ''
+
+    def effective_ra(self, lst, it):
+        if it.get('unique'):
+            return it['ra']
+        if it.get('dir'):
+            fold = next((x for x in lst['items'].values() if x.get('fsobj') == 1 and x['fields'].get('Title') == it['dir'] and not x.get('dir')), None)
+            if fold is not None and fold.get('unique'):
+                return fold['ra']
+        return lst['ra'] if lst['unique'] else self.web_ra
+
+    def roles_on_item(self, user_id, lst, it):
+        out = set()
+        ra = self.effective_ra(lst, it)
+        for pid in self.principals_of(user_id):
+            out |= ra.get(pid, set())
+        return out
+
+    def pseudo(self, lst, it, name):
+        if name == 'FSObjType':
+            return it.get('fsobj', 0)
+        if name == 'FileLeafRef':
+            return it['fields'].get('Title') if it.get('fsobj') == 1 else '{0}_.000'.format(it['id'])
+        if name == 'FileDirRef':
+            return SITE_REL + '/Lists/' + lst['url'] + ('/' + it['dir'] if it.get('dir') else '')
+        raise KeyError(name)
 
     def item_out(self, lst, it):
         o = {'ID': it['id'], 'Id': it['id']}
@@ -228,6 +277,7 @@ class FakeSP:
                     o[name] = v[:10]
             else:
                 o[name] = v
+        o['{IsFolder}'] = it.get('fsobj') == 1
         u = self.users[it.get('editor', 10)]
         o['Editor'] = {'Claims': u['Claims'], 'DisplayName': u['Title'], 'Email': u['Email']}
         a = self.users[it.get('author', 10)]
@@ -244,6 +294,10 @@ class FakeSP:
                 col = m.group(1)
                 if col == 'ID':
                     rows = [r for r in rows if r['id'] == int(float(m.group(3)))]
+                    continue
+                if col in ('FSObjType', 'FileLeafRef', 'FileDirRef'):
+                    want = m.group(2).replace("''", "'") if m.group(2) is not None else int(float(m.group(3)))
+                    rows = [r for r in rows if self.pseudo(lst, r, col) == want]
                     continue
                 if col not in lst['fields']:
                     fail(400, 'column in filter does not exist: ' + col)
@@ -281,9 +335,9 @@ class FakeSP:
         if method == 'POST' and headers.get('X-HTTP-Method') == 'MERGE':
             if path.startswith('_api/web/lists') and '/fields/' in path and verbose:
                 pass  # verbose SP.Field bodies are also accepted; the flows send nometadata
-            if headers.get('IF-MATCH') != '*':
+            if not headers.get('IF-MATCH'):
                 fail(412, 'IF-MATCH required')
-            return self.merge(path, data)
+            return self.merge(path, data, headers.get('IF-MATCH'))
 
         def need_type(t):
             if not verbose or (data.get('__metadata') or {}).get('type') != t:
@@ -446,6 +500,9 @@ class FakeSP:
                     if name == 'Title':
                         o['Title'] = r.get('Title')
                         continue
+                    if name in ('FSObjType', 'FileLeafRef', 'FileDirRef'):
+                        o[name] = self.pseudo(lst, lst['items'][r['ID']], name)
+                        continue
                     if name not in lst['fields']:
                         fail(400, 'column not found ' + name)
                     t = lst['fields'][name]
@@ -468,8 +525,23 @@ class FakeSP:
         if method == 'POST' and rest == '/items':
             if not verbose or data.get('__metadata', {}).get('type') != lst['entity']:
                 fail(400, 'item type must be ' + lst['entity'])
-            p = {'item/' + k: v for k, v in data.items() if k != '__metadata'}
-            return {'Id': self.write_item(lst, None, p)['id']}
+            return {'Id': self.write_item(lst, None, self.rest_fields(lst, data))['id']}
+        if method == 'POST' and rest == '/AddValidateUpdateItemUsingPath':   # the flows create folders this way
+            info = data.get('listItemCreateInfo') or {}
+            root = SITE_REL + '/Lists/' + lst['url']
+            if (info.get('FolderPath') or {}).get('DecodedUrl') != root:
+                fail(400, 'FolderPath must be the list root')
+            if info.get('UnderlyingObjectType') != 1 or not info.get('LeafName'):
+                fail(400, 'only folder creation is simulated here')
+            name = info['LeafName']
+            if any(x.get('fsobj') == 1 and x['fields'].get('Title') == name for x in lst['items'].values()):
+                fail(400, 'A file or folder with the name ' + name + ' already exists.')
+            self._new_fsobj = 1
+            try:
+                it = self.write_item(lst, None, {'item/Title': name})
+            finally:
+                self._new_fsobj = 0
+            return {'value': [{'FieldName': 'Id', 'FieldValue': str(it['id']), 'HasException': False}]}
         mg2 = re.match(r'^/items\((\d+)\)(/roleassignments)?$', rest)
         if method == 'GET' and mg2:
             it = lst['items'].get(int(mg2.group(1)))
@@ -485,6 +557,8 @@ class FakeSP:
                         out[name] = bool(it['unique'])
                     elif name in ('Id', 'ID'):
                         out[name] = it['id']
+                    elif name in ('FSObjType', 'FileLeafRef', 'FileDirRef'):
+                        out[name] = self.pseudo(lst, it, name)
                     elif name in lst['fields']:
                         t = lst['fields'][name]
                         v = it['fields'].get(name)
@@ -503,10 +577,18 @@ class FakeSP:
                             out[name] = v
                     else:
                         fail(400, 'column not found ' + name)
+                if 'minimalmetadata' in headers.get('Accept', '') or 'verbose' in headers.get('Accept', ''):
+                    out['odata.etag'] = self.etag(it)
+                # test hook: someone else saves the item just after it was read (a stale etag on the next write)
+                bump = getattr(self, 'bump_once', {}).pop((lst['Title'], it['id']), None)
+                if bump:
+                    keep, self.me = self.me, bump.get('as', 10)
+                    self.write_item(lst, it['id'], bump['fields'])
+                    self.me = keep
                 return out
             if 'Member' not in qs or 'RoleDefinitionBindings' not in qs:
                 fail(400, 'roleassignments needs $expand=Member,RoleDefinitionBindings')
-            ra = it['ra'] if it['unique'] else (lst['ra'] if lst['unique'] else self.web_ra)
+            ra = self.effective_ra(lst, it)
             out = []
             for pid, rids in ra.items():
                 if pid in self.users:
@@ -575,7 +657,27 @@ class FakeSP:
         lst['fields'][name] = f
         return {'InternalName': name}
 
-    def merge(self, path, data):
+    def etag(self, it):
+        return '"{0},{1}"'.format(it['id'], it.get('version', 0))
+
+    def rest_fields(self, lst, data):
+        """A nometadata / verbose REST body as connector-style parameters: choices plain text, people as <Name>Id."""
+        p = {}
+        for k, v in data.items():
+            if k == '__metadata':
+                continue
+            name = k
+            if k not in lst['fields'] and k.endswith('Id') and lst['fields'].get(k[:-2], {}).get('Type') == 'User':
+                name = k[:-2]
+                p['item/' + name + '/Id'] = v
+                continue
+            f = lst['fields'].get(name)
+            if f is None:
+                fail(400, 'The property {0} does not exist on type SP.Data.ListItem'.format(k))
+            p['item/' + name + ('/Value' if f['Type'] == 'Choice' else '')] = v
+        return p
+
+    def merge(self, path, data, if_match='*'):
         m = re.match(r"^_api/web/lists\(guid'([0-9a-f-]+)'\)(.*)$", path)
         if not m or m.group(1) not in self.lists:
             fail(404, 'merge target')
@@ -602,14 +704,11 @@ class FakeSP:
         if mi:   # item update by REST (nometadata body: choice columns as plain text)
             if '__metadata' in data:
                 fail(400, 'the flows send item updates without __metadata')
-            p = {}
-            for k, v in data.items():
-                f = lst['fields'].get(k)
-                if f is None:
-                    fail(400, 'The property {0} does not exist on type SP.Data.ListItem'.format(k))
-                p['item/' + k + ('/Value' if f['Type'] == 'Choice' else '')] = v
+            p = self.rest_fields(lst, data)
             if int(mi.group(1)) not in lst['items']:
                 fail(404, 'item')
+            if if_match != '*' and if_match != self.etag(lst['items'][int(mi.group(1))]):
+                fail(412, 'The version of the item has changed (etag mismatch)')
             self.write_item(lst, int(mi.group(1)), p)
             return {}
         mf = re.match(r"^/fields/getbyinternalnameortitle\('([^']+)'\)$", rest)

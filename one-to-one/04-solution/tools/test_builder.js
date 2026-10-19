@@ -31,10 +31,18 @@ var OUT = path.join(ROOT, '.builder-test');
   var downloads = [];
   page.on('download', function (d) { downloads.push(d); });
   await page.click('#go');
-  await page.waitForTimeout(1500);
-  ok('Builder: eight downloads', downloads.length === 8, downloads.length);
+  for (var w = 0; w < 40 && downloads.length < 11; w++) { await page.waitForTimeout(250); }
+  await page.waitForTimeout(300);
+  // browsers allow about 10 automatic downloads at once; the page lists every package as a link for the rest
+  var got = downloads.map(function (d) { return d.suggestedFilename(); });
+  var links = await page.$$('#files a');
+  for (var li = 0; li < links.length; li++) {
+    var nm = await links[li].textContent();
+    if (got.indexOf(nm) < 0) { var dl = page.waitForEvent('download'); await links[li].click(); await dl; await page.waitForTimeout(200); }
+  }
+  ok('Builder: eleven downloads', downloads.length === 11, downloads.length);
   for (var i = 0; i < downloads.length; i++) { await downloads[i].saveAs(path.join(OUT, downloads[i].suggestedFilename())); }
-  ok('Builder: eight links listed', (await page.$$('#files a')).length === 8);
+  ok('Builder: eleven links listed', (await page.$$('#files a')).length === 11);
   ok('Builder: no network requests', external.length === 0, external.join(', '));
   ok('Builder: no page errors', errors.length === 0, errors.join(' | '));
   await browser.close();

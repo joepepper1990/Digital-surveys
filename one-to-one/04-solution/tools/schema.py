@@ -24,6 +24,14 @@ DELIVERY_STATUS = ['Pending', 'Sent', 'Failed', 'Read', 'Held']
 CHALLENGE_STATE = ['Open', 'Agreed', 'Not agreed']
 CHALLENGE_STATUS = ['Open', 'Agreed', 'Not agreed', 'Rejected']
 NOTIFY_STATUS = ['Draft', 'Pending', 'Sending', 'Sent', 'Failed', 'Retry', 'Cancelled']
+# 1.5 action tracker
+ACTION_STATUS = ['Open', 'In progress', 'Waiting', 'Ready for close-out', 'Closed']
+ACTION_OWNER = ['Technician', 'Team Leader']
+UPDATE_KIND = ['progress', 'waiting', 'followup', 'closeRequest']
+UPDATE_OUTCOME = ['Satisfactory', 'Support', 'Ready']
+PROCESS_STATE = ['Pending', 'Processing', 'Applied', 'Rejected']
+NOTICE_KIND = ['E19', 'E20']
+NOTICE_STATUS = ['Pending', 'Sending', 'Sent', 'Failed', 'Retry', 'Cancelled']
 DEFAULT_REMINDERS = '[20,27]'
 
 DEFAULT_BANDS = ('[{"name":"Not met","max":1.5},{"name":"Partially met","max":2.25},'
@@ -215,6 +223,8 @@ LISTS = [
             since(date('ChallengeTlAgreedOn', with_time=True), '1.3'),
             since(date('ChallengeTechAgreedOn', with_time=True), '1.3'),
             since(date('ChallengeClosedOn', with_time=True), '1.3'),
+            # 1.5: set by Flow 3 / Flow 1 once every agreed action of a review released after the tracker started is in it
+            since(date('ActionsSyncedOn', with_time=True), '1.5'),
         ],
         'views': [
             view('Overdue', ['LinkTitle', 'Technician', 'MonthKey', 'DueDate', 'ReviewState'],
@@ -279,6 +289,72 @@ LISTS = [
             choice('NotifyStatus', NOTIFY_STATUS, default='Draft', indexed=True),
             date('NotifiedOn', with_time=True),
             text('NotifyError'),
+        ],
+        'views': [],
+    },
+    {
+        # 1.5: the live record of every agreed action (one item per action, from a released review or added by the Team
+        # Leader). Owners only at list level; Flow 9 gives each item exactly its technician Read. Technicians never write here.
+        'key': 'actions', 'url': 'OneToOneActions', 'title': '1-to-1 Actions', 'groupRead': False, 'since': '1.5',
+        'description': 'ESG 1-to-1: agreed actions tracked between monthly 1-to-1s. Each item is visible only to the Team Leader and its technician (Flow 9).',
+        'fields': [
+            text('ActionKey', unique=True),
+            person('Technician'),
+            choice('Owner', ACTION_OWNER, default='Technician'),
+            note('Criteria'),
+            number('OriginReviewId', indexed=True),
+            number('OriginMgrId'),
+            text('OriginMonth'),
+            date('OriginalDue'),
+            date('CurrentDue'),
+            choice('Status', ACTION_STATUS, default='Open', indexed=True),
+            note('WaitingReason'),
+            text('WaitingUntil'),
+            note('LatestProgress'),
+            date('LastUpdateOn', with_time=True),
+            text('LastUpdateBy'),
+            date('ClosedOn'),
+            note('DecisionNote'),
+            note('HistoryJson'),
+            text('SharedWith'),
+        ],
+        'views': [
+            view('Open actions', ['LinkTitle', 'Technician', 'Owner', 'Status', 'CurrentDue'],
+                 "<OrderBy><FieldRef Name='CurrentDue'/></OrderBy><Where><Neq><FieldRef Name='Status'/><Value Type='Choice'>Closed</Value></Neq></Where>"),
+        ],
+    },
+    {
+        # 1.5: technicians' progress updates – append-only. Each technician has one folder (u<site user id>) that only they
+        # can add to (Flow 9); the folder, not the editable Author column, says who sent an update. Flow 10 checks it,
+        # applies it to the action and locks the item to Read.
+        'key': 'actionUpdates', 'url': 'OneToOneActionUpdates', 'title': '1-to-1 Action Updates', 'groupRead': False, 'since': '1.5',
+        'folders': True,
+        'description': 'ESG 1-to-1: progress updates sent by technicians on their actions (one folder per person, Flow 10 records them).',
+        'fields': [
+            number('ActionId', indexed=True),
+            choice('Kind', UPDATE_KIND, default='progress'),
+            choice('Outcome', UPDATE_OUTCOME),
+            note('Message'),
+            text('WaitingUntil'),
+            text('ClientKey', unique=True),
+            choice('ProcessState', PROCESS_STATE, default='Pending', indexed=True),
+            text('ProcessNote'),
+        ],
+        'views': [],
+    },
+    {
+        # 1.5: action emails (E19 close-out requested, E20 deadline reminder) – one item per email, unique key, so a retry
+        # never sends twice; Flow 11 sends and records Sent / Failed. Owners only.
+        'key': 'actionNotices', 'url': 'OneToOneActionNotices', 'title': '1-to-1 Action Notices', 'groupRead': False, 'since': '1.5',
+        'description': 'ESG 1-to-1: action emails waiting, sent or failed (Owners only). Flow 11 sends them.',
+        'fields': [
+            text('NoticeKey', unique=True),
+            choice('Kind', NOTICE_KIND, default='E20'),
+            number('ActionId', indexed=True),
+            choice('Status', NOTICE_STATUS, default='Pending', indexed=True),
+            number('Attempts', default=0),
+            text('LastError'),
+            date('SentOn', with_time=True),
         ],
         'views': [],
     },

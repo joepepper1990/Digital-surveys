@@ -297,7 +297,10 @@ def check_schema():
 
 # Steps in flows 1-3 that handle no personal data (role/list/group IDs) and may stay visible in run history.
 NO_PERSONAL_DATA = {'Get_owners_group', 'Get_role_definitions', 'Get_lists', 'Role_full_control', 'Role_edit', 'Role_read',
-                    'List_monthly_reviews', 'List_manager_reviews'}
+                    'List_monthly_reviews', 'List_manager_reviews',
+                    # 1.5 action tracker: list / role ids, principal ids, item ids, states and dates only
+                    'Role_submit', 'List_actions', 'List_action_updates', 'List_action_notices', 'List_settings',
+                    'Open_actions', 'Stuck_updates', 'Waiting_updates', 'Retry_notices', 'Action_grants', 'Folder_grants', 'Created_id', 'Action_grants_others', 'Folder_grants_others'}
 
 
 def check_secure(f):
@@ -336,7 +339,8 @@ def secured_inputs(a):
 
 
 # review answers, feedback, wellbeing and amendment content (column references in expressions)
-SENSITIVE_REF = re.compile(r"\?\['(Reason|ChangesJson|ChangedFields|Q\d\w*|FB_\w+|\w+Json|Message|ManagerNotes|WinOfMonth|NotifyError)'\]")
+SENSITIVE_REF = re.compile(r"\?\['(Reason|ChangesJson|ChangedFields|Q\d\w*|FB_\w+|\w+Json|Message|ManagerNotes|WinOfMonth|NotifyError|"
+                           r"LatestProgress|WaitingReason|DecisionNote|Criteria)'\]")
 # a whole trigger item or a whole record from a read step
 WHOLE_ITEM = re.compile(r'"@(triggerBody\(\)|body\(\\?\'[^\']+\\?\'\)|first\(body\(\\?\'[^\']+\\?\'\)[^"]*\))"')
 
@@ -355,7 +359,7 @@ NO_SECURE_TYPES = {'SetVariable', 'InitializeVariable', 'AppendToArrayVariable',
 
 
 def check_upgrade_safe(f):
-    if any(x in f['name'] for x in ('0 Setup', '5 Wellbeing', '6 Feedback', '7 Challenge', '8 Amendment')):   # imported Off; turned on after setup
+    if any(x in f['name'] for x in ('0 Setup', '5 Wellbeing', '6 Feedback', '7 Challenge', '8 Amendment', '9 Action', '10 Action', '11 Action')):   # imported Off; turned on after setup
         return []
     probs = []
     def walk(o, path):

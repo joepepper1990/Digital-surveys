@@ -447,6 +447,13 @@ window.ESGOneToOne = function (ctx) {
   // Amendments audit (Owners only): who and when come from SharePoint's own Author / Created
   var AM_FIELDS = 'ID,Title,ReviewItemId,ManagerReviewId,MonthKey,Reason,ChangedFields,ChangesJson,NotifyStatus,NotifiedOn,NotifyError,Created,Modified,' +
     'Author/Title,Technician/Title,Technician/EMail';
+  // 1.5 action tracker. Actions: TL + Flow 9 / 10 write; a technician reads only their own (Flow 9 shares each item).
+  var MR_V15_FIELDS = ',ActionsSyncedOn';
+  var ACT_FIELDS = 'ID,Title,ActionKey,Owner,Criteria,OriginReviewId,OriginMgrId,OriginMonth,OriginalDue,CurrentDue,Status,WaitingReason,WaitingUntil,' +
+    'LatestProgress,LastUpdateOn,LastUpdateBy,ClosedOn,DecisionNote,HistoryJson,SharedWith,Modified,Technician/Id,Technician/Title,Technician/EMail';
+  // Action Updates: what a technician sent (their own folder only); Flow 10 records it on the action
+  var UPD_FIELDS = 'ID,Title,ActionId,Kind,Outcome,Message,WaitingUntil,ClientKey,ProcessState,ProcessNote,Created,FileDirRef';
+  var NOTICE_FIELDS = 'ID,Title,NoticeKey,Kind,ActionId,Status,Attempts,LastError,SentOn,Created,Modified';
 
   // Ratings are whole numbers 1–5; anything else in an (editable) record is treated as not given.
   function r15(v) { var n = num(v); return n !== null && n >= 1 && n <= 5 && Math.floor(n) === n ? n : null; }
