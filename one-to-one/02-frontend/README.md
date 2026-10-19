@@ -1,4 +1,4 @@
-# ESG 1-to-1 — frontend (v5.0.0)
+# ESG 1-to-1 — frontend (v5.1.0)
 
 | File | What it is |
 |---|---|
@@ -7,6 +7,7 @@
 | `mock/mock-sharepoint.js` | Local in-memory SharePoint, with fictional users and data, for testing without the tenant |
 | `mock/index.html` | **Generated** by `tools/build-mock.js` from the production CSS. Open it in a browser to click through. |
 | `test/run-tests.js` | Automated tests of the app (headless Chromium against the mock) |
+| `test/run-action-tests.js` | Automated tests of the 5.1 action tracker: lifecycle, reliability, security, emails, carry-forward, compatibility, XSS, 1366 px layout |
 | `reset/one-to-one-reset.html`, `reset/one-to-one-reset.js` | **Temporary** one-time test-data reset tool (layout **ESG 1-to-1 reset tool**). Upload only for the reset, then remove – see [`../RESET_PROCEDURE.md`](../RESET_PROCEDURE.md). |
 | `mock/reset.html` | The reset tool against the mock |
 | `test/run-reset-tests.js` | Automated tests of the reset tool |
@@ -24,7 +25,8 @@
 
 Prerequisites:
 
-- The eight lists are built ([`../01-sharepoint/lists.md`](../01-sharepoint/lists.md)) by solution **1.4** Setup. Upgrading from 4.5.0 / 1.3: follow the order in [`../MIGRATION_1_4.md`](../MIGRATION_1_4.md). If the page is uploaded before Setup 1.4 has run, nothing breaks: it reads only the columns that exist, released reviews are read-only, and a banner says to run Setup 1.4. Amendments and the new dates appear once Setup has run.
+- The eleven lists are built ([`../01-sharepoint/lists.md`](../01-sharepoint/lists.md)) by solution **1.5** Setup. Upgrading from 5.0.0 / 1.4: follow [`../MIGRATION_1_5.md`](../MIGRATION_1_5.md). If page 5.1.0 is uploaded before Setup 1.5 has run, it behaves as 5.0 (the Actions page lists agreed actions read-only, and technicians have no *My actions* tab) and a banner says to run Setup 1.5.
+- Before 1.5, the lists were built by solution **1.4** Setup. Upgrading from 4.5.0 / 1.3: follow the order in [`../MIGRATION_1_4.md`](../MIGRATION_1_4.md). If the page is uploaded before Setup 1.4 has run, nothing breaks: it reads only the columns that exist, released reviews are read-only, and a banner says to run Setup 1.4. Amendments and the new dates appear once Setup has run.
 - The `1-to-1 Technicians` group exists.
 
 Steps:
@@ -52,7 +54,7 @@ Steps:
 
 | # | As | Do | Expect |
 |---|---|---|---|
-| 1 | TL | Open the site | **Team overview**. The top menu bar has Team overview, Monthly reviews, Expectations, Actions, Wellbeing, **Team ▾** (the team list) and **⚙ Settings**, and shows **v5.0.0** at its right-hand end (no "Today" date in the bar). |
+| 1 | TL | Open the site | **Team overview**. The top menu bar has Team overview, Monthly reviews, Expectations, Actions, Wellbeing, **Team ▾** (the team list) and **⚙ Settings**, and shows **v5.1.0** at its right-hand end (no "Today" date in the bar). |
 | 2 | TL | ⚙ Settings → Team → set **Next appraisal** (e.g. `15-Jul-2027`), **Next wellbeing** and **Appraisal period start** → Save → reopen | Same dates shown; the Technicians list shows 15/07/2027 in AppraisalDate, and NextWellbeingDate / AppraisalCycleStart are set |
 | 3 | TL | Expectations → add a Shared one, then an Individual one, then retire one; then **Delete permanently** a retired test one | A **Shared** card and one card per person; new items go to the end of their group. Retired = Active **No**. Delete permanently asks first, and the item is in the site recycle bin. |
 | 4 | Test A | Open the E1 link | Their review. The menu bar has only *This month · My appraisal · Appraisal report · Wellbeing*. |
@@ -80,10 +82,11 @@ You need Node.js. For the automated tests you also need Playwright with Chromium
 cd one-to-one/02-frontend
 node tools/build-mock.js          # regenerates mock/index.html from one-to-one.html
 node test/run-tests.js            # 319 checks; exits non-zero on any failure
-node test/run-reset-tests.js      # 31 checks of the reset tool
+node test/run-action-tests.js     # 101 checks of the action tracker
+node test/run-reset-tests.js      # 45 checks of the reset tool
 ```
 
-Or in one line: `node tools/build-mock.js && node test/run-tests.js` and `node test/run-reset-tests.js`.
+Or in one line: `node tools/build-mock.js && node test/run-tests.js && node test/run-action-tests.js && node test/run-reset-tests.js`. Set `SHOTS_DIR` to a folder to also save the 1366 px screenshots from `run-action-tests.js`.
 
 - **Paths:** the test runner looks for Playwright at `/opt/node-tools/node_modules/playwright` and Chromium at `/opt/pw-browsers/…`. Set `PLAYWRIGHT_MODULE` and `CHROMIUM_PATH` to point elsewhere.
 - **Clicking through:** open `mock/index.html` in a browser (`mock/reset.html` for the reset tool).
@@ -101,7 +104,7 @@ Or in one line: `node tools/build-mock.js && node test/run-tests.js` and `node t
 | TL journey | Review; Complete blocked by an incomplete action; feedback and state are separate writes; actions fields; TL ratings; release; technician sees the released feedback |
 | Settings | Invalid date rejected; dates normalised to DD-MMM-YYYY; written as `dd/MM/yyyy`; bands saved; BST round-trip keeps the same day |
 | Expectations | Create (including the person value), edit, retire; no limit of 10 (warning above 30); Shared card plus one card per person; new items at the end of their group; **Delete permanently** only on retired items, to the recycle bin, and reviews keep their own copy; a technician's delete is refused (403) |
-| Actions | Close-out from the Actions page |
+| Actions (5.1) | Close-out from the Actions page is one MERGE on 1-to-1 Actions with its etag; no Manager Review is written. The full tracker suite is `run-action-tests.js` (below). |
 | Report | 8 sections; print popup |
 | Clearer forms (v4.5) | Orange border on unanswered required questions, red after Submit with a jump to the first, cleared as answered; wellbeing steps and TL action rows likewise |
 | Words not numbers (v4.5) | No numeric rating or score anywhere a technician looks (form, outlook, My appraisal, chart axis and tooltips, report); the TL still sees numbers; focus areas listed |

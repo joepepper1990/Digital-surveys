@@ -1,48 +1,55 @@
-# ESG 1-to-1 — import the flows and create the lists (solution 1.4)
+# ESG 1-to-1 — import the flows and create the lists (solution 1.5)
 
 You don't build the flows or the lists by hand any more:
 
-- **Import one solution file.** It contains all eight flows: **0 Setup**, **1–6** and **8** (there is no Flow 7 from 1.4).
-- **Run the setup flow once.** It creates the eight lists exactly as specified, plus the permission levels, the technicians group and the list permissions.
+- **Import one solution file.** It contains all eleven flows: **0 Setup**, **1–6** and **8–11** (there is no Flow 7 from 1.4).
+- **Run the setup flow once.** It creates the eleven lists exactly as specified, plus the permission levels, the technicians group and the list permissions.
 
 | File | What it is |
 |---|---|
-| [`ESGOneToOne_1_4_0_0_unmanaged.zip`](ESGOneToOne_1_4_0_0_unmanaged.zip) | **The solution (1.4.0.0).** Eight flows, three connection references, two environment variables. Goes with page **5.0.0**. |
+| [`ESGOneToOne_1_5_0_0_unmanaged.zip`](ESGOneToOne_1_5_0_0_unmanaged.zip) | **The solution (1.5.0.0).** Eleven flows, three connection references, two environment variables. Goes with page **5.1.0**. (Earlier zips are kept only for going back.) |
 | [`legacy-package-builder.html`](legacy-package-builder.html) | **Fallback only**, if your environment can't import solutions (§6). |
 
-The eight flows:
+The eleven flows:
 
 | Flow | Starts | Job |
 |---|---|---|
 | **ESG 1-to-1 \| 0 Setup (run once)** | On | Run by hand. Creates or completes the lists, columns, indexes, views, permission levels, group and list permissions, and the `Bands` and `Reminders` settings. **Safe to re-run:** it adds what's missing and brings settings up to the specification. It never deletes a list, column or item, and never lowers version history. Then it emails you a summary. |
-| **ESG 1-to-1 \| 1 Daily scheduler** | Off | 07:00 UK daily: creates each month's reviews (with every expectation that applies – no limit of 10, Shared before Individual), copies each person's appraisal period boundaries onto their new review, makes them private, emails links, and sends reminders on the days set in ⚙ Settings → Reminders (20th and 27th by default). 1.4: emails you 7 days before, on the day and weekly while overdue for each person's **next wellbeing** (E12) and **next appraisal** (E17) dates from ⚙ Settings → Team, and reports any submitted review Flow 2 never processed. |
+| **ESG 1-to-1 \| 1 Daily scheduler** | Off | 07:00 UK daily: creates each month's reviews (with every expectation that applies – no limit of 10, Shared before Individual), copies each person's appraisal period boundaries onto their new review, makes them private, emails links, and sends reminders on the days set in ⚙ Settings → Reminders (20th and 27th by default). 1.4: emails you 7 days before, on the day and weekly while overdue for each person's **next wellbeing** (E12) and **next appraisal** (E17) dates from ⚙ Settings → Team, and reports any submitted review Flow 2 never processed. 1.5: adds any agreed actions Flow 3 couldn't, creates the E20 reminders (5 working days before each deadline, one per action and deadline), and puts stuck updates and failed action emails back in the queue. |
 | **ESG 1-to-1 \| 2 Review submitted** | Off | Locks a submitted review, stamps the Manager Review, emails you. 1.4: a change made by your account to a review it has already processed (an amendment) is cancelled – it is not a resubmission. |
-| **ESG 1-to-1 \| 3 Manager decision** | Off | On Complete / Close: validates, locks, releases the feedback, emails the technician. |
+| **ESG 1-to-1 \| 3 Manager decision** | Off | On Complete / Close: validates, locks, releases the feedback, emails the technician. 1.5: then adds the review's agreed actions to *1-to-1 Actions* (once each, only for reviews released after the tracker started) and stamps `ActionsSyncedOn`; a failure there never undoes the release – Flow 1 finishes it. |
 | **ESG 1-to-1 \| 4 Team members** 🆕 1.1 | Off | Keeps the `1-to-1 Technicians` group in step with the Technicians list: someone you add in ⚙ Settings → Team gets access to the page; someone you deactivate loses it. **Full sync:** each run also removes anyone in the group without an Active row (so don't add people to the group by hand). Emails you each change. |
 | **ESG 1-to-1 \| 5 Wellbeing** 🆕 1.1 | Off | Wellbeing assessments: makes each one private to you and that person, emails them the link, locks it when they submit (and wipes anything they typed in your part), stamps completion and emails them the agreed record. |
 | **ESG 1-to-1 \| 6 Feedback** 🆕 1.2 | Off | Feedback from the page's 💬 bubble: makes each item Owners-only, emails it to you (E13). If that email fails it marks the item *Failed*, tries a short notice, and the page shows it in your *Needs your attention*. |
+| **ESG 1-to-1 \| 9 Action access** 🆕 1.5 | Off | When an action is added or changed: checks its actual permissions are exactly Owners + its technician (Read), and the technician's update folder `u<id>` is exactly Owners + them (1-to-1 Submit); creates the folder, removes anything else, and records *SharedWith*. Safe to re-run. |
+| **ESG 1-to-1 \| 10 Action update** 🆕 1.5 | Off | When a technician sends an update: claims it (one run only), takes who sent it from the folder it is in, checks the rules, records it on the action with the action's etag (retrying once if you saved in between), then locks it to Read and marks it *Applied* or *Rejected*. A close-out request also queues E19. |
+| **ESG 1-to-1 \| 11 Action notice** 🆕 1.5 | Off | Sends the action emails waiting in *1-to-1 Action Notices*: **E19** (close-out requested, to you) and **E20** (deadline in 5 working days, to the technician, copied to you). Claims each before sending; records *Sent*, or *Failed* with the error. |
 | **ESG 1-to-1 \| 8 Amendment notice** 🆕 1.4 | Off | When you save an amendment to a submitted or released 1-to-1, emails the technician **E16** (the month and a link only – never the changes or the reason) and marks the *1-to-1 Amendments* record *Sent*. If the email fails it marks it *Failed* and sends you a short notice; *Needs your attention* then offers **Resend**. |
 
-Flows 1–6 and 8 are imported **off**, because the lists don't exist until the setup flow has run.
+Flows 1–6 and 8–11 are imported **off**, because the lists don't exist until the setup flow has run.
 
 **No Flow 7 from 1.4.** The challenge feature (1.3: *7 Challenge*, the *1-to-1 Challenges* list, E14 / E15) was removed. An import never deletes a flow, so on an upgraded environment *7 Challenge* is still listed: turn it off, and delete it once you're happy (§0, steps 2 and 10). The challenge records are kept (§3).
 
 ---
 
-## 0. Already imported an earlier version? Upgrade to 1.4.0.0 (about 30 min)
+## 0. Already imported an earlier version? Upgrade to 1.5.0.0 (about 30 min)
+
+**From 1.4.0.0:** follow [`../MIGRATION_1_5.md`](../MIGRATION_1_5.md) – back up, turn off Flow 1, import `ESGOneToOne_1_5_0_0_unmanaged.zip`, run 0 Setup, turn on flows 2, 3, 4, 5, 6, 8, 9, 10 and 11, upload page 5.1.0, turn on Flow 1, then run its checks T1–T14. The action tracker starts empty: nothing is imported.
+
+**From 1.3.x:** the steps below (written for 1.4) still apply with the 1.5 zip and page 5.1.0; in step 5 also turn on **9, 10 and 11**. Then do the 1.5 checks.
 
 Do this instead of §1–§3 if **ESG 1-to-1** is already in your environment. The full deployment order, what changes in the tenant, how to go back and the tenant-only checks T1–T11 are in [`../MIGRATION_1_4.md`](../MIGRATION_1_4.md); the steps below follow it exactly. Do each step only with approval; every step can be repeated safely.
 
 1. **Back up.** Export each list to CSV (**Export → Export to CSV**): Technicians, Appraisal Expectations, Monthly Reviews, Manager Reviews, Wellbeing Assessments, 1-to-1 Feedback, 1-to-1 Challenges. Keep the previous solution zip and the current `one-to-one.html` / `one-to-one.js` so you can go back.
 2. **Turn off Flows 7 and 1.** **Solutions → ESG 1-to-1** → *7 Challenge* (only there if you had 1.3) → **Turn off**; *1 Daily scheduler* → **Turn off**.
-3. **Solutions → Import solution → Browse** → `ESGOneToOne_1_4_0_0_unmanaged.zip` → **Next**.
+3. **Solutions → Import solution → Browse** → `ESGOneToOne_1_5_0_0_unmanaged.zip` → **Next**.
    - It says it will **upgrade** the existing solution. Keep the defaults and leave *"Enable Plugin steps and flows included in the solution"* **unticked**.
    - Connections and environment variables keep their current values; just click **Next / Import**.
    - The new **8 Amendment notice** flow arrives **Off**.
 4. **Run ESG 1-to-1 | 0 Setup (run once)** and wait for its summary email, *ESG 1-to-1 setup: complete*. It adds the four date / period columns on **Technicians**, `AppraisalBoundaries` on **Monthly Reviews** and the Owners-only **1-to-1 Amendments** list, and retires **1-to-1 Challenges** (the group is removed, its items made Owners-only, open challenges closed as *Not agreed*; nothing is deleted). From an older version it also adds anything else missing (Feedback, Wellbeing, Reminders, `1-to-1 Submit`). If the subject says *items to check*, read the list in the email first.
 5. **Turn on flows 2, 3, 4, 5, 6 and 8**, in that order. **Leave 1 and 7 off.** Flows that are already On stay On.
    - Import message *"one or more flows may not have turned on … List not found"*: a flow was looking for a list Setup hadn't created yet. Finish step 4, then turn the flow on here.
-6. **Upload the page.** Replace `one-to-one.html` and `one-to-one.js` (v5.0.0) in **Welcome Web Part – Custom Layouts**, then web part settings → **Reset layout cache** → **Republish**. The top bar shows **v5.0.0**.
+6. **Upload the page.** Replace `one-to-one.html` and `one-to-one.js` (v5.1.0) in **Welcome Web Part – Custom Layouts**, then web part settings → **Reset layout cache** → **Republish**. The top bar shows **v5.1.0**.
    - If the page goes up before step 4, nothing breaks: it reads only the columns that exist, released reviews are read-only, and a banner says to run Setup 1.4.
 7. **Enter the dates** in ⚙ **Settings → Team**, for each person: **Appraisal period start** (the date their last appraisal was actually completed), **Next appraisal** (check it) and **Next wellbeing** (*Needs your attention* offers the date from their last completed assessment – **Use it** – but only you decide). Then **Save settings**. Nothing is calculated or moved automatically.
 8. **Turn on Flow 1.**
@@ -70,7 +77,7 @@ Check: Site contents → **1-to-1 Amendments** → Permissions: **Owners – Ful
 
 ## 2. Import the solution (10 min)
 
-1. **Solutions → Import solution → Browse** → choose `ESGOneToOne_1_4_0_0_unmanaged.zip` → **Next** → **Next**.
+1. **Solutions → Import solution → Browse** → choose `ESGOneToOne_1_5_0_0_unmanaged.zip` → **Next** → **Next**.
 2. **Connections.** For each of the three connection references, pick an existing connection or click **+ New connection**, signed in as **you**:
 
    | Connection reference | Connector |
@@ -108,6 +115,7 @@ Check: Site contents → **1-to-1 Amendments** → Permissions: **Owners – Ful
 | 1-to-1 Feedback (1.2) | Item-level permissions: each person reads and edits only their own items; `1-to-1 Technicians` – **1-to-1 Submit** on this list only (a third permission level setup creates: Contribute without delete, versions, alerts or personal views) |
 | 1-to-1 Amendments (1.4) | **Owners – Full Control only** (the technicians group has no access), versioning on (100). The restricted audit of your amendments; Flow 8 emails each notice. |
 | Technicians and Monthly Reviews (1.4) | New, empty columns: `NextWellbeingDate`, `AppraisalCycleStart`, `AppraisalHistoryJson`, `AppraisalBoundaries` on Technicians, and `AppraisalBoundaries` on Monthly Reviews. Existing values are untouched. |
+| Action tracker (1.5) | **1-to-1 Actions**, **1-to-1 Action Updates** (folders on) and **1-to-1 Action Notices**: **Owners – Full Control only**, versioning on (100), unique keys on `ActionKey`, `ClientKey` and `NoticeKey`, indexes on the status and id columns. `ActionsSyncedOn` on Manager Reviews. The *1-to-1 Settings* item `ActionsTrackerStart` (written only the first time). Item and folder permissions are set later by Flow 9. |
 | 1-to-1 Challenges (retired in 1.4) | Only on a site upgraded from 1.3: the `1-to-1 Technicians` group is removed from the list, every item is made Owners-only and any open challenge is closed as *Not agreed*. The records are **kept**. A new site never gets this list. |
 | Checks (warnings only) | You are Site Collection Admin; regional settings are English (UK) and London time; the Site URL has no trailing slash |
 
@@ -118,17 +126,17 @@ Check: Site contents → **1-to-1 Amendments** → Permissions: **Owners – Ful
 - grant the group Read on the page, the layouts library and the Welcome Errors list;
 - add people to the group.
 
-**Existing lists.** Setup recognises the eight lists by their **web address** (`Lists/Technicians`, `Lists/AppraisalExpectations`, `Lists/MonthlyReviews`, `Lists/ManagerReviews`, `Lists/WellbeingAssessments`, `Lists/OneToOneSettings`, `Lists/OneToOneFeedback`, `Lists/OneToOneAmendments`), and the retired `Lists/OneToOneChallenges` if it is there. If one already exists (for example, you started building it by hand), setup **keeps it**:
+**Existing lists.** Setup recognises the eleven lists by their **web address** (`Lists/Technicians`, `Lists/AppraisalExpectations`, `Lists/MonthlyReviews`, `Lists/ManagerReviews`, `Lists/WellbeingAssessments`, `Lists/OneToOneSettings`, `Lists/OneToOneFeedback`, `Lists/OneToOneAmendments`, `Lists/OneToOneActions`, `Lists/OneToOneActionUpdates`, `Lists/OneToOneActionNotices`), and the retired `Lists/OneToOneChallenges` if it is there. If one already exists (for example, you started building it by hand), setup **keeps it**:
 
 - it adds only the missing columns, indexes and views;
 - it sets the display name and list settings, raising the version limit to at least 100 and never lowering it;
 - it tidies the permissions.
 
-It removes your own direct entry only if you are Site Collection Admin or in the Owners group, so you can't be locked out. If a *different* list already uses one of the eight names, the summary email tells you to rename it.
+It removes your own direct entry only if you are Site Collection Admin or in the Owners group, so you can't be locked out. If a *different* list already uses one of the eleven names, the summary email tells you to rename it.
 
 ## 4. Check the result (5 min)
 
-- [ ] **Site contents** shows the eight lists: Technicians, Appraisal Expectations, Monthly Reviews, Manager Reviews, **Wellbeing Assessments**, 1-to-1 Settings, **1-to-1 Feedback**, **1-to-1 Amendments** (plus the retired 1-to-1 Challenges on a site upgraded from 1.3).
+- [ ] **Site contents** shows the eleven lists: Technicians, Appraisal Expectations, Monthly Reviews, Manager Reviews, **Wellbeing Assessments**, 1-to-1 Settings, **1-to-1 Feedback**, **1-to-1 Amendments**, **1-to-1 Actions**, **1-to-1 Action Updates**, **1-to-1 Action Notices** (plus the retired 1-to-1 Challenges on a site upgraded from 1.3). The three action lists show **Owners – Full Control only**.
 - [ ] Open each list → **Settings → Permissions for this list**:
   - the five data lists (including **Wellbeing Assessments**, which holds health information): **Owners – Full Control** only;
   - **1-to-1 Settings** also has `1-to-1 Technicians` – Read;
@@ -138,11 +146,11 @@ It removes your own direct entry only if you are Site Collection Admin or in the
 - [ ] Spot-check one column: Monthly Reviews → List settings → **Q9FollowUp**. The address bar ends `Field=Q9FollowUp`, and there are three choices.
 - [ ] **Technicians** → List settings shows `NextWellbeingDate`, `AppraisalCycleStart`, `AppraisalHistoryJson` and `AppraisalBoundaries`; **1-to-1 Amendments** → Versioning settings: Yes, 100.
 
-## 5. Turn on flows 1–6 and 8
+## 5. Turn on flows 1–6 and 8–11
 
-Only after the Setup summary email (§3) – flows 4, 5, 6 and 8 need the lists it creates. **0 Setup** stays On; it only runs when you click Run. (If it ever shows Off, turn it on before running it.)
+Only after the Setup summary email (§3) – flows 4, 5, 6 and 8–11 need the lists it creates. **0 Setup** stays On; it only runs when you click Run. (If it ever shows Off, turn it on before running it.)
 
-1. **Solutions → ESG 1-to-1** → select each flow → **Turn on**, in this order: **2 Review submitted**, **3 Manager decision**, **4 Team members**, **5 Wellbeing**, **6 Feedback**, **8 Amendment notice**, and **1 Daily scheduler** last (so the first daily run finds everything else ready).
+1. **Solutions → ESG 1-to-1** → select each flow → **Turn on**, in this order: **2 Review submitted**, **3 Manager decision**, **4 Team members**, **5 Wellbeing**, **6 Feedback**, **8 Amendment notice**, **9 Action access**, **10 Action update**, **11 Action notice**, and **1 Daily scheduler** last (so the first daily run finds everything else ready).
 2. Continue with the runbook:
    - [`../GO_LIVE_RUNBOOK.md`](../GO_LIVE_RUNBOOK.md) **Phase 6**: install the frontend.
    - **Phase 8**: Test A and Test B first.
@@ -150,7 +158,7 @@ Only after the Setup summary email (§3) – flows 4, 5, 6 and 8 need the lists 
 
 > **Testing a different date (plan H tests F13–F20).** Open flow 1 → **Edit** → **Initialize varTestDate** → type a date such as `2026-11-20T07:00:00` → **Save** → **Run**. **Clear it afterwards and save.** Leave it empty in production.
 
-**Secure inputs/outputs** are already on for the SharePoint triggers and every data, Filter array, Select and email action in flows 1–6 and 8. Steps that use their outputs are hidden automatically, so answers and feedback don't appear in run history. Only the steps that look up role, group and list IDs stay visible. The setup flow's history shows only list and column names; it handles no personal data.
+**Secure inputs/outputs** are already on for the SharePoint triggers and every data, Filter array, Select, *Send an HTTP request to SharePoint* (the SharePoint connector, not the premium HTTP one) and email action in flows 1–6 and 8–11. Steps that use their outputs are hidden automatically, so answers and feedback don't appear in run history. Only the steps that look up role, group and list IDs stay visible. The setup flow's history shows only list and column names; it handles no personal data.
 
 ---
 

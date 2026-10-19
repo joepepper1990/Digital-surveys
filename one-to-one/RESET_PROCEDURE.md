@@ -1,6 +1,6 @@
 # One-time test-data reset – procedure
 
-Use this **once**, before go-live, to clear 1-to-1 records that were created while testing. Do it only after the upgrade to 1.4 / page 5.0.0 (see `MIGRATION_1_4.md`) and only with written approval to delete data in the live site.
+Use this **once**, before go-live, to clear 1-to-1 records that were created while testing. Do it only after the upgrade (1.5 / page 5.1.0, see `MIGRATION_1_5.md`; the tool is version 1.1.0) and only with written approval to delete data in the live site. **Deleting tracked actions needs its own, separate written approval.**
 
 ## What it removes, and what it never touches
 
@@ -13,12 +13,17 @@ Use this **once**, before go-live, to clear 1-to-1 records that were created whi
 - 1-to-1 Challenges (retired list, if it is still on the site)
 - 1-to-1 Amendments
 - Appraisal Expectations – **opt-in only**. These are your real set-up, so they are never ticked by "Select all".
+- **Tracked actions (1.5) – a separate group, only with separate approval.** 1-to-1 Actions, with their 1-to-1 Action Updates and 1-to-1 Action Notices. The group is hidden until you tick **Include tracked actions**, and "Select all" never ticks them.
+  - Ticking an action always ticks its updates and emails too. They are deleted first, then the action, so none are ever left behind.
+  - An update or email can't be ticked on its own unless its action is already gone.
+  - **Deleting a review never deletes its actions** (they are separate records).
 
 **Never touched.** These lists aren't in the tool at all, and its one delete function refuses anything outside the list above.
 
 - **Technicians**: people, accounts, Active, next appraisal date, next wellbeing date, period start, appraisal history
 - **1-to-1 Settings**: bands, reminders, labels
 - List and item permissions, the 1-to-1 Technicians group, site settings, flows
+- The technicians' update folders (`u<number>`) in 1-to-1 Action Updates – never listed, and the delete function refuses them
 
 ## The two files
 
@@ -30,7 +35,7 @@ Use this **once**, before go-live, to clear 1-to-1 records that were created whi
 ## Steps
 
 1. **Approval.** Get written approval to delete test data in the live site. Note the date.
-2. **Back up the lists.** Export each list to Excel: open it, then **Export → Export to CSV**. Do this for Monthly Reviews, Manager Reviews, Wellbeing Assessments, 1-to-1 Feedback, 1-to-1 Amendments and Appraisal Expectations. Keep the files somewhere private, because they hold personal data. The tool makes its own JSON backup as well.
+2. **Back up the lists.** Export each list to Excel: open it, then **Export → Export to CSV**. Do this for Monthly Reviews, Manager Reviews, Wellbeing Assessments, 1-to-1 Feedback, 1-to-1 Amendments, Appraisal Expectations, and 1-to-1 Actions, 1-to-1 Action Updates and 1-to-1 Action Notices. Keep the files somewhere private, because they hold personal data. The tool makes its own JSON backup as well.
 3. **Turn Flow 1 off.** In **Power Automate → Solutions → ESG 1-to-1**, turn off **1 Daily scheduler**, so it can't create or remind about anything while you work.
 4. **Make a temporary page.**
    1. Upload the two files to **Welcome Web Part – Custom Layouts**.
@@ -41,6 +46,7 @@ Use this **once**, before go-live, to clear 1-to-1 records that were created whi
 5. **Inventory and choose.** The tool reads every list and shows each record with its person, month and status. Use **Filter by person** and **Filter by month**, tick the records to remove, or use **Select all shown (except expectations)**.
    - A monthly review and its manager review are always ticked (and unticked) together. Half a pair left behind would stay visible, and Flow 1 would create that month again and re-send the link.
    - Months are UK months.
+   - **Tracked actions:** only with the separate approval, tick **Include tracked actions**. The tracker group appears; tick each action to remove (its updates and emails are ticked with it). Leave it unticked otherwise. The confirmation phrase in step 8 then names the tracker records, for example `DELETE 12 RECORDS INCLUDING 3 TRACKER RECORDS`.
 6. **Back up.** Click **Download backup**. It saves a JSON file with every column of every ticked record. If you change the selection afterwards, you must download a new backup before going on.
 7. **Dry run.** Click **Run the dry run**. It lists exactly what would be deleted, per list and per record, and changes nothing. Check the list.
 8. **Confirm.**

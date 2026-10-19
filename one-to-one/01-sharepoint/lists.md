@@ -10,7 +10,7 @@ Build these **eight lists** on the private 1-to-1 site. The frontend (`one-to-on
 
 ## Rules for every list
 
-- **Create with the internal name, then rename.** Create the list as `MonthlyReviews` (no space), then rename it to `Monthly Reviews` in List settings. The frontend and flows use the **display names**: `Technicians`, `Appraisal Expectations`, `Monthly Reviews`, `Manager Reviews`, `Wellbeing Assessments`, `1-to-1 Settings`, `1-to-1 Feedback`, `1-to-1 Amendments`.
+- **Create with the internal name, then rename.** Create the list as `MonthlyReviews` (no space), then rename it to `Monthly Reviews` in List settings. The frontend and flows use the **display names**: `Technicians`, `Appraisal Expectations`, `Monthly Reviews`, `Manager Reviews`, `Wellbeing Assessments`, `1-to-1 Settings`, `1-to-1 Feedback`, `1-to-1 Amendments`, and from 1.5 `1-to-1 Actions`, `1-to-1 Action Updates`, `1-to-1 Action Notices`.
 - **Columns:** type the name exactly as shown (that becomes the permanent internal name). Leave every column **not required**, apart from Title.
 - **Choice columns:** one choice per line, exactly as written (including dashes). Turn **Can add values manually** off. Where the default is *(none)*, delete the default value.
 - **Multiple lines of text:** **plain text** (turn **Use enhanced rich text** off) and turn **Append changes to existing text** off.
@@ -144,6 +144,8 @@ Create as `ManagerReviews`, rename to **Manager Reviews**.
 | ChallengeTechAgreedOn 🆕 v4.5 | **Date and time** | — | Flow 7 | The technician's agreement, copied from their challenge |
 | ChallengeClosedOn 🆕 v4.5 | **Date and time** | — | Flow 7, Flow 1 | |
 
+> **1.5:** one more column, **`ActionsSyncedOn`** (Date and time, written by flows 3 and 1 only), records when this review's agreed actions were all added to *1-to-1 Actions*. It stays empty for reviews released before the tracker started. From 1.5, `ActionsJson` is the record of what was agreed **at that meeting**; once released, the actions are managed only in *1-to-1 Actions* and the review's copy is never changed by the Actions page.
+>
 > **Not in v4:** `AgreedActions` and `ActionsDueBy` (replaced by `ActionsJson` and `NextActionDue`). Don't create them.
 >
 > **1.4:** the `Challenge*` columns are no longer read or written (challenges were removed). They are kept so no data is lost; Setup 1.4 sets any `ChallengeState = Open` to *Not agreed*.
@@ -237,6 +239,73 @@ Created by the setup flow (solution 1.4) at `Lists/OneToOneAmendments`, display 
 - [ ] Permissions: **Owners – Full Control only.** The technicians group has no access; technicians never see the reason or the before/after values (they get E16 with a link, and see the current version of their review).
 - [ ] Versioning on (100). The page never edits an item's reason or changes; only `NotifyStatus` moves on. **Honest limit:** site owners and site collection admins can always edit a list they own, so the audit is tamper-*evident* (full version history), not tamper-proof. The E16 email to the technician is an independent record.
 
+## 10. 1-to-1 Actions 🆕 1.5 (Owners only; flow 9 shares each item with its technician, Read)
+
+The live record of every tracked action. Flow 3 adds a released review's agreed actions (flow 1 finishes any it couldn't); the Team Leader can also add actions on the Actions page. Only the Team Leader's page and flows 9 and 10 write it, always with the item's etag.
+
+| Column | Type | Notes |
+|---|---|---|
+| Title | (built-in) | The action as agreed (up to 250 characters) |
+| ActionKey | Single line of text | **Indexed, unique.** `mr<Manager Review id>-<action id>` from a review, `tl-…` when added on the Actions page. A retry can never add an action twice. |
+| Technician | Person | Whose action it is (flow 9 shares the item with exactly this person) |
+| Owner | Choice: Technician / Team Leader | Who carries it out. Only the technician's own actions can be put forward for close-out by them. |
+| Criteria | Multiple lines (plain) | Close-out criteria |
+| OriginReviewId, OriginMgrId | Number | The review it was agreed in (OriginReviewId indexed). Empty for actions added on the Actions page. |
+| OriginMonth | Single line of text | yyyy-MM |
+| OriginalDue | Date only | The deadline as first agreed – never changed |
+| CurrentDue | Date only | The deadline now (a change needs a reason, kept in the history) |
+| Status | Choice: Open / In progress / Waiting / Ready for close-out / Closed (default Open) | **Indexed.** *Waiting* explains a delay; it never moves the deadline. Only the Team Leader sets *Closed* or reopens. |
+| WaitingReason | Multiple lines (plain) | What it is waiting on (required for Waiting) |
+| WaitingUntil | Single line of text | yyyy-MM-dd, optional next check |
+| LatestProgress | Multiple lines (plain) | The latest progress note |
+| LastUpdateOn / LastUpdateBy | Date and time / Single line of text | |
+| ClosedOn | Date only | |
+| DecisionNote | Multiple lines (plain) | The Team Leader's close-out note, or why a close-out isn't agreed yet, or why it was reopened |
+| HistoryJson | Multiple lines (plain) | Every change, appended, never rewritten: `[{"id":"u42","at":"…","by":"…","kind":"progress","text":"…"}]` |
+| SharedWith | Single line of text | Written by flow 9 once the item is shared (the page shows *not shared yet* until then) |
+
+- [ ] Permissions: **Owners – Full Control** at list level. Each item: unique permissions, Owners Full Control + its technician *1-to-1 Read* (flow 9 checks the exact set every time the item changes, and removes anything else).
+- [ ] Versioning on (100). View *Open actions* (Status ≠ Closed, by CurrentDue).
+- **Honest limit:** site owners can edit any list they own. The history is tamper-*evident* (version history, and every write by the page or a flow appends), not tamper-proof.
+
+## 11. 1-to-1 Action Updates 🆕 1.5 (one folder per technician; only they can add to theirs)
+
+Technicians' progress updates. **Append-only:** each update is a new item; flow 10 checks it, records it on the action and locks it.
+
+| Column | Type | Notes |
+|---|---|---|
+| Title | (built-in) | `Update <client key>` (no content) |
+| ActionId | Number | **Indexed.** The action it is about – checked by flow 10, never trusted |
+| Kind | Choice: progress / waiting / followup / closeRequest | |
+| Outcome | Choice: Satisfactory / Support / Ready | Follow-up outcomes only |
+| Message | Multiple lines (plain) | The update (required for progress and waiting) |
+| WaitingUntil | Single line of text | yyyy-MM-dd |
+| ClientKey | Single line of text | **Indexed, unique.** Made by the page for each update and reused on a retry, so a retry or refresh can't record it twice. A follow-up's key carries its review month (`fu-yyyy-MM-…`). |
+| ProcessState | Choice: Pending / Processing / Applied / Rejected (default Pending) | **Indexed.** Flow 10 |
+| ProcessNote | Single line of text | Why it was rejected |
+
+- [ ] **Folders on** (Advanced settings → *Make "New Folder" command available*: Yes – Setup does it).
+- [ ] Permissions: **Owners – Full Control only** at list level (no group access). Flow 9 creates one folder per technician, named `u<their site user id>`, with unique permissions: Owners Full Control + **that technician 1-to-1 Submit**. Who sent an update is taken from the folder it is in – never from *Created By* or *ActionId*.
+- [ ] After processing, flow 10 gives each update its own permissions: Owners + the sender *1-to-1 Read*. A technician can never delete an update (no Delete in any 1-to-1 level).
+
+## 12. 1-to-1 Action Notices 🆕 1.5 (Owners only)
+
+The outbox for E19 (close-out requested) and E20 (deadline in 5 working days). Flow 11 sends each one.
+
+| Column | Type | Notes |
+|---|---|---|
+| Title / NoticeKey | (built-in) / Single line of text | **NoticeKey indexed, unique:** `E19-u<update id>` or `E20-a<action id>-<yyyy-MM-dd>` – one email per request, one reminder per action and deadline |
+| Kind | Choice: E19 / E20 | |
+| ActionId | Number | **Indexed** |
+| Status | Choice: Pending / Sending / Sent / Failed / Retry / Cancelled (default Pending) | **Indexed.** *Sending* left for over an hour = delivery unknown. *Retry* = Resend from the page or the daily retry (up to 3 attempts). *Cancelled* = no longer needed (the action was closed). |
+| Attempts | Number (default 0) | |
+| LastError | Single line of text | No content, just what failed |
+| SentOn | Date and time | |
+
+- [ ] Permissions: **Owners – Full Control only.**
+
+**Settings item `ActionsTrackerStart`** (in *1-to-1 Settings*): written once by Setup 1.5 with the date and time it ran. Only reviews released after it have their actions tracked, so earlier `ActionsJson` is never imported. Don't edit or delete it.
+
 ## 9. 1-to-1 Challenges – retired in 1.4
 
 The list made by solution 1.3 is **kept, not deleted**: no new challenges can be made and the page no longer reads it. Setup 1.4 removes the `1-to-1 Technicians` group from it, makes every item Owners-only, and closes any open challenge as *Not agreed*. A new site set up with 1.4 never gets this list. You may delete it later yourself, after exporting it, if you no longer need the records.
@@ -250,5 +319,6 @@ The list made by solution 1.3 is **kept, not deleted**: no new challenges can be
 - [ ] **1-to-1 Settings:** Owners – Full Control **and** `1-to-1 Technicians` – Read. Nothing else.
 - [ ] **1-to-1 Feedback:** Owners – Full Control **and** `1-to-1 Technicians` – 1-to-1 Submit, with item-level permissions set to their own items only.
 - [ ] **1-to-1 Amendments** (and the retired **1-to-1 Challenges**): **only Owners – Full Control**.
+- [ ] **1-to-1 Actions, 1-to-1 Action Updates, 1-to-1 Action Notices** (1.5): **only Owners – Full Control** at list level. Items in Actions and folders in Action Updates have their own permissions, set by flow 9 (see sections 10–11).
 - [ ] Versioning on, attachments off, search off, on every list.
 - [ ] Spot-check three internal names: open List settings → click the column → the URL ends `Field=Q9FollowUp` (etc.).

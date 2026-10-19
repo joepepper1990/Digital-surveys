@@ -1,6 +1,8 @@
 # ESG 1-to-1 — Power Automate build sheets (v4)
 
 > **v4.2 / solution 1.1:** Flow 1 now reads the reminder days from the `Reminders` item and emails the TL about wellbeing reviews due; Flows **4 Team members** and **5 Wellbeing** were added. They are in the importable solution and the legacy packages (no by-hand sheet) – see [`../04-solution/IMPORT_GUIDE.md`](../04-solution/IMPORT_GUIDE.md) and `tools/flows.py`. This sheet still describes Flows 1–3 as they were in 1.0, for reference.
+>
+> **Solution 1.5:** flows **9 Action access**, **10 Action update** and **11 Action notice** were added, and flows 1 and 3 gained the action-tracker steps (see [`../CHANGES_5_1.md`](../CHANGES_5_1.md)). These too exist only in the importable solution and the legacy packages – they rely on REST calls with etags and folder permissions that are not practical to build by hand. Don't build them from this sheet.
 
 > **Import instead of building.** These flows (plus a setup flow that creates the lists) are packaged as a ready-made solution: [`../04-solution/IMPORT_GUIDE.md`](../04-solution/IMPORT_GUIDE.md). The imported flows follow these sheets step for step, with two differences:
 > - **IDs are looked up at run time.** The Owners group, Full Control, `1-to-1 Edit`, `1-to-1 Read` and the two list GUIDs are found by name in a `Get_owners_group` / `Get_role_definitions` / `Get_lists` → `Ids` step, so the `var…Id` variables below aren't needed.

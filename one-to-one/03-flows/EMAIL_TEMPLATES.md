@@ -145,3 +145,16 @@ E4 and E5 are written in the first person (they come from your mailbox), so they
 E14 and E15 (challenges, Flow 7) are **no longer sent**: Flow 7 is not in solution 1.4 and is turned off and deleted during the upgrade (`MIGRATION_1_4.md`).
 
 The exact HTML is in [`../04-solution/tools/flows.py`](../04-solution/tools/flows.py) (`flow_team`, `flow_wellbeing`, `flow_daily`, `flow_amendment`).
+
+## Solution 1.5 – action tracker emails
+
+Both are sent by flow **11 Action notice** from the line manager's mailbox. Each is one item in the Owners-only *1-to-1 Action Notices* list, with a unique key, so a retry or a second run never creates a second email. The notice records **Pending → Sending → Sent** or **Failed** (with the attempt count and the error). A run that stops mid-send leaves it at *Sending*; the page shows that as **delivery unknown**, never as sent. Email can't promise exactly-once delivery: the design sends at most once per claim, and a Resend from the page may arrive twice if the first one did get through.
+
+| # | Flow → to | Subject | Body (summary) |
+|---|---|---|---|
+| E19 | 11 Action notice → you | `Close-out requested: <name>` | <name> has asked you to close out this action: **<action>**. Link **Review it on the Actions page** (`?actionId=<id>`): accept, or say why it is not finished yet. Sent once per request (key `E19-u<update id>`); not sent if the action is no longer *Ready for close-out*. |
+| E20 | 11 Action notice → the person, copy to you | `Action due in 5 working days` | This action is due on **DD-MMM-YYYY** (in 5 working days): **<action>**. Owner: <name> or Team Leader. If it is on track, nothing else is needed; if not, add an update or agree a new date. Link **Open the action** (`?actionId=<id>`). |
+
+**When E20 is sent.** Flow 1 creates the notice once the UK date reaches 5 working days before the action's current deadline (deadline on a weekday: 7 days before; Saturday: 5; Sunday: 6; bank holidays aren't counted). If Flow 1 missed that day it catches up on the next run, up to the deadline itself. There is one reminder per action and deadline (key `E20-a<action id>-<yyyy-mm-dd>`): moving the deadline gives exactly one new reminder for the new date. Nothing is sent for closed actions, and there are **no overdue emails** – overdue actions show in *Needs your attention* instead.
+
+Action text, names and dates are HTML-escaped. The emails never contain progress notes, waiting reasons or the history.
