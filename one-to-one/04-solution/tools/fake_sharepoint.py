@@ -331,7 +331,8 @@ class FakeSP:
         if not uri.startswith('_api/'):
             fail(400, 'uri must start with _api/: ' + uri)
         path, _, qs = uri.partition('?')
-        if any(x in uri for x in self.fail_uris):   # test hook: make a REST call fail with a server error
+        # test hook: make a REST call fail with a server error ('POST <path>' = only a POST to exactly that path)
+        if any((method == 'POST' and path == x[5:]) if x.startswith('POST ') else x in uri for x in self.fail_uris):
             fail(500, 'simulated server error')
         verbose = 'odata=verbose' in headers.get('Content-Type', '')
         data = None

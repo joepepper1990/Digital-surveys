@@ -111,3 +111,34 @@ Previous versions: page 5.0.0 and solution 1.4.0.0. To install, see `MIGRATION_1
 - **The page writes actions only with REST MERGE and the etag it read** (never `*`), and only to 1-to-1 Actions. Every action date is read back after saving.
 - **Reset tool 1.1.0:** a separate *Action tracker* group, shown only after its own tick box (separate approval). Selecting an action always takes its updates and emails with it; they are deleted first, so nothing is left behind. Deleting reviews never deletes actions. Folders are never deleted.
 - **Standard connectors only** (SharePoint, Outlook, Office 365 Users). No premium or HTTP connector.
+
+## 1.5.0.1 – Flow 1 nesting repair (19-Oct-2026)
+
+**Why.** Power Automate refused to turn on *1 Daily scheduler* from 1.5.0.0 (`TemplateValidationError`: actions nested at level 9, maximum 8). The action-tracker steps went as deep as level 11.
+
+**What changed.** Flow 1's structure only; behaviour, flow IDs, connectors, environment variables, triggers, lists and the page are unchanged. Full details and upgrade steps: `04-solution/REPAIR_1_5_0_1.md`.
+
+- The always-true *Action tracker* wrapper is gone. Its try and catch sit directly in the main *Try*, with the same order (after *Reconcile_submissions*) and the same E7 reporting.
+- A one-step wrapper around each review's sync is gone. A review that can't be added is still reported by name.
+- Two "condition → stop" pairs are now one step each, failing with the same message (also in Flow 3).
+- **New build guard:** any flow nested deeper than 8 levels (including else branches and Switch cases), or with more than 500 actions, fails the build. It is checked on the generated flows, on the packed zip and on the legacy packages.
+- **New package check** (`tools/check_package.py`):
+  - the zip is exactly the validated source;
+  - same flow IDs, connection references, environment variables and triggers as 1.5.0.0;
+  - the 1.5.0.0 zip is never overwritten.
+
+**Maximum nesting level after the fix:**
+
+| Flow | Level |
+|---|---|
+| 0 Setup | 4 |
+| 1 Daily | 8 (was 11) |
+| 2 | 2 |
+| 3 | 6 (was 7) |
+| 4 | 3 |
+| 5 | 4 |
+| 6 | 2 |
+| 8 | 2 |
+| 9 | 3 |
+| 10 | 5 |
+| 11 | 3 |

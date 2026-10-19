@@ -1,7 +1,9 @@
-# Upgrade to solution 1.5.0.0 and page 5.1.0 – deployment order
+# Upgrade to solution 1.5.0.1 and page 5.1.0 – deployment order
 
 From: solution **1.4.0.0** and page **5.0.0**.
-To: solution **1.5.0.0** (`04-solution/ESGOneToOne_1_5_0_0_unmanaged.zip`) and page **5.1.0** (`02-frontend/one-to-one.html` + `one-to-one.js`).
+To: solution **1.5.0.1** (`04-solution/ESGOneToOne_1_5_0_1_unmanaged.zip`) and page **5.1.0** (`02-frontend/one-to-one.html` + `one-to-one.js`).
+
+> **1.5.0.1 replaces 1.5.0.0**, whose *1 Daily scheduler* can't be turned on (nested deeper than Power Automate's 8 levels). Already imported 1.5.0.0? Follow `04-solution/REPAIR_1_5_0_1.md` instead of this whole list. Don't import 1.5.0.0.
 
 **Nothing in this repository has been run against the live tenant.** Do each step only with approval. Every step can be repeated safely. Nothing in this upgrade deletes or rewrites existing data.
 
@@ -35,7 +37,7 @@ The action tracker **starts empty**. There is no import tool and no import step.
    - Export Manager Reviews and 1-to-1 Settings to CSV (open the list → **Export → Export to CSV**).
    - Keep `ESGOneToOne_1_4_0_0_unmanaged.zip` and the current page files (download `one-to-one.html` / `one-to-one.js` from the Custom Layouts library) so you can go back.
 2. **Turn off Flow 1.** Power Automate → **Solutions → ESG 1-to-1** → *1 Daily scheduler* → **Turn off**.
-3. **Import** `ESGOneToOne_1_5_0_0_unmanaged.zip` as an upgrade, exactly as in `04-solution/IMPORT_GUIDE.md`:
+3. **Import** `ESGOneToOne_1_5_0_1_unmanaged.zip` as an upgrade, exactly as in `04-solution/IMPORT_GUIDE.md`:
    - keep the same connections and environment variables;
    - leave "Enable plugin steps and flows" unticked;
    - flows 9, 10 and 11 arrive **Off**.
@@ -75,7 +77,7 @@ These can't be proven in the local tests (see `TEST_REPORT_1_5.md` for what was)
 
 | # | Check | How |
 |---|---|---|
-| T1 | Flows 1, 3 and 9–11 activate after import (no `WorkflowOperationParametersExtraParameter`, no `secureData` errors) | Turn each on. Every call to the new lists is a REST request and every write to a late column is a REST MERGE; the validator rejects connector steps on them and `secureData` on variables. |
+| T1 | Flows 1, 3 and 9–11 activate after import (no `TemplateValidationError` about nesting, no `WorkflowOperationParametersExtraParameter`, no `secureData` errors) | Turn each on. Every call to the new lists is a REST request and every write to a late column is a REST MERGE; the validator rejects connector steps on them and `secureData` on variables. |
 | T2 | Setup 1.5 email says *complete*; the three lists exist with the unique keys | List settings → each key column → *Enforce unique values: Yes* (ActionKey, ClientKey, NoticeKey). Action Updates → Advanced settings → folders: Yes. |
 | T3 | `ActionsTrackerStart` is written once | Run Setup again: the item's value doesn't change. |
 | T4 | Flow 3 adds a released review's actions once each | Release a test review with two actions: two items in 1-to-1 Actions (`mr<id>-<action id>`), `ActionsSyncedOn` set on the review. Release again or run flow 1: still two. |

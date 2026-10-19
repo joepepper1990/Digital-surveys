@@ -7,7 +7,7 @@ You don't build the flows or the lists by hand any more:
 
 | File | What it is |
 |---|---|
-| [`ESGOneToOne_1_5_0_0_unmanaged.zip`](ESGOneToOne_1_5_0_0_unmanaged.zip) | **The solution (1.5.0.0).** Eleven flows, three connection references, two environment variables. Goes with page **5.1.0**. (Earlier zips are kept only for going back.) |
+| [`ESGOneToOne_1_5_0_1_unmanaged.zip`](ESGOneToOne_1_5_0_1_unmanaged.zip) | **The solution (1.5.0.1).** Eleven flows, three connection references, two environment variables. Goes with page **5.1.0**. (Earlier zips are kept only for going back.) |
 | [`legacy-package-builder.html`](legacy-package-builder.html) | **Fallback only**, if your environment can't import solutions (§6). |
 
 The eleven flows:
@@ -32,9 +32,11 @@ Flows 1–6 and 8–11 are imported **off**, because the lists don't exist until
 
 ---
 
-## 0. Already imported an earlier version? Upgrade to 1.5.0.0 (about 30 min)
+## 0. Already imported an earlier version? Upgrade to 1.5.0.1 (about 30 min)
 
-**From 1.4.0.0:** follow [`../MIGRATION_1_5.md`](../MIGRATION_1_5.md) – back up, turn off Flow 1, import `ESGOneToOne_1_5_0_0_unmanaged.zip`, run 0 Setup, turn on flows 2, 3, 4, 5, 6, 8, 9, 10 and 11, upload page 5.1.0, turn on Flow 1, then run its checks T1–T16. The action tracker starts empty: nothing is imported.
+**From 1.5.0.0** (*1 Daily scheduler* wouldn't turn on): see [`REPAIR_1_5_0_1.md`](REPAIR_1_5_0_1.md) – import 1.5.0.1 over it and turn Flow 1 on.
+
+**From 1.4.0.0:** follow [`../MIGRATION_1_5.md`](../MIGRATION_1_5.md) – back up, turn off Flow 1, import `ESGOneToOne_1_5_0_1_unmanaged.zip`, run 0 Setup, turn on flows 2, 3, 4, 5, 6, 8, 9, 10 and 11, upload page 5.1.0, turn on Flow 1, then run its checks T1–T16. The action tracker starts empty: nothing is imported.
 
 **From 1.3.x:** the steps below (written for 1.4) still apply with the 1.5 zip and page 5.1.0; in step 5 also turn on **9, 10 and 11**. Then do the 1.5 checks.
 
@@ -42,7 +44,7 @@ Do this instead of §1–§3 if **ESG 1-to-1** is already in your environment. T
 
 1. **Back up.** Export each list to CSV (**Export → Export to CSV**): Technicians, Appraisal Expectations, Monthly Reviews, Manager Reviews, Wellbeing Assessments, 1-to-1 Feedback, 1-to-1 Challenges. Keep the previous solution zip and the current `one-to-one.html` / `one-to-one.js` so you can go back.
 2. **Turn off Flows 7 and 1.** **Solutions → ESG 1-to-1** → *7 Challenge* (only there if you had 1.3) → **Turn off**; *1 Daily scheduler* → **Turn off**.
-3. **Solutions → Import solution → Browse** → `ESGOneToOne_1_5_0_0_unmanaged.zip` → **Next**.
+3. **Solutions → Import solution → Browse** → `ESGOneToOne_1_5_0_1_unmanaged.zip` → **Next**.
    - It says it will **upgrade** the existing solution. Keep the defaults and leave *"Enable Plugin steps and flows included in the solution"* **unticked**.
    - Connections and environment variables keep their current values; just click **Next / Import**.
    - The new **8 Amendment notice** flow arrives **Off**.
@@ -77,7 +79,7 @@ Check: Site contents → **1-to-1 Amendments** → Permissions: **Owners – Ful
 
 ## 2. Import the solution (10 min)
 
-1. **Solutions → Import solution → Browse** → choose `ESGOneToOne_1_5_0_0_unmanaged.zip` → **Next** → **Next**.
+1. **Solutions → Import solution → Browse** → choose `ESGOneToOne_1_5_0_1_unmanaged.zip` → **Next** → **Next**.
 2. **Connections.** For each of the three connection references, pick an existing connection or click **+ New connection**, signed in as **you**:
 
    | Connection reference | Connector |

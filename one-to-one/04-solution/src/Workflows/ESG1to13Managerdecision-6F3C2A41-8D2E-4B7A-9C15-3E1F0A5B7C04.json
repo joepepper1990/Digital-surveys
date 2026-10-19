@@ -1185,18 +1185,8 @@
                                   }
                                 },
                                 "R_Still_missing": {
-                                  "type": "If",
-                                  "expression": "@empty(body('R_Recheck')?['value'])",
-                                  "actions": {
-                                    "R_STOP_could_not_add": {
-                                      "type": "Compose",
-                                      "inputs": "@int('An agreed action could not be added to the tracker.')",
-                                      "runAfter": {}
-                                    }
-                                  },
-                                  "else": {
-                                    "actions": {}
-                                  },
+                                  "type": "Compose",
+                                  "inputs": "@int(if(empty(body('R_Recheck')?['value']), 'An agreed action could not be added to the tracker.', '0'))",
                                   "runAfter": {
                                     "R_Recheck": [
                                       "Succeeded"

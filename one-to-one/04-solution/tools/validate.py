@@ -407,6 +407,48 @@ def check_platform(f):
     return probs
 
 
+MAX_NESTING = 8      # Power Automate: an action may be nested at most 8 levels deep (top-level actions are level 0)
+MAX_ACTIONS = 500    # Power Automate: actions per workflow
+
+
+def nesting_levels(definition):
+    """Every action with its nesting level as Power Automate counts it (top level 0; each Scope / Foreach / Until body,
+    If branch – then or else – and Switch case or default adds one), and the path to it."""
+    out = []
+
+    def walk(actions, level, path):
+        for name, a in (actions or {}).items():
+            out.append((level, name, path))
+            t = a.get('type')
+            if t in ('Scope', 'Foreach', 'Until'):
+                walk(a.get('actions'), level + 1, path + [name])
+            elif t == 'If':
+                walk(a.get('actions'), level + 1, path + [name])
+                walk((a.get('else') or {}).get('actions'), level + 1, path + [name + ' (else)'])
+            elif t == 'Switch':
+                for case, body in (a.get('cases') or {}).items():
+                    walk(body.get('actions'), level + 1, path + [name + ' / ' + case])
+                walk((a.get('default') or {}).get('actions'), level + 1, path + [name + ' (default)'])
+    walk(definition.get('actions'), 0, [])
+    return out
+
+
+def check_nesting(name, definition, limit=MAX_NESTING):
+    """Power Automate refuses to save or turn on a flow with an action nested deeper than 8 levels
+    (TemplateValidationError), or with more than 500 actions."""
+    probs, levels = [], nesting_levels(definition)
+    for level, action, path in levels:
+        if level > limit:
+            probs.append('[{0}] {1} is nested at level {2} (Power Automate allows {3}): {4}'.format(name, action, level, limit, ' > '.join(path)))
+    if len(levels) > MAX_ACTIONS:
+        probs.append('[{0}] {1} actions – Power Automate allows {2} per flow'.format(name, len(levels), MAX_ACTIONS))
+    return probs
+
+
+def max_nesting(definition):
+    return max((lv for lv, _, _ in nesting_levels(definition)), default=0)
+
+
 def validate_all(flows):
     probs = check_schema()
     for f in flows:
@@ -414,6 +456,7 @@ def validate_all(flows):
         probs += check_secure(f)
         probs += check_upgrade_safe(f)
         probs += check_platform(f)
+        probs += check_nesting(f['name'], f['json']['properties']['definition'])
         refs = f['json']['properties']['connectionReferences']
         used = set(re.findall(r'"connectionName": "([^"]+)"', json.dumps(f['json'])))
         if used - set(refs):

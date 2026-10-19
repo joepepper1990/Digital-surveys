@@ -1,6 +1,6 @@
 # ESG 1-to-1 — verification record (19-Oct-2026)
 
-**Scope:** frontend **v5.1.0**, solution **1.5.0.0**, the importable solution (setup flow + Flows 1–6 and 8–11), the one-time reset tool (1.1.0), the legacy-package builder, the eleven-list schema and all documents. Earlier rounds (§3–§3d) are kept as the record for 4.x / 1.3 / 1.4; the 1.5 checks are in §3e and `TEST_REPORT_1_5.md`.
+**Scope:** frontend **v5.1.0**, solution **1.5.0.1** (1.5.0.0 with Flow 1 restructured to Power Automate's 8 nesting levels – `04-solution/REPAIR_1_5_0_1.md`), the importable solution (setup flow + Flows 1–6 and 8–11), the one-time reset tool (1.1.0), the legacy-package builder, the eleven-list schema and all documents. Earlier rounds (§3–§3d) are kept as the record for 4.x / 1.3 / 1.4; the 1.5 checks are in §3e and `TEST_REPORT_1_5.md`.
 
 **What this record can and can't prove.** Everything here ran outside your tenant. It proves the files are well-formed, internally consistent and behave as specified against a strict model of SharePoint that follows Microsoft's documentation. Only the tenant can prove the import and real permissions (§5).
 
@@ -12,10 +12,11 @@
 | Action tracker (1.5) | `02-frontend`: `node test/run-action-tests.js` | **108 / 108** |
 | Reset tool | `02-frontend`: `node test/run-reset-tests.js` | **45 / 45** |
 | Solution build | `04-solution/tools/build.py`: generate `src/`, validate, pack with Microsoft's Power Platform CLI, unpack again and compare | Packs; round trip identical |
-| Static validator | Expressions, references, scopes, run-after chains, required connector parameters, list/column names, JSON request bodies, field XML / view CAML, schedule time zone, secured run history, no hidden failures; 1.4: REST MERGE (not connector writes) for columns added after their list was created, no `secureData` on variables | 11 flows clean (0–6, 8–11) |
-| Validator proof | `tools/test_validate.py`: deliberately broken copies of the flows | **38 / 38** caught |
-| End-to-end simulation | `tools/simulate.py`: the real flow JSON executed against an in-memory SharePoint | **294 / 294** (solution) and **294 / 294** (legacy form) |
+| Static validator | Expressions, references, scopes, run-after chains, required connector parameters, list/column names, JSON request bodies, field XML / view CAML, schedule time zone, secured run history, no hidden failures; 1.4: REST MERGE (not connector writes) for columns added after their list was created, no `secureData` on variables | 11 flows clean (0–6, 8–11); every action within Power Automate's 8 nesting levels (deepest: Flow 1 at 8) |
+| Validator proof | `tools/test_validate.py`: deliberately broken copies of the flows (including nesting deeper than 8 levels and over 500 actions) | **42 / 42** caught |
+| End-to-end simulation | `tools/simulate.py`: the real flow JSON executed against an in-memory SharePoint | **298 / 298** (solution) and **298 / 298** (legacy form) |
 | Simulation proof | New scenarios run against the previously committed flows / frontend | 18 flow checks and 2 frontend checks fail on the old code, so the tests detect the bugs fixed in §3. Second review (§3a): 7 new flow checks fail on the 1.1.1.0 flows, and the new frontend checks fail on 4.2.1 (privacy ×3, robustness – the run then stops because the old profile page crashes) |
+| Package check | `tools/check_package.py`: the packed zip against the validated source and the previous package | Identical flows; within 8 levels / 500 actions; same IDs, connections, variables, triggers; 1.5.0.0 zip unchanged |
 | Legacy builder | `tools/test_builder.js` + `check_builder_zips.py` | Rejects bad input; no network requests; zips are standard and exactly as expected |
 | Microsoft schema | Flow definitions checked against Microsoft's published workflow-definition JSON schema | No error class that real exported Microsoft (PnP) flows don't also produce |
 | Determinism | Rebuild twice; compare `src/`, the builder page and the zip's flow JSON | Identical |

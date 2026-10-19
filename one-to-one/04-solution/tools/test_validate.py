@@ -278,6 +278,39 @@ def verdict_shows_progress_text(fl):
     a.pop('runtimeConfiguration', None)
 
 
+# ---- Power Automate limits: nesting deeper than 8 levels, more than 500 actions (TemplateValidationError on save / turn on)
+NESTING = ('nested_one_level_too_deep', 'nested_too_deep_in_else_branch', 'nested_too_deep_in_switch_case', 'more_than_500_actions')
+
+
+@mutation
+def nested_one_level_too_deep(fl):
+    # S_Create is at level 8 (the limit); wrapping it in one more scope puts it at 9 – the 1.5.0.0 activation failure
+    c, a = find(fl[1]['json']['properties']['definition'], 'S_Create')
+    inner = dict(a, runAfter={})
+    c['S_Create'] = {'type': 'Scope', 'actions': {'S_Create_deeper': inner}, 'runAfter': a.get('runAfter', {})}
+
+
+@mutation
+def nested_too_deep_in_else_branch(fl):
+    _, a = find(fl[1]['json']['properties']['definition'], 'S_Not_yet')
+    a['else'] = {'actions': {'Else_scope': {'type': 'Scope', 'runAfter': {}, 'actions': {
+        'Else_deep': {'type': 'Compose', 'inputs': 'x', 'runAfter': {}}}}}}
+
+
+@mutation
+def nested_too_deep_in_switch_case(fl):
+    _, a = find(fl[1]['json']['properties']['definition'], 'S_Not_yet')
+    a['actions']['Deep_switch'] = {'type': 'Switch', 'expression': "@'a'", 'runAfter': {}, 'cases': {
+        'Case_a': {'case': 'a', 'actions': {'Case_deep': {'type': 'Compose', 'inputs': 'x', 'runAfter': {}}}}}}
+
+
+@mutation
+def more_than_500_actions(fl):
+    acts = fl[2]['json']['properties']['definition']['actions']
+    for i in range(500):
+        acts['Filler_{0}'.format(i)] = {'type': 'Compose', 'inputs': 'x', 'runAfter': {}}
+
+
 if __name__ == '__main__':
     base = build_all()
     assert validate.validate_all(base) == [], 'baseline must be clean'
@@ -287,6 +320,8 @@ if __name__ == '__main__':
         m(fl)
         probs = validate.validate_all(fl)
         ok = bool(probs) and (m.__name__ not in ('new_list_by_connector', 'new_list_by_url') or any('read it by REST' in p for p in probs))
+        if m.__name__ in NESTING:   # caught by the limit rule itself, not by something incidental
+            ok = any('nested at level 9' in p or 'actions – Power Automate allows 500' in p for p in probs)
         failed += not ok
         print(('PASS ' if ok else 'FAIL ') + m.__name__ + ('  → ' + probs[0] if probs else ''))
     print('\n{0} / {1} mutations caught'.format(len(MUTATIONS) - failed, len(MUTATIONS)))

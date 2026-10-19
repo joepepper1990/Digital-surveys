@@ -23,10 +23,12 @@ If the site is still on **4.5.0** (5.0.0 was never installed), this also brings 
 
 **Only do this once you have approval to change the live site.**
 
+**Already imported the earlier 1.5.0.0 file, and "1 Daily scheduler" wouldn't turn on?** Don't start again: just import **ESGOneToOne_1_5_0_1_unmanaged.zip** the same way (Part 3), then turn on **1 Daily scheduler** (see `04-solution/REPAIR_1_5_0_1.md`). Nothing else changes.
+
 ## Before you start
 
 - [ ] Have the **3 files** ready, saved somewhere you can find them (for example your Downloads folder):
-  - **ESGOneToOne_1_5_0_0_unmanaged.zip** – the "behind the scenes" part
+  - **ESGOneToOne_1_5_0_1_unmanaged.zip** – the "behind the scenes" part
   - **one-to-one.html** – the page design
   - **one-to-one.js** – the page itself
 - [ ] Use a **laptop or desktop computer** (not a phone), with **Edge or Chrome**.
@@ -62,7 +64,7 @@ If the site is still on **4.5.0** (5.0.0 was never installed), this also brings 
 
 1. Go back to the **Solutions** list (click **Solutions** on the left).
 2. At the top, click **Import solution**.
-3. Click **Browse**, find **ESGOneToOne_1_5_0_0_unmanaged.zip** and double-click it.
+3. Click **Browse**, find **ESGOneToOne_1_5_0_1_unmanaged.zip** and double-click it.
 4. Click **Next**.
 5. You'll see a screen that mentions **upgrade**. That's what we want.
    - **Don't change anything** on this screen.

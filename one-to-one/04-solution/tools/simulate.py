@@ -1253,6 +1253,46 @@ def v15_checks():
     ok('Flow 3 / 1 (review fix): an older entry without ownerRole keeps its owner – the Team Leader\'s stays the Team Leader\'s',
        owners == {'legacy TL one': 'Team Leader', 'legacy own one': 'Technician'}, owners)
 
+    # 1.5.0.1 (nesting fix): a reminder that can't be queued still fails that part only, is reported in E7, and the review
+    # sync and the retries still run in the same daily run
+    set_due(a1, '2027-10-13')   # Wednesday → reminded from 6 October
+    stuck2 = sp.add_in_folder(upd, 'u11', {'item/Title': 'u', 'item/ClientKey': 'stuck2', 'item/ActionId': a1['id'], 'item/Kind/Value': 'progress',
+                                           'item/Message': 'stuck again', 'item/ProcessState/Value': 'Processing'})
+    stuck2['fields']['Modified'] = '2027-10-06T04:00:00Z'
+    sync_me = sp.write_item(mgr, None, {'item/Title': 'Alex – 2027-09', 'item/ReviewKey': 'test-sync-1501', 'item/MonthKey': '2027-09',
+                                        'item/Technician/Claims': sp.users[11]['Claims'], 'item/ReviewState/Value': 'Completed', 'item/ReleasedOn': '2027-10-01T10:00:00Z',
+                                        'item/ActionsJson': '[{"id":"N1","text":"added on the bad reminder day","owner":"Alex Morgan","ownerRole":"tech","criteria":"x","due":"2027-12-01","status":"Open"}]'})
+    sp.fail_uris = ["POST _api/web/lists(guid'" + notc['Id'] + "')/items"]
+    m = len(sp.emails)
+    st, eng = daily('2027-10-06')
+    sp.fail_uris = []
+    probs = [e for e in sp.emails[m:] if e['subject'] == '1-to-1 system: action needed']
+    ok('Flow 1 (1.5.0.1): a deadline reminder that can\'t be queued is reported in E7, while the review sync and the retries still run',
+       st == 'Succeeded' and not any(i['fields']['NoticeKey'].endswith('2027-10-13') for i in e20_for(a1)) and len(probs) == 1 and
+       'deadline reminders could not be queued' in probs[0]['body'] and bool(sync_me['fields'].get('ActionsSyncedOn')) and
+       any(i['fields'].get('Title') == 'added on the bad reminder day' for i in act['items'].values()) and stuck2['fields']['ProcessState'] == 'Pending',
+       (st, [e['body'][:300] for e in probs], stuck2['fields']['ProcessState']))
+    daily('2027-10-07')
+    ok('Flow 1 (1.5.0.1): … and the reminder is queued once on the next run (catch-up)', len([i for i in e20_for(a1) if i['fields']['NoticeKey'].endswith('2027-10-13')]) == 1)
+
+    # 1.5.0.1: an action that can't be created (and isn't there on the re-check) still stops that review – reported by name,
+    # left unsynced – and is added on the next run
+    lost = sp.write_item(mgr, None, {'item/Title': 'Alex – 2027-10', 'item/ReviewKey': 'test-lost-1501', 'item/MonthKey': '2027-10',
+                                     'item/Technician/Claims': sp.users[11]['Claims'], 'item/ReviewState/Value': 'Completed', 'item/ReleasedOn': '2027-10-08T10:00:00Z',
+                                     'item/ActionsJson': '[{"id":"Z1","text":"create refused once","owner":"Alex Morgan","ownerRole":"tech","criteria":"x","due":"2027-12-01","status":"Open"}]'})
+    sp.fail_uris = ["POST _api/web/lists(guid'" + act['Id'] + "')/items"]
+    m = len(sp.emails)
+    st, eng = daily('2027-10-09')
+    sp.fail_uris = []
+    probs = [e for e in sp.emails[m:] if e['subject'] == '1-to-1 system: action needed']
+    ok('Flow 1 (1.5.0.1): an action that can\'t be added (not there on the re-check) fails that review only – reported by name, not marked synced',
+       st == 'Succeeded' and not lost['fields'].get('ActionsSyncedOn') and len(probs) == 1 and 'Alex – 2027-10' in probs[0]['body'] and
+       eng.results.get('S_Still_missing', {}).get('status') == 'Failed' and 'could not be added to the tracker' in json.dumps(eng.results['S_Still_missing'].get('outputs')),
+       (st, eng.results.get('S_Still_missing'), [e['body'][:200] for e in probs]))
+    daily('2027-10-10')
+    ok('Flow 1 (1.5.0.1): … and the next run adds it once and marks the review synced', bool(lost['fields'].get('ActionsSyncedOn')) and
+       len([i for i in act['items'].values() if i['fields'].get('Title') == 'create refused once']) == 1)
+
     # security review: a folder renamed or otherwise changed by its holder is never trusted (it could pose as someone else's)
     sp.me = 11
     sp.write_item(upd, folder['id'], {'item/Title': 'u11'})   # any change by the technician makes them its last editor

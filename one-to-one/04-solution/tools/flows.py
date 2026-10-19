@@ -783,16 +783,16 @@ def flow_daily():
             ('Note_reconcile_failed', append('varProblems', 'Could not check for unprocessed submissions today. Open the run history for details.')),
           )), {'ReconcileTry': FAILED}),
         })),
-        ('Action_tracker', cond("@equals(1, 1)", {
-            'ActionTry': after(scope(action_daily_steps()), {}),
-            'ActionCatch': after(scope(seq(
-                ('Note_actions_failed', append('varProblems', 'Action tracker: adding agreed actions, deadline reminders or retries '
-                                                              'could not all be done today. Open the run history for details.')),
-            )), {'ActionTry': FAILED}),
-        })),
-        ('Any_problems', cond("@greater(length(variables('varProblems')), 0)", seq(
+        # the action tracker's try / catch sit directly in Try (no always-true wrapper: Power Automate allows 8 nesting levels)
+        ('ActionTry', scope(action_daily_steps())),
+        ('ActionCatch', after(scope(seq(
+            ('Note_actions_failed', append('varProblems', 'Action tracker: adding agreed actions, deadline reminders or retries '
+                                                          'could not all be done today. Open the run history for details.')),
+        )), {'ActionTry': FAILED})),
+        # after the tracker either way (it finished, or its failure was noted) – but not when it never ran
+        ('Any_problems', after(cond("@greater(length(variables('varProblems')), 0)", seq(
             ('Send_E7', email('@' + TL_EMAIL, '1-to-1 system: action needed', e7)),
-        ))),
+        )), {'ActionTry': TOLERANT, 'ActionCatch': ['Succeeded', 'Skipped']})),
     )
     actions = seq(
         ('Initialize_varTestDate', dict(init_var('varTestDate', 'string', ''),
@@ -1330,9 +1330,9 @@ def action_create(prefix, mr, released_expr, start_prefix=None):
                                         {P + 'New_item': OK}),
                     # a parallel run may have added it a moment ago (the key is unique): fine if it is there now
                     P + 'Recheck': after(http('GET', find), {P + 'Create': FAILED}),
-                    P + 'Still_missing': after(cond("@empty(body('" + P + "Recheck')?['value'])", seq(
-                        (P + 'STOP_could_not_add', compose("@int('An agreed action could not be added to the tracker.')")),
-                    )), {P + 'Recheck': OK}),
+                    # fails the run with this message only if it really isn't there (one step, not an If – nesting limit)
+                    P + 'Still_missing': after(compose("@int(if(empty(body('" + P + "Recheck')?['value']), "
+                                                       "'An agreed action could not be added to the tracker.', '0'))"), {P + 'Recheck': OK}),
                 })),
             ))),
             (P + 'Stamp_synced', http('POST', "_api/web/lists(guid'@{outputs('Ids')?['mgrList']}')/items(@{" + mid + "})",
@@ -1699,13 +1699,12 @@ def action_daily_steps():
                                   "ticks(if(empty(outputs('D_Tracker_start')), '2100-01-01T00:00:00Z', outputs('D_Tracker_start')))))", secure=True)),
                 # one review at a time: a review that can't be finished is reported and retried tomorrow, the others still go in
                 ('Each_to_sync', foreach("@body('To_sync')", {
-                    'Sync_one': after(scope(seq(
-                        *action_create('S_', "items('Each_to_sync')", "items('Each_to_sync')?['ReleasedOn']", 'D_'),
-                    )), {}),
+                    # action_create() is one If (S_Eligible): no wrapper scope needed (keeps Flow 1 within 8 nesting levels)
+                    **seq(*action_create('S_', "items('Each_to_sync')", "items('Each_to_sync')?['ReleasedOn']", 'D_')),
                     'Sync_one_failed': after(scope(seq(
                         ('Note_sync_failed', append('varProblems', "@concat('Agreed actions from ', " + esc("items('Each_to_sync')?['Title']") + ", "
                                                                    "' could not all be added to the action tracker – the daily run tries again tomorrow (the run history names the step).')")),
-                    )), {'Sync_one': FAILED}),
+                    )), {'S_Eligible': FAILED}),
                 })),
             )), {})),
             ('Sync_part_failed', after(scope(seq(
@@ -1732,9 +1731,9 @@ def action_daily_steps():
                                                             verbose=True), {'Notice_item': OK}),
                                 # a manual re-run at the same moment may have created it (the key is unique): fine if it's there
                                 'Recheck_notice': after(http('GET', nfind), {'Create_notice': FAILED}),
-                                'Notice_missing': after(cond("@empty(body('Recheck_notice')?['value'])", seq(
-                                    ('STOP_notice_not_created', compose("@int('A deadline reminder could not be queued.')")),
-                                )), {'Recheck_notice': OK}),
+                                # fails with this message only if it really isn't there (one step, not an If – nesting limit)
+                                'Notice_missing': after(compose("@int(if(empty(body('Recheck_notice')?['value']), "
+                                                                "'A deadline reminder could not be queued.', '0'))"), {'Recheck_notice': OK}),
                             })),
                         ))),
                     ))),

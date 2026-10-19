@@ -21,7 +21,7 @@ from flows import build_all, CONN, ENV_VARS  # noqa: E402
 import validate  # noqa: E402
 import legacy  # noqa: E402
 
-VERSION = '1.5.0.0'
+VERSION = '1.5.0.1'
 UNIQUE = 'ESGOneToOne'
 DISPLAY = 'ESG 1-to-1'
 PUBLISHER = {'unique': 'ESGOneToOne', 'display': 'ESG 1-to-1', 'prefix': 'esg', 'option': '41236'}
@@ -199,6 +199,8 @@ if __name__ == '__main__':
         print('\n'.join(problems))
         raise SystemExit('{0} validation problem(s)'.format(len(problems)))
     print('validation: {0} flows OK'.format(len(flows)))
+    print('maximum nesting level (Power Automate allows {0}): '.format(validate.MAX_NESTING) +
+          ', '.join('{0} {1}'.format(f['name'].split('| ')[1], validate.max_nesting(f['json']['properties']['definition'])) for f in flows))
     with open(BUILDER, 'w', encoding='utf-8') as fh:
         fh.write(legacy.builder_html(flows))
     print('legacy builder:', os.path.relpath(BUILDER, ROOT))

@@ -6,7 +6,7 @@
 
 | Path | What it is |
 |---|---|
-| `ESGOneToOne_1_5_0_0_unmanaged.zip` | **The importable solution (1.5.0.0)**, packed by Microsoft's Power Platform CLI (`pac solution pack`). The older `1_4_0_0` and `1_3_0_*` zips are kept only for going back (`../MIGRATION_1_5.md`, `../MIGRATION_1_4.md`). |
+| `ESGOneToOne_1_5_0_1_unmanaged.zip` | **The importable solution (1.5.0.1)** – see [`REPAIR_1_5_0_1.md`](REPAIR_1_5_0_1.md). `ESGOneToOne_1_5_0_0_unmanaged.zip` is kept for the record only: its Flow 1 can't be turned on (nesting)., packed by Microsoft's Power Platform CLI (`pac solution pack`). The older `1_4_0_0` and `1_3_0_*` zips are kept only for going back (`../MIGRATION_1_5.md`, `../MIGRATION_1_4.md`). |
 | `legacy-package-builder.html` | Offline page that makes legacy (non-solution) packages, for environments without Dataverse |
 | `src/` | The unpacked solution, in the same layout `pac solution unpack` produces. **Generated – do not edit by hand.** |
 | `tools/schema.py` | **The SharePoint schema, defined once:** lists, columns (field XML), indexes, views, permission levels |
@@ -14,7 +14,8 @@
 | `tools/legacy.py` | Legacy package templates and the builder page |
 | `tools/build.py` | Generates `src/`, validates, packs the zip, unpacks it again to prove the round trip |
 | `tools/validate.py` | Static checks for every flow |
-| `tools/test_validate.py` | Proves the validator catches mistakes (38 deliberate breakages) |
+| `tools/test_validate.py` | Proves the validator catches mistakes (42 deliberate breakages, including nesting deeper than Power Automate's 8 levels) |
+| `tools/check_package.py` | Proves the packed zip is exactly the validated source, within the nesting and action limits, with the same flow IDs, connections, environment variables and triggers as the previous package, and that the previous zip is unchanged |
 | `tools/wdl.py`, `tools/fake_sharepoint.py`, `tools/simulate.py` | Run the real flow JSON against an in-memory SharePoint, end to end |
 | `tools/test_builder.js`, `tools/check_builder_zips.py` | Browser test of the legacy builder and checks on the zips it makes |
 | `tools/run_all.sh` | Everything above, in order |
@@ -32,11 +33,11 @@ tools/run_all.sh
 | Step | Checks |
 |---|---|
 | `build.py` | **Generates the files:** `src/` and the builder page. **Validates every flow:** expressions parse and use real functions; every reference points at an existing action, variable, parameter or enclosing loop; `runAfter` chains are complete; SharePoint/Outlook actions have their required parameters; list and column names exist in the schema; REST bodies are valid JSON; field XML and view CAML are well-formed; a time-zoned schedule has a start time. **Packs** with `pac` and **unpacks** again; the flow JSON must survive the round trip unchanged. |
-| `test_validate.py` | 38 deliberately broken copies of the flows; the validator must reject every one |
-| `simulate.py` (solution and legacy) | 294 end-to-end checks against the fake SharePoint (each form), grouped below |
+| `test_validate.py` | 42 deliberately broken copies of the flows; the validator must reject every one |
+| `simulate.py` (solution and legacy) | 298 end-to-end checks against the fake SharePoint (each form), grouped below |
 | `test_builder.js` + `check_builder_zips.py` | The builder rejects bad input, makes no network requests, and produces standard zips whose contents are exactly the templates with the values filled in |
 
-**The 294 simulation checks** cover:
+**The 298 simulation checks** cover:
 
 - **Setup builds exactly the lists in [`../01-sharepoint/lists.csv`](../01-sharepoint/lists.csv):** column types, choices, defaults, ranges, indexes, unique key, views, settings and permissions.
 - **The lists hold every column the frontend reads or writes.**

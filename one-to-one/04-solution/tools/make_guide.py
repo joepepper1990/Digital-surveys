@@ -79,7 +79,7 @@ GUIDE = r'''# ESG Monthly Technician 1-to-1 — Finalisation Guide
 
 **From the end of Stage 0B to a live system, then running it month to month.** This document is self-contained: you don't need any other file to follow it. Tick each box as you go.
 
-Version: system v5.1.0 (frontend) · solution 1.5.0.0 · guide dated 19-Oct-2026
+Version: system v5.1.0 (frontend) · solution 1.5.0.1 · guide dated 19-Oct-2026
 
 ---
 
@@ -93,7 +93,7 @@ Version: system v5.1.0 (frontend) · solution 1.5.0.0 · guide dated 19-Oct-2026
   - the `1-to-1 Edit` and `1-to-1 Read` permission levels exist.
 - **Everything to install is built and verified offline:**
   - frontend: 319 automated checks, 108 more for the action tracker, and 45 for the one-time reset tool;
-  - flows: simulated end to end, 294 checks, and 38 deliberately broken copies all caught by the validator;
+  - flows: simulated end to end, 298 checks, and 42 deliberately broken copies all caught by the validator;
   - independent review rounds fixed 55 defects (see VERIFICATION.md).
 
 **New in 5.1.0 / solution 1.5 – action tracking** (already on an earlier version? §4.2 has the upgrade order):
@@ -138,7 +138,7 @@ Version: system v5.1.0 (frontend) · solution 1.5.0.0 · guide dated 19-Oct-2026
 
 | File | Goes to |
 |---|---|
-| `ESGOneToOne_1_5_0_0_unmanaged.zip` | Power Automate → **Solutions → Import solution**. Contains the eleven flows (0 Setup, 1–6 and 8–11); the setup flow creates the lists. |
+| `ESGOneToOne_1_5_0_1_unmanaged.zip` | Power Automate → **Solutions → Import solution**. Contains the eleven flows (0 Setup, 1–6 and 8–11); the setup flow creates the lists. |
 | `one-to-one.html` | SharePoint → *Welcome Web Part - Custom Layouts* library |
 | `one-to-one.js` | Same library, alongside the `.html` |
 
@@ -155,7 +155,7 @@ Version: system v5.1.0 (frontend) · solution 1.5.0.0 · guide dated 19-Oct-2026
 
 ## Phase 0 — Get and check the files (5 min)
 
-- [ ] **Right zip.** Open the zip, then open `solution.xml` in Notepad. It must show `<Version>1.5.0.0</Version>` and contain `<RootComponent type="380" schemaName="esg_SiteUrl"`. If it doesn't, you have an older download: get the latest one.
+- [ ] **Right zip.** Open the zip, then open `solution.xml` in Notepad. It must show `<Version>1.5.0.1</Version>` and contain `<RootComponent type="380" schemaName="esg_SiteUrl"`. If it doesn't, you have an older download: get the latest one.
 - [ ] **Right frontend.** You have `one-to-one.html` and `one-to-one.js` (v5.1.0). After installing, the top menu bar must show **v5.1.0** (right-hand end).
 - [ ] **Unchanged files.** Transfer them the usual approved way. Don't open and re-save them in Word.
 
@@ -174,13 +174,15 @@ Version: system v5.1.0 (frontend) · solution 1.5.0.0 · guide dated 19-Oct-2026
 
 ### 4.2 Import the solution (10 min)
 
-> **Already on 1.4.0.0 / page 5.0.0?** Upgrade to 1.5.0.0 in this order, each step with approval: back up Manager Reviews and 1-to-1 Settings; turn off *1 Daily scheduler*; import `ESGOneToOne_1_5_0_0_unmanaged.zip` as an upgrade (flows 9, 10 and 11 arrive Off); run **0 Setup** and wait for *complete*; turn on flows **2, 3, 4, 5, 6, 8, 9, 10 and 11**; upload page 5.1.0 (Replace, Reset layout cache, Republish – the top bar shows **v5.1.0**); turn on Flow 1. Nothing is imported: the tracker starts empty. (Full order, going back and checks T1–T16: `MIGRATION_1_5.md`.)
+> **Imported 1.5.0.0 and *1 Daily scheduler* wouldn't turn on?** Import `ESGOneToOne_1_5_0_1_unmanaged.zip` over it the same way, then turn Flow 1 on (`04-solution/REPAIR_1_5_0_1.md`). Nothing else changes.
+>
+> **Already on 1.4.0.0 / page 5.0.0?** Upgrade to 1.5.0.1 in this order, each step with approval: back up Manager Reviews and 1-to-1 Settings; turn off *1 Daily scheduler*; import `ESGOneToOne_1_5_0_1_unmanaged.zip` as an upgrade (flows 9, 10 and 11 arrive Off); run **0 Setup** and wait for *complete*; turn on flows **2, 3, 4, 5, 6, 8, 9, 10 and 11**; upload page 5.1.0 (Replace, Reset layout cache, Republish – the top bar shows **v5.1.0**); turn on Flow 1. Nothing is imported: the tracker starts empty. (Full order, going back and checks T1–T16: `MIGRATION_1_5.md`.)
 >
 > **Already imported an earlier version (1.3.0.x / page 4.5.0 or before)?** Upgrade in this order (written for 1.4 – use the 1.5 zip and page 5.1.0, and in step 5 also turn on flows 9, 10 and 11), each step with approval:
 >
 > 1. **Back up:** export each list to CSV (Technicians, Appraisal Expectations, Monthly Reviews, Manager Reviews, Wellbeing Assessments, 1-to-1 Feedback, 1-to-1 Challenges). Keep the old zip and page files.
 > 2. **Turn off** *7 Challenge* (if you have it) and *1 Daily scheduler*.
-> 3. Import `ESGOneToOne_1_5_0_0_unmanaged.zip` over it the same way: it says it will **upgrade**; leave *"Enable Plugin steps and flows"* unticked and keep your connections and values. The new **8 Amendment notice** flow arrives **Off**.
+> 3. Import `ESGOneToOne_1_5_0_1_unmanaged.zip` over it the same way: it says it will **upgrade**; leave *"Enable Plugin steps and flows"* unticked and keep your connections and values. The new **8 Amendment notice** flow arrives **Off**.
 > 4. Run **0 Setup** again (4.3) and wait for *"ESG 1-to-1 setup: complete"*. It adds the new date columns and the **1-to-1 Amendments** list, and retires challenges (the technicians lose access to the 1-to-1 Challenges list; open challenges close as *Not agreed*; nothing is deleted).
 > 5. Turn on flows **2, 3, 4, 5, 6 and 8**, in that order. Leave 1 and 7 off.
 > 6. Upload the new frontend files with **Replace** and **Reset layout cache** (4.5). The top bar shows **v5.1.0**. (If the page goes up before step 4, it still works and shows a banner asking you to run Setup.)
@@ -193,7 +195,7 @@ Version: system v5.1.0 (frontend) · solution 1.5.0.0 · guide dated 19-Oct-2026
 2. [ ] Top right: pick the environment IT named for the flows.
 3. [ ] Left menu: **Solutions**.
    - If it asks to create a **Dataverse database**, or *Solutions* is missing, use §4.8 instead.
-4. [ ] **Import solution → Browse →** `ESGOneToOne_1_5_0_0_unmanaged.zip` → **Next → Next**.
+4. [ ] **Import solution → Browse →** `ESGOneToOne_1_5_0_1_unmanaged.zip` → **Next → Next**.
 5. [ ] **Connections.** For each of the three, pick yours or click **+ New connection**, signed in as you:
 
    | Connection reference | Connector |

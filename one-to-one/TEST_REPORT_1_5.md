@@ -1,4 +1,4 @@
-# Test report – page 5.1.0 and solution 1.5.0.0 (enhanced action tracking)
+# Test report – page 5.1.0 and solution 1.5.0.1 (enhanced action tracking)
 
 **Date:** 19-Oct-2026.
 **Scope:** everything changed in `CHANGES_5_1.md`, plus a full rerun of the 5.0.0 / 1.4.0.0 tests.
@@ -139,3 +139,35 @@ These are T1–T16 in `MIGRATION_1_5.md`, including:
 - the item-level "edit only own items" setting stopping a folder rename (T15);
 - E19 and E20 delivery;
 - date round-trips on the live regional settings.
+
+## 1.5.0.1 rerun (Flow 1 nesting repair, 19-Oct-2026)
+
+Everything above was run again on 1.5.0.1:
+
+| Suite | Result |
+|---|---|
+| Frontend – existing behaviour | **319 / 319** |
+| Frontend – action tracker | **108 / 108** |
+| Reset tool | **45 / 45** |
+| Validator mutations | **42 / 42** (four new: too deep in a scope, in an else branch, in a Switch case; over 500 actions) |
+| Simulations | **298 / 298**, solution and legacy |
+| `run_all.sh` | **ALL CHECKS PASSED** |
+
+`run_all.sh` now also runs `tools/check_package.py`, which checks that:
+
+- the packed `ESGOneToOne_1_5_0_1_unmanaged.zip` flows are identical to the validated source;
+- every packaged flow is within 8 levels and 500 actions;
+- the flow IDs, connection references, environment variables and triggers are the same as 1.5.0.0;
+- the 1.5.0.0 zip is unchanged;
+- the nesting rule, run on the 1.5.0.0 Flow 1, reports exactly the actions Power Automate named.
+
+**New simulation checks of the restructured paths:**
+
+- A deadline reminder that can't be queued is reported in E7, while the review sync and the retries still run in the same run. It is caught up, once, the next day.
+- An action that can't be created (and isn't there on the re-check) fails only that review. The review is reported by name, left unsynced, and finished on the next run.
+
+**Still to confirm in the tenant:**
+
+- Flow 1, and flows 3 and 9–11, turn on without `TemplateValidationError` (T1).
+- One real Flow 1 run succeeds.
+- The rest of T2–T16.
