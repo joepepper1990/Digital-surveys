@@ -131,6 +131,70 @@ async function main() {
   await page.waitForFunction(function () { return /Finished/.test(document.querySelector('[data-reset-root]').innerText); }, null, { timeout: 8000 });
   ok('Failure: a record SharePoint refused is reported as failed (and stays)', /(\d+) deleted · 1 failed · 0 still there/.test(await step(5).innerText()), await step(5).innerText());
 
+  // ---- 1.5 action tracker: a separate, separately authorised group; an action goes with its updates and emails
+  await page.evaluate(function () { OTO_MOCK.reset(); });
+  await open({ as: 'tl' });
+  await page.evaluate(function () {
+    var d = OTO_MOCK.current.db, a = d.lists['1-to-1 Actions'].find(function (x) { return x.Title === 'Complete the confined space refresher'; }), now = new Date().toISOString();
+    d.lists['1-to-1 Action Updates'].push({ ID: d.nextId['1-to-1 Action Updates']++, __v: 1, Title: 'Update', ActionId: a.ID, Kind: 'progress', Message: 'x', ClientKey: 'up-r1', ProcessState: 'Applied',
+      FileDirRef: '/sites/esg-1to1/Lists/OneToOneActionUpdates/u11', FSObjType: 0, Created: now, Modified: now, Author: 'i:0#.f|membership|alex.morgan@example.test' });
+    d.lists['1-to-1 Action Updates'].push({ ID: d.nextId['1-to-1 Action Updates']++, __v: 1, Title: 'Update', ActionId: 99999, Kind: 'progress', Message: 'orphan', ClientKey: 'up-orphan', ProcessState: 'Rejected',
+      FileDirRef: '/sites/esg-1to1/Lists/OneToOneActionUpdates/u11', FSObjType: 0, Created: now, Modified: now, Author: 'i:0#.f|membership|alex.morgan@example.test' });
+    d.lists['1-to-1 Action Notices'].push({ ID: d.nextId['1-to-1 Action Notices']++, __v: 1, Title: 'E20-a' + a.ID + '-x', NoticeKey: 'E20-a' + a.ID + '-x', Kind: 'E20', ActionId: a.ID, Status: 'Sent', Attempts: 1, Created: now, Modified: now });
+    sessionStorage.setItem('oto-mock-db-v9', JSON.stringify(d));
+  });
+  await open({ as: 'tl' });
+  var t0 = await db(), tA = t0.lists['1-to-1 Actions'].find(function (x) { return x.Title === 'Complete the confined space refresher'; });
+  var alexActs0 = t0.lists['1-to-1 Actions'].filter(function (x) { return x.Technician.indexOf('alex.') >= 0; }).length;
+  var tt = await page.locator('[data-reset-root]').innerText();
+  ok('Tracker: tracked actions are hidden until "Include tracked actions" is ticked', !/1-to-1 Actions –/.test(tt) && /Include tracked actions/.test(tt) && /separate written approval/.test(tt));
+  // deleting a person's reviews never deletes their actions
+  await page.locator('select[aria-label="Filter by person"]').selectOption('Alex Morgan');
+  await page.locator('#rs-tracker').check();
+  await page.locator('button:has-text("Select all shown")').click();
+  var tt2 = await page.locator('section.rs-step').first().innerText();
+  ok('Tracker: "Select all shown" never picks tracked actions, even with the group shown', /1-to-1 Actions – \d+ records · 0 selected/.test(tt2) && /1-to-1 Action Updates – \d+ records · 0 selected/.test(tt2), tt2.slice(0, 900));
+  await page.locator('#rs-tracker').uncheck();
+  var nA = Number((await step(4).locator('button.danger').innerText()).replace(/\D/g, ''));
+  var dlA = page.waitForEvent('download'); await step(2).locator('button:has-text("Download backup")').click(); await dlA; await page.waitForTimeout(150);
+  await step(3).locator('button').click(); await step(4).locator('#rs-flow1').check();
+  await step(4).locator('input[type="text"]').fill('DELETE ' + nA + ' RECORDS'); await step(4).locator('button.danger').click();
+  await page.waitForFunction(function () { return /Finished/.test(document.querySelector('[data-reset-root]').innerText); }, null, { timeout: 8000 });
+  var t1 = await db();
+  ok('Tracker: deleting a person\'s reviews leaves their actions, updates and emails alone', t1.lists['1-to-1 Actions'].filter(function (x) { return x.Technician.indexOf('alex.') >= 0; }).length === alexActs0 &&
+    t1.lists['1-to-1 Action Updates'].length === t0.lists['1-to-1 Action Updates'].length && t1.lists['1-to-1 Action Notices'].length === t0.lists['1-to-1 Action Notices'].length &&
+    !t1.recycled.some(function (x) { return /^1-to-1 Action/.test(x.list); }));
+  // selecting an action selects its updates and emails; they go first; nothing else does
+  await open({ as: 'tl' });
+  await page.locator('#rs-tracker').check();
+  var invT = await page.locator('section.rs-step').first().innerText();
+  var realUpd = t1.lists['1-to-1 Action Updates'].filter(function (x) { return x.FSObjType !== 1; }).length;
+  ok('Tracker: update folders are never listed (only updates)', invT.indexOf('1-to-1 Action Updates – ' + realUpd + ' record') >= 0, invT.slice(0, 900));
+  await page.locator('details.rs-list:has-text("1-to-1 Actions –") summary').click();
+  await page.locator('details.rs-list:has-text("1-to-1 Actions –") tr:has-text("Complete the confined space refresher") input[type="checkbox"]').check();
+  var btnTxt = await step(4).locator('button.danger').innerText();
+  ok('Tracker: ticking an action ticks its update and its email too (3 records)', btnTxt === 'Delete 3 records', btnTxt);
+  ok('Tracker: an update that belongs to an action can\'t be ticked on its own', await page.locator('details.rs-list:has-text("1-to-1 Action Updates") input[title^="Selected with its action"]').first().isDisabled());
+  var dlT = page.waitForEvent('download'); await step(2).locator('button:has-text("Download backup")').click(); var bkT = JSON.parse(fs.readFileSync(await (await dlT).path(), 'utf8')); await page.waitForTimeout(150);
+  ok('Tracker: the backup holds the action, its update and its email, every column', (bkT.lists['1-to-1 Actions'] || []).length === 1 && 'HistoryJson' in bkT.lists['1-to-1 Actions'][0] &&
+    (bkT.lists['1-to-1 Action Updates'] || []).length === 1 && (bkT.lists['1-to-1 Action Notices'] || []).length === 1);
+  await step(3).locator('button').click(); await step(4).locator('#rs-flow1').check();
+  await step(4).locator('input[type="text"]').fill('DELETE 3 RECORDS'); await step(4).locator('button.danger').click(); await page.waitForTimeout(200);
+  ok('Tracker: the confirmation phrase names the tracker records', /Type exactly: DELETE 3 RECORDS INCLUDING 3 TRACKER RECORDS/.test(await page.locator('.rs-msg').innerText()));
+  await step(4).locator('input[type="text"]').fill('DELETE 3 RECORDS INCLUDING 3 TRACKER RECORDS'); await step(4).locator('button.danger').click();
+  await page.waitForFunction(function () { return /Finished/.test(document.querySelector('[data-reset-root]').innerText); }, null, { timeout: 8000 });
+  var t2 = await db(), rec = t2.recycled.slice(t1.recycled.length);
+  ok('Tracker: the email and update go first, then the action – no orphans left', rec.length === 3 && rec[0].list === '1-to-1 Action Notices' && rec[1].list === '1-to-1 Action Updates' && rec[2].list === '1-to-1 Actions' &&
+    rec[2].item.ID === tA.ID && !t2.lists['1-to-1 Action Updates'].some(function (x) { return x.ActionId === tA.ID; }) && !t2.lists['1-to-1 Action Notices'].some(function (x) { return x.ActionId === tA.ID; }));
+  ok('Tracker: folders, other actions and their permissions are untouched', t2.lists['1-to-1 Action Updates'].filter(function (x) { return x.FSObjType === 1; }).length === t1.lists['1-to-1 Action Updates'].filter(function (x) { return x.FSObjType === 1; }).length &&
+    t2.lists['1-to-1 Actions'].length === t1.lists['1-to-1 Actions'].length - 1 && JSON.stringify(t2.folders) === JSON.stringify(t1.folders));
+  await page.locator('#rs-tracker').check().catch(function () {});
+  await page.locator('details.rs-list:has-text("1-to-1 Action Updates") summary').click();
+  await page.locator('details.rs-list:has-text("1-to-1 Action Updates") tbody input[type="checkbox"]:not([disabled])').first().check();
+  ok('Tracker: an update whose action is already gone can be ticked on its own', (await step(4).locator('button.danger').innerText()) === 'Delete 1 records');
+  await page.locator('#rs-tracker').uncheck();
+  ok('Tracker: unticking "Include tracked actions" clears tracker selections', (await step(4).locator('button.danger').innerText()) === 'Delete 0 records');
+
   // technician: refused by the page and by SharePoint
   await open({ as: 'alex' });
   ok('Security: a technician gets "Team Leader only" and no inventory', /Team Leader \(site owner\) only/.test(await page.locator('[data-reset-root]').innerText()) && (await page.locator('section.rs-step').count()) === 0);
@@ -147,7 +211,7 @@ async function main() {
     var d = OTO_MOCK.current.db, x = OTO_MOCK.X.join(' ');
     d.lists['Monthly Reviews'][0].Title = x; d.lists['Manager Reviews'][0].MonthKey = x; d.lists['Wellbeing Assessments'][0].Title = x;
     d.lists['Appraisal Expectations'][0].Title = x; d.lists['Appraisal Expectations'][0].AppraisalYear = x;
-    sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d));
+    sessionStorage.setItem('oto-mock-db-v9', JSON.stringify(d));
   });
   await open({ as: 'tl', xss: '1' });
   await page.evaluate(function () { Array.prototype.forEach.call(document.querySelectorAll('details.rs-list'), function (d) { d.open = true; }); });

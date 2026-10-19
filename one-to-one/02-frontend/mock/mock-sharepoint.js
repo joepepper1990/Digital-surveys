@@ -8,11 +8,14 @@
 //      READ the 1-to-1 Settings list, nothing else; Team Leader: everything)
 //   * field validation for validateUpdateListItem (choices, numbers, dd/MM/yyyy dates, yes/no, people)
 //   * the observable effects of Flow 2 (submit → lock + stamp; a Team Leader amendment is not a submission),
-//     Flow 3 (complete/close → release) and Flow 8 (amendment → email the technician, or Failed)
+//     Flow 3 (complete/close → release, and from 1.5 the agreed actions added to the tracker), Flow 8 (amendment → email the
+//     technician, or Failed), Flow 9 (each action shared with its technician, their update folder), Flow 10 (a technician's
+//     update checked and recorded, then locked) and Flow 11 (action emails: Sent / Failed / delivery unknown)
+//   * etags (412 on a stale IF-MATCH), REST MERGE, unique columns, folders and folder permissions
 // State persists in sessionStorage so you can switch user (TL ↔ Test A ↔ Test B) and carry on.
 (function () {
   'use strict';
-  var KEY = 'oto-mock-db-v8';
+  var KEY = 'oto-mock-db-v9';
   var SITE = 'https://contoso.example/sites/esg-1to1';
   var TZ = 'Europe/London';
 
@@ -31,7 +34,14 @@
     WbStatus: ['Open', 'Submitted', 'Completed'],
     FbType: ['Fault', 'Improvement', 'Suggestion'],
     FbStatus: ['Pending', 'Sent', 'Failed', 'Read', 'Held'],
-    Notify: ['Draft', 'Pending', 'Sending', 'Sent', 'Failed', 'Retry', 'Cancelled']
+    Notify: ['Draft', 'Pending', 'Sending', 'Sent', 'Failed', 'Retry', 'Cancelled'],
+    ActStatus: ['Open', 'In progress', 'Waiting', 'Ready for close-out', 'Closed'],
+    Owner: ['Technician', 'Team Leader'],
+    UpdKind: ['progress', 'waiting', 'followup', 'closeRequest'],
+    Outcome: ['Satisfactory', 'Support', 'Ready'],
+    Process: ['Pending', 'Processing', 'Applied', 'Rejected'],
+    NoticeKind: ['E19', 'E20'],
+    NoticeStatus: ['Pending', 'Sending', 'Sent', 'Failed', 'Retry', 'Cancelled']
   };
   // ?locale=uk (default) | us | uk-noiso | us-noiso – how this pretend SharePoint reads typed dates
   var LOCALE = (function () { try { return new URL(window.location.href).searchParams.get('locale') || 'uk'; } catch (_) { return 'uk'; } })();
@@ -53,7 +63,7 @@
       TechFollowUp: F('text'), ExpectationSnapshotJson: F('note'), FB_Q1: F('note'), FB_Q2: F('note'), FB_Q3: F('note'), FB_Q4: F('note'), FB_Q5: F('note'),
       FB_Q6: F('note'), FB_Q7: F('note'), FB_Q9: F('note'), FB_Overall: F('note'), ExpectationFeedbackJson: F('note'), FollowUpDecision: F('choice', { c: CHOICES.Follow }),
       MeetingDate: F('date'), ActionsJson: F('note'), ActionsStatus: F('choice', { c: CHOICES.ActionsStatus }), NextActionDue: F('date'), CompletedOn: F('datetime'),
-      CompletedBy: F('text'), ReleasedOn: F('datetime'), CorrectionLog: F('note') },
+      CompletedBy: F('text'), ReleasedOn: F('datetime'), CorrectionLog: F('note'), ActionsSyncedOn: F('datetime', { v15: true }) },
     '1-to-1 Settings': { Title: F('text'), Value: F('note') },
     'Wellbeing Assessments': { Title: F('text'), Technician: F('person'), AssessmentStatus: F('choice', { c: CHOICES.WbStatus }), AssessmentDate: F('date'),
       Position: F('text'), EmployeeNumber: F('text'), AnswersJson: F('note'), PersonalJson: F('note'), ArrangementsJson: F('note'), ManagerNotes: F('note'),
@@ -65,9 +75,23 @@
     // Owners only (no group access). Created / Author are SharePoint's own.
     '1-to-1 Amendments': { Title: F('text'), ReviewItemId: F('num'), ManagerReviewId: F('num'), MonthKey: F('text'), Technician: F('person'), Reason: F('note'),
       ChangedFields: F('note'), ChangesJson: F('note'), NotifyStatus: F('choice', { c: CHOICES.Notify }), NotifiedOn: F('datetime'), NotifyError: F('text'),
-      Created: F('datetime'), Author: F('person') }
+      Created: F('datetime'), Author: F('person') },
+    // 1.5 action tracker. Actions: Owners only; flow 9 gives the action's technician Read. ActionKey is unique.
+    '1-to-1 Actions': { Title: F('text'), ActionKey: F('text', { unique: true }), Technician: F('person'), Owner: F('choice', { c: CHOICES.Owner }), Criteria: F('note'),
+      OriginReviewId: F('num'), OriginMgrId: F('num'), OriginMonth: F('text'), OriginalDue: F('date'), CurrentDue: F('date'), Status: F('choice', { c: CHOICES.ActStatus }),
+      WaitingReason: F('note'), WaitingUntil: F('text'), LatestProgress: F('note'), LastUpdateOn: F('datetime'), LastUpdateBy: F('text'), ClosedOn: F('date'),
+      DecisionNote: F('note'), HistoryJson: F('note'), SharedWith: F('text') },
+    // one folder per technician (u<site user id>, only they can add to it); FileDirRef / FSObjType are SharePoint's own
+    '1-to-1 Action Updates': { Title: F('text'), ActionId: F('num'), Kind: F('choice', { c: CHOICES.UpdKind }), Outcome: F('choice', { c: CHOICES.Outcome }), Message: F('note'),
+      WaitingUntil: F('text'), ClientKey: F('text', { unique: true }), ProcessState: F('choice', { c: CHOICES.Process }), ProcessNote: F('text'),
+      FileDirRef: F('text'), FSObjType: F('num'), Created: F('datetime'), Author: F('person') },
+    '1-to-1 Action Notices': { Title: F('text'), NoticeKey: F('text', { unique: true }), Kind: F('choice', { c: CHOICES.NoticeKind }), ActionId: F('num'),
+      Status: F('choice', { c: CHOICES.NoticeStatus }), Attempts: F('num'), LastError: F('text'), SentOn: F('datetime'), Created: F('datetime') }
   };
-  var READ_ONLY = ['HasUniqueRoleAssignments', 'Author', 'Created', 'Modified'];
+  var READ_ONLY = ['HasUniqueRoleAssignments', 'Author', 'Created', 'Modified', 'FileDirRef', 'FSObjType'];
+  var TRACKER = ['1-to-1 Actions', '1-to-1 Action Updates', '1-to-1 Action Notices'];
+  var LIST_URL = { '1-to-1 Actions': 'OneToOneActions', '1-to-1 Action Updates': 'OneToOneActionUpdates', '1-to-1 Action Notices': 'OneToOneActionNotices' };
+  function listUrl(list) { return '/sites/esg-1to1/Lists/' + (LIST_URL[list] || list.replace(/\W/g, '')); }
 
   // ---------------------------------------------------------------- people (fictional)
   var USERS = [
@@ -110,7 +134,8 @@
 
   // ---------------------------------------------------------------- seed
   function seed(xss) {
-    var db = { nextId: {}, lists: {}, perms: { 'Monthly Reviews': {}, 'Manager Reviews': {}, 'Wellbeing Assessments': {}, '1-to-1 Feedback': {} }, fbFail: false, writes: [], emails: [], recycled: [], group: [], digest: 'MOCKDIGEST-' + Date.now() };
+    var db = { nextId: {}, lists: {}, perms: { 'Monthly Reviews': {}, 'Manager Reviews': {}, 'Wellbeing Assessments': {}, '1-to-1 Feedback': {}, '1-to-1 Actions': {}, '1-to-1 Action Updates': {} },
+      folders: {}, fbFail: false, writes: [], emails: [], recycled: [], group: [], digest: 'MOCKDIGEST-' + Date.now() };
     Object.keys(SCHEMA).forEach(function (l) { db.lists[l] = []; db.nextId[l] = 1; });
     function add(list, fields) { var id = db.nextId[list]++; var it = { ID: id }; Object.keys(fields).forEach(function (k) { it[k] = fields[k]; }); db.lists[list].push(it); return it; }
     var today = londonToday(), CUR = today.slice(0, 7);
@@ -232,7 +257,7 @@
         if (R() < 0.45) {
           var a = pick(BANK.actions), dueA = new Date(Date.parse(lastDay(m) + 'T12:00:00Z') + (20 + Math.floor(R() * 40)) * 86400000).toISOString().slice(0, 10);
           var closed = dueA < addMonths(CUR, 0) + '-01' ? R() < 0.9 : R() < 0.15;
-          acts.push({ id: 'a' + rv.ID, text: a[0], owner: a[1] === 'tech' ? u.title : 'Team Leader', criteria: a[2], due: dueA, status: closed ? 'Closed' : 'Open', closedOn: closed ? dueA : '' });
+          acts.push({ id: 'a' + rv.ID, text: a[0], owner: a[1] === 'tech' ? u.title : 'Team Leader', criteria: a[2], due: dueA, status: closed ? 'Closed' : 'Open', closedOn: closed ? (dueA < today ? dueA : today) : '' });
         }
         mr.ActionsJson = JSON.stringify(acts);
         mr.ActionsStatus = acts.length ? (acts.some(function (x) { return x.status === 'Open'; }) ? 'Open' : 'Done') : 'None';
@@ -268,6 +293,12 @@
         var ej = JSON.parse(c.rv.ExpectationsJson); ej.forEach(function (x) { x.comment = X[2]; x.title = x.title + X[0]; }); c.rv.ExpectationsJson = JSON.stringify(ej);
       }
     });
+    // the action tracker started three months ago (Setup 1.5): reviews released since then have their actions tracked (Flow 3)
+    var startDay = addMonths(CUR, -3) + '-01';
+    add('1-to-1 Settings', { Title: 'ActionsTrackerStart', Value: dateOnlyUtc(startDay) });
+    db.trackerStart = dateOnlyUtc(startDay);
+    db.lists['Manager Reviews'].forEach(function (mr) { if (mr.ReleasedOn) { trackRelease(db, mr, mr.ReleasedOn); } });
+    seedTracker(db, today, xss);
     // wellbeing assessments (Flow 5 effects applied)
     function wbAns(issues, help) {
       var a = {}, ids = ['d1', 'd2', 'd3', 'd4', 'd5', 'd6', 'd7', 'd8', 'd9', 'c1', 'c2', 'c3', 's1', 's2', 's3', 'r1', 'r2', 'r3', 'r4', 'r5', 'ro1', 'ro2', 'ro3', 'ro4', 'ro5', 'ro6', 'ro7', 'ro8', 'ro9', 'ch1', 'ch2', 'ch3'];
@@ -296,12 +327,122 @@
     }
     // every item carries SharePoint's Modified stamp
     var stamp = new Date(Date.now() - 86400000).toISOString().replace(/\.\d{3}/, '');
-    Object.keys(db.lists).forEach(function (l) { db.lists[l].forEach(function (it) { it.Modified = stamp; }); });
+    Object.keys(db.lists).forEach(function (l) { db.lists[l].forEach(function (it) { it.Modified = stamp; it.__v = it.__v || 1; }); });
     return db;
 
     function release(rv, mr, u) {
       db.perms['Monthly Reviews'][rv.ID] = {}; db.perms['Monthly Reviews'][rv.ID][u.email] = 'read';
       db.perms['Manager Reviews'][mr.ID] = {}; db.perms['Manager Reviews'][mr.ID][u.email] = 'read';
+    }
+  }
+
+  // ---------------------------------------------------------------- 1.5 action tracker (flows 3, 9, 10, 11)
+  function addItem(db, list, fields) { var id = db.nextId[list]++; var it = { ID: id, __v: 1, Modified: nowIso(), Created: nowIso() }; Object.keys(fields).forEach(function (k) { it[k] = fields[k]; }); db.lists[list].push(it); return it; }
+  function touch(it) { it.__v = (it.__v || 1) + 1; it.Modified = nowIso(); }
+  function userOfClaims(c) { return userByClaims(c); }
+  // Flow 3 (1.5): after release, each agreed action is added once (key mr<id>-<action id>), then ActionsSyncedOn is stamped.
+  // db.failCreateAt = n: only n are added this time (the run broke) – the daily run (runFlow1Sync) finishes it.
+  function trackRelease(db, mr, releasedOn) {
+    if (!db.trackerStart || db.v14 || db.v13 || !releasedOn || Date.parse(releasedOn) < Date.parse(db.trackerStart) || mr.ActionsSyncedOn) { return; }
+    var acts = []; try { acts = JSON.parse(mr.ActionsJson || '[]'); } catch (_) { acts = []; }
+    var u = userOfClaims(mr.Technician); if (!u) { return; }
+    for (var i = 0; i < acts.length; i++) {
+      var a = acts[i], key = 'mr' + mr.ID + '-' + a.id;
+      if (!a.id) { return; }
+      if (db.lists['1-to-1 Actions'].some(function (x) { return x.ActionKey === key; })) { continue; }
+      if (db.failCreateAt !== undefined && db.failCreateAt !== null) { if (db.failCreateAt <= 0) { db.failCreateAt = null; return; } db.failCreateAt--; }
+      var owner = a.ownerRole === 'tl' || (!a.ownerRole && a.owner !== u.title) ? 'Team Leader' : 'Technician';
+      var it = addItem(db, '1-to-1 Actions', { Title: String(a.text || '').slice(0, 250), ActionKey: key, Technician: claimsOf(u), Owner: owner, Criteria: a.criteria || '',
+        OriginReviewId: mr.ReviewItemId, OriginMgrId: mr.ID, OriginMonth: mr.MonthKey, OriginalDue: a.due ? dateOnlyUtc(a.due) : null, CurrentDue: a.due ? dateOnlyUtc(a.due) : null,
+        Status: a.status === 'Closed' ? 'Closed' : 'Open', ClosedOn: a.status === 'Closed' && a.closedOn ? dateOnlyUtc(a.closedOn) : null,
+        HistoryJson: JSON.stringify([{ id: 'c', at: releasedOn, kind: 'created', month: mr.MonthKey, by: 'Agreed at the monthly 1-to-1' }]), SharedWith: '' });
+      flow9(db, it);
+    }
+    mr.ActionsSyncedOn = nowIso();
+  }
+  // Flow 9: the action readable by exactly its technician; their update folder (only they can add to it)
+  function flow9(db, it) {
+    if (db.flow9Off) { return; }
+    var u = userOfClaims(it.Technician); if (!u) { return; }
+    db.perms['1-to-1 Actions'][it.ID] = {}; db.perms['1-to-1 Actions'][it.ID][u.email] = 'read';
+    var f = 'u' + u.id;
+    if (!db.folders[f]) { db.folders[f] = u.email; addItem(db, '1-to-1 Action Updates', { Title: f, FSObjType: 1, FileDirRef: listUrl('1-to-1 Action Updates') }); }
+    db.folders[f] = u.email;
+    if (it.SharedWith !== u.email) { it.SharedWith = u.email; touch(it); }
+  }
+  var CLOSE_REQ = function (k, o) { return k === 'closeRequest' || (k === 'followup' && o === 'Ready'); };
+  // Flow 10: who sent it comes from the folder it is in (never Author / ActionId); applied once (u<id> in the history).
+  function flow10(db, up) {
+    if (db.flow10Off || up.FSObjType === 1 || up.ProcessState !== 'Pending') { return; }
+    up.ProcessState = 'Processing'; touch(up);
+    var dir = String(up.FileDirRef || ''), folder = dir.split('/').pop(), root = listUrl('1-to-1 Action Updates');
+    var email = dir === root + '/' + folder && /^u\d+$/.test(folder) ? db.folders[folder] : null, sender = email ? userByEmail(email) : null;
+    var ac = db.lists['1-to-1 Actions'].find(function (x) { return x.ID === Number(up.ActionId); });
+    var kind = up.Kind || '', msg = String(up.Message || '').trim(), oc = up.Outcome || '';
+    var verdict = !sender || ('u' + sender.id) !== folder ? 'Not sent from your own update folder' : !ac ? 'Action not found' : ac.Technician !== claimsOf(sender) ? 'Not your action'
+      : ac.Status === 'Closed' ? 'The action is closed' : CHOICES.UpdKind.indexOf(kind) < 0 ? 'Unknown kind of update'
+      : (kind === 'progress' || kind === 'waiting') && !msg ? 'The update is empty' : kind === 'followup' && CHOICES.Outcome.indexOf(oc) < 0 ? 'Unknown follow-up outcome'
+      : CLOSE_REQ(kind, oc) && ac.Owner !== 'Technician' ? 'Only the Team Leader closes their own actions' : '';
+    db.perms['1-to-1 Action Updates'][up.ID] = {};
+    if (sender) { db.perms['1-to-1 Action Updates'][up.ID][sender.email] = 'read'; }   // locked: Owners + the sender Read
+    if (verdict) { up.ProcessState = 'Rejected'; up.ProcessNote = verdict; touch(up); return; }
+    var hist = []; try { hist = JSON.parse(ac.HistoryJson || '[]'); } catch (_) { hist = []; }
+    if (!hist.some(function (e) { return e && e.id === 'u' + up.ID; })) {
+      var text = msg.slice(0, 2000);
+      hist.push({ id: 'u' + up.ID, at: nowIso(), by: sender.title, kind: kind, outcome: oc, text: text, waitingUntil: up.WaitingUntil || '', key: String(up.ClientKey || '').slice(0, 60) });
+      ac.Status = CLOSE_REQ(kind, oc) ? 'Ready for close-out' : kind === 'waiting' ? 'Waiting' : (ac.Status === 'Open' || ac.Status === 'Waiting') ? 'In progress' : ac.Status;
+      if (text) { ac.LatestProgress = text; }
+      ac.LastUpdateOn = nowIso(); ac.LastUpdateBy = sender.title;
+      if (kind === 'waiting') { ac.WaitingReason = text; ac.WaitingUntil = up.WaitingUntil || ''; } else if (kind === 'progress') { ac.WaitingReason = ''; ac.WaitingUntil = ''; }
+      ac.HistoryJson = JSON.stringify(hist); touch(ac);
+    }
+    up.ProcessState = 'Applied'; up.ProcessNote = ''; touch(up);
+    if (CLOSE_REQ(kind, oc)) { addNotice(db, 'E19-u' + up.ID, 'E19', ac.ID); }
+  }
+  function addNotice(db, key, kind, actionId) {
+    if (db.lists['1-to-1 Action Notices'].some(function (n) { return n.NoticeKey === key; })) { return null; }
+    var n = addItem(db, '1-to-1 Action Notices', { Title: key, NoticeKey: key, Kind: kind, ActionId: actionId, Status: 'Pending', Attempts: 0 });
+    flow11(db, n); return n;
+  }
+  // Flow 11: Pending / Retry → Sending → Sent, or Failed (db.noticeFail). db.failAfterSend: the run dies mid-send (stays Sending).
+  function flow11(db, n) {
+    if (db.flow11Off || ['Pending', 'Retry'].indexOf(n.Status) < 0) { return; }
+    var ac = db.lists['1-to-1 Actions'].find(function (x) { return x.ID === n.ActionId; }), u = ac ? userOfClaims(ac.Technician) : null;
+    if (!ac || ac.Status === 'Closed' || (n.Kind === 'E19' && ac.Status !== 'Ready for close-out')) { n.Status = 'Cancelled'; touch(n); return; }
+    n.Status = 'Sending'; touch(n);
+    if (db.failAfterSend) { db.emails.push({ to: n.Kind === 'E19' ? 'TL' : u.email, template: n.Kind, actionId: ac.ID, unknown: true }); return; }
+    if (db.noticeFail) { n.Status = 'Failed'; n.Attempts = (n.Attempts || 0) + 1; n.LastError = 'Mailbox unavailable (simulated)'; touch(n); return; }
+    db.emails.push(n.Kind === 'E19' ? { to: 'TL', template: 'E19', actionId: ac.ID } : { to: u.email, cc: 'TL', template: 'E20', actionId: ac.ID });
+    n.Status = 'Sent'; n.SentOn = nowIso(); n.Attempts = (n.Attempts || 0) + 1; n.LastError = ''; touch(n);
+  }
+  function seedTracker(db, today, xss) {
+    var acts = db.lists['1-to-1 Actions'];
+    function day(n) { return new Date(Date.parse(today + 'T12:00:00Z') + n * 86400000).toISOString().slice(0, 10); }
+    function hist(it, e) { var h0 = JSON.parse(it.HistoryJson || '[]'); h0.push(e); it.HistoryJson = JSON.stringify(h0); }
+    var alex = USERS[1], sam = USERS[2], casey = USERS[4];
+    // Test A: one in progress (overdue), one waiting on something outside it, one of theirs; plus one added by the Team Leader
+    function mk(u, title, owner, due, extra) {
+      var it = addItem(db, '1-to-1 Actions', { Title: title, ActionKey: 'tl-seed' + acts.length, Technician: claimsOf(u), Owner: owner, Criteria: 'Evidence shared with the Team Leader.',
+        OriginMonth: today.slice(0, 7), OriginalDue: dateOnlyUtc(due), CurrentDue: dateOnlyUtc(due), Status: 'Open',
+        HistoryJson: JSON.stringify([{ id: 'c', at: nowIso(), by: 'Team Leader (mock)', role: 'tl', kind: 'created', month: today.slice(0, 7), text: 'Added on the Actions page' }]), SharedWith: '' });
+      Object.keys(extra || {}).forEach(function (k) { it[k] = extra[k]; });
+      flow9(db, it); return it;
+    }
+    var a1 = mk(alex, 'Complete the confined space refresher', 'Technician', day(-3), { OriginMonth: addMonths(today.slice(0, 7), -1) });
+    a1.Status = 'In progress'; a1.LatestProgress = 'Booked onto the course; waiting for the joining pack.'; a1.LastUpdateOn = dateOnlyUtc(day(-12)); a1.LastUpdateBy = alex.title;
+    hist(a1, { id: 'useed1', at: dateOnlyUtc(day(-12)), by: alex.title, kind: 'progress', text: a1.LatestProgress });
+    var a2 = mk(alex, 'Replace the faulty area 3 monitor head', 'Team Leader', day(9));
+    a2.Status = 'Waiting'; a2.WaitingReason = 'Spare part on order from the supplier (expected next week).'; a2.WaitingUntil = day(6);
+    hist(a2, { id: 'tseed2', at: dateOnlyUtc(day(-4)), by: 'Team Leader (mock)', role: 'tl', kind: 'waiting', text: a2.WaitingReason, waitingUntil: a2.WaitingUntil });
+    var a3 = mk(sam, 'Shadow two permit issues', 'Technician', day(20));
+    a3.Status = 'Ready for close-out'; a3.LatestProgress = 'Both permit issues shadowed and signed off.'; a3.LastUpdateOn = dateOnlyUtc(day(-1)); a3.LastUpdateBy = sam.title;
+    hist(a3, { id: 'useed3', at: dateOnlyUtc(day(-1)), by: sam.title, kind: 'closeRequest', text: a3.LatestProgress });
+    var a4 = mk(casey, 'Review the area 3 routine schedule', 'Technician', day(-40), { OriginMonth: addMonths(today.slice(0, 7), -2) });
+    a4.Status = 'Open';
+    if (xss) {
+      a1.Title = 'Refresher ' + X[0]; a1.Criteria = X[1]; a1.LatestProgress = X[2]; a2.WaitingReason = X[3]; a2.DecisionNote = X[4];
+      hist(a1, { id: 'uxss', at: nowIso(), by: X[0], kind: 'progress', text: X.join(' '), month: X[2], outcome: X[1] });
+      hist(a1, { id: 'uxss2', at: nowIso(), by: alex.title, kind: X[0], text: X[3] });
     }
   }
 
@@ -313,29 +454,56 @@
   function saveDb(db) { try { sessionStorage.setItem(KEY, JSON.stringify(db)); } catch (_) { /* ignore */ } }
 
   // ---------------------------------------------------------------- permission model (D.4)
+  function ownFolder(db, u) { var f = Object.keys(db.folders || {}).find(function (k) { return db.folders[k] === u.email; }); return f || null; }
   function canSeeList(db, list, u) {
     if (u.owner) { return !!db.lists[list]; }
     if (list === '1-to-1 Settings' || list === '1-to-1 Feedback') { return true; }   // group: Read / Submit (own items only)
+    if (list === '1-to-1 Action Updates' && ownFolder(db, u)) { return true; }        // Limited Access through their own folder
     if (db.perms[list]) { return Object.keys(db.perms[list]).some(function (id) { return !!db.perms[list][id][u.email]; }); }
     return false;
+  }
+  // an update item without its own permissions inherits its folder's: the technician's Submit (add, read, edit – no delete)
+  function updRole(db, it, u) {
+    var p = db.perms['1-to-1 Action Updates'][it.ID];
+    if (p) { return p[u.email] || null; }
+    var folder = it.FSObjType === 1 ? it.Title : String(it.FileDirRef || '').split('/').pop();
+    return db.folders[folder] === u.email ? 'edit' : null;
   }
   function canRead(db, list, id, u) {
     if (u.owner) { return true; }
     if (list === '1-to-1 Settings') { return true; }
+    if (list === '1-to-1 Action Updates') { var it = db.lists[list].find(function (x) { return x.ID === id; }); return !!it && !!updRole(db, it, u); }
     return !!(db.perms[list] && db.perms[list][id] && db.perms[list][id][u.email]);
   }
   function canWrite(db, list, id, u) {
     if (u.owner) { return true; }
+    if (list === '1-to-1 Action Updates') { var it = db.lists[list].find(function (x) { return x.ID === id; }); return !!it && it.FSObjType !== 1 && updRole(db, it, u) === 'edit'; }
     return !!(db.perms[list] && db.perms[list][id] && db.perms[list][id][u.email] === 'edit');
   }
-  function serialize(list, it) {
+  function etagOf(it) { return '"' + (it.__v || 1) + '"'; }
+  function serialize(list, it, meta) {
     var out = {}, sc = SCHEMA[list];
     Object.keys(it).forEach(function (k) {
+      if (k === '__v') { return; }
       if (sc[k] && sc[k].t === 'person') { out[k] = person(userByClaims(it[k])); } else { out[k] = it[k] === undefined ? null : it[k]; }
     });
     Object.keys(sc).forEach(function (k) { if (!(k in out)) { out[k] = sc[k].t === 'person' ? null : (sc[k].t === 'bool' ? false : null); } });
+    if (list === '1-to-1 Action Updates') { out.FSObjType = it.FSObjType === 1 ? 1 : 0; out.FileDirRef = it.FileDirRef || listUrl(list); }
     out.Modified = it.Modified || null;
+    if (meta) { out['odata.etag'] = etagOf(it); }
     return out;
+  }
+  // the simple $filter forms the page uses: Field eq 'v' / Field ne 'v' (joined by and)
+  function filterRows(rows, q) {
+    var m = /(?:^|&)\$filter=([^&]*)/.exec(q); if (!m) { return rows; }
+    var f = decodeURIComponent(m[1].replace(/\+/g, ' '));
+    var parts = f.split(/\s+and\s+/i).map(function (c) { var x = /^\s*(\w+)\s+(eq|ne)\s+'((?:[^']|'')*)'\s*$/.exec(c); return x ? { f: x[1], op: x[2], v: x[3].replace(/''/g, "'") } : null; });
+    if (parts.some(function (x) { return !x; })) { return null; }
+    return rows.filter(function (it) { return parts.every(function (c) { var v = it[c.f] === null || it[c.f] === undefined ? '' : String(it[c.f]); return c.op === 'eq' ? v === c.v : v !== c.v; }); });
+  }
+  function uniqueClash(db, list, name, value, selfId) {
+    var f = SCHEMA[list][name];
+    return !!(f && f.unique && value !== '' && value !== null && db.lists[list].some(function (x) { return x.ID !== selfId && x[name] === value; }));
   }
 
   // ---------------------------------------------------------------- value coercion (validateUpdateListItem)
@@ -407,6 +575,7 @@
     var rv = db.lists['Monthly Reviews'].find(function (x) { return x.ID === mr.ReviewItemId; });
     if (rv) { rv.ReviewStatus = mr.ReviewState; }
     db.emails.push({ to: u.email, template: mr.ReviewState === 'Completed' ? 'E4' : 'E5', reviewId: mr.ReviewItemId });
+    trackRelease(db, mr, mr.ReleasedOn);   // 1.5: the agreed actions go into the tracker (once each)
   }
 
   // Flow 4: the 1-to-1 group follows the Technicians list (Active = in the group)
@@ -482,7 +651,11 @@
       var m = /^\/_api\/web\/lists\/getbytitle\('([^']*(?:''[^']*)*)'\)(\/.*)?$/.exec(rest);
       if (!m) { return spError(404, 'Not found: ' + rest); }
       var list = decodeURIComponent(m[1]).replace(/''/g, "'"), tail = m[2] || '';
-      if (!db.lists[list] || (db.v13 && list === '1-to-1 Amendments')) { return spError(404, 'List \'' + list + '\' does not exist at site with URL \'' + SITE + '\'.'); }
+      if (!db.lists[list] || (db.v13 && list === '1-to-1 Amendments') || ((db.v13 || db.v14) && TRACKER.indexOf(list) >= 0)) { return spError(404, 'List \'' + list + '\' does not exist at site with URL \'' + SITE + '\'.'); }
+      if ((db.v13 || db.v14) && method === 'GET' && /ActionsSyncedOn/.test(decodeURIComponent(q))) {   // test hook: Setup 1.5 not run yet
+        return resp(400, { 'odata.error': { code: '-1, System.ArgumentException', message: { lang: 'en-US', value: 'Column \'ActionsSyncedOn\' does not exist.' } } });
+      }
+      var meta = /minimalmetadata/.test(String(headers['Accept'] || ''));
       if (db.v13 && method === 'GET' && /AppraisalBoundaries|NextWellbeingDate|AppraisalCycleStart|AppraisalHistoryJson/.test(decodeURIComponent(q))) {   // test hook: Setup 1.4 not run yet
         return resp(400, { 'odata.error': { code: '-1, System.ArgumentException', message: { lang: 'en-US', value: 'Column does not exist.' } } });
       }
@@ -492,16 +665,46 @@
         return resp(400, { 'odata.error': { code: '-1, System.ArgumentException', message: { lang: 'en-US', value: 'Column \'' + db.missingMrColumn + '\' does not exist.' } } });
       }
       if (method === 'GET' && tail === '/items') {
-        var rows = db.lists[list].filter(function (it) { return canRead(db, list, it.ID, u); }).map(function (it) { return serialize(list, it); });
-        return resp(200, { value: rows });
+        var vis = db.lists[list].filter(function (it) { return canRead(db, list, it.ID, u); });
+        if ((db.v13 || db.v14) && list === '1-to-1 Settings') { vis = vis.filter(function (it) { return it.Title !== 'ActionsTrackerStart'; }); }
+        vis = filterRows(vis, q);
+        if (!vis) { return resp(400, { 'odata.error': { code: '-1', message: { lang: 'en-US', value: 'Filter not supported by the mock' } } }); }
+        return resp(200, { value: vis.map(function (it) { return serialize(list, it, meta); }) });
       }
-      if (method === 'GET' && tail === '/RootFolder') { return u.owner || list === '1-to-1 Feedback' ? resp(200, { ServerRelativeUrl: '/sites/esg-1to1/Lists/' + list.replace(/\W/g, '') }) : spError(403, 'Access denied.'); }
+      if (method === 'GET' && tail === '/RootFolder') { return u.owner || list === '1-to-1 Feedback' ? resp(200, { ServerRelativeUrl: listUrl(list) }) : spError(403, 'Access denied.'); }
       var im = /^\/items\((\d+)\)(\/validateUpdateListItem|\/recycle\(\))?$/.exec(tail);
       if (im) {
         var id = Number(im[1]);
         var it = db.lists[list].find(function (x) { return x.ID === id; });
         if (!it || !canRead(db, list, id, u)) { return spError(404, 'Item does not exist. It may have been deleted by another user.'); }
-        if (method === 'GET' && !im[2]) { return resp(200, serialize(list, it)); }
+        if (method === 'GET' && !im[2]) { return resp(200, serialize(list, it, meta)); }
+        // REST MERGE (the page: 1-to-1 Actions only, Team Leader). IF-MATCH must be '*' or the item's current etag, else 412.
+        if (method === 'POST' && !im[2] && String(headers['X-HTTP-Method'] || '').toUpperCase() === 'MERGE') {
+          if (headers['X-RequestDigest'] !== db.digest) { return spError(403, 'The security validation for this page is invalid.'); }
+          if (!canWrite(db, list, id, u)) { return spError(403, 'Access denied. You do not have permission to perform this action or access this resource.'); }
+          var im2 = headers['IF-MATCH'];
+          if (!im2 || (im2 !== '*' && im2 !== etagOf(it))) { db.stale = (db.stale || 0) + 1; saveDb(db); return resp(412, { 'odata.error': { code: '-1, Microsoft.SharePoint.Client.ClientServiceException', message: { lang: 'en-US', value: 'The request ETag value does not match the object\'s ETag value.' } } }); }
+          if (db.failWrites > 0) { db.failWrites--; return spError(500, 'Simulated server error'); }
+          var mb = JSON.parse(options.body || '{}'), set = {}, bad = '';
+          Object.keys(mb).forEach(function (k) {
+            var f = SCHEMA[list][k];
+            if (!f || READ_ONLY.indexOf(k) >= 0) { bad = bad || 'Column \'' + k + '\' does not exist.'; return; }
+            var v = mb[k];
+            if (f.t === 'choice' && v !== null && v !== '' && f.c.indexOf(v) < 0) { bad = bad || 'Invalid choice value: ' + v; return; }
+            if ((f.t === 'date' || f.t === 'datetime') && v) { var d = new Date(v); if (isNaN(d.getTime())) { bad = bad || 'Invalid date'; return; } v = d.toISOString().replace('.000', ''); }
+            if (f.t === 'text' && v && String(v).length > 255) { bad = bad || 'Text too long'; return; }
+            if (uniqueClash(db, list, k, v, id)) { bad = bad || 'Duplicate value'; return; }
+            set[k] = v === '' && (f.t === 'date' || f.t === 'datetime') ? null : v;
+          });
+          if (bad) { return resp(400, { 'odata.error': { code: '-1', message: { lang: 'en-US', value: bad } } }); }
+          Object.keys(set).forEach(function (k) { it[k] = set[k]; });
+          touch(it);
+          db.writes.push({ as: u.key, list: list, id: id, merge: true, fields: Object.keys(set), values: set, ifMatch: im2 });
+          if (list === '1-to-1 Actions') { flow9(db, it); }
+          if (list === '1-to-1 Action Notices') { flow11(db, it); }
+          saveDb(db);
+          return resp(204);
+        }
         if (method === 'POST' && im[2] === '/recycle()') {
           if (headers['X-RequestDigest'] !== db.digest) { return spError(403, 'The security validation for this page is invalid.'); }
           if (!u.owner) { return spError(403, 'Access denied. You do not have permission to perform this action or access this resource.'); }   // no Delete in the technicians' levels
@@ -519,18 +722,22 @@
           var results = [], ok = true, pending = {};
           (body.formValues || []).forEach(function (fv) {
             var c = coerce(list, fv.FieldName, fv.FieldValue);
+            if (!c.err && uniqueClash(db, list, fv.FieldName, c.v, id)) { c = { err: 'The list item could not be added or updated because duplicate values were found in the following field(s) in the list: [' + fv.FieldName + '].' }; }
             if (c.err) { ok = false; results.push({ ErrorCode: -1, ErrorMessage: c.err, FieldName: fv.FieldName, FieldValue: fv.FieldValue, HasException: true, ItemId: id }); }
             else { pending[fv.FieldName] = c.v; results.push({ ErrorCode: 0, ErrorMessage: null, FieldName: fv.FieldName, FieldValue: fv.FieldValue, HasException: false, ItemId: id }); }
           });
           if (ok) {
             Object.keys(pending).forEach(function (k) { it[k] = pending[k]; });
-            it.Modified = nowIso();
+            touch(it);
             db.writes.push({ as: u.key, list: list, id: id, fields: Object.keys(pending), values: (body.formValues || []).reduce(function (o, fv) { o[fv.FieldName] = fv.FieldValue; return o; }, {}) });
             if (list === 'Monthly Reviews') { flow2(db, it, u); }   // runs on every change, as the real trigger does
             if (list === 'Manager Reviews' && 'ReviewState' in pending) { flow3(db, it); }
             if (list === 'Technicians' && 'Active' in pending) { flow4(db, it); }
             if (list === 'Wellbeing Assessments') { flow5(db, it, false); }
             if (list === '1-to-1 Amendments' && 'NotifyStatus' in pending) { flow8(db, it); }
+            if (list === '1-to-1 Actions') { flow9(db, it); }
+            if (list === '1-to-1 Action Updates') { flow10(db, it); }
+            if (list === '1-to-1 Action Notices' && 'Status' in pending) { flow11(db, it); }
             saveDb(db);
           }
           return resp(200, { value: results });
@@ -538,12 +745,21 @@
       }
       if (method === 'POST' && tail === '/AddValidateUpdateItemUsingPath') {
         if (headers['X-RequestDigest'] !== db.digest) { return spError(403, 'The security validation for this page is invalid.'); }
-        if (!u.owner && list !== '1-to-1 Feedback') { return spError(403, 'Access denied.'); }
         var b = JSON.parse(options.body || '{}');
         if (!b.listItemCreateInfo || !b.listItemCreateInfo.FolderPath || !b.listItemCreateInfo.FolderPath.DecodedUrl) { return spError(400, 'listItemCreateInfo is required'); }
-        var item = { ID: db.nextId[list]++, Modified: nowIso() }, res = [], good = true;
+        // where the item goes: the list's root, or (Action Updates) a person's folder – a technician may add only into their own
+        var fp = String(b.listItemCreateInfo.FolderPath.DecodedUrl).replace(/\/+$/, ''), dirName = '';
+        if (fp !== listUrl(list)) {
+          var fm = fp.indexOf(listUrl(list) + '/') === 0 ? fp.slice(listUrl(list).length + 1) : null;
+          if (list !== '1-to-1 Action Updates' || !fm || !db.folders[fm]) { return spError(u.owner ? 400 : 403, u.owner ? 'Folder not found' : 'Access denied.'); }
+          dirName = fm;
+        }
+        if (!u.owner && !(list === '1-to-1 Feedback' && !dirName) && !(list === '1-to-1 Action Updates' && dirName && db.folders[dirName] === u.email)) { return spError(403, 'Access denied.'); }
+        var item = { ID: db.nextId[list]++, Modified: nowIso(), __v: 1 }, res = [], good = true;
+        if (list === '1-to-1 Action Updates') { item.FileDirRef = listUrl(list) + (dirName ? '/' + dirName : ''); item.FSObjType = 0; }
         (b.formValues || []).forEach(function (fv) {
           var c = coerce(list, fv.FieldName, fv.FieldValue);
+          if (!c.err && uniqueClash(db, list, fv.FieldName, c.v, -1)) { c = { err: 'The list item could not be added or updated because duplicate values were found in the following field(s) in the list: [' + fv.FieldName + '].' }; }
           if (c.err) { good = false; res.push({ FieldName: fv.FieldName, HasException: true, ErrorMessage: c.err }); } else { item[fv.FieldName] = c.v; res.push({ FieldName: fv.FieldName, HasException: false, ErrorMessage: null }); }
         });
         if (good) {
@@ -556,6 +772,9 @@
             flow6(db, item, u);
           }
           if (list === '1-to-1 Amendments') { item.Author = claimsOf(u); item.Created = nowIso(); flow8(db, item); }
+          if (list === '1-to-1 Actions') { item.Created = nowIso(); flow9(db, item); }
+          if (list === '1-to-1 Action Updates') { item.Author = claimsOf(u); item.Created = nowIso(); item.ProcessState = item.ProcessState || 'Pending'; flow10(db, item); }
+          if (list === '1-to-1 Action Notices') { item.Created = nowIso(); item.Status = item.Status || 'Pending'; flow11(db, item); }
           db.writes.push({ as: u.key, list: list, id: item.ID, create: true, fields: (b.formValues || []).map(function (fv) { return fv.FieldName; }), values: (b.formValues || []).reduce(function (o, fv) { o[fv.FieldName] = fv.FieldValue; return o; }, {}) });
           saveDb(db);
         } else { db.nextId[list]--; }
@@ -580,6 +799,12 @@
     reset: function () { try { sessionStorage.removeItem(KEY); } catch (_) { /* ignore */ } },
     // test hook: run Flow 8 for any amendment waiting (as if it had just been switched on)
     runFlow8: function () { var db = window.OTO_MOCK.current.db; db.lists['1-to-1 Amendments'].forEach(function (it) { flow8(db, it); }); saveDb(db); },
+    // 1.5 hooks: the daily reconciliation (flow 1), and flows 9 / 10 / 11 catching up (as if they had just been switched on)
+    runFlow1Sync: function () { var db = window.OTO_MOCK.current.db; db.lists['Manager Reviews'].forEach(function (mr) { if (mr.ReleasedOn) { trackRelease(db, mr, mr.ReleasedOn); } }); saveDb(db); },
+    runFlow9: function () { var db = window.OTO_MOCK.current.db; db.lists['1-to-1 Actions'].forEach(function (it) { flow9(db, it); }); saveDb(db); },
+    runFlow10: function () { var db = window.OTO_MOCK.current.db; db.lists['1-to-1 Action Updates'].forEach(function (it) { flow10(db, it); }); saveDb(db); },
+    runFlow11: function () { var db = window.OTO_MOCK.current.db; db.lists['1-to-1 Action Notices'].forEach(function (it) { flow11(db, it); }); saveDb(db); },
+    addNotice: function (key, kind, actionId) { var db = window.OTO_MOCK.current.db; var n = addNotice(db, key, kind, actionId); saveDb(db); return n ? n.ID : 0; },
     userByKey: function (k) { return USERS.find(function (u) { return u.key === k; }) || USERS[0]; },
     ctx: function (userKey, xss) {
       var db = loadDb(xss), u = window.OTO_MOCK.userByKey(userKey);

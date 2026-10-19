@@ -5,15 +5,19 @@
 // the Team Leader can open, with Flow 1 turned off, then delete the page and these two files (see RESET_PROCEDURE.md).
 //
 // It NEVER touches: Technicians (people, accounts, active status, appraisal / wellbeing dates and period history),
-// 1-to-1 Settings, list or item permissions, groups, flows. Those lists are not in its list of lists at all, and the one
-// delete function refuses anything else.
+// 1-to-1 Settings, list or item permissions, groups, flows, or the technicians' update folders. Those are not in its list
+// of lists at all, and the one delete function refuses anything else.
+//
+// Tracked actions (1.5) are a separate group, shown only after "Include tracked actions" is ticked (separate approval).
+// An action is always deleted together with its updates and emails, never leaving them behind; deleting reviews never
+// deletes actions.
 //
 // Same security rules as the main page: data reaches the page only through textContent; no external resources; the
 // signed-in user's own permissions apply to every request (a technician has no Delete permission, so SharePoint refuses).
 window.ESGOneToOneReset = function (ctx) {
   'use strict';
 
-  var VERSION = '1.0.0';
+  var VERSION = '1.1.0';
   // The only lists this tool reads or deletes from. Expectations are listed but never selected by default.
   var LISTS = [
     { key: 'reviews', title: 'Monthly Reviews', select: 'ID,Title,MonthKey,ReviewStatus,Created,Technician/Title', expand: 'Technician', who: 'Technician', month: 'MonthKey', status: 'ReviewStatus' },
@@ -22,7 +26,11 @@ window.ESGOneToOneReset = function (ctx) {
     { key: 'feedback', title: '1-to-1 Feedback', select: 'ID,Title,FeedbackType,DeliveryStatus,Created,Author/Title', expand: 'Author', who: 'Author', month: 'Created', status: 'DeliveryStatus' },
     { key: 'challenges', title: '1-to-1 Challenges', select: 'ID,Title,MonthKey,ChallengeStatus,Created,Author/Title', expand: 'Author', who: 'Author', month: 'MonthKey', status: 'ChallengeStatus' },
     { key: 'amendments', title: '1-to-1 Amendments', select: 'ID,Title,MonthKey,NotifyStatus,Created,Technician/Title', expand: 'Technician', who: 'Technician', month: 'MonthKey', status: 'NotifyStatus' },
-    { key: 'exp', title: 'Appraisal Expectations', select: 'ID,Title,AppliesTo,AppraisalYear,Active,Created,Technician/Title', expand: 'Technician', who: 'Technician', month: 'Created', status: 'AppliesTo', optIn: true }
+    { key: 'exp', title: 'Appraisal Expectations', select: 'ID,Title,AppliesTo,AppraisalYear,Active,Created,Technician/Title', expand: 'Technician', who: 'Technician', month: 'Created', status: 'AppliesTo', optIn: true },
+    // the action tracker: updates and emails are selected only through their action (an orphan – its action already gone – on its own)
+    { key: 'actions', title: '1-to-1 Actions', select: 'ID,Title,ActionKey,Status,OriginMonth,Created,Technician/Title', expand: 'Technician', who: 'Technician', month: 'OriginMonth', status: 'Status', tracker: true },
+    { key: 'updates', title: '1-to-1 Action Updates', select: 'ID,Title,ActionId,Kind,ProcessState,Created,FSObjType,Author/Title', expand: 'Author', who: 'Author', month: 'Created', status: 'ProcessState', tracker: true, child: true },
+    { key: 'notices', title: '1-to-1 Action Notices', select: 'ID,Title,NoticeKey,Kind,Status,ActionId,Created,Author/Title', expand: 'Author', who: 'Author', month: 'Created', status: 'Status', tracker: true, child: true }
   ];
   var NEVER = ['Technicians', '1-to-1 Settings'];
   var MANAGE_PERMISSIONS_LOW = 0x02000000;
@@ -33,7 +41,7 @@ window.ESGOneToOneReset = function (ctx) {
   var backup = null;       // { sig, at, count }
   var dry = null;          // { sig }
   var result = null;       // { deleted: [...], failed: [...], verify: {...} }
-  var filt = { who: '', month: '' }, flowOff = false, busyNow = false, msg = null;
+  var filt = { who: '', month: '' }, flowOff = false, busyNow = false, msg = null, withTracker = false, folderIds = [];
 
   // ------------------------------------------------------------------ DOM (textContent only)
   function h(tag, attrs, children) {
@@ -91,6 +99,8 @@ window.ESGOneToOneReset = function (ctx) {
   async function recycle(title, id) {
     if (NEVER.indexOf(title) >= 0 || !LISTS.some(function (l) { return l.title === title; })) { throw new Error('Refused: ' + title + ' is never reset.'); }
     if (!Number.isInteger(id) || id <= 0) { throw new Error('Invalid item'); }
+    if (title === '1-to-1 Action Updates' && folderIds.indexOf(id) >= 0) { throw new Error('Refused: update folders are never deleted.'); }
+    if (LISTS.some(function (l) { return l.title === title && l.tracker; }) && !withTracker) { throw new Error('Refused: tracked actions are not included.'); }
     var r = await req('POST', listPath(title) + '/items(' + id + ')/recycle()', null, { 'X-RequestDigest': await digest() });
     if (!r.ok) { throw new Error(errText(r)); }
   }
@@ -107,12 +117,26 @@ window.ESGOneToOneReset = function (ctx) {
     for (var i = 0; i < LISTS.length; i++) {
       var l = LISTS[i];
       var rows = await getAll(l.title, '$select=' + l.select + '&$expand=' + l.expand + '&$orderby=ID');
+      if (l.key === 'updates' && rows) {   // folders (one per technician) are part of the set-up, never test data
+        folderIds = rows.filter(function (x) { return Number(x.FSObjType) === 1; }).map(function (x) { return Number(x.ID); });
+        rows = rows.filter(function (x) { return Number(x.FSObjType) !== 1; });
+      }
       out[l.key] = { list: l, missing: rows === null, rows: (rows || []).map(function (x) {
         var w = x[l.who];
         return { id: Number(x.ID), title: str(x.Title), who: str(w && w.Title), month: monthOf(x[l.month]), status: str(x[l.status] && x[l.status].Value !== undefined ? x[l.status].Value : x[l.status]),
-          pair: l.key === 'mgr' ? Number(x.ReviewItemId) || 0 : 0 };
+          pair: l.key === 'mgr' ? Number(x.ReviewItemId) || 0 : 0, action: l.child ? Number(x.ActionId) || 0 : 0 };
       }) };
     }
+    // an update or email names its action; it goes with it
+    if (out.actions && out.actions.rows) {
+      var ids = out.actions.rows.map(function (r) { return r.id; });
+      ['updates', 'notices'].forEach(function (k) { (out[k].rows || []).forEach(function (r) { r.orphan = ids.indexOf(r.action) < 0; }); });
+    }
+    return out;
+  }
+  function childrenOf(actionId) {
+    var out = [];
+    ['updates', 'notices'].forEach(function (k) { if (inv && inv[k]) { inv[k].rows.forEach(function (r) { if (!r.orphan && r.action === actionId) { out.push({ key: k, row: r }); } }); } });
     return out;
   }
   // A Monthly Review and its Manager Review are always kept or deleted together: half a pair left behind would stay
@@ -124,13 +148,20 @@ window.ESGOneToOneReset = function (ctx) {
     return null;
   }
   function pick(key, r, on) {
+    var l = LISTS.find(function (x) { return x.key === key; });
+    if (l.tracker && !withTracker) { return; }
+    if (l.child && !r.orphan) { return; }   // follows its action
     picked[key + ':' + r.id] = on;
     var p = partnerOf(key, r);
     if (p) { picked[p.key + ':' + p.row.id] = on; }
+    if (key === 'actions') { childrenOf(r.id).forEach(function (c) { picked[c.key + ':' + c.row.id] = on; }); }
   }
   function selected() {
     var out = [];
-    LISTS.forEach(function (l) { var s = inv && inv[l.key]; if (!s) { return; } s.rows.forEach(function (r) { if (picked[l.key + ':' + r.id]) { out.push({ list: l, row: r }); } }); });
+    LISTS.forEach(function (l) {
+      var s = inv && inv[l.key]; if (!s || (l.tracker && !withTracker)) { return; }
+      s.rows.forEach(function (r) { if (picked[l.key + ':' + r.id]) { out.push({ list: l, row: r }); } });
+    });
     return out;
   }
   function sig() { return selected().map(function (x) { return x.list.key + ':' + x.row.id; }).join(','); }
@@ -160,8 +191,9 @@ window.ESGOneToOneReset = function (ctx) {
   }
   async function runDelete() {
     var sel = selected(), done = [], failed = [];
-    // the audit / notice records first, the reviews last, so nothing is ever left pointing at a missing review
-    var order = ['amendments', 'feedback', 'challenges', 'wellbeing', 'mgr', 'reviews', 'exp'];
+    // the audit / notice records first, the reviews last, so nothing is ever left pointing at a missing review; an action's
+    // emails and updates before the action, so a failure part-way never leaves them without it
+    var order = ['amendments', 'feedback', 'challenges', 'wellbeing', 'mgr', 'reviews', 'exp', 'notices', 'updates', 'actions'];
     sel.sort(function (a, b) { return order.indexOf(a.list.key) - order.indexOf(b.list.key); });
     for (var i = 0; i < sel.length; i++) {
       var x = sel[i];
@@ -179,7 +211,7 @@ window.ESGOneToOneReset = function (ctx) {
       if (s && s.rows.some(function (r) { return r.id === d.id; })) { left.push(d); }
     });
     var counts = {};
-    LISTS.forEach(function (l) { counts[l.title] = after[l.key].missing ? null : after[l.key].rows.length; });
+    LISTS.forEach(function (l) { if (!l.tracker || withTracker) { counts[l.title] = after[l.key].missing ? null : after[l.key].rows.length; } });
     return { after: after, stillThere: left, counts: counts };
   }
 
@@ -198,7 +230,7 @@ window.ESGOneToOneReset = function (ctx) {
       function (e) { busyNow = false; msg = { text: String(e && e.message ? e.message : e), bad: true }; render(); });
   }
   function visible(l) {
-    return inv[l.key].rows.filter(function (r) { return (!filt.who || r.who === filt.who) && (!filt.month || r.month === filt.month); });
+    return inv[l.key].rows.filter(function (r) { return (!filt.who || r.who === filt.who || (l.child && !r.orphan)) && (!filt.month || r.month === filt.month || (l.child && !r.orphan)); });
   }
   function render() {
     if (!root) { return; }
@@ -208,24 +240,34 @@ window.ESGOneToOneReset = function (ctx) {
     wrap.appendChild(h('div', { class: 'rs-head' }, [h('h2', { text: 'ESG 1-to-1 – one-time test-data reset' }), h('span', { class: 'rs-ver', text: 'v' + VERSION })]));
     if (msg) { wrap.appendChild(h('div', { class: 'rs-msg' + (msg.bad ? ' bad' : ''), role: 'status', text: msg.text })); }
     if (!inv) { return; }
-    wrap.appendChild(h('p', { class: 'rs-warn', text: 'Never touched: Technicians (people, accounts, active status, appraisal and wellbeing dates, period history), 1-to-1 Settings, permissions, groups and flows. Deleted records go to the site recycle bin (restorable for about 93 days).' }));
+    wrap.appendChild(h('p', { class: 'rs-warn', text: 'Never touched: Technicians (people, accounts, active status, appraisal and wellbeing dates, period history), 1-to-1 Settings, permissions, groups, flows and the technicians\' update folders. Deleting a review never deletes tracked actions. Deleted records go to the site recycle bin (restorable for about 93 days).' }));
 
     // 1. inventory and selection
     var whoSet = {}, monthSet = {};
-    LISTS.forEach(function (l) { inv[l.key].rows.forEach(function (r) { if (r.who) { whoSet[r.who] = 1; } if (r.month) { monthSet[r.month] = 1; } }); });
+    LISTS.forEach(function (l) { if (l.tracker && !withTracker) { return; } inv[l.key].rows.forEach(function (r) { if (r.who) { whoSet[r.who] = 1; } if (r.month) { monthSet[r.month] = 1; } }); });
     var whoSel = h('select', { 'aria-label': 'Filter by person', onchange: function () { filt.who = whoSel.value; render(); } },
       [h('option', { value: '', text: 'Everyone' })].concat(Object.keys(whoSet).sort().map(function (w) { var o = h('option', { value: w, text: w }); o.selected = filt.who === w; return o; })));
     var monSel = h('select', { 'aria-label': 'Filter by month', onchange: function () { filt.month = monSel.value; render(); } },
       [h('option', { value: '', text: 'All months' })].concat(Object.keys(monthSet).sort().reverse().map(function (m) { var o = h('option', { value: m, text: m }); o.selected = filt.month === m; return o; })));
-    var lists = LISTS.map(function (l) {
+    var trackerOn = h('input', { type: 'checkbox', id: 'rs-tracker' }); trackerOn.checked = withTracker;
+    trackerOn.addEventListener('change', function () {
+      withTracker = trackerOn.checked;
+      if (!withTracker) { Object.keys(picked).forEach(function (k) { if (/^(actions|updates|notices):/.test(k)) { delete picked[k]; } }); }
+      render();
+    });
+    var trackerGate = inv.actions && inv.actions.missing ? null : h('div', { class: 'rs-list rs-gate' }, [
+      h('label', { class: 'rs-chk', for: 'rs-tracker' }, [trackerOn, ' Include tracked actions (1-to-1 Actions, their updates and emails) – only with separate written approval to delete them']),
+      h('p', { class: 'rs-muted', text: 'Selecting an action always selects its updates and emails, and they are deleted with it. Deleting reviews never deletes actions.' })]);
+    var nPlain = LISTS.filter(function (l) { return !l.tracker; }).length;
+    var lists = LISTS.filter(function (l) { return !l.tracker || withTracker; }).map(function (l) {
       var s = inv[l.key];
       if (s.missing) { return h('div', { class: 'rs-list' }, [h('h4', { text: l.title }), h('p', { class: 'rs-muted', text: 'Not on this site – nothing to do.' })]); }
       var rows = visible(l), nPicked = s.rows.filter(function (r) { return picked[l.key + ':' + r.id]; }).length;
-      var all = h('input', { type: 'checkbox', 'aria-label': 'Select all shown in ' + l.title });
+      var all = h('input', { type: 'checkbox', 'aria-label': 'Select all shown in ' + l.title, disabled: l.child || null });
       all.checked = rows.length > 0 && rows.every(function (r) { return picked[l.key + ':' + r.id]; });
       all.addEventListener('change', function () { rows.forEach(function (r) { pick(l.key, r, all.checked); }); render(); });
       var body = rows.map(function (r) {
-        var c = h('input', { type: 'checkbox', 'aria-label': 'Select ' + l.title + ' ' + r.id });
+        var c = h('input', { type: 'checkbox', 'aria-label': 'Select ' + l.title + ' ' + r.id, disabled: l.child && !r.orphan ? true : null, title: l.child && !r.orphan ? 'Selected with its action (#' + r.action + ')' : null });
         c.checked = !!picked[l.key + ':' + r.id];
         c.addEventListener('change', function () { pick(l.key, r, c.checked); render(); });
         return h('tr', null, [h('td', null, c), h('td', { text: String(r.id) }), h('td', { text: r.title }), h('td', { text: r.who }), h('td', { text: r.month }), h('td', { text: r.status })]);
@@ -233,15 +275,16 @@ window.ESGOneToOneReset = function (ctx) {
       return h('details', { class: 'rs-list', open: nPicked > 0 || null }, [
         h('summary', null, [h('b', { text: l.title }), h('span', { class: 'rs-muted', text: ' – ' + s.rows.length + ' record' + (s.rows.length === 1 ? '' : 's') + ' · ' + nPicked + ' selected' + (l.optIn ? ' · opt-in only' : '') })]),
         l.optIn ? h('p', { class: 'rs-muted', text: 'Expectations are your real set-up – select them only if they were test data. Past reviews keep their own copies.' }) : null,
+        l.child ? h('p', { class: 'rs-muted', text: 'Selected automatically with their action. Only one whose action is already gone can be selected on its own.' }) : null,
         h('table', { class: 'rs-tbl' }, [h('thead', null, h('tr', null, [h('th', null, all), h('th', { text: 'ID' }), h('th', { text: 'Title' }), h('th', { text: 'Person' }), h('th', { text: 'Month' }), h('th', { text: 'Status' })])),
           h('tbody', null, body.length ? body : h('tr', null, h('td', { colspan: '6', class: 'rs-muted', text: 'Nothing matches the filter.' })))])
       ]);
     });
     var sel = selected(), curSig = sig();
     wrap.appendChild(step(1, 'Inventory and choose', [h('div', { class: 'rs-filters' }, [whoSel, monSel,
-      btn('Select all shown (except expectations)', function () { LISTS.forEach(function (l) { if (!l.optIn && !inv[l.key].missing) { visible(l).forEach(function (r) { pick(l.key, r, true); }); } }); render(); }),
+      btn('Select all shown (except expectations and tracked actions)', function () { LISTS.forEach(function (l) { if (!l.optIn && !l.tracker && !inv[l.key].missing) { visible(l).forEach(function (r) { pick(l.key, r, true); }); } }); render(); }),
       btn('Clear selection', function () { picked = {}; render(); }),
-      btn('Re-read', function () { act('Reading', async function () { inv = await inventory(); picked = {}; backup = dry = null; }); })])].concat(lists), sel.length ? 'done' : ''));
+      btn('Re-read', function () { act('Reading', async function () { inv = await inventory(); picked = {}; backup = dry = null; }); })])].concat(lists.slice(0, nPlain)).concat(trackerGate ? [trackerGate] : []).concat(lists.slice(nPlain)), sel.length ? 'done' : ''));
 
     // 2. backup
     var backed = backup && backup.sig === curSig && sel.length;
@@ -261,7 +304,8 @@ window.ESGOneToOneReset = function (ctx) {
     ], dried ? 'done' : ''));
 
     // 4. confirm and delete
-    var phrase = 'DELETE ' + sel.length + ' RECORDS';
+    var nActs = sel.filter(function (x) { return x.list.tracker; }).length;
+    var phrase = 'DELETE ' + sel.length + ' RECORDS' + (nActs ? ' INCLUDING ' + nActs + ' TRACKER RECORDS' : '');
     var flowChk = h('input', { type: 'checkbox', id: 'rs-flow1' }); flowChk.checked = flowOff;
     flowChk.addEventListener('change', function () { flowOff = flowChk.checked; render(); });
     var typed = h('input', { type: 'text', 'aria-label': 'Type the confirmation', autocomplete: 'off', spellcheck: 'false' });

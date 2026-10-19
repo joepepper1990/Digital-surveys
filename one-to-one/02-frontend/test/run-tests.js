@@ -238,16 +238,16 @@ async function main() {
   var d10b = await db(page);
   ok('Expectations: retire writes Active = 0', d10b.writes[d10b.writes.length - 1].values.Active === '0');
 
-  // ---------------------------------------------------------------- 11. actions page close-out
+  // ---------------------------------------------------------------- 11. actions page close-out (5.1: the tracker, never the Manager Review)
   await page.locator('.topbar >> text=Actions').click();
   var before = (await db(page)).writes.length;
-  await page.locator('button:has-text("Close out")').first().click();
-  await page.locator('.modal button:has-text("Close out")').click();
-  await page.waitForTimeout(250);
+  await page.locator('tr[data-action] button:has-text("Agree & close")').first().click();
+  await page.locator('.modal button:has-text("Close action")').click();
+  await page.waitForTimeout(300);
   var d11 = await db(page);
-  var aw = d11.writes[d11.writes.length - 1];
-  var aw2 = d11.writes.slice(before).find(function (w) { return 'ActionsJson' in w.values; });
-  ok('Actions: close-out writes ActionsJson on the Manager Review', !!aw2 && aw2.list === 'Manager Reviews' && /"status":"Closed"/.test(aw2.values.ActionsJson) && aw.list === 'Manager Reviews');
+  var aw2 = d11.writes.slice(before);
+  ok('Actions: close-out is one MERGE on 1-to-1 Actions (with its etag) – no Manager Review is written', aw2.length === 1 && aw2[0].list === '1-to-1 Actions' && aw2[0].merge &&
+    aw2[0].values.Status === 'Closed' && /^"\d+"$/.test(aw2[0].ifMatch), JSON.stringify(aw2));
 
   // ---------------------------------------------------------------- 12. report + print window
   await openTeam(page, 'Jordan Lee');
@@ -272,7 +272,7 @@ async function main() {
   await page.evaluate(function (a) {   // what a technician could do to their own open review through REST
     var rv = OTO_MOCK.current.db.lists['Monthly Reviews'].find(function (r) { return r.ID === a.id; });
     rv.MonthKey = '2099-01'; rv.DueDate = '2099-12-31T23:59:59Z'; rv.Technician = a.other;
-    sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(OTO_MOCK.current.db));
+    sessionStorage.setItem('oto-mock-db-v9', JSON.stringify(OTO_MOCK.current.db));
   }, { id: target.ID, other: samClaims });
   errs = await open(page, { as: 'tl' });
   var rowT = await page.locator('.nw tr:has-text("' + tName + '")').innerText();
@@ -281,7 +281,7 @@ async function main() {
   await page.evaluate(function (a) {   // technician has submitted; Flow 2 has not run yet (5-minute polling window)
     var rv = OTO_MOCK.current.db.lists['Monthly Reviews'].find(function (r) { return r.ID === a.id; });
     rv.ReviewStatus = 'Submitted';
-    sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(OTO_MOCK.current.db));
+    sessionStorage.setItem('oto-mock-db-v9', JSON.stringify(OTO_MOCK.current.db));
   }, { id: target.ID });
   errs = await open(page, { as: 'tl' });
   ok('Status: a submission waiting for Flow 2 shows "Submitted – processing", not "Not started"',
@@ -372,7 +372,7 @@ async function main() {
   var L3 = await layoutAt(1440, 900);
   await L3.pg.evaluate(function () {
     var d = OTO_MOCK.current.db; d.lists['Technicians'] = []; d.lists['Monthly Reviews'] = []; d.lists['Manager Reviews'] = [];
-    sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d));
+    sessionStorage.setItem('oto-mock-db-v9', JSON.stringify(d));
   });
   await open(L3.pg, { as: 'tl' });
   var m3 = await L3.pg.evaluate(function () { var r = document.querySelector('[data-oto-root]'); return { h: r.getBoundingClientRect().height, vh: window.innerHeight, txt: r.innerText }; });
@@ -382,7 +382,7 @@ async function main() {
   await L3.c.close();
 
   var L4 = await layoutAt(1440, 900, { as: 'alex' });
-  ok('Layout: technician top bar has 4 tabs (incl. Wellbeing), no Team menu or Settings', (await L4.pg.locator('.topbar .tabs button.nav').count()) === 4 &&
+  ok('Layout: technician top bar has 5 tabs (incl. My actions and Wellbeing), no Team menu or Settings', (await L4.pg.locator('.topbar .tabs button.nav').count()) === 5 &&
     (await L4.pg.locator('.teammenu').count()) === 0 && (await L4.pg.locator('.topbar >> text=Settings').count()) === 0);
   ok('Layout: version shown in the top bar', (await L4.pg.locator('.topbar .ver').innerText()) === 'v' + (await L4.pg.evaluate(function () { return window.ESGOneToOne ? window.ESGOneToOne()._version : ''; })));
   await L4.c.close();
@@ -523,7 +523,7 @@ async function main() {
   ok('Appraisal: dates further out are not flagged yet', tA.indexOf('Aim to complete Alex Morgan') < 0);
   await P.evaluate(function (iso) {
     var d = OTO_MOCK.current.db; d.lists['Technicians'].find(function (t) { return t.Title === 'Alex Morgan'; }).AppraisalDate = iso + 'T12:00:00Z';
-    sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d));
+    sessionStorage.setItem('oto-mock-db-v9', JSON.stringify(d));
   }, futureIso(-10));
   await o15({ as: 'tl' });
   var tO = await P.locator('[data-oto-root]').innerText();
@@ -648,7 +648,7 @@ async function main() {
   var R = await c18.newPage(), dlg18 = [];
   R.on('dialog', function (d) { dlg18.push(d.message()); d.accept(); });
   async function save18(fn, arg) {
-    await R.evaluate(function (a) { var d = OTO_MOCK.current.db; (new Function('d', 'arg', a.body))(d, a.arg); sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d)); }, { body: fn, arg: arg });
+    await R.evaluate(function (a) { var d = OTO_MOCK.current.db; (new Function('d', 'arg', a.body))(d, a.arg); sessionStorage.setItem('oto-mock-db-v9', JSON.stringify(d)); }, { body: fn, arg: arg });
   }
   await open(R, { as: 'tl' }); await R.evaluate(function () { OTO_MOCK.reset(); });
   await open(R, { as: 'tl' });
@@ -694,7 +694,7 @@ async function main() {
     var rv = d.lists['Monthly Reviews'].find(function (x) { return x.Technician.indexOf('jordan.') >= 0 && x.MonthKey === pm; });
     var mr = d.lists['Manager Reviews'].find(function (x) { return x.ReviewItemId === rv.ID; });
     rv.ReviewStatus = 'Submitted'; mr.ReviewState = 'Open'; mr.ReleasedOn = null; mr.SubmittedOn = null;
-    sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d)); return rv.ID; });
+    sessionStorage.setItem('oto-mock-db-v9', JSON.stringify(d)); return rv.ID; });
   await open(R, { as: 'tl', reviewId: String(prev18) });
   ok('Close – not submitted is disabled while the submission is being processed', await R.locator('button:has-text("Close – not submitted")').isDisabled());
   // toasts survive the redraw that follows a save
@@ -751,7 +751,7 @@ async function main() {
     !d19.perms['1-to-1 Feedback'][fb19.ID] && (await api(B, 'GET', "/_api/web/lists/getbytitle('1-to-1 Feedback')/items")).json.value.length === 0);
   ok('Feedback: sending does not touch the unsaved form', (await B.locator('textarea').first().inputValue()) === q1v + ' (still typing)');
   // email fails → the TL sees it in Needs your attention and can read it
-  await B.evaluate(function () { var d = OTO_MOCK.current.db; d.fbFail = true; sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d)); });
+  await B.evaluate(function () { var d = OTO_MOCK.current.db; d.fbFail = true; sessionStorage.setItem('oto-mock-db-v9', JSON.stringify(d)); });
   await open(B, { as: 'sam' });
   await B.locator('.fbk-bubble').click(); await B.locator('.fbk-types button:has-text("Suggestion")').click();
   await B.locator('#oto-fbk-text').fill('Could the report include last year too?'); await B.locator('.fbk-panel button:has-text("Send")').click(); await B.waitForTimeout(250);
@@ -767,7 +767,7 @@ async function main() {
   ok('Feedback: Mark as read removes it from the list and records Read', !/Feedback from Sam Patel/.test(await B.locator('[data-oto-root]').innerText()) &&
     d19b.lists['1-to-1 Feedback'].find(function (x) { return x.Message.indexOf('last year') >= 0; }).DeliveryStatus === 'Read');
   // a site where the Feedback list doesn't exist yet (solution not upgraded): a clear message, the text is kept
-  await B.evaluate(function () { var d = OTO_MOCK.current.db; delete d.lists['1-to-1 Feedback']; sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d)); });
+  await B.evaluate(function () { var d = OTO_MOCK.current.db; delete d.lists['1-to-1 Feedback']; sessionStorage.setItem('oto-mock-db-v9', JSON.stringify(d)); });
   var e19c = await open(B, { as: 'tl' });
   ok('Feedback: the TL page still loads without the Feedback list', !e19c.length && (await B.locator('.attn-card').count()) === 1);
   await open(B, { as: 'jordan' });
@@ -821,13 +821,14 @@ async function main() {
   ok('Shorter form: a question answered No folds to one line', (await q4c.getAttribute('class')).indexOf('compact') >= 0);
   await q4c.locator('button:has-text("Yes")').click();
   ok('Shorter form: changing it to Yes opens it again', (await q4c.getAttribute('class')).indexOf('compact') < 0 && await q4c.locator('textarea').isVisible());
-  await S.evaluate(function (id) { var d = OTO_MOCK.current.db; d.lists['Monthly Reviews'].find(function (x) { return x.ID === id; }).Q2Issue = 'Van tyre slow puncture'; sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d)); }, cur20.ID);
+  await S.evaluate(function (id) { var d = OTO_MOCK.current.db; d.lists['Monthly Reviews'].find(function (x) { return x.ID === id; }).Q2Issue = 'Van tyre slow puncture'; sessionStorage.setItem('oto-mock-db-v9', JSON.stringify(d)); }, cur20.ID);
   await open(S, { as: 'alex' });
   ok('Shorter form: Q2 with text is open on load', (await S.locator('section.card:has-text("Challenges, blockers") textarea').first().inputValue()) === 'Van tyre slow puncture' &&
     await S.locator('section.card:has-text("Challenges, blockers") textarea').first().isVisible());
   // Since last time
   var since = await S.locator('.since').innerText();
-  ok('Since last time: shows what was raised last month and the actions', /What you raised in/i.test(since) && /YOUR ACTIONS|Your actions/i.test(since), since.slice(0, 300));
+  ok('Since last time: shows what was raised last month; the actions are carried forward in their own card (5.1)', /What you raised in/i.test(since) && !/YOUR ACTIONS|Your actions/i.test(since) &&
+    (await S.locator('.carry-card').count()) === 1, since.slice(0, 300));
   await S.locator('.since button:has-text("Hide")').click();
   await open(S, { as: 'alex' });
   ok('Since last time: Hide is remembered', !(await S.locator('.since .since-body').isVisible()));
@@ -839,7 +840,7 @@ async function main() {
     var d = OTO_MOCK.current.db, rv = d.lists['Monthly Reviews'].filter(function (x) { return x.Technician.indexOf('alex.') >= 0 && x.ID !== id; }).sort(function (x, y) { return x.MonthKey < y.MonthKey ? 1 : -1; })[0];
     rv.Q5PlanningRaise = 'Yes'; rv.Q5PlanningDetail = 'Leave in December';
     var mr = d.lists['Manager Reviews'].find(function (m) { return m.ReviewItemId === rv.ID; }); mr.FB_Q5 = 'UNRELEASED-REPLY'; mr.ReleasedOn = null; mr.ReviewState = 'Submitted';
-    sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d));
+    sessionStorage.setItem('oto-mock-db-v9', JSON.stringify(d));
   }, cur20.ID);
   await open(S, { as: 'alex' });
   var since2 = await S.locator('.since').innerText();
@@ -874,7 +875,7 @@ async function main() {
   var Q = await c21.newPage();
   Q.on('dialog', function (d) { d.accept(); });
   async function db21() { return Q.evaluate(function () { return JSON.parse(JSON.stringify(OTO_MOCK.current.db)); }); }
-  async function put21(body) { await Q.evaluate(function (b) { var d = OTO_MOCK.current.db; (new Function('d', b))(d); sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d)); }, body); }
+  async function put21(body) { await Q.evaluate(function (b) { var d = OTO_MOCK.current.db; (new Function('d', b))(d); sessionStorage.setItem('oto-mock-db-v9', JSON.stringify(d)); }, body); }
   await open(Q, { as: 'alex' }); await Q.evaluate(function () { OTO_MOCK.reset(); });
   await open(Q, { as: 'alex' });
   // details of a question switched to No and back to Yes are kept and saved
@@ -962,7 +963,7 @@ async function main() {
     var d = OTO_MOCK.current.db, x = OTO_MOCK.X.join(' ');
     d.lists['1-to-1 Feedback'].push({ ID: 900, Title: x.slice(0, 60), FeedbackType: 'Fault', Message: x, PageName: x, AppVersion: x, DeliveryStatus: 'Failed', HasUniqueRoleAssignments: true,
       Created: new Date().toISOString(), Author: 'i:0#.f|membership|riley.evans@example.test' });
-    sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d));
+    sessionStorage.setItem('oto-mock-db-v9', JSON.stringify(d));
   });
   await sweep('TL reading hostile feedback', { as: 'tl', xss: '1' }, async function () { await page.locator('.attn-row:has-text("Feedback from") button').first().click(); });
   await sweep('Since last time with hostile earlier answers', { as: 'alex', xss: '1' }, async function () {
@@ -1317,7 +1318,7 @@ async function main() {
   await V.evaluate(function () { OTO_MOCK.current.db.amFail = true; });
   var sRv = d27.lists['Monthly Reviews'].find(function (r) { return r.Technician === claims('sam.patel@example.test') && r.MonthKey === curMonth(); });
   await open(V, { as: 'tl', reviewId: String(sRv.ID) });
-  await V.evaluate(function () { var d = OTO_MOCK.current.db; d.amFail = true; sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d)); });
+  await V.evaluate(function () { var d = OTO_MOCK.current.db; d.amFail = true; sessionStorage.setItem('oto-mock-db-v9', JSON.stringify(d)); });
   await V.locator('.pagehead button:has-text("Amend answers")').click(); await V.waitForTimeout(300);
   await V.locator('section.card:has-text("Feedback for") textarea').first().fill('Added after the meeting');
   await V.locator('.pagehead button:has-text("Save amendment")').click();
@@ -1325,7 +1326,7 @@ async function main() {
   await open(V, { as: 'tl' });
   var failRow = V.locator('.attn-row:has-text("couldn\'t be sent")');
   ok('Amend: a failed email shows in Needs your attention with Resend, and the TL got a notice', (await failRow.count()) === 1 && (await dbV()).emails.some(function (e) { return e.template === 'E16-notice'; }));
-  await V.evaluate(function () { var d = OTO_MOCK.current.db; d.amFail = false; sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d)); });
+  await V.evaluate(function () { var d = OTO_MOCK.current.db; d.amFail = false; sessionStorage.setItem('oto-mock-db-v9', JSON.stringify(d)); });
   await failRow.locator('button:has-text("Resend")').click(); await V.waitForTimeout(400);
   var d27d = await dbV(), am2 = d27d.lists['1-to-1 Amendments'][1];
   ok('Amend: Resend sends it (Retry → Sent), one email for that amendment', am2.NotifyStatus === 'Sent' && d27d.emails.filter(function (e) { return e.template === 'E16' && e.amId === am2.ID; }).length === 1);
@@ -1334,7 +1335,7 @@ async function main() {
     var d = OTO_MOCK.current.db, old = new Date(Date.now() - 3600000).toISOString();
     d.lists['1-to-1 Amendments'].push({ ID: 90, Title: 'x', ReviewItemId: ids.r, ManagerReviewId: 0, MonthKey: ids.m, Technician: 'i:0#.f|membership|riley.evans@example.test', Reason: 'r',
       ChangedFields: 'Q1 What has gone well', ChangesJson: JSON.stringify([{ l: 'rv', f: 'Q1WentWell', b: 'old', a: 'a value never saved' }]), NotifyStatus: 'Draft', Created: old, Modified: old, Author: 'i:0#.f|membership|team.leader@example.test' });
-    sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d));
+    sessionStorage.setItem('oto-mock-db-v9', JSON.stringify(d));
   }, { r: rRv.ID, m: curMonth() });
   await open(V, { as: 'tl' });
   var draftRow = V.locator('.attn-row:has-text("wasn\'t saved")');
@@ -1343,7 +1344,7 @@ async function main() {
   ok('Amend: dismissing marks it Cancelled and emails nobody', (await dbV()).lists['1-to-1 Amendments'].find(function (x) { return x.ID === 90; }).NotifyStatus === 'Cancelled' &&
     (await dbV()).emails.filter(function (e) { return e.amId === 90; }).length === 0);
   // before Setup 1.4 the page still loads and released reviews are read-only
-  await V.evaluate(function () { var d = OTO_MOCK.current.db; d.v13 = true; sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d)); });
+  await V.evaluate(function () { var d = OTO_MOCK.current.db; d.v13 = true; sessionStorage.setItem('oto-mock-db-v9', JSON.stringify(d)); });
   var e13 = await open(V, { as: 'tl', reviewId: String(jRv.ID) });
   ok('Upgrade order: before Setup 1.4 the page loads, released reviews are read-only and say why', e13.length === 0 && (await V.locator('.pagehead button:has-text("Amend")').count()) === 0 &&
     /needs solution 1\.4/.test(await V.locator('[data-oto-root]').innerText()), e13.join('|'));
@@ -1432,7 +1433,7 @@ async function main() {
     d.lists['1-to-1 Amendments'].push({ ID: 95, Title: 'x', ReviewItemId: id, ManagerReviewId: 0, MonthKey: '2026-01', Technician: 'i:0#.f|membership|jordan.lee@example.test', Reason: 'r',
       ChangedFields: 'x', ChangesJson: JSON.stringify([{ f: '__proto__' }, null, { f: 'constructor', b: 1 }, { l: 'mr', f: 'ActionsJson', b: '[null]', a: '[null,{"text":"x"}]' }]),
       NotifyStatus: 'Sent', Created: old, Modified: old, Author: 'i:0#.f|membership|team.leader@example.test' });
-    sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d));
+    sessionStorage.setItem('oto-mock-db-v9', JSON.stringify(d));
   }, jCur28.ID);
   errB = [];
   await open(B, { as: 'tl', reviewId: String(jCur28.ID) });
@@ -1456,7 +1457,7 @@ async function main() {
       d.lists['1-to-1 Amendments'].push({ ID: 91, Title: x, ReviewItemId: id, ManagerReviewId: 0, MonthKey: '2026-01', Technician: 'i:0#.f|membership|alex.morgan@example.test', Reason: x,
         ChangedFields: x, ChangesJson: JSON.stringify([{ l: 'rv', f: 'Q1WentWell', b: x, a: x }, { l: 'mr', f: 'ActionsJson', b: '[]', a: JSON.stringify([{ text: x, owner: x, status: 'Open' }]) }]),
         NotifyStatus: 'Failed', NotifyError: x, Created: old, Modified: old, Author: 'i:0#.f|membership|team.leader@example.test' });
-      sessionStorage.setItem('oto-mock-db-v8', JSON.stringify(d));
+      sessionStorage.setItem('oto-mock-db-v9', JSON.stringify(d));
     }, rv.ID);
     await open(page, { as: 'tl', xss: '1', reviewId: String(rv.ID) });
     await page.locator('details.amend summary').first().click();

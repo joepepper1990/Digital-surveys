@@ -396,6 +396,44 @@
   .SCOPE .oto .since-list li { margin: 4px 0; }
   .SCOPE .oto .since-reply { background: #f1f7f3; border-left: 3px solid var(--green); padding: 4px 9px; margin: 4px 0 2px; border-radius: 0 6px 6px 0; font-size: 13px; }
   .SCOPE .oto .since-list .ok { color: var(--green); font-weight: 700; }
+  /* 5.1 action tracker */
+  .SCOPE .oto .badge.soft { background: rgba(255,255,255,.28); }
+  .SCOPE .oto .tiles.needs { margin-top: 14px; }
+  .SCOPE .oto .tilebtn { all: unset; display: block; cursor: pointer; border-radius: 10px; }
+  .SCOPE .oto .tilebtn:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; }
+  .SCOPE .oto .tilebtn[aria-pressed="true"] .tile { border-color: var(--navy); box-shadow: inset 0 0 0 2px var(--navy); }
+  .SCOPE .oto .tilebtn .tile { height: 100%; box-sizing: border-box; }
+  .SCOPE .oto .filters.wrap { flex-wrap: wrap; }
+  .SCOPE .oto .filters.wrap > div { width: 190px; }
+  .SCOPE .oto .tblwrap { overflow-x: auto; }
+  .SCOPE .oto .tblwrap table.tbl td { vertical-align: top; }
+  .SCOPE .oto .nw1 { white-space: nowrap; }
+  .SCOPE .oto .btn-col { display: flex; flex-direction: column; gap: 4px; align-items: stretch; }
+  .SCOPE .oto table.tbl tr.focus td { background: var(--blue-bg); }
+  .SCOPE .oto tr.acthist-row td { background: var(--soft); }
+  .SCOPE .oto ol.acthist { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; }
+  .SCOPE .oto ol.acthist li { border-left: 3px solid var(--line); padding: 2px 0 2px 10px; overflow-wrap: anywhere; }
+  .SCOPE .oto details.acthist-d { margin-top: 10px; }
+  .SCOPE .oto details.acthist-d summary, .SCOPE .oto details.closedacts summary { cursor: pointer; color: var(--navy); font-weight: 650; }
+  .SCOPE .oto .actsum { background: var(--soft); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; overflow-wrap: anywhere; }
+  .SCOPE .oto .actcard { border-left: 4px solid var(--navy-2); }
+  .SCOPE .oto .actcard.od { border-left-color: var(--red); }
+  .SCOPE .oto .actcard.focus { box-shadow: 0 0 0 2px var(--navy); }
+  .SCOPE .oto .actcard h2 { overflow-wrap: anywhere; }
+  .SCOPE .oto .actkv { display: grid; grid-template-columns: 170px 1fr; gap: 4px 14px; margin: 10px 0 0; font-size: 13px; }
+  .SCOPE .oto .actkv dt { color: var(--muted); font-weight: 600; } .SCOPE .oto .actkv dd { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+  .SCOPE .oto .quickupd { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+  .SCOPE .oto .quickupd textarea.invalid { border-color: var(--red); background: var(--red-bg); }
+  .SCOPE .oto .updstate { margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--navy); }
+  .SCOPE .oto .updstate.ok, .SCOPE .oto .small.ok { color: var(--green); }
+  .SCOPE .oto .updstate.bad { color: var(--red); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .SCOPE .oto .carry-card { border-left: 4px solid var(--navy-2); }
+  .SCOPE .oto .carry { display: grid; gap: 8px; }
+  .SCOPE .oto .carry-row { display: grid; grid-template-columns: 1fr auto; gap: 6px 14px; align-items: start; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; overflow-wrap: anywhere; }
+  .SCOPE .oto .carry-row.od { border-color: #f0b8bb; }
+  .SCOPE .oto .carry-row > :nth-child(3) { grid-column: 1 / -1; }
+  .SCOPE .oto .carry-out { display: flex; flex-direction: column; gap: 4px; }
+  .SCOPE .oto details.closedacts { padding: 12px 18px; }
         </style>
         <div class="oto" data-oto-root>
             <p style="padding:24px;font-family:Segoe UI,Arial,sans-serif">Loading the ESG 1-to-1…</p>

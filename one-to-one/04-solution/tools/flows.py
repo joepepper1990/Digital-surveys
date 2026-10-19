@@ -1460,7 +1460,8 @@ def flow_action_update():
             ('Entry' + sfx, compose({'id': "@{concat('u', string(" + TB + "?['ID']))}", 'at': '@{utcNow()}',
                                      'by': "@{coalesce(" + AB + "?['Technician']?['Title'], '')}", 'kind': '@{' + KIND + '}',
                                      'outcome': '@{' + OUTCOME + '}', 'text': '@{' + text + '}',
-                                     'waitingUntil': "@{coalesce(" + U + "?['WaitingUntil'], '')}"}, secure=True)),
+                                     'waitingUntil': "@{coalesce(" + U + "?['WaitingUntil'], '')}",
+                                     'key': "@{take(string(coalesce(" + U + "?['ClientKey'], '')), 60)}"}, secure=True)),
             ('Patch' + sfx, compose({
                 'Status': status,
                 'LatestProgress': "@if(empty(" + MSG + "), coalesce(" + AB + "?['LatestProgress'], ''), " + text + ")",
@@ -1517,7 +1518,7 @@ def flow_action_update():
         ('Get_flow_account', http('GET', '_api/web/currentuser?$select=Id')),
         ('Tracker_ready', cond("@or(equals(outputs('ActIds')?['act'], null), equals(outputs('ActIds')?['upd'], null))",
                                seq(('Run_setup_first', terminate('Failed', 'The 1-to-1 action lists were not found. Run ESG 1-to-1 | 0 Setup (1.5).'))))),
-        ('Get_update', http('GET', act_uri('upd', upd_base + '?$select=Id,ActionId,Kind,Outcome,Message,WaitingUntil,ProcessState,FileDirRef,FSObjType'),
+        ('Get_update', http('GET', act_uri('upd', upd_base + '?$select=Id,ActionId,Kind,Outcome,Message,WaitingUntil,ClientKey,ProcessState,FileDirRef,FSObjType'),
                             headers={'Accept': 'application/json;odata=minimalmetadata'})),
         ('Still_pending', cond("@and(equals(" + U + "?['ProcessState'], 'Pending'), equals(" + U + "?['FSObjType'], 0))", None, seq(
             ('Nothing_to_do', terminate('Cancelled'))))),
