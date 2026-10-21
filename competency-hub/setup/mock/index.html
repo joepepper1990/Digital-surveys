@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en-GB"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Competency Hub Setup – local test</title><style>body{margin:16px;background:#f3f6f8;font-family:Segoe UI,sans-serif}
+            .mock-scope .chs { box-sizing: border-box; font-family: Segoe UI, Arial, sans-serif; font-size: 15px; color: #16222c; max-width: 1100px; padding: 20px; background: #fff; border: 1px solid #d9dfe5; }
+            .mock-scope .chs h1 { font-size: 22px; margin: 0 0 10px; color: #13516b; }
+            .mock-scope .chs .warn { background: #fff3d6; color: #6b4a00; padding: 8px 12px; border-radius: 6px; }
+            .mock-scope .chs .field { margin: 10px 0; }
+            .mock-scope .chs textarea { width: 100%; box-sizing: border-box; font-family: Consolas, monospace; font-size: 13px; }
+            .mock-scope .chs .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 16px 0; }
+            .mock-scope .chs .btn { padding: 8px 16px; border: 1px solid #c3ccd4; background: #fff; border-radius: 6px; font: inherit; font-weight: 600; cursor: pointer; }
+            .mock-scope .chs .btn.primary { background: #ef7d3a; border-color: #ef7d3a; color: #fff; }
+            .mock-scope .chs .btn:disabled { opacity: .5; cursor: default; }
+            .mock-scope .chs input[type=text] { padding: 7px 10px; border: 1px solid #c3ccd4; border-radius: 6px; font: inherit; }
+            .mock-scope .chs .status { font-weight: 600; }
+            .mock-scope .chs .status.good { color: #1b7a45; }
+            .mock-scope .chs .status.bad { color: #a4262c; }
+            .mock-scope .chs table { border-collapse: collapse; width: 100%; font-size: 14px; }
+            .mock-scope .chs th, .mock-scope .chs td { border-bottom: 1px solid #e3e8ec; padding: 5px 8px; text-align: left; vertical-align: top; }
+            .mock-scope .chs .lvl-stop td { background: #fde8e9; color: #a4262c; font-weight: 600; }
+            .mock-scope .chs .lvl-warn td { background: #fff3d6; }
+            .mock-scope .chs .lvl-create td:nth-child(2) { color: #13516b; font-weight: 600; }
+            .mock-scope .chs .lvl-ok td { color: #5b6774; }
+            .mock-scope .chs :focus-visible { outline: 3px solid #2b78d0; outline-offset: 2px; }
+        </style></head><body>
+<p style="background:#222;color:#fff;padding:6px 10px;font-size:13px">Local test with a simulated SharePoint site – nothing real is changed. Add ?scenario=notOwner, membersShare, wrongRegion or withHubPage to try other cases.</p>
+<div class="mock-scope">
+        <section class="chs" data-chs-root><p>Loading Competency Hub Setup…</p></section>
+        </div>
+<script src="mock-admin.js"></script>
+<script src="../dist/CH_Setup.js"></script>
+<script>var params = new URLSearchParams(location.search); var site = MockAdmin.create(params.get("scenario") || ""); window.ESGCompetencyHubSetup(site.ctx).onInitialize(); window.mockSite = site;
+(function () { var auto = params.get("auto"); if (!auto) return; setTimeout(function () {
+  document.getElementById("chs-confirm").checked = true;
+  var buttons = document.querySelectorAll(".chs .btn");
+  if (auto === "check") { buttons[0].click(); return; }
+  var typed = document.getElementById("chs-typed"); typed.value = "SETUP"; typed.dispatchEvent(new Event("input")); buttons[1].click();
+}, 300); })();</script>
+</body></html>

@@ -11,11 +11,16 @@ This project is separate from the other applications in this repository.
 
 ## Status
 
-**Planning approved (19 October 2026). Nothing has been built or deployed.**
+**Planning approved (19 October 2026). Nothing has been deployed to the site.**
 
-The next stage is Phase 0: probes on the tenant and organisational confirmations
-(see section H.1 and I.2 of the plan). Development starts once the readiness
-conditions in section A of the plan are met.
+| Part | State |
+|---|---|
+| Probe P0 (`probe/`) | Passed on the site, 21 October 2026 |
+| App shell (`02-frontend/`) | Built and tested locally against a simulated SharePoint site |
+| Setup page (`setup/`) | Built and tested locally; ready for the owner to run Check (see its README) |
+| Flows | Not started (Phases 1–2) |
+
+See section K of the plan for the current step.
 
 ## Platform
 
@@ -30,6 +35,7 @@ conditions in section A of the plan are met.
 | Document | Contents |
 |---|---|
 | [docs/IMPLEMENTATION_PLAN.md](docs/IMPLEMENTATION_PLAN.md) | The approved planning package: functional, UI, data and permissions specifications; workflows; architecture; roadmap and tests; risks and decisions; independent reviews |
+| [setup/README.md](setup/README.md) | The Setup page and the owner runbook |
 
 ## Planned layout
 

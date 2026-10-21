@@ -1,7 +1,7 @@
 # ESG Competency Hub — Planning Package (revision 3)
 
 **Environmental Safety Group, Dungeness B Power Station**
-**Status:** plan approved on 19 October 2026 (revision 3, after a second independent review, J.2); layout, access model, flow account, management roles and site decided on 21 October 2026 (E.0, K4, K5). Remaining decisions in I.4 are recorded in the Phase 0 decision log as they are confirmed. Nothing has been deployed to the site yet.
+**Status:** plan approved on 19 October 2026 (revision 3, after a second independent review, J.2); layout, access model, flow account, management roles and site decided on 21 October 2026 (E.0, K4, K5); probe P0 passed on the site on 21 October 2026 and the Setup page built and tested locally (K6). Remaining decisions in I.4 are recorded in the Phase 0 decision log as they are confirmed. Nothing has been deployed to the site yet.
 
 ---
 
@@ -3117,7 +3117,189 @@ in section A:
 
 ---
 
-## K5. The new site exists: run the P0 probe (current task)
+## K6. P0 passed. Next: build Setup (current task)
+
+### K6.1 P0 probe result, 21 Oct 2026 12:56 UTC (EDF RECORD, from your screenshot)
+
+| Check | Result |
+|---|---|
+| C1–C3, C5–C8, C10, C11 | **PASS.** Welcome runs our code; it identifies you; the site can be read; the regional settings are 2057 (UK) and time zone 2 (London); the UK date is right; both Welcome lists are readable; a signed request is accepted; Back works. |
+| C4 | Site owner |
+| C9 | No Competency Hub lists yet, as expected |
+| Browser | Edge 155 on Windows |
+
+This proves P-01, P-07 (site settings and browser date) and P-09 on the real
+site. The app can therefore use page links with the browser Back button.
+C-11 (Welcome on the new site) is resolved.
+
+**Two findings to act on:**
+
+1. **The site is a Microsoft 365 group-connected team site** (template GROUP),
+   not a communication site as the plan assumed. Everyone in the Microsoft 365
+   group gets edit access to the whole site, and members can share it. To keep
+   the access model in E.0 intact:
+   - Keep the Microsoft 365 group's members to **you only** (owners). Never add
+     staff to the group, and never turn it into a Team. Staff get access only
+     through the Competency Hub SharePoint groups that Setup creates.
+   - Set **Site permissions → Change how members can share → Only site owners
+     can share**, and turn off access requests. **This needs your permission.**
+   - Setup checks both of these and refuses to continue if the Microsoft 365
+     group's Members has anyone other than owners.
+   - Every list breaks inheritance anyway (E.4), so the group's site-wide edit
+     right never reaches the app's data.
+2. **The site language is English (US)** (1033). This only affects SharePoint's
+   own menus. Dates and times use the regional settings, which are correct. No
+   action is needed.
+
+### K6.2 Recommendation D-17: Setup as an owner-only page, not a flow **[Rec]**
+
+**Context.** The plan had Setup (flow 0) creating everything from the schema.
+Because you are the site owner, the same work can be done more simply and more
+visibly from **an owner-only Setup page**. This is a separate Welcome layout,
+running as you, that uses the same SharePoint REST calls. Its advantages:
+
+- it shows each step and its result live;
+- it needs no flow import or connections yet;
+- it uses no Power Platform requests;
+- it can be tested fully against the simulated SharePoint before it touches
+  the site.
+
+The queue, reminder and notification flows are unaffected and are built later
+(Phases 1–2).
+
+**Safety rules:**
+
+- **Only site owners can use it.** The page checks that you have Manage
+  Permissions on the site and stops otherwise.
+- **The page lives on its own `HubSetup.aspx`**, which is visible to owners
+  only.
+- **Its files are deleted after use.** Code rule S8 (no permission calls from
+  the browser) still applies to the app itself, and the static tests confirm
+  that the app script contains none.
+- **It shows a dry run first.** "Check" lists everything it would create or
+  change, and writes nothing. "Apply" needs a typed confirmation, `SETUP`.
+- **It is idempotent.** Each item is created only if missing, and each step
+  reads back its result. Running it again changes nothing and reports
+  "already in place".
+- **It never deletes anything.** If it finds something unexpected (for example
+  a list with the right name but wrong columns), it reports it and stops that
+  step.
+- **It keeps a downloadable log** of every action and result.
+
+**What it creates, in order** (from one `schema.json`, as plan D.2, E.0, E.4
+and E.5.1 describe):
+
+1. **Pre-checks:**
+   - you are an owner;
+   - the regional settings are correct;
+   - the Microsoft 365 group has no extra members;
+   - sharing is limited to owners.
+2. **Permission levels:** Competency Hub Read, Add and Contribute.
+3. **13 SharePoint groups:**
+   - All Users;
+   - one Members group for each of the 10 areas;
+   - Management;
+   - Administrators.
+
+   Group membership is visible to the group owner only, with no join requests.
+4. **The 14 lists and the Records Export library**, with:
+   - columns, required fields, defaults and indexes;
+   - unique-key columns;
+   - versioning;
+   - attachments where needed;
+   - "edit own items" on Requests and Calendar Events;
+   - search crawling turned off for the technical lists.
+5. **Folders:**
+   - `{Key}` folders for the 10 areas in each partitioned list;
+   - History `Administration` and `Transactions`;
+   - Requests `System`.
+6. **Permissions** (E.0/E.4):
+   - break inheritance on each list;
+   - All Users get Read on the area folders;
+   - Members and Management get Add or Contribute;
+   - All Users get Add on every Noticeboard area folder (K4.1);
+   - administrators-only for Transactions, the Notification Log and Records
+     Export.
+
+   Every grant is read back.
+7. **Data:**
+   - the Settings rows;
+   - the 10 Competencies;
+   - **bootstrap: Joe Pepper** as Team Leader and administrator (E.5.1), with
+     the People row and request folder, administrator flag set last after
+     read-back.
+8. **Optional people import** from a pasted list (UPN, role, area keys).
+   - Each person is resolved with `ensureuser`; anyone who doesn't resolve is
+     reported and skipped.
+   - This waits for C-04: the other 25 sign-in names and the "Harrisson"
+     spelling.
+9. **Grant All Users Read** on the app page, the Welcome layouts library and
+   the Welcome errors list. If the app page doesn't exist yet, Setup reports
+   it, and running Setup again later picks it up.
+
+**Files:**
+
+- `competency-hub/setup/` — `CH_Setup.html` and `CH_Setup.js`, built from
+  `setup/src/` with the same build tool;
+- `competency-hub/04-solution/schema/schema.json` — the single schema, also
+  used to generate `01-sharepoint/lists.md`.
+
+The mock SharePoint is extended to emulate lists, fields, groups, role
+definitions, role assignments, folders and inheritance, and records every
+write.
+
+**Tests** (local, against the simulated SharePoint):
+
+- a dry run makes no writes;
+- the first apply creates exactly what the schema lists;
+- a second apply makes no writes and reports everything as already in place;
+- a non-owner is stopped at the pre-check;
+- a Microsoft 365 group with extra members is stopped at the pre-check;
+- an interrupted apply, resumed, finishes correctly;
+- the expected permissions match E.0/E.4 for every list and folder;
+- the bootstrap administrator flag is set only after the group read-back.
+
+**Your steps after I deliver it** (each needs your permission):
+
+1. Set sharing to owners only.
+2. Create the `HubSetup` page, upload the two Setup files and select the
+   layout.
+3. Run **Check** and send me the dry-run report.
+4. Run **Apply**, then send me the log.
+5. Delete the Setup files.
+
+**After Setup:**
+
+- Upload the app (`dist/` files) to a `Hub` page, and see the real app with
+  your account on the real, empty site.
+- Run probe P1 (P-03, P-04, P-13), which needs two test accounts with no other
+  access. It checks folder isolation, request folders and add-only notices on
+  the real permissions.
+
+**Effort:** 3–4 days. This replaces the Setup flow line (4–5 days) in H.5.
+
+### K6.3 Delivered locally, 21 Oct 2026
+
+The Setup page is built and tested against the simulated SharePoint site
+(`competency-hub/setup/`, runbook in its README). Nothing has been run on the
+site.
+
+- **Tests:** 14 engine tests and 8 browser checks pass (evidence class LOCAL /
+  OFFLINE-SIMULATED). They cover every test listed in K6.2, plus the people
+  import, `Hub.aspx` access, and Apply interrupted at about 50 points and then
+  resumed.
+- **Defect found and fixed by the interruption test:** a run stopped between
+  marking the bootstrap transaction Applied and recording
+  `BootstrapCompletedOn` was never completed. The transaction is now marked
+  Applied last, and an unfinished bootstrap is always resumed.
+- **Deviation from E.4:** group membership is set to "visible to group members"
+  rather than "visible to the group owner", because SharePoint REST can set
+  only the former. Staff still cannot see other groups' members. This can be
+  changed by hand in each group's settings if wanted.
+- **Size:** a full Apply on the empty site makes about 880 SharePoint requests;
+  allow a few minutes with the page open.
+
+## K5. The new site exists: run the P0 probe
 
 **Context.** You created the site `/sites/ESGCompetencyHub` on 21 Oct 2026 and
 set its regional settings. That resolves C-01 and D-05. The next gate is the P0

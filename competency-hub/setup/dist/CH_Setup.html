@@ -1,0 +1,33 @@
+<template
+    id="metadata"
+    data-name="Competency Hub Setup"
+    data-description="One-off setup of the ESG Competency Hub site (site owners only)"
+    data-author="ESG Competency Hub">
+
+    <template id="layout">
+        <style>
+            .SCOPE .chs { box-sizing: border-box; font-family: Segoe UI, Arial, sans-serif; font-size: 15px; color: #16222c; max-width: 1100px; padding: 20px; background: #fff; border: 1px solid #d9dfe5; }
+            .SCOPE .chs h1 { font-size: 22px; margin: 0 0 10px; color: #13516b; }
+            .SCOPE .chs .warn { background: #fff3d6; color: #6b4a00; padding: 8px 12px; border-radius: 6px; }
+            .SCOPE .chs .field { margin: 10px 0; }
+            .SCOPE .chs textarea { width: 100%; box-sizing: border-box; font-family: Consolas, monospace; font-size: 13px; }
+            .SCOPE .chs .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin: 16px 0; }
+            .SCOPE .chs .btn { padding: 8px 16px; border: 1px solid #c3ccd4; background: #fff; border-radius: 6px; font: inherit; font-weight: 600; cursor: pointer; }
+            .SCOPE .chs .btn.primary { background: #ef7d3a; border-color: #ef7d3a; color: #fff; }
+            .SCOPE .chs .btn:disabled { opacity: .5; cursor: default; }
+            .SCOPE .chs input[type=text] { padding: 7px 10px; border: 1px solid #c3ccd4; border-radius: 6px; font: inherit; }
+            .SCOPE .chs .status { font-weight: 600; }
+            .SCOPE .chs .status.good { color: #1b7a45; }
+            .SCOPE .chs .status.bad { color: #a4262c; }
+            .SCOPE .chs table { border-collapse: collapse; width: 100%; font-size: 14px; }
+            .SCOPE .chs th, .SCOPE .chs td { border-bottom: 1px solid #e3e8ec; padding: 5px 8px; text-align: left; vertical-align: top; }
+            .SCOPE .chs .lvl-stop td { background: #fde8e9; color: #a4262c; font-weight: 600; }
+            .SCOPE .chs .lvl-warn td { background: #fff3d6; }
+            .SCOPE .chs .lvl-create td:nth-child(2) { color: #13516b; font-weight: 600; }
+            .SCOPE .chs .lvl-ok td { color: #5b6774; }
+            .SCOPE .chs :focus-visible { outline: 3px solid #2b78d0; outline-offset: 2px; }
+        </style>
+        <section class="chs" data-chs-root><p>Loading Competency Hub Setup…</p></section>
+        <script src="CH_Setup.js" data-layout data-exports="ESGCompetencyHubSetup"></script>
+    </template>
+</template>
