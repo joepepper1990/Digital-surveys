@@ -389,17 +389,32 @@ test('Throttled reads are retried, and a Check after Apply still finds nothing t
   assert.ok(rows(listByUrl(site, 'People'))[0].IsAdministrator);
 });
 
-test('Check reports permissions it cannot read, instead of planning to change them', async () => {
+for (const mode of ['omit', 'refuse']) {
+  test('Without a usable has-own-permissions flag (' + mode + '), Check and Apply judge by the grants and find nothing to do', async () => {
+    const { site, run } = newSite();
+    assert.equal((await run('apply')).result.ok, true);
+    site.uniqueFlag(mode);
+    site.writes.length = 0;
+    const check = await run('check');
+    deq(check.entries.filter((e) => e.level === 'create' || e.level === 'warn').map((e) => e.text), []);
+    const again = await run('apply');
+    assert.equal(again.result.ok, true, again.stops.join(' | '));
+    deq(site.writes, []);
+  });
+}
+
+test('Without the flag, a list that really inherits its permissions is still found and fixed', async () => {
   const { site, run } = newSite();
   assert.equal((await run('apply')).result.ok, true);
-  site.refuseUniqueRead(true);
-  site.writes.length = 0;
+  site.uniqueFlag('omit');
+  const requests = listByUrl(site, 'Requests');
+  requests.unique = false;
+  requests.ra = [];
   const check = await run('check');
-  deq(check.entries.filter((e) => e.level === 'create').map((e) => e.text), []);
-  const warns = check.entries.filter((e) => e.level === 'warn').map((e) => e.text);
-  assert.ok(warns.length >= 38, warns.length + ' warnings: one per list, folder and Welcome list');
-  assert.ok(warns.every((w) => /^Could not read the permissions of ".+" \(HTTP 400: The property HasUniqueRoleAssignments cannot be read\.\)\.$/.test(w)), warns[0]);
-  deq(site.writes, []);
+  assert.ok(check.entries.some((e) => e.text === 'Would give "Requests" its own permissions: Owners FullControl.'), 'inheriting Requests list is reported');
+  assert.equal((await run('apply')).result.ok, true);
+  assert.equal(requests.unique, true);
+  assert.ok(!requests.ra.some((a) => a.p === groupId(site, 'ESG Competency Hub Visitors')), 'site visitors cannot see Requests');
 });
 
 test('Securing a list never clears permissions already set on its folders', async () => {

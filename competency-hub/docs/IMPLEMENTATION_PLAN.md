@@ -3327,6 +3327,25 @@ doubtful. The simulated site does not reproduce it.
 **Next.** You upload the new `CH_Setup.js`, run **Check only**, and send the
 log. Apply waits until the cause is known.
 
+**Diagnosis (EDF RECORD, 15:36 UTC).** Every list and folder already had all
+of its expected grants: "2 of 2", "4 of 4" and so on. The site is correct.
+
+The cause was in how Setup reads the flag. SharePoint answered the
+`HasUniqueRoleAssignments` read in OData 4.0 form without a usable `true`.
+The Welcome errors list was the only exception.
+
+**Fix.** Setup now judges by the grants themselves:
+
+- when the flag is unusable, a securable counts as having its own permissions
+  if all its Competency Hub grants are present and nobody else has
+  non-Limited-Access rights;
+- an inheriting object would show the site's Members and Visitors;
+- the Competency Hub levels are never granted on the site itself.
+
+This applies to Check and to Apply, so neither needlessly re-breaks
+inheritance. Twenty tests cover it, including a list that really inherits its
+permissions with no usable flag.
+
 ### K6.6 Setup applied on the site (EDF RECORD, 21 Oct 2026 15:22 UTC)
 
 **Result.** Apply finished with no stops and no warnings. It created:

@@ -212,6 +212,8 @@ window.ESGCompetencyHubSetup = function (ctx) {
         var full = defs.filter(function (d) { return Number(d.RoleTypeKind) === 5; })[0];
         if (!full) throw new StopError('Full Control permission level not found');
         S.roles.FullControl = full.Id;
+        var limited = defs.filter(function (d) { return Number(d.RoleTypeKind) === 1; })[0];
+        S.roles.LimitedAccess = limited ? limited.Id : -1;
         for (var i = 0; i < schema.permissionLevels.length; i++) {
           var p = schema.permissionLevels[i];
           var shortName = p.name.replace('Competency Hub ', '');
@@ -461,33 +463,48 @@ window.ESGCompetencyHubSetup = function (ctx) {
       }
 
       // Makes the securable at `path` unique (if needed) and ensures each [principal, level] grant.
+      // Grants on `have` from anyone not in `allowed`, ignoring Limited Access (SharePoint adds it for access below).
+      function extras(have, allowed) {
+        return have.filter(function (a) {
+          return allowed.indexOf(a.id) < 0 && a.roles.some(function (r) { return r !== S.roles.LimitedAccess; });
+        });
+      }
+
+      // Whether the securable at `path` already has its own permissions. SharePoint's HasUniqueRoleAssignments flag
+      // is used when it says so; otherwise the grants decide: the expected Competency Hub grants are present and,
+      // unless the inherited grants were copied, nobody else has access. An inheriting object would instead show
+      // the site's Members and Visitors, and the Competency Hub levels are never granted on the site itself.
+      async function ownPermissions(path, expected, copy) {
+        var flag = null;
+        try { flag = (await rest.get(path + '?$select=HasUniqueRoleAssignments')).HasUniqueRoleAssignments; } catch (e) { flag = null; }
+        var have = await assignments(path);
+        if (flag === true) return { own: true, have: have };
+        var allPresent = expected.every(function (g) { return has(have, principal(g[0]), S.roles[g[1]]); });
+        var allowed = expected.map(function (g) { return principal(g[0]); }).concat([S.me.Id]);
+        return { own: allPresent && (copy || !extras(have, allowed).length), have: have };
+      }
+
+      // Makes the securable at `path` unique (if needed) and ensures each [principal, level] grant.
       async function secure(path, label, grants, copy, step) {
         var expected = (copy ? [] : [['Owners', 'FullControl']]).concat(grants);
+        var allowed;
         if (!applying()) {
           var planned = expected.some(function (g) { return !principal(g[0]) || !S.roles[g[1]]; });
           if (planned) { note('create', step, 'Would give "' + label + '" its own permissions: ' + describe(expected) + '.'); return; }
           var state;
-          try { state = await rest.get(path + '?$select=HasUniqueRoleAssignments'); } catch (e) {
+          try { state = await ownPermissions(path, expected, copy); } catch (e) {
             note('warn', step, 'Could not read the permissions of "' + label + '" (' + e.message + ').');
             return;
           }
-          if (!state || state.HasUniqueRoleAssignments !== true) {
-            // Report what SharePoint said, and whether the grants are visible anyway, so the log shows which is true.
-            var seen = await assignments(path).catch(function () { return null; });
-            var present = seen && expected.filter(function (g) { return has(seen, principal(g[0]), S.roles[g[1]]); }).length;
-            note('create', step, 'Would give "' + label + '" its own permissions: ' + describe(expected) + '. SharePoint answered ' +
-              JSON.stringify(state).slice(0, 120) + (seen ? '; ' + present + ' of ' + expected.length + ' of these grants are already present.' : '.'));
-            return;
-          }
-          var have = await assignments(path);
-          var missing = expected.filter(function (g) { return !has(have, principal(g[0]), S.roles[g[1]]); });
+          if (!state.own) { note('create', step, 'Would give "' + label + '" its own permissions: ' + describe(expected) + '.'); return; }
+          var missing = expected.filter(function (g) { return !has(state.have, principal(g[0]), S.roles[g[1]]); });
           if (missing.length) note('create', step, 'Would add to "' + label + '": ' + describe(missing) + '.');
           else note('ok', step, '"' + label + '" permissions already in place.');
           return;
         }
-        var cur = await rest.get(path + '?$select=HasUniqueRoleAssignments');
+        var cur = await ownPermissions(path, expected, copy);
         var changed = false;
-        if (!cur.HasUniqueRoleAssignments) {
+        if (!cur.own) {
           await write(path + '/breakroleinheritance(copyRoleAssignments=' + (copy ? 'true' : 'false') + ',clearSubscopes=false)');
           changed = true;
         }
@@ -504,8 +521,8 @@ window.ESGCompetencyHubSetup = function (ctx) {
         var after = await assignments(path);
         var missingAfter = expected.filter(function (g) { return !has(after, principal(g[0]), S.roles[g[1]]); });
         if (missingAfter.length) { note('stop', step, '"' + label + '" is missing ' + describe(missingAfter) + ' after setting it.'); return; }
-        var allowed = expected.map(function (g) { return principal(g[0]); }).concat([S.me.Id]);
-        var extra = after.filter(function (a) { return allowed.indexOf(a.id) < 0; });
+        allowed = expected.map(function (g) { return principal(g[0]); }).concat([S.me.Id]);
+        var extra = extras(after, allowed);
         if (extra.length && !copy) note('warn', step, '"' + label + '" also grants access to ' + extra.map(function (e) { return e.title; }).join(', ') + '. Nothing was removed; review it.');
         note(changed ? 'create' : 'ok', step, changed ? 'Set permissions on "' + label + '": ' + describe(expected) + '.' : '"' + label + '" permissions already in place.');
       }

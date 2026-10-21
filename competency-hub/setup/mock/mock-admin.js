@@ -371,7 +371,9 @@ window.MockAdmin = (function () {
       // The 'throttle' scenario answers every fifth read with 429 Too Many Requests, once.
       if (scenario === 'throttle' && ++gets % 5 === 0) return fail(429, 'The request has been throttled.');
       // refuseUniqueRead(true) makes the site refuse to say whether an object has its own permissions.
-      if (refuseUnique && /HasUniqueRoleAssignments/.test(url)) return fail(400, 'The property HasUniqueRoleAssignments cannot be read.');
+      if (refuseUnique === 'refuse' && /HasUniqueRoleAssignments/.test(url)) return fail(400, 'The property HasUniqueRoleAssignments cannot be read.');
+      // 'omit' answers like the site did on 21 Oct 2026: OData 4.0 metadata, without a usable flag.
+      if (refuseUnique === 'omit' && /HasUniqueRoleAssignments/.test(url)) return respond(200, { '@odata.context': SITE + '/_api/$metadata#lists/$entity' });
       return get(url.replace(SITE, ''));
     };
     // Like SPFx's SPHttpClient, requests are OData 4.0 unless an odata-version header overrides it, and
@@ -393,7 +395,7 @@ window.MockAdmin = (function () {
       ctx: ctx, writes: writes, lists: lists, groups: groups, roleDefs: roleDefs, users: users, web: web, me: function () { return me; },
       effective: function (list, item) { return effective(list, item); }, findFolder: findFolder,
       setFailAfter: function (n) { failAfter = n; writes.length = 0; },
-      refuseUniqueRead: function (on) { refuseUnique = !!on; },
+      uniqueFlag: function (mode) { refuseUnique = mode; },
       // Signs in as another site owner, for tests where someone else runs Setup.
       signInAs: function (email, title) {
         var u = users.filter(function (x) { return x.Email === email; })[0];
