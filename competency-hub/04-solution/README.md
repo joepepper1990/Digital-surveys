@@ -1,6 +1,6 @@
 # ESG Competency Hub – Power Automate solution
 
-`ESGCompetencyHub_1_0_0_0_unmanaged.zip` is the solution to import into Power Automate (plan K7.3). It holds:
+`ESGCompetencyHub_1_0_0_1_unmanaged.zip` is the solution to import into Power Automate (plan K7.3). It holds:
 
 | Part | Name |
 |---|---|
@@ -11,6 +11,23 @@
 
 `schema/schema.json` is the single description of the lists. Setup builds the site from it, and the flow tools check every
 column the flow uses against it.
+
+## Version 1.0.0.1: fewer SharePoint calls (plan K7.10)
+
+The first test on the site took 9½ minutes, almost all of it waiting on SharePoint calls. This version makes **20 calls
+to raise an action (was 31)** and **16 to extend or complete one (was 26)**. The same checks and records are made:
+
+- **Lists by address.** Every list is reached as `GetList('/sites/…/Lists/<url>')`, so no call is needed to find them.
+- **First run.** When a run has just created the transaction row, nothing for the request can exist yet, so the
+  "already done?" look-ups (existing action, folders, event row) are skipped. A resubmitted run is not a first run and
+  makes every check, as before.
+- **Returned Ids.** New items' Ids are taken from the create response (read back only if missing); the claim time is
+  written with the transaction row; both sign-in names come from one call; the area comes with the action (`$expand`);
+  the lock this run took is released without reading the action again.
+
+`test_flow.py` holds a call budget per request type, so a later change that adds calls fails the tests.
+
+Import it over 1.0.0.0 as an **upgrade**; the connection and site address stay as they are.
 
 ## What the flow does
 

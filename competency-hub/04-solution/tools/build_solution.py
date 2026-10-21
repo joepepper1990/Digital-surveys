@@ -22,7 +22,8 @@ import validate
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, '..'))
 SRC = os.path.join(ROOT, 'src')
-VERSION = '1.0.0.0'
+VERSION = '1.0.0.1'
+INTRODUCED = '1.0.0.0'   # the version the flow and environment variable first appeared in
 UNIQUE = 'ESGCompetencyHub'
 DISPLAY = 'ESG Competency Hub'
 PREFIX = 'esghub'
@@ -55,7 +56,7 @@ def workflow_xml(f):
         '      <TriggerOnDelete>0</TriggerOnDelete>', '      <AsyncAutodelete>0</AsyncAutodelete>',
         '      <SyncWorkflowLogOnFailure>0</SyncWorkflowLogOnFailure>',
         '      <StateCode>{0}</StateCode>'.format(1 if on else 0), '      <StatusCode>{0}</StatusCode>'.format(2 if on else 1),
-        '      <RunAs>1</RunAs>', '      <IsTransacted>1</IsTransacted>', '      <IntroducedVersion>{0}</IntroducedVersion>'.format(VERSION),
+        '      <RunAs>1</RunAs>', '      <IsTransacted>1</IsTransacted>', '      <IntroducedVersion>{0}</IntroducedVersion>'.format(INTRODUCED),
         '      <IsCustomizable>1</IsCustomizable>', '      <BusinessProcessType>0</BusinessProcessType>',
         '      <IsCustomProcessingStepAllowedForOtherPublishers>1</IsCustomProcessingStepAllowedForOtherPublishers>',
         '      <ModernFlowType>0</ModernFlowType>', '      <PrimaryEntity>none</PrimaryEntity>',
@@ -111,7 +112,7 @@ def env_var(ev):
         '<environmentvariabledefinition schemaname="{0}">'.format(ev['schema']),
         '  <description default="{0}">'.format(d), '    <label description="{0}" languagecode="1033" />'.format(d), '  </description>',
         '  <displayname default="{0}">'.format(esc(ev['display'])), '    <label description="{0}" languagecode="1033" />'.format(esc(ev['display'])),
-        '  </displayname>', '  <introducedversion>{0}</introducedversion>'.format(VERSION), '  <iscustomizable>1</iscustomizable>',
+        '  </displayname>', '  <introducedversion>{0}</introducedversion>'.format(INTRODUCED), '  <iscustomizable>1</iscustomizable>',
         '  <isrequired>1</isrequired>', '  <secretstore>0</secretstore>', '  <type>100000000</type>',
         '</environmentvariabledefinition>']) + '\r\n'
 

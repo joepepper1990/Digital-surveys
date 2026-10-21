@@ -23,7 +23,7 @@ convertTimeZone convertToUtc createArray dataUri dayOfMonth dayOfWeek dayOfYear 
 equals first float formatDateTime formatNumber getFutureTime getPastTime greater greaterOrEquals guid if indexOf int item items
 join json last lastIndexOf length less lessOrEquals listCallbackUrl max min mod mul not null or outputs parameters rand range
 replace result select setProperty skip split startOfDay startOfHour startOfMonth startsWith string sub substring take ticks toLower
-toUpper trigger triggerBody triggerOutputs trim union uriComponent utcNow variables workflow xml xpath
+toUpper trigger triggerBody triggerOutputs trim union uriComponent uriPath utcNow variables workflow xml xpath
 '''.split())
 REQUIRED = {
     'HttpRequest': ['dataset', 'parameters/method', 'parameters/uri'], 'GetOnUpdatedItems': ['dataset', 'table'],
@@ -379,7 +379,7 @@ def validate_all(flows):
 
 def check_rest_columns(f):
     """Every column a REST call selects, filters on or writes must exist in the list the call names (by its URL key,
-    e.g. lists(guid'@{outputs('Ids')?['act']}')). Catches a misspelt column before the tenant does."""
+    e.g. GetList('@{outputs('Ids')?['act']}')). Catches a misspelt column before the tenant does."""
     from flows import LIST_KEYS
     probs = []
 
@@ -388,7 +388,7 @@ def check_rest_columns(f):
             if o.get('type') == 'OpenApiConnection' and o['inputs']['host']['operationId'] == 'HttpRequest':
                 p = o['inputs']['parameters']
                 uri = p['parameters/uri']
-                m = re.search(r"lists\(guid'@\{outputs\('Ids'\)\?\['(\w+)'\]\}'\)", uri)
+                m = re.search(r"GetList\('@\{outputs\('Ids'\)\?\['(\w+)'\]\}'\)", uri)
                 if m and m.group(1) in LIST_KEYS:
                     fields = LIST_FIELDS[LIST_KEYS[m.group(1)]]
                     qs = re.sub(r'@\{[^}]*\}', 'X', uri).partition('?')[2]   # expressions hold ?[...] too

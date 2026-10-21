@@ -45,6 +45,7 @@ def site():
         'DueDay': 20261019.0, 'Status': 'In Progress', 'IsOpen': True, 'Priority': 'Normal', 'RequiresCloseOut': False,
         'ExtensionCount': 1.0, 'Revision': 2.0, 'PendingRequestKey': None, 'LastRequestKey': None, 'CreatedRequestKey': 'IMPORT-1'})
     s.folder('updates', 'FLK/A{0}'.format(s.action))
+    s.folder('history', 'FLK/A{0}'.format(s.action))   # made when the action was raised
     return s
 
 
@@ -372,6 +373,87 @@ class Robustness(unittest.TestCase):
         self.assertEqual(status, 'Failed')
         self.assertEqual(request(s, r)['Status'], 'Failed')
         self.assertEqual(s.rows('history', RowKind='Transaction')[0]['f']['State'], 'Failed')
+
+
+class Calls(unittest.TestCase):
+    """Fewer SharePoint calls per request (plan K7.10): a first run skips every "already done?" look-up."""
+    BUDGET = {'RaiseAction': 20, 'ExtendDeadline': 16, 'MarkComplete': 16}
+
+    def first_run(self, rtype, s=None):
+        s = s or site()
+        payload = {'RaiseAction': RaiseAction.good, 'ExtendDeadline': Extend().payload(), 'MarkComplete': {'note': 'Done.'}}[rtype]
+        r = submit(s, RACHEL, rtype, payload, target=None if rtype == 'RaiseAction' else s.action, revision=None if rtype == 'RaiseAction' else 2)
+        status, eng = run(s, r)
+        return s, r, status, eng
+
+    def test_each_request_type_stays_within_its_call_budget(self):
+        for rtype, budget in self.BUDGET.items():
+            with self.subTest(rtype):
+                s, r, status, eng = self.first_run(rtype)
+                self.assertEqual(request(s, r)['Status'], 'Completed', eng.log)
+                self.assertLessEqual(len(s.calls), budget, '\n'.join(m + ' ' + u for m, u in s.calls))
+
+    def test_lists_are_reached_by_address_with_no_look_up(self):
+        s, r, status, eng = self.first_run('RaiseAction')
+        self.assertFalse([u for m, u in s.calls if u.startswith('_api/web/lists')], s.calls)
+
+    def test_without_returned_ids_the_items_are_read_back(self):
+        for rtype in ('RaiseAction', 'ExtendDeadline'):
+            with self.subTest(rtype):
+                s = site()
+                s.return_new_id = False
+                s, r, status, eng = self.first_run(rtype, s)
+                self.assertEqual(request(s, r)['Status'], 'Completed', eng.log)
+                ev = s.rows('history', RequestKey=KEY + '|1')[0]
+                self.assertEqual(ev['f']['ActorId'], RACHEL)
+                if rtype == 'RaiseAction':
+                    a = s.rows('actions', CreatedRequestKey='F|' + KEY)[0]
+                    self.assertEqual(ev['dir'], 'FLK/A{0}'.format(a['id']))
+                    self.assertEqual(int(request(s, r)['ResultId']), a['id'])
+
+    def test_a_folder_that_already_exists_stops_a_first_run_and_the_resubmit_finishes(self):
+        s = site()
+        nxt = s.by_key['actions']['next']
+        s.folder('updates', 'FLK/A{0}'.format(nxt), author=RACHEL)
+        r = submit(s, RACHEL, 'RaiseAction', RaiseAction.good)
+        first, _ = run(s, r)
+        self.assertEqual((first, request(s, r)['Status']), ('Failed', 'Failed'))
+        request(s, r)['Status'] = 'Submitted'
+        run(s, r, now=s.clock + timedelta(minutes=10))
+        self.assertEqual(request(s, r)['Status'], 'Completed')
+        self.assertEqual(len(s.rows('actions', CreatedRequestKey='F|' + KEY)), 1)
+
+    def test_an_action_without_its_history_folder_is_repaired_on_the_resubmit(self):
+        s = site()
+        fold = s._find_folder(s.by_key['history'], 'FLK', 'A{0}'.format(s.action))
+        del s.by_key['history']['items'][fold['id']]
+        r = submit(s, RACHEL, 'ExtendDeadline', Extend().payload(), target=s.action, revision=2)
+        first, _ = run(s, r)
+        self.assertEqual(first, 'Failed')
+        request(s, r)['Status'] = 'Submitted'
+        run(s, r, now=s.clock + timedelta(minutes=10))
+        self.assertEqual(request(s, r)['Status'], 'Completed')
+        self.assertEqual(s.rows('history', RequestKey=KEY + '|1')[0]['dir'], 'FLK/A{0}'.format(s.action))
+        self.assertEqual(s.item('actions', s.action)['f']['PendingRequestKey'], '')
+
+    def test_a_transaction_row_from_the_previous_version_still_resumes(self):
+        s = site()
+        r = submit(s, RACHEL, 'ExtendDeadline', Extend().payload(), target=s.action, revision=2)
+        req = request(s, r)
+        s.add('history', 'Transactions', {'Title': 'Request', 'RowKind': 'Transaction', 'RequestKey': KEY, 'RequestItemId': float(r),
+                                          'RequestType': 'ExtendDeadline', 'RecordType': 'Action', 'RecordId': float(s.action),
+                                          'ExpectedRevision': 2.0, 'Payload': req['Payload'], 'State': 'Received', 'Attempts': 1.0})
+        status, eng = run(s, r)
+        self.assertEqual(request(s, r)['Status'], 'Completed', eng.log)
+        tx = s.rows('history', RowKind='Transaction')[0]['f']
+        self.assertEqual((tx['State'], tx['FirstClaimedAt']), ('Applied', '2026-10-21T09:30:00Z'))
+
+    def test_the_claim_time_is_kept_to_the_minute(self):
+        s = site()
+        s.clock = s.clock + timedelta(seconds=42)
+        s, r, status, eng = self.first_run('ExtendDeadline', s)
+        tx = s.rows('history', RowKind='Transaction')[0]['f']
+        self.assertEqual(tx['FirstClaimedAt'], '2026-10-21T09:30:00Z')
 
 
 if __name__ == '__main__':

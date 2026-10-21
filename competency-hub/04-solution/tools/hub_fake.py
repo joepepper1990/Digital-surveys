@@ -38,7 +38,9 @@ class HubFake:
         self.lists = {}
         self.by_key = {}
         self.writes = []                  # every write, in order: (method, path)
+        self.calls = []                   # every SharePoint call, in order: (method, uri)
         self.fail_at = None               # 1-based index of a write that fails once (simulated interruption)
+        self.return_new_id = True         # AddValidateUpdateItemUsingPath lists the new item's Id among its results
         self.clock = datetime(2026, 10, 21, 9, 30, tzinfo=timezone.utc)
         for l in LISTS:
             lid = str(uuid.uuid4())
@@ -109,6 +111,15 @@ class HubFake:
     def _out(self, lst, it, select, meta):
         o = {}
         for name in select:
+            if '/' in name:
+                # a projected lookup column (needs $expand in the real API): Competency/CompetencyKey
+                look, _, col = name.partition('/')
+                f = lst['fields'].get(look)
+                if f is None or f['type'] != 'Lookup':
+                    fail(400, "The field or property '{0}' does not exist.".format(look))
+                target = self.by_key[f['lookup']]['items'].get(it['f'].get(look + 'Id'))
+                o.setdefault(look, {})[col] = (target['id'] if col == 'Id' else target['f'].get(col)) if target else None
+                continue
             if name in ('Id', 'ID'):
                 o[name] = it['id']
             elif name == 'FileDirRef':
@@ -148,6 +159,7 @@ class HubFake:
             fail(500, 'simulated interruption at write {0}'.format(self.fail_at))
 
     def rest(self, method, uri, headers, body):
+        self.calls.append((method, uri))
         if not uri.startswith('_api/'):
             fail(400, 'uri must start with _api/: ' + uri)
         path, _, qs = uri.partition('?')
@@ -181,11 +193,20 @@ class HubFake:
             if m.group(2):
                 fail(404, 'File Not Found.')
             return {'Exists': False}
-        m = re.match(r"^_api/web/lists\(guid'([0-9a-f-]+)'\)(/.*)?$", path)
-        if not m or m.group(1) not in self.lists:
+        m = re.match(r"^_api/web/siteusers$", path)
+        if method == 'GET' and m:
+            ids = [int(x) for x in re.findall(r'Id eq (\d+)', params.get('$filter', ''))]
+            return {'value': [{'Id': u['Id'], 'LoginName': u['LoginName']} for uid, u in sorted(self.users.items()) if uid in ids]}
+        # lists by their web address, as the flow reaches them
+        m = re.match(r"^_api/web/GetList\('((?:[^']|'')*)'\)(/.*)?$", path)
+        lst = next((l for l in self.lists.values() if m and l['root'] == m.group(1).replace("''", "'")), None)
+        if not lst:
             fail(404, 'List does not exist: ' + path)
-        lst, rest = self.lists[m.group(1)], m.group(2) or ''
+        rest = m.group(2) or ''
         select = [s for s in params.get('$select', 'Id').split(',') if s]
+        for c in select:
+            if '/' in c and c.split('/')[0] not in params.get('$expand', '').split(','):
+                fail(400, 'The query to field \'{0}\' is not valid. The $select query string must specify the target fields and the $expand query string must contains {1}.'.format(c, c.split('/')[0]))
         if method == 'GET' and rest == '/items':
             rows = [it for it in lst['items'].values() if self._matches(lst, it, params.get('$filter'))]
             return {'value': [self._out(lst, it, select, meta) for it in sorted(rows, key=lambda x: x['id'])]}
@@ -361,5 +382,6 @@ class HubFake:
                 d = f['default']
                 vals[name] = {'Boolean': lambda x: x in ('1', 1, True), 'Number': float}.get(f['type'], lambda x: x)(d)
         it = self._new(lst, path, {'Title': info['LeafName']['DecodedUrl']} if folder else vals, fsobj=1 if folder else 0, author=self.me)
-        results.append({'FieldName': 'Id', 'FieldValue': str(it['id']), 'HasException': False, 'ErrorMessage': None})
+        if self.return_new_id:
+            results.append({'FieldName': 'Id', 'FieldValue': str(it['id']), 'HasException': False, 'ErrorMessage': None})
         return {'value': results}

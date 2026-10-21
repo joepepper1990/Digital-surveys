@@ -66,7 +66,7 @@ class BrokenFlowsAreRejected(unittest.TestCase):
         self.expect(lambda d, f: find(d, 'Requester').__setitem__('inputs', "@first(body('Get_requesters')?['value'])"), "no such action")
 
     def test_runafter_outside_the_container(self):
-        self.expect(lambda d, f: find(d, 'Verdict_R').__setitem__('runAfter', {'Get_lists': ['Succeeded']}), 'not in the same container')
+        self.expect(lambda d, f: find(d, 'Verdict_R').__setitem__('runAfter', {'Get_request': ['Succeeded']}), 'not in the same container')
 
     def test_uninitialised_variable(self):
         self.expect(lambda d, f: find(d, 'Set_tx').__setitem__('inputs', {'name': 'varNope', 'value': 1}), 'unknown variable varNope')
@@ -75,7 +75,7 @@ class BrokenFlowsAreRejected(unittest.TestCase):
         self.expect(lambda d, f: find(d, 'Set_tx').__setitem__('runtimeConfiguration', {'secureData': {'properties': ['inputs']}}), 'not supported on a SetVariable')
 
     def test_premium_http_action(self):
-        self.expect(lambda d, f: find(d, 'Try')['actions'].__setitem__('Call_out', {'type': 'Http', 'inputs': {}, 'runAfter': {'Get_lists': ['Succeeded']}}), 'premium or not allowed')
+        self.expect(lambda d, f: find(d, 'Try')['actions'].__setitem__('Call_out', {'type': 'Http', 'inputs': {}, 'runAfter': {'Get_request': ['Succeeded']}}), 'premium or not allowed')
 
     def test_misspelt_column_in_a_rest_call(self):
         def change(d, f):
@@ -88,7 +88,7 @@ class BrokenFlowsAreRejected(unittest.TestCase):
 
     def test_connector_list_step_instead_of_rest(self):
         def change(d, f):
-            a = find(d, 'Get_lists')
+            a = find(d, 'Get_requester')
             a['inputs']['host']['operationId'] = 'GetItems'
             a['inputs']['parameters'] = {'dataset': a['inputs']['parameters']['dataset'], 'table': 'People'}
         self.expect(change, 'write and read lists by REST')

@@ -3669,17 +3669,101 @@ A reload forgets them, so even 0.2.0 drops the note.
 - You replace both app files, use **Reset layout cache** on the web part, and
   reload with **Ctrl+F5** once. The footer should say 0.2.1.
 
-### K7.10 Next: cut SharePoint calls per request (proposed, not in 0.2.1)
+### K7.10 Faster request flow (solution 1.0.0.1) — delivered locally, 21 Oct 2026
 
-Your timings show throttled calls. I propose a flow update, solution 1.0.0.1,
-that reduces the calls each request makes:
+**Context.** The first raise on the site took 9 min 35 s. Steps that only
+calculate took 0 s. SharePoint calls took 0.2–0.9 s at best, but usually 11–66
+s, which suggests throttling. The flow makes about **31 SharePoint calls to
+raise an action** and about **25 to extend or complete one**. Each call cut
+saves 1–60 s, and fewer calls also make throttling less likely. Correctness
+must not change: the same checks, the same idempotent resume, the same
+records.
 
-- reuse the list IDs and flow account across steps;
-- combine the requester and folder checks;
-- skip folder look-ups when the folder already exists.
+**The main idea: a "first run" flag.** If a run has just created the
+transaction row (`Need_tx` true), nothing for this request can exist yet:
+- no action;
+- no event row;
+- no folder;
+- no lock.
 
-The aim is about half the calls on the raise path. This needs your go-ahead,
-and you would import it as an upgrade.
+So that run can skip every "was this already done?" look-up. A resumed run
+(the transaction row already exists) keeps every look-up, exactly as now. A
+new variable, `varFresh`, is set to true inside `Need_tx`.
+
+**Changes in `04-solution/tools/flows.py`**, with calls saved on a first run:
+
+| # | Change | Raise | Extend / complete |
+|---|---|---|---|
+| 1 | **No `Get_lists`.** Lists are addressed by path: `L(key)` becomes `_api/web/GetList('@{outputs('Ids')?['<key>Path']}')…`. `Ids` is built from `uriPath(site)` + `/Lists/<url>`, with the URLs from `schema.json` (e.g. `Requests`, `CompetencyMembers`). This is still by web address, not title (1-to-1 lesson 3). The "Run Setup first" message becomes a plain failure on the first call. | −1 | −1 |
+| 2 | **`FirstClaimedAt` written when the transaction is created**, so there is no separate `Save_claimed_at`. The claim time is truncated to the minute, so a resumed run recomputes the same event time. `Need_claim_time` stays for transaction rows made by 1.0.0.0. | −1 | −1 |
+| 3 | **`varTx` built from the request and `Create_tx`'s returned Id** on a first run, with no `Get_tx`. A resumed run reads the row as now. | −1 | −1 |
+| 4 | **One user look-up for both logins**: `_api/web/siteusers?$filter=Id eq A or Id eq B`, replacing `Get_owner_login_R` and `Get_my_login_R`. | −1 | — |
+| 5 | **The new action's Id taken from `Create_action_R`'s response** (`FieldName 'Id'`), so `Find_created_R` is skipped. It falls back to the query if the Id is missing. | −1 | — |
+| 6 | **First run skips `Find_existing_R`, `Find_folder_U_R`, `Find_folder_H_R` and `Find_event`.** If a folder unexpectedly exists, the create step stops the run (Catch). The resubmit is then a resumed run, which finds the folder and carries on. That is no less safe than today. | −4 | −1 (event) |
+| 7 | **Event Id from `Find_event` or `Create_event`'s response**, so `Get_event` is never needed. | −1 | −1 |
+| 8 | **Release without `Get_action_now`** when this run took the lock (raise: created with it; change: `Lock_and_values` succeeded). It uses `IF-MATCH: *`. Only flows write Actions, and runs are one at a time. A resumed run still reads the action and checks that the lock is its own. | −1 | −1 |
+| 9 | **Change cases: the area comes with the action** (`$expand=Competency&$select=…,Competency/CompetencyKey`), so there is no `Get_area`. | — | −1 |
+| 10 | **Change cases: `varTxPlan` set from the `Plan` compose** when the plan is saved in this run, so there is no `Get_tx_plan`. A resumed run already has it from the transaction row. | — | −1 |
+| 11 | **Change cases: no `Find_folder_H`.** Every committed action has its History folder, because raise creates it before release, and changes are refused on uncommitted actions. | — | −1 |
+| | **About 31 → 19 calls** for raise; **about 25 → 16** for extend and complete | **−12** | **−9** |
+
+**Not changed:**
+- `Get_request`, the claim, the requester and folder checks (including
+  `Get_flow_account`), memberships, the lock with its ETag, the event row and
+  its details, transaction Applied, and the request Completed.
+- Trigger concurrency stays at 1.
+- The app (0.2.1) needs no change.
+
+**Supporting changes:**
+- **`hub_fake.py`:** `GetList('<path>')` and `siteusers` with an `or` filter;
+  a call counter.
+- **`wdl.py`:** `uriPath`, if missing.
+- **`validate.py`:** the REST column check recognises `GetList`.
+- **`build_solution.py`:** version **1.0.0.1**.
+- **`check_package.py`:** still compares against the 1-to-1 zip.
+
+**Tests (`test_flow.py`):**
+- All 22 existing tests must pass unchanged. That includes "an interruption at
+  every write, then resubmit", which covers the new first-run paths: an
+  interrupted first run is resumed as a non-first run.
+- New tests:
+  - **call budgets**: a first-run raise uses 19 calls or fewer, and extend and
+    complete 16 or fewer. These are counted by the fake and fail if a later
+    change adds calls;
+  - a squatted `Updates/{area}/A{id}` folder on a first run: the run fails, and
+    a resubmit completes;
+  - a create response without an Id uses the fallback query;
+  - a 1.0.0.0 transaction row without `FirstClaimedAt` still resumes.
+- `test_validate.py` (19 tests), `run_all.sh` and the package check pass.
+
+**Delivery:**
+- Commit and push.
+- Zip: `1-Power-Automate/ESGCompetencyHub_1_0_0_1_unmanaged.zip`, plus HOW-TO
+  "Upgrade the flow".
+
+**Your steps:**
+1. In Power Automate, go to **Solutions → Import solution**, choose the new zip
+   and confirm the **upgrade**. Keep the same connection and site URL.
+2. Check *2 Request queue* is still **On**.
+3. Raise a TEST action and send the run's total time.
+
+**Honest limit.** If SharePoint is throttling your account, for example
+because of the 1-to-1 flows too, each remaining call can still take about 12 s.
+Expect about 4–5 minutes rather than 9–10 under the same conditions, and well
+under a minute when calls are normal. If it is still slow, the next step is to
+look at the 1-to-1 flows' request use.
+
+**Delivered locally.** The result is **31 → 20 calls** for raise and
+**26 → 16** for extend and complete. Raise came in at 20, not the 19 planned,
+because the transaction look-up (`Find_tx`) is what tells a first run apart.
+
+Tests:
+- 29 flow tests pass: the 22 existing ones, including an interruption at every
+  write followed by a resubmit, and 7 new ones covering call budgets, lists by
+  address, read-back without returned Ids, a pre-existing folder, a missing
+  History folder repaired on resubmit, a 1.0.0.0 transaction row, and the claim
+  time to the minute.
+- The 19 rejection tests and the package comparison pass.
 
 ### K6.10 People list confirmed (C-04 resolved, 21 Oct 2026)
 

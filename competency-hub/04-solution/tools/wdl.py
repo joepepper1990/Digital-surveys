@@ -306,6 +306,9 @@ def call(name, a, ctx):
         return to_str(a[0]).lower()
     if name == 'startsWith':
         return to_str(a[0]).startswith(to_str(a[1]))
+    if name == 'uriPath':
+        from urllib.parse import urlsplit
+        return urlsplit(to_str(a[0])).path or '/'
     if name == 'endsWith':
         return to_str(a[0]).endswith(to_str(a[1]))
     if name == 'substring':

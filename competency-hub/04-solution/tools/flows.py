@@ -135,7 +135,8 @@ def esc(expr):
 
 
 def L(key, rest=''):
-    return "_api/web/lists(guid'@{outputs('Ids')?['" + key + "']}')" + rest
+    """A list by its web address (/sites/…/Lists/<url>): no look-up call, and still right if the list is renamed."""
+    return "_api/web/GetList('@{outputs('Ids')?['" + key + "']}')" + rest
 
 
 def day_num(iso_expr):
@@ -233,17 +234,25 @@ def flow_request_queue():
         path = "@{outputs('Ids')?['" + root_key + "']}/@{" + area_expr + "}"
         values, call = create_in_folder(key, path, 'Folder_values' + sfx, 'Folder_body' + sfx, leaf_expr='@{' + leaf_expr + '}')
         # by its address, not a list query: a list query on FileRef would stop working once the list passes 5,000 items
+        # a first run creates it without looking: if it unexpectedly exists the create stops the run, and the
+        # resubmitted (no longer first) run finds it
         return [
-            ('Find_folder' + sfx, http('GET', "_api/web/GetFolderByServerRelativePath(decodedurl='" + path + "/@{" + leaf_expr + "}')?$select=Exists")),
-            ('Need_folder' + sfx, after(cond("@not(and(equals(actions('Find_folder" + sfx + "')?['status'], 'Succeeded'), equals(body('Find_folder" + sfx + "')?['Exists'], true)))", seq(
+            ('Folder_unknown' + sfx, set_var('varFolderExists', False)),
+            ('Check_folder' + sfx, cond("@not(variables('varFresh'))", seq(
+                ('Find_folder' + sfx, http('GET', "_api/web/GetFolderByServerRelativePath(decodedurl='" + path + "/@{" + leaf_expr + "}')?$select=Exists")),
+                ('Folder_found' + sfx, after(set_var('varFolderExists', "@and(equals(actions('Find_folder" + sfx + "')?['status'], 'Succeeded'), "
+                                                                       "equals(body('Find_folder" + sfx + "')?['Exists'], true))"),
+                                             {'Find_folder' + sfx: TOLERANT})),
+            ))),
+            ('Need_folder' + sfx, cond("@not(variables('varFolderExists'))", seq(
                 ('Folder_values' + sfx, form({'Title': '@{' + leaf_expr + '}'})),
                 ('Folder_body' + sfx, values),
                 ('Create_folder' + sfx, call),
                 *created_ok('Create_folder' + sfx, 'Folder_created' + sfx, 'A folder could not be created. See Create_folder' + sfx + '.'),
-            )), {'Find_folder' + sfx: TOLERANT})),
+            ))),
         ]
 
-    def commit(sfx, action_id_expr, area_key_expr, area_id_expr, event_fields, result_expr):
+    def commit(sfx, action_id_expr, area_key_expr, area_id_expr, event_fields, result_expr, ensure_hist=True):
         """Plan F.1.2 step 9: event row, transaction Applied, lock released, request Completed."""
         ev_key = "concat(" + KEY + ", '|1')"
         ev_key_uri = "concat(" + KEY + ", '%7C1')"
@@ -251,10 +260,18 @@ def flow_request_queue():
         ev_values, ev_call = create_in_folder('hist', hist_path, 'Event_values' + sfx, 'Event_body' + sfx)
         details = dict({'CompetencyId': '@int(' + area_id_expr + ')', 'ActorId': '@int(' + SENDER + ')', 'EventTime': '@{' + EVENT_TIME + '}',
                         'ProcessedAt': '@{utcNow()}'}, **event_fields.get('json', {}))
+        found = "body('Find_event" + sfx + "')?['value']"
         return [
-            *ensure_folder('_H' + sfx, 'hist', 'histRoot', area_key_expr, "concat('A', " + action_id_expr + ")"),
-            ('Find_event' + sfx, http('GET', L('hist', "/items?$select=Id&$filter=RequestKey eq '@{" + ev_key_uri + "}'"))),
-            ('Need_event' + sfx, cond("@empty(body('Find_event" + sfx + "')?['value'])", seq(
+            # a committed action always has its History folder (raise makes it before release), so a first change run
+            # does not look for it; if it was missing after all, that run stops and the resubmitted run creates it
+            *(ensure_folder('_H' + sfx, 'hist', 'histRoot', area_key_expr, "concat('A', " + action_id_expr + ")") if ensure_hist else [
+                ('Repair_folder' + sfx, cond("@not(variables('varFresh'))", seq(
+                    *ensure_folder('_H' + sfx, 'hist', 'histRoot', area_key_expr, "concat('A', " + action_id_expr + ")"))))]),
+            ('Check_event' + sfx, cond("@not(variables('varFresh'))", seq(
+                ('Find_event' + sfx, http('GET', L('hist', "/items?$select=Id&$filter=RequestKey eq '@{" + ev_key_uri + "}'"))),
+                ('Event_found' + sfx, set_var('varEventId', "@int(if(empty(" + found + "), '0', " + idstr("first(" + found + ")?['Id']") + "))")),
+            ))),
+            ('Need_event' + sfx, cond("@equals(variables('varEventId'), 0)", seq(
                 ('Event_values' + sfx, form(dict({'Title': '@{take(' + event_fields['title'] + ', 255)}', 'RowKind': 'Event', 'RequestKey': '@{' + ev_key + '}',
                                                   'RecordType': 'Action', 'RecordId': '@{' + action_id_expr + '}',
                                                   'EventType': event_fields['type'], 'RequestType': '@{' + TX + "?['RequestType']}"},
@@ -262,16 +279,30 @@ def flow_request_queue():
                 ('Event_body' + sfx, ev_values),
                 ('Create_event' + sfx, ev_call),
                 *created_ok('Create_event' + sfx, 'Event_created' + sfx, 'The History event row could not be created. See Create_event' + sfx + '.'),
+                # the new row's Id comes back with the create; read it only if it did not
+                ('Event_new_id' + sfx, query("@body('Create_event" + sfx + "')?['value']", "@equals(item()?['FieldName'], 'Id')")),
+                ('Has_event_id' + sfx, cond("@empty(body('Event_new_id" + sfx + "'))", seq(
+                    ('Get_event' + sfx, http('GET', L('hist', "/items?$select=Id&$filter=RequestKey eq '@{" + ev_key_uri + "}'"))),
+                    ('Set_event_read' + sfx, set_var('varEventId', "@int(" + idstr("first(body('Get_event" + sfx + "')?['value'])?['Id']") + ")")),
+                ), seq(
+                    ('Set_event_new' + sfx, set_var('varEventId', "@int(first(body('Event_new_id" + sfx + "'))?['FieldValue'])")),
+                ))),
             ))),
-            ('Get_event' + sfx, http('GET', L('hist', "/items?$select=Id&$filter=RequestKey eq '@{" + ev_key_uri + "}'"))),
             ('Event_details' + sfx, compose(details)),
-            ('Save_event' + sfx, merge(L('hist', "/items(@{" + idstr("first(body('Get_event" + sfx + "')?['value'])?['Id']") + "})"), 'Event_details' + sfx)),
+            ('Save_event' + sfx, merge(L('hist', "/items(@{variables('varEventId')})"), 'Event_details' + sfx)),
             *tx_update('applied' + sfx, {'State': 'Applied', 'StepsDone': 'VALUES;EVENT', 'ProcessedAt': '@{utcNow()}'}),
-            ('Get_action_now' + sfx, http('GET', L('act', "/items(@{" + action_id_expr + "})?$select=Id,PendingRequestKey,LastRequestKey"), meta=True)),
-            ('Still_locked' + sfx, cond("@equals(string(coalesce(body('Get_action_now" + sfx + "')?['PendingRequestKey'], '')), " + KEY + ")", seq(
-                ('Release_body' + sfx, compose({'PendingRequestKey': '', 'LastRequestKey': '@{' + KEY + '}'})),
-                ('Release' + sfx, merge(L('act', "/items(@{" + action_id_expr + "})"), 'Release_body' + sfx,
-                                        if_match="@{body('Get_action_now" + sfx + "')?['odata.etag']}")),
+            # this run took the lock, and only these one-at-a-time runs write Actions: release it directly.
+            # A resumed run reads the action first and releases only its own lock.
+            ('Release_how' + sfx, cond("@variables('varLockedHere')", seq(
+                ('Release_mine_body' + sfx, compose({'PendingRequestKey': '', 'LastRequestKey': '@{' + KEY + '}'})),
+                ('Release_mine' + sfx, merge(L('act', "/items(@{" + action_id_expr + "})"), 'Release_mine_body' + sfx)),
+            ), seq(
+                ('Get_action_now' + sfx, http('GET', L('act', "/items(@{" + action_id_expr + "})?$select=Id,PendingRequestKey,LastRequestKey"), meta=True)),
+                ('Still_locked' + sfx, cond("@equals(string(coalesce(body('Get_action_now" + sfx + "')?['PendingRequestKey'], '')), " + KEY + ")", seq(
+                    ('Release_body' + sfx, compose({'PendingRequestKey': '', 'LastRequestKey': '@{' + KEY + '}'})),
+                    ('Release' + sfx, merge(L('act', "/items(@{" + action_id_expr + "})"), 'Release_body' + sfx,
+                                            if_match="@{body('Get_action_now" + sfx + "')?['odata.etag']}")),
+                ))),
             ))),
             *finish_request(sfx, 'Completed', result_expr, 'int(' + action_id_expr + ')'),
         ]
@@ -279,7 +310,7 @@ def flow_request_queue():
     # ---------------------------------------------------------------- RaiseAction
     AREA_R = "first(body('Get_area_R')?['value'])"
     OWNER_R = "first(body('Get_owner_R')?['value'])"
-    EXISTING_R = "first(body('Find_existing_R')?['value'])"
+    EXISTING_R = "body('Find_existing_R')?['value']"
     TITLE = "trim(string(coalesce(" + P + "?['title'], '')))"
     DESC = "trim(string(coalesce(" + P + "?['description'], '')))"
     DUE = "string(coalesce(" + P + "?['dueIso'], ''))"
@@ -287,7 +318,7 @@ def flow_request_queue():
     DUE_OK = "and(equals(variables('varDue'), " + DUE + "), not(empty(" + DUE + ")))"
     DUE_SAFE = "if(" + DUE_OK + ", " + DUE + ", '2000-01-01')"
     MAX_DAY = "outputs('Max_due_R')"
-    verdict_r = ("@if(not(empty(" + EXISTING_R + ")), '', "
+    verdict_r = ("@if(greater(variables('varExistingId'), 0), '', "
                  "if(or(empty(" + AREA_R + "), not(or(" + IS_MGMT + ", not(empty(body('My_member_R')))))), 'Choose one of your areas.', "
                  "if(or(empty(" + OWNER_R + "), not(equals(string(" + OWNER_R + "?['Status']), 'Active')), "
                  "not(or(contains(" + MANAGEMENT + ", string(" + OWNER_R + "?['Role'])), not(empty(body('Owner_member_R')?['value']))))), "
@@ -302,7 +333,8 @@ def flow_request_queue():
                  "if(not(contains(createArray('Low', 'Normal', 'High'), " + PRIO + ")), 'Choose a priority.', '')))))))))))")
     action_path = "@{outputs('Ids')?['actRoot']}/@{" + AREA_R + "?['CompetencyKey']}"
     act_values, act_call = create_in_folder('act', action_path, 'Action_values_R', 'Action_body_R')
-    claims = lambda step: "@{concat('[{\"Key\":\"', body('" + step + "')?['LoginName'], '\"}]')}"
+    claims = lambda step: "@{concat('[{\"Key\":\"', first(body('" + step + "'))?['LoginName'], '\"}]')}"
+    OWNER_ID_R = idstr(OWNER_R + "?['SiteUserId']")
     ACT_ID_R = "string(variables('varActionId'))"
     raise_case = seq(
         ('Get_area_R', http('GET', L('comps', "/items?$select=Id,CompetencyKey,Status&$filter=CompetencyKey eq '@{" + esc(P + "?['areaKey']") + "}' and Status eq 'Active'"))),
@@ -310,15 +342,20 @@ def flow_request_queue():
         ('Get_owner_R', http('GET', L('people', "/items?$select=Id,Title,SiteUserId,Role,Status&$filter=SiteUserId eq @{" + idq(P + "?['ownerId']") + "}"))),
         ('Owner_member_R', http('GET', L('members', "/items?$select=Id&$filter=PersonId eq @{" + idq(P + "?['ownerId']") + "} and CompetencyId eq @{"
                                          + idq(AREA_R + "?['Id']") + "} and Status eq 'Active'"))),
-        ('Find_existing_R', http('GET', L('act', "/items?$select=Id,CompetencyId&$filter=CreatedRequestKey eq 'F%7C@{" + esc(KEY) + "}'"))),
+        ('Check_existing_R', cond("@not(variables('varFresh'))", seq(
+            ('Find_existing_R', http('GET', L('act', "/items?$select=Id,CompetencyId&$filter=CreatedRequestKey eq 'F%7C@{" + esc(KEY) + "}'"))),
+            ('Existing_found_R', set_var('varExistingId', "@int(if(empty(" + EXISTING_R + "), '0', " + idstr("first(" + EXISTING_R + ")?['Id']") + "))")),
+        ))),
         ('Read_due_R', set_var('varDue', "@{formatDateTime(concat(" + DUE + ", 'T00:00:00Z'), 'yyyy-MM-dd')}")),
         ('Max_due_R', after(compose("@formatDateTime(addToTime(concat(" + TODAY + ", 'T00:00:00Z'), " + str(MAX_DEADLINE_MONTHS) + ", 'Month'), 'yyyy-MM-dd')"),
                             {'Read_due_R': TOLERANT})),
         ('Verdict_R', compose(verdict_r)),
         ('Allowed_R', cond("@empty(outputs('Verdict_R'))", seq(
-            ('Is_new_R', cond("@empty(" + EXISTING_R + ")", seq(
-                ('Get_owner_login_R', http('GET', "_api/web/getuserbyid(@{" + idstr(P + "?['ownerId']") + "})?$select=LoginName")),
-                ('Get_my_login_R', http('GET', "_api/web/getuserbyid(@{" + SENDER + "})?$select=LoginName")),
+            ('Is_new_R', cond("@equals(variables('varExistingId'), 0)", seq(
+                # both people's sign-in names in one call; the owner is the People row the checks found
+                ('Get_logins_R', http('GET', "_api/web/siteusers?$select=Id,LoginName&$filter=Id eq @{" + OWNER_ID_R + "} or Id eq @{" + SENDER + "}")),
+                ('Get_owner_login_R', query("@body('Get_logins_R')?['value']", "@equals(string(item()?['Id']), " + OWNER_ID_R + ")")),
+                ('Get_my_login_R', query("@body('Get_logins_R')?['value']", "@equals(string(item()?['Id']), " + SENDER + ")")),
                 ('Action_values_R', form({
                     'Title': '@{' + TITLE + '}', 'Description': '@{' + DESC + '}', 'Competency': '@{' + idstr(AREA_R + "?['Id']") + '}',
                     'AssignedTo': claims('Get_owner_login_R'), 'RaisedBy': claims('Get_my_login_R'),
@@ -330,10 +367,17 @@ def flow_request_queue():
                 ('Action_body_R', act_values),
                 ('Create_action_R', act_call),
                 *created_ok('Create_action_R', 'Action_created_R', 'The action could not be created. See Create_action_R.'),
-                ('Find_created_R', http('GET', L('act', "/items?$select=Id&$filter=CreatedRequestKey eq 'F%7C@{" + esc(KEY) + "}'"))),
-                ('Set_new_id_R', set_var('varActionId', "@int(" + idstr("first(body('Find_created_R')?['value'])?['Id']") + ")")),
+                # it was created with this run's lock
+                ('Set_locked_here_R', set_var('varLockedHere', True)),
+                ('Action_new_id_R', query("@body('Create_action_R')?['value']", "@equals(item()?['FieldName'], 'Id')")),
+                ('Has_action_id_R', cond("@empty(body('Action_new_id_R'))", seq(
+                    ('Find_created_R', http('GET', L('act', "/items?$select=Id&$filter=CreatedRequestKey eq 'F%7C@{" + esc(KEY) + "}'"))),
+                    ('Set_new_id_R', set_var('varActionId', "@int(" + idstr("first(body('Find_created_R')?['value'])?['Id']") + ")")),
+                ), seq(
+                    ('Set_returned_id_R', set_var('varActionId', "@int(first(body('Action_new_id_R'))?['FieldValue'])")),
+                ))),
             ), seq(
-                ('Set_existing_id_R', set_var('varActionId', "@int(" + idstr(EXISTING_R + "?['Id']") + ")")),
+                ('Set_existing_id_R', set_var('varActionId', "@variables('varExistingId')")),
             ))),
             *ensure_folder('_U_R', 'upd', 'updRoot', AREA_R + "?['CompetencyKey']", "concat('A', " + ACT_ID_R + ")"),
             *commit('_R', ACT_ID_R, AREA_R + "?['CompetencyKey']", idstr(AREA_R + "?['Id']"),
@@ -346,7 +390,7 @@ def flow_request_queue():
     # ---------------------------------------------------------------- shared by ExtendDeadline and MarkComplete
     def change_case(sfx, verdict_tail, plan_fields, values_fields, event_fields, result_expr):
         A = "body('Get_action" + sfx + "')"
-        AREA = "first(body('Get_area" + sfx + "')?['value'])"
+        AREA_KEY = A + "?['Competency']?['CompetencyKey']"
         PENDING = "string(coalesce(" + A + "?['PendingRequestKey'], ''))"
         ALREADY = "or(equals(" + PENDING + ", " + KEY + "), equals(string(coalesce(" + A + "?['LastRequestKey'], '')), " + KEY + "))"
         UNCOMMITTED = "and(not(empty(" + PENDING + ")), equals(string(coalesce(" + A + "?['CreatedRequestKey'], '')), concat('F|', " + PENDING + ")))"
@@ -362,14 +406,13 @@ def flow_request_queue():
                    "if(" + UNCOMMITTED + ", 'That action could not be found.', " + verdict_tail(ctx) + "))")
         action_item = L('act', "/items(@{" + idstr(TX + "?['RecordId']") + "})")
         sel = ('?$select=Id,Title,CompetencyId,AssignedToId,RaisedById,Status,DueDay,OriginalDueDate,ExtensionCount,RequiresCloseOut,'
-               'Revision,PendingRequestKey,LastRequestKey,CreatedRequestKey')
+               'Revision,PendingRequestKey,LastRequestKey,CreatedRequestKey,Competency/CompetencyKey&$expand=Competency')
         return seq(
             ('Get_action' + sfx, http('GET', action_item + sel, meta=True)),
             ('Action_read' + sfx, after(cond("@equals(actions('Get_action" + sfx + "')?['status'], 'Succeeded')", None, seq(
                 ('Action_missing' + sfx, cond("@equals(outputs('Get_action" + sfx + "')?['statusCode'], 404)", reject(sfx + '_missing', "'That action could not be found.'"),
                                               seq(('Action_unreadable' + sfx, fail_here('The action could not be read. See Get_action' + sfx + '.'))))))),
                 {'Get_action' + sfx: TOLERANT})),
-            ('Get_area' + sfx, http('GET', L('comps', "/items?$select=Id,CompetencyKey&$filter=Id eq @{" + idstr(A + "?['CompetencyId']") + "}"))),
             ('My_member' + sfx, query("@body('Get_my_memberships')?['value']", "@equals(" + idstr("item()?['CompetencyId']") + ", " + idstr(A + "?['CompetencyId']") + ")")),
             *([('Read_due' + sfx, set_var('varDue', "@{formatDateTime(concat(string(coalesce(" + P + "?['newDueIso'], '')), 'T00:00:00Z'), 'yyyy-MM-dd')}"))]
               if sfx == '_X' else [('Read_due' + sfx, set_var('varDue', ''))]),
@@ -379,6 +422,7 @@ def flow_request_queue():
                     # the plan is stored before anything changes, so a resumed run knows the previous values
                     ('Plan' + sfx, compose(plan_fields(ctx))),
                     *tx_update('planned' + sfx, {'State': 'Planned', 'PreviousValue': "@{string(outputs('Plan" + sfx + "'))}"}),
+                    ('Set_plan_now' + sfx, set_var('varTxPlan', "@{string(outputs('Plan" + sfx + "'))}")),
                     ('Values' + sfx, compose(dict({'PendingRequestKey': '@{' + KEY + '}',
                                                    'Revision': "@add(int(" + idstr(A + "?['Revision']") + "), 1)"}, **values_fields(ctx)))),
                     ('Lock_and_values' + sfx, merge(action_item, 'Values' + sfx, if_match="@{" + A + "?['odata.etag']}")),
@@ -387,11 +431,11 @@ def flow_request_queue():
                         ('Lock_conflict' + sfx, cond("@equals(outputs('Lock_and_values" + sfx + "')?['statusCode'], 412)", reject(sfx + '_stale', q(STALE)),
                                                      seq(('Lock_failed' + sfx, fail_here('The action could not be updated. See Lock_and_values' + sfx + '.'))))))),
                         {'Lock_and_values' + sfx: TOLERANT})),
+                    ('Set_locked_here' + sfx, set_var('varLockedHere', True)),
                 ))),
-                ('Get_tx_plan' + sfx, http('GET', L('hist', "/items(@{" + idstr(TX + "?['Id']") + "})?$select=Id,PreviousValue"))),
-                ('Set_plan' + sfx, set_var('varTxPlan', "@{coalesce(body('Get_tx_plan" + sfx + "')?['PreviousValue'], '{}')}")),
-                *commit(sfx, idstr(A + "?['Id']"), "first(body('Get_area" + sfx + "')?['value'])?['CompetencyKey']", idstr(AREA + "?['Id']"),
-                        event_fields(ctx), result_expr(ctx)),
+                # a resumed run already has the stored plan from the transaction row (Set_tx_plan)
+                *commit(sfx, idstr(A + "?['Id']"), AREA_KEY, idstr(A + "?['CompetencyId']"),
+                        event_fields(ctx), result_expr(ctx), ensure_hist=False),
             ), reject(sfx, "outputs('Verdict" + sfx + "')"))),
         )
 
@@ -451,14 +495,12 @@ def flow_request_queue():
         lambda c: "if(" + CLOSES + ", 'Action closed.', 'Marked as done; waiting for a close-out check.')")
 
     # ---------------------------------------------------------------- common part
-    lists = "body('Get_lists')?['value']"
-    def find(key):
-        return ('List_' + key, query('@' + lists, "@equals(item()?['RootFolder']?['Name'], " + q(BY_KEY[LIST_URLS[key]]['url']) + ")"))
     ids = {}
     for key in LIST_KEYS:
-        ids[key] = "@first(body('List_" + key + "'))?['Id']"
+        ids[key] = "@{outputs('Site_path')}/Lists/" + BY_KEY[LIST_URLS[key]]['url']
     for key in ('req', 'act', 'hist', 'upd'):
-        ids[key + 'Root'] = "@first(body('List_" + key + "'))?['RootFolder']?['ServerRelativeUrl']"
+        ids[key + 'Root'] = ids[key]
+    SITE_PATH = "uriPath(" + SITE + ")"
     IN_OWN = ("and(equals(string(" + R + "?['FileDirRef']), concat(outputs('Ids')?['reqRoot'], '/', outputs('Folder_name'))), "
               "startsWith(outputs('Folder_name'), 'u'))")
     FOLDER = "outputs('Folder_item')"
@@ -471,11 +513,9 @@ def flow_request_queue():
     tx_find = L('hist', "/items?$select=Id,RequestKey,RequestType,RecordId,ExpectedRevision,Payload,State,FirstClaimedAt,PreviousValue"
                         "&$filter=RequestItemId eq @{" + TB + "?['ID']} and RowKind eq 'Transaction'")
     try_actions = seq(
-        ('Get_lists', http('GET', '_api/web/lists?$select=Id,Title,RootFolder/Name,RootFolder/ServerRelativeUrl&$expand=RootFolder')),
-        *[find(k) for k in LIST_KEYS],
+        # the lists by their web addresses under the site (Setup made them), so no call is needed to find them
+        ('Site_path', compose("@if(endsWith(" + SITE_PATH + ", '/'), take(" + SITE_PATH + ", sub(length(" + SITE_PATH + "), 1)), " + SITE_PATH + ")")),
         ('Ids', compose(ids)),
-        ('Lists_ready', cond("@or(" + ", ".join("equals(outputs('Ids')?['" + k + "'], null)" for k in LIST_KEYS) + ")",
-                             seq(('Run_setup_first', terminate('Failed', 'The Competency Hub lists were not found. Run Setup on the site first.'))))),
         ('Get_flow_account', http('GET', '_api/web/currentuser?$select=Id')),
         ('Get_request', http('GET', req_item + '?$select=Id,RequestKey,RequestType,TargetId,ExpectedRevision,Payload,Status,Created,AuthorId,FileDirRef,FSObjType',
                              meta=True)),
@@ -501,24 +541,40 @@ def flow_request_queue():
             *finish_request('_untrusted', 'Rejected', "'This request was not sent from your own request folder.'"),
             ('Done_untrusted', terminate('Succeeded'))))),
         ('Get_my_memberships', http('GET', L('members', "/items?$select=Id,CompetencyId,CanManageMeetings&$filter=PersonId eq @{" + SENDER + "} and Status eq 'Active'"))),
-        # the private copy: everything after this works from the transaction row, never the editable request item
+        # the private copy: everything after this works from the transaction row, never the editable request item.
+        # The claim time is kept to the minute, so a resumed run computes exactly the same event time.
+        ('Claim_now', compose("@formatDateTime(utcNow(), 'yyyy-MM-ddTHH:mm:00Z')")),
         ('Find_tx', http('GET', tx_find)),
         ('Need_tx', cond("@empty(body('Find_tx')?['value'])", seq(
             ('Tx_values', form({'Title': "@{concat('Request ', " + idstr(TB + "?['ID']") + ", ': ', string(" + R + "?['RequestType']))}",
                                 'RowKind': 'Transaction', 'RequestKey': "@{" + R + "?['RequestKey']}", 'RequestItemId': "@{" + TB + "?['ID']}",
                                 'RequestType': "@{" + R + "?['RequestType']}", 'RecordType': 'Action',
                                 'RecordId': "@{" + idstr(R + "?['TargetId']") + "}", 'ExpectedRevision': "@{" + idstr(R + "?['ExpectedRevision']") + "}",
-                                'Payload': "@{" + R + "?['Payload']}", 'State': 'Received', 'Attempts': '1'})),
+                                'Payload': "@{" + R + "?['Payload']}", 'State': 'Received', 'Attempts': '1',
+                                'FirstClaimedAt': "@{convertFromUtc(outputs('Claim_now'), 'GMT Standard Time', 'dd/MM/yyyy HH:mm')}"})),
             ('Tx_body', tx_values),
             ('Create_tx', tx_call),
             *created_ok('Create_tx', 'Tx_created', 'The transaction row could not be created. See Create_tx.'),
+            # a first run: nothing for this request can exist yet, so the "already done?" look-ups are skipped
+            ('Set_fresh', set_var('varFresh', True)),
+            ('Tx_new_id', query("@body('Create_tx')?['value']", "@equals(item()?['FieldName'], 'Id')")),
+            ('Has_tx_id', cond("@empty(body('Tx_new_id'))", seq(
+                ('Get_tx', http('GET', tx_find)),
+                ('Set_tx_read', set_var('varTx', "@first(body('Get_tx')?['value'])")),
+            ), seq(
+                ('Tx_new', compose({'Id': "@int(first(body('Tx_new_id'))?['FieldValue'])", 'RequestKey': "@{" + R + "?['RequestKey']}",
+                                    'RequestType': "@{" + R + "?['RequestType']}", 'RecordId': "@" + R + "?['TargetId']",
+                                    'ExpectedRevision': "@" + R + "?['ExpectedRevision']", 'Payload': "@" + R + "?['Payload']",
+                                    'State': 'Received', 'FirstClaimedAt': "@{outputs('Claim_now')}", 'PreviousValue': None})),
+                ('Set_tx_new', set_var('varTx', "@outputs('Tx_new')")),
+            ))),
+        ), seq(
+            ('Set_tx', set_var('varTx', "@first(body('Find_tx')?['value'])")),
         ))),
-        ('Get_tx', http('GET', tx_find)),
-        ('Set_tx', set_var('varTx', "@first(body('Get_tx')?['value'])")),
         ('Set_tx_id', set_var('varTxId', "@int(" + idstr(TX + "?['Id']") + ")")),
         ('Set_tx_plan', set_var('varTxPlan', "@{coalesce(" + TX + "?['PreviousValue'], '{}')}")),
         # the first claim's time is kept on the transaction row; a run interrupted before saving it saves it now
-        ('Claim_time', compose("@coalesce(" + TX + "?['FirstClaimedAt'], utcNow())")),
+        ('Claim_time', compose("@coalesce(" + TX + "?['FirstClaimedAt'], outputs('Claim_now'))")),
         ('Need_claim_time', cond("@empty(string(coalesce(" + TX + "?['FirstClaimedAt'], '')))", seq(
             ('Claimed_at', compose({'FirstClaimedAt': "@{outputs('Claim_time')}"})),
             ('Save_claimed_at', merge(L('hist', "/items(@{variables('varTxId')})"), 'Claimed_at')),
@@ -553,8 +609,13 @@ def flow_request_queue():
                   ('Initialize_varTxId', init_var('varTxId', 'integer', 0)),
                   ('Initialize_varTxPlan', init_var('varTxPlan', 'string', '{}')),
                   ('Initialize_varDue', init_var('varDue', 'string', '')),
-                  ('Initialize_varActionId', init_var('varActionId', 'integer', 0)))
-    actions['Try'] = after(scope(try_actions), {'Initialize_varActionId': OK})
+                  ('Initialize_varActionId', init_var('varActionId', 'integer', 0)),
+                  ('Initialize_varFresh', init_var('varFresh', 'boolean', False)),
+                  ('Initialize_varExistingId', init_var('varExistingId', 'integer', 0)),
+                  ('Initialize_varFolderExists', init_var('varFolderExists', 'boolean', False)),
+                  ('Initialize_varEventId', init_var('varEventId', 'integer', 0)),
+                  ('Initialize_varLockedHere', init_var('varLockedHere', 'boolean', False)))
+    actions['Try'] = after(scope(try_actions), {'Initialize_varLockedHere': OK})
     actions['Catch'] = catch
     triggers = {'When_a_request_is_submitted': {
         'type': 'OpenApiConnection',
