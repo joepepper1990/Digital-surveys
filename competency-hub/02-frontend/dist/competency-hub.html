@@ -88,6 +88,22 @@
 .SCOPE .ch .subtabs button[aria-selected="true"] {color: var(--navy); border-bottom-color: var(--navy); font-weight: 600;}
 .SCOPE .ch .scrim {position: fixed; inset: 0; background: rgba(16, 32, 46, .45); display: flex; align-items: flex-start; justify-content: center; padding: 6vh calc(16 * var(--u)); z-index: 1000; overflow-y: auto;}
 .SCOPE .ch .dialog {background: #fff; border-radius: calc(12 * var(--u)); width: min(calc(620 * var(--u)), 100%); padding: calc(24 * var(--u)); box-shadow: 0 calc(12 * var(--u)) calc(40 * var(--u)) rgba(0, 0, 0, .25);}
+.SCOPE .ch .shell {display: flex; flex-direction: column; flex: 1;}
+.SCOPE .ch .dialog-wide {width: min(calc(860 * var(--u)), 100%);}
+.SCOPE .ch .dialog-head {display: flex; align-items: flex-start; justify-content: space-between; gap: calc(12 * var(--u)); margin-bottom: calc(8 * var(--u));}
+.SCOPE .ch .dialog-head h2 {margin: 0;}
+.SCOPE .ch .dialog-x {background: none; border: 0; font-size: calc(28 * var(--u)); line-height: 1; color: var(--muted); padding: 0 calc(4 * var(--u));}
+.SCOPE .ch .dialog-body h3 {font-size: calc(18 * var(--u)); margin: 0 0 calc(12 * var(--u));}
+.SCOPE .ch .facts {display: grid; grid-template-columns: max-content 1fr; gap: calc(8 * var(--u)) calc(18 * var(--u)); margin: calc(12 * var(--u)) 0 calc(18 * var(--u));}
+.SCOPE .ch .facts dt {font-weight: 600; color: var(--muted);}
+.SCOPE .ch .facts dd {margin: 0;}
+.SCOPE .ch .pending {background: var(--navy-soft); color: var(--navy); border-radius: calc(8 * var(--u)); padding: calc(8 * var(--u)) calc(12 * var(--u));}
+.SCOPE .ch .request-strip {list-style: none; margin: 0 0 calc(18 * var(--u)); padding: 0; display: grid; gap: calc(8 * var(--u));}
+.SCOPE .ch .item-open {display: flex; justify-content: space-between; align-items: center; gap: calc(14 * var(--u)); width: 100%; background: none; border: 0; padding: 0; text-align: left; color: inherit;}
+.SCOPE .ch .item-open:disabled {cursor: default;}
+.SCOPE .ch .items li:has(.item-open:not(:disabled)):hover {border-color: var(--navy);}
+.SCOPE .ch .more summary, .SCOPE .ch .ext-list summary {cursor: pointer; color: var(--navy); font-weight: 600; margin: calc(6 * var(--u)) 0;}
+.SCOPE .ch .ext-list {margin-bottom: calc(14 * var(--u));}
 .SCOPE .ch .field {margin-bottom: calc(16 * var(--u));}
 .SCOPE .ch .field label {display: block; font-weight: 600; margin-bottom: calc(4 * var(--u));}
 .SCOPE .ch .field .hint {display: block; color: var(--muted); font-size: calc(14 * var(--u)); margin-bottom: calc(6 * var(--u));}

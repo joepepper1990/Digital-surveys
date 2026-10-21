@@ -7,8 +7,9 @@ CH.model = (function () {
   var QUERIES = {
     competencies: '$select=Id,Title,CompetencyKey,SortOrder,Status,TrackingStart',
     members: "$select=Id,CompetencyId,PersonId,CanManageMeetings,Status&$filter=Status eq 'Active'",
-    actions: '$select=Id,Title,CompetencyId,LinkedCompetenciesId,AssignedToId,RaisedById,DueDay,Status,IsOpen,ExtensionCount,' +
-      'RequiresCloseOut,PendingRequestKey,CreatedRequestKey&$filter=IsOpen eq 1 and FSObjType eq 0',
+    actions: '$select=Id,Title,Description,CompetencyId,LinkedCompetenciesId,AssignedToId,RaisedById,DateRaised,DueDay,OriginalDueDate,' +
+      'Status,IsOpen,Priority,ExtensionCount,RequiresCloseOut,Revision,PendingRequestKey,LastRequestKey,CreatedRequestKey,FileDirRef' +
+      '&$filter=IsOpen eq 1 and FSObjType eq 0',
     notices: "$select=Id,Title,Body,Category,IsImportant,ImportantUntil,Status,AuthorId,Created,FileDirRef&$filter=Status eq 'Active' and FSObjType eq 0",
     updates: '$select=Id,EntryType,ParentType,ParentId,AuthorId,Created,FileDirRef,IsHidden&$filter=IsFlagEvent eq 1 and FSObjType eq 0',
     meetings: '$select=Id,CompetencyId,MeetingDate,Status,ChairId&$filter=FSObjType eq 0',
@@ -81,6 +82,10 @@ CH.model = (function () {
         linkedKeys: linked.map(function (a) { return a.key; }),
         ownerId: r.AssignedToId, ownerName: nameOf(r.AssignedToId), raisedById: r.RaisedById,
         dueIso: dueIso, status: r.Status, extensions: r.ExtensionCount || 0,
+        originalIso: r.OriginalDueDate ? D.localDate(r.OriginalDueDate) : dueIso,
+        description: r.Description || '', priority: r.Priority || 'Normal', requiresCloseOut: !!r.RequiresCloseOut,
+        raisedIso: r.DateRaised ? D.localDate(r.DateRaised) : '', raisedByName: nameOf(r.RaisedById),
+        revision: Number(r.Revision) || 1, dueDay: Number(r.DueDay), locked: !!r.PendingRequestKey,
         waitingCloseOut: waitingCloseOut, group: words.group, dueText: words.text
       };
     });
@@ -163,9 +168,19 @@ CH.model = (function () {
       };
     });
 
+    // Who may own an action in an area (ACT-03): its active members, and Team Leaders and the Group Head.
+    function ownersFor(key) {
+      return people.filter(function (p) {
+        return p.Status === 'Active' && ((membersByArea[key] || {})[p.SiteUserId] || CH.config.managementRoles.indexOf(p.Role) >= 0);
+      }).map(function (p) { return { id: p.SiteUserId, name: p.Title, role: p.Role }; })
+        .sort(function (a, b) { return a.name.localeCompare(b.name); });
+    }
+    var actionById = {};
+    actions.forEach(function (a) { actionById[a.id] = a; });
+
     return {
       today: today, areas: areas, areaByKey: areaByKey, stats: stats, actions: actions, notices: notices, calendar: calendar,
-      inArea: inArea, nameOf: nameOf,
+      inArea: inArea, nameOf: nameOf, ownersFor: ownersFor, actionById: actionById,
       sections: {
         actions: section(raw.actions), notices: section(raw.notices), meetings: section(raw.meetings),
         calendar: section(raw.calendar), flags: section(raw.updates), members: section(raw.members)

@@ -27,7 +27,8 @@ CH.ui = (function () {
   var GROUPS = [['late', 'Late', 'var(--late)'], ['soon', 'Due within 7 days', 'var(--soon)'], ['later', 'Coming up', '#9aa5af']];
 
   // Actions grouped as Late / Due within 7 days / Coming up. sub(action) gives the grey second line.
-  function actionList(actions, sub, emptyText, state) {
+  // Each action opens with open(action); pending(action) gives a "being recorded" note, if any.
+  function actionList(actions, sub, emptyText, state, open, pending) {
     if (state === 'unavailable') return null;
     if (!actions.length) return h('p', { class: 'muted', text: emptyText });
     var out = [];
@@ -37,9 +38,10 @@ CH.ui = (function () {
       if (!rows.length) return;
       out.push(h('h3', { class: 'group-title' }, h('span', { class: 'dot', style: 'background:' + g[2], 'aria-hidden': 'true' }), g[1]));
       out.push(h('ul', { class: 'items' }, rows.map(function (a) {
-        return h('li', null,
-          h('span', null, h('span', { class: 't', text: a.title }), h('span', { class: 's', text: sub(a) })),
-          chip(a.waitingCloseOut ? 'later' : a.group, a.dueText));
+        var note = pending ? pending(a) : '';
+        return h('li', null, h('button', { type: 'button', class: 'item-open', onclick: open ? function () { open(a); } : null, disabled: open ? null : true },
+          h('span', null, h('span', { class: 't', text: a.title }), h('span', { class: 's', text: sub(a) + (note ? ' · ' + note : '') })),
+          chip(a.waitingCloseOut ? 'later' : a.group, a.dueText)));
       })));
     });
     return out;

@@ -1,7 +1,7 @@
 // A simulated Welcome context and SharePoint REST endpoint for local testing.
-// It answers only the requests the app makes, enforces the same write rule as the planned
-// permissions (any active user may add a notice; nothing else is writable here), and records
-// every write so the tests can prove the shell stays read-only otherwise.
+// It answers only the requests the app makes, enforces the planned write permissions (notices by any
+// active user; updates by area members and management; requests only in the user's own folder), records
+// every write, and runs requests through the simulated request flow (flow-sim.js).
 window.MockSharePoint = (function () {
   'use strict';
   var SITE = 'https://contoso.example/sites/ESGCompetencyHub';
@@ -101,24 +101,71 @@ window.MockSharePoint = (function () {
     var body = JSON.parse(options.body || '{}');
     if (url.indexOf('/AddValidateUpdateItemUsingPath') < 0) return respond(400, { error: 'Not supported by the mock' });
     var title = listTitle(url);
-    var folder = body.listItemCreateInfo.FolderPath.DecodedUrl.split('/').pop();
+    var path = body.listItemCreateInfo.FolderPath.DecodedUrl;
+    var folder = path.split('/Lists/')[1].split('/').slice(1).join('/');
     var me = data.People.filter(function (p) { return p.SiteUserId === asId && p.Status === 'Active'; })[0];
     writes.push({ list: title, folder: folder, by: asId });
-    if (title !== 'Noticeboard' || !me) return respond(403, { error: 'Access denied' });
     var values = {};
     body.formValues.forEach(function (f) { values[f.FieldName] = f.FieldValue; });
-    if (data.Noticeboard.some(function (n) { return n.ClientKey === values.ClientKey; })) {
-      return respond(200, { value: [{ FieldName: 'ClientKey', HasException: true, ErrorMessage: 'This value must be unique.' }] });
+    if (!me) return respond(403, { error: 'Access denied' });
+    var store = WRITABLE[title];
+    if (!store || !store.allowed(folder, me)) return respond(403, { error: 'Access denied' });
+    var unique = store.unique;
+    if (data[title].some(function (n) { return n[unique] === values[unique]; })) {
+      return respond(200, { value: [{ FieldName: unique, HasException: true, ErrorMessage: 'This value must be unique.' }] });
     }
-    var id = data.Noticeboard.reduce(function (m, n) { return Math.max(m, n.Id); }, 0) + 1;
-    data.Noticeboard.push({
-      Id: id, Title: values.Title, Body: values.Body, Category: values.Category, IsImportant: values.IsImportant === '1',
-      ImportantUntil: null, Status: 'Active', AuthorId: asId, Created: new Date().toISOString(),
-      FileDirRef: '/sites/ESGCompetencyHub/Lists/Noticeboard/' + folder, ClientKey: values.ClientKey
-    });
+    var id = data[title].reduce(function (m, n) { return Math.max(m, n.Id); }, 0) + 1;
+    var row = store.row(values, id, path);
+    data[title].push(row);
+    if (title === 'Requests') flow.schedule(row, mode);
     return respond(200, { value: body.formValues.map(function (f) { return { FieldName: f.FieldName, FieldValue: f.FieldValue, HasException: false }; })
       .concat([{ FieldName: 'Id', FieldValue: String(id), HasException: false }]) });
   }
+
+  // What each list lets a signed-in user add, following the planned permissions (E.0, E.4, K4.1).
+  function writesArea(me, key) {
+    var c = data.Competencies.filter(function (x) { return x.CompetencyKey === key && x.Status === 'Active'; })[0];
+    if (!c) return false;
+    if (me.Role === 'Team Leader' || me.Role === 'Group Head') return true;
+    return data['Competency Members'].some(function (m) { return m.PersonId === me.SiteUserId && m.CompetencyId === c.Id && m.Status === 'Active'; });
+  }
+  var WRITABLE = {
+    // Any active user, in any active area's folder.
+    Noticeboard: {
+      unique: 'ClientKey',
+      allowed: function (folder) { return data.Competencies.some(function (c) { return c.CompetencyKey === folder && c.Status === 'Active'; }); },
+      row: function (v, id, path) {
+        return { Id: id, Title: v.Title, Body: v.Body, Category: v.Category, IsImportant: v.IsImportant === '1', ImportantUntil: null, Status: 'Active',
+          AuthorId: asId, Created: new Date().toISOString(), FileDirRef: path, ClientKey: v.ClientKey };
+      }
+    },
+    // Only into the user's own folder.
+    Requests: {
+      unique: 'RequestKey',
+      allowed: function (folder, me) { return folder === 'u' + me.SiteUserId; },
+      row: function (v, id, path) {
+        return { Id: id, Title: v.Title, RequestKey: v.RequestKey, RequestType: v.RequestType, TargetType: v.TargetType,
+          TargetId: v.TargetId ? Number(v.TargetId) : null, ExpectedRevision: v.ExpectedRevision ? Number(v.ExpectedRevision) : null,
+          Payload: v.Payload, Status: 'Submitted', AuthorId: asId, Created: new Date().toISOString(), FileDirRef: path };
+      }
+    },
+    // Members and management add, in an action's own folder {area}/A{id}, which exists once the action is committed.
+    Updates: {
+      unique: 'ClientKey',
+      allowed: function (folder, me) {
+        var m = /^([A-Z]+)\/A(\d+)$/.exec(folder);
+        if (!m || !writesArea(me, m[1])) return false;
+        return data.Actions.some(function (a) {
+          return a.Id === Number(m[2]) && a.FileDirRef.split('/').pop() === m[1] && !(a.PendingRequestKey && a.CreatedRequestKey === 'F|' + a.PendingRequestKey);
+        });
+      },
+      row: function (v, id, path) {
+        return { Id: id, Title: v.Title, ClientKey: v.ClientKey, ParentType: v.ParentType, ParentId: Number(v.ParentId), EntryType: v.EntryType,
+          IsFlagEvent: v.IsFlagEvent === '1', IsHidden: false, Body: v.Body, AuthorId: asId, Created: new Date().toISOString(), FileDirRef: path };
+      }
+    }
+  };
+  var flow = window.MockFlow.create(data, today);
 
   function Client() {}
   Client.configurations = { v1: {} };

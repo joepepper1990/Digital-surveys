@@ -21,7 +21,7 @@ CH.views.area = (function () {
       ui.sectionNote(app.model.sections.actions, 'actions'),
       ui.actionList(list, function (a) {
         return a.ownerName + (a.areaKey !== area.key ? ' · shared from ' + a.areaName : '') + (a.extensions ? ' · deadline moved ' + (a.extensions === 1 ? 'once' : a.extensions + ' times') : '');
-      }, 'There are no open actions in ' + area.name + '.', app.model.sections.actions)
+      }, 'There are no open actions in ' + area.name + '.', app.model.sections.actions, app.openAction, app.pendingNote)
     ];
   }
 
@@ -88,7 +88,7 @@ CH.views.area = (function () {
         'Speak to one of the ' + area.name + ' engineers or your Team Leader if something needs doing.'));
     } else {
       out.push(h('div', { class: 'row actions-row' },
-        ui.button('Raise an action', function () { app.comingSoon('Raising actions'); }, 'main'),
+        ui.button('Raise an action', function () { app.raiseAction(key); }, 'main'),
         ui.button('Post a notice', function () { app.postNotice(key); }),
         acc.runsMeetings(key) ? ui.button(s.nextMeeting ? 'Start meeting' : 'Book a meeting', function () { app.comingSoon('Meetings'); }) : null));
     }

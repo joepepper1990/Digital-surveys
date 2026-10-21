@@ -8,9 +8,10 @@ const crypto = require('crypto');
 
 const ROOT = path.join(__dirname, '..');
 const MODULES = [
-  'src/core/config.js', 'src/core/dom.js', 'src/core/dates.js', 'src/core/sp.js',
-  'src/domain/access.js', 'src/domain/model.js',
-  'src/ui/components.js', 'src/views/home.js', 'src/views/area.js', 'src/views/notice-form.js',
+  'src/core/config.js', 'src/core/dom.js', 'src/core/dates.js', 'src/core/sp.js', 'src/core/requests.js',
+  'src/domain/access.js', 'src/domain/rules.js', 'src/domain/model.js',
+  'src/ui/components.js', 'src/ui/dialog.js',
+  'src/views/home.js', 'src/views/area.js', 'src/views/notice-form.js', 'src/views/raise-form.js', 'src/views/action-panel.js',
   'src/app.js'
 ];
 
@@ -70,9 +71,12 @@ function build() {
     '<label>Simulate <select id="mock-mode"><option value="">Normal</option><option value="slow">Slow responses</option>' +
       '<option value="people403">People list denied (403)</option><option value="actions404">Actions list missing (404)</option>' +
       '<option value="actionsPartial">Actions over the read limit</option><option value="unknown">Unknown user</option>' +
-      '<option value="duplicate">Duplicate person</option><option value="left">Person marked Left</option></select></label></div>',
+      '<option value="duplicate">Duplicate person</option><option value="left">Person marked Left</option><option value="flowSlow">Request flow very slow</option>' +
+      '<option value="flowFail">Request flow fails</option></select></label></div>',
     '<div class="mock-scope"><div class="ch" data-ch-root><p>Loading the ESG Competency Hub…</p></div></div>',
     '<script src="seed.js"></script>',
+    '<script src="rules.js"></script>',
+    '<script src="flow-sim.js"></script>',
     '<script src="mock-sharepoint.js"></script>',
     '<script src="drivers.js"></script>',
     '<script src="../dist/competency-hub.js"></script>',
@@ -88,7 +92,13 @@ function build() {
     sources: Object.fromEntries(MODULES.concat(['styles/app.css', 'layout/competency-hub.layout.html']).map((m) => [m, sha256(read(m))]))
   }, null, 2) + '\n';
 
-  return { 'dist/competency-hub.js': js, 'dist/competency-hub.html': layout, 'dist/BUILD_MANIFEST.json': manifest, 'mock/index.html': mock };
+  // The simulated request flow in the mock applies the same rules as the app (plan K7.3).
+  const rules = ['/* Built by tools/build.js from src/core/config.js, dates.js and domain/rules.js for the mock. Do not edit. */',
+    'window.MockRules = (function () {', "  'use strict';", '  var CH = {};',
+    ['src/core/config.js', 'src/core/dates.js', 'src/domain/rules.js'].map((m) => read(m).split('\n').map((l) => l ? '  ' + l : l).join('\n')).join('\n'),
+    '  return { config: CH.config, dates: CH.dates, rules: CH.rules };', '})();', ''].join('\n');
+
+  return { 'dist/competency-hub.js': js, 'dist/competency-hub.html': layout, 'dist/BUILD_MANIFEST.json': manifest, 'mock/index.html': mock, 'mock/rules.js': rules };
 }
 
 const files = require.main === module ? build() : null;

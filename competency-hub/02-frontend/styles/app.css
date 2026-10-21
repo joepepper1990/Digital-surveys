@@ -104,6 +104,22 @@ h2 { font-size: calc(18 * var(--u)); font-weight: 600; margin: 0 0 calc(12 * var
 
 .scrim { position: fixed; inset: 0; background: rgba(16, 32, 46, .45); display: flex; align-items: flex-start; justify-content: center; padding: 6vh calc(16 * var(--u)); z-index: 1000; overflow-y: auto; }
 .dialog { background: #fff; border-radius: calc(12 * var(--u)); width: min(calc(620 * var(--u)), 100%); padding: calc(24 * var(--u)); box-shadow: 0 calc(12 * var(--u)) calc(40 * var(--u)) rgba(0, 0, 0, .25); }
+.shell { display: flex; flex-direction: column; flex: 1; }
+.dialog-wide { width: min(calc(860 * var(--u)), 100%); }
+.dialog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: calc(12 * var(--u)); margin-bottom: calc(8 * var(--u)); }
+.dialog-head h2 { margin: 0; }
+.dialog-x { background: none; border: 0; font-size: calc(28 * var(--u)); line-height: 1; color: var(--muted); padding: 0 calc(4 * var(--u)); }
+.dialog-body h3 { font-size: calc(18 * var(--u)); margin: 0 0 calc(12 * var(--u)); }
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: calc(8 * var(--u)) calc(18 * var(--u)); margin: calc(12 * var(--u)) 0 calc(18 * var(--u)); }
+.facts dt { font-weight: 600; color: var(--muted); }
+.facts dd { margin: 0; }
+.pending { background: var(--navy-soft); color: var(--navy); border-radius: calc(8 * var(--u)); padding: calc(8 * var(--u)) calc(12 * var(--u)); }
+.request-strip { list-style: none; margin: 0 0 calc(18 * var(--u)); padding: 0; display: grid; gap: calc(8 * var(--u)); }
+.item-open { display: flex; justify-content: space-between; align-items: center; gap: calc(14 * var(--u)); width: 100%; background: none; border: 0; padding: 0; text-align: left; color: inherit; }
+.item-open:disabled { cursor: default; }
+.items li:has(.item-open:not(:disabled)):hover { border-color: var(--navy); }
+.more summary, .ext-list summary { cursor: pointer; color: var(--navy); font-weight: 600; margin: calc(6 * var(--u)) 0; }
+.ext-list { margin-bottom: calc(14 * var(--u)); }
 .field { margin-bottom: calc(16 * var(--u)); }
 .field label { display: block; font-weight: 600; margin-bottom: calc(4 * var(--u)); }
 .field .hint { display: block; color: var(--muted); font-size: calc(14 * var(--u)); margin-bottom: calc(6 * var(--u)); }

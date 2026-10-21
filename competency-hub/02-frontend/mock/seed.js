@@ -83,8 +83,22 @@ window.MockSeed = function (todayIso) {
       Id: 40 + i, Title: a[0], CompetencyId: area(a[1]), LinkedCompetenciesId: (a[7] || []).map(area),
       AssignedToId: idOf[a[2]], RaisedById: idOf[a[3]], DueDay: dueDay(a[4]), Status: a[5], IsOpen: true,
       ExtensionCount: a[6], RequiresCloseOut: a[5] === 'Completed', PendingRequestKey: '', CreatedRequestKey: 'IMPORT-' + (40 + i),
-      FileDirRef: '/sites/ESGCompetencyHub/Lists/Actions/' + a[1]
+      FileDirRef: '/sites/ESGCompetencyHub/Lists/Actions/' + a[1],
+      Description: 'Synthetic test action: ' + a[0].toLowerCase() + '.', Priority: 'Normal', Revision: 1 + a[6], LastRequestKey: '',
+      DateRaised: at(Math.min(a[4], 0) - 20, '09:30:00'), OriginalDueDate: at(a[4] - 7 * a[6], '12:00:00')
     };
+  });
+  // One History row per earlier extension, as the request flow writes them.
+  var history = [];
+  actions.forEach(function (a, i) {
+    var due = ACTIONS[i][4];
+    for (var n = 1; n <= a.ExtensionCount; n++) {
+      history.push({ Id: history.length + 1, RowKind: 'Event', RequestKey: 'IMPORT-EXT-' + a.Id + '|' + n, RecordType: 'Action', RecordId: a.Id,
+        EventType: 'Deadline Extended', ActorId: a.AssignedToId, EventTime: at(due - 7 * (a.ExtensionCount - n) - 10, '14:00:00'),
+        ExtensionNumber: n, PreviousDueDate: at(due - 7 * (a.ExtensionCount - n + 1), '12:00:00'), NewDueDate: at(due - 7 * (a.ExtensionCount - n), '12:00:00'),
+        Note: 'Waiting for parts from the supplier.', IsOnBehalf: false,
+        FileDirRef: '/sites/ESGCompetencyHub/Lists/History/' + ACTIONS[i][1] + '/A' + a.Id });
+    }
   });
   // An uncommitted create that must never appear on screen.
   actions.push({ Id: 99, Title: 'Half-created action (must stay hidden)', CompetencyId: 1, LinkedCompetenciesId: [], AssignedToId: idOf['Rachel Boulden'],
@@ -110,7 +124,10 @@ window.MockSeed = function (todayIso) {
     return { Id: id, EntryType: entry, ParentType: 'Notice', ParentId: parentId, AuthorId: idOf[author], Created: at(dayOffset, '11:00:00'),
       FileDirRef: '/sites/ESGCompetencyHub/Lists/Updates/' + key, IsHidden: false, IsFlagEvent: true };
   }
-  var updates = [
+  var progress = { Id: 100, EntryType: 'Progress', ParentType: 'Action', ParentId: 40, AuthorId: idOf['Rachel Boulden'], Created: at(-1, '15:20:00'),
+    FileDirRef: '/sites/ESGCompetencyHub/Lists/Updates/FLK/A40', IsHidden: false, IsFlagEvent: false, ClientKey: 'seed-100',
+    Body: 'Replacement probe ordered; delivery expected next week.' };
+  var updates = [progress,
     flag(1, 'FLK', 1, 'Flagged', 'Nick Pearce', -1),
     flag(2, 'FLK', 2, 'Flagged', 'Matt Henley', -5),
     flag(3, 'RP', 3, 'Flagged', 'Jenn Tibbenham', -2),
@@ -138,6 +155,7 @@ window.MockSeed = function (todayIso) {
 
   return {
     'Competencies': competencies, 'People': people, 'Competency Members': members, 'Actions': actions,
-    'Noticeboard': notices, 'Updates': updates, 'Meetings': meetings, 'Calendar Events': calendar
+    'Noticeboard': notices, 'Updates': updates, 'Meetings': meetings, 'Calendar Events': calendar,
+    'Requests': [], 'History': history
   };
 };

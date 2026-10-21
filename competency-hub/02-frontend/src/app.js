@@ -64,10 +64,51 @@ CH.app = (function () {
         })));
     }
 
+    // The page is repainted inside app.shell; dialogs live in app.layer, so an open dialog keeps its focus.
     function paint(content) {
       if (disposed) return;
-      CH.dom.clear(app.root);
-      CH.dom.append(app.root, frame(content));
+      if (!app.shell || app.shell.parentNode !== app.root) {
+        CH.dom.clear(app.root);
+        app.shell = h('div', { class: 'shell' });
+        app.layer = h('div', { class: 'layer' });
+        CH.dom.append(app.root, [app.shell, app.layer]);
+      }
+      CH.dom.clear(app.shell);
+      CH.dom.append(app.shell, frame(content));
+    }
+
+    // Raised actions being recorded, changes that were not accepted, and requests that never left the browser.
+    function requestStrip() {
+      if (!app.tracker) return null;
+      var items = app.tracker.entries().filter(function (e) {
+        if (e.dismissed) return false;
+        if (e.type === 'RaiseAction') return e.state !== 'done';
+        return e.state === 'rejected' || e.state === 'failed';
+      }).map(function (e) {
+        var waiting = e.state === 'submitted' || e.state === 'slow';
+        return h('li', { class: waiting ? 'pending' : 'section-note' }, h('b', { text: e.label }),
+          waiting ? ' – submitted ' + CH.dates.ukTime(e.submittedAt) + ', being recorded (usually under 5 minutes).' + (e.state === 'slow' ? ' ' + e.message : '')
+            : ' – ' + (e.state === 'rejected' ? 'not accepted: ' : 'not recorded yet: ') + e.message + ' ',
+          waiting ? null : CH.ui.linkButton('Dismiss', function () { app.tracker.dismiss(e); }));
+      });
+      var unsent = app.tracker.unsent();
+      if (unsent.length) {
+        items.push(h('li', { class: 'section-note' }, h('b', { text: unsent.length === 1 ? '1 change was not sent. ' : unsent.length + ' changes were not sent. ' }),
+          'Your connection dropped before it reached SharePoint. ', CH.ui.linkButton('Send again', async function () {
+            try { await app.tracker.resend(); render(false); } catch (_) { CH.ui.toast(app.root, 'Still could not send. Try again in a moment.', 'info'); }
+          })));
+      }
+      return items.length ? h('ul', { class: 'request-strip', 'aria-live': 'polite' }, items) : null;
+    }
+
+    function onRequestChange(entry) {
+      if (entry.state !== 'done') { render(false); if (app.panel) app.panel.refresh(); return; }
+      reload().then(function () {
+        render(false);
+        if (app.panel) app.panel.refresh();
+        var a = app.model.actionById[entry.resultId];
+        CH.ui.toast(app.root, entry.type === 'RaiseAction' && a ? a.ref + ' raised: ' + a.title + '.' : entry.message, 'ok');
+      }).catch(function () { CH.ui.toast(app.root, entry.message + ' Reload the page to see it.', 'ok'); });
     }
 
     function stateScreen(title, message, detail) {
@@ -79,6 +120,14 @@ CH.app = (function () {
     app.openArea = function (key) { app.state = { view: 'area', area: key, tab: 0 }; render(true); };
     app.comingSoon = function (what) { CH.ui.toast(app.root, what + ' will be available in the next version of the Competency Hub.', 'info'); };
     app.postNotice = function (key) { CH.views.noticeForm.open(app, key); };
+    app.raiseAction = function (key) { CH.views.raiseForm.open(app, key); };
+    app.openAction = function (a) { CH.views.actionPanel.open(app, a.id); };
+    app.pendingNote = function (a) {
+      var e = app.tracker && app.tracker.forTarget(a.id);
+      if (e && (e.state === 'submitted' || e.state === 'slow')) return 'change being recorded';
+      if (e && e.state === 'rejected') return 'change not accepted';
+      return a.locked ? 'being updated' : '';
+    };
     app.noticePosted = async function (key) {
       await reload();
       if (app.state.view === 'area' && app.state.area === key) app.state.tab = 1;
@@ -88,9 +137,9 @@ CH.app = (function () {
 
     function render(moveFocus) {
       if (!app.model) return;
-      var content = app.state.view === 'area' && app.model.areaByKey[app.state.area]
+      var content = [requestStrip(), app.state.view === 'area' && app.model.areaByKey[app.state.area]
         ? CH.views.area.render(app, app.state.area, app.state.tab)
-        : CH.views.home.render(app);
+        : CH.views.home.render(app)];
       paint(content);
       if (moveFocus) {
         var main = app.root.querySelector('#ch-main');
@@ -147,6 +196,7 @@ CH.app = (function () {
       app.person = identity.person;
       app.people = people;
       app.firstName = await app.sp.myFirstName();
+      app.tracker = CH.requests.tracker(app, onRequestChange);
       try {
         await reload();
       } catch (error) {
@@ -158,6 +208,8 @@ CH.app = (function () {
       var areaParam = (params.get('area') || '').toUpperCase();
       if (app.model.areaByKey[areaParam]) app.state = { view: 'area', area: areaParam, tab: 0 };
       render(false);
+      var actionParam = Number(params.get('action'));
+      if (actionParam) CH.views.actionPanel.open(app, actionParam);
     }
 
     return {
@@ -177,6 +229,7 @@ CH.app = (function () {
       },
       onDispose: function () {
         disposed = true;
+        if (app.tracker) app.tracker.stop();
         if (observer) observer.disconnect();
         window.removeEventListener('resize', applySize);
       }

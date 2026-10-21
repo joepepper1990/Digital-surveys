@@ -21,10 +21,10 @@ function findChrome() {
   throw new Error('Chromium not found: pass its path as the first argument or set CHROME_PATH.');
 }
 const CHROME = findChrome();
-const BASE_ARGS = ['--headless', '--no-sandbox', '--disable-gpu', '--hide-scrollbars', '--enable-logging=stderr', '--v=0', '--virtual-time-budget=15000'];
+const BASE_ARGS = ['--headless', '--no-sandbox', '--disable-gpu', '--hide-scrollbars', '--enable-logging=stderr', '--v=0'];
 
-function open(query, extra) {
-  const r = spawnSync(CHROME, BASE_ARGS.concat(extra || [], [PAGE + '?' + query]), { encoding: 'utf8', maxBuffer: 50 * 1024 * 1024 });
+function open(query, extra, budget) {
+  const r = spawnSync(CHROME, BASE_ARGS.concat(['--virtual-time-budget=' + (budget || 15000)], extra || [], [PAGE + '?' + query]), { encoding: 'utf8', maxBuffer: 50 * 1024 * 1024 });
   const errors = (r.stderr || '').split('\n').filter((l) => /Uncaught|SyntaxError|TypeError|ReferenceError/.test(l));
   return { dom: r.stdout || '', errors };
 }
@@ -95,8 +95,8 @@ t = text(dump('as=' + RACHEL + '&mode=slow').dom);
 check('slow responses: page still completes', t.includes('Your areas'));
 
 // Scripted interactions
-function drive(query) {
-  const d = dump(query);
+function drive(query, budget) {
+  const d = open(query, ['--dump-dom'], budget);
   const m = /<pre id="drive-result">([\s\S]*?)<\/pre>/.exec(d.dom);
   if (!m) return { ok: false, error: 'no result; script errors: ' + d.errors.join(' | ') };
   return JSON.parse(m[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>'));
@@ -113,6 +113,34 @@ res = drive('as=' + RACHEL + '&area=FLK&drive=keyboardTabs');
 check('arrow keys move between area tabs', res.ok && res.result.selected === 'Notices & issues' && res.result.focused === 'Notices & issues', JSON.stringify(res));
 res = drive('as=' + ROBERT + '&drive=readOnlyAudit');
 check('every area and tab opened: no writes, no POSTs', res.ok && res.result.areasVisited === 10 && res.result.writes === 0 && res.result.posts === 0, JSON.stringify(res));
+
+// Actions (plan K7): raise, update, extend, mark as done, stale changes, view only, keyboard
+const SLOW = 200000;
+res = drive('as=' + RACHEL + '&drive=raiseAction', SLOW);
+check('raise: empty title and a past date are refused, in plain words', res.ok && /Enter what needs doing/.test(res.result.emptyError) && /past/.test(res.result.pastError), JSON.stringify(res));
+check('raise: the owner list holds area members and management, with "(you)"', res.ok && res.result.owners.some((o) => /Rachel Boulden \(you\)/.test(o)) &&
+  res.result.owners.some((o) => /Robert Starbuck – Group Head/.test(o)) && !res.result.owners.some((o) => /Kai Todd/.test(o)), JSON.stringify(res && res.result && res.result.owners));
+check('raise: summary shown, then "being recorded" until the flow confirms it', res.ok && /Order replacement smear papers/.test(res.result.summary) &&
+  /being recorded/.test(res.result.stripText), JSON.stringify(res));
+check('raise: the new action appears once confirmed, and the note goes', res.ok && res.result.listed && res.result.stripGone && res.result.request.status === 'Completed', JSON.stringify(res));
+check('raise: the only write is a request in the user\'s own folder', res.ok && res.result.writes.length === 1 && res.result.writes[0].list === 'Requests' &&
+  res.result.writes[0].folder === 'u' + RACHEL && res.result.request.type === 'RaiseAction', JSON.stringify(res && res.result && res.result.writes));
+res = drive('as=' + RACHEL + '&action=40&drive=updateAndExtend', SLOW);
+check('action panel: what, who and when in plain words, with the original deadline', res.ok && /2 days late/.test(res.result.before) && /Was due/.test(res.result.before) &&
+  /Rachel Boulden is doing it/.test(res.result.before) && /Deadline moved once \(was/.test(res.result.before), JSON.stringify(res && res.result && res.result.before));
+check('update: saved instantly into the action\'s own folder and listed', res.ok && res.result.writes[0].list === 'Updates' && res.result.writes[0].folder === 'FLK/A40', JSON.stringify(res));
+check('extend: a short reason is refused; the effect is explained', res.ok && /10 characters/.test(res.result.reasonError) && /The new deadline will be/.test(res.result.effect), JSON.stringify(res));
+check('extend: pending while recorded, buttons disabled, then the history shows both changes', res.ok && /being recorded/.test(res.result.pending) &&
+  res.result.buttonsDisabled && /Show all deadline changes \(2\)/.test(res.result.after) && res.result.history === 2, JSON.stringify(res));
+res = drive('as=' + RACHEL + '&action=53&drive=markDone', SLOW);
+check('mark as done: explained, then the action is closed', res.ok && /will be closed/.test(res.result.explain) && res.result.status === 'Closed', JSON.stringify(res));
+res = drive('as=' + RACHEL + '&action=40&drive=staleRevision', SLOW);
+check('a change based on an old version is refused with the plain message, and nothing changes', res.ok &&
+  /updated by someone else/.test(res.result.panel) && res.result.status === 'In Progress', JSON.stringify(res));
+res = drive('as=' + RACHEL + '&action=62&drive=viewOnlyAction');
+check('view only: an action in another area has no buttons and says why', res.ok && res.result.buttons === 0 && /You can read this action/.test(res.result.panel), JSON.stringify(res));
+res = drive('as=' + RACHEL + '&drive=dialogKeyboard');
+check('keyboard: focus moves into the action, Escape closes it and focus returns', res.ok && res.result.inside && res.result.closed && res.result.focusBack, JSON.stringify(res));
 
 // Sizes follow the width the app has, and the reader's text size (plan K6.9)
 const sized = (w) => { const d = open('as=' + ROBERT + '&drive=sizes', ['--window-size=' + w + ',1200', '--dump-dom']); const m = /<pre id="drive-result">([\s\S]*?)<\/pre>/.exec(d.dom); return m ? JSON.parse(m[1].replace(/&quot;/g, '"')) : { ok: false }; };

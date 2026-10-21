@@ -26,7 +26,7 @@ CH.views.home = (function () {
     var mine = app.model.actions.filter(function (a) { return a.ownerId === app.person.SiteUserId; });
     return ui.card('Your actions', [
       ui.sectionNote(app.model.sections.actions, 'actions'),
-      ui.actionList(mine, function (a) { return a.areaName; }, 'You have no open actions. Nice work.', app.model.sections.actions)
+      ui.actionList(mine, function (a) { return a.areaName; }, 'You have no open actions. Nice work.', app.model.sections.actions, app.openAction, app.pendingNote)
     ]);
   }
 
@@ -90,9 +90,10 @@ CH.views.home = (function () {
     });
     if (m.sections.actions !== 'unavailable') m.actions.filter(function (a) { return a.group === 'late'; })
       .sort(function (a, b) { return a.dueIso.localeCompare(b.dueIso); }).slice(0, 6).forEach(function (a) {
-        items.push(h('li', null, h('span', null, h('b', { text: a.title }), h('br'),
-          h('span', { class: 'muted small', text: a.areaName + ' · ' + a.ownerName + (a.extensions >= 2 ? ' · deadline moved ' + a.extensions + ' times' : '') })),
-        ui.chip('late', a.dueText)));
+        items.push(h('li', null, h('button', { type: 'button', class: 'item-open', onclick: function () { app.openAction(a); } },
+          h('span', null, h('b', { text: a.title }), h('br'),
+            h('span', { class: 'muted small', text: a.areaName + ' · ' + a.ownerName + (a.extensions >= 2 ? ' · deadline moved ' + a.extensions + ' times' : '') })),
+          ui.chip('late', a.dueText))));
       });
     var closeOut = m.actions.filter(function (a) { return a.waitingCloseOut; }).length;
     if (closeOut) items.push(h('li', null, h('span', null, h('b', { text: closeOut + (closeOut === 1 ? ' action is' : ' actions are') }), ' waiting for a close-out check')));
@@ -117,7 +118,7 @@ CH.views.home = (function () {
       else out.push(h('p', { class: 'sentence' }, 'Across the group: ', h('b', { text: open + ' open actions' }), ', ',
         h('b', { class: late ? 'txt-late' : '', text: late + ' late' }), stale ? [', and ', h('b', { text: stale + (stale === 1 ? ' area' : ' areas') }), ' with no recent meeting.'] : '.'));
       out.push(h('div', { class: 'row actions-row' },
-        ui.button('Raise an action', function () { app.comingSoon('Raising actions'); }, 'main'),
+        ui.button('Raise an action', function () { app.raiseAction(postFirst); }, 'main'),
         ui.button('Post a notice', function () { app.postNotice(postFirst); })));
       out.push(h('h2', { text: 'All areas' }));
       out.push(ui.tileGrid(m.areas.filter(function (a) { return a.status === 'Active'; }), m, false, app.openArea));
@@ -128,7 +129,7 @@ CH.views.home = (function () {
     } else {
       out.push(h('p', { class: 'lead', text: acc.isEngineer ? 'Your actions, and what you look after as an engineer.' : 'Here is what needs your attention.' }));
       out.push(h('div', { class: 'row actions-row' },
-        ui.button('Raise an action', function () { app.comingSoon('Raising actions'); }, 'main'),
+        acc.memberAreas.length ? ui.button('Raise an action', function () { app.raiseAction(acc.memberAreas[0]); }, 'main') : null,
         ui.button('Post a notice', function () { app.postNotice(postFirst); })));
       var mine = m.areas.filter(function (a) { return acc.isMember(a.key) && a.status === 'Active'; });
       var others = m.areas.filter(function (a) { return !acc.isMember(a.key) && a.status === 'Active'; });

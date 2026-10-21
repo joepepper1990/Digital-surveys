@@ -73,6 +73,105 @@ window.MockDrivers = (function () {
       var selected = all('.subtabs button').filter(function (b) { return b.getAttribute('aria-selected') === 'true'; })[0];
       return { selected: selected && selected.textContent, focused: document.activeElement && document.activeElement.textContent };
     },
+    // Raise an action through the three steps; it is recorded by the simulated flow and appears (plan K7).
+    raiseAction: async function () {
+      (await until(function () { return byText('button', 'Raise an action'); })).click();
+      await until(function () { return q('#ch-r-title'); });
+      var form = q('#ch-r form');
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await wait(50);
+      var emptyError = q('#ch-r-title-err').textContent;
+      type(q('#ch-r-title'), 'Order replacement smear papers');
+      type(q('#ch-r-description'), 'Stock is down to one box.');
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-r-ownerId'); });
+      var owners = all('#ch-r-ownerId option').map(function (o) { return o.textContent; });
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      var due = await until(function () { return q('#ch-r-dueIso'); });
+      due.value = '2020-01-01';
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await wait(50);
+      var pastError = q('#ch-r-dueIso-err').textContent;
+      due.value = q('#ch-r-dueIso').max.slice(0, 4) - 1 + q('#ch-r-dueIso').min.slice(4);
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return text().indexOf('Check and raise') >= 0; });
+      var summary = q('#ch-r .facts').textContent;
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return !q('#ch-r'); });
+      var strip = await until(function () { return q('.request-strip'); });
+      var stripText = strip.textContent;
+      await until(function () { return text().indexOf('raised: Order replacement smear papers') >= 0; }, 120000);
+      var req = MockSharePoint.data.Requests[0];
+      return { emptyError: emptyError, pastError: pastError, owners: owners, summary: summary, stripText: stripText,
+        stripGone: !q('.request-strip'), listed: !!byText('.items .t', 'Order replacement smear papers'),
+        request: { folder: req.FileDirRef.split('/').pop(), type: req.RequestType, status: req.Status },
+        writes: MockSharePoint.writes.slice() };
+    },
+    // Open an action by its link, add an update, then ask for more time and see the new deadline confirmed.
+    updateAndExtend: async function () {
+      await until(function () { return q('#ch-a .facts'); });
+      var before = q('#ch-a').textContent;
+      byText('#ch-a button', 'Add an update').click();
+      type(await until(function () { return q('#ch-u-body'); }), 'Supplier confirmed delivery on Friday.');
+      q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-a').textContent.indexOf('Supplier confirmed delivery on Friday.') >= 0; });
+      byText('#ch-a button', 'I need more time').click();
+      var date = await until(function () { return q('#ch-x-newDueIso'); });
+      type(q('#ch-x-reason'), 'short');
+      q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await wait(50);
+      var reasonError = q('#ch-x-reason-err').textContent;
+      date.value = MockRules.dates.addDays(MockRules.dates.localDate(new Date()), 7);
+      date.dispatchEvent(new Event('input'));
+      var effect = q('#ch-a .explain').textContent;
+      type(q('#ch-x-reason'), 'Waiting for the replacement probe to arrive.');
+      q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-a .pending'); });
+      var pending = q('#ch-a .pending').textContent;
+      var buttonsDisabled = all('#ch-a .actions-row .btn').every(function (b) { return b.disabled; });
+      await until(function () { return text().indexOf('Deadline moved to') >= 0; }, 120000);
+      await until(function () { return q('#ch-a') && q('#ch-a').textContent.indexOf('Show all deadline changes (2)') >= 0; });
+      return { before: before, reasonError: reasonError, effect: effect, pending: pending, buttonsDisabled: buttonsDisabled,
+        after: q('#ch-a').textContent, writes: MockSharePoint.writes.slice(),
+        history: MockSharePoint.data.History.filter(function (h) { return h.RecordId === 40; }).length };
+    },
+    // Mark as done: an action with no close-out check is closed and leaves the open lists.
+    markDone: async function () {
+      await until(function () { return q('#ch-a .facts'); });
+      byText('#ch-a button', 'Mark as done').click();
+      await until(function () { return q('#ch-c-note'); });
+      var explain = q('#ch-a .explain').textContent;
+      q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return text().indexOf('Action closed.') >= 0; }, 120000);
+      return { explain: explain, panel: q('#ch-a') ? q('#ch-a').textContent : '', status: MockSharePoint.data.Actions.filter(function (a) { return a.Id === 53; })[0].Status };
+    },
+    // Someone else changes the action while it is open: the request is refused with the plain message.
+    staleRevision: async function () {
+      await until(function () { return q('#ch-a .facts'); });
+      MockSharePoint.data.Actions.filter(function (a) { return a.Id === 40; })[0].Revision += 1;
+      byText('#ch-a button', 'Mark as done').click();
+      await until(function () { return q('#ch-c-note'); });
+      q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-a').textContent.indexOf('Not accepted') >= 0; }, 120000);
+      return { panel: q('#ch-a').textContent, status: MockSharePoint.data.Actions.filter(function (a) { return a.Id === 40; })[0].Status };
+    },
+    // A visitor reads an action in another area: no buttons, a plain explanation.
+    viewOnlyAction: async function () {
+      await until(function () { return q('#ch-a .facts'); });
+      await until(function () { return q('#ch-a').textContent.indexOf('Loading updates') < 0; });
+      return { buttons: all('#ch-a .actions-row .btn').length, panel: q('#ch-a').textContent };
+    },
+    // Keyboard: Escape closes a dialog and focus returns to the action that opened it.
+    dialogKeyboard: async function () {
+      var item = await until(function () { return q('.items .item-open'); });
+      item.focus();
+      item.click();
+      await until(function () { return q('#ch-a'); });
+      var inside = q('#ch-a').contains(document.activeElement);
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await wait(50);
+      return { inside: inside, closed: !q('#ch-a'), focusBack: document.activeElement === item };
+    },
     // Open every area and every tab: the shell must make no writes at all.
     readOnlyAudit: async function () {
       await until(function () { return q('.tile'); });

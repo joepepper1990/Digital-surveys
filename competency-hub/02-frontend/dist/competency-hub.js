@@ -1,11 +1,11 @@
-/* ESG Competency Hub 0.1.2 – built from src/ by tools/build.js. Do not edit. */
+/* ESG Competency Hub 0.2.0 – built from src/ by tools/build.js. Do not edit. */
 window.ESGCompetencyHub = function (ctx) {
   'use strict';
   var CH = {};
   /* src/core/config.js */
   // Fixed names and limits. Lists are addressed by display title; folders by list URL name.
   CH.config = {
-    VERSION: '0.1.2',
+    VERSION: '0.2.0',
     ENVIRONMENT: 'TEST',
     lists: {
       competencies: { title: 'Competencies', url: 'Competencies' },
@@ -15,14 +15,17 @@ window.ESGCompetencyHub = function (ctx) {
       notices: { title: 'Noticeboard', url: 'Noticeboard' },
       updates: { title: 'Updates', url: 'Updates' },
       calendar: { title: 'Calendar Events', url: 'CalendarEvents' },
-      meetings: { title: 'Meetings', url: 'Meetings' }
+      meetings: { title: 'Meetings', url: 'Meetings' },
+      requests: { title: 'Requests', url: 'Requests' },
+      history: { title: 'History', url: 'History' }
     },
     pageSize: 500,
     maxRows: 5000,
     dueSoonDays: 7,
     meetingOverdueDays: 35,
     noticeImportantMaxDays: 30,
-    managementRoles: ['Team Leader', 'Group Head']
+    managementRoles: ['Team Leader', 'Group Head'],
+    maxDeadlineYears: 2
   };
 
   /* src/core/dom.js */
@@ -270,6 +273,153 @@ window.ESGCompetencyHub = function (ctx) {
     return { create: create, SpError: SpError, escapeOData: escapeOData, folderOf: folderOf };
   })();
 
+  /* src/core/requests.js */
+  // Queued changes (plan C.6, F.1): the browser writes a request into the user's own Requests folder and the
+  // request flow applies it. Success is shown only when the request is Completed and the action itself confirms
+  // it (its LastRequestKey is this request and nothing is locked), or History holds the request's event row.
+  CH.requests = (function () {
+    var UNSENT_KEY = 'esg-competency-hub-unsent';
+    var SCHEDULE = [20, 40, 60];
+    var EVERY = 60;
+    var GIVE_UP_MINUTES = 15;
+
+    function newKey() {
+      if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
+      var b = new Uint8Array(16);
+      window.crypto.getRandomValues(b);
+      b[6] = (b[6] & 15) | 64; b[8] = (b[8] & 63) | 128;
+      var x = Array.prototype.map.call(b, function (v) { return (v + 256).toString(16).slice(1); }).join('');
+      return x.slice(0, 8) + '-' + x.slice(8, 12) + '-' + x.slice(12, 16) + '-' + x.slice(16, 20) + '-' + x.slice(20);
+    }
+
+    function readUnsent() {
+      try { return JSON.parse(window.localStorage.getItem(UNSENT_KEY) || '[]') || []; } catch (_) { return []; }
+    }
+    function writeUnsent(list) {
+      try { window.localStorage.setItem(UNSENT_KEY, JSON.stringify(list)); } catch (_) { /* not remembered */ }
+    }
+
+    // app: { sp, person }. onChange(entry) is called whenever a request's state changes.
+    function tracker(app, onChange) {
+      var entries = [];
+      var timers = [];
+      var stopped = false;
+      var q = CH.sp.escapeOData;
+
+      function folder() { return 'u' + app.person.SiteUserId; }
+
+      function values(spec) {
+        return {
+          Title: String(spec.label).slice(0, 255), RequestKey: spec.key, RequestType: spec.type,
+          TargetType: spec.targetId ? 'Action' : '', TargetId: spec.targetId || '', ExpectedRevision: spec.expectedRevision || '',
+          Payload: JSON.stringify(spec.payload), Status: 'Submitted'
+        };
+      }
+
+      async function findRequest(key) {
+        var res = await app.sp.items(CH.config.lists.requests.title,
+          "$select=Id,Status,ResultMessage,ResultId&$filter=RequestKey eq '" + q(key) + "'", 1);
+        return res.rows[0] || null;
+      }
+
+      // spec: { type, targetId, expectedRevision, payload, label, key? }. Resolves to the tracked entry.
+      async function submit(spec) {
+        spec.key = spec.key || newKey();
+        try {
+          await app.sp.addToFolder('requests', folder(), values(spec));
+        } catch (error) {
+          // An unclear failure may still have saved the request: look for it by its key before giving up.
+          var found = null;
+          try { found = await findRequest(spec.key); } catch (_) { found = null; }
+          if (!found) {
+            var unsent = readUnsent().filter(function (u) { return u.key !== spec.key; });
+            unsent.push(spec);
+            writeUnsent(unsent);
+            throw error;
+          }
+        }
+        writeUnsent(readUnsent().filter(function (u) { return u.key !== spec.key; }));
+        var entry = { key: spec.key, type: spec.type, targetId: spec.targetId || null, label: spec.label, submittedAt: new Date(),
+          state: 'submitted', message: '', resultId: null, polls: 0 };
+        entries.push(entry);
+        schedule(entry);
+        onChange(entry);
+        return entry;
+      }
+
+      function schedule(entry) {
+        if (stopped) return;
+        var seconds = entry.polls < SCHEDULE.length ? SCHEDULE[entry.polls] - (entry.polls ? SCHEDULE[entry.polls - 1] : 0) : EVERY;
+        timers.push(setTimeout(function () { poll(entry); }, seconds * 1000));
+      }
+
+      async function poll(entry) {
+        if (stopped || entry.state !== 'submitted' && entry.state !== 'slow') return;
+        entry.polls++;
+        var row = null;
+        try { row = await findRequest(entry.key); } catch (_) { row = null; }
+        var status = row && row.Status;
+        if (status === 'Rejected') return settle(entry, 'rejected', row.ResultMessage || 'This change was not accepted.');
+        if (status === 'Failed' || status === 'Needs attention') {
+          return settle(entry, 'failed', 'This change has not been recorded yet. A Competency Hub administrator can see it and will put it right.');
+        }
+        if (status === 'Completed' && await confirmed(entry, row)) {
+          entry.resultId = row.ResultId || entry.targetId;
+          return settle(entry, 'done', row.ResultMessage || 'Recorded.');
+        }
+        var minutes = (Date.now() - entry.submittedAt.getTime()) / 60000;
+        if (minutes >= GIVE_UP_MINUTES && entry.state !== 'slow') {
+          entry.state = 'slow';
+          entry.message = 'This is taking longer than usual. It will be recorded; you can keep working.';
+          onChange(entry);
+        }
+        schedule(entry);
+      }
+
+      // The action itself must show this change, with no lock left on it.
+      async function confirmed(entry, row) {
+        var id = Number(row.ResultId || entry.targetId);
+        if (!id) return false;
+        try {
+          var res = await app.sp.items(CH.config.lists.actions.title, '$select=Id,LastRequestKey,PendingRequestKey&$filter=Id eq ' + id, 1);
+          var action = res.rows[0];
+          if (action && action.LastRequestKey === entry.key && !action.PendingRequestKey) return true;
+          // A later change may already have committed on the same action; its event row proves this one.
+          var ev = await app.sp.items(CH.config.lists.history.title, "$select=Id&$filter=RequestKey eq '" + q(entry.key + '|1') + "'", 1);
+          return ev.rows.length > 0;
+        } catch (_) {
+          return false;
+        }
+      }
+
+      function settle(entry, state, message) {
+        entry.state = state;
+        entry.message = message;
+        onChange(entry);
+      }
+
+      return {
+        submit: submit,
+        entries: function () { return entries.slice(); },
+        // The newest unfinished or unread request for an action.
+        forTarget: function (id) {
+          return entries.filter(function (e) { return Number(e.targetId) === Number(id) && !e.dismissed; }).slice(-1)[0] || null;
+        },
+        dismiss: function (entry) { entry.dismissed = true; onChange(entry); },
+        unsent: readUnsent,
+        // Sends again, with the same keys, the requests a failed connection left behind.
+        resend: async function () {
+          var list = readUnsent();
+          for (var i = 0; i < list.length; i++) await submit(list[i]);
+          return list.length;
+        },
+        stop: function () { stopped = true; timers.forEach(clearTimeout); }
+      };
+    }
+
+    return { tracker: tracker, newKey: newKey, SCHEDULE: SCHEDULE, GIVE_UP_MINUTES: GIVE_UP_MINUTES };
+  })();
+
   /* src/domain/access.js */
   // Who the user is and what they may do (plan E.0, E.2, K4.1). The server remains the real boundary;
   // these rules decide what the screen offers. Identity fails closed: no guessed role, no default access.
@@ -327,6 +477,96 @@ window.ESGCompetencyHub = function (ctx) {
     return { resolveIdentity: resolveIdentity, build: build, MESSAGES: MESSAGES };
   })();
 
+  /* src/domain/rules.js */
+  // Business rules for actions (plan B.3, B.4, E.3, F.2, F.3), shared by the forms and by the simulated
+  // request flow in the mock, so the screen and the server apply the same checks. The flow in Power Automate
+  // follows these rule by rule; the server stays the real boundary.
+  CH.rules = (function () {
+    var D = CH.dates;
+    var OPEN_STATUSES = ['Open', 'In Progress', 'Awaiting Input'];
+    var PRIORITIES = ['Low', 'Normal', 'High'];
+
+    // The same calendar date N years on; 29 February becomes 28 February in a non-leap year.
+    function addYears(iso, years) {
+      var y = +iso.slice(0, 4) + years;
+      var m = +iso.slice(5, 7);
+      var d = +iso.slice(8, 10);
+      var last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+      return y + '-' + iso.slice(5, 7) + '-' + (Math.min(d, last) < 10 ? '0' : '') + Math.min(d, last);
+    }
+
+    function isOpen(status) { return OPEN_STATUSES.indexOf(status) >= 0; }
+
+    // ctx: { today, maxYears, canWrite(areaKey), ownerAllowed(areaKey, ownerId) }
+    function validateRaise(v, ctx) {
+      var e = {};
+      var title = String(v.title || '').trim();
+      var description = String(v.description || '').trim();
+      if (!title) e.title = 'Enter what needs doing.';
+      else if (title.length > 255) e.title = 'Keep the title to 255 characters or fewer.';
+      if (!description) e.description = 'Add a short description.';
+      else if (description.length > 5000) e.description = 'Keep the description to 5,000 characters or fewer.';
+      if (!v.areaKey || !ctx.canWrite(v.areaKey)) e.areaKey = 'Choose one of your areas.';
+      if (!v.ownerId) e.ownerId = 'Choose who will do it.';
+      else if (!e.areaKey && !ctx.ownerAllowed(v.areaKey, Number(v.ownerId))) e.ownerId = 'Choose a member of this area or a Team Leader.';
+      if (!D.isIso(v.dueIso || '')) e.dueIso = 'Choose a target date.';
+      else if (v.dueIso < ctx.today) e.dueIso = 'The target date cannot be in the past.';
+      else if (v.dueIso > addYears(ctx.today, ctx.maxYears)) e.dueIso = 'Choose a date within ' + ctx.maxYears + ' years.';
+      if (v.priority && PRIORITIES.indexOf(v.priority) < 0) e.priority = 'Choose a priority.';
+      return e;
+    }
+
+    // action: { status, dueIso }. v: { newDueIso, reason }. ctx: { today }
+    function validateExtend(action, v, ctx) {
+      var e = {};
+      if (!isOpen(action.status)) e.action = 'This action is no longer open, so its deadline cannot be moved.';
+      if (!D.isIso(v.newDueIso || '')) e.newDueIso = 'Choose the new deadline.';
+      else if (v.newDueIso <= action.dueIso) e.newDueIso = 'The new deadline must be after ' + D.long(action.dueIso) + '.';
+      else if (v.newDueIso < ctx.today) e.newDueIso = 'The new deadline cannot be in the past.';
+      var reason = String(v.reason || '').trim();
+      if (reason.length < 10) e.reason = 'Give a reason of at least 10 characters.';
+      else if (reason.length > 1000) e.reason = 'Keep the reason to 1,000 characters or fewer.';
+      return e;
+    }
+
+    function validateComplete(action, v) {
+      var e = {};
+      if (!isOpen(action.status)) e.action = 'This action is already done.';
+      if (String(v.note || '').length > 1000) e.note = 'Keep the note to 1,000 characters or fewer.';
+      return e;
+    }
+
+    function validateUpdate(v) {
+      var body = String(v.body || '').trim();
+      if (!body) return { body: 'Write your update.' };
+      if (body.length > 2000) return { body: 'Keep the update to 2,000 characters or fewer.' };
+      return {};
+    }
+
+    // Who may do what with an action (E.3). personId: SiteUserId. access: CH.access result.
+    function roles(action, personId, access) {
+      var owner = Number(action.ownerId) === Number(personId);
+      var manager = Number(action.raisedById) === Number(personId) || access.canManage(action.areaKey);
+      var open = isOpen(action.status);
+      return {
+        owner: owner,
+        manager: manager,
+        canUpdate: access.canWrite(action.areaKey) || owner,
+        canExtend: open && (owner || manager),
+        canComplete: open && (owner || manager)
+      };
+    }
+
+    // Mark complete closes the action unless a close-out check is required (D-07).
+    function completionStatus(requiresCloseOut) { return requiresCloseOut ? 'Completed' : 'Closed'; }
+
+    return {
+      addYears: addYears, isOpen: isOpen, validateRaise: validateRaise, validateExtend: validateExtend,
+      validateComplete: validateComplete, validateUpdate: validateUpdate, roles: roles,
+      completionStatus: completionStatus, PRIORITIES: PRIORITIES, OPEN_STATUSES: OPEN_STATUSES
+    };
+  })();
+
   /* src/domain/model.js */
   // Loads the lists the shell needs and turns them into one read-only model.
   // Every section records whether it is complete, partial or unavailable, so a failed or
@@ -337,8 +577,9 @@ window.ESGCompetencyHub = function (ctx) {
     var QUERIES = {
       competencies: '$select=Id,Title,CompetencyKey,SortOrder,Status,TrackingStart',
       members: "$select=Id,CompetencyId,PersonId,CanManageMeetings,Status&$filter=Status eq 'Active'",
-      actions: '$select=Id,Title,CompetencyId,LinkedCompetenciesId,AssignedToId,RaisedById,DueDay,Status,IsOpen,ExtensionCount,' +
-        'RequiresCloseOut,PendingRequestKey,CreatedRequestKey&$filter=IsOpen eq 1 and FSObjType eq 0',
+      actions: '$select=Id,Title,Description,CompetencyId,LinkedCompetenciesId,AssignedToId,RaisedById,DateRaised,DueDay,OriginalDueDate,' +
+        'Status,IsOpen,Priority,ExtensionCount,RequiresCloseOut,Revision,PendingRequestKey,LastRequestKey,CreatedRequestKey,FileDirRef' +
+        '&$filter=IsOpen eq 1 and FSObjType eq 0',
       notices: "$select=Id,Title,Body,Category,IsImportant,ImportantUntil,Status,AuthorId,Created,FileDirRef&$filter=Status eq 'Active' and FSObjType eq 0",
       updates: '$select=Id,EntryType,ParentType,ParentId,AuthorId,Created,FileDirRef,IsHidden&$filter=IsFlagEvent eq 1 and FSObjType eq 0',
       meetings: '$select=Id,CompetencyId,MeetingDate,Status,ChairId&$filter=FSObjType eq 0',
@@ -411,6 +652,10 @@ window.ESGCompetencyHub = function (ctx) {
           linkedKeys: linked.map(function (a) { return a.key; }),
           ownerId: r.AssignedToId, ownerName: nameOf(r.AssignedToId), raisedById: r.RaisedById,
           dueIso: dueIso, status: r.Status, extensions: r.ExtensionCount || 0,
+          originalIso: r.OriginalDueDate ? D.localDate(r.OriginalDueDate) : dueIso,
+          description: r.Description || '', priority: r.Priority || 'Normal', requiresCloseOut: !!r.RequiresCloseOut,
+          raisedIso: r.DateRaised ? D.localDate(r.DateRaised) : '', raisedByName: nameOf(r.RaisedById),
+          revision: Number(r.Revision) || 1, dueDay: Number(r.DueDay), locked: !!r.PendingRequestKey,
           waitingCloseOut: waitingCloseOut, group: words.group, dueText: words.text
         };
       });
@@ -493,9 +738,19 @@ window.ESGCompetencyHub = function (ctx) {
         };
       });
 
+      // Who may own an action in an area (ACT-03): its active members, and Team Leaders and the Group Head.
+      function ownersFor(key) {
+        return people.filter(function (p) {
+          return p.Status === 'Active' && ((membersByArea[key] || {})[p.SiteUserId] || CH.config.managementRoles.indexOf(p.Role) >= 0);
+        }).map(function (p) { return { id: p.SiteUserId, name: p.Title, role: p.Role }; })
+          .sort(function (a, b) { return a.name.localeCompare(b.name); });
+      }
+      var actionById = {};
+      actions.forEach(function (a) { actionById[a.id] = a; });
+
       return {
         today: today, areas: areas, areaByKey: areaByKey, stats: stats, actions: actions, notices: notices, calendar: calendar,
-        inArea: inArea, nameOf: nameOf,
+        inArea: inArea, nameOf: nameOf, ownersFor: ownersFor, actionById: actionById,
         sections: {
           actions: section(raw.actions), notices: section(raw.notices), meetings: section(raw.meetings),
           calendar: section(raw.calendar), flags: section(raw.updates), members: section(raw.members)
@@ -536,7 +791,8 @@ window.ESGCompetencyHub = function (ctx) {
     var GROUPS = [['late', 'Late', 'var(--late)'], ['soon', 'Due within 7 days', 'var(--soon)'], ['later', 'Coming up', '#9aa5af']];
 
     // Actions grouped as Late / Due within 7 days / Coming up. sub(action) gives the grey second line.
-    function actionList(actions, sub, emptyText, state) {
+    // Each action opens with open(action); pending(action) gives a "being recorded" note, if any.
+    function actionList(actions, sub, emptyText, state, open, pending) {
       if (state === 'unavailable') return null;
       if (!actions.length) return h('p', { class: 'muted', text: emptyText });
       var out = [];
@@ -546,9 +802,10 @@ window.ESGCompetencyHub = function (ctx) {
         if (!rows.length) return;
         out.push(h('h3', { class: 'group-title' }, h('span', { class: 'dot', style: 'background:' + g[2], 'aria-hidden': 'true' }), g[1]));
         out.push(h('ul', { class: 'items' }, rows.map(function (a) {
-          return h('li', null,
-            h('span', null, h('span', { class: 't', text: a.title }), h('span', { class: 's', text: sub(a) })),
-            chip(a.waitingCloseOut ? 'later' : a.group, a.dueText));
+          var note = pending ? pending(a) : '';
+          return h('li', null, h('button', { type: 'button', class: 'item-open', onclick: open ? function () { open(a); } : null, disabled: open ? null : true },
+            h('span', null, h('span', { class: 't', text: a.title }), h('span', { class: 's', text: sub(a) + (note ? ' · ' + note : '') })),
+            chip(a.waitingCloseOut ? 'later' : a.group, a.dueText)));
         })));
       });
       return out;
@@ -618,6 +875,79 @@ window.ESGCompetencyHub = function (ctx) {
     };
   })();
 
+  /* src/ui/dialog.js */
+  // The one dialog used by every form and the action panel: modal, focus kept inside, Escape or the
+  // backdrop closes it, and focus returns to where it was.
+  CH.ui.dialog = (function () {
+    var h = CH.dom.h;
+    var FOCUSABLE = 'a[href], select, input, textarea, button:not([disabled])';
+
+    // opts: { root, id, title, wide, onClose }. Returns { body, close, node, setTitle }.
+    function open(opts) {
+      var previousFocus = document.activeElement;
+      var heading = h('h2', { id: opts.id + '-heading', text: opts.title });
+      var body = h('div', { class: 'dialog-content' });
+      var closeBtn = h('button', { type: 'button', class: 'dialog-x', 'aria-label': 'Close', text: '×' });
+      var dialog = h('div', { class: 'dialog' + (opts.wide ? ' dialog-wide' : ''), role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': opts.id + '-heading', id: opts.id },
+        h('div', { class: 'dialog-head' }, heading, closeBtn), body);
+      var scrim = h('div', { class: 'scrim', onclick: function (e) { if (e.target === scrim) close(); } }, dialog);
+      var closed = false;
+
+      function close() {
+        if (closed) return;
+        closed = true;
+        scrim.remove();
+        document.removeEventListener('keydown', onKey, true);
+        if (previousFocus && previousFocus.focus && document.contains(previousFocus)) previousFocus.focus();
+        if (opts.onClose) opts.onClose();
+      }
+      function onKey(e) {
+        if (e.key === 'Escape') { e.preventDefault(); close(); return; }
+        if (e.key !== 'Tab') return;
+        var focusable = Array.prototype.filter.call(dialog.querySelectorAll(FOCUSABLE), function (n) { return n.offsetParent !== null; });
+        if (!focusable.length) return;
+        var first = focusable[0], last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+      closeBtn.addEventListener('click', close);
+      document.addEventListener('keydown', onKey, true);
+      opts.root.appendChild(scrim);
+
+      return {
+        node: dialog, body: body, close: close,
+        isOpen: function () { return !closed; },
+        setTitle: function (text) { heading.textContent = text; },
+        focusFirst: function () {
+          var first = body.querySelector('input, select, textarea, button');
+          (first || closeBtn).focus();
+        }
+      };
+    }
+
+    // A labelled field with a hint and an error line (ids follow the input's id).
+    function field(label, input, hint) {
+      return h('div', { class: 'field' }, h('label', { for: input.id, text: label }), hint ? h('span', { class: 'hint', text: hint }) : null, input,
+        h('span', { class: 'field-error', id: input.id + '-err' }));
+    }
+
+    // Shows errors ({ key: message }) against fields whose ids are prefix + key; focuses the first.
+    function showErrors(container, prefix, errors, order) {
+      Array.prototype.forEach.call(container.querySelectorAll('.field-error'), function (n) { n.textContent = ''; });
+      var first = null;
+      order.forEach(function (k) {
+        if (!errors[k]) return;
+        var slot = container.querySelector('#' + prefix + k + '-err');
+        if (slot) slot.textContent = errors[k];
+        if (!first) first = container.querySelector('#' + prefix + k);
+      });
+      if (first) first.focus();
+      return !!first;
+    }
+
+    return { open: open, field: field, showErrors: showErrors };
+  })();
+
   /* src/views/home.js */
   // Front pages by role (plan K1/K2): tiles at full width, then three columns of useful lists.
   CH.views = CH.views || {};
@@ -647,7 +977,7 @@ window.ESGCompetencyHub = function (ctx) {
       var mine = app.model.actions.filter(function (a) { return a.ownerId === app.person.SiteUserId; });
       return ui.card('Your actions', [
         ui.sectionNote(app.model.sections.actions, 'actions'),
-        ui.actionList(mine, function (a) { return a.areaName; }, 'You have no open actions. Nice work.', app.model.sections.actions)
+        ui.actionList(mine, function (a) { return a.areaName; }, 'You have no open actions. Nice work.', app.model.sections.actions, app.openAction, app.pendingNote)
       ]);
     }
 
@@ -711,9 +1041,10 @@ window.ESGCompetencyHub = function (ctx) {
       });
       if (m.sections.actions !== 'unavailable') m.actions.filter(function (a) { return a.group === 'late'; })
         .sort(function (a, b) { return a.dueIso.localeCompare(b.dueIso); }).slice(0, 6).forEach(function (a) {
-          items.push(h('li', null, h('span', null, h('b', { text: a.title }), h('br'),
-            h('span', { class: 'muted small', text: a.areaName + ' · ' + a.ownerName + (a.extensions >= 2 ? ' · deadline moved ' + a.extensions + ' times' : '') })),
-          ui.chip('late', a.dueText)));
+          items.push(h('li', null, h('button', { type: 'button', class: 'item-open', onclick: function () { app.openAction(a); } },
+            h('span', null, h('b', { text: a.title }), h('br'),
+              h('span', { class: 'muted small', text: a.areaName + ' · ' + a.ownerName + (a.extensions >= 2 ? ' · deadline moved ' + a.extensions + ' times' : '') })),
+            ui.chip('late', a.dueText))));
         });
       var closeOut = m.actions.filter(function (a) { return a.waitingCloseOut; }).length;
       if (closeOut) items.push(h('li', null, h('span', null, h('b', { text: closeOut + (closeOut === 1 ? ' action is' : ' actions are') }), ' waiting for a close-out check')));
@@ -738,7 +1069,7 @@ window.ESGCompetencyHub = function (ctx) {
         else out.push(h('p', { class: 'sentence' }, 'Across the group: ', h('b', { text: open + ' open actions' }), ', ',
           h('b', { class: late ? 'txt-late' : '', text: late + ' late' }), stale ? [', and ', h('b', { text: stale + (stale === 1 ? ' area' : ' areas') }), ' with no recent meeting.'] : '.'));
         out.push(h('div', { class: 'row actions-row' },
-          ui.button('Raise an action', function () { app.comingSoon('Raising actions'); }, 'main'),
+          ui.button('Raise an action', function () { app.raiseAction(postFirst); }, 'main'),
           ui.button('Post a notice', function () { app.postNotice(postFirst); })));
         out.push(h('h2', { text: 'All areas' }));
         out.push(ui.tileGrid(m.areas.filter(function (a) { return a.status === 'Active'; }), m, false, app.openArea));
@@ -749,7 +1080,7 @@ window.ESGCompetencyHub = function (ctx) {
       } else {
         out.push(h('p', { class: 'lead', text: acc.isEngineer ? 'Your actions, and what you look after as an engineer.' : 'Here is what needs your attention.' }));
         out.push(h('div', { class: 'row actions-row' },
-          ui.button('Raise an action', function () { app.comingSoon('Raising actions'); }, 'main'),
+          acc.memberAreas.length ? ui.button('Raise an action', function () { app.raiseAction(acc.memberAreas[0]); }, 'main') : null,
           ui.button('Post a notice', function () { app.postNotice(postFirst); })));
         var mine = m.areas.filter(function (a) { return acc.isMember(a.key) && a.status === 'Active'; });
         var others = m.areas.filter(function (a) { return !acc.isMember(a.key) && a.status === 'Active'; });
@@ -796,7 +1127,7 @@ window.ESGCompetencyHub = function (ctx) {
         ui.sectionNote(app.model.sections.actions, 'actions'),
         ui.actionList(list, function (a) {
           return a.ownerName + (a.areaKey !== area.key ? ' · shared from ' + a.areaName : '') + (a.extensions ? ' · deadline moved ' + (a.extensions === 1 ? 'once' : a.extensions + ' times') : '');
-        }, 'There are no open actions in ' + area.name + '.', app.model.sections.actions)
+        }, 'There are no open actions in ' + area.name + '.', app.model.sections.actions, app.openAction, app.pendingNote)
       ];
     }
 
@@ -863,7 +1194,7 @@ window.ESGCompetencyHub = function (ctx) {
           'Speak to one of the ' + area.name + ' engineers or your Team Leader if something needs doing.'));
       } else {
         out.push(h('div', { class: 'row actions-row' },
-          ui.button('Raise an action', function () { app.comingSoon('Raising actions'); }, 'main'),
+          ui.button('Raise an action', function () { app.raiseAction(key); }, 'main'),
           ui.button('Post a notice', function () { app.postNotice(key); }),
           acc.runsMeetings(key) ? ui.button(s.nextMeeting ? 'Start meeting' : 'Book a meeting', function () { app.comingSoon('Meetings'); }) : null));
       }
@@ -897,21 +1228,12 @@ window.ESGCompetencyHub = function (ctx) {
   })();
 
   /* src/views/notice-form.js */
-  // "Post a notice": the one instant write in this version. Any active user may post on any active
-  // area's noticeboard (K4.1); only members may mark a notice as important.
+  // "Post a notice": an instant write. Any active user may post on any active area's noticeboard (K4.1);
+  // only members may mark a notice as important.
   CH.views = CH.views || {};
   CH.views.noticeForm = (function () {
     var h = CH.dom.h;
     var CATEGORIES = ['General', 'Request', 'Improvement idea', 'Safety', 'Equipment', 'Other'];
-
-    function newKey() {
-      if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
-      var b = new Uint8Array(16);
-      window.crypto.getRandomValues(b);
-      b[6] = (b[6] & 15) | 64; b[8] = (b[8] & 63) | 128;
-      var x = Array.prototype.map.call(b, function (v) { return (v + 256).toString(16).slice(1); }).join('');
-      return x.slice(0, 8) + '-' + x.slice(8, 12) + '-' + x.slice(12, 16) + '-' + x.slice(16, 20) + '-' + x.slice(20);
-    }
 
     // Validation shared by the form and the tests.
     function validate(values) {
@@ -927,10 +1249,9 @@ window.ESGCompetencyHub = function (ctx) {
     }
 
     function open(app, areaKey) {
-      var root = app.root;
       var areas = app.model.areas.filter(function (a) { return app.access.canPostNotice(a.key); });
-      var clientKey = newKey();
-      var previousFocus = document.activeElement;
+      var clientKey = CH.requests.newKey();
+      var field = CH.ui.dialog.field;
 
       var areaSelect = h('select', { id: 'ch-n-area' }, areas.map(function (a) {
         return h('option', { value: a.key, selected: a.key === areaKey ? true : null, text: a.name + (app.access.canWrite(a.key) ? '' : ' (not your area)') });
@@ -944,11 +1265,6 @@ window.ESGCompetencyHub = function (ctx) {
       var outsideNote = h('p', { class: 'explain' });
       var submit = h('button', { type: 'submit', class: 'btn btn-main', text: 'Post notice' });
 
-      function field(label, input, hint, errId) {
-        return h('div', { class: 'field' }, h('label', { for: input.id, text: label }), hint ? h('span', { class: 'hint', text: hint }) : null, input,
-          h('span', { class: 'field-error', id: errId }));
-      }
-
       function refreshArea() {
         var key = areaSelect.value;
         var member = app.access.canWrite(key);
@@ -960,44 +1276,24 @@ window.ESGCompetencyHub = function (ctx) {
       }
       areaSelect.addEventListener('change', refreshArea);
 
+      var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-n', title: 'Post a notice' });
       var form = h('form', { class: 'dialog-body', novalidate: true },
-        field('Which noticeboard?', areaSelect, null, 'ch-n-area-err'),
+        field('Which noticeboard?', areaSelect),
         outsideNote,
-        field('Title', title, 'A short summary people will recognise.', 'ch-n-title-err'),
-        field('Message', body, null, 'ch-n-body-err'),
-        field('Category', category, null, 'ch-n-cat-err'),
+        field('Title', title, 'A short summary people will recognise.'),
+        field('Message', body),
+        field('Category', category),
         importantRow,
         errorBox,
-        h('div', { class: 'row' }, submit, h('button', { type: 'button', class: 'btn', text: 'Cancel', onclick: close })));
-
-      var dialog = h('div', { class: 'dialog', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'ch-n-heading' },
-        h('h2', { id: 'ch-n-heading', text: 'Post a notice' }), form);
-      var scrim = h('div', { class: 'scrim', onclick: function (e) { if (e.target === scrim) close(); } }, dialog);
-
-      function close() {
-        scrim.remove();
-        document.removeEventListener('keydown', onKey, true);
-        if (previousFocus && previousFocus.focus) previousFocus.focus();
-      }
-      function onKey(e) {
-        if (e.key === 'Escape') { e.preventDefault(); close(); return; }
-        if (e.key !== 'Tab') return;
-        var focusable = dialog.querySelectorAll('select, input, textarea, button');
-        var first = focusable[0], last = focusable[focusable.length - 1];
-        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-      }
+        h('div', { class: 'row' }, submit, h('button', { type: 'button', class: 'btn', text: 'Cancel', onclick: dlg.close })));
+      dlg.body.appendChild(form);
 
       form.addEventListener('submit', async function (e) {
         e.preventDefault();
-        ['area', 'title', 'body', 'cat'].forEach(function (k) { var n = form.querySelector('#ch-n-' + k + '-err'); if (n) n.textContent = ''; });
         errorBox.textContent = '';
         var values = { title: title.value, body: body.value, category: category.value };
         var errors = validate(values);
-        if (errors.title) form.querySelector('#ch-n-title-err').textContent = errors.title;
-        if (errors.body) form.querySelector('#ch-n-body-err').textContent = errors.body;
-        if (errors.category) form.querySelector('#ch-n-cat-err').textContent = errors.category;
-        if (Object.keys(errors).length) { (errors.title ? title : errors.body ? body : category).focus(); return; }
+        if (CH.ui.dialog.showErrors(form, 'ch-n-', { title: errors.title, body: errors.body, cat: errors.category }, ['title', 'body', 'cat'])) return;
 
         var key = areaSelect.value;
         submit.disabled = true;
@@ -1008,14 +1304,14 @@ window.ESGCompetencyHub = function (ctx) {
             IsImportant: important.checked && app.access.canWrite(key) ? '1' : '0',
             ClientKey: clientKey, CreatedRequestKey: 'U|' + clientKey, Status: 'Active'
           });
-          close();
+          dlg.close();
           app.noticePosted(key);
         } catch (error) {
           // An unclear failure may still have saved the notice: look for it by its client key first.
           try {
             var found = await app.sp.items(CH.config.lists.notices.title,
               "$select=Id&$filter=ClientKey eq '" + CH.sp.escapeOData(clientKey) + "'", 1);
-            if (found.rows.length) { close(); app.noticePosted(key); return; }
+            if (found.rows.length) { dlg.close(); app.noticePosted(key); return; }
           } catch (_) { /* fall through to the message */ }
           submit.disabled = false;
           submit.textContent = 'Try again';
@@ -1026,13 +1322,382 @@ window.ESGCompetencyHub = function (ctx) {
         }
       });
 
-      document.addEventListener('keydown', onKey, true);
-      root.appendChild(scrim);
       refreshArea();
       title.focus();
     }
 
     return { open: open, validate: validate, CATEGORIES: CATEGORIES };
+  })();
+
+  /* src/views/raise-form.js */
+  // "Raise an action": a three-step guided form (plan C.9), then a summary. The action is created by the
+  // request flow; until then the request shows as being recorded.
+  CH.views = CH.views || {};
+  CH.views.raiseForm = (function () {
+    var h = CH.dom.h;
+    var D = CH.dates;
+    var R = CH.rules;
+    var field = function (l, i, hint) { return CH.ui.dialog.field(l, i, hint); };
+    var STEPS = [
+      { title: 'What needs doing?', keys: ['title', 'description'] },
+      { title: 'Who will do it, and in which area?', keys: ['areaKey', 'ownerId'] },
+      { title: 'By when?', keys: ['dueIso', 'priority'] },
+      { title: 'Check and raise', keys: [] }
+    ];
+
+    function open(app, areaKey) {
+      var m = app.model;
+      var mine = m.areas.filter(function (a) { return app.access.canWrite(a.key); });
+      if (!mine.length) { CH.ui.toast(app.root, 'You are not a member of any area yet, so you cannot raise actions.', 'info'); return; }
+      var today = m.today;
+      var step = 0;
+      var key = CH.requests.newKey();
+
+      var title = h('input', { id: 'ch-r-title', type: 'text', maxlength: '255', autocomplete: 'off' });
+      var description = h('textarea', { id: 'ch-r-description', rows: '5', maxlength: '5000' });
+      var area = h('select', { id: 'ch-r-areaKey' }, mine.map(function (a) {
+        return h('option', { value: a.key, selected: a.key === areaKey ? true : null, text: a.name });
+      }));
+      var owner = h('select', { id: 'ch-r-ownerId' });
+      var due = h('input', { id: 'ch-r-dueIso', type: 'date', min: today, max: R.addYears(today, CH.config.maxDeadlineYears) });
+      var priority = h('select', { id: 'ch-r-priority' }, R.PRIORITIES.map(function (p) { return h('option', { value: p, selected: p === 'Normal' ? true : null, text: p }); }));
+      var closeOut = h('input', { id: 'ch-r-closeOut', type: 'checkbox' });
+      var closeOutTouched = false;
+      closeOut.addEventListener('change', function () { closeOutTouched = true; });
+      priority.addEventListener('change', function () { if (!closeOutTouched) closeOut.checked = priority.value === 'High'; });
+
+      function fillOwners() {
+        var current = owner.value || String(app.person.SiteUserId);
+        CH.dom.clear(owner);
+        owner.appendChild(h('option', { value: '', text: 'Choose a person' }));
+        m.ownersFor(area.value).forEach(function (p) {
+          owner.appendChild(h('option', { value: String(p.id), selected: String(p.id) === current ? true : null,
+            text: p.name + (Number(p.id) === Number(app.person.SiteUserId) ? ' (you)' : '') + (CH.config.managementRoles.indexOf(p.role) >= 0 ? ' – ' + p.role : '') }));
+        });
+      }
+      area.addEventListener('change', fillOwners);
+      fillOwners();
+
+      function values() {
+        return { title: title.value, description: description.value, areaKey: area.value, ownerId: owner.value,
+          dueIso: due.value, priority: priority.value, requiresCloseOut: closeOut.checked };
+      }
+      function errorsFor(keys) {
+        var all = R.validateRaise(values(), {
+          today: today, maxYears: CH.config.maxDeadlineYears, canWrite: app.access.canWrite,
+          ownerAllowed: function (k, id) { return m.ownersFor(k).some(function (p) { return Number(p.id) === id; }); }
+        });
+        var out = {};
+        keys.forEach(function (k) { if (all[k]) out[k] = all[k]; });
+        return out;
+      }
+
+      var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-r', title: 'Raise an action' });
+      var progress = h('p', { class: 'muted small', 'aria-live': 'polite' });
+      var errorBox = h('p', { class: 'form-error', role: 'alert' });
+      var stepBox = h('div');
+      var nextBtn = h('button', { type: 'submit', class: 'btn btn-main' });
+      var backBtn = h('button', { type: 'button', class: 'btn' });
+      var form = h('form', { class: 'dialog-body', novalidate: true }, progress, stepBox, errorBox, h('div', { class: 'row' }, nextBtn, backBtn));
+      dlg.body.appendChild(form);
+
+      var panes = [
+        [field('Title', title, 'A short summary, for example "Replace FH40 probe".'), field('Description', description, 'What needs doing and anything the owner should know.')],
+        [field('Area', area), field('Who will do it?', owner, 'Members of the area, and Team Leaders and the Group Head.')],
+        [field('Target date', due, 'From today up to ' + CH.config.maxDeadlineYears + ' years ahead.'),
+          h('details', { class: 'more' }, h('summary', { text: 'More options' }),
+            field('Priority', priority), h('label', { class: 'check' }, closeOut, ' Needs a close-out check before it is closed'))],
+        null
+      ];
+
+      function summary() {
+        var v = values();
+        var ownerName = m.nameOf(Number(v.ownerId));
+        return h('dl', { class: 'facts' },
+          h('dt', { text: 'What' }), h('dd', null, h('b', { text: v.title.trim() }), h('br'), h('span', { class: 'notice-body', text: v.description.trim() })),
+          h('dt', { text: 'Who' }), h('dd', { text: ownerName + ', in ' + m.areaByKey[v.areaKey].name }),
+          h('dt', { text: 'When' }), h('dd', { text: 'By ' + D.weekday(v.dueIso) + ' ' + D.long(v.dueIso) }),
+          h('dt', { text: 'Also' }), h('dd', { text: v.priority + ' priority' + (v.requiresCloseOut ? ', with a close-out check' : '') }));
+      }
+
+      function go(n) {
+        step = Math.max(0, Math.min(STEPS.length - 1, n));
+        errorBox.textContent = '';
+        progress.textContent = 'Step ' + (step + 1) + ' of ' + STEPS.length + ' – ' + STEPS[step].title;
+        Array.prototype.forEach.call(form.querySelectorAll('.field-error'), function (x) { x.textContent = ''; });
+        CH.dom.clear(stepBox);
+        CH.dom.append(stepBox, panes[step] || summary());
+        nextBtn.textContent = step === STEPS.length - 1 ? 'Raise action' : 'Next';
+        backBtn.textContent = step === 0 ? 'Cancel' : 'Back';
+        var first = stepBox.querySelector('input, select, textarea');
+        if (first) first.focus(); else nextBtn.focus();
+      }
+
+      form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        errorBox.textContent = '';
+        if (step < STEPS.length - 1) {
+          var errors = errorsFor(STEPS[step].keys);
+          if (CH.ui.dialog.showErrors(form, 'ch-r-', errors, STEPS[step].keys)) return;
+          go(step + 1);
+          return;
+        }
+        var all = errorsFor(['title', 'description', 'areaKey', 'ownerId', 'dueIso', 'priority']);
+        if (Object.keys(all).length) { errorBox.textContent = 'Something needs changing: ' + all[Object.keys(all)[0]]; return; }
+        var v = values();
+        nextBtn.disabled = true;
+        nextBtn.textContent = 'Sending…';
+        try {
+          await app.tracker.submit({ key: key, type: 'RaiseAction', label: 'Raise “' + v.title.trim() + '”', payload: {
+            areaKey: v.areaKey, title: v.title.trim(), description: v.description.trim(), ownerId: Number(v.ownerId),
+            dueIso: v.dueIso, priority: v.priority, requiresCloseOut: v.requiresCloseOut } });
+          dlg.close();
+          CH.ui.toast(app.root, 'Your action has been sent. It will appear in a few minutes.', 'ok');
+        } catch (error) {
+          nextBtn.disabled = false;
+          nextBtn.textContent = 'Try again';
+          errorBox.textContent = 'Your action could not be sent just now. Nothing has been lost – try again in a moment.';
+        }
+      });
+      backBtn.addEventListener('click', function () { if (step === 0) dlg.close(); else go(step - 1); });
+      go(0);
+    }
+
+    return { open: open, STEPS: STEPS };
+  })();
+
+  /* src/views/action-panel.js */
+  // One action (plan C.9): What, Who and When in plain words, three buttons, and its updates.
+  // "Add an update" is an instant write; "I need more time" and "Mark as done" are queued requests.
+  CH.views = CH.views || {};
+  CH.views.actionPanel = (function () {
+    var h = CH.dom.h;
+    var D = CH.dates;
+    var R = CH.rules;
+    var ui = CH.ui;
+    var field = function (l, i, hint) { return CH.ui.dialog.field(l, i, hint); };
+
+    function timeOf(date) { return D.ukTime(date); }
+
+    // The panel's line about a change in progress, rejected or not yet recorded.
+    function pendingLine(app, action) {
+      var entry = app.tracker.forTarget(action.id);
+      if (entry && (entry.state === 'submitted' || entry.state === 'slow')) {
+        return h('p', { class: 'pending', role: 'status' }, h('b', { text: entry.label }), ' – submitted ' + timeOf(entry.submittedAt) +
+          ', being recorded (usually under 5 minutes).' + (entry.state === 'slow' ? ' ' + entry.message : ''));
+      }
+      if (entry && (entry.state === 'rejected' || entry.state === 'failed')) {
+        return h('div', { class: 'section-note', role: 'alert' }, h('b', { text: entry.state === 'rejected' ? 'Not accepted: ' : 'Not recorded yet: ' }),
+          entry.message + ' ', ui.linkButton('Dismiss', function () { app.tracker.dismiss(entry); }));
+      }
+      if (action.locked) return h('p', { class: 'pending', role: 'status', text: 'Being updated… Try again in a minute.' });
+      return null;
+    }
+
+    function whenText(action) {
+      if (action.waitingCloseOut) return 'Done – waiting for a close-out check by ' + action.raisedByName + '.';
+      var text = (action.group === 'late' ? 'Was due ' : 'Due ') + D.weekday(action.dueIso) + ' ' + D.long(action.dueIso) + '.';
+      if (action.extensions) {
+        text += ' Deadline moved ' + (action.extensions === 1 ? 'once' : action.extensions + ' times') +
+          (action.originalIso !== action.dueIso ? ' (was ' + D.long(action.originalIso) + ').' : '.');
+      }
+      return text;
+    }
+
+    // Updates count only in the action's own folder, {area}/A{id} (plan F.5).
+    async function loadUpdates(app, action) {
+      var res = await app.sp.items(CH.config.lists.updates.title,
+        "$select=Id,EntryType,Body,AuthorId,Created,FileDirRef,IsHidden&$filter=ParentType eq 'Action' and ParentId eq " + action.id, 500);
+      var folder = '/' + action.areaKey + '/A' + action.id;
+      return res.rows.filter(function (u) {
+        return !u.IsHidden && String(u.FileDirRef || '').slice(-folder.length) === folder && u.EntryType !== 'Flagged' && u.EntryType !== 'Flag Withdrawn';
+      }).sort(function (a, b) { return b.Id - a.Id; });
+    }
+
+    async function loadExtensions(app, action) {
+      var res = await app.sp.items(CH.config.lists.history.title,
+        "$select=Id,EventType,ActorId,EventTime,PreviousDueDate,NewDueDate,Note,ExtensionNumber,IsOnBehalf&$filter=RecordType eq 'Action' and RecordId eq " + action.id, 500);
+      return res.rows.filter(function (r) { return r.EventType === 'Deadline Extended'; })
+        .sort(function (a, b) { return (a.ExtensionNumber || 0) - (b.ExtensionNumber || 0); });
+    }
+
+    function open(app, id) {
+      var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-a', title: 'Action', wide: true, onClose: function () { app.panel = null; } });
+      var view = 'main';
+      var updates = null;
+      var extensions = null;
+      var notFound = false;
+
+      function action() { return app.model.actionById[id]; }
+
+      async function loadExtras() {
+        var a = action();
+        if (!a) return;
+        try { updates = await loadUpdates(app, a); } catch (_) { updates = 'error'; }
+        try { extensions = a.extensions ? await loadExtensions(app, a) : []; } catch (_) { extensions = []; }
+        if (view === 'main' && dlg.isOpen()) fill();
+      }
+
+      function fill() {
+        CH.dom.clear(dlg.body);
+        var a = action();
+        if (!a) {
+          dlg.setTitle('Action not available');
+          CH.dom.append(dlg.body, h('p', { text: notFound ? 'This action is not available. It may have been closed, or you may not have access to it.'
+            : 'This action could not be found.' }));
+          return;
+        }
+        var r = R.roles(a, app.person.SiteUserId, app.access);
+        var entry = app.tracker.forTarget(a.id);
+        var busy = a.locked || (entry && (entry.state === 'submitted' || entry.state === 'slow'));
+        dlg.setTitle(a.title);
+        CH.dom.append(dlg.body, [
+          h('p', { class: 'muted small', text: a.ref + ' · ' + a.areaName + (a.priority === 'High' ? ' · High priority' : '') }),
+          pendingLine(app, a),
+          h('dl', { class: 'facts' },
+            h('dt', { text: 'When' }), h('dd', null, ui.chip(a.waitingCloseOut ? 'later' : a.group, a.dueText), ' ', whenText(a)),
+            h('dt', { text: 'Who' }), h('dd', { text: a.ownerName + ' is doing it. Raised by ' + a.raisedByName + (a.raisedIso ? ' on ' + D.long(a.raisedIso) : '') + '.' }),
+            h('dt', { text: 'What' }), h('dd', { class: 'notice-body', text: a.description || 'No description.' })),
+          extensions && extensions.length ? h('details', { class: 'ext-list' }, h('summary', { text: 'Show all deadline changes (' + extensions.length + ')' }),
+            h('ul', { class: 'plain' }, extensions.map(function (x) {
+              return h('li', null, h('span', null,
+                h('s', { text: x.PreviousDueDate ? D.short(D.localDate(x.PreviousDueDate)) : '' }), ' → ', h('b', { text: x.NewDueDate ? D.long(D.localDate(x.NewDueDate)) : '' }),
+                h('br'), h('span', { class: 'muted small', text: app.model.nameOf(x.ActorId) + (x.IsOnBehalf ? ' (on behalf of the owner)' : '') +
+                  (x.EventTime ? ' · ' + D.short(D.localDate(x.EventTime)) : '') + ' · “' + (x.Note || '') + '”' })));
+            }))) : null,
+          h('div', { class: 'row actions-row' },
+            r.canUpdate ? ui.button('Add an update', function () { show('update'); }, 'main') : null,
+            r.canExtend ? ui.button('I need more time', function () { show('extend'); }) : null,
+            r.canComplete ? ui.button('Mark as done', function () { show('complete'); }) : null),
+          !r.canUpdate && !r.canExtend && !r.canComplete ? h('p', { class: 'muted small', text: 'You can read this action. Only its owner, the people who manage it and members of ' + a.areaName + ' can change it.' }) : null,
+          h('h3', { class: 'group-title', text: 'Updates' }),
+          updates === null ? h('p', { class: 'muted', text: 'Loading updates…' })
+            : updates === 'error' ? h('p', { class: 'section-note', text: 'Could not load the updates just now.' })
+            : updates.length ? h('ul', { class: 'plain' }, updates.map(function (u) {
+              return h('li', null, h('span', null, h('span', { class: 'notice-body', text: u.Body || '' }), h('br'),
+                h('span', { class: 'muted small', text: app.model.nameOf(u.AuthorId) + ' · ' + D.short(D.localDate(u.Created)) + ' ' + D.ukTime(u.Created) +
+                  (u.EntryType === 'Blocker' ? ' · blocker' : '') })));
+            })) : h('p', { class: 'muted', text: 'No updates yet.' })
+        ]);
+        Array.prototype.forEach.call(dlg.body.querySelectorAll('.actions-row .btn'), function (b) { b.disabled = !!busy; });
+      }
+
+      function show(which) {
+        view = which;
+        CH.dom.clear(dlg.body);
+        var a = action();
+        if (which === 'update') updateForm(a);
+        if (which === 'extend') extendForm(a);
+        if (which === 'complete') completeForm(a);
+        dlg.focusFirst();
+      }
+      function back() { view = 'main'; fill(); dlg.focusFirst(); }
+
+      function formShell(title, fields, submitLabel, onSubmit) {
+        var errorBox = h('p', { class: 'form-error', role: 'alert' });
+        var submit = h('button', { type: 'submit', class: 'btn btn-main', text: submitLabel });
+        var form = h('form', { class: 'dialog-body', novalidate: true }, h('h3', { text: title }), fields, errorBox,
+          h('div', { class: 'row' }, submit, h('button', { type: 'button', class: 'btn', text: 'Back', onclick: back })));
+        form.addEventListener('submit', async function (e) {
+          e.preventDefault();
+          errorBox.textContent = '';
+          submit.disabled = true;
+          try {
+            var ok = await onSubmit(form);
+            if (!ok) submit.disabled = false;
+          } catch (error) {
+            submit.disabled = false;
+            submit.textContent = 'Try again';
+            errorBox.textContent = error.status === 403
+              ? 'SharePoint did not allow this change. Your text has been kept.'
+              : 'This could not be sent just now. Your text has been kept – try again in a moment.';
+          }
+        });
+        dlg.body.appendChild(form);
+        return form;
+      }
+
+      function updateForm(a) {
+        var body = h('textarea', { id: 'ch-u-body', rows: '5', maxlength: '2000' });
+        var clientKey = CH.requests.newKey();
+        formShell('Add an update', [field('Your update', body, 'What has happened, or what is next. Everyone who can see this action can read it.')], 'Save update',
+          async function (form) {
+            var errors = R.validateUpdate({ body: body.value });
+            if (CH.ui.dialog.showErrors(form, 'ch-u-', errors, ['body'])) return false;
+            var text = body.value.trim();
+            try {
+              await app.sp.addToFolder('updates', a.areaKey + '/A' + a.id, {
+                Title: text.slice(0, 80), ClientKey: clientKey, ParentType: 'Action', ParentId: a.id,
+                EntryType: 'Progress', IsFlagEvent: '0', IsHidden: '0', Body: text
+              });
+            } catch (error) {
+              var found = await app.sp.items(CH.config.lists.updates.title, "$select=Id&$filter=ClientKey eq '" + CH.sp.escapeOData(clientKey) + "'", 1)
+                .catch(function () { return { rows: [] }; });
+              if (!found.rows.length) throw error;
+            }
+            ui.toast(app.root, 'Your update has been saved.', 'ok');
+            updates = null;
+            back();
+            loadExtras();
+            return true;
+          });
+      }
+
+      function extendForm(a) {
+        var today = app.model.today;
+        var min = D.addDays(a.dueIso > today ? a.dueIso : D.addDays(today, -1), 1);
+        var date = h('input', { id: 'ch-x-newDueIso', type: 'date', min: min, max: R.addYears(today, CH.config.maxDeadlineYears) });
+        var reason = h('textarea', { id: 'ch-x-reason', rows: '4', maxlength: '1000' });
+        var r = R.roles(a, app.person.SiteUserId, app.access);
+        var effect = h('p', { class: 'explain', role: 'status' });
+        function explain() {
+          effect.textContent = (D.isIso(date.value) ? 'The new deadline will be ' + D.weekday(date.value) + ' ' + D.long(date.value) + '. ' : '') +
+            'The original deadline (' + D.long(a.originalIso) + ') stays on record, and everyone who can see this action can read your reason.' +
+            (r.owner ? '' : ' This will be recorded as done on behalf of ' + a.ownerName + '.');
+        }
+        date.addEventListener('input', explain);
+        explain();
+        formShell('I need more time', [
+          h('p', { class: 'muted', text: 'Current deadline: ' + D.weekday(a.dueIso) + ' ' + D.long(a.dueIso) + '.' }),
+          field('New deadline', date), field('Why?', reason, 'At least 10 characters.'), effect], 'Ask for more time',
+          async function (form) {
+            var v = { newDueIso: date.value, reason: reason.value };
+            var errors = R.validateExtend(a, v, { today: today });
+            if (errors.action) { form.querySelector('.form-error').textContent = errors.action; return false; }
+            if (CH.ui.dialog.showErrors(form, 'ch-x-', errors, ['newDueIso', 'reason'])) return false;
+            await app.tracker.submit({ type: 'ExtendDeadline', targetId: a.id, expectedRevision: a.revision,
+              payload: { newDueIso: v.newDueIso, reason: v.reason.trim(), expectedDueDay: a.dueDay }, label: 'New deadline ' + D.short(v.newDueIso) });
+            back();
+            return true;
+          });
+      }
+
+      function completeForm(a) {
+        var note = h('textarea', { id: 'ch-c-note', rows: '3', maxlength: '1000' });
+        formShell('Mark as done', [
+          h('p', { class: 'explain', text: a.requiresCloseOut
+            ? 'It will then wait for a close-out check by ' + a.raisedByName + ' before it is closed.'
+            : 'The action will be closed. It stays in the history of ' + a.areaName + '.' }),
+          field('Anything to add? (optional)', note)], 'Mark as done',
+          async function (form) {
+            var errors = R.validateComplete(a, { note: note.value });
+            if (errors.action) { form.querySelector('.form-error').textContent = errors.action; return false; }
+            if (CH.ui.dialog.showErrors(form, 'ch-c-', errors, ['note'])) return false;
+            await app.tracker.submit({ type: 'MarkComplete', targetId: a.id, expectedRevision: a.revision,
+              payload: { note: note.value.trim() }, label: 'Mark as done' });
+            back();
+            return true;
+          });
+      }
+
+      notFound = !action();
+      fill();
+      dlg.focusFirst();
+      loadExtras();
+      app.panel = { id: id, refresh: function () { if (view === 'main') { updates = null; fill(); loadExtras(); } } };
+    }
+
+    return { open: open };
   })();
 
   /* src/app.js */
@@ -1102,10 +1767,51 @@ window.ESGCompetencyHub = function (ctx) {
           })));
       }
 
+      // The page is repainted inside app.shell; dialogs live in app.layer, so an open dialog keeps its focus.
       function paint(content) {
         if (disposed) return;
-        CH.dom.clear(app.root);
-        CH.dom.append(app.root, frame(content));
+        if (!app.shell || app.shell.parentNode !== app.root) {
+          CH.dom.clear(app.root);
+          app.shell = h('div', { class: 'shell' });
+          app.layer = h('div', { class: 'layer' });
+          CH.dom.append(app.root, [app.shell, app.layer]);
+        }
+        CH.dom.clear(app.shell);
+        CH.dom.append(app.shell, frame(content));
+      }
+
+      // Raised actions being recorded, changes that were not accepted, and requests that never left the browser.
+      function requestStrip() {
+        if (!app.tracker) return null;
+        var items = app.tracker.entries().filter(function (e) {
+          if (e.dismissed) return false;
+          if (e.type === 'RaiseAction') return e.state !== 'done';
+          return e.state === 'rejected' || e.state === 'failed';
+        }).map(function (e) {
+          var waiting = e.state === 'submitted' || e.state === 'slow';
+          return h('li', { class: waiting ? 'pending' : 'section-note' }, h('b', { text: e.label }),
+            waiting ? ' – submitted ' + CH.dates.ukTime(e.submittedAt) + ', being recorded (usually under 5 minutes).' + (e.state === 'slow' ? ' ' + e.message : '')
+              : ' – ' + (e.state === 'rejected' ? 'not accepted: ' : 'not recorded yet: ') + e.message + ' ',
+            waiting ? null : CH.ui.linkButton('Dismiss', function () { app.tracker.dismiss(e); }));
+        });
+        var unsent = app.tracker.unsent();
+        if (unsent.length) {
+          items.push(h('li', { class: 'section-note' }, h('b', { text: unsent.length === 1 ? '1 change was not sent. ' : unsent.length + ' changes were not sent. ' }),
+            'Your connection dropped before it reached SharePoint. ', CH.ui.linkButton('Send again', async function () {
+              try { await app.tracker.resend(); render(false); } catch (_) { CH.ui.toast(app.root, 'Still could not send. Try again in a moment.', 'info'); }
+            })));
+        }
+        return items.length ? h('ul', { class: 'request-strip', 'aria-live': 'polite' }, items) : null;
+      }
+
+      function onRequestChange(entry) {
+        if (entry.state !== 'done') { render(false); if (app.panel) app.panel.refresh(); return; }
+        reload().then(function () {
+          render(false);
+          if (app.panel) app.panel.refresh();
+          var a = app.model.actionById[entry.resultId];
+          CH.ui.toast(app.root, entry.type === 'RaiseAction' && a ? a.ref + ' raised: ' + a.title + '.' : entry.message, 'ok');
+        }).catch(function () { CH.ui.toast(app.root, entry.message + ' Reload the page to see it.', 'ok'); });
       }
 
       function stateScreen(title, message, detail) {
@@ -1117,6 +1823,14 @@ window.ESGCompetencyHub = function (ctx) {
       app.openArea = function (key) { app.state = { view: 'area', area: key, tab: 0 }; render(true); };
       app.comingSoon = function (what) { CH.ui.toast(app.root, what + ' will be available in the next version of the Competency Hub.', 'info'); };
       app.postNotice = function (key) { CH.views.noticeForm.open(app, key); };
+      app.raiseAction = function (key) { CH.views.raiseForm.open(app, key); };
+      app.openAction = function (a) { CH.views.actionPanel.open(app, a.id); };
+      app.pendingNote = function (a) {
+        var e = app.tracker && app.tracker.forTarget(a.id);
+        if (e && (e.state === 'submitted' || e.state === 'slow')) return 'change being recorded';
+        if (e && e.state === 'rejected') return 'change not accepted';
+        return a.locked ? 'being updated' : '';
+      };
       app.noticePosted = async function (key) {
         await reload();
         if (app.state.view === 'area' && app.state.area === key) app.state.tab = 1;
@@ -1126,9 +1840,9 @@ window.ESGCompetencyHub = function (ctx) {
 
       function render(moveFocus) {
         if (!app.model) return;
-        var content = app.state.view === 'area' && app.model.areaByKey[app.state.area]
+        var content = [requestStrip(), app.state.view === 'area' && app.model.areaByKey[app.state.area]
           ? CH.views.area.render(app, app.state.area, app.state.tab)
-          : CH.views.home.render(app);
+          : CH.views.home.render(app)];
         paint(content);
         if (moveFocus) {
           var main = app.root.querySelector('#ch-main');
@@ -1185,6 +1899,7 @@ window.ESGCompetencyHub = function (ctx) {
         app.person = identity.person;
         app.people = people;
         app.firstName = await app.sp.myFirstName();
+        app.tracker = CH.requests.tracker(app, onRequestChange);
         try {
           await reload();
         } catch (error) {
@@ -1196,6 +1911,8 @@ window.ESGCompetencyHub = function (ctx) {
         var areaParam = (params.get('area') || '').toUpperCase();
         if (app.model.areaByKey[areaParam]) app.state = { view: 'area', area: areaParam, tab: 0 };
         render(false);
+        var actionParam = Number(params.get('action'));
+        if (actionParam) CH.views.actionPanel.open(app, actionParam);
       }
 
       return {
@@ -1215,6 +1932,7 @@ window.ESGCompetencyHub = function (ctx) {
         },
         onDispose: function () {
           disposed = true;
+          if (app.tracker) app.tracker.stop();
           if (observer) observer.disconnect();
           window.removeEventListener('resize', applySize);
         }
