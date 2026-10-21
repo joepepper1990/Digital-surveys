@@ -1,11 +1,11 @@
-/* ESG Competency Hub 0.1.1 – built from src/ by tools/build.js. Do not edit. */
+/* ESG Competency Hub 0.1.2 – built from src/ by tools/build.js. Do not edit. */
 window.ESGCompetencyHub = function (ctx) {
   'use strict';
   var CH = {};
   /* src/core/config.js */
   // Fixed names and limits. Lists are addressed by display title; folders by list URL name.
   CH.config = {
-    VERSION: '0.1.1',
+    VERSION: '0.1.2',
     ENVIRONMENT: 'TEST',
     lists: {
       competencies: { title: 'Competencies', url: 'Competencies' },
@@ -593,7 +593,26 @@ window.ESGCompetencyHub = function (ctx) {
       setTimeout(function () { if (region.textContent === text) { region.textContent = ''; region.className = 'toast'; } }, 6000);
     }
 
+    // Size steps by the width the app has (plan K6.9), so wide screens are not left with small text.
+    var SCALE_STEPS = [[2400, 1.5], [2000, 1.35], [1700, 1.2], [1400, 1.1]];
+    function scaleFor(width) {
+      for (var i = 0; i < SCALE_STEPS.length; i++) if (width >= SCALE_STEPS[i][0]) return SCALE_STEPS[i][1];
+      return 1;
+    }
+
+    // The reader's text size, remembered in this browser only. Storage can be unavailable; then Normal is used.
+    var TEXT_SIZES = [['Normal', 1], ['Large', 1.15], ['Larger', 1.3]];
+    var TEXT_KEY = 'esg-competency-hub-text-size';
+    function textSize() {
+      var saved = null;
+      try { saved = window.localStorage.getItem(TEXT_KEY); } catch (_) { saved = null; }
+      return TEXT_SIZES.some(function (t) { return t[0] === saved; }) ? saved : 'Normal';
+    }
+    function textFactor(name) { return (TEXT_SIZES.filter(function (t) { return t[0] === name; })[0] || TEXT_SIZES[0])[1]; }
+    function saveTextSize(name) { try { window.localStorage.setItem(TEXT_KEY, name); } catch (_) { /* not remembered */ } }
+
     return {
+      scaleFor: scaleFor, TEXT_SIZES: TEXT_SIZES, textSize: textSize, textFactor: textFactor, saveTextSize: saveTextSize,
       chip: chip, card: card, button: button, linkButton: linkButton, sectionNote: sectionNote,
       actionList: actionList, tile: tile, tileGrid: tileGrid, areaStatusLines: areaStatusLines, toast: toast
     };
@@ -1024,6 +1043,7 @@ window.ESGCompetencyHub = function (ctx) {
     function create(ctx) {
       var started = false;
       var disposed = false;
+      var observer = null;
       var app = { state: { view: 'home', area: null, tab: 0 } };
 
       function findRoot() { return document.querySelector('[data-ch-root]'); }
@@ -1046,11 +1066,40 @@ window.ESGCompetencyHub = function (ctx) {
           h('header', { class: 'bar' }, h('div', { class: 'bar-in' },
             h('div', { class: 'brand' }, 'ESG Competency Hub', h('small', { text: 'Environmental Safety Group' })),
             C.ENVIRONMENT !== 'PRODUCTION' ? h('span', { class: 'env', text: C.ENVIRONMENT + ' – not live data' }) : null,
-            app.person ? h('span', { class: 'who', text: app.person.Title + ' · ' + app.person.Role }) : null)),
+            app.person ? h('span', { class: 'who', text: app.person.Title + ' · ' + app.person.Role }) : null,
+            textSizeControl())),
           h('main', { id: 'ch-main', tabindex: '-1' }, content),
           h('p', { class: 'toast', 'data-ch-live': true, role: 'status', 'aria-live': 'polite' }),
           h('footer', { text: 'ESG Competency Hub · version ' + C.VERSION })
         ];
+      }
+
+      function applySize() {
+        if (!app.root || !app.root.style) return;
+        app.root.style.setProperty('--scale', String(CH.ui.scaleFor(app.root.clientWidth || 0)));
+        app.root.style.setProperty('--text', String(CH.ui.textFactor(CH.ui.textSize())));
+      }
+
+      // Follows the width Welcome gives the app; nothing else is observed.
+      function watchSize() {
+        applySize();
+        if (typeof window.ResizeObserver === 'function') {
+          observer = new window.ResizeObserver(function () { if (!disposed) applySize(); });
+          observer.observe(app.root);
+        } else {
+          window.addEventListener('resize', applySize);
+        }
+      }
+
+      function textSizeControl() {
+        var current = CH.ui.textSize();
+        return h('label', { class: 'textsize' }, 'Text size ',
+          h('select', {
+            'aria-label': 'Text size',
+            onchange: function (e) { CH.ui.saveTextSize(e.target.value); applySize(); }
+          }, CH.ui.TEXT_SIZES.map(function (t) {
+            return h('option', t[0] === current ? { value: t[0], selected: 'selected' } : { value: t[0] }, t[0]);
+          })));
       }
 
       function paint(content) {
@@ -1108,6 +1157,7 @@ window.ESGCompetencyHub = function (ctx) {
 
       async function start() {
         app.root = await waitForRoot();
+        watchSize();
         var webPart = ctx.getWebPart();
         if (!webPart || !webPart.spHttpClient || !webPart.pageContext || !webPart.pageContext.web) {
           throw new Error('Welcome did not provide a SharePoint connection.');
@@ -1163,7 +1213,11 @@ window.ESGCompetencyHub = function (ctx) {
         onError: function (error) {
           if (window.console) console.error('Competency Hub: Welcome reported an error', error);
         },
-        onDispose: function () { disposed = true; }
+        onDispose: function () {
+          disposed = true;
+          if (observer) observer.disconnect();
+          window.removeEventListener('resize', applySize);
+        }
       };
     }
 

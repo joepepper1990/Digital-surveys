@@ -6,97 +6,100 @@
 
     <template id="layout">
         <style>
-.SCOPE .ch {--navy: #13516b; --navy-soft: #e7f0f6; --accent: #ef7d3a; --accent-dark: #c95f1f; --ink: #16222c; --muted: #5b6774; --bg: #f3f6f8; --card: #ffffff; --line: #dde3e8; --focus: #2b78d0; --late: #a4262c; --late-bg: #fde8e9; --soon: #8a5a00; --soon-bg: #fff3d6; --ok: #1b7a45; --ok-bg: #e6f3eb; box-sizing: border-box; background: var(--bg); color: var(--ink); font: 16px/1.55 "Segoe UI", system-ui, sans-serif; min-height: 70vh; position: relative;}
+.SCOPE .ch {--navy: #13516b; --navy-soft: #e7f0f6; --accent: #ef7d3a; --accent-dark: #c95f1f; --ink: #16222c; --muted: #5b6774; --bg: #f3f6f8; --card: #ffffff; --line: #dde3e8; --focus: #2b78d0; --late: #a4262c; --late-bg: #fde8e9; --soon: #8a5a00; --soon-bg: #fff3d6; --ok: #1b7a45; --ok-bg: #e6f3eb; box-sizing: border-box; background: var(--bg); color: var(--ink); font: calc(16 * var(--u))/1.55 "Segoe UI", system-ui, sans-serif; position: relative; --scale: 1; --text: 1; --u: calc(1px * var(--scale) * var(--text)); min-height: calc(100vh - 180px); display: flex; flex-direction: column;}
 .SCOPE .ch * {box-sizing: border-box;}
 .SCOPE .ch button, .SCOPE .ch input, .SCOPE .ch select, .SCOPE .ch textarea {font: inherit;}
 .SCOPE .ch button {cursor: pointer;}
-.SCOPE .ch :focus-visible {outline: 3px solid var(--focus); outline-offset: 2px;}
+.SCOPE .ch :focus-visible {outline: 3px solid var(--focus); outline-offset: calc(2 * var(--u));}
 .SCOPE .ch .bar {background: var(--navy); color: #fff; border-bottom: 3px solid var(--accent);}
-.SCOPE .ch .bar-in {display: flex; align-items: center; gap: 16px; padding: 8px 32px; min-height: 58px; flex-wrap: wrap;}
-.SCOPE .ch .brand {font-weight: 600; font-size: 17px;}
-.SCOPE .ch .brand small {display: block; font-weight: 400; font-size: 12px; color: #c9dde6;}
-.SCOPE .ch .env {background: #fff3d6; color: #6b4a00; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 600;}
-.SCOPE .ch .who {margin-left: auto; font-size: 14px; color: #dbe8ee;}
-.SCOPE .ch main {padding: 28px 32px 48px; outline: none;}
-.SCOPE .ch h1 {font-size: 26px; font-weight: 600; margin: 0 0 6px;}
-.SCOPE .ch h2 {font-size: 18px; font-weight: 600; margin: 0 0 12px;}
-.SCOPE .ch .lead {color: var(--muted); margin: 0 0 20px; font-size: 17px;}
-.SCOPE .ch .sentence {font-size: 18px; margin: 0 0 20px;}
+.SCOPE .ch .bar-in {display: flex; align-items: center; gap: calc(16 * var(--u)); padding: calc(8 * var(--u)) calc(32 * var(--u)); min-height: calc(58 * var(--u)); flex-wrap: wrap;}
+.SCOPE .ch .brand {font-weight: 600; font-size: calc(17 * var(--u));}
+.SCOPE .ch .brand small {display: block; font-weight: 400; font-size: calc(12 * var(--u)); color: #c9dde6;}
+.SCOPE .ch .env {background: #fff3d6; color: #6b4a00; border-radius: calc(999 * var(--u)); padding: calc(2 * var(--u)) calc(10 * var(--u)); font-size: calc(12 * var(--u)); font-weight: 600;}
+.SCOPE .ch .textsize {font-size: calc(14 * var(--u)); color: #dbe8ee; display: flex; align-items: center; gap: calc(6 * var(--u));}
+.SCOPE .ch .textsize select {border: 1px solid #5d8aa0; border-radius: calc(6 * var(--u)); background: #fff; color: var(--ink); padding: calc(2 * var(--u)) calc(6 * var(--u));}
+.SCOPE .ch .who {margin-left: auto; font-size: calc(14 * var(--u)); color: #dbe8ee;}
+.SCOPE .ch main {padding: calc(28 * var(--u)) calc(32 * var(--u)) calc(48 * var(--u)); outline: none; flex: 1;}
+.SCOPE .ch h1 {font-size: calc(30 * var(--u)); font-weight: 600; margin: 0 0 calc(6 * var(--u));}
+.SCOPE .ch h2 {font-size: calc(18 * var(--u)); font-weight: 600; margin: 0 0 calc(12 * var(--u));}
+.SCOPE .ch .lead {color: var(--muted); margin: 0 0 calc(20 * var(--u)); font-size: calc(17 * var(--u));}
+.SCOPE .ch .sentence {font-size: calc(19 * var(--u)); margin: 0 0 calc(20 * var(--u));}
 .SCOPE .ch .muted {color: var(--muted);}
-.SCOPE .ch .small {font-size: 14px;}
-.SCOPE .ch .row {display: flex; gap: 12px; flex-wrap: wrap; align-items: center;}
-.SCOPE .ch .actions-row {margin-bottom: 24px;}
-.SCOPE .ch .tab-actions {margin-bottom: 12px;}
+.SCOPE .ch .small {font-size: calc(14 * var(--u));}
+.SCOPE .ch .row {display: flex; gap: calc(12 * var(--u)); flex-wrap: wrap; align-items: center;}
+.SCOPE .ch .actions-row {margin-bottom: calc(24 * var(--u));}
+.SCOPE .ch .tab-actions {margin-bottom: calc(12 * var(--u));}
 .SCOPE .ch .txt-late {color: var(--late); font-weight: 600;}
 .SCOPE .ch .txt-soon {color: var(--soon); font-weight: 600;}
 .SCOPE .ch .txt-ok {color: var(--ok); font-weight: 600;}
-.SCOPE .ch .card {background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px 22px; margin-bottom: 20px;}
-.SCOPE .ch .state-card {max-width: 720px; margin: 40px auto;}
-.SCOPE .ch .cols3 {display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start;}
-.SCOPE .ch .cols3 > div > .card:last-child {margin-bottom: 0;}
-.SCOPE .ch .btn {border: 1px solid #c3ccd4; background: #fff; color: var(--ink); border-radius: 8px; padding: 10px 18px; font-weight: 600; min-height: 44px;}
+.SCOPE .ch .card {background: var(--card); border: 1px solid var(--line); border-radius: calc(12 * var(--u)); padding: calc(20 * var(--u)) calc(22 * var(--u)); margin-bottom: calc(20 * var(--u));}
+.SCOPE .ch .state-card {max-width: calc(720 * var(--u)); margin: calc(40 * var(--u)) auto;}
+.SCOPE .ch .cols3 {display: grid; grid-template-columns: 1fr 1fr; gap: calc(20 * var(--u)); align-items: stretch;}
+.SCOPE .ch .cols3 > div {display: flex; flex-direction: column;}
+.SCOPE .ch .cols3 > div > .card:last-child {margin-bottom: 0; flex: 1;}
+.SCOPE .ch .btn {border: 1px solid #c3ccd4; background: #fff; color: var(--ink); border-radius: calc(8 * var(--u)); padding: calc(10 * var(--u)) calc(18 * var(--u)); font-weight: 600; min-height: calc(44 * var(--u));}
 .SCOPE .ch .btn:hover {background: #f4f7f9;}
 .SCOPE .ch .btn:disabled {opacity: .6; cursor: default;}
 .SCOPE .ch .btn-main {background: var(--accent); border-color: var(--accent); color: #fff;}
 .SCOPE .ch .btn-main:hover {background: var(--accent-dark);}
-.SCOPE .ch .btn-link {background: none; border: 0; color: var(--navy); text-decoration: underline; padding: 6px 0;}
-.SCOPE .ch .when {font-weight: 600; white-space: nowrap; padding: 3px 11px; border-radius: 999px; font-size: 14px; display: inline-block; margin-left: 6px;}
+.SCOPE .ch .btn-link {background: none; border: 0; color: var(--navy); text-decoration: underline; padding: calc(6 * var(--u)) 0;}
+.SCOPE .ch .when {font-weight: 600; white-space: nowrap; padding: calc(3 * var(--u)) calc(11 * var(--u)); border-radius: calc(999 * var(--u)); font-size: calc(14 * var(--u)); display: inline-block; margin-left: calc(6 * var(--u));}
 .SCOPE .ch .w-late {color: var(--late); background: var(--late-bg);}
 .SCOPE .ch .w-soon {color: var(--soon); background: var(--soon-bg);}
 .SCOPE .ch .w-later {color: var(--muted); background: #eef1f4;}
 .SCOPE .ch .w-ok {color: var(--ok); background: var(--ok-bg);}
-.SCOPE .ch .group-title {display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 16px; margin: 14px 0 8px;}
+.SCOPE .ch .group-title {display: flex; align-items: center; gap: calc(8 * var(--u)); font-weight: 600; font-size: calc(16 * var(--u)); margin: calc(14 * var(--u)) 0 calc(8 * var(--u));}
 .SCOPE .ch .group-title:first-child {margin-top: 0;}
-.SCOPE .ch .dot {width: 10px; height: 10px; border-radius: 50%; display: inline-block;}
+.SCOPE .ch .dot {width: calc(10 * var(--u)); height: calc(10 * var(--u)); border-radius: 50%; display: inline-block;}
 .SCOPE .ch .items {list-style: none; margin: 0; padding: 0;}
-.SCOPE .ch .items li {display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 11px 14px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; background: #fff;}
+.SCOPE .ch .items li {display: flex; justify-content: space-between; align-items: center; gap: calc(14 * var(--u)); padding: calc(11 * var(--u)) calc(14 * var(--u)); border: 1px solid var(--line); border-radius: calc(10 * var(--u)); margin-bottom: calc(8 * var(--u)); background: #fff;}
 .SCOPE .ch .items .t {font-weight: 600; display: block;}
-.SCOPE .ch .items .s {color: var(--muted); font-size: 14px;}
+.SCOPE .ch .items .s {color: var(--muted); font-size: calc(14 * var(--u));}
 .SCOPE .ch .plain {list-style: none; margin: 0; padding: 0;}
-.SCOPE .ch .plain li {padding: 10px 0; border-bottom: 1px solid #edf0f3; display: flex; justify-content: space-between; gap: 12px; align-items: center;}
+.SCOPE .ch .plain li {padding: calc(10 * var(--u)) 0; border-bottom: 1px solid #edf0f3; display: flex; justify-content: space-between; gap: calc(12 * var(--u)); align-items: center;}
 .SCOPE .ch .plain li:last-child {border-bottom: 0;}
 .SCOPE .ch .notice-body {white-space: pre-wrap;}
-.SCOPE .ch .section-note {background: #fff3d6; color: #6b4a00; border-radius: 8px; padding: 8px 12px; font-size: 14px;}
+.SCOPE .ch .section-note {background: #fff3d6; color: #6b4a00; border-radius: calc(8 * var(--u)); padding: calc(8 * var(--u)) calc(12 * var(--u)); font-size: calc(14 * var(--u));}
 .SCOPE .ch .manage {border-left: 4px solid var(--navy);}
-.SCOPE .ch .manage .num {font-size: 26px; font-weight: 600; display: block; line-height: 1.2;}
-.SCOPE .ch .manage-grid {display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 14px;}
-.SCOPE .ch .manage-grid div {background: var(--navy-soft); border-radius: 10px; padding: 12px 14px;}
-.SCOPE .ch .tiles {display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-bottom: 24px;}
-.SCOPE .ch .tile {text-align: left; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; min-height: 120px; display: flex; flex-direction: column; gap: 6px; border-top: 5px solid var(--ok); color: var(--ink);}
+.SCOPE .ch .manage .num {font-size: calc(26 * var(--u)); font-weight: 600; display: block; line-height: 1.2;}
+.SCOPE .ch .manage-grid {display: grid; grid-template-columns: repeat(3, 1fr); gap: calc(12 * var(--u)); margin-bottom: calc(14 * var(--u));}
+.SCOPE .ch .manage-grid div {background: var(--navy-soft); border-radius: calc(10 * var(--u)); padding: calc(12 * var(--u)) calc(14 * var(--u));}
+.SCOPE .ch .tiles {display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(220 * var(--u)), 1fr)); gap: calc(14 * var(--u)); margin-bottom: calc(24 * var(--u));}
+.SCOPE .ch .tile {text-align: left; background: #fff; border: 1px solid var(--line); border-radius: calc(12 * var(--u)); padding: calc(18 * var(--u)) calc(20 * var(--u)); min-height: calc(140 * var(--u)); display: flex; flex-direction: column; gap: calc(6 * var(--u)); border-top: 5px solid var(--ok); color: var(--ink);}
 .SCOPE .ch .tile:hover {border-color: var(--navy);}
 .SCOPE .ch .tile.has-late {border-top-color: var(--late);}
 .SCOPE .ch .tile.has-warn {border-top-color: var(--accent);}
-.SCOPE .ch .tile b {font-size: 17px;}
-.SCOPE .ch .tile .status {font-size: 14px; color: var(--muted);}
+.SCOPE .ch .tile b {font-size: calc(19 * var(--u));}
+.SCOPE .ch .tile .status {font-size: calc(15 * var(--u)); color: var(--muted);}
 .SCOPE .ch .tile.view-only {border-top-color: #b8c2cb; background: #fafbfc;}
-.SCOPE .ch .tile .vo {font-size: 12px; font-weight: 600; color: var(--muted); background: #eef1f4; border-radius: 999px; padding: 1px 8px; margin-left: 6px; vertical-align: middle;}
-.SCOPE .ch .tiles-small .tile {min-height: 96px;}
-.SCOPE .ch .other-heading {margin-top: 28px;}
-.SCOPE .ch .other-note {margin: -6px 0 14px;}
-.SCOPE .ch .areastrip {display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 20px; align-items: center;}
-.SCOPE .ch .areastrip button {border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 6px 14px; color: var(--ink);}
+.SCOPE .ch .tile .vo {font-size: calc(12 * var(--u)); font-weight: 600; color: var(--muted); background: #eef1f4; border-radius: calc(999 * var(--u)); padding: calc(1 * var(--u)) calc(8 * var(--u)); margin-left: calc(6 * var(--u)); vertical-align: middle;}
+.SCOPE .ch .tiles-small .tile {min-height: calc(110 * var(--u));}
+.SCOPE .ch .other-heading {margin-top: calc(28 * var(--u));}
+.SCOPE .ch .other-note {margin: -calc(6 * var(--u)) 0 calc(14 * var(--u));}
+.SCOPE .ch .areastrip {display: flex; gap: calc(6 * var(--u)); flex-wrap: wrap; margin-bottom: calc(20 * var(--u)); align-items: center;}
+.SCOPE .ch .areastrip button {border: 1px solid var(--line); background: #fff; border-radius: calc(999 * var(--u)); padding: calc(6 * var(--u)) calc(14 * var(--u)); color: var(--ink);}
 .SCOPE .ch .areastrip button[aria-current="page"] {background: var(--navy); border-color: var(--navy); color: #fff; font-weight: 600;}
 .SCOPE .ch .areastrip button.other {color: var(--muted); border-style: dashed;}
 .SCOPE .ch .areastrip button.other[aria-current="page"] {color: #fff; border-style: solid;}
-.SCOPE .ch .areastrip .back {border: 0; background: none; color: var(--navy); font-weight: 600; margin-right: 10px;}
-.SCOPE .ch .viewonly-bar {background: #eef1f4; border-left: 4px solid #8a96a1; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px;}
-.SCOPE .ch .subtabs {display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 20px; flex-wrap: wrap;}
-.SCOPE .ch .subtabs button {background: none; border: 0; padding: 10px 14px; color: var(--muted); border-bottom: 3px solid transparent; margin-bottom: -1px;}
+.SCOPE .ch .areastrip .back {border: 0; background: none; color: var(--navy); font-weight: 600; margin-right: calc(10 * var(--u));}
+.SCOPE .ch .viewonly-bar {background: #eef1f4; border-left: 4px solid #8a96a1; border-radius: calc(8 * var(--u)); padding: calc(12 * var(--u)) calc(16 * var(--u)); margin-bottom: calc(20 * var(--u));}
+.SCOPE .ch .subtabs {display: flex; gap: calc(4 * var(--u)); border-bottom: 1px solid var(--line); margin-bottom: calc(20 * var(--u)); flex-wrap: wrap;}
+.SCOPE .ch .subtabs button {background: none; border: 0; padding: calc(10 * var(--u)) calc(14 * var(--u)); color: var(--muted); border-bottom: 3px solid transparent; margin-bottom: -calc(1 * var(--u));}
 .SCOPE .ch .subtabs button[aria-selected="true"] {color: var(--navy); border-bottom-color: var(--navy); font-weight: 600;}
-.SCOPE .ch .scrim {position: fixed; inset: 0; background: rgba(16, 32, 46, .45); display: flex; align-items: flex-start; justify-content: center; padding: 6vh 16px; z-index: 1000; overflow-y: auto;}
-.SCOPE .ch .dialog {background: #fff; border-radius: 12px; width: min(620px, 100%); padding: 24px; box-shadow: 0 12px 40px rgba(0, 0, 0, .25);}
-.SCOPE .ch .field {margin-bottom: 16px;}
-.SCOPE .ch .field label {display: block; font-weight: 600; margin-bottom: 4px;}
-.SCOPE .ch .field .hint {display: block; color: var(--muted); font-size: 14px; margin-bottom: 6px;}
-.SCOPE .ch .field input, .SCOPE .ch .field select, .SCOPE .ch .field textarea {width: 100%; border: 1px solid #c3ccd4; border-radius: 8px; padding: 9px 12px; background: #fff;}
-.SCOPE .ch .field-error, .SCOPE .ch .form-error {color: var(--late); font-weight: 600; font-size: 14px;}
+.SCOPE .ch .scrim {position: fixed; inset: 0; background: rgba(16, 32, 46, .45); display: flex; align-items: flex-start; justify-content: center; padding: 6vh calc(16 * var(--u)); z-index: 1000; overflow-y: auto;}
+.SCOPE .ch .dialog {background: #fff; border-radius: calc(12 * var(--u)); width: min(calc(620 * var(--u)), 100%); padding: calc(24 * var(--u)); box-shadow: 0 calc(12 * var(--u)) calc(40 * var(--u)) rgba(0, 0, 0, .25);}
+.SCOPE .ch .field {margin-bottom: calc(16 * var(--u));}
+.SCOPE .ch .field label {display: block; font-weight: 600; margin-bottom: calc(4 * var(--u));}
+.SCOPE .ch .field .hint {display: block; color: var(--muted); font-size: calc(14 * var(--u)); margin-bottom: calc(6 * var(--u));}
+.SCOPE .ch .field input, .SCOPE .ch .field select, .SCOPE .ch .field textarea {width: 100%; border: 1px solid #c3ccd4; border-radius: calc(8 * var(--u)); padding: calc(9 * var(--u)) calc(12 * var(--u)); background: #fff;}
+.SCOPE .ch .field-error, .SCOPE .ch .form-error {color: var(--late); font-weight: 600; font-size: calc(14 * var(--u));}
 .SCOPE .ch .field-error:empty, .SCOPE .ch .form-error:empty {display: none;}
-.SCOPE .ch .check {display: block; margin-bottom: 16px;}
-.SCOPE .ch .explain {background: var(--navy-soft); border-radius: 8px; padding: 10px 14px;}
-.SCOPE .ch .toast {position: fixed; right: 24px; bottom: 24px; margin: 0; max-width: 420px; z-index: 1001;}
+.SCOPE .ch .check {display: block; margin-bottom: calc(16 * var(--u));}
+.SCOPE .ch .explain {background: var(--navy-soft); border-radius: calc(8 * var(--u)); padding: calc(10 * var(--u)) calc(14 * var(--u));}
+.SCOPE .ch .toast {position: fixed; right: calc(24 * var(--u)); bottom: calc(24 * var(--u)); margin: 0; max-width: calc(420 * var(--u)); z-index: 1001;}
 .SCOPE .ch .toast:empty {display: none;}
-.SCOPE .ch .toast-ok, .SCOPE .ch .toast-info {background: var(--navy); color: #fff; border-radius: 8px; padding: 12px 16px; box-shadow: 0 6px 20px rgba(0, 0, 0, .2);}
-.SCOPE .ch footer {text-align: center; color: var(--muted); font-size: 12px; padding: 24px;}
+.SCOPE .ch .toast-ok, .SCOPE .ch .toast-info {background: var(--navy); color: #fff; border-radius: calc(8 * var(--u)); padding: calc(12 * var(--u)) calc(16 * var(--u)); box-shadow: 0 calc(6 * var(--u)) calc(20 * var(--u)) rgba(0, 0, 0, .2);}
+.SCOPE .ch footer {text-align: center; color: var(--muted); font-size: calc(12 * var(--u)); padding: calc(24 * var(--u));}
 @media (min-width: 1400px) {
 .SCOPE .ch .tiles {grid-template-columns: repeat(var(--cols), 1fr);}
 .SCOPE .ch .cols3 {grid-template-columns: 1.1fr 1fr 1fr;}
@@ -104,8 +107,8 @@
 @media (max-width: 900px) {
 .SCOPE .ch .cols3, .SCOPE .ch .manage-grid {grid-template-columns: 1fr;}
 .SCOPE .ch .items li {flex-direction: column; align-items: flex-start;}
-.SCOPE .ch main {padding: 24px 16px;}
-.SCOPE .ch .bar-in {padding: 8px 16px;}
+.SCOPE .ch main {padding: calc(24 * var(--u)) calc(16 * var(--u));}
+.SCOPE .ch .bar-in {padding: calc(8 * var(--u)) calc(16 * var(--u));}
 }
 @media (pointer: coarse) {
 .SCOPE .ch .btn, .SCOPE .ch .areastrip button, .SCOPE .ch .subtabs button {min-height: 44px;}

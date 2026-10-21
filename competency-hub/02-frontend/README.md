@@ -2,6 +2,12 @@
 
 Plain HTML, CSS and JavaScript, delivered as a Welcome by Accelerator 365 custom layout. Same-origin SharePoint REST runs as the signed-in user. There are no libraries and no external calls.
 
+## Version 0.1.2: sized for the screen
+
+- Text, spacing and tiles grow with the width the app has: ×1.1 from 1,400 px, ×1.2 from 1,700 px, ×1.35 from 2,000 px and ×1.5 from 2,400 px. Every size in `styles/app.css` is a multiple of `--u`.
+- Bigger tiles and headings at every width, and the app fills the window's height.
+- A **Text size** control (Normal, Large, Larger) in the top bar. Each browser remembers its choice.
+
 ## Version 0.1.1: first fixes from the live site
 
 - The greeting uses the first name from the user's Microsoft 365 profile. If that can't be read, it uses the part of a `firstname.lastname@` address before the dot. Display names at EDF are "Surname Firstname", so "Pepper" was shown before.

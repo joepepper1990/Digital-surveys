@@ -3,97 +3,100 @@
 <title>Competency Hub – local test</title>
 <style>body{margin:0;background:#f3f6f8} .mock-bar{font:13px Segoe UI,sans-serif;background:#222;color:#fff;padding:6px 12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 .mock-bar select{font:inherit}
-.mock-scope .ch {--navy: #13516b; --navy-soft: #e7f0f6; --accent: #ef7d3a; --accent-dark: #c95f1f; --ink: #16222c; --muted: #5b6774; --bg: #f3f6f8; --card: #ffffff; --line: #dde3e8; --focus: #2b78d0; --late: #a4262c; --late-bg: #fde8e9; --soon: #8a5a00; --soon-bg: #fff3d6; --ok: #1b7a45; --ok-bg: #e6f3eb; box-sizing: border-box; background: var(--bg); color: var(--ink); font: 16px/1.55 "Segoe UI", system-ui, sans-serif; min-height: 70vh; position: relative;}
+.mock-scope .ch {--navy: #13516b; --navy-soft: #e7f0f6; --accent: #ef7d3a; --accent-dark: #c95f1f; --ink: #16222c; --muted: #5b6774; --bg: #f3f6f8; --card: #ffffff; --line: #dde3e8; --focus: #2b78d0; --late: #a4262c; --late-bg: #fde8e9; --soon: #8a5a00; --soon-bg: #fff3d6; --ok: #1b7a45; --ok-bg: #e6f3eb; box-sizing: border-box; background: var(--bg); color: var(--ink); font: calc(16 * var(--u))/1.55 "Segoe UI", system-ui, sans-serif; position: relative; --scale: 1; --text: 1; --u: calc(1px * var(--scale) * var(--text)); min-height: calc(100vh - 180px); display: flex; flex-direction: column;}
 .mock-scope .ch * {box-sizing: border-box;}
 .mock-scope .ch button, .mock-scope .ch input, .mock-scope .ch select, .mock-scope .ch textarea {font: inherit;}
 .mock-scope .ch button {cursor: pointer;}
-.mock-scope .ch :focus-visible {outline: 3px solid var(--focus); outline-offset: 2px;}
+.mock-scope .ch :focus-visible {outline: 3px solid var(--focus); outline-offset: calc(2 * var(--u));}
 .mock-scope .ch .bar {background: var(--navy); color: #fff; border-bottom: 3px solid var(--accent);}
-.mock-scope .ch .bar-in {display: flex; align-items: center; gap: 16px; padding: 8px 32px; min-height: 58px; flex-wrap: wrap;}
-.mock-scope .ch .brand {font-weight: 600; font-size: 17px;}
-.mock-scope .ch .brand small {display: block; font-weight: 400; font-size: 12px; color: #c9dde6;}
-.mock-scope .ch .env {background: #fff3d6; color: #6b4a00; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 600;}
-.mock-scope .ch .who {margin-left: auto; font-size: 14px; color: #dbe8ee;}
-.mock-scope .ch main {padding: 28px 32px 48px; outline: none;}
-.mock-scope .ch h1 {font-size: 26px; font-weight: 600; margin: 0 0 6px;}
-.mock-scope .ch h2 {font-size: 18px; font-weight: 600; margin: 0 0 12px;}
-.mock-scope .ch .lead {color: var(--muted); margin: 0 0 20px; font-size: 17px;}
-.mock-scope .ch .sentence {font-size: 18px; margin: 0 0 20px;}
+.mock-scope .ch .bar-in {display: flex; align-items: center; gap: calc(16 * var(--u)); padding: calc(8 * var(--u)) calc(32 * var(--u)); min-height: calc(58 * var(--u)); flex-wrap: wrap;}
+.mock-scope .ch .brand {font-weight: 600; font-size: calc(17 * var(--u));}
+.mock-scope .ch .brand small {display: block; font-weight: 400; font-size: calc(12 * var(--u)); color: #c9dde6;}
+.mock-scope .ch .env {background: #fff3d6; color: #6b4a00; border-radius: calc(999 * var(--u)); padding: calc(2 * var(--u)) calc(10 * var(--u)); font-size: calc(12 * var(--u)); font-weight: 600;}
+.mock-scope .ch .textsize {font-size: calc(14 * var(--u)); color: #dbe8ee; display: flex; align-items: center; gap: calc(6 * var(--u));}
+.mock-scope .ch .textsize select {border: 1px solid #5d8aa0; border-radius: calc(6 * var(--u)); background: #fff; color: var(--ink); padding: calc(2 * var(--u)) calc(6 * var(--u));}
+.mock-scope .ch .who {margin-left: auto; font-size: calc(14 * var(--u)); color: #dbe8ee;}
+.mock-scope .ch main {padding: calc(28 * var(--u)) calc(32 * var(--u)) calc(48 * var(--u)); outline: none; flex: 1;}
+.mock-scope .ch h1 {font-size: calc(30 * var(--u)); font-weight: 600; margin: 0 0 calc(6 * var(--u));}
+.mock-scope .ch h2 {font-size: calc(18 * var(--u)); font-weight: 600; margin: 0 0 calc(12 * var(--u));}
+.mock-scope .ch .lead {color: var(--muted); margin: 0 0 calc(20 * var(--u)); font-size: calc(17 * var(--u));}
+.mock-scope .ch .sentence {font-size: calc(19 * var(--u)); margin: 0 0 calc(20 * var(--u));}
 .mock-scope .ch .muted {color: var(--muted);}
-.mock-scope .ch .small {font-size: 14px;}
-.mock-scope .ch .row {display: flex; gap: 12px; flex-wrap: wrap; align-items: center;}
-.mock-scope .ch .actions-row {margin-bottom: 24px;}
-.mock-scope .ch .tab-actions {margin-bottom: 12px;}
+.mock-scope .ch .small {font-size: calc(14 * var(--u));}
+.mock-scope .ch .row {display: flex; gap: calc(12 * var(--u)); flex-wrap: wrap; align-items: center;}
+.mock-scope .ch .actions-row {margin-bottom: calc(24 * var(--u));}
+.mock-scope .ch .tab-actions {margin-bottom: calc(12 * var(--u));}
 .mock-scope .ch .txt-late {color: var(--late); font-weight: 600;}
 .mock-scope .ch .txt-soon {color: var(--soon); font-weight: 600;}
 .mock-scope .ch .txt-ok {color: var(--ok); font-weight: 600;}
-.mock-scope .ch .card {background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px 22px; margin-bottom: 20px;}
-.mock-scope .ch .state-card {max-width: 720px; margin: 40px auto;}
-.mock-scope .ch .cols3 {display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start;}
-.mock-scope .ch .cols3 > div > .card:last-child {margin-bottom: 0;}
-.mock-scope .ch .btn {border: 1px solid #c3ccd4; background: #fff; color: var(--ink); border-radius: 8px; padding: 10px 18px; font-weight: 600; min-height: 44px;}
+.mock-scope .ch .card {background: var(--card); border: 1px solid var(--line); border-radius: calc(12 * var(--u)); padding: calc(20 * var(--u)) calc(22 * var(--u)); margin-bottom: calc(20 * var(--u));}
+.mock-scope .ch .state-card {max-width: calc(720 * var(--u)); margin: calc(40 * var(--u)) auto;}
+.mock-scope .ch .cols3 {display: grid; grid-template-columns: 1fr 1fr; gap: calc(20 * var(--u)); align-items: stretch;}
+.mock-scope .ch .cols3 > div {display: flex; flex-direction: column;}
+.mock-scope .ch .cols3 > div > .card:last-child {margin-bottom: 0; flex: 1;}
+.mock-scope .ch .btn {border: 1px solid #c3ccd4; background: #fff; color: var(--ink); border-radius: calc(8 * var(--u)); padding: calc(10 * var(--u)) calc(18 * var(--u)); font-weight: 600; min-height: calc(44 * var(--u));}
 .mock-scope .ch .btn:hover {background: #f4f7f9;}
 .mock-scope .ch .btn:disabled {opacity: .6; cursor: default;}
 .mock-scope .ch .btn-main {background: var(--accent); border-color: var(--accent); color: #fff;}
 .mock-scope .ch .btn-main:hover {background: var(--accent-dark);}
-.mock-scope .ch .btn-link {background: none; border: 0; color: var(--navy); text-decoration: underline; padding: 6px 0;}
-.mock-scope .ch .when {font-weight: 600; white-space: nowrap; padding: 3px 11px; border-radius: 999px; font-size: 14px; display: inline-block; margin-left: 6px;}
+.mock-scope .ch .btn-link {background: none; border: 0; color: var(--navy); text-decoration: underline; padding: calc(6 * var(--u)) 0;}
+.mock-scope .ch .when {font-weight: 600; white-space: nowrap; padding: calc(3 * var(--u)) calc(11 * var(--u)); border-radius: calc(999 * var(--u)); font-size: calc(14 * var(--u)); display: inline-block; margin-left: calc(6 * var(--u));}
 .mock-scope .ch .w-late {color: var(--late); background: var(--late-bg);}
 .mock-scope .ch .w-soon {color: var(--soon); background: var(--soon-bg);}
 .mock-scope .ch .w-later {color: var(--muted); background: #eef1f4;}
 .mock-scope .ch .w-ok {color: var(--ok); background: var(--ok-bg);}
-.mock-scope .ch .group-title {display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 16px; margin: 14px 0 8px;}
+.mock-scope .ch .group-title {display: flex; align-items: center; gap: calc(8 * var(--u)); font-weight: 600; font-size: calc(16 * var(--u)); margin: calc(14 * var(--u)) 0 calc(8 * var(--u));}
 .mock-scope .ch .group-title:first-child {margin-top: 0;}
-.mock-scope .ch .dot {width: 10px; height: 10px; border-radius: 50%; display: inline-block;}
+.mock-scope .ch .dot {width: calc(10 * var(--u)); height: calc(10 * var(--u)); border-radius: 50%; display: inline-block;}
 .mock-scope .ch .items {list-style: none; margin: 0; padding: 0;}
-.mock-scope .ch .items li {display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 11px 14px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; background: #fff;}
+.mock-scope .ch .items li {display: flex; justify-content: space-between; align-items: center; gap: calc(14 * var(--u)); padding: calc(11 * var(--u)) calc(14 * var(--u)); border: 1px solid var(--line); border-radius: calc(10 * var(--u)); margin-bottom: calc(8 * var(--u)); background: #fff;}
 .mock-scope .ch .items .t {font-weight: 600; display: block;}
-.mock-scope .ch .items .s {color: var(--muted); font-size: 14px;}
+.mock-scope .ch .items .s {color: var(--muted); font-size: calc(14 * var(--u));}
 .mock-scope .ch .plain {list-style: none; margin: 0; padding: 0;}
-.mock-scope .ch .plain li {padding: 10px 0; border-bottom: 1px solid #edf0f3; display: flex; justify-content: space-between; gap: 12px; align-items: center;}
+.mock-scope .ch .plain li {padding: calc(10 * var(--u)) 0; border-bottom: 1px solid #edf0f3; display: flex; justify-content: space-between; gap: calc(12 * var(--u)); align-items: center;}
 .mock-scope .ch .plain li:last-child {border-bottom: 0;}
 .mock-scope .ch .notice-body {white-space: pre-wrap;}
-.mock-scope .ch .section-note {background: #fff3d6; color: #6b4a00; border-radius: 8px; padding: 8px 12px; font-size: 14px;}
+.mock-scope .ch .section-note {background: #fff3d6; color: #6b4a00; border-radius: calc(8 * var(--u)); padding: calc(8 * var(--u)) calc(12 * var(--u)); font-size: calc(14 * var(--u));}
 .mock-scope .ch .manage {border-left: 4px solid var(--navy);}
-.mock-scope .ch .manage .num {font-size: 26px; font-weight: 600; display: block; line-height: 1.2;}
-.mock-scope .ch .manage-grid {display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 14px;}
-.mock-scope .ch .manage-grid div {background: var(--navy-soft); border-radius: 10px; padding: 12px 14px;}
-.mock-scope .ch .tiles {display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-bottom: 24px;}
-.mock-scope .ch .tile {text-align: left; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; min-height: 120px; display: flex; flex-direction: column; gap: 6px; border-top: 5px solid var(--ok); color: var(--ink);}
+.mock-scope .ch .manage .num {font-size: calc(26 * var(--u)); font-weight: 600; display: block; line-height: 1.2;}
+.mock-scope .ch .manage-grid {display: grid; grid-template-columns: repeat(3, 1fr); gap: calc(12 * var(--u)); margin-bottom: calc(14 * var(--u));}
+.mock-scope .ch .manage-grid div {background: var(--navy-soft); border-radius: calc(10 * var(--u)); padding: calc(12 * var(--u)) calc(14 * var(--u));}
+.mock-scope .ch .tiles {display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(220 * var(--u)), 1fr)); gap: calc(14 * var(--u)); margin-bottom: calc(24 * var(--u));}
+.mock-scope .ch .tile {text-align: left; background: #fff; border: 1px solid var(--line); border-radius: calc(12 * var(--u)); padding: calc(18 * var(--u)) calc(20 * var(--u)); min-height: calc(140 * var(--u)); display: flex; flex-direction: column; gap: calc(6 * var(--u)); border-top: 5px solid var(--ok); color: var(--ink);}
 .mock-scope .ch .tile:hover {border-color: var(--navy);}
 .mock-scope .ch .tile.has-late {border-top-color: var(--late);}
 .mock-scope .ch .tile.has-warn {border-top-color: var(--accent);}
-.mock-scope .ch .tile b {font-size: 17px;}
-.mock-scope .ch .tile .status {font-size: 14px; color: var(--muted);}
+.mock-scope .ch .tile b {font-size: calc(19 * var(--u));}
+.mock-scope .ch .tile .status {font-size: calc(15 * var(--u)); color: var(--muted);}
 .mock-scope .ch .tile.view-only {border-top-color: #b8c2cb; background: #fafbfc;}
-.mock-scope .ch .tile .vo {font-size: 12px; font-weight: 600; color: var(--muted); background: #eef1f4; border-radius: 999px; padding: 1px 8px; margin-left: 6px; vertical-align: middle;}
-.mock-scope .ch .tiles-small .tile {min-height: 96px;}
-.mock-scope .ch .other-heading {margin-top: 28px;}
-.mock-scope .ch .other-note {margin: -6px 0 14px;}
-.mock-scope .ch .areastrip {display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 20px; align-items: center;}
-.mock-scope .ch .areastrip button {border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 6px 14px; color: var(--ink);}
+.mock-scope .ch .tile .vo {font-size: calc(12 * var(--u)); font-weight: 600; color: var(--muted); background: #eef1f4; border-radius: calc(999 * var(--u)); padding: calc(1 * var(--u)) calc(8 * var(--u)); margin-left: calc(6 * var(--u)); vertical-align: middle;}
+.mock-scope .ch .tiles-small .tile {min-height: calc(110 * var(--u));}
+.mock-scope .ch .other-heading {margin-top: calc(28 * var(--u));}
+.mock-scope .ch .other-note {margin: -calc(6 * var(--u)) 0 calc(14 * var(--u));}
+.mock-scope .ch .areastrip {display: flex; gap: calc(6 * var(--u)); flex-wrap: wrap; margin-bottom: calc(20 * var(--u)); align-items: center;}
+.mock-scope .ch .areastrip button {border: 1px solid var(--line); background: #fff; border-radius: calc(999 * var(--u)); padding: calc(6 * var(--u)) calc(14 * var(--u)); color: var(--ink);}
 .mock-scope .ch .areastrip button[aria-current="page"] {background: var(--navy); border-color: var(--navy); color: #fff; font-weight: 600;}
 .mock-scope .ch .areastrip button.other {color: var(--muted); border-style: dashed;}
 .mock-scope .ch .areastrip button.other[aria-current="page"] {color: #fff; border-style: solid;}
-.mock-scope .ch .areastrip .back {border: 0; background: none; color: var(--navy); font-weight: 600; margin-right: 10px;}
-.mock-scope .ch .viewonly-bar {background: #eef1f4; border-left: 4px solid #8a96a1; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px;}
-.mock-scope .ch .subtabs {display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 20px; flex-wrap: wrap;}
-.mock-scope .ch .subtabs button {background: none; border: 0; padding: 10px 14px; color: var(--muted); border-bottom: 3px solid transparent; margin-bottom: -1px;}
+.mock-scope .ch .areastrip .back {border: 0; background: none; color: var(--navy); font-weight: 600; margin-right: calc(10 * var(--u));}
+.mock-scope .ch .viewonly-bar {background: #eef1f4; border-left: 4px solid #8a96a1; border-radius: calc(8 * var(--u)); padding: calc(12 * var(--u)) calc(16 * var(--u)); margin-bottom: calc(20 * var(--u));}
+.mock-scope .ch .subtabs {display: flex; gap: calc(4 * var(--u)); border-bottom: 1px solid var(--line); margin-bottom: calc(20 * var(--u)); flex-wrap: wrap;}
+.mock-scope .ch .subtabs button {background: none; border: 0; padding: calc(10 * var(--u)) calc(14 * var(--u)); color: var(--muted); border-bottom: 3px solid transparent; margin-bottom: -calc(1 * var(--u));}
 .mock-scope .ch .subtabs button[aria-selected="true"] {color: var(--navy); border-bottom-color: var(--navy); font-weight: 600;}
-.mock-scope .ch .scrim {position: fixed; inset: 0; background: rgba(16, 32, 46, .45); display: flex; align-items: flex-start; justify-content: center; padding: 6vh 16px; z-index: 1000; overflow-y: auto;}
-.mock-scope .ch .dialog {background: #fff; border-radius: 12px; width: min(620px, 100%); padding: 24px; box-shadow: 0 12px 40px rgba(0, 0, 0, .25);}
-.mock-scope .ch .field {margin-bottom: 16px;}
-.mock-scope .ch .field label {display: block; font-weight: 600; margin-bottom: 4px;}
-.mock-scope .ch .field .hint {display: block; color: var(--muted); font-size: 14px; margin-bottom: 6px;}
-.mock-scope .ch .field input, .mock-scope .ch .field select, .mock-scope .ch .field textarea {width: 100%; border: 1px solid #c3ccd4; border-radius: 8px; padding: 9px 12px; background: #fff;}
-.mock-scope .ch .field-error, .mock-scope .ch .form-error {color: var(--late); font-weight: 600; font-size: 14px;}
+.mock-scope .ch .scrim {position: fixed; inset: 0; background: rgba(16, 32, 46, .45); display: flex; align-items: flex-start; justify-content: center; padding: 6vh calc(16 * var(--u)); z-index: 1000; overflow-y: auto;}
+.mock-scope .ch .dialog {background: #fff; border-radius: calc(12 * var(--u)); width: min(calc(620 * var(--u)), 100%); padding: calc(24 * var(--u)); box-shadow: 0 calc(12 * var(--u)) calc(40 * var(--u)) rgba(0, 0, 0, .25);}
+.mock-scope .ch .field {margin-bottom: calc(16 * var(--u));}
+.mock-scope .ch .field label {display: block; font-weight: 600; margin-bottom: calc(4 * var(--u));}
+.mock-scope .ch .field .hint {display: block; color: var(--muted); font-size: calc(14 * var(--u)); margin-bottom: calc(6 * var(--u));}
+.mock-scope .ch .field input, .mock-scope .ch .field select, .mock-scope .ch .field textarea {width: 100%; border: 1px solid #c3ccd4; border-radius: calc(8 * var(--u)); padding: calc(9 * var(--u)) calc(12 * var(--u)); background: #fff;}
+.mock-scope .ch .field-error, .mock-scope .ch .form-error {color: var(--late); font-weight: 600; font-size: calc(14 * var(--u));}
 .mock-scope .ch .field-error:empty, .mock-scope .ch .form-error:empty {display: none;}
-.mock-scope .ch .check {display: block; margin-bottom: 16px;}
-.mock-scope .ch .explain {background: var(--navy-soft); border-radius: 8px; padding: 10px 14px;}
-.mock-scope .ch .toast {position: fixed; right: 24px; bottom: 24px; margin: 0; max-width: 420px; z-index: 1001;}
+.mock-scope .ch .check {display: block; margin-bottom: calc(16 * var(--u));}
+.mock-scope .ch .explain {background: var(--navy-soft); border-radius: calc(8 * var(--u)); padding: calc(10 * var(--u)) calc(14 * var(--u));}
+.mock-scope .ch .toast {position: fixed; right: calc(24 * var(--u)); bottom: calc(24 * var(--u)); margin: 0; max-width: calc(420 * var(--u)); z-index: 1001;}
 .mock-scope .ch .toast:empty {display: none;}
-.mock-scope .ch .toast-ok, .mock-scope .ch .toast-info {background: var(--navy); color: #fff; border-radius: 8px; padding: 12px 16px; box-shadow: 0 6px 20px rgba(0, 0, 0, .2);}
-.mock-scope .ch footer {text-align: center; color: var(--muted); font-size: 12px; padding: 24px;}
+.mock-scope .ch .toast-ok, .mock-scope .ch .toast-info {background: var(--navy); color: #fff; border-radius: calc(8 * var(--u)); padding: calc(12 * var(--u)) calc(16 * var(--u)); box-shadow: 0 calc(6 * var(--u)) calc(20 * var(--u)) rgba(0, 0, 0, .2);}
+.mock-scope .ch footer {text-align: center; color: var(--muted); font-size: calc(12 * var(--u)); padding: calc(24 * var(--u));}
 @media (min-width: 1400px) {
 .mock-scope .ch .tiles {grid-template-columns: repeat(var(--cols), 1fr);}
 .mock-scope .ch .cols3 {grid-template-columns: 1.1fr 1fr 1fr;}
@@ -101,8 +104,8 @@
 @media (max-width: 900px) {
 .mock-scope .ch .cols3, .mock-scope .ch .manage-grid {grid-template-columns: 1fr;}
 .mock-scope .ch .items li {flex-direction: column; align-items: flex-start;}
-.mock-scope .ch main {padding: 24px 16px;}
-.mock-scope .ch .bar-in {padding: 8px 16px;}
+.mock-scope .ch main {padding: calc(24 * var(--u)) calc(16 * var(--u));}
+.mock-scope .ch .bar-in {padding: calc(8 * var(--u)) calc(16 * var(--u));}
 }
 @media (pointer: coarse) {
 .mock-scope .ch .btn, .mock-scope .ch .areastrip button, .mock-scope .ch .subtabs button {min-height: 44px;}

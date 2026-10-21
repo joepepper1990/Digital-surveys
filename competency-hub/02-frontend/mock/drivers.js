@@ -14,7 +14,27 @@ window.MockDrivers = (function () {
   function text() { return document.querySelector('[data-ch-root]').textContent; }
   function type(el, value) { el.value = value; el.dispatchEvent(new Event('input', { bubbles: true })); }
 
+  function px(sel) { var n = q(sel); return n ? parseFloat(getComputedStyle(n).fontSize) : 0; }
+
   var scenarios = {
+    // Sizes follow the app's width and the reader's text size (plan K6.9).
+    sizes: async function () {
+      await until(function () { return q('.tile b'); });
+      await wait(200);
+      var before = { tile: px('.tile b'), h1: px('h1'), scale: document.querySelector('[data-ch-root]').style.getPropertyValue('--scale') };
+      var select = q('.textsize select');
+      select.value = 'Larger';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      await wait(100);
+      var larger = px('.tile b');
+      var saved = window.localStorage.getItem('esg-competency-hub-text-size');
+      select.value = 'Normal';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return {
+        width: document.querySelector('[data-ch-root]').clientWidth, tile: before.tile, h1: before.h1, scale: before.scale,
+        larger: larger, saved: saved, scrollsSideways: document.documentElement.scrollWidth > window.innerWidth + 1
+      };
+    },
     // A technician posts on another area's noticeboard (K4.1): allowed, labelled, and the only write.
     postNoticeOutside: async function () {
       await until(function () { return q('.viewonly-bar'); });

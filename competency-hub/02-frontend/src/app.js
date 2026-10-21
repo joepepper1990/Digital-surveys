@@ -5,6 +5,7 @@ CH.app = (function () {
   function create(ctx) {
     var started = false;
     var disposed = false;
+    var observer = null;
     var app = { state: { view: 'home', area: null, tab: 0 } };
 
     function findRoot() { return document.querySelector('[data-ch-root]'); }
@@ -27,11 +28,40 @@ CH.app = (function () {
         h('header', { class: 'bar' }, h('div', { class: 'bar-in' },
           h('div', { class: 'brand' }, 'ESG Competency Hub', h('small', { text: 'Environmental Safety Group' })),
           C.ENVIRONMENT !== 'PRODUCTION' ? h('span', { class: 'env', text: C.ENVIRONMENT + ' – not live data' }) : null,
-          app.person ? h('span', { class: 'who', text: app.person.Title + ' · ' + app.person.Role }) : null)),
+          app.person ? h('span', { class: 'who', text: app.person.Title + ' · ' + app.person.Role }) : null,
+          textSizeControl())),
         h('main', { id: 'ch-main', tabindex: '-1' }, content),
         h('p', { class: 'toast', 'data-ch-live': true, role: 'status', 'aria-live': 'polite' }),
         h('footer', { text: 'ESG Competency Hub · version ' + C.VERSION })
       ];
+    }
+
+    function applySize() {
+      if (!app.root || !app.root.style) return;
+      app.root.style.setProperty('--scale', String(CH.ui.scaleFor(app.root.clientWidth || 0)));
+      app.root.style.setProperty('--text', String(CH.ui.textFactor(CH.ui.textSize())));
+    }
+
+    // Follows the width Welcome gives the app; nothing else is observed.
+    function watchSize() {
+      applySize();
+      if (typeof window.ResizeObserver === 'function') {
+        observer = new window.ResizeObserver(function () { if (!disposed) applySize(); });
+        observer.observe(app.root);
+      } else {
+        window.addEventListener('resize', applySize);
+      }
+    }
+
+    function textSizeControl() {
+      var current = CH.ui.textSize();
+      return h('label', { class: 'textsize' }, 'Text size ',
+        h('select', {
+          'aria-label': 'Text size',
+          onchange: function (e) { CH.ui.saveTextSize(e.target.value); applySize(); }
+        }, CH.ui.TEXT_SIZES.map(function (t) {
+          return h('option', t[0] === current ? { value: t[0], selected: 'selected' } : { value: t[0] }, t[0]);
+        })));
     }
 
     function paint(content) {
@@ -89,6 +119,7 @@ CH.app = (function () {
 
     async function start() {
       app.root = await waitForRoot();
+      watchSize();
       var webPart = ctx.getWebPart();
       if (!webPart || !webPart.spHttpClient || !webPart.pageContext || !webPart.pageContext.web) {
         throw new Error('Welcome did not provide a SharePoint connection.');
@@ -144,7 +175,11 @@ CH.app = (function () {
       onError: function (error) {
         if (window.console) console.error('Competency Hub: Welcome reported an error', error);
       },
-      onDispose: function () { disposed = true; }
+      onDispose: function () {
+        disposed = true;
+        if (observer) observer.disconnect();
+        window.removeEventListener('resize', applySize);
+      }
     };
   }
 

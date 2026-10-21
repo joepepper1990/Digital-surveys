@@ -84,7 +84,26 @@ CH.ui = (function () {
     setTimeout(function () { if (region.textContent === text) { region.textContent = ''; region.className = 'toast'; } }, 6000);
   }
 
+  // Size steps by the width the app has (plan K6.9), so wide screens are not left with small text.
+  var SCALE_STEPS = [[2400, 1.5], [2000, 1.35], [1700, 1.2], [1400, 1.1]];
+  function scaleFor(width) {
+    for (var i = 0; i < SCALE_STEPS.length; i++) if (width >= SCALE_STEPS[i][0]) return SCALE_STEPS[i][1];
+    return 1;
+  }
+
+  // The reader's text size, remembered in this browser only. Storage can be unavailable; then Normal is used.
+  var TEXT_SIZES = [['Normal', 1], ['Large', 1.15], ['Larger', 1.3]];
+  var TEXT_KEY = 'esg-competency-hub-text-size';
+  function textSize() {
+    var saved = null;
+    try { saved = window.localStorage.getItem(TEXT_KEY); } catch (_) { saved = null; }
+    return TEXT_SIZES.some(function (t) { return t[0] === saved; }) ? saved : 'Normal';
+  }
+  function textFactor(name) { return (TEXT_SIZES.filter(function (t) { return t[0] === name; })[0] || TEXT_SIZES[0])[1]; }
+  function saveTextSize(name) { try { window.localStorage.setItem(TEXT_KEY, name); } catch (_) { /* not remembered */ } }
+
   return {
+    scaleFor: scaleFor, TEXT_SIZES: TEXT_SIZES, textSize: textSize, textFactor: textFactor, saveTextSize: saveTextSize,
     chip: chip, card: card, button: button, linkButton: linkButton, sectionNote: sectionNote,
     actionList: actionList, tile: tile, tileGrid: tileGrid, areaStatusLines: areaStatusLines, toast: toast
   };

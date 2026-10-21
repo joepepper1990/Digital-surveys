@@ -3299,6 +3299,78 @@ site.
 - **Size:** a full Apply on the empty site makes about 880 SharePoint requests;
   allow a few minutes with the page open.
 
+### K6.9 Make the app fill the screen and read comfortably (app 0.1.2)
+
+**Context.** The app now runs full width on the Hub page (screenshot, 21 Oct
+2026). Your feedback was that everything looks a bit small and doesn't fit the
+screen.
+
+The CSS uses a 16 px base. On a wide or high-resolution screen, though, that
+leaves:
+
+- small text;
+- short tiles;
+- a large empty band below the cards.
+
+SharePoint's own menus in the screenshot are also small, which suggests a
+wide display. Plan C.2 already proposed "zoom steps above 1,700 px", but they
+were never built.
+
+**Changes** (`02-frontend/styles/app.css`, `src/app.js`, `src/ui/components.js`):
+
+1. **Automatic scaling to the width the app has.** A small `ResizeObserver` on
+   the app root sets a scale step as a CSS variable `--scale`:
+
+   | App width | Scale |
+   |---|---|
+   | under 1,400 px | 1 |
+   | 1,400 px | 1.1 |
+   | 1,700 px | 1.2 |
+   | 2,000 px | 1.35 |
+   | 2,400 px | 1.5 |
+
+   Font sizes, spacing and tile heights are written as `calc(… * var(--scale))`
+   so that everything grows together. CSS `zoom` is not used: it is unreliable
+   inside SharePoint pages.
+2. **Bigger, clearer tiles and cards at every width:**
+   - area names 19 px (from 17 px);
+   - status lines 15 px (from 14 px);
+   - tile height 140 px (from 120 px), with more padding;
+   - the greeting 30 px (from 26 px);
+   - the summary sentence 19 px.
+3. **Fill the height.** The app area is at least the visible window height
+   below the SharePoint header, so its grey background reaches the bottom. The
+   three lower cards stretch to equal height.
+4. **A "Text size" control** (Normal / Large / Larger, ×1 / ×1.15 / ×1.3) at the
+   right of the top bar, next to your name. It multiplies the automatic scale,
+   and each person's browser remembers their choice (`localStorage`, with a
+   safe fallback). This helps staff who find small text hard to read.
+
+**Not changing:** the layout, content, colours and behaviour.
+
+**Tests.**
+
+- **Browser test:** screenshots at 1,366, 1,920 and 2,560 px for every role.
+  It also checks that:
+  - there is no horizontal scrolling;
+  - tile text is larger at 2,560 than at 1,366 px;
+  - the Text size control changes it and is remembered after a reload.
+- **Unit test:** the scale steps.
+- **Static rules S1–S8:** still pass. Building the control uses `textContent`
+  only.
+
+**Delivery.**
+
+- The version becomes 0.1.2.
+- Commit and push.
+- Rebuild the zip.
+- You replace `competency-hub.js` **and** `competency-hub.html` (the CSS lives
+  in the `.html`), then reload with Ctrl+F5.
+
+**Your check.** It's also worth pressing **Ctrl+0** in Edge first. The
+SharePoint menus look small in your screenshot, so browser zoom may be set
+below 100%.
+
 ### K6.8 Hub page opened to All Users (EDF RECORD, 21 Oct 2026 15:50 UTC)
 
 **Results.**

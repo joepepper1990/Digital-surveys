@@ -114,10 +114,19 @@ check('arrow keys move between area tabs', res.ok && res.result.selected === 'No
 res = drive('as=' + ROBERT + '&drive=readOnlyAudit');
 check('every area and tab opened: no writes, no POSTs', res.ok && res.result.areasVisited === 10 && res.result.writes === 0 && res.result.posts === 0, JSON.stringify(res));
 
+// Sizes follow the width the app has, and the reader's text size (plan K6.9)
+const sized = (w) => { const d = open('as=' + ROBERT + '&drive=sizes', ['--window-size=' + w + ',1200', '--dump-dom']); const m = /<pre id="drive-result">([\s\S]*?)<\/pre>/.exec(d.dom); return m ? JSON.parse(m[1].replace(/&quot;/g, '"')) : { ok: false }; };
+const s1366 = sized(1366), s2560 = sized(2560);
+check('text and tiles are larger on a wide screen', s1366.ok && s2560.ok && s2560.result.tile > s1366.result.tile * 1.3 && s2560.result.h1 > s1366.result.h1,
+  JSON.stringify([s1366, s2560]));
+check('no sideways scrolling at 1366 or 2560 px', s1366.ok && s2560.ok && !s1366.result.scrollsSideways && !s2560.result.scrollsSideways, JSON.stringify([s1366, s2560]));
+check('"Larger" text size enlarges the text and is remembered', s1366.ok && s1366.result.larger > s1366.result.tile * 1.2 && s1366.result.saved === 'Larger',
+  JSON.stringify(s1366));
+
 // Screenshots: three roles at three widths, plus a view-only area
 fs.mkdirSync(SHOTS, { recursive: true });
 [['technician', RACHEL], ['engineer', RICHARD], ['group-head', ROBERT]].forEach(([name, id]) => {
-  [1920, 1366, 768].forEach((w) => {
+  [2560, 1920, 1366, 768].forEach((w) => {
     open('as=' + id, ['--window-size=' + w + ',1500', '--screenshot=' + path.join(SHOTS, name + '-' + w + '.png')]);
   });
 });
