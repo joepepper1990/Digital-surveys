@@ -366,7 +366,19 @@ window.MockAdmin = (function () {
     function Client() {}
     Client.configurations = { v1: {} };
     Client.prototype.get = function (url) { return get(url.replace(SITE, '')); };
-    Client.prototype.post = function (url, config, opts) { return post(url.replace(SITE, ''), opts || {}); };
+    // Like SPFx's SPHttpClient, requests are OData 4.0 unless an odata-version header overrides it, and
+    // SharePoint cannot read a verbose (__metadata) body under OData 4.0.
+    Client.prototype.post = function (url, config, opts) {
+      opts = opts || {};
+      var h = {};
+      Object.keys(opts.headers || {}).forEach(function (k) { h[k.toLowerCase()] = opts.headers[k]; });
+      var v3 = h['odata-version'] === '' || h['odata-version'] === '3.0';
+      if (!v3 && /odata=verbose/.test(h['content-type'] || '') && opts.body) {
+        writes.push(url.replace(SITE, ''));
+        return fail(400, 'Parsing JSON Light feeds or entries in requests without entity set is not supported. Pass in the entity set as a parameter to ODataMessageReader.CreateODataEntryReader or ODataMessageReader.CreateODataFeedReader method.');
+      }
+      return post(url.replace(SITE, ''), opts);
+    };
     var ctx = { getWebPart: function () { return { spHttpClient: new Client(), pageContext: { web: { absoluteUrl: SITE, serverRelativeUrl: REL } } }; } };
 
     return {

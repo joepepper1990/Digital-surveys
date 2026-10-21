@@ -3299,6 +3299,73 @@ site.
 - **Size:** a full Apply on the empty site makes about 880 SharePoint requests;
   allow a few minutes with the page open.
 
+### K6.5 Fix: Apply stopped at its first write (EDF RECORD, 21 Oct 2026)
+
+**What happened.**
+- The Check ran clean.
+- Apply stopped at its first write with:
+  `HTTP 400: Parsing JSON Light feeds or entries in requests without entity set is not supported`.
+
+**Cause.**
+- Welcome's `spHttpClient` is SPFx's SPHttpClient. It adds `OData-Version: 4.0` to every request unless the request overrides it.
+- Under OData 4.0, SharePoint reads the body as "JSON Light". It cannot read our `odata=verbose` entity body (the one with `__metadata`), so it rejects it.
+- Only entity creates use verbose: permission levels, groups, lists, field MERGE, list MERGE and group users. The method calls (`AddValidateUpdateItemUsingPath`, `createfieldasxml`, `ensureuser`, role assignments) send no entity and are unaffected.
+- The app itself only uses nometadata, so it is unaffected.
+- The simulated site did not model this header, which is why the tests passed.
+
+**The log was misleading.** "Created permission level Competency Hub Read" is written *before* the write is sent. The level was most likely **not** created. A re-run reports what it finds either way.
+
+**Fix:**
+1. **`setup/src/rest.js`:** for verbose requests, send `odata-version: ''`. This is the documented way to make SPHttpClient use OData 3 / verbose. Nometadata requests are left unchanged.
+2. **`setup/src/engine.js`:** in Apply, log "Created …" only after the write succeeds. This covers permission levels, groups, lists, list settings and folders. Check mode keeps "Would …".
+3. **`setup/mock/mock-admin.js`:** model SPHttpClient. A request without an `odata-version` header counts as 4.0, and a verbose body under 4.0 gets the same 400 and message. This makes the tests fail on the old code and pass on the fixed code.
+4. **Rebuild and test:**
+   - rebuild with `setup/tools/build.js`;
+   - run the 14 engine tests and the browser smoke test;
+   - add a test that a verbose write without the header is rejected by the mock.
+5. **Package:**
+   - commit and push;
+   - rebuild `ESG-Competency-Hub-Setup.zip` with the new `CH_Setup.js`, and send it.
+
+**Your steps afterwards:**
+1. Upload the new `CH_Setup.js` (Replace) to the layouts library.
+2. In the Welcome web part, use **Reset layout cache** (or reload with Ctrl+F5).
+3. Run **Check**. It should show "Competency Hub Read" as either already in place or still to create.
+4. Run **Apply** and send the log.
+
+**Residual risk.** Other entity bodies can only be proven on the site. The new logging order means any later failure is reported accurately, and Apply resumes from where it stopped.
+
+### K6.4 Download package (your request: "a zip with every file I need")
+
+**Context.** You want one download holding everything needed for the next
+steps on the site, so you don't have to fetch files from the branch one by one.
+
+**Contents of `ESG-Competency-Hub-Setup.zip`:**
+
+```
+1-Setup/        CH_Setup.html, CH_Setup.js        upload now (runbook steps 3–7)
+2-App/          competency-hub.html, competency-hub.js   for later: the Hub page, after Setup
+HOW-TO.html     the owner runbook from setup/README.md as one plain page, readable
+                offline: the steps for sharing, the M365 group, the HubSetup page,
+                Check, Apply, tidy-up, and then uploading the app
+```
+
+The package leaves out the P0 probe files (already used), tests, mocks, sources
+and the plan. The files are copied from the built `dist/` folders. Before
+copying, `tools/build.js --check` and the tests are run, so the files match the
+tested build.
+
+**Steps:**
+1. Run the Setup and app build checks and tests.
+2. Write `HOW-TO.html` (plain text styling, no scripts, no tenant address).
+3. Build the zip in the scratchpad and list its contents. Then send it to you
+   with SendUserFile.
+4. Don't commit the zip itself. The repository already has the source files.
+
+**Verification:** `unzip -l` lists the 5 files. A test check (`--check`)
+confirms the dist files are current. Open `HOW-TO.html` in headless Chromium
+and screenshot it, to make sure it renders.
+
 ## K5. The new site exists: run the P0 probe
 
 **Context.** You created the site `/sites/ESGCompetencyHub` on 21 Oct 2026 and

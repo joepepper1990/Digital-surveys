@@ -21,6 +21,8 @@ CHS.rest = (function () {
       var verbose = !!opts.verbose;
       var type = verbose ? 'application/json;odata=verbose' : 'application/json;odata=nometadata';
       var headers = { 'Accept': type };
+      // SPHttpClient sends OData-Version 4.0 by default, under which SharePoint cannot read verbose bodies.
+      if (verbose) headers['odata-version'] = '';
       var options = { headers: headers };
       if (method !== 'GET') {
         headers['Content-Type'] = type;

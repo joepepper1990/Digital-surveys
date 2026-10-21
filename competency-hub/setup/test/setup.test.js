@@ -359,3 +359,21 @@ test('Build output is current, and neither the app nor Setup uses unsafe DOM wri
   const appJs = fs.readFileSync(path.join(ROOT, '..', '02-frontend', 'dist', 'competency-hub.js'), 'utf8');
   assert.doesNotMatch(appJs, /breakroleinheritance|roleassignments|roledefinitions|sitegroups|ensureuser|resetroleinheritance/i);
 });
+
+test('Verbose writes override the OData 4.0 default, and a failed write is never logged as done', async () => {
+  // The simulated client rejects a verbose body sent as OData 4.0, as SharePoint did on 21 Oct 2026.
+  const ctx = load();
+  const site = ctx.MockAdmin.create('');
+  const client = site.ctx.getWebPart().spHttpClient;
+  const res = await client.post('https://contoso.example/sites/ESGCompetencyHub/_api/web/sitegroups', {},
+    { headers: { 'Content-Type': 'application/json;odata=verbose' }, body: JSON.stringify({ __metadata: { type: 'SP.Group' }, Title: 'X' }) });
+  assert.equal(res.status, 400);
+  assert.match(await res.text(), /JSON Light/);
+
+  // The first write fails: nothing is reported as created.
+  const failing = newSite('');
+  failing.site.setFailAfter(-1); // every write fails
+  const r = await failing.run('apply');
+  assert.equal(r.result.ok, false);
+  deq(r.entries.filter((e) => e.level === 'create').map((e) => e.text), []);
+});

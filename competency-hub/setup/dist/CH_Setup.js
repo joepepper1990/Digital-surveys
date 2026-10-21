@@ -27,6 +27,8 @@ window.ESGCompetencyHubSetup = function (ctx) {
         var verbose = !!opts.verbose;
         var type = verbose ? 'application/json;odata=verbose' : 'application/json;odata=nometadata';
         var headers = { 'Accept': type };
+        // SPHttpClient sends OData-Version 4.0 by default, under which SharePoint cannot read verbose bodies.
+        if (verbose) headers['odata-version'] = '';
         var options = { headers: headers };
         if (method !== 'GET') {
           headers['Content-Type'] = type;
@@ -214,7 +216,6 @@ window.ESGCompetencyHubSetup = function (ctx) {
             S.roles[shortName] = found.Id;
             continue;
           }
-          note('create', step, (applying() ? 'Created' : 'Would create') + ' permission level "' + p.name + '".');
           if (applying()) {
             var made = await write('/_api/web/roledefinitions', {
               __metadata: { type: 'SP.RoleDefinition' }, Name: p.name, Description: p.description, Order: 200 + i,
@@ -222,6 +223,7 @@ window.ESGCompetencyHubSetup = function (ctx) {
             }, { verbose: true });
             S.roles[shortName] = made.Id;
           }
+          note('create', step, (applying() ? 'Created' : 'Would create') + ' permission level "' + p.name + '".');
         }
       }
 
@@ -247,7 +249,6 @@ window.ESGCompetencyHubSetup = function (ctx) {
             else note('ok', step, '"' + g.title + '" already in place.');
             continue;
           }
-          note('create', step, (applying() ? 'Created' : 'Would create') + ' group "' + g.title + '".');
           if (applying()) {
             var made = await write('/_api/web/sitegroups', {
               __metadata: { type: 'SP.Group' }, Title: g.title, Description: g.description,
@@ -255,6 +256,7 @@ window.ESGCompetencyHubSetup = function (ctx) {
             }, { verbose: true });
             S.groups[g.key] = made.Id;
           }
+          note('create', step, (applying() ? 'Created' : 'Would create') + ' group "' + g.title + '".');
         }
       }
 
@@ -276,10 +278,11 @@ window.ESGCompetencyHubSetup = function (ctx) {
             S.lists[l.key] = { id: found.Id };
             note('ok', step, '"' + l.title + '" already exists.');
           } else {
-            note('create', step, (applying() ? 'Created' : 'Would create') + ' ' + (l.template === 101 ? 'library' : 'list') + ' "' + l.title + '" (' + url + ').');
-            if (!applying()) { S.lists[l.key] = { id: null, planned: true }; continue; }
+            var what = (l.template === 101 ? 'library' : 'list') + ' "' + l.title + '" (' + url + ').';
+            if (!applying()) { note('create', step, 'Would create ' + what); S.lists[l.key] = { id: null, planned: true }; continue; }
             var made = await write('/_api/web/lists', { __metadata: { type: 'SP.List' }, Title: l.url, BaseTemplate: l.template, AllowContentTypes: false, ContentTypesEnabled: false }, { verbose: true });
             S.lists[l.key] = { id: made.Id };
+            note('create', step, 'Created ' + what);
           }
           await listSettings(l);
         }
@@ -302,13 +305,12 @@ window.ESGCompetencyHubSetup = function (ctx) {
           if (have[k] !== want[k] && Number(have[k]) !== want[k]) { change[k] = want[k]; diffs.push(k); }
         });
         if (!diffs.length) return;
-        note('create', step, (applying() ? 'Set' : 'Would set') + ' ' + diffs.join(', ') + ' on "' + l.title + '".');
-        if (applying()) {
-          await write(listPath(l.key), change, { verbose: true, merge: true });
-          var back = await rest.get(listPath(l.key) + '?$select=' + diffs.join(','));
-          var bad = diffs.filter(function (k) { return back[k] !== want[k] && Number(back[k]) !== want[k]; });
-          if (bad.length) note('stop', step, 'SharePoint did not keep ' + bad.join(', ') + ' on "' + l.title + '".');
-        }
+        if (!applying()) { note('create', step, 'Would set ' + diffs.join(', ') + ' on "' + l.title + '".'); return; }
+        await write(listPath(l.key), change, { verbose: true, merge: true });
+        var back = await rest.get(listPath(l.key) + '?$select=' + diffs.join(','));
+        var bad = diffs.filter(function (k) { return back[k] !== want[k] && Number(back[k]) !== want[k]; });
+        if (bad.length) note('stop', step, 'SharePoint did not keep ' + bad.join(', ') + ' on "' + l.title + '".');
+        else note('create', step, 'Set ' + diffs.join(', ') + ' on "' + l.title + '".');
       }
 
       function fieldsFor(l) {
@@ -322,6 +324,7 @@ window.ESGCompetencyHubSetup = function (ctx) {
         var defs = fieldsFor(l);
         if (!info || info.broken) return;
         if (info.planned) {
+          if (!defs.length && !l.titleUnique) return;
           note('create', step, 'Would add ' + defs.length + ' columns to "' + l.title + '"' + (l.titleUnique ? ' and make Title unique' : '') + '.');
           return;
         }
@@ -554,19 +557,19 @@ window.ESGCompetencyHubSetup = function (ctx) {
         var missing = schema.settings.filter(function (s) { return !have.some(function (h) { return h.Title === s[0]; }); });
         if (!missing.length) note('ok', step, 'All ' + schema.settings.length + ' settings already in place.');
         else {
-          note('create', step, (applying() ? 'Added ' : 'Would add ') + missing.length + ' settings.');
           if (applying()) for (var i = 0; i < missing.length; i++) {
             var s = missing[i];
             await addItem('settings', '', { Title: s[0], Value: s[0] === 'SchemaVersion' ? schema.schemaVersion : s[1], Description: s[2], Revision: 1, CreatedRequestKey: 'IMPORT-SETTING-' + s[0] }, step);
           }
+          note('create', step, (applying() ? 'Added ' : 'Would add ') + missing.length + ' settings.');
         }
         var comps = await rest.getRows(listPath('competencies') + '/items?$select=Id,Title,CompetencyKey&$top=500');
         var today = opts.today || ukToday();
         var newOnes = areas.filter(function (a) { return !comps.some(function (c) { return c.CompetencyKey === a.key; }); });
         if (!newOnes.length) note('ok', step, 'All ' + areas.length + ' competency areas already in place.');
         else {
-          note('create', step, (applying() ? 'Added ' : 'Would add ') + 'competency areas: ' + newOnes.map(function (a) { return a.title; }).join(', ') + '.');
-          if (applying()) for (var j = 0; j < newOnes.length; j++) {
+          if (!applying()) note('create', step, 'Would add competency areas: ' + newOnes.map(function (a) { return a.title; }).join(', ') + '.');
+          else for (var j = 0; j < newOnes.length; j++) {
             var a = newOnes[j];
             var id = await addItem('competencies', '', {
               Title: a.title, CompetencyKey: a.key, SortOrder: a.sort, Status: 'Active', TrackingStart: ukDate(today),
@@ -574,6 +577,7 @@ window.ESGCompetencyHubSetup = function (ctx) {
             }, step);
             var back = await rest.get(listPath('competencies') + '/items(' + id + ')?$select=TrackingStart');
             var stored = back && back.TrackingStart ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(new Date(back.TrackingStart)) : '';
+            note('create', step, 'Added competency area ' + a.title + '.');
             if (stored !== today) note('warn', step, a.title + ': Tracking Start was stored as ' + (stored || 'blank') + ' instead of ' + today + '. Dates need checking (probe P-07).');
           }
         }
@@ -586,7 +590,6 @@ window.ESGCompetencyHubSetup = function (ctx) {
         var row = people[0];
         if (row && row.Role !== person.role) note('warn', step, person.title + ' is already recorded as ' + row.Role + ', not ' + person.role + '. Not changed; use the app to change roles.');
         if (!row) {
-          note('create', step, (applying() ? 'Added ' : 'Would add ') + person.title + ' (' + person.role + ') to People.');
           if (applying()) {
             var id = await addItem('people', '', {
               Title: person.title, Person: claimFor(person.loginName), Email: person.email.toLowerCase(), SiteUserId: person.siteUserId,
@@ -594,6 +597,7 @@ window.ESGCompetencyHubSetup = function (ctx) {
             }, step);
             row = { Id: id, Role: person.role, IsAdministrator: false };
           }
+          note('create', step, (applying() ? 'Added ' : 'Would add ') + person.title + ' (' + person.role + ') to People.');
         }
         var folder = 'u' + person.siteUserId;
         var r = await ensureFolder('requests', folder, step);
@@ -618,11 +622,11 @@ window.ESGCompetencyHubSetup = function (ctx) {
         if (!gid) { note('create', step, 'Would add ' + person.title + ' to ' + title + '.'); return; }
         var users = await rest.getRows('/_api/web/sitegroups(' + gid + ')/users?$select=Id');
         if (users.some(function (u) { return Number(u.Id) === person.siteUserId; })) return;
-        note('create', step, (applying() ? 'Added ' : 'Would add ') + person.title + ' to ' + title + '.');
-        if (!applying()) return;
+        if (!applying()) { note('create', step, 'Would add ' + person.title + ' to ' + title + '.'); return; }
         await write('/_api/web/sitegroups(' + gid + ')/users', { __metadata: { type: 'SP.User' }, LoginName: person.loginName }, { verbose: true });
         var back = await rest.getRows('/_api/web/sitegroups(' + gid + ')/users?$select=Id');
         if (!back.some(function (u) { return Number(u.Id) === person.siteUserId; })) throw new StopError(person.title + ' is not in ' + title + ' after adding.');
+        note('create', step, 'Added ' + person.title + ' to ' + title + '.');
       }
 
       async function membership(person, area, step) {
@@ -630,14 +634,14 @@ window.ESGCompetencyHubSetup = function (ctx) {
         if (S.lists.members.planned) { note('create', step, 'Would record ' + person.title + ' as a member of ' + area.key + '.'); return; }
         var have = await rest.getRows(listPath('members') + "/items?$select=Id&$filter=MembershipKey eq '" + CHS.rest.q(key) + "'");
         if (have.length) return;
-        note('create', step, (applying() ? 'Recorded ' : 'Would record ') + person.title + ' as a member of ' + area.key + '.');
-        if (!applying()) return;
+        if (!applying()) { note('create', step, 'Would record ' + person.title + ' as a member of ' + area.key + '.'); return; }
         var comp = await rest.getRows(listPath('competencies') + "/items?$select=Id&$filter=CompetencyKey eq '" + area.key + "'");
         if (!comp.length) throw new StopError('Competency ' + area.key + ' not found');
         await addItem('members', area.key, {
           Title: person.title + ' – ' + area.key, Competency: comp[0].Id, Person: claimFor(person.loginName), MembershipKey: key,
           CanManageMeetings: area.canManageMeetings ? '1' : '0', Status: 'Active', Revision: 1, CreatedRequestKey: 'IMPORT-' + key
         }, step);
+        note('create', step, 'Recorded ' + person.title + ' as a member of ' + area.key + '.');
       }
 
       async function usableAdministrators() {
