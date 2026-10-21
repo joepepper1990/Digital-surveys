@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ESG Competency Hub – Preview</title>
+<style>
+:root {
+  --navy: #13516b; --accent: #ef7d3a; --accent-dark: #c95f1f;
+  --ink: #16222c; --muted: #5b6774; --bg: #f3f6f8; --card: #ffffff; --line: #dde3e8;
+  --focus: #2b78d0;
+  --late: #a4262c; --late-bg: #fde8e9;
+  --soon: #8a5a00; --soon-bg: #fff3d6;
+  --ok: #1b7a45; --ok-bg: #e6f3eb;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 "Segoe UI", system-ui, sans-serif; }
+button { font: inherit; cursor: pointer; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+a { color: var(--navy); }
+
+.note { background: #fff8e6; color: #6b4a00; text-align: center; font-size: 13px; padding: 5px; }
+
+.bar { background: var(--navy); color: #fff; border-bottom: 3px solid var(--accent); }
+.bar-in { max-width: 1040px; margin: 0 auto; display: flex; align-items: center; gap: 28px; padding: 0 24px; flex-wrap: wrap; }
+.brand { font-weight: 600; font-size: 17px; padding: 16px 0; }
+.nav { display: flex; gap: 4px; flex-wrap: wrap; }
+.nav button { background: none; border: 0; color: #dbe8ee; padding: 18px 12px 15px; border-bottom: 3px solid transparent; margin-bottom: -3px; }
+.nav button[aria-current="page"] { color: #fff; border-bottom-color: #fff; font-weight: 600; }
+.role { margin-left: auto; font-size: 13px; color: #dbe8ee; }
+.role select { font: inherit; font-size: 13px; border-radius: 6px; border: 0; padding: 3px 6px; }
+
+main { max-width: 1040px; margin: 0 auto; padding: 32px 24px 64px; }
+h1 { font-size: 26px; font-weight: 600; margin: 0 0 6px; }
+h2 { font-size: 18px; font-weight: 600; margin: 0 0 12px; }
+.lead { color: var(--muted); margin: 0 0 28px; font-size: 17px; }
+.view { display: none; } .view.active { display: block; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 24px; margin-bottom: 20px; }
+.muted { color: var(--muted); }
+.row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.back { background: none; border: 0; color: var(--navy); padding: 0; margin-bottom: 16px; }
+
+.btn { border: 1px solid #c3ccd4; background: #fff; color: var(--ink); border-radius: 8px; padding: 11px 20px; font-weight: 600; min-height: 46px; }
+.btn:hover { background: #f4f7f9; }
+.btn-main { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-main:hover { background: var(--accent-dark); }
+.btn-link { background: none; border: 0; color: var(--navy); text-decoration: underline; padding: 8px 0; font-weight: 400; min-height: 0; }
+
+/* Action list */
+.group { margin-bottom: 24px; }
+.group h2 { display: flex; align-items: center; gap: 10px; }
+.group h2 .dot { width: 10px; height: 10px; border-radius: 50%; }
+.items { list-style: none; margin: 0; padding: 0; }
+.items li button { width: 100%; text-align: left; background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; margin-bottom: 8px; display: flex; justify-content: space-between; gap: 16px; align-items: center; }
+.items li button:hover { border-color: var(--navy); }
+.items .title { font-weight: 600; display: block; }
+.items .sub { color: var(--muted); font-size: 14px; }
+.when { font-weight: 600; white-space: nowrap; padding: 4px 12px; border-radius: 999px; font-size: 14px; }
+.w-late { color: var(--late); background: var(--late-bg); }
+.w-soon { color: var(--soon); background: var(--soon-bg); }
+.w-later { color: var(--muted); background: #eef1f4; }
+.w-ok { color: var(--ok); background: var(--ok-bg); }
+
+.sentence { font-size: 18px; margin: 0 0 24px; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 24px; flex-wrap: wrap; }
+.tabs button { background: none; border: 0; padding: 12px 16px; color: var(--muted); border-bottom: 3px solid transparent; margin-bottom: -1px; }
+.tabs button[aria-selected="true"] { color: var(--navy); border-bottom-color: var(--navy); font-weight: 600; }
+
+/* Action card */
+.facts { display: grid; grid-template-columns: 110px 1fr; gap: 10px 16px; margin: 20px 0; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; }
+.updates { list-style: none; padding: 0; margin: 0; }
+.updates li { padding: 12px 0; border-bottom: 1px solid #edf0f3; }
+.updates li:last-child { border-bottom: 0; }
+.pending { background: #e7f0f6; color: var(--navy); border-radius: 8px; padding: 10px 14px; margin-top: 16px; }
+
+/* Forms */
+label.f { display: block; font-weight: 600; margin-bottom: 18px; }
+label.f span { display: block; font-weight: 400; color: var(--muted); font-size: 14px; margin-bottom: 6px; }
+input[type=text], input[type=date], textarea, select.f { font: inherit; width: 100%; border: 1px solid #c3ccd4; border-radius: 8px; padding: 10px 12px; margin-top: 6px; background: #fff; }
+.steps { display: flex; gap: 8px; margin-bottom: 24px; }
+.steps div { flex: 1; height: 6px; border-radius: 3px; background: var(--line); }
+.steps div.on { background: var(--accent); }
+.step { display: none; } .step.on { display: block; }
+.explain { background: #f4f7f9; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; }
+
+/* Meeting */
+.meet { display: grid; grid-template-columns: 1fr 260px; gap: 20px; }
+.progress { color: var(--muted); margin-bottom: 8px; }
+.bar-track { height: 8px; background: var(--line); border-radius: 4px; margin-bottom: 20px; }
+.bar-fill { height: 100%; background: var(--accent); border-radius: 4px; }
+.choice { display: flex; gap: 10px; flex-wrap: wrap; margin: 18px 0; }
+.choice button { border: 2px solid #c3ccd4; background: #fff; border-radius: 10px; padding: 12px 18px; font-weight: 600; }
+.choice button[aria-pressed="true"] { border-color: var(--ok); background: var(--ok-bg); color: var(--ok); }
+.agenda { list-style: none; padding: 0; margin: 0; font-size: 15px; }
+.agenda li { padding: 7px 10px; border-radius: 6px; }
+.agenda li.cur { background: #e7f0f6; font-weight: 600; }
+.agenda li.done { color: var(--muted); }
+.agenda li.done::before { content: "✓ "; color: var(--ok); }
+
+/* Tables (management) */
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; color: var(--muted); font-weight: 600; font-size: 14px; padding: 10px; border-bottom: 1px solid var(--line); }
+td { padding: 12px 10px; border-bottom: 1px solid #edf0f3; }
+tr:last-child td { border-bottom: 0; }
+
+/* Access */
+.ticks { list-style: none; padding: 0; margin: 0; }
+.ticks li { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #edf0f3; gap: 12px; }
+.ticks li:last-child { border-bottom: 0; }
+.switch { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+
+.mgmt-only, .admin-only { display: none; }
+body.mgmt .mgmt-only, body.admin .admin-only { display: revert; }
+footer { text-align: center; color: var(--muted); font-size: 12px; padding-bottom: 24px; }
+
+@media (max-width: 800px) {
+  .meet { grid-template-columns: 1fr; }
+  .facts { grid-template-columns: 1fr; gap: 2px; }
+  .facts dd { margin-bottom: 10px; }
+  .items li button { flex-direction: column; align-items: flex-start; }
+  main { padding: 24px 16px 48px; }
+}
+</style>
+</head>
+<body>
+<div class="note">Design preview with sample data — not connected to SharePoint.</div>
+
+<header class="bar"><div class="bar-in">
+  <div class="brand">ESG Competency Hub</div>
+  <nav class="nav" aria-label="Main">
+    <button data-go="home" aria-current="page">Home</button>
+    <button data-go="mine">My actions</button>
+    <button data-go="area">My areas</button>
+    <button data-go="meeting">Meetings</button>
+    <button data-go="mgmt" class="mgmt-only">Management</button>
+    <button data-go="access" class="admin-only">Admin</button>
+  </nav>
+  <label class="role">Preview as
+    <select id="role" aria-label="Preview as role">
+      <option value="">Technician</option>
+      <option value="mgmt">Management</option>
+      <option value="mgmt admin">Administrator</option>
+    </select>
+  </label>
+</div></header>
+
+<main>
+
+<!-- HOME -->
+<section class="view active" id="v-home">
+  <h1>Good morning, Rachel</h1>
+  <p class="lead">Here is what needs your attention.</p>
+
+  <div class="row" style="margin-bottom:28px">
+    <button class="btn btn-main" data-go="raise">Raise an action</button>
+    <button class="btn" data-go="area">Go to my areas</button>
+  </div>
+
+  <p class="mgmt-only card" style="margin-top:0">9 actions are late across all areas. <a href="#" data-go="mgmt">View the management summary</a></p>
+
+  <div class="group">
+    <h2><span class="dot" style="background:var(--late)"></span>Late</h2>
+    <ul class="items">
+      <li><button data-go="action"><span><span class="title">Replace FH40 probe</span><span class="sub">Flask</span></span><span class="when w-late">2 days late</span></button></li>
+    </ul>
+  </div>
+  <div class="group">
+    <h2><span class="dot" style="background:var(--soon)"></span>Due this week</h2>
+    <ul class="items">
+      <li><button data-go="action"><span><span class="title">Update dosimetry issue log</span><span class="sub">Dosimetry</span></span><span class="when w-soon">Due Thursday</span></button></li>
+      <li><button data-go="action"><span><span class="title">Review RP survey frequencies</span><span class="sub">Radiological Protection</span></span><span class="when w-soon">Due Sunday</span></button></li>
+    </ul>
+  </div>
+  <div class="group">
+    <h2><span class="dot" style="background:#9aa5af"></span>Coming up</h2>
+    <ul class="items">
+      <li><button data-go="action"><span><span class="title">Check sampling line flow rates</span><span class="sub">Active Lab &amp; Sampling</span></span><span class="when w-later">Due 9 Nov</span></button></li>
+      <li><button data-go="action"><span><span class="title">Green Stream handover notes</span><span class="sub">Green Stream</span></span><span class="when w-later">Due 20 Nov</span></button></li>
+    </ul>
+  </div>
+
+  <p class="muted">Next meeting: <b>Flask, Wednesday 11 November</b>. <a href="#" data-go="meeting">See all meetings</a></p>
+</section>
+
+<!-- MY ACTIONS -->
+<section class="view" id="v-mine">
+  <h1>My actions</h1>
+  <p class="lead">Everything assigned to you, soonest first.</p>
+  <div class="row" style="margin-bottom:24px">
+    <label>Area <select class="f" style="width:auto"><option>All my areas</option><option>Flask</option><option>Dosimetry</option></select></label>
+  </div>
+  <ul class="items">
+    <li><button data-go="action"><span><span class="title">Replace FH40 probe</span><span class="sub">Flask</span></span><span class="when w-late">2 days late</span></button></li>
+    <li><button data-go="action"><span><span class="title">Update dosimetry issue log</span><span class="sub">Dosimetry</span></span><span class="when w-soon">Due Thursday</span></button></li>
+    <li><button data-go="action"><span><span class="title">Review RP survey frequencies</span><span class="sub">Radiological Protection</span></span><span class="when w-soon">Due Sunday</span></button></li>
+    <li><button data-go="action"><span><span class="title">Check sampling line flow rates</span><span class="sub">Active Lab &amp; Sampling</span></span><span class="when w-later">Due 9 Nov</span></button></li>
+    <li><button data-go="action"><span><span class="title">Green Stream handover notes</span><span class="sub">Green Stream</span></span><span class="when w-later">Due 20 Nov</span></button></li>
+  </ul>
+  <button class="btn-link">Show finished items</button>
+</section>
+
+<!-- ACTION -->
+<section class="view" id="v-action">
+  <button class="back" data-go="home">‹ Back</button>
+  <div class="card">
+    <p class="muted" style="margin:0">Flask · ACT-00042</p>
+    <h1>Replace FH40 probe</h1>
+    <p style="margin:0"><span class="when w-late">2 days late</span></p>
+    <dl class="facts">
+      <dt>What</dt><dd>The FH40 probe on the Flask bench failed its pre-use check. Replace it and return the old one for repair.</dd>
+      <dt>Who</dt><dd>Rachel Boulden (you). Raised by Kelly Bates.</dd>
+      <dt>When</dt><dd>Due 17 October. The deadline has been moved once (it was 10 October).</dd>
+    </dl>
+    <div class="row">
+      <button class="btn btn-main" data-go="update">Add an update</button>
+      <button class="btn" data-go="time">I need more time</button>
+      <button class="btn">Mark as done</button>
+    </div>
+    <button class="btn-link">More options</button>
+  </div>
+  <div class="card">
+    <h2>Updates</h2>
+    <ul class="updates">
+      <li><b>Rachel Boulden</b>, 15 October<br>Replacement probe ordered. Delivery expected 6 November.</li>
+      <li><b>Kelly Bates</b>, 9 October<br>The spare unit is also out of calibration.</li>
+      <li><b>Rachel Boulden</b>, 3 October<br>Fault confirmed and the old probe tagged out.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ADD UPDATE -->
+<section class="view" id="v-update">
+  <button class="back" data-go="action">‹ Back to the action</button>
+  <div class="card">
+    <h1>Add an update</h1>
+    <p class="lead">Replace FH40 probe</p>
+    <label class="f">What has happened?<textarea rows="4" placeholder="For example: probe arrived, fitting on Monday."></textarea></label>
+    <div class="row"><button class="btn btn-main" data-go="action">Save update</button><button class="btn" data-go="action">Cancel</button></div>
+  </div>
+</section>
+
+<!-- NEED MORE TIME -->
+<section class="view" id="v-time">
+  <button class="back" data-go="action">‹ Back to the action</button>
+  <div class="card">
+    <h1>I need more time</h1>
+    <p class="lead">Replace FH40 probe — currently due 17 October</p>
+    <label class="f">New deadline<input type="date" value="2026-10-30"></label>
+    <label class="f">Why do you need more time?<span>Everyone who can see this action can read the reason.</span><textarea rows="3">Replacement probe not delivered until 6 November.</textarea></label>
+    <div class="explain">The deadline will move to <b>Friday 30 October</b>. The original date stays on record, and you'll get a reminder a week before.</div>
+    <div class="row"><button class="btn btn-main" data-go="saved">Move the deadline</button><button class="btn" data-go="action">Cancel</button></div>
+  </div>
+</section>
+
+<section class="view" id="v-saved">
+  <div class="card">
+    <h1>Thanks — your request has been sent</h1>
+    <p>The new deadline will show on the action in a few minutes. You don't need to wait on this page.</p>
+    <div class="row"><button class="btn btn-main" data-go="home">Back to home</button></div>
+  </div>
+</section>
+
+<!-- RAISE -->
+<section class="view" id="v-raise">
+  <button class="back" data-go="home">‹ Back</button>
+  <div class="card">
+    <h1>Raise an action</h1>
+    <div class="steps" aria-hidden="true"><div class="on"></div><div></div><div></div></div>
+    <div class="step on" data-step="1">
+      <p class="muted">Step 1 of 3</p>
+      <label class="f">What needs doing?<span>A short title people will recognise.</span><input type="text" placeholder="For example: Replace FH40 probe"></label>
+      <label class="f">More detail<textarea rows="4"></textarea></label>
+    </div>
+    <div class="step" data-step="2">
+      <p class="muted">Step 2 of 3</p>
+      <label class="f">Which area is it for?<select class="f"><option>Flask</option><option>Instruments</option><option>Green Stream</option></select></label>
+      <label class="f">Who should do it?<input type="text" placeholder="Start typing a name"></label>
+    </div>
+    <div class="step" data-step="3">
+      <p class="muted">Step 3 of 3</p>
+      <label class="f">When does it need to be done by?<input type="date"></label>
+      <button class="btn-link">More options (priority, other areas, attachments)</button>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn" id="prev" style="display:none">Back</button>
+      <button class="btn btn-main" id="next">Next</button>
+    </div>
+  </div>
+</section>
+
+<!-- AREA -->
+<section class="view" id="v-area">
+  <div class="row" style="justify-content:space-between">
+    <h1>Flask</h1>
+    <label>Area <select class="f" style="width:auto"><option>Flask</option><option>Instruments</option><option>Green Stream</option><option>Dosimetry</option></select></label>
+  </div>
+  <p class="sentence">12 open actions, <b style="color:var(--late)">1 late</b>. Next meeting Wednesday 11 November.</p>
+  <div class="tabs" role="tablist">
+    <button role="tab" aria-selected="true">Actions</button><button role="tab">Notices &amp; issues</button><button role="tab">Calendar</button><button role="tab" data-go="meeting">Meetings</button>
+  </div>
+  <div class="row" style="margin-bottom:16px"><button class="btn btn-main" data-go="raise">Raise an action</button></div>
+  <ul class="items">
+    <li><button data-go="action"><span><span class="title">Replace FH40 probe</span><span class="sub">Rachel Boulden</span></span><span class="when w-late">2 days late</span></button></li>
+    <li><button data-go="action"><span><span class="title">Update Flask procedure FLK-03</span><span class="sub">Nick Pearce</span></span><span class="when w-soon">Due Friday</span></button></li>
+    <li><button data-go="action"><span><span class="title">Leak-test kit replacement quote</span><span class="sub">Matt Henley · waiting for a supplier</span></span><span class="when w-later">Due 3 Nov</span></button></li>
+    <li><button data-go="action"><span><span class="title">Contamination monitor checks</span><span class="sub">Steve Punnett · shared with Radiological Protection</span></span><span class="when w-later">Due 12 Nov</span></button></li>
+  </ul>
+  <button class="btn-link">Show all 12</button> · <button class="btn-link">Show finished items</button>
+</section>
+
+<!-- MEETING -->
+<section class="view" id="v-meeting">
+  <h1>Flask monthly meeting</h1>
+  <p class="lead">Wednesday 11 November · Chair: Kelly Bates</p>
+  <div class="meet">
+    <div class="card">
+      <p class="progress">Item 3 of 9 · Open actions</p>
+      <div class="bar-track"><div class="bar-fill" style="width:33%"></div></div>
+      <h2 style="font-size:22px">Replace FH40 probe</h2>
+      <p>Rachel Boulden · <span class="when w-late">2 days late</span> · deadline moved once</p>
+      <p class="muted">Latest update: "Replacement probe ordered. Delivery expected 6 November."</p>
+      <p style="margin-bottom:0"><b>What did the meeting decide?</b></p>
+      <div class="choice" id="choice">
+        <button aria-pressed="false">Discussed</button>
+        <button aria-pressed="false">Carry forward</button>
+        <button aria-pressed="false">Raise an action</button>
+      </div>
+      <label class="f">Notes (optional)<textarea rows="3" placeholder="For example: keep open until fitted."></textarea></label>
+      <div class="row"><button class="btn">Previous item</button><button class="btn btn-main">Next item</button></div>
+      <p class="muted" style="font-size:14px;margin-bottom:0">Everything you choose is saved straight away.</p>
+    </div>
+    <div class="card">
+      <h2>Agenda</h2>
+      <ol class="agenda">
+        <li class="done">Attendance</li>
+        <li class="done">Calibration rig out of service</li>
+        <li class="cur">Replace FH40 probe</li>
+        <li>Leak-test kit quote</li>
+        <li>Update procedure FLK-03</li>
+        <li>Closed since last meeting (2)</li>
+        <li>Leak-test kit ageing</li>
+        <li>Upcoming dates</li>
+        <li>Any other business</li>
+      </ol>
+      <button class="btn" style="width:100%;margin-top:12px">Finish meeting</button>
+    </div>
+  </div>
+</section>
+
+<!-- MANAGEMENT -->
+<section class="view" id="v-mgmt">
+  <h1>Management summary</h1>
+  <p class="sentence">84 open actions across 10 areas. <b style="color:var(--late)">9 are late</b>, and Green Stream has not met since 2 September.</p>
+  <div class="card">
+    <table>
+      <tr><th>Area</th><th>Open</th><th>Late</th><th>Next meeting</th></tr>
+      <tr><td>Flask</td><td>12</td><td><span class="when w-late">1 late</span></td><td>11 Nov</td></tr>
+      <tr><td>Instruments</td><td>8</td><td><span class="when w-ok">None</span></td><td>12 Nov</td></tr>
+      <tr><td>Green Stream</td><td>18</td><td><span class="when w-late">3 late</span></td><td><span class="when w-soon">Not booked</span></td></tr>
+      <tr><td>RPE</td><td>6</td><td><span class="when w-ok">None</span></td><td>18 Nov</td></tr>
+      <tr><td>BA</td><td>4</td><td><span class="when w-ok">None</span></td><td>13 Nov</td></tr>
+      <tr><td>Dosimetry</td><td>7</td><td><span class="when w-ok">None</span></td><td>19 Nov</td></tr>
+      <tr><td>Radiological Protection</td><td>21</td><td><span class="when w-late">2 late</span></td><td>17 Nov</td></tr>
+      <tr><td>DSL</td><td>5</td><td><span class="when w-ok">None</span></td><td>20 Nov</td></tr>
+      <tr><td>Active Lab &amp; Sampling</td><td>9</td><td><span class="when w-ok">None</span></td><td>24 Nov</td></tr>
+      <tr><td>Radwaste</td><td>6</td><td><span class="when w-late">3 late</span></td><td>12 Nov</td></tr>
+    </table>
+  </div>
+  <button class="btn-link">More detail (deadline changes, issues, flagged items, export)</button>
+</section>
+
+<!-- ACCESS -->
+<section class="view" id="v-access">
+  <h1>People &amp; access</h1>
+  <p class="lead">Choose a person to see and change the areas they can use.</p>
+  <label class="f" style="max-width:420px">Person<select class="f"><option>Kai Todd — Engineer</option><option>Rachel Boulden — Technician</option></select></label>
+  <div class="card">
+    <h2>Kai Todd's areas</h2>
+    <ul class="ticks">
+      <li><label><input type="checkbox" checked> Green Stream</label><span class="switch"><input type="checkbox" checked> Can run meetings</span></li>
+      <li><label><input type="checkbox" checked> Radiological Protection</label><span class="switch"><input type="checkbox" checked> Can run meetings</span></li>
+      <li><label><input type="checkbox" checked> Radwaste</label><span class="switch"><input type="checkbox" checked> Can run meetings</span></li>
+      <li><label><input type="checkbox"> Flask</label><span class="switch"></span></li>
+      <li><label><input type="checkbox"> Instruments</label><span class="switch"></span></li>
+      <li><label><input type="checkbox"> RPE</label><span class="switch"></span></li>
+    </ul>
+    <div class="row" style="margin-top:16px"><button class="btn btn-main">Save changes</button><button class="btn-link">View everyone at once</button></div>
+  </div>
+</section>
+
+</main>
+<footer>ESG Competency Hub · version 1.0.0 (preview)</footer>
+
+<script>
+(function () {
+  var views = document.querySelectorAll('.view');
+  var navMap = { action: 'home', update: 'home', time: 'home', saved: 'home', raise: 'home' };
+  function go(name) {
+    views.forEach(function (v) { v.classList.toggle('active', v.id === 'v-' + name); });
+    var navName = navMap[name] || name;
+    document.querySelectorAll('.nav button').forEach(function (b) {
+      if (b.dataset.go === navName) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    });
+    if (name === 'raise') setStep(1);
+    window.scrollTo(0, 0);
+  }
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-go]');
+    if (!t) return;
+    e.preventDefault();
+    go(t.dataset.go);
+  });
+
+  document.getElementById('role').addEventListener('change', function (e) {
+    document.body.className = e.target.value;
+    go('home');
+  });
+
+  var step = 1;
+  var prev = document.getElementById('prev'), next = document.getElementById('next');
+  function setStep(n) {
+    step = n;
+    document.querySelectorAll('.step').forEach(function (s) { s.classList.toggle('on', +s.dataset.step === n); });
+    document.querySelectorAll('.steps div').forEach(function (d, i) { d.classList.toggle('on', i < n); });
+    prev.style.display = n > 1 ? '' : 'none';
+    next.textContent = n === 3 ? 'Raise action' : 'Next';
+  }
+  next.addEventListener('click', function () { if (step < 3) setStep(step + 1); else go('saved'); });
+  prev.addEventListener('click', function () { setStep(step - 1); });
+
+  document.querySelectorAll('#choice button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('#choice button').forEach(function (o) { o.setAttribute('aria-pressed', 'false'); });
+      b.setAttribute('aria-pressed', 'true');
+    });
+  });
+})();
+</script>
+</body>
+</html>

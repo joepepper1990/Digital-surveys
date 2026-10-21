@@ -1,7 +1,7 @@
 # ESG Competency Hub — Planning Package (revision 3)
 
 **Environmental Safety Group, Dungeness B Power Station**
-**Status:** plan approved on 19 October 2026 (revision 3, after a second independent review, J.2). Each decision in I.4 is recorded in the Phase 0 decision log as it is confirmed. Nothing has been built, deployed or changed in SharePoint.
+**Status:** plan approved on 19 October 2026 (revision 3, after a second independent review, J.2); layout and access model decided on 21 October 2026. Each decision in I.4 is recorded in the Phase 0 decision log as it is confirmed. Nothing has been built, deployed or changed in SharePoint.
 
 ---
 
@@ -119,6 +119,8 @@ Legend:
 | Frontend: Welcome by Accelerator 365 with professional HTML, CSS and JavaScript. Backend: SharePoint lists and Power Automate. No SPFx, React or Power Apps. | **[You]** |
 | Welcome is installed and proven with the DSL and ESG 1-to-1 applications | **[You]** (supported by the 0.1 evidence for the 1-to-1) |
 | A new, dedicated SharePoint site | **[Answered]** — confirm at approval (D-05) |
+| Everyone can read every area; only members, and Team Leaders and the Group Head, can write (E.0) | **[You]**, 21 Oct 2026 |
+| Front-page layout: home tiles at full width (K2) | **[You]**, 21 Oct 2026 |
 | Flow and notification identity | **Open decision** (D-03). Your earlier answer ("my own account") is to be reconsidered, as you asked; options are in G.6. |
 | Everything else: list design, folder security, request queue, direct writes, flows, the transaction model, the UI design and visual style, the repository location, the test environment, the close-out rule, reminder frequencies, the meeting snapshot point, the amendment model, retention, and deferring PDF minutes | **[Rec]** — the decisions in I.4 |
 | Volumes, devices, latency and the tenant settings listed in 0.3 | **[Assumption]** |
@@ -257,7 +259,8 @@ Tabs: **Overview · Actions · Improvements & Degradations · Noticeboard · Cal
 | CMP-03 | Cross-competency actions are included and labelled "Shared with {areas}" |
 | CMP-04 | No scores |
 | CMP-05 | **History**: closed actions, resolved register entries, archived notices and finalised meetings, with search |
-| CMP-06 | Archived areas are read-only to management and administrators, hidden from members, and closed to new records |
+| CMP-06 | Archived areas are read-only to everyone, listed under "Archived areas", and closed to new records (amended by E.0) |
+| CMP-07 [You] | Every area is visible to everyone. Members of an area, and Team Leaders and the Group Head, can add and change things there; everyone else has read-only access (E.0). |
 
 ### B.3 Actions
 
@@ -625,6 +628,82 @@ on the row. **Finalise** is enabled once the meeting's pending-changes count is
 zero.
 
 ---
+
+### C.9 Simplified interface (revision after the first preview)
+
+**Why.** You reviewed the first clickable preview
+(`competency-hub/02-frontend/preview/competency-hub-preview.html`) and found it
+too busy for staff who are not confident with computers. It showed too much at
+once:
+
+- four number tiles and five cards on the home page;
+- symbols such as ⚠, ◷ and ↻ that need learning;
+- seven tabs per area;
+- every meeting control visible at the same time.
+
+This section replaces C.3 and C.4 wherever they conflict. **No functional
+requirement is removed**; less common features move one click deeper.
+
+**Design rules**
+
+1. **One question per page.** Home answers "What do I need to do?". An area
+   page answers "What is happening in this area?". A meeting page answers "What
+   are we discussing next?".
+2. **Plain words instead of symbols.** For example:
+   - "2 days late", not "⚠ Overdue 2d";
+   - "Due Friday", not "◷ 3 days";
+   - "Deadline moved once", not "↻1".
+
+   Colour supports the words and is never needed to understand them.
+3. **At most three main buttons per page**, written as verbs:
+   - "Add an update";
+   - "I need more time";
+   - "Mark as done".
+
+   Everything else sits under one "More options" link.
+4. **Short menus.** The menu shows only Home, My actions, My areas and Meetings.
+   Management and Admin appear only to people who hold those roles. Search
+   moves onto the pages where it is used. The pending counter and version
+   number leave the menu bar: pending changes show on the record itself, and
+   the version moves to a page footer.
+5. **Calm layout.** Body text is 16 px, with generous spacing, one accent colour
+   for actions, and red, amber and green only for urgency.
+6. **Show less, reveal on request.** Long lists show the first five items, with
+   "Show all". Closed and archived items sit behind "Show finished items".
+7. **Helpful empty states.** For example: "You have no actions due. Nice work."
+   or "Nothing is flagged for the next meeting. Use 'Add to next meeting' on
+   any notice."
+
+**Page designs**
+
+| Page | Simplified design |
+|---|---|
+| Home | Greeting, then **one list of my actions** grouped as *Late*, *Due this week* and *Coming up*, each line saying in words when it is due. Two buttons: **Raise an action** and **Go to my areas**. One small "Next meetings" line. Notices and dates move to the area pages. Management users also see one line, "9 actions are late across all areas – view dashboard". |
+| My actions | The same grouped list, plus one filter, "Area", and "Show finished items" |
+| Area | Header with the area name and **one summary sentence**, e.g. "12 open actions, 1 late. Next meeting Wed 11 Nov." Four tabs: **Actions · Notices & issues · Calendar · Meetings**. *Notices & issues* combines the Noticeboard with Improvements & Degradations, using a type filter. History becomes "Show finished items" in each tab. |
+| Action | One card: **What** (title and description), **Who** (owner, raised by), **When**, e.g. "Due 17 Oct – 2 days late. Deadline moved once (was 10 Oct)". Three buttons: **Add an update**, **I need more time**, **Mark as done**. Below are the updates in plain sentences. Other actions sit under "More options": reassign, close, share with another area, evidence. |
+| Raise an action | A three-step guided form, with Back and Next: (1) What needs doing? (2) Who and which area? (3) By when? — then a summary with **Raise action**. Optional fields stay behind "More options". |
+| Need more time | One date picker and one "Why?" box, with the effect explained: "The new deadline will be 30 Oct. Your manager can see the reason." |
+| Meeting | **Go through the agenda one item at a time.** The page shows a progress line, e.g. "Item 3 of 11 – Open actions", with the current item large and three answer buttons: **Discussed**, **Carry forward**, **Raise an action**, plus a notes box and **Next item**. An "Agenda" list on the side lets the chair jump to any item. Attendance is a simple tick list at the start. Finalising happens on a closing summary screen. |
+| Management dashboard | One sentence summary, then one table: area, open, late, next meeting, with words and colour. Clicking a number opens the list. Extension and degradation details move under "More detail". |
+| People & Access | Admin only. Choose a person, then see **their areas as a tick list** with "Can run meetings" switches. This replaces the 10-column matrix; the matrix stays available as "View all" for administrators. |
+
+**Validation with real users.** In Phase 1, before building the full UI, the
+revised clickable preview is tried by three to five technicians who are not
+confident with computers. Each is asked to:
+
+- find their late action;
+- ask for more time;
+- add an update;
+- record an outcome in a meeting.
+
+We change anything they stumble on. The result is recorded in
+`TEST_REPORT_<v>.md` as T-UI-13. The plan estimates 1–2 days for this, within
+Hardening.
+
+**Effect on scope.** No requirement is removed. Merging the two tabs and the
+guided forms are presentation changes. The data model, permissions and flows
+are unchanged.
 
 ## D. Data specification
 
@@ -1218,6 +1297,72 @@ faster routine operations.
 
 ## E. Permissions specification
 
+### E.0 Access model: everyone reads every area, members change their own **[You, 21 Oct 2026]**
+
+**Your decision.** Every member of staff can **see** every competency area, so
+each area is transparent to the whole group. Only these people can **add or
+change** things in an area:
+
+- the area's own members (its engineers and technicians);
+- Team Leaders and the Group Head, who can add and change things in every area.
+
+This section replaces the earlier assumption that people see only their own
+areas. Where E.2–E.6, F.1.3 or B conflict with it, this section wins.
+
+| Person | Their own areas | Every other area |
+|---|---|---|
+| Technician | Read and contribute: post updates and notices, flag items, raise actions, keep their own calendar entries, and act as owner on their actions | **Read only** |
+| Engineer | As a technician, plus the action-manager and meeting-administrator rights in E.3 | **Read only** |
+| Team Leader, Group Head | Everything, in all areas | — |
+| System administrator | The admin role adds no operational rights. Administrators can read every area, as everyone can. | Read only, unless also a member |
+
+**What a read-only visitor can do** in an area that isn't theirs:
+
+- see its actions, notices and issues, calendar, meetings and finalised minutes;
+- **not** raise, comment, flag, extend, post or edit there.
+
+The UI marks such pages "View only", and the server enforces the rule.
+
+**Assumption to confirm (A-1).** Whether a read-only visitor may **flag an item
+for an area's meeting** or **comment**. Recommended: no, keep strictly read-only.
+Members can raise matters on a visitor's behalf.
+
+**Changes to the design:**
+
+1. **Reading.** The All Users group gets **Read** on each list's competency
+   folders, so no per-area read grants are needed. These stay restricted:
+   - other people's request folders;
+   - the History folders `Administration` and `Transactions`;
+   - the Notification Log;
+   - the Records Export library;
+   - hidden comments.
+2. **Writing is unchanged in principle.**
+   - Members and management get **Add** (Updates, Noticeboard) or
+     **Contribute** (Calendar, open meeting `Record`) on their area's
+     `{Key}` folders.
+   - Every queued request still checks membership on the server (F.1.2 step 6).
+   - Non-members' writes are refused by SharePoint and by the flows.
+3. **Cross-competency actions become simpler.** Linking or unlinking an area no
+   longer changes who can *read* the action. It only changes who may *write*
+   updates in its `A{id}` folder. Item-level read grants and read revocations
+   are no longer needed.
+4. **Fewer unique permission scopes.** Item-level scopes now exist only for:
+   - write access on cross-competency actions;
+   - hidden comments;
+   - moderated calendar entries.
+5. **Archived areas** (CMP-06, as amended) are **read-only for everyone** and
+   listed under "Archived areas", rather than hidden. No new records can be
+   added.
+6. **Search** covers all areas for everyone (SRC-03 applies to all staff).
+7. **Notifications** are unchanged. Emails still go only to the people
+   involved.
+
+**Security note.** This widens who can *read* area records to all Hub users.
+It suits operational transparency, but confirm that no area holds information
+that should be restricted, for example personal or security-sensitive
+content (C-13). If any does, that content needs a separate restricted
+location, not the general area pages.
+
 ### E.1 People and initial memberships [Brief] (checked against the brief)
 
 ✓ means the person is a member of that competency. Joe Pepper, Mark Wellstead and
@@ -1290,7 +1435,7 @@ Notes on the seed data:
 
 | Concept | Source of truth | Grants |
 |---|---|---|
-| Competency membership [Brief] | Competency Members → group "Competency Hub – {Name} Members" | Read; add updates, flags and notices; edit own calendar entries |
+| Competency membership [Brief; E.0] | Competency Members → group "Competency Hub – {Name} Members" | Write rights in that area: add updates, flags and notices; edit own calendar entries. Reading every area comes from All Users (E.0). |
 | Action ownership [Brief] | `Actions.AssignedTo` | Owner operations |
 | Action manager [Rec, derived from Brief §9.3] | Raiser, area engineers, meeting administrators, management | Management operations on actions |
 | Meeting administration [Brief/Rec] | `Competency Members.CanManageMeetings` | Meeting lifecycle; area moderation; Contribute on the open meeting's `Record` folder; may chair meetings (as may management) |
@@ -1309,7 +1454,7 @@ the area; Mgmt = management; Admin = system administrator.
 
 | Operation | Member | Owner | Raiser | Eng | MA | Mgmt | Admin* |
 |---|---|---|---|---|---|---|---|
-| View area records | ✓ | | | ✓ | ✓ | ✓ | ✓ |
+| View area records (every area, for every Hub user: E.0) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Raise action | ✓ | | | ✓ | ✓ | ✓ | |
 | Post progress update or comment (instant) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
 | Change status, record a blocker | | ✓ | ✓ | ✓ | ✓ | ✓ | |
@@ -2785,6 +2930,7 @@ A second developer would shorten the elapsed time, but not the total effort.
 | C-09 | Retention, and Purview labels |
 | C-10 | Devices and browsers; meeting patterns; go-live date |
 | C-11 | Welcome is available, and licensed, on the new site |
+| C-13 | No area holds information that must be hidden from other ESG staff (E.0). If any does, it needs a separate restricted location. |
 | C-12 | Service accounts are permitted (licence, Conditional Access/MFA for connections), and a shared mailbox is available with Send As and Full Access for the flow account, keeping copies of sent items (D-03) |
 
 ### I.3 Prepared fallbacks
@@ -2969,6 +3115,180 @@ in section A:
 3. C-01 to C-03, C-11 and C-12 are confirmed, and the site exists.
 
 ---
+
+## K3. What happens next (current task)
+
+**Context.** The plan (revision 3) is approved. The front-page layout is chosen
+(tiles at full width), and so is the access model (everyone reads every area;
+members, Team Leaders and the Group Head write). Nothing has been built against
+SharePoint yet. The next steps fall into three groups.
+
+### 1. My next step, on approval of this section
+
+1. **Commit and push** to the designated branch:
+   - the updated plan, as `competency-hub/docs/IMPLEMENTATION_PLAN.md`;
+   - the chosen layout preview.
+
+   Layouts A and B stay in `02-frontend/preview/` for reference.
+2. **Build the Phase 0 probe pages** so they are ready for when the site exists.
+   These are small Welcome layouts and a short instruction sheet, covering:
+   - P-01: Welcome loads and can read the site;
+   - P-03, P-04 and P-13: folder permissions, request folders and add-only
+     writes;
+   - P-07: dates;
+   - P-09: back-button behaviour.
+
+   Each probe records its result on screen for you to screenshot. They create
+   nothing until you run them on the new site.
+3. **Start the Phase 1 frontend locally**, against the mock SharePoint only,
+   with no tenant access:
+   - the project scaffold, build and tests;
+   - the shared helpers adapted from the 1-to-1;
+   - the real application shell in the chosen tiles layout, with role-based
+     front pages and view-only areas.
+
+   This is low-risk work that Phase 0 results won't change. The backend flows
+   wait for Phase 0.
+
+### 2. What I need from you (no rush, but they gate later phases)
+
+| Item | Why it matters |
+|---|---|
+| **A-1:** may non-members flag or comment in other areas? (Recommendation: no) | Finalises the view-only rules |
+| **C-13:** confirm no area holds information that must be hidden from other ESG staff | Confirms that everyone-reads is safe |
+| **D-03:** the flow account. A service account with a shared mailbox (recommended), or your account with a shared mailbox | Needed before any flow is built in the tenant |
+| **D-04:** two flow co-owners, who must be Site Collection Administrators | Continuity |
+| **C-04 / C-05:** user principal names (UPNs) for the 28 people, the spelling of "Harrisson", and who is Team Leader and who is Group Head | For the seed import |
+
+### 3. What needs IT, the tenant, or your explicit permission
+
+These are the Phase 0 gates; each needs your go-ahead before anything is changed:
+
+1. The new site is created, with UK regional settings and owner-only sharing
+   (C-01 to C-03).
+2. Welcome is confirmed as available and licensed on that site (C-11).
+3. The service account and shared mailbox, if D-03 option A is chosen (C-12).
+4. DLP allows the SharePoint and Outlook connectors together (C-02).
+5. You upload and run the probe pages, then send me the screenshots. I then
+   write the probe report, apply the fallbacks and re-estimate.
+
+**Verification for step 1.**
+
+- The build passes, and the unit and browser tests pass on the mock.
+- The shell is screenshotted for all three roles at 1,920, 1,366 and 768 px.
+- The probe pages render locally with a fake Welcome context.
+- Nothing touches SharePoint.
+
+## K2. Chosen layout: C (home tiles) at full width
+
+**Context.** You chose layout C (home tiles). On a wide screen it currently sits
+in a narrow centred column: the page width is capped at 1,180 px, and the 10
+area tiles fall into rows of 4 + 4 + 2. You want it to use the full width of the
+screen.
+
+**Changes** to `layout-c-tiles.html`, made in the build sources
+(`shells.css` and `shared.js`) and then regenerated:
+
+1. **Remove the width cap for layout C.** `.layout-c main` gets no maximum
+   width, with 32 px side padding (16 px on small screens).
+2. **Tiles fill the row evenly.** The grid fits as many columns as there is
+   room for (each at least 240 px wide). On a 1,600 px or wider screen this
+   gives 10 areas as **2 rows of 5**, and a technician's 6 areas as one row of
+   6. It collapses gracefully on smaller screens: 3–4 columns on a laptop, 2 on
+   a tablet, 1 on a phone.
+3. **Lower section uses the width too.** On wide screens (1,400 px and above)
+   the cards below the tiles sit in **3 columns** instead of 2:
+
+   | Role | Column 1 | Column 2 | Column 3 |
+   |---|---|---|---|
+   | Management | Needs your attention | Your own actions | Coming meetings |
+   | Engineer | For you to manage | Your actions | Next meetings and New in your areas |
+   | Technician | Your actions | Next meetings | New in your areas |
+
+   Below 1,400 px it falls back to 2 columns, and below 900 px to 1.
+4. **Area pages** (after clicking a tile) also go full width. The area pill
+   strip stays at the top.
+5. Layouts A and B are left as they are, for reference.
+
+**Verification.** Screenshot layout C in headless Chromium at 1,920, 1,366 and
+768 px for all three roles. Check that there is no horizontal scrolling, that
+management sees 2 rows of 5 at 1,920 px, and that there are no script errors.
+Then send you the updated file with the 1,920 px screenshot.
+
+## K1. Three layout options to choose from
+
+**Context.** You want three separate HTML layouts to choose from. The front page
+must suit each role:
+
+- **Group Head and Team Leaders**: a good overview of everything, across all
+  ten areas.
+- **Technicians**: a separate tab for each of their competencies, and a useful
+  overview front page.
+- **Engineers**: the same, plus what they need as meeting administrators and
+  action managers.
+
+All three layouts follow the plain-language rules in C.9: words rather than
+symbols, at most three main buttons, and calm spacing. They differ only in
+**layout and navigation**.
+
+**Files.** Each is self-contained, with sample data, a "Preview as" switch
+(Technician / Engineer / Group Head or Team Leader) and no SharePoint
+connection. They are saved in `competency-hub/02-frontend/preview/`:
+
+| File | Layout | How competencies are shown | Character |
+|---|---|---|---|
+| `layout-a-tabs.html` | **A. Top tabs.** The menu bar, then a row of tabs: **Overview** followed by one tab per competency the person belongs to (management: all ten) | Each tab is a full page for that area | Familiar, like browser tabs; best when people belong to 2–6 areas |
+| `layout-b-sidebar.html` | **B. Side menu.** A fixed left column listing *My overview*, then each competency with a small late count beside it; content on the right | Click an area in the side menu | Everything is visible at once; scales to 10 areas; works like Outlook folders |
+| `layout-c-tiles.html` | **C. Home tiles.** The front page is a grid of large tiles, one per competency, each showing plain status ("2 late · meeting Wed"). A tile opens that area, with a "Back to overview" link; the selected area also appears as a tab strip | Tiles on the front page, then tabs inside | The most visual and the most touch-friendly; good for tablets |
+
+**What the front page shows, by role (the same content in every layout):**
+
+| Role | Overview content |
+|---|---|
+| Technician | My actions grouped as *Late*, *Due this week* and *Coming up*; my next meetings; new notices in my areas (the latest 3); buttons **Raise an action** and **Add a notice** |
+| Engineer | Everything a technician sees, plus a **"For you to manage"** panel: actions waiting for a close-out check, actions in my areas that are late, items flagged for meetings I run, and my next meeting to prepare, with a **Start meeting** button |
+| Group Head / Team Leader | **Group overview:** one summary sentence (e.g. "84 open actions, 9 late, 1 area with no recent meeting"). An **area status table or tiles** for all ten areas (open, late, deadlines moved twice or more, next meeting). A **"Needs your attention"** list: late items, areas without a meeting for over 35 days, unresolved degradations and items flagged for discussion. Their own actions sit below. |
+
+**Each competency tab or page** (all roles) shows the area's one-line summary,
+then sub-sections for:
+
+- Actions;
+- Notices & issues;
+- Calendar;
+- Meetings.
+
+Engineers and management see management buttons there, such as *Start meeting*
+and *Review close-outs*.
+
+**Verification.**
+
+1. Render each file in headless Chromium for all three
+   roles at 1366 px, plus the technician view at 768 px.
+2. Check that there are no script errors and no horizontal scrolling.
+3. Send you the three HTML files and a contact sheet of screenshots for
+   side-by-side comparison.
+
+Nothing is committed unless you ask. Once you have chosen a layout, it replaces
+C.3 and C.4 in the plan.
+
+## K0. Next step after this revision: rebuild the preview
+
+1. Replace `competency-hub/02-frontend/preview/competency-hub-preview.html` with
+   a calm, simplified clickable preview that follows C.9:
+   - Home with the grouped action list;
+   - an action card with three buttons;
+   - the three-step Raise form;
+   - the "I need more time" dialog;
+   - an area page with four tabs;
+   - a one-item-at-a-time meeting;
+   - a simple management view;
+   - a person-centred access page.
+
+   It is still sample data only, with no SharePoint connection.
+2. Check it in Chromium at 1366 px and 768 px, and capture screenshots for
+   review.
+3. Send the preview to you. Commit the preview and the updated plan section to
+   the designated branch only if you ask.
 
 ## K. After approval
 
