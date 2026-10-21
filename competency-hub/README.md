@@ -11,13 +11,13 @@ This project is separate from the other applications in this repository.
 
 ## Status
 
-**Planning approved (19 October 2026). Nothing has been deployed to the site.**
+**Planning approved (19 October 2026). The site structure is in place; the app is not yet deployed.**
 
 | Part | State |
 |---|---|
 | Probe P0 (`probe/`) | Passed on the site, 21 October 2026 |
 | App shell (`02-frontend/`) | Built and tested locally against a simulated SharePoint site |
-| Setup page (`setup/`) | Built and tested locally; ready for the owner to run Check (see its README) |
+| Setup page (`setup/`) | Applied on the site, 21 October 2026: lists, groups, folders, permissions and the first administrator are in place |
 | Flows | Not started (Phases 1–2) |
 
 See section K of the plan for the current step.

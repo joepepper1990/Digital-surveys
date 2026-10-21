@@ -1,7 +1,7 @@
 # ESG Competency Hub — Planning Package (revision 3)
 
 **Environmental Safety Group, Dungeness B Power Station**
-**Status:** plan approved on 19 October 2026 (revision 3, after a second independent review, J.2); layout, access model, flow account, management roles and site decided on 21 October 2026 (E.0, K4, K5); probe P0 passed on the site on 21 October 2026 and the Setup page built and tested locally (K6). Remaining decisions in I.4 are recorded in the Phase 0 decision log as they are confirmed. Nothing has been deployed to the site yet.
+**Status:** plan approved on 19 October 2026 (revision 3, after a second independent review, J.2); layout, access model, flow account, management roles and site decided on 21 October 2026 (E.0, K4, K5); probe P0 passed and Setup applied on the site on 21 October 2026 (K6). Remaining decisions in I.4 are recorded in the Phase 0 decision log as they are confirmed. The app itself has not been deployed yet.
 
 ---
 
@@ -3298,6 +3298,52 @@ site.
   changed by hand in each group's settings if wanted.
 - **Size:** a full Apply on the empty site makes about 880 SharePoint requests;
   allow a few minutes with the page open.
+
+### K6.6 Setup applied on the site (EDF RECORD, 21 Oct 2026 15:22 UTC)
+
+**Result.** Apply finished with no stops and no warnings. It created:
+
+- the 3 permission levels;
+- the 13 groups;
+- the 15 lists and the library, with their settings and all columns;
+- 113 folders;
+- every list and folder permission in E.0/E.4;
+- the 23 settings and the 10 areas;
+- you (site user 7) as Team Leader and first administrator, with your request folder and memberships of All Users, Management and Administrators;
+- All Users Read on both Welcome lists.
+
+**What else this proves on the real site:**
+
+- Column definitions, unique and indexed columns, and the list settings all work.
+- Folders can be created through REST.
+- Breaking inheritance left no unexpected grants: the log has no "also grants access" warning.
+- The Tracking Start date round trip is correct: no date warning. This is part of P-07.
+- The OData fix (K6.5) works.
+
+`Hub.aspx` does not exist yet, as expected. The app's list names (`02-frontend/src/core/config.js`) match the schema titles and URLs.
+
+**Next (your steps, each changing the site):**
+
+1. **Confirmation run.** Reload HubSetup and run **Check**. It should report no changes, only "already in place". Send the log. This proves on the site that Setup can safely be run again.
+2. **App page:**
+   - create `Hub` with Welcome in a full-width (or one-column) section;
+   - upload the `2-App` files;
+   - choose the layout *ESG Competency Hub*;
+   - turn off News, Slides, Background, Search, Greeting, Weather and Time;
+   - publish.
+3. **Open the app page.** Run **Apply** on HubSetup once more. This should change only `Hub.aspx`, giving All Users Read. Send the log.
+4. **Tidy up.**
+   - Delete `CH_Setup.html`, `CH_Setup.js` and the HubSetup page.
+   - Check that the default *Members* and *Visitors* site groups are empty.
+5. **Look at the real app** on `Hub`. It should greet you as a Team Leader and show the 10 areas, all empty. Send a screenshot.
+
+**My step once you approve:** record K6.6 in the repository copy of the plan and in `setup/README.md` ("applied on the site"), then commit and push. Nothing else changes in the code.
+
+**Then:**
+
+- **C-04:** the other 25 sign-in names, for the people import (a Setup re-run).
+- **Probe P1:** needs two test accounts.
+- **The next build increment:** raising and updating actions (the request queue and the first flows).
 
 ### K6.5 Fix: Apply stopped at its first write (EDF RECORD, 21 Oct 2026)
 

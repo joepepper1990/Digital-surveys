@@ -19,6 +19,9 @@ It creates, from `../04-solution/schema/schema.json`:
 | People import | Optional. One line per person: `email, role, area keys` |
 | App page access | All Users get Read on the Welcome layouts library, the Welcome errors list and `Hub.aspx` (when it exists) |
 
+**Status:** applied on the site on 21 October 2026, with no stops or warnings
+(plan K6.6). Run it again after creating `Hub.aspx` to open that page to All Users.
+
 **Check** changes nothing and lists what Apply would do. **Apply** needs `SETUP`
 typed first. It only adds what is missing, never deletes or changes anything it
 finds that differs from the plan (it reports it and stops instead), reads every
