@@ -1,7 +1,7 @@
 # ESG Competency Hub — Planning Package (revision 3)
 
 **Environmental Safety Group, Dungeness B Power Station**
-**Status:** plan approved on 19 October 2026 (revision 3, after a second independent review, J.2); layout, access model, flow account, management roles and site decided on 21 October 2026 (E.0, K4, K5); probe P0 passed and Setup applied on the site on 21 October 2026 (K6). Remaining decisions in I.4 are recorded in the Phase 0 decision log as they are confirmed. The app itself has not been deployed yet.
+**Status:** plan approved on 19 October 2026 (revision 3, after a second independent review, J.2); layout, access model, flow account, management roles and site decided on 21 October 2026 (E.0, K4, K5); probe P0 passed, Setup applied and the Hub page opened to all staff on 21 October 2026 (K6). Remaining decisions in I.4 are recorded in the Phase 0 decision log as they are confirmed.
 
 ---
 
@@ -3298,6 +3298,33 @@ site.
   changed by hand in each group's settings if wanted.
 - **Size:** a full Apply on the empty site makes about 880 SharePoint requests;
   allow a few minutes with the page open.
+
+### K6.8 Hub page opened to All Users (EDF RECORD, 21 Oct 2026 15:50 UTC)
+
+**Results.**
+
+- **Confirmation Check (15:42 UTC):** every row was OK, with no changes. This
+  proves on the site that Setup can safely be run again, and that the K6.7 fix
+  works.
+- **Apply after creating `Hub.aspx` (15:50 UTC):** it made exactly one change,
+  *Set permissions on "Hub.aspx page": AllUsers Read*. Everything else was
+  already in place.
+
+**Next (your steps):**
+
+1. Open the Hub page, reload it with Ctrl+F5, and send a screenshot.
+2. Tidy up (HOW-TO Part C):
+   - delete the Setup files and the HubSetup page;
+   - check that the default Members and Visitors groups are empty.
+
+**My step once you approve:** record K6.7 and K6.8 in the repository copy of
+the plan, then commit and push. No code changes.
+
+**Then:**
+
+- C-04: the 25 sign-in names, for the people import;
+- probe P1, with two test accounts;
+- the next build increment: raising and updating actions.
 
 ### K6.7 Confirmation Check reports list and folder permissions as missing (21 Oct 2026)
 
