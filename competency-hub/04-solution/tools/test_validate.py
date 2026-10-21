@@ -4,7 +4,6 @@
 import copy
 import io
 import json
-import subprocess
 import sys
 import unittest
 import zipfile
@@ -114,8 +113,7 @@ class BrokenFlowsAreRejected(unittest.TestCase):
 class BrokenPackagesAreRejected(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.ref = zipfile.ZipFile(io.BytesIO(subprocess.run(['git', 'show', check_package.REF_GIT], capture_output=True, check=True,
-                                                            cwd=build_solution.ROOT).stdout))
+        cls.ref = zipfile.ZipFile(io.BytesIO(check_package.reference_bytes()))
         cls.files, _, _ = build_solution.build()
 
     def package(self, edit):

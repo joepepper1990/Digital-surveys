@@ -3,7 +3,7 @@ packed by Microsoft's pac CLI. Compares, element by element, the zip's file layo
 endings, solution.xml, customizations.xml (each Workflow element and connection reference), the environment
 variable definitions and [Content_Types].xml. Also re-checks the packed flows (validation, nesting, size).
     python3 check_package.py [reference.zip]
-Without a reference path it reads the 1-to-1 zip from the repository (git show of its branch).
+Without a reference path it reads the 1-to-1 zip from this repository's history.
 """
 import io
 import json
@@ -16,7 +16,16 @@ import zipfile
 import build_solution
 import validate
 
-REF_GIT = 'origin/claude/esg-technician-1-to-1-607sc3:one-to-one/04-solution/ESGOneToOne_1_5_0_1_unmanaged.zip'
+REF_PATH = 'one-to-one/04-solution/ESGOneToOne_1_5_0_1_unmanaged.zip'
+
+
+def reference_bytes():
+    """The 1-to-1 zip from whichever branch of this repository holds it."""
+    commit = subprocess.run(['git', 'log', '--all', '-1', '--format=%H', '--', REF_PATH], capture_output=True, text=True, check=True,
+                            cwd=build_solution.ROOT).stdout.strip()
+    if not commit:
+        raise SystemExit('The ESG 1-to-1 reference zip was not found in this repository; pass its path as an argument.')
+    return subprocess.run(['git', 'show', commit + ':' + REF_PATH], capture_output=True, check=True, cwd=build_solution.ROOT).stdout
 
 
 def kind(name):
@@ -129,7 +138,7 @@ def main():
     if len(sys.argv) > 1:
         ref_bytes = open(sys.argv[1], 'rb').read()
     else:
-        ref_bytes = subprocess.run(['git', 'show', REF_GIT], capture_output=True, check=True, cwd=build_solution.ROOT).stdout
+        ref_bytes = reference_bytes()
     ref = zipfile.ZipFile(io.BytesIO(ref_bytes))
     ours = zipfile.ZipFile(build_solution.ZIP)
     probs = compare(ref, ours) + own_checks(ours)
