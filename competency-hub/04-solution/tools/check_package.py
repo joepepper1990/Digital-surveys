@@ -21,7 +21,7 @@ REF_PATH = 'one-to-one/04-solution/ESGOneToOne_1_5_0_1_unmanaged.zip'
 
 def reference_bytes():
     """The 1-to-1 zip from whichever branch of this repository holds it."""
-    commit = subprocess.run(['git', 'log', '--all', '-1', '--format=%H', '--', REF_PATH], capture_output=True, text=True, check=True,
+    commit = subprocess.run(['git', 'log', '--all', '-1', '--format=%H', '--', ':/' + REF_PATH], capture_output=True, text=True, check=True,
                             cwd=build_solution.ROOT).stdout.strip()
     if not commit:
         raise SystemExit('The ESG 1-to-1 reference zip was not found in this repository; pass its path as an argument.')
