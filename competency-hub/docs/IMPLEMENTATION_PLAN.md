@@ -2923,7 +2923,7 @@ A second developer would shorten the elapsed time, but not the total effort.
 | C-01 | **Resolved 21 Oct 2026:** the site `/sites/ESGCompetencyHub` was created by you, with UK regional settings. Because your own account runs the flows (D-03), you are already its owner. |
 | C-02 | The environment for the flows, and DLP (SharePoint including the HTTP action, Office 365 Outlook) |
 | C-03 | Limited-access lockdown is off on the site |
-| C-04 | Sign-in names for the 25 engineers and technicians (management addresses supplied 21 Oct 2026); the spelling of "Harrisson" |
+| C-04 | **Resolved 21 Oct 2026:** sign-in names for all 28 people confirmed (firstname.lastname, full first names; kept out of the repository); "Harrisson" confirmed (K6.10) |
 | C-05 | **Resolved 21 Oct 2026:** Robert Starbuck is Group Head; Joe Pepper, Mark Wellstead and Nathan Tilly are Team Leaders |
 | C-06 | The initial system administrators (with their roles) and the flow co-owners, who hold a privileged role (D-04) |
 | C-07 | IT code-review requirements for custom JavaScript |
@@ -3299,6 +3299,53 @@ site.
 - **Size:** a full Apply on the empty site makes about 880 SharePoint requests;
   allow a few minutes with the page open.
 
+### K6.10 People list confirmed (C-04 resolved, 21 Oct 2026)
+
+**Context.** You supplied the corrected sign-in list: 25 engineers and
+technicians, plus Mark Wellstead and Nathan Tilly (Team Leaders) and Robert
+Starbuck (Group Head).
+
+- **First names:** Ben, Dave, Matt, Steve and Jenn use their full first names
+  (Benjamin, David, Matthew, Stephen and Jennifer). Doti's address has no
+  hyphen.
+- **Spelling:** "Harrisson" is confirmed.
+
+**You are not on the list, and don't need to be.** Setup already made you the
+first administrator, as a Team Leader:
+
+- People entry;
+- request folder;
+- membership of All Users, Management and Administrators.
+
+Management sees and acts in every area through its role, so area memberships
+are not needed. If you were included, Setup would leave your entry unchanged.
+
+**The list matches E.1:** 79 engineer and 73 technician memberships, 152 in
+total. I checked it against the format Setup reads (`setup/src/engine.js`,
+`parsePeople`).
+
+**Data rule:** the real addresses are not committed to the repository. The plan
+records only that C-04 is resolved.
+
+**Your steps** (each changes the site and gives the 28 people access to the
+Hub):
+
+1. Re-upload the `1-Setup` files.
+2. Recreate the HubSetup page with the *Competency Hub Setup* layout.
+3. Paste the list under *Optional: add other people now* and run **Check**.
+   - Expect "Would look up …" for most people. Check only finds people who have
+     already visited a site.
+   - Send me the log.
+4. Run **Apply**. Expect about 700 SharePoint requests, so allow several
+   minutes.
+   - Any address that can't be found is reported and skipped, and the rest are
+     added.
+   - Send me the log.
+5. Delete the Setup files and the HubSetup page again.
+
+**My step once you approve:** mark C-04 resolved in the plan, with no
+addresses, and commit and push. No code changes.
+
 ### K6.9 Make the app fill the screen and read comfortably (app 0.1.2)
 
 **Context.** The app now runs full width on the Hub page (screenshot, 21 Oct
@@ -3616,7 +3663,7 @@ changed.
 | D-04 co-owners | **None for now** | D-04 = none **[You]**. <br>• The Setup *Recover administrator* path depends on you as the only owner. <br>• R-03 is raised to High impact. <br>• The handover drill in Phase 6 is replaced by a written handover note. |
 | A-1 non-member rights | **Non-members can post a notice on any area's noticeboard, and nothing else** (for example a request, a need or an improvement idea) | E.0 is amended: <br>• All Users get **Add** on every area's Noticeboard folder; nothing else changes. <br>• Notices from non-members are labelled *"From {name}, {their area}"*. <br>• The area's meeting administrators are notified once a day in the existing digest. <br>• They can flag the notice for the meeting, or archive it, as usual. <br>• Non-members cannot comment on, flag or edit anything else. <br>Test T-PERM-16 is added. |
 | C-13 restricted content | **Confirmed: nothing needs hiding from other ESG staff** | C-13 is closed. E.0 stands as written. |
-| Management roles (C-05) | **Group Head: Robert Starbuck** (`robert.starbuck@edf-energy.com`). **Team Leaders:** Joe Pepper (`joseph.pepper@edf-energy.com`), Mark Wellstead (`mark.wellstead@edf-energy.com`), Nathan Tilly (`nathan.tilly@edf-energy.com`) | E.1 is updated: **Robert Starbuck is added as person 29**, Group Head, with all areas by role. Email addresses are stored in lower case, because matching ignores case. |
+| Management roles (C-05) | **Group Head: Robert Starbuck**. **Team Leaders:** Joe Pepper, Mark Wellstead, Nathan Tilly | E.1 is updated: **Robert Starbuck is added as person 29**, Group Head, with all areas by role. Email addresses are stored in lower case, because matching ignores case. |
 
 **Still open:**
 
