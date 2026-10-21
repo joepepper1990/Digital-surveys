@@ -232,14 +232,15 @@ def flow_request_queue():
         """{list}/{area}/A{id}: found by its address, created if missing."""
         path = "@{outputs('Ids')?['" + root_key + "']}/@{" + area_expr + "}"
         values, call = create_in_folder(key, path, 'Folder_values' + sfx, 'Folder_body' + sfx, leaf_expr='@{' + leaf_expr + '}')
+        # by its address, not a list query: a list query on FileRef would stop working once the list passes 5,000 items
         return [
-            ('Find_folder' + sfx, http('GET', L(key, "/items?$select=Id&$filter=FSObjType eq 1 and FileRef eq '" + path + "/@{" + leaf_expr + "}'"))),
-            ('Need_folder' + sfx, cond("@empty(body('Find_folder" + sfx + "')?['value'])", seq(
+            ('Find_folder' + sfx, http('GET', "_api/web/GetFolderByServerRelativePath(decodedurl='" + path + "/@{" + leaf_expr + "}')?$select=Exists")),
+            ('Need_folder' + sfx, after(cond("@not(and(equals(actions('Find_folder" + sfx + "')?['status'], 'Succeeded'), equals(body('Find_folder" + sfx + "')?['Exists'], true)))", seq(
                 ('Folder_values' + sfx, form({'Title': '@{' + leaf_expr + '}'})),
                 ('Folder_body' + sfx, values),
                 ('Create_folder' + sfx, call),
                 *created_ok('Create_folder' + sfx, 'Folder_created' + sfx, 'A folder could not be created. See Create_folder' + sfx + '.'),
-            ))),
+            )), {'Find_folder' + sfx: TOLERANT})),
         ]
 
     def commit(sfx, action_id_expr, area_key_expr, area_id_expr, event_fields, result_expr):
@@ -460,8 +461,9 @@ def flow_request_queue():
         ids[key + 'Root'] = "@first(body('List_" + key + "'))?['RootFolder']?['ServerRelativeUrl']"
     IN_OWN = ("and(equals(string(" + R + "?['FileDirRef']), concat(outputs('Ids')?['reqRoot'], '/', outputs('Folder_name'))), "
               "startsWith(outputs('Folder_name'), 'u'))")
-    FOLDER = "first(body('Find_folder')?['value'])"
+    FOLDER = "outputs('Folder_item')"
     TRUSTED = ("@and(" + IN_OWN + ", not(empty(" + FOLDER + ")), "
+               "equals(" + idstr(FOLDER + "?['FileSystemObjectType']") + ", '1'), "
                "equals(" + idstr(FOLDER + "?['AuthorId']") + ", " + idstr("body('Get_flow_account')?['Id']") + "), "
                "equals(" + idstr(R + "?['AuthorId']") + ", " + SENDER + "), "
                "not(empty(" + ME + ")), equals(string(" + ME + "?['Status']), 'Active'))")
@@ -488,7 +490,10 @@ def flow_request_queue():
                           {'Claim': TOLERANT})),
         ('Folder_name', compose("@last(split(string(" + R + "?['FileDirRef']), '/'))")),
         ('Sender_id', compose("@if(" + IN_OWN + ", replace(outputs('Folder_name'), 'u', ''), '0')")),
-        ('Find_folder', http('GET', L('req', "/items?$select=Id,AuthorId&$filter=FSObjType eq 1 and FileRef eq '@{outputs('Ids')?['reqRoot']}/@{" + esc("outputs('Folder_name')") + "}'"))),
+        # the request folder's own item (who made it), by its address – no list query, so no 5,000-item limit
+        ('Find_folder', after(http('GET', "_api/web/GetFolderByServerRelativePath(decodedurl='@{outputs('Ids')?['reqRoot']}/@{" + esc("outputs('Folder_name')") + "}')/ListItemAllFields?$select=Id,AuthorId,FileSystemObjectType"),
+                              {'Sender_id': OK})),
+        ('Folder_item', after(compose("@if(equals(actions('Find_folder')?['status'], 'Succeeded'), body('Find_folder'), null)"), {'Find_folder': TOLERANT})),
         ('Get_requester', http('GET', L('people', "/items?$select=Id,Title,SiteUserId,Role,Status&$filter=SiteUserId eq @{" + esc(SENDER) + "}"))),
         ('Requester', compose("@first(body('Get_requester')?['value'])")),
         # the requester comes from the folder; a request anywhere else is refused without a transaction (plan F.1.2 step 1)

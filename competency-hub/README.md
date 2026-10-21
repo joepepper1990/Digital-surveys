@@ -16,9 +16,9 @@ This project is separate from the other applications in this repository.
 | Part | State |
 |---|---|
 | Probe P0 (`probe/`) | Passed on the site, 21 October 2026 |
-| App shell (`02-frontend/`) | Built and tested locally against a simulated SharePoint site |
+| App (`02-frontend/`) | 0.1.2 running on the site; 0.2.0 (raising and updating actions) built and tested locally |
 | Setup page (`setup/`) | Applied on the site, 21 October 2026: lists, groups, folders, permissions and the first administrator are in place |
-| Flows | Not started (Phases 1–2) |
+| Flows (`04-solution/`) | Request queue flow (raise, extend, mark as done) built and tested locally; ready to import |
 
 See section K of the plan for the current step.
 

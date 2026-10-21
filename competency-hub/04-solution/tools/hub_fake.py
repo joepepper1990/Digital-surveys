@@ -167,6 +167,20 @@ class HubFake:
             if not u:
                 fail(404, 'User cannot be found.')
             return {'LoginName': u['LoginName']}
+        m = re.match(r"^_api/web/GetFolderByServerRelativePath\(decodedurl='((?:[^']|'')*)'\)(/ListItemAllFields)?$", path)
+        if method == 'GET' and m:
+            url = m.group(1).replace("''", "'")
+            for lst in self.lists.values():
+                if url.startswith(lst['root'] + '/'):
+                    d, _, leaf = url[len(lst['root']) + 1:].rpartition('/')
+                    fold = self._find_folder(lst, d, leaf)
+                    if fold and m.group(2):
+                        return {'Id': fold['id'], 'AuthorId': fold['author'], 'FileSystemObjectType': 1}
+                    if fold:
+                        return {'Exists': True}
+            if m.group(2):
+                fail(404, 'File Not Found.')
+            return {'Exists': False}
         m = re.match(r"^_api/web/lists\(guid'([0-9a-f-]+)'\)(/.*)?$", path)
         if not m or m.group(1) not in self.lists:
             fail(404, 'List does not exist: ' + path)

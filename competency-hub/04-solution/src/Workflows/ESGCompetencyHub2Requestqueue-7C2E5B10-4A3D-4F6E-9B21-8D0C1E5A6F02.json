@@ -484,7 +484,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/lists(guid'@{outputs('Ids')?['req']}')/items?$select=Id,AuthorId&$filter=FSObjType eq 1 and FileRef eq '@{outputs('Ids')?['reqRoot']}/@{replace(string(coalesce(outputs('Folder_name'), '')), '''', '''''')}'",
+                  "parameters/uri": "_api/web/GetFolderByServerRelativePath(decodedurl='@{outputs('Ids')?['reqRoot']}/@{replace(string(coalesce(outputs('Folder_name'), '')), '''', '''''')}')/ListItemAllFields?$select=Id,AuthorId,FileSystemObjectType",
                   "parameters/headers": {
                     "Accept": "application/json;odata=nometadata"
                   }
@@ -494,6 +494,17 @@
               "runAfter": {
                 "Sender_id": [
                   "Succeeded"
+                ]
+              }
+            },
+            "Folder_item": {
+              "type": "Compose",
+              "inputs": "@if(equals(actions('Find_folder')?['status'], 'Succeeded'), body('Find_folder'), null)",
+              "runAfter": {
+                "Find_folder": [
+                  "Succeeded",
+                  "Failed",
+                  "TimedOut"
                 ]
               }
             },
@@ -516,7 +527,7 @@
                 "authentication": "@parameters('$authentication')"
               },
               "runAfter": {
-                "Find_folder": [
+                "Folder_item": [
                   "Succeeded"
                 ]
               }
@@ -532,7 +543,7 @@
             },
             "Trusted": {
               "type": "If",
-              "expression": "@and(and(equals(string(body('Get_request')?['FileDirRef']), concat(outputs('Ids')?['reqRoot'], '/', outputs('Folder_name'))), startsWith(outputs('Folder_name'), 'u')), not(empty(first(body('Find_folder')?['value']))), equals(first(split(string(coalesce(first(body('Find_folder')?['value'])?['AuthorId'], '')), '.')), first(split(string(coalesce(body('Get_flow_account')?['Id'], '')), '.'))), equals(first(split(string(coalesce(body('Get_request')?['AuthorId'], '')), '.')), outputs('Sender_id')), not(empty(outputs('Requester'))), equals(string(outputs('Requester')?['Status']), 'Active'))",
+              "expression": "@and(and(equals(string(body('Get_request')?['FileDirRef']), concat(outputs('Ids')?['reqRoot'], '/', outputs('Folder_name'))), startsWith(outputs('Folder_name'), 'u')), not(empty(outputs('Folder_item'))), equals(first(split(string(coalesce(outputs('Folder_item')?['FileSystemObjectType'], '')), '.')), '1'), equals(first(split(string(coalesce(outputs('Folder_item')?['AuthorId'], '')), '.')), first(split(string(coalesce(body('Get_flow_account')?['Id'], '')), '.'))), equals(first(split(string(coalesce(body('Get_request')?['AuthorId'], '')), '.')), outputs('Sender_id')), not(empty(outputs('Requester'))), equals(string(outputs('Requester')?['Status']), 'Active'))",
               "actions": {},
               "else": {
                 "actions": {
@@ -1515,7 +1526,7 @@
                             "parameters": {
                               "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                               "parameters/method": "GET",
-                              "parameters/uri": "_api/web/lists(guid'@{outputs('Ids')?['upd']}')/items?$select=Id&$filter=FSObjType eq 1 and FileRef eq '@{outputs('Ids')?['updRoot']}/@{first(body('Get_area_R')?['value'])?['CompetencyKey']}/@{concat('A', string(variables('varActionId')))}'",
+                              "parameters/uri": "_api/web/GetFolderByServerRelativePath(decodedurl='@{outputs('Ids')?['updRoot']}/@{first(body('Get_area_R')?['value'])?['CompetencyKey']}/@{concat('A', string(variables('varActionId')))}')?$select=Exists",
                               "parameters/headers": {
                                 "Accept": "application/json;odata=nometadata"
                               }
@@ -1530,7 +1541,7 @@
                         },
                         "Need_folder_U_R": {
                           "type": "If",
-                          "expression": "@empty(body('Find_folder_U_R')?['value'])",
+                          "expression": "@not(and(equals(actions('Find_folder_U_R')?['status'], 'Succeeded'), equals(body('Find_folder_U_R')?['Exists'], true)))",
                           "actions": {
                             "Folder_values_U_R": {
                               "type": "Compose",
@@ -1626,7 +1637,9 @@
                           },
                           "runAfter": {
                             "Find_folder_U_R": [
-                              "Succeeded"
+                              "Succeeded",
+                              "Failed",
+                              "TimedOut"
                             ]
                           }
                         },
@@ -1641,7 +1654,7 @@
                             "parameters": {
                               "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                               "parameters/method": "GET",
-                              "parameters/uri": "_api/web/lists(guid'@{outputs('Ids')?['hist']}')/items?$select=Id&$filter=FSObjType eq 1 and FileRef eq '@{outputs('Ids')?['histRoot']}/@{first(body('Get_area_R')?['value'])?['CompetencyKey']}/@{concat('A', string(variables('varActionId')))}'",
+                              "parameters/uri": "_api/web/GetFolderByServerRelativePath(decodedurl='@{outputs('Ids')?['histRoot']}/@{first(body('Get_area_R')?['value'])?['CompetencyKey']}/@{concat('A', string(variables('varActionId')))}')?$select=Exists",
                               "parameters/headers": {
                                 "Accept": "application/json;odata=nometadata"
                               }
@@ -1656,7 +1669,7 @@
                         },
                         "Need_folder_H_R": {
                           "type": "If",
-                          "expression": "@empty(body('Find_folder_H_R')?['value'])",
+                          "expression": "@not(and(equals(actions('Find_folder_H_R')?['status'], 'Succeeded'), equals(body('Find_folder_H_R')?['Exists'], true)))",
                           "actions": {
                             "Folder_values_H_R": {
                               "type": "Compose",
@@ -1752,7 +1765,9 @@
                           },
                           "runAfter": {
                             "Find_folder_H_R": [
-                              "Succeeded"
+                              "Succeeded",
+                              "Failed",
+                              "TimedOut"
                             ]
                           }
                         },
@@ -2704,7 +2719,7 @@
                             "parameters": {
                               "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                               "parameters/method": "GET",
-                              "parameters/uri": "_api/web/lists(guid'@{outputs('Ids')?['hist']}')/items?$select=Id&$filter=FSObjType eq 1 and FileRef eq '@{outputs('Ids')?['histRoot']}/@{first(body('Get_area_X')?['value'])?['CompetencyKey']}/@{concat('A', first(split(string(coalesce(body('Get_action_X')?['Id'], '')), '.')))}'",
+                              "parameters/uri": "_api/web/GetFolderByServerRelativePath(decodedurl='@{outputs('Ids')?['histRoot']}/@{first(body('Get_area_X')?['value'])?['CompetencyKey']}/@{concat('A', first(split(string(coalesce(body('Get_action_X')?['Id'], '')), '.')))}')?$select=Exists",
                               "parameters/headers": {
                                 "Accept": "application/json;odata=nometadata"
                               }
@@ -2719,7 +2734,7 @@
                         },
                         "Need_folder_H_X": {
                           "type": "If",
-                          "expression": "@empty(body('Find_folder_H_X')?['value'])",
+                          "expression": "@not(and(equals(actions('Find_folder_H_X')?['status'], 'Succeeded'), equals(body('Find_folder_H_X')?['Exists'], true)))",
                           "actions": {
                             "Folder_values_H_X": {
                               "type": "Compose",
@@ -2815,7 +2830,9 @@
                           },
                           "runAfter": {
                             "Find_folder_H_X": [
-                              "Succeeded"
+                              "Succeeded",
+                              "Failed",
+                              "TimedOut"
                             ]
                           }
                         },
@@ -3781,7 +3798,7 @@
                             "parameters": {
                               "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                               "parameters/method": "GET",
-                              "parameters/uri": "_api/web/lists(guid'@{outputs('Ids')?['hist']}')/items?$select=Id&$filter=FSObjType eq 1 and FileRef eq '@{outputs('Ids')?['histRoot']}/@{first(body('Get_area_C')?['value'])?['CompetencyKey']}/@{concat('A', first(split(string(coalesce(body('Get_action_C')?['Id'], '')), '.')))}'",
+                              "parameters/uri": "_api/web/GetFolderByServerRelativePath(decodedurl='@{outputs('Ids')?['histRoot']}/@{first(body('Get_area_C')?['value'])?['CompetencyKey']}/@{concat('A', first(split(string(coalesce(body('Get_action_C')?['Id'], '')), '.')))}')?$select=Exists",
                               "parameters/headers": {
                                 "Accept": "application/json;odata=nometadata"
                               }
@@ -3796,7 +3813,7 @@
                         },
                         "Need_folder_H_C": {
                           "type": "If",
-                          "expression": "@empty(body('Find_folder_H_C')?['value'])",
+                          "expression": "@not(and(equals(actions('Find_folder_H_C')?['status'], 'Succeeded'), equals(body('Find_folder_H_C')?['Exists'], true)))",
                           "actions": {
                             "Folder_values_H_C": {
                               "type": "Compose",
@@ -3892,7 +3909,9 @@
                           },
                           "runAfter": {
                             "Find_folder_H_C": [
-                              "Succeeded"
+                              "Succeeded",
+                              "Failed",
+                              "TimedOut"
                             ]
                           }
                         },

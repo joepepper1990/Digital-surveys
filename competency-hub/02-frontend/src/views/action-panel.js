@@ -35,10 +35,11 @@ CH.views.actionPanel = (function () {
     return text;
   }
 
-  // Updates count only in the action's own folder, {area}/A{id} (plan F.5).
+  // Updates count only in the action's own folder, {area}/A{id} (plan F.5). Each query starts with an indexed
+  // column (ParentId, RecordId), so it keeps working once the list passes 5,000 items.
   async function loadUpdates(app, action) {
     var res = await app.sp.items(CH.config.lists.updates.title,
-      "$select=Id,EntryType,Body,AuthorId,Created,FileDirRef,IsHidden&$filter=ParentType eq 'Action' and ParentId eq " + action.id, 500);
+      "$select=Id,EntryType,Body,AuthorId,Created,FileDirRef,IsHidden&$filter=ParentId eq " + action.id + " and ParentType eq 'Action'", 500);
     var folder = '/' + action.areaKey + '/A' + action.id;
     return res.rows.filter(function (u) {
       return !u.IsHidden && String(u.FileDirRef || '').slice(-folder.length) === folder && u.EntryType !== 'Flagged' && u.EntryType !== 'Flag Withdrawn';
@@ -47,7 +48,7 @@ CH.views.actionPanel = (function () {
 
   async function loadExtensions(app, action) {
     var res = await app.sp.items(CH.config.lists.history.title,
-      "$select=Id,EventType,ActorId,EventTime,PreviousDueDate,NewDueDate,Note,ExtensionNumber,IsOnBehalf&$filter=RecordType eq 'Action' and RecordId eq " + action.id, 500);
+      "$select=Id,EventType,ActorId,EventTime,PreviousDueDate,NewDueDate,Note,ExtensionNumber,IsOnBehalf&$filter=RecordId eq " + action.id + " and RecordType eq 'Action'", 500);
     return res.rows.filter(function (r) { return r.EventType === 'Deadline Extended'; })
       .sort(function (a, b) { return (a.ExtensionNumber || 0) - (b.ExtensionNumber || 0); });
   }

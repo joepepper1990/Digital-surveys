@@ -2,6 +2,16 @@
 
 Plain HTML, CSS and JavaScript, delivered as a Welcome by Accelerator 365 custom layout. Same-origin SharePoint REST runs as the signed-in user. There are no libraries and no external calls.
 
+## Version 0.2.0: raising and updating actions
+
+- **Action panel.** Clicking any action opens it. It shows **When** (with "Was due", how often the deadline moved and the original date), **Who** and **What**, the updates, and every deadline change. The link `?action={id}` opens it directly.
+- **Raise an action.** A three-step guided form (what, who and where, by when), then a summary. Sends a `RaiseAction` request.
+- **Add an update.** An instant write into the action's own folder, `Updates/{area}/A{id}`.
+- **I need more time.** A new date and a reason, with the effect explained. Sends `ExtendDeadline` with the revision and deadline the user saw.
+- **Mark as done.** Says whether it closes or waits for a close-out check. Sends `MarkComplete`.
+- **Requests.** These go only into the user's own `Requests/u{SiteUserId}` folder and show "being recorded" until the action itself confirms the change (`LastRequestKey`, no lock). Refusals are shown in plain words; requests that never left the browser are kept and offered again.
+- **Shared rules.** `src/domain/rules.js` holds the rules shared with the simulated request flow in the mock. The Power Automate flow (`../04-solution`) applies the same rules with the same messages.
+
 ## Version 0.1.2: sized for the screen
 
 - Text, spacing and tiles grow with the width the app has: ×1.1 from 1,400 px, ×1.2 from 1,700 px, ×1.35 from 2,000 px and ×1.5 from 2,400 px. Every size in `styles/app.css` is a multiple of `--u`.

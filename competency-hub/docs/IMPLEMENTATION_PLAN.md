@@ -1,7 +1,7 @@
 # ESG Competency Hub — Planning Package (revision 3)
 
 **Environmental Safety Group, Dungeness B Power Station**
-**Status:** plan approved on 19 October 2026 (revision 3, after a second independent review, J.2); layout, access model, flow account, management roles and site decided on 21 October 2026 (E.0, K4, K5); probe P0 passed, Setup applied and the Hub page opened to all staff on 21 October 2026 (K6). Remaining decisions in I.4 are recorded in the Phase 0 decision log as they are confirmed.
+**Status:** plan approved on 19 October 2026 (revision 3, after a second independent review, J.2); layout, access model, flow account, management roles and site decided on 21 October 2026 (E.0, K4, K5); probe P0 passed, Setup applied and the Hub page opened on 21 October 2026 (K6); raising and updating actions built and tested locally (K7). Remaining decisions in I.4 are recorded in the Phase 0 decision log as they are confirmed.
 
 ---
 
@@ -3298,6 +3298,308 @@ site.
   changed by hand in each group's settings if wanted.
 - **Size:** a full Apply on the empty site makes about 880 SharePoint requests;
   allow a few minutes with the page open.
+
+## K7. Next build: raising and updating actions (app 0.2.0, solution 1.0.0)
+
+### K7.1 Context
+
+The site, Setup and the read-only app are in place. People will be added only
+once the system is finished (your decision). You asked for the next build,
+**raising and updating actions**, and chose to put the flows in **the same
+Power Platform environment as the 1-to-1**, running as your account (D-03 C).
+
+This increment covers the most-used part of Phase 2:
+
+- **Raise an action** — queued;
+- **Add an update** — instant;
+- **I need more time** — queued extension;
+- **Mark as done** — queued.
+
+The server side follows plan F.1, cut to what these three request types need.
+You test all of it on the real site as yourself; nobody else is added.
+
+### K7.2 Frontend (`competency-hub/02-frontend/`, version 0.2.0)
+
+**New modules,** added to `tools/build.js` `MODULES` before `src/app.js`:
+
+- **`src/ui/dialog.js`.** One shared dialog: scrim, `aria-modal`, focus trap,
+  Escape to close, focus restored on close. It is lifted out of
+  `views/notice-form.js`, which then uses it.
+- **`src/core/requests.js`** (plan G.2.2):
+  - `submit(type, target, payload)` writes a Requests item into the user's own
+    folder `u{SiteUserId}`, using the existing `sp.addToFolder`. It sends
+    `RequestKey` (a UUID), `RequestType`, `TargetType`, `TargetId`,
+    `ExpectedRevision`, `Payload` (JSON) and `Status = Submitted`.
+  - `track(key)` polls the request and the target at 20 s, 40 s and 60 s, then
+    every 60 s for up to 15 minutes. It confirms success only when the request
+    is Completed **and** the action shows `LastRequestKey` equal to that key with
+    no lock (plan C.6).
+  - Requests that fail to send are kept in `localStorage` and offered again
+    ("Unsent").
+- **`src/views/action-panel.js`.** Clicking any action, wherever it is listed,
+  opens a panel. It shows the C.9 card:
+  - **What:** title and description.
+  - **Who:** owner and raised by.
+  - **When:** for example "Due 17 Oct – 2 days late. Deadline moved once (was 10
+    Oct)".
+  - **Updates:** listed as plain sentences.
+
+  It has three buttons, shown only to people allowed to use them (E.3), and
+  pending changes appear as "Submitted 10:42 – being recorded".
+
+  | Button | What it does |
+  |---|---|
+  | **Add an update** | Instant: writes to `Updates/{Key}/A{id}` with a ClientKey. Owner, raiser, area members and management (D-15). |
+  | **I need more time** | Asks for a date and a reason (10–1,000 characters), and explains the effect. Sends an `ExtendDeadline` request with `ExpectedRevision` and the expected `DueDay`. |
+  | **Mark as done** | Asks for confirmation and an optional note. Sends a `MarkComplete` request. |
+
+  Deep link: `?action={id}`. A user who isn't allowed sees "not available".
+- **`src/views/raise-form.js`.** The three-step guided form:
+  1. What needs doing? Title (up to 255 characters, required) and description
+     (required).
+  2. Who and which area? The area is limited to those the user can write to.
+     The owner list holds that area's members plus management, read from
+     Competency Members and People.
+  3. By when? The target date must be between today and `MaxDeadlineYears`
+     ahead.
+
+  Priority and "Needs a close-out check" sit under *More options*. A summary
+  page ends with **Raise action**, which sends a `RaiseAction` request.
+
+**Changes to existing files:**
+
+- **`views/home.js` and `views/area.js`:** "Raise an action" opens the form
+  instead of `app.comingSoon`.
+- **`ui.actionList` items** become buttons that open the panel.
+- **`domain/model.js`:**
+  - action reads add `Revision, Description, Priority, CurrentDueDate,
+    OriginalDueDate, LastRequestKey, FileDirRef`;
+  - updates for the open action are read on demand
+    (`ParentType eq 'Action' and ParentId eq {id}`).
+- **`core/config.js`:** adds the `requests` and `history` lists, and sets
+  `VERSION` to 0.2.0.
+
+**Rules kept:**
+
+- S1–S8 still hold.
+- The browser may write only to `notices`, `updates` and its own `requests`
+  folder. `static.test.js` changes its allow-list to exactly these three, and
+  also checks that `addToFolder` is never called with a computed list key.
+
+**Mock and tests:**
+
+- **`mock/mock-sharepoint.js`:**
+  - accepts writes to Requests (own folder only) and Updates (area members and
+    management only);
+  - simulates the flow: on a timer it applies a request as the real flow would,
+    with the same rules module (see K7.3);
+  - adds modes for a rejected request, a slow request and a stale revision.
+- **`mock/seed.js`:** adds Requests and History lists, and `Revision` and
+  `Description` on actions.
+- **Tests:**
+  - unit tests for the form validations and the date rules (past dates, beyond
+    `MaxDeadlineYears`, extension not after the current deadline);
+  - browser drivers for:
+    - raise, then "being recorded", then Applied, and the action appears;
+    - an extension shown as ~~old date~~ → new date;
+    - mark as done;
+    - an instant update;
+    - a stale revision showing the ACT-11 message;
+    - a view-only user seeing no buttons;
+    - keyboard use of the dialogs.
+
+### K7.3 Server side (`competency-hub/03-flows/` and `04-solution/`, solution "ESG Competency Hub" 1.0.0)
+
+**Toolchain.** This reuses the proven 1-to-1 toolchain, copied and adapted. It
+is not referenced across projects, which stay separate.
+
+| File | Contents |
+|---|---|
+| `tools/flows.py` | Flow definitions written in Python |
+| `tools/validate.py` | Expressions, references, `runAfter` chains, required parameters, nesting of at most 8, at most 500 actions, no `secureData` on unsupported actions, standard connectors only |
+| `tools/test_validate.py` | Deliberately broken copies of the flows, all of which must be rejected |
+| `tools/wdl.py`, `fake_sharepoint.py`, `simulate.py` | Run the real flow JSON against an in-memory SharePoint |
+| `tools/build.py` | Writes `src/` and the zip |
+
+**Packing.**
+
+- The 1-to-1 packed with Microsoft's `pac solution pack`, which is not
+  installed here. I will try to install it (`dotnet tool install`).
+- If that isn't possible, `build.py` writes the zip itself, in exactly pac's
+  layout: `solution.xml`, `customizations.xml` with the `<Workflow>` elements,
+  `[Content_Types].xml`, `Workflows/*.json` and the environment-variable
+  definitions.
+- `check_package.py` compares its structure, element by element, with the
+  1-to-1's pac-made 1.5.0.1 zip.
+- **Known risk:** a hand-packed zip has not been imported before, so the first
+  import is the real test. If it is refused, fallback T1 applies: I fix the
+  layout from the error message.
+
+**Solution contents:**
+
+- **Publisher:** prefix `esg`.
+- **Connection reference:** `esg_sharedsharepointonline_hub`, for SharePoint
+  only. Outlook comes with notifications in the next increment.
+- **Environment variables:**
+  - `esg_CompetencyHubSiteUrl`;
+  - `esg_CompetencyHubIsTest` (default false).
+- **Fixed flow GUIDs:**
+  - **ESG Competency Hub | 2 Request queue** (ships Off, so you turn it on
+    after import).
+    - Trigger: SharePoint "When an item is created or modified" on Requests,
+      filtered to Status = Submitted. Trigger concurrency is 1. Lists are
+      found by URL through REST at run time (lesson 3).
+    - **Steps** (plan F.1.2, cut down):
+      1. **Requester from the folder:** `FileDirRef` must be
+         `…/Requests/u{id}`; the folder must be created by the flow account and
+         have unique permissions; the requester's People row must be Active.
+         The tripwire rejects anything else.
+      2. **Claim:** a transaction row in `History/Transactions`, keyed by the
+         request's item ID, copying type, target, revision and payload. If the
+         row already exists, the stored copy is used.
+      3. **Fix the event time:** F.1.2 step 4.
+      4. **Authorise and validate** with the E.3 rules:
+         - **RaiseAction:** the requester can write to the area; the owner is
+           a member of the area or management; title and description are
+           present; the date is from today to `MaxDeadlineYears` ahead.
+         - **ExtendDeadline:** the requester is the owner or an action
+           manager; the action is open; the new date is after the current
+           deadline and not before today; the reason is 10–1,000 characters;
+           the revision and `DueDay` match what the user saw.
+         - **MarkComplete:** the requester is the owner or an action manager;
+           the action is open.
+      5. **Lock and values** in one MERGE with the action's `IF-MATCH` ETag
+         (lesson 2: REST MERGE, not PatchItem). `Revision` goes up by 1. A 412
+         with nothing done yet means Void, and the request is Rejected with
+         the ACT-11 message.
+      6. **RaiseAction:** creates the action in `Actions/{Key}` with
+         `CreatedRequestKey = F|{key}` and `PendingRequestKey = key`, so it is
+         invisible until committed. Then it creates the folder
+         `Updates/{Key}/A{id}`, which inherits area access.
+      7. **Commit:**
+         - History event rows `{key}|{n}` in `History/{Key}/A{id}` (the folder
+           is created when needed);
+         - for an extension, every EXT-04 field;
+         - transaction Applied;
+         - release: `PendingRequestKey` cleared and `LastRequestKey` set;
+         - the request mirrored as Completed with a ResultMessage.
+      8. **Try/Catch.** Failures leave the transaction *Failed*, with
+         `LastError`, and keep the lock. The request shows "Failed – an
+         administrator has been notified" (the email comes in the next
+         increment).
+    - Every step is idempotent by key, so running it again finishes the work
+      (plan F.1.1).
+
+**Deferred to the next increment (honestly stated):**
+
+- Queue Monitor: retries, missed triggers, stale-lock alerts;
+- leases (trigger concurrency 1 stands in for now);
+- guard rows;
+- notifications and the outbox;
+- Daily Tasks (reminders);
+- Incomplete changes, Retry and Roll back.
+
+Until then, a stuck request is visible to administrators in History and is
+fixed by re-submitting.
+
+**Shared rules.** One small JavaScript module, `domain/rules.js` (dates, who may
+do what, validation), is used by the browser and by the mock flow simulator.
+The Power Automate expressions follow it rule by rule. `simulate.py` runs the
+same rule cases against the real flow JSON, so the two cannot drift.
+
+### K7.4 Setup changes
+
+Setup 1.1 adds what the flow needs, still idempotently:
+
+- **`History/{Key}/Actions`:** a container folder, so that `History/{Key}/A{id}`
+  folders sit where E.4 already allows area read.
+- **Flow account's permission.** It is you, an owner, so this needs only a
+  check.
+
+No list or column changes are expected. If any appear during the build, they go
+through `schema.json` and a Setup Check/Apply.
+
+### K7.5 Your steps afterwards (each needs your go-ahead)
+
+1. Re-upload the Setup files, then run **Check** and **Apply**. Any change is
+   small.
+2. Power Automate in the 1-to-1 environment:
+   1. **Solutions → Import** `ESGCompetencyHub_1_0_0_0_unmanaged.zip`.
+   2. Choose your SharePoint connection.
+   3. Enter the site URL.
+   4. Turn on *2 Request queue*.
+3. Replace both app files (0.2.0).
+4. As yourself, raise a test action, add an update, extend it, then mark it as
+   done. Send screenshots and the flow run history if anything fails.
+
+The `HOW-TO.html` in the zip is rewritten for these steps.
+
+### K7.6 Verification before delivery
+
+- **Frontend:** unit tests and browser tests, at three widths, with the new
+  drivers.
+- **Static rules:** the new write allow-list.
+- **Flows:**
+  - `validate.py`;
+  - `test_validate.py`;
+  - `simulate.py` cases for each type and rule: accept, reject, stale
+    revision, wrong folder, someone else's action, re-run after a failure at
+    each step (idempotency), and the event-time rule;
+  - nesting and action limits;
+  - the package structure check against the 1-to-1 zip.
+- **Setup:** existing tests, plus the new folder.
+
+All of this is LOCAL / OFFLINE-SIMULATED until you import and test on the site.
+
+### K7.7 Size
+
+This is about 12–16 developer-days of the plan's estimate:
+
+- Actions UI;
+- the Action Requests flow;
+- the transaction core.
+
+It is delivered in one package, with commits along the way. I'll report
+progress at three milestones:
+
+1. frontend done on the mock;
+2. flows passing the simulator;
+3. package built.
+
+### K7.8 Delivered locally, 21 Oct 2026
+
+**Frontend.** App 0.2.0 is in `02-frontend`:
+- action panel;
+- three-step Raise form;
+- Add an update, I need more time and Mark as done;
+- request tracking with confirmation on the action itself;
+- shared `domain/rules.js`.
+
+Its tests pass: 40 unit tests and all browser checks, including each journey, stale changes, view-only users and keyboard use.
+
+**Flow.** `04-solution` holds the solution **ESG Competency Hub 1.0.0.0**:
+- one flow, *2 Request queue*;
+- its own publisher, prefix `esghub`.
+
+The toolchain is adapted from the 1-to-1 and checks the flow in four ways:
+- the validator, which also checks every REST column against `schema.json`;
+- 22 simulator tests on the real flow JSON, including an interruption at every write and then a resubmission;
+- 19 rejection tests;
+- a package comparison with the 1-to-1 zip that pac packed.
+
+**Deviations from K7:**
+- **Publisher.** Prefix `esghub` replaces `esg`, so the Hub cannot clash with the 1-to-1 publisher in the same environment.
+- **Environment variables.** `IsTest` is left out until the test hooks need it.
+- **Setup.** No change is needed: the flow creates `{area}/A{id}` folders inside the area folders Setup made.
+- **Folder lookups.** The flow finds folders by address (`GetFolderByServerRelativePath`), not by a list query. A list query would stop working past 5,000 items.
+
+**Known risk.** The zip is packed by `build_solution.py`, because pac is not available here, so the first import is the real test.
+
+**Your steps** are in HOW-TO.html in the download:
+1. Import the solution.
+2. Turn the flow on.
+3. Replace both app files.
+4. Raise, update, extend and complete a TEST action, sending screenshots.
 
 ### K6.10 People list confirmed (C-04 resolved, 21 Oct 2026)
 
