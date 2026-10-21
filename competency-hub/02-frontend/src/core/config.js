@@ -1,6 +1,6 @@
 // Fixed names and limits. Lists are addressed by display title; folders by list URL name.
 CH.config = {
-  VERSION: '0.2.0',
+  VERSION: '0.2.1',
   ENVIRONMENT: 'TEST',
   lists: {
     competencies: { title: 'Competencies', url: 'Competencies' },

@@ -114,6 +114,7 @@ h2 { font-size: calc(18 * var(--u)); font-weight: 600; margin: 0 0 calc(12 * var
 .facts dt { font-weight: 600; color: var(--muted); }
 .facts dd { margin: 0; }
 .pending { background: var(--navy-soft); color: var(--navy); border-radius: calc(8 * var(--u)); padding: calc(8 * var(--u)) calc(12 * var(--u)); }
+.stale-copy { margin: 0; background: #fff3d6; color: #6b4a00; padding: calc(10 * var(--u)) calc(16 * var(--u)); text-align: center; }
 .request-strip { list-style: none; margin: 0 0 calc(18 * var(--u)); padding: 0; display: grid; gap: calc(8 * var(--u)); }
 .item-open { display: flex; justify-content: space-between; align-items: center; gap: calc(14 * var(--u)); width: 100%; background: none; border: 0; padding: 0; text-align: left; color: inherit; }
 .item-open:disabled { cursor: default; }

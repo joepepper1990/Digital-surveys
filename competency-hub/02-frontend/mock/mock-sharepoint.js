@@ -199,11 +199,23 @@ window.MockSharePoint = (function () {
       userSelect.addEventListener('change', go);
       modeSelect.addEventListener('change', go);
     }
-    var app = window.ESGCompetencyHub(ctx);
+    if (params.get('stamp')) document.querySelector('[data-ch-root]').setAttribute('data-ch-version', params.get('stamp'));
+    var app = current = window.ESGCompetencyHub(ctx);
     app.onInitialize();
     if (params.get('drive') && window.MockDrivers) setTimeout(function () { window.MockDrivers.run(params.get('drive')); }, 50);
     return app;
   }
 
-  return { start: start, ctx: ctx, writes: writes, requests: requests, data: data };
+  // A page reload as the app sees it: the old instance goes, a new one starts on the same (simulated) site.
+  var current = null;
+  function reload() {
+    if (current) current.onDispose();
+    var root = document.querySelector('[data-ch-root]');
+    while (root.firstChild) root.removeChild(root.firstChild);
+    root.textContent = 'Loading the ESG Competency Hub…';
+    current = window.ESGCompetencyHub(ctx);
+    current.onInitialize();
+  }
+
+  return { start: start, reload: reload, ctx: ctx, writes: writes, requests: requests, data: data };
 })();

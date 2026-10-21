@@ -95,6 +95,7 @@
 .mock-scope .ch .facts dt {font-weight: 600; color: var(--muted);}
 .mock-scope .ch .facts dd {margin: 0;}
 .mock-scope .ch .pending {background: var(--navy-soft); color: var(--navy); border-radius: calc(8 * var(--u)); padding: calc(8 * var(--u)) calc(12 * var(--u));}
+.mock-scope .ch .stale-copy {margin: 0; background: #fff3d6; color: #6b4a00; padding: calc(10 * var(--u)) calc(16 * var(--u)); text-align: center;}
 .mock-scope .ch .request-strip {list-style: none; margin: 0 0 calc(18 * var(--u)); padding: 0; display: grid; gap: calc(8 * var(--u));}
 .mock-scope .ch .item-open {display: flex; justify-content: space-between; align-items: center; gap: calc(14 * var(--u)); width: 100%; background: none; border: 0; padding: 0; text-align: left; color: inherit;}
 .mock-scope .ch .item-open:disabled {cursor: default;}
@@ -130,7 +131,7 @@
 </style></head><body>
 <div class="mock-bar"><b>Local test with simulated SharePoint – synthetic data only</b><label>Sign in as <select id="mock-user"></select></label>
 <label>Simulate <select id="mock-mode"><option value="">Normal</option><option value="slow">Slow responses</option><option value="people403">People list denied (403)</option><option value="actions404">Actions list missing (404)</option><option value="actionsPartial">Actions over the read limit</option><option value="unknown">Unknown user</option><option value="duplicate">Duplicate person</option><option value="left">Person marked Left</option><option value="flowSlow">Request flow very slow</option><option value="flowFail">Request flow fails</option></select></label></div>
-<div class="mock-scope"><div class="ch" data-ch-root><p>Loading the ESG Competency Hub…</p></div></div>
+<div class="mock-scope"><div class="ch" data-ch-root data-ch-version="0.2.1"><p>Loading the ESG Competency Hub…</p></div></div>
 <script src="seed.js"></script>
 <script src="rules.js"></script>
 <script src="flow-sim.js"></script>

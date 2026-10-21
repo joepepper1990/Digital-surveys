@@ -2,6 +2,11 @@
 
 Plain HTML, CSS and JavaScript, delivered as a Welcome by Accelerator 365 custom layout. Same-origin SharePoint REST runs as the signed-in user. There are no libraries and no external calls.
 
+## Version 0.2.1: fixes from the first test on the site
+
+- **Changes survive a reload.** On start the app reads the user's own requests that are still `Submitted` or `Processing` and tracks them again, so "being recorded" notes, the panel's pending line and the raise strip come back after a refresh.
+- **Old copies are reported.** The build stamps the version into the layout (`data-ch-version`). If the script's version differs, the browser kept an old copy of one file, and a banner asks the reader to press Ctrl+F5.
+
 ## Version 0.2.0: raising and updating actions
 
 - **Action panel.** Clicking any action opens it. It shows **When** (with "Was due", how often the deadline moved and the original date), **Who** and **What**, the updates, and every deadline change. The link `?action={id}` opens it directly.

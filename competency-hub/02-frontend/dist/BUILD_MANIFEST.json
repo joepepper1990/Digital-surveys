@@ -1,16 +1,16 @@
 {
   "product": "ESG Competency Hub",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "outputs": {
-    "competency-hub.js": "6ce87dab8e898de1f5d8a27cd114a213ae45d834308737665e93cf4ec6f0fb4a",
-    "competency-hub.html": "075c890b15a274cf256825c46aa54c072e546be8dd5d0c09bc844baac1fd6ad6"
+    "competency-hub.js": "67cb69db6cf87b38f6ca9f0e54e7a87687fa13036ad1ca8d6bbc5f40e8138fbf",
+    "competency-hub.html": "f51547576a6a454f31c87f2ff1156899254c5b2fc26a1e1850f66b7e2bf5add7"
   },
   "sources": {
-    "src/core/config.js": "2c14f2d7b637253ec1411bd41e7e5ebad8531328c0a27d7a012a3f1e470efbe5",
+    "src/core/config.js": "1d3a979ae225e7254452c41c40110c0ec73fbfdca39b23d813b07d2875140913",
     "src/core/dom.js": "313c1dd6467a0fb4065977850370a95aa80ecd39dd030197bc6d1538b210ff7a",
     "src/core/dates.js": "036ff90f4d36a7ac933fe6ec4428725cb27125393601957d382f2927c01a8875",
     "src/core/sp.js": "f3ac2f8ea5cfa21d439c4d58ddc75b3f2578a856e29e026d150a9cdb39935ced",
-    "src/core/requests.js": "e39fa02b7cfa7df682f86194a97f019c5af2fb5e3181e9624e73790c428f0945",
+    "src/core/requests.js": "e241d9bc0fe865146bf767fa96128b319f53d5866cf7d6a01d85da0d699534e5",
     "src/domain/access.js": "1343abd196d737357f91c922a57a946ded649729ce13ce92bcbfe4c896552712",
     "src/domain/rules.js": "66fa0d71d3e0f7719b960d961859cda650edeb6d0a37ad2b899c1d98b29cd212",
     "src/domain/model.js": "4b0256d23d89e1ef3e0e3ba22d91776ad30087e17924f77d0b42d607a96bfb28",
@@ -21,8 +21,8 @@
     "src/views/notice-form.js": "6e08d9edee50dbea64d76eb24af60fb526499afc5166b74bb3aab089b31ba4eb",
     "src/views/raise-form.js": "df4ff18efad47ef2672f28520fb6c1c19e1d917509813f6538ae0992388bdbb0",
     "src/views/action-panel.js": "678444ec4732b8c96323c0f8920a64bcfe32b755d36843bf17739ae0afaa662f",
-    "src/app.js": "2c4d3f125b0b09b10f2509730f6576fcfeb8fe80c9ce6f47d8e8e7f00bed6915",
-    "styles/app.css": "9acacf2b00ad9e36f92f5a879876b29651779ab298ce69cbeb3c661d10c6c078",
-    "layout/competency-hub.layout.html": "3a81eaec24e2b794ab927f4cd3d0e5891cdf888ebaa07d210668e0fc77b52c06"
+    "src/app.js": "322d220dfd1f390e4fe5485192caf65866a53d6a13bb920d08c2aac936439096",
+    "styles/app.css": "888d67c13c4c752717cfd808624984d67b58bf8f605c1c5e28760cbbaf74f4af",
+    "layout/competency-hub.layout.html": "d1ab8207281c0906fe2ebeefbf0ac495d292c1b80af30fd3d69d96129967a4c7"
   }
 }

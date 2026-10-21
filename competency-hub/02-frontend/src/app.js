@@ -22,9 +22,18 @@ CH.app = (function () {
       });
     }
 
+    // The layout carries the version it was built with. A different script version means the browser kept an
+    // old copy of one of the two files (plan K7.9).
+    function staleCopy() {
+      var built = app.root && app.root.getAttribute && app.root.getAttribute('data-ch-version');
+      return !!built && built !== CH.config.VERSION;
+    }
+
     function frame(content) {
       var C = CH.config;
       return [
+        app.stale ? h('p', { class: 'stale-copy', role: 'alert' }, h('b', { text: 'A newer version of the Competency Hub is available. ' }),
+          'Press Ctrl+F5 to load it. Until then some buttons may not work.') : null,
         h('header', { class: 'bar' }, h('div', { class: 'bar-in' },
           h('div', { class: 'brand' }, 'ESG Competency Hub', h('small', { text: 'Environmental Safety Group' })),
           C.ENVIRONMENT !== 'PRODUCTION' ? h('span', { class: 'env', text: C.ENVIRONMENT + ' – not live data' }) : null,
@@ -168,6 +177,7 @@ CH.app = (function () {
 
     async function start() {
       app.root = await waitForRoot();
+      app.stale = staleCopy();
       watchSize();
       var webPart = ctx.getWebPart();
       if (!webPart || !webPart.spHttpClient || !webPart.pageContext || !webPart.pageContext.web) {
@@ -198,7 +208,7 @@ CH.app = (function () {
       app.firstName = await app.sp.myFirstName();
       app.tracker = CH.requests.tracker(app, onRequestChange);
       try {
-        await reload();
+        await Promise.all([reload(), app.tracker.resume().catch(function () { return 0; })]);
       } catch (error) {
         stateScreen('The Competency Hub could not load', 'Some of the information could not be read. Please reload the page in a few minutes.',
           'Details for the administrator: ' + (error.status ? 'HTTP ' + error.status : error.message));

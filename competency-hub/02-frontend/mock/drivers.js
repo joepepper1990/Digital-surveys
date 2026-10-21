@@ -102,7 +102,14 @@ window.MockDrivers = (function () {
       var stripText = strip.textContent;
       await until(function () { return text().indexOf('raised: Order replacement smear papers') >= 0; }, 120000);
       var req = MockSharePoint.data.Requests[0];
-      return { emptyError: emptyError, pastError: pastError, owners: owners, summary: summary, stripText: stripText,
+      var item = all('.items .item-open').filter(function (b) { return b.textContent.indexOf('Order replacement smear papers') >= 0; })[0];
+      item.scrollIntoView({ block: 'center' });
+      await wait(50);
+      var box = item.getBoundingClientRect();
+      var onTop = document.elementFromPoint(box.left + 5, box.top + 5);
+      item.click();
+      var opens = !!(await until(function () { return q('#ch-a .facts'); })) && q('#ch-a').textContent.indexOf('Stock is down to one box.') >= 0;
+      return { reachable: !!onTop && item.contains(onTop), opens: opens, emptyError: emptyError, pastError: pastError, owners: owners, summary: summary, stripText: stripText,
         stripGone: !q('.request-strip'), listed: !!byText('.items .t', 'Order replacement smear papers'),
         request: { folder: req.FileDirRef.split('/').pop(), type: req.RequestType, status: req.Status },
         writes: MockSharePoint.writes.slice() };
@@ -134,6 +141,57 @@ window.MockDrivers = (function () {
       return { before: before, reasonError: reasonError, effect: effect, pending: pending, buttonsDisabled: buttonsDisabled,
         after: q('#ch-a').textContent, writes: MockSharePoint.writes.slice(),
         history: MockSharePoint.data.History.filter(function (h) { return h.RecordId === 40; }).length };
+    },
+    // Reloading while changes are being recorded (plan K7.9): the notes come back, the changes confirm,
+    // and the new action opens on click without another reload.
+    reloadWhilePending: async function () {
+      await until(function () { return q('#ch-a .facts'); });
+      byText('#ch-a button', 'I need more time').click();
+      var date = await until(function () { return q('#ch-x-newDueIso'); });
+      date.value = MockRules.dates.addDays(MockRules.dates.localDate(new Date()), 7);
+      date.dispatchEvent(new Event('input'));
+      type(q('#ch-x-reason'), 'Waiting for the replacement probe to arrive.');
+      q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-a .pending'); });
+      MockSharePoint.reload();
+      var item = await until(function () { return all('.items .item-open').filter(function (b) { return b.textContent.indexOf('Replace FH40 probe') >= 0; })[0]; });
+      var noteAfterReload = item.textContent;
+      await until(function () { return text().indexOf('Deadline moved to') >= 0; }, 120000);
+      var confirmedNoteGone = all('.items .item-open').filter(function (b) { return b.textContent.indexOf('Replace FH40 probe') >= 0; })[0].textContent.indexOf('being recorded') < 0;
+      // Raise an action, reload before the flow has run, then open the new action from the list.
+      byText('button', 'Raise an action').click();
+      type(await until(function () { return q('#ch-r-title'); }), 'Check spare filter stock');
+      type(q('#ch-r-description'), 'Count the filters in store B.');
+      var form = q('#ch-r form');
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-r-ownerId'); });
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      var due = await until(function () { return q('#ch-r-dueIso'); });
+      due.value = MockRules.dates.addDays(MockRules.dates.localDate(new Date()), 14);
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return text().indexOf('Check and raise') >= 0; });
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return !q('#ch-r'); });
+      MockSharePoint.reload();
+      var strip = await until(function () { return q('.request-strip'); });
+      var stripAfterReload = strip.textContent;
+      await until(function () { return text().indexOf('raised: Check spare filter stock') >= 0; }, 120000);
+      all('.dialog-x').forEach(function (x) { x.click(); });
+      await until(function () { return !q('#ch-a'); });
+      var listed = all('.items .item-open').filter(function (b) { return b.textContent.indexOf('Check spare filter stock') >= 0; })[0];
+      listed.scrollIntoView({ block: 'center' });
+      await wait(50);
+      var x = listed.getBoundingClientRect();
+      var onTop = document.elementFromPoint(x.left + 5, x.top + 5);
+      listed.click();
+      await until(function () { return q('#ch-a .facts'); });
+      return { noteAfterReload: noteAfterReload, confirmedNoteGone: confirmedNoteGone, stripAfterReload: stripAfterReload,
+        reachable: !!onTop && listed.contains(onTop), onTop: onTop ? onTop.tagName + '.' + onTop.className : null, opened: q('#ch-a').textContent.indexOf('Count the filters in store B.') >= 0 };
+    },
+    // An old copy of one app file: the reader is told to press Ctrl+F5.
+    staleCopy: async function () {
+      await until(function () { return q('.bar'); });
+      return { banner: q('.stale-copy') ? q('.stale-copy').textContent : '' };
     },
     // Mark as done: an action with no close-out check is closed and leaves the open lists.
     markDone: async function () {

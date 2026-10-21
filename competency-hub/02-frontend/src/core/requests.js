@@ -6,6 +6,7 @@ CH.requests = (function () {
   var SCHEDULE = [20, 40, 60];
   var EVERY = 60;
   var GIVE_UP_MINUTES = 15;
+  var OPEN_STATUSES = ['Submitted', 'Processing'];
 
   function newKey() {
     if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
@@ -71,6 +72,25 @@ CH.requests = (function () {
       return entry;
     }
 
+    // After a reload: the user's own requests still waiting for the flow are tracked again (plan K7.9).
+    // Status is indexed, so it leads the filter; AuthorId keeps it to this person's requests.
+    async function resume() {
+      var found = [];
+      for (var i = 0; i < OPEN_STATUSES.length; i++) {
+        var res = await app.sp.items(CH.config.lists.requests.title, '$select=Id,Title,RequestKey,RequestType,TargetId,Created' +
+          "&$filter=Status eq '" + OPEN_STATUSES[i] + "' and AuthorId eq " + Number(app.person.SiteUserId), 100);
+        found = found.concat(res.rows);
+      }
+      found.sort(function (a, b) { return a.Id - b.Id; }).forEach(function (row) {
+        if (!row.RequestKey || entries.some(function (e) { return e.key === row.RequestKey; })) return;
+        var entry = { key: row.RequestKey, type: row.RequestType, targetId: row.TargetId || null, label: row.Title || 'Your change',
+          submittedAt: row.Created ? new Date(row.Created) : new Date(), state: 'submitted', message: '', resultId: null, polls: 0 };
+        entries.push(entry);
+        schedule(entry);
+      });
+      return found.length;
+    }
+
     function schedule(entry) {
       if (stopped) return;
       var seconds = entry.polls < SCHEDULE.length ? SCHEDULE[entry.polls] - (entry.polls ? SCHEDULE[entry.polls - 1] : 0) : EVERY;
@@ -124,6 +144,7 @@ CH.requests = (function () {
 
     return {
       submit: submit,
+      resume: resume,
       entries: function () { return entries.slice(); },
       // The newest unfinished or unread request for an action.
       forTarget: function (id) {

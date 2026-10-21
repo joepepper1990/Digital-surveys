@@ -8,7 +8,7 @@ const { MODULES } = require('../tools/build.js');
 const ROOT = path.join(__dirname, '..');
 
 function loadApp(extra) {
-  const context = vm.createContext(Object.assign({ CH: {}, Intl, Date, Math, JSON, Promise, URLSearchParams, console, setTimeout, window: {} }, extra || {}));
+  const context = vm.createContext(Object.assign({ CH: {}, Intl, Date, Math, JSON, Promise, URLSearchParams, console, setTimeout, clearTimeout, window: {} }, extra || {}));
   MODULES.forEach((m) => vm.runInContext(fs.readFileSync(path.join(ROOT, m), 'utf8'), context, { filename: m }));
   return context.CH;
 }

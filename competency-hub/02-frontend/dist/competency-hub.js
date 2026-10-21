@@ -1,11 +1,11 @@
-/* ESG Competency Hub 0.2.0 – built from src/ by tools/build.js. Do not edit. */
+/* ESG Competency Hub 0.2.1 – built from src/ by tools/build.js. Do not edit. */
 window.ESGCompetencyHub = function (ctx) {
   'use strict';
   var CH = {};
   /* src/core/config.js */
   // Fixed names and limits. Lists are addressed by display title; folders by list URL name.
   CH.config = {
-    VERSION: '0.2.0',
+    VERSION: '0.2.1',
     ENVIRONMENT: 'TEST',
     lists: {
       competencies: { title: 'Competencies', url: 'Competencies' },
@@ -282,6 +282,7 @@ window.ESGCompetencyHub = function (ctx) {
     var SCHEDULE = [20, 40, 60];
     var EVERY = 60;
     var GIVE_UP_MINUTES = 15;
+    var OPEN_STATUSES = ['Submitted', 'Processing'];
 
     function newKey() {
       if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
@@ -347,6 +348,25 @@ window.ESGCompetencyHub = function (ctx) {
         return entry;
       }
 
+      // After a reload: the user's own requests still waiting for the flow are tracked again (plan K7.9).
+      // Status is indexed, so it leads the filter; AuthorId keeps it to this person's requests.
+      async function resume() {
+        var found = [];
+        for (var i = 0; i < OPEN_STATUSES.length; i++) {
+          var res = await app.sp.items(CH.config.lists.requests.title, '$select=Id,Title,RequestKey,RequestType,TargetId,Created' +
+            "&$filter=Status eq '" + OPEN_STATUSES[i] + "' and AuthorId eq " + Number(app.person.SiteUserId), 100);
+          found = found.concat(res.rows);
+        }
+        found.sort(function (a, b) { return a.Id - b.Id; }).forEach(function (row) {
+          if (!row.RequestKey || entries.some(function (e) { return e.key === row.RequestKey; })) return;
+          var entry = { key: row.RequestKey, type: row.RequestType, targetId: row.TargetId || null, label: row.Title || 'Your change',
+            submittedAt: row.Created ? new Date(row.Created) : new Date(), state: 'submitted', message: '', resultId: null, polls: 0 };
+          entries.push(entry);
+          schedule(entry);
+        });
+        return found.length;
+      }
+
       function schedule(entry) {
         if (stopped) return;
         var seconds = entry.polls < SCHEDULE.length ? SCHEDULE[entry.polls] - (entry.polls ? SCHEDULE[entry.polls - 1] : 0) : EVERY;
@@ -400,6 +420,7 @@ window.ESGCompetencyHub = function (ctx) {
 
       return {
         submit: submit,
+        resume: resume,
         entries: function () { return entries.slice(); },
         // The newest unfinished or unread request for an action.
         forTarget: function (id) {
@@ -1726,9 +1747,18 @@ window.ESGCompetencyHub = function (ctx) {
         });
       }
 
+      // The layout carries the version it was built with. A different script version means the browser kept an
+      // old copy of one of the two files (plan K7.9).
+      function staleCopy() {
+        var built = app.root && app.root.getAttribute && app.root.getAttribute('data-ch-version');
+        return !!built && built !== CH.config.VERSION;
+      }
+
       function frame(content) {
         var C = CH.config;
         return [
+          app.stale ? h('p', { class: 'stale-copy', role: 'alert' }, h('b', { text: 'A newer version of the Competency Hub is available. ' }),
+            'Press Ctrl+F5 to load it. Until then some buttons may not work.') : null,
           h('header', { class: 'bar' }, h('div', { class: 'bar-in' },
             h('div', { class: 'brand' }, 'ESG Competency Hub', h('small', { text: 'Environmental Safety Group' })),
             C.ENVIRONMENT !== 'PRODUCTION' ? h('span', { class: 'env', text: C.ENVIRONMENT + ' – not live data' }) : null,
@@ -1872,6 +1902,7 @@ window.ESGCompetencyHub = function (ctx) {
 
       async function start() {
         app.root = await waitForRoot();
+        app.stale = staleCopy();
         watchSize();
         var webPart = ctx.getWebPart();
         if (!webPart || !webPart.spHttpClient || !webPart.pageContext || !webPart.pageContext.web) {
@@ -1902,7 +1933,7 @@ window.ESGCompetencyHub = function (ctx) {
         app.firstName = await app.sp.myFirstName();
         app.tracker = CH.requests.tracker(app, onRequestChange);
         try {
-          await reload();
+          await Promise.all([reload(), app.tracker.resume().catch(function () { return 0; })]);
         } catch (error) {
           stateScreen('The Competency Hub could not load', 'Some of the information could not be read. Please reload the page in a few minutes.',
             'Details for the administrator: ' + (error.status ? 'HTTP ' + error.status : error.message));

@@ -3601,6 +3601,86 @@ The toolchain is adapted from the 1-to-1 and checks the flow in four ways:
 3. Replace both app files.
 4. Raise, update, extend and complete a TEST action, sending screenshots.
 
+### K7.9 Fixes from your first on-site test (app 0.2.1)
+
+**Context.** Part C1 passed on the site: the action was raised and recorded,
+and appeared on the Hub. The run took 9 min 35 s. SharePoint calls took 11–66 s
+each where about 1 s is normal, which points to throttling (K7.10). You found
+two problems:
+
+1. After an action appeared in *Your actions*, hovering over it or clicking it
+   did nothing until you reloaded with **Ctrl+F5**. A plain F5 did not fix it.
+2. After *I need more time*, the action said "change being recorded". After you
+   refreshed the page, that note disappeared, although the flow was still
+   running.
+
+**Cause of 1: the browser kept an old copy of the app.** The click and hover
+code is in 0.2.0. Ctrl+F5 fetches fresh files, but F5 can reuse the cached
+`competency-hub.js` from 0.1.2. In that version, actions in the list are not
+links at all. The same stale copy also explains part of problem 2, because
+0.1.2 knows nothing about changes being recorded. There is no flaw in the
+0.2.0 click code, but nothing warns you when an old copy is running.
+
+**Cause of 2 (also a real bug in 0.2.0):** the app keeps the list of changes
+being recorded in the page's memory only (`src/core/requests.js`, `tracker`).
+A reload forgets them, so even 0.2.0 drops the note.
+
+**Changes:**
+
+1. **Detect an old copy.**
+   - `tools/build.js` stamps the version into the layout
+     (`<div class="ch" data-ch-root data-ch-version="0.2.1">` in
+     `layout/competency-hub.layout.html`).
+   - On start, `src/app.js` compares this with `CH.config.VERSION`. If they
+     differ, the app shows a plain banner above everything else: "A newer
+     version of the Competency Hub is available. Press Ctrl+F5 to load it."
+   - The script name stays the same, so uploading a new version is unchanged.
+2. **Remember changes across a reload.** Add `tracker.resume()` in
+   `src/core/requests.js`, called from `start()` after the model loads.
+   - It reads the person's own open requests:
+     `$filter=Status eq 'Submitted' and AuthorId eq {SiteUserId}`, then the same
+     for `Processing`. Status is indexed, so it leads the filter.
+   - For each one it rebuilds an entry: key, type, target, label = Title,
+     submittedAt = Created. Polling then carries on with the existing schedule
+     (`schedule`/`poll`). The "change being recorded" notes, the panel's
+     pending line and the raise strip then reappear after a reload.
+   - Requests that are already final are not resumed. Their outcome shows on
+     the action itself.
+3. **Version 0.2.1.** Update `src/core/config.js`, the README version notes and
+   the HOW-TO.
+
+**Tests:**
+
+- **Unit:** `resume()` rebuilds entries from Submitted and Processing rows and
+  ignores final ones. The version check shows the banner only on a mismatch.
+- **Browser** (`test/browser/run.js`, new driver): raise an action and extend
+  one, reload the page before the simulated flow finishes, and check:
+  - the "being recorded" notes are back;
+  - the change then confirms;
+  - the action opens on click without another reload.
+
+  A second run checks the banner with a mismatched layout stamp.
+- **Static rules and the existing suites** still pass. The flow is unchanged.
+
+**Delivery:**
+
+- Commit and push.
+- Rebuild the zip: `2-App` only, plus HOW-TO notes.
+- You replace both app files, use **Reset layout cache** on the web part, and
+  reload with **Ctrl+F5** once. The footer should say 0.2.1.
+
+### K7.10 Next: cut SharePoint calls per request (proposed, not in 0.2.1)
+
+Your timings show throttled calls. I propose a flow update, solution 1.0.0.1,
+that reduces the calls each request makes:
+
+- reuse the list IDs and flow account across steps;
+- combine the requester and folder checks;
+- skip folder look-ups when the folder already exists.
+
+The aim is about half the calls on the raise path. This needs your go-ahead,
+and you would import it as an upgrade.
+
 ### K6.10 People list confirmed (C-04 resolved, 21 Oct 2026)
 
 **Context.** You supplied the corrected sign-in list: 25 engineers and

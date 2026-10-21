@@ -56,7 +56,7 @@ function build() {
   ].join('\n');
 
   const css = scopeCss(read('styles/app.css'), '.SCOPE');
-  const layout = read('layout/competency-hub.layout.html').replace('/*CSS*/', css);
+  const layout = read('layout/competency-hub.layout.html').replace('/*CSS*/', css).replace('/*VERSION*/', pkgVersion);
 
   const mockCss = css.split('.SCOPE').join('.mock-scope');
   const mock = [
@@ -73,7 +73,7 @@ function build() {
       '<option value="actionsPartial">Actions over the read limit</option><option value="unknown">Unknown user</option>' +
       '<option value="duplicate">Duplicate person</option><option value="left">Person marked Left</option><option value="flowSlow">Request flow very slow</option>' +
       '<option value="flowFail">Request flow fails</option></select></label></div>',
-    '<div class="mock-scope"><div class="ch" data-ch-root><p>Loading the ESG Competency Hub…</p></div></div>',
+    '<div class="mock-scope"><div class="ch" data-ch-root data-ch-version="' + pkgVersion + '"><p>Loading the ESG Competency Hub…</p></div></div>',
     '<script src="seed.js"></script>',
     '<script src="rules.js"></script>',
     '<script src="flow-sim.js"></script>',

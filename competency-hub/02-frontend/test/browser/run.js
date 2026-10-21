@@ -123,6 +123,7 @@ check('raise: the owner list holds area members and management, with "(you)"', r
 check('raise: summary shown, then "being recorded" until the flow confirms it', res.ok && /Order replacement smear papers/.test(res.result.summary) &&
   /being recorded/.test(res.result.stripText), JSON.stringify(res));
 check('raise: the new action appears once confirmed, and the note goes', res.ok && res.result.listed && res.result.stripGone && res.result.request.status === 'Completed', JSON.stringify(res));
+check('raise: once confirmed, the new action opens on click without a reload', res.ok && res.result.reachable && res.result.opens, JSON.stringify(res));
 check('raise: the only write is a request in the user\'s own folder', res.ok && res.result.writes.length === 1 && res.result.writes[0].list === 'Requests' &&
   res.result.writes[0].folder === 'u' + RACHEL && res.result.request.type === 'RaiseAction', JSON.stringify(res && res.result && res.result.writes));
 res = drive('as=' + RACHEL + '&action=40&drive=updateAndExtend', SLOW);
@@ -132,6 +133,15 @@ check('update: saved instantly into the action\'s own folder and listed', res.ok
 check('extend: a short reason is refused; the effect is explained', res.ok && /10 characters/.test(res.result.reasonError) && /The new deadline will be/.test(res.result.effect), JSON.stringify(res));
 check('extend: pending while recorded, buttons disabled, then the history shows both changes', res.ok && /being recorded/.test(res.result.pending) &&
   res.result.buttonsDisabled && /Show all deadline changes \(2\)/.test(res.result.after) && res.result.history === 2, JSON.stringify(res));
+res = drive('as=' + RACHEL + '&action=40&drive=reloadWhilePending', SLOW);
+check('reload while an extension is recorded: the note comes back, then clears once confirmed', res.ok && /change being recorded/.test(res.result.noteAfterReload) &&
+  res.result.confirmedNoteGone, JSON.stringify(res));
+check('reload while a raised action is recorded: the strip comes back, and the new action opens on click', res.ok && /being recorded/.test(res.result.stripAfterReload) &&
+  res.result.reachable && res.result.opened, JSON.stringify(res));
+res = drive('as=' + RACHEL + '&drive=staleCopy&stamp=0.0.1');
+check('an old copy of an app file is reported, with Ctrl+F5', res.ok && /Ctrl\+F5/.test(res.result.banner), JSON.stringify(res));
+res = drive('as=' + RACHEL + '&drive=staleCopy');
+check('matching files: no old-copy banner', res.ok && res.result.banner === '', JSON.stringify(res));
 res = drive('as=' + RACHEL + '&action=53&drive=markDone', SLOW);
 check('mark as done: explained, then the action is closed', res.ok && /will be closed/.test(res.result.explain) && res.result.status === 'Closed', JSON.stringify(res));
 res = drive('as=' + RACHEL + '&action=40&drive=staleRevision', SLOW);
