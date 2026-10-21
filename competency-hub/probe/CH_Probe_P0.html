@@ -1,0 +1,47 @@
+<template
+    id="metadata"
+    data-name="Competency Hub probe P0"
+    data-description="Phase 0 read-only checks for the ESG Competency Hub site"
+    data-author="ESG Competency Hub">
+
+    <template id="layout">
+        <style>
+            .SCOPE .chp {
+                box-sizing: border-box;
+                font-family: Segoe UI, Arial, sans-serif;
+                font-size: 14px;
+                color: #16222c;
+                max-width: 960px;
+                padding: 16px;
+                border: 1px solid #d9dfe5;
+                background: #fff;
+            }
+            .SCOPE .chp h2 { font-size: 18px; margin: 0 0 8px; color: #13516b; }
+            .SCOPE .chp table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+            .SCOPE .chp th, .SCOPE .chp td {
+                border: 1px solid #d9dfe5; padding: 5px 7px;
+                text-align: left; vertical-align: top;
+            }
+            .SCOPE .chp .pass { color: #1b7a45; font-weight: 700; }
+            .SCOPE .chp .fail { color: #a4262c; font-weight: 700; }
+            .SCOPE .chp .note { color: #8a5a00; font-weight: 700; }
+            .SCOPE .chp .info { color: #5b6774; }
+            .SCOPE .chp button { margin: 6px 8px 6px 0; padding: 6px 12px; }
+            .SCOPE .chp textarea {
+                box-sizing: border-box; width: 100%; min-height: 170px;
+                font-family: Consolas, monospace; font-size: 12px;
+            }
+        </style>
+        <section class="chp" data-chprobe-root>
+            <h2>ESG Competency Hub – Phase 0 probe</h2>
+            <p class="info">Read-only checks. This page creates, changes and deletes nothing in SharePoint.</p>
+            <p data-chprobe-status>Waiting for Welcome JavaScript to start...</p>
+            <div data-chprobe-controls></div>
+        </section>
+        <script
+            src="CH_Probe_P0.js"
+            data-layout
+            data-exports="ESGCompetencyHubProbeP0">
+        </script>
+    </template>
+</template>
