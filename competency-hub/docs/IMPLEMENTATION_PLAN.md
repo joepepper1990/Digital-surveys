@@ -1,7 +1,7 @@
 # ESG Competency Hub — Planning Package (revision 3)
 
 **Environmental Safety Group, Dungeness B Power Station**
-**Status:** plan approved on 19 October 2026 (revision 3, after a second independent review, J.2); layout, access model, flow account and management roles decided on 21 October 2026 (E.0, K4). Remaining decisions in I.4 are recorded in the Phase 0 decision log as they are confirmed. Nothing has been deployed or changed in SharePoint.
+**Status:** plan approved on 19 October 2026 (revision 3, after a second independent review, J.2); layout, access model, flow account, management roles and site decided on 21 October 2026 (E.0, K4, K5). Remaining decisions in I.4 are recorded in the Phase 0 decision log as they are confirmed. Nothing has been deployed to the site yet.
 
 ---
 
@@ -2920,7 +2920,7 @@ A second developer would shorten the elapsed time, but not the total effort.
 
 | ID | Confirmation |
 |---|---|
-| C-01 | IT creates the new site, with the flow account as Site Collection Administrator |
+| C-01 | **Resolved 21 Oct 2026:** the site `/sites/ESGCompetencyHub` was created by you, with UK regional settings. Because your own account runs the flows (D-03), you are already its owner. |
 | C-02 | The environment for the flows, and DLP (SharePoint including the HTTP action, Office 365 Outlook) |
 | C-03 | Limited-access lockdown is off on the site |
 | C-04 | Sign-in names for the 25 engineers and technicians (management addresses supplied 21 Oct 2026); the spelling of "Harrisson" |
@@ -2963,7 +2963,7 @@ settled it.
 | D-02 | Save model | Instant direct writes for routine updates, comments, flags, notices, own calendar entries and live meetings; queued transactions for everything rule-bound (C.8) |
 | D-03 | Flow and notification identity | **Decided [You], 21 Oct 2026: option C** (your own account and mailbox) to begin with; a later switch to a service account is possible (K4.1). |
 | D-04 | Flow co-owners | **Decided [You], 21 Oct 2026: none for now** (K4.1). If co-owners are added later: two management users. Co-owners can edit the flows and use the flow account's connections, so this is a privileged role. They must be Site Collection Administrators, preferably using separate administration accounts. |
-| D-05 | Site | A new dedicated private communication site (your earlier answer, to be confirmed) |
+| D-05 | Site | **Decided [You], 21 Oct 2026:** the new dedicated site `/sites/ESGCompetencyHub` |
 | D-06 | Test environment | A separate environment; fallback is rehearsal on production with a reset |
 | D-07 | Close-out | Completion closes the action unless a close-out check is required (on by default for High priority) |
 | D-08 | Overdue reminders | Day 1, then weekly; weekly management summary |
@@ -3117,7 +3117,54 @@ in section A:
 
 ---
 
-## K4. Your decisions of 21 Oct 2026, and the first build increment (current task)
+## K5. The new site exists: run the P0 probe (current task)
+
+**Context.** You created the site `/sites/ESGCompetencyHub` on 21 Oct 2026 and
+set its regional settings. That resolves C-01 and D-05. The next gate is the P0
+probe (P-01, P-07, P-09), which proves on the real site that:
+
+- Welcome runs our code;
+- it identifies you;
+- the site can be read;
+- the Welcome lists are readable;
+- the regional settings are UK and London time;
+- the Back button works.
+
+**What I do:**
+
+1. Record C-01 and D-05 as resolved in the plan and the repository copy.
+2. Keep the tenant address **out of the code and repository files**. It is
+   given to the flows only through the environment variable
+   `esg_CompetencyHubSiteUrl` at import time. The P0 probe already reads the
+   site from Welcome's context, so it needs no change.
+3. Give you the probe steps with direct links for this site:
+   - Site contents: `…/_layouts/15/viewlsts.aspx`
+   - new page: Site Pages
+   - the page to open afterwards: `…/SitePages/HubProbe.aspx`
+
+   No code is changed or rebuilt. The probe files are already on the branch,
+   at `competency-hub/probe/CH_Probe_P0.html` and `CH_Probe_P0.js`.
+
+**What you do** (each step changes only the new site, and only by adding the
+probe page and two files):
+
+1. Download the two probe files from the branch.
+2. Create the `HubProbe` page with a full-width Welcome web part. This creates
+   the Welcome layouts library and the Errors list.
+3. Upload both files to *Welcome Web Part - Custom Layouts*, select the layout
+   *Competency Hub probe P0*, then republish.
+4. Reload the page, click *Run back-button test*, and send back the results box
+   and a screenshot.
+
+**After a pass:** I write the probe report, and then Setup comes next. Setup
+creates the lists, groups and folders and makes you the first administrator,
+using its own instruction sheet. Your explicit permission is needed before it
+runs.
+
+**If anything fails:** delete the page and the two files. Nothing else was
+changed.
+
+## K4. Your decisions of 21 Oct 2026, and the first build increment
 
 ### K4.1 Decisions to record in the plan
 
