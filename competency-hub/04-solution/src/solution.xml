@@ -1,0 +1,42 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<ImportExportXml version="9.2.25093.138" SolutionPackageVersion="9.2" languagecode="1033" generatedBy="CrmLive" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" OrganizationVersion="9.2.25093.138" OrganizationSchemaType="Full" CRMServerServiceabilityVersion="9.2.25095.00139">
+  <SolutionManifest>
+    <UniqueName>ESGCompetencyHub</UniqueName>
+    <LocalizedNames>
+      <LocalizedName description="ESG Competency Hub" languagecode="1033" />
+    </LocalizedNames>
+    <Descriptions>
+      <Description description="ESG Competency Hub: the request queue flow that applies changes sent from the Competency Hub page." languagecode="1033" />
+    </Descriptions>
+    <Version>1.0.0.0</Version>
+    <Managed>0</Managed>
+    <Publisher>
+      <UniqueName>ESGCompetencyHub</UniqueName>
+      <LocalizedNames>
+        <LocalizedName description="ESG Competency Hub" languagecode="1033" />
+      </LocalizedNames>
+      <Descriptions />
+      <EMailAddress xsi:nil="true"></EMailAddress>
+      <SupportingWebsiteUrl xsi:nil="true"></SupportingWebsiteUrl>
+      <CustomizationPrefix>esghub</CustomizationPrefix>
+      <CustomizationOptionValuePrefix>63587</CustomizationOptionValuePrefix>
+      <Addresses>
+        <Address>
+          <AddressNumber>1</AddressNumber>
+          <AddressTypeCode>1</AddressTypeCode>
+          <ShippingMethodCode>1</ShippingMethodCode>
+        </Address>
+        <Address>
+          <AddressNumber>2</AddressNumber>
+          <AddressTypeCode>1</AddressTypeCode>
+          <ShippingMethodCode>1</ShippingMethodCode>
+        </Address>
+      </Addresses>
+    </Publisher>
+    <RootComponents>
+      <RootComponent type="29" id="{7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f02}" behavior="0" />
+      <RootComponent type="380" schemaName="esghub_CompetencyHubSiteUrl" behavior="0" />
+    </RootComponents>
+    <MissingDependencies />
+  </SolutionManifest>
+</ImportExportXml>

@@ -1,0 +1,13 @@
+<environmentvariabledefinition schemaname="esghub_CompetencyHubSiteUrl">
+  <description default="Full address of the Competency Hub site, e.g. https://&lt;tenant&gt;.sharepoint.com/sites/ESGCompetencyHub (no trailing slash).">
+    <label description="Full address of the Competency Hub site, e.g. https://&lt;tenant&gt;.sharepoint.com/sites/ESGCompetencyHub (no trailing slash)." languagecode="1033" />
+  </description>
+  <displayname default="ESG Competency Hub Site URL">
+    <label description="ESG Competency Hub Site URL" languagecode="1033" />
+  </displayname>
+  <introducedversion>1.0.0.0</introducedversion>
+  <iscustomizable>1</iscustomizable>
+  <isrequired>1</isrequired>
+  <secretstore>0</secretstore>
+  <type>100000000</type>
+</environmentvariabledefinition>
