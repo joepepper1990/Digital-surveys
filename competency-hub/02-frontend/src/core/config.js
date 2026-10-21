@@ -1,0 +1,21 @@
+// Fixed names and limits. Lists are addressed by display title; folders by list URL name.
+CH.config = {
+  VERSION: '0.1.0',
+  ENVIRONMENT: 'TEST',
+  lists: {
+    competencies: { title: 'Competencies', url: 'Competencies' },
+    people: { title: 'People', url: 'People' },
+    members: { title: 'Competency Members', url: 'CompetencyMembers' },
+    actions: { title: 'Actions', url: 'Actions' },
+    notices: { title: 'Noticeboard', url: 'Noticeboard' },
+    updates: { title: 'Updates', url: 'Updates' },
+    calendar: { title: 'Calendar Events', url: 'CalendarEvents' },
+    meetings: { title: 'Meetings', url: 'Meetings' }
+  },
+  pageSize: 500,
+  maxRows: 5000,
+  dueSoonDays: 7,
+  meetingOverdueDays: 35,
+  noticeImportantMaxDays: 30,
+  managementRoles: ['Team Leader', 'Group Head']
+};

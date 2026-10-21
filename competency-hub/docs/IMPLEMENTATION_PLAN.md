@@ -1,7 +1,7 @@
 # ESG Competency Hub — Planning Package (revision 3)
 
 **Environmental Safety Group, Dungeness B Power Station**
-**Status:** plan approved on 19 October 2026 (revision 3, after a second independent review, J.2); layout and access model decided on 21 October 2026. Each decision in I.4 is recorded in the Phase 0 decision log as it is confirmed. Nothing has been built, deployed or changed in SharePoint.
+**Status:** plan approved on 19 October 2026 (revision 3, after a second independent review, J.2); layout, access model, flow account and management roles decided on 21 October 2026 (E.0, K4). Remaining decisions in I.4 are recorded in the Phase 0 decision log as they are confirmed. Nothing has been deployed or changed in SharePoint.
 
 ---
 
@@ -1400,9 +1400,10 @@ RW Radwaste
 | 23 | Jenn Tibbenham | Technician | | | ✓ | | | | ✓ | | | | 2 |
 | 24 | Adam Washford | Technician | ✓ | ✓ | ✓ | | | | ✓ | | | ✓ | 5 |
 | 25 | Sadie Young | Technician | | | ✓ | | | ✓ | ✓ | | ✓ | | 4 |
-| 26 | Joe Pepper | Management | all (role) |
-| 27 | Mark Wellstead | Management | all (role) |
-| 28 | Nathan Tilly | Management | all (role) |
+| 26 | Joe Pepper | Team Leader **[You]** | all (role) |
+| 27 | Mark Wellstead | Team Leader **[You]** | all (role) |
+| 28 | Nathan Tilly | Team Leader **[You]** | all (role) |
+| 29 | Robert Starbuck | Group Head **[You]** | all (role) |
 
 | Competency | Engineers | Technicians | Members |
 |---|---|---|---|
@@ -2922,8 +2923,8 @@ A second developer would shorten the elapsed time, but not the total effort.
 | C-01 | IT creates the new site, with the flow account as Site Collection Administrator |
 | C-02 | The environment for the flows, and DLP (SharePoint including the HTTP action, Office 365 Outlook) |
 | C-03 | Limited-access lockdown is off on the site |
-| C-04 | User principal names for all 28 people; the spelling of "Harrisson" |
-| C-05 | Which person is Team Leader and which is Group Head |
+| C-04 | Sign-in names for the 25 engineers and technicians (management addresses supplied 21 Oct 2026); the spelling of "Harrisson" |
+| C-05 | **Resolved 21 Oct 2026:** Robert Starbuck is Group Head; Joe Pepper, Mark Wellstead and Nathan Tilly are Team Leaders |
 | C-06 | The initial system administrators (with their roles) and the flow co-owners, who hold a privileged role (D-04) |
 | C-07 | IT code-review requirements for custom JavaScript |
 | C-08 | Delegation of meeting administration to technicians |
@@ -2960,8 +2961,8 @@ settled it.
 | ID | Decision | Recommendation |
 |---|---|---|
 | D-02 | Save model | Instant direct writes for routine updates, comments, flags, notices, own calendar entries and live meetings; queued transactions for everything rule-bound (C.8) |
-| D-03 | Flow and notification identity | Option A (service account + shared mailbox), subject to C-12. Otherwise option B. Option C only for a pilot. |
-| D-04 | Flow co-owners | Two management users. Co-owners can edit the flows and use the flow account's connections, so this is a privileged role. They must be Site Collection Administrators, preferably using separate administration accounts. |
+| D-03 | Flow and notification identity | **Decided [You], 21 Oct 2026: option C** (your own account and mailbox) to begin with; a later switch to a service account is possible (K4.1). |
+| D-04 | Flow co-owners | **Decided [You], 21 Oct 2026: none for now** (K4.1). If co-owners are added later: two management users. Co-owners can edit the flows and use the flow account's connections, so this is a privileged role. They must be Site Collection Administrators, preferably using separate administration accounts. |
 | D-05 | Site | A new dedicated private communication site (your earlier answer, to be confirmed) |
 | D-06 | Test environment | A separate environment; fallback is rehearsal on production with a reset |
 | D-07 | Close-out | Completion closes the action unless a close-out check is required (on by default for High priority) |
@@ -3116,7 +3117,100 @@ in section A:
 
 ---
 
-## K3. What happens next (current task)
+## K4. Your decisions of 21 Oct 2026, and the first build increment (current task)
+
+### K4.1 Decisions to record in the plan
+
+| Item | Your decision | Effect on the plan |
+|---|---|---|
+| C-01 site | **You can create the new site yourself.** Welcome is proven in the tenant. | C-01 is resolved. C-11 (Welcome on the new site) is still checked by running the P0 probe there. |
+| D-03 flow and notification identity | **Your own account to begin with**, using your own mailbox, so emails come from you. A switch to a service account may follow once everything works. | D-03 = option C **[You]**. G.6 gains a "switching to a service account later" procedure: <br>• transfer flow ownership;<br>• re-create connections;<br>• add the new account as Site Collection Administrator;<br>• change the sender environment variable. <br>Risks R-03 and R-05 stay open: request use is shared with the 1-to-1 flows, and continuity depends on your account. |
+| D-04 co-owners | **None for now** | D-04 = none **[You]**. <br>• The Setup *Recover administrator* path depends on you as the only owner. <br>• R-03 is raised to High impact. <br>• The handover drill in Phase 6 is replaced by a written handover note. |
+| A-1 non-member rights | **Non-members can post a notice on any area's noticeboard, and nothing else** (for example a request, a need or an improvement idea) | E.0 is amended: <br>• All Users get **Add** on every area's Noticeboard folder; nothing else changes. <br>• Notices from non-members are labelled *"From {name}, {their area}"*. <br>• The area's meeting administrators are notified once a day in the existing digest. <br>• They can flag the notice for the meeting, or archive it, as usual. <br>• Non-members cannot comment on, flag or edit anything else. <br>Test T-PERM-16 is added. |
+| C-13 restricted content | **Confirmed: nothing needs hiding from other ESG staff** | C-13 is closed. E.0 stands as written. |
+| Management roles (C-05) | **Group Head: Robert Starbuck** (`robert.starbuck@edf-energy.com`). **Team Leaders:** Joe Pepper (`joseph.pepper@edf-energy.com`), Mark Wellstead (`mark.wellstead@edf-energy.com`), Nathan Tilly (`nathan.tilly@edf-energy.com`) | E.1 is updated: **Robert Starbuck is added as person 29**, Group Head, with all areas by role. Email addresses are stored in lower case, because matching ignores case. |
+
+**Still open:**
+
+- **C-04:** the sign-in names of the other 25 staff. If they all follow `firstname.lastname@edf-energy.com`, say so and I will prepare the import file. The spelling of "Harrisson" still needs confirming.
+- **C-06:** the initial system administrator. Assumption: **Joe Pepper**, since you will run Setup.
+- **D-02 and D-05 to D-16:** still recommendations awaiting your approval. The plan approval covered them in general, but they have not been confirmed one by one.
+
+### K4.2 First build increment: the app shell, built locally against a simulated SharePoint
+
+**Context.** Phase 0 can run as soon as you create the site and run the P0
+probe. Meanwhile the frontend can be built and tested locally, because it
+doesn't depend on the probe results.
+
+**Scope of this increment**, in `competency-hub/02-frontend/` (G.2/G.4
+structure):
+
+1. **Scaffold.**
+   - `src/` contains plain modules.
+   - `tools/build.js` (Node, no bundler) concatenates them into
+     `dist/competency-hub.js` and `dist/competency-hub.html` (the Welcome
+     layout), using the proven wrapper from the 1-to-1 and the P0 probe
+     (`window.ESGCompetencyHub = function (ctx) { … onInitialize/onError/onDispose }`).
+   - `--check` mode detects a stale `dist/`.
+2. **Core modules:**
+
+   | Module | Contents |
+   |---|---|
+   | `core/dom.js` | `h()`, which sets text content only |
+   | `core/dates.js` | Every D.0.1 rule: `localDate`, `addDays`, `daysBetween`, the DueDay conversions and the Monday key |
+   | `core/sp.js` | Read helpers adapted from the 1-to-1: `req`, paged reads with a same-site next-link guard, and 429/503 retry |
+   | `core/config.js` | List and folder names |
+3. **Identity and roles** (`domain/access.js`), with these rules:
+   - **Fail closed.** A user not found in People, marked Left, or matching more than one People row sees only "Your account isn't set up yet – contact {administrators}". No role is guessed.
+   - **Roles** come from `People.Role`: Technician, Engineer, Team Leader or Group Head.
+   - **Memberships** come from Competency Members.
+   - **`canWrite(area)`** is true for members, Team Leaders and the Group Head.
+   - **`canPostNotice(area)`** is true for every active user.
+4. **Screens (read-only, plus posting a notice on the mock):**
+   - home pages for Technician, Engineer and Team Leader/Group Head, in the chosen full-width tiles layout;
+   - area pages with the Actions, Notices & issues, Calendar and Meetings tabs;
+   - the view-only bar for non-members;
+   - "Post a notice" available in every area.
+
+   The other forms (raise action, extend and so on) appear but are marked
+   "Coming in the next increment", so nothing is half-built.
+5. **Mock SharePoint** (`mock/`):
+   - a fake Welcome context and in-memory `_api` reads;
+   - synthetic, clearly labelled seed data for the 29 people (real names and
+     roles from E.1, with no real sign-in names) and sample actions;
+   - simulated 403, 404 and slow responses.
+
+   A `mock/index.html` page runs the app locally, with a "Sign in as" switch.
+
+**Tests** (`test/`, run with Node and the pre-installed Chromium):
+
+- **Unit tests:**
+  - every D.0.1 date-matrix row;
+  - access rules for each role, including non-member notice posting and every
+    fail-closed case (unknown user, user marked Left, duplicate People rows);
+  - static code rules S1–S8 (for example, no `innerHTML` and no writes outside
+    the allow-list).
+- **Browser tests:** each role's home page and an area page render at 1,920,
+  1,366 and 768 px with no script errors; a view-only area shows no write
+  buttons; the 403/404 states show plain error messages.
+
+**Not in this increment:**
+
+- Setup and the flows;
+- the request queue and all queued writes;
+- meetings;
+- the management dashboard drill-downs;
+- anything in the tenant.
+
+**Deliverable:**
+
+- the built `dist/` files and the test results;
+- screenshots for each role;
+- a commit to the designated branch;
+- a short status note listing what has been tested locally and what is not
+  yet proven.
+
+## K3. What happens next
 
 **Context.** The plan (revision 3) is approved. The front-page layout is chosen
 (tiles at full width), and so is the access model (everyone reads every area;

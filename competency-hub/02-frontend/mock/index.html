@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en-GB"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Competency Hub – local test</title>
+<style>body{margin:0;background:#f3f6f8} .mock-bar{font:13px Segoe UI,sans-serif;background:#222;color:#fff;padding:6px 12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.mock-bar select{font:inherit}
+.mock-scope .ch {--navy: #13516b; --navy-soft: #e7f0f6; --accent: #ef7d3a; --accent-dark: #c95f1f; --ink: #16222c; --muted: #5b6774; --bg: #f3f6f8; --card: #ffffff; --line: #dde3e8; --focus: #2b78d0; --late: #a4262c; --late-bg: #fde8e9; --soon: #8a5a00; --soon-bg: #fff3d6; --ok: #1b7a45; --ok-bg: #e6f3eb; box-sizing: border-box; background: var(--bg); color: var(--ink); font: 16px/1.55 "Segoe UI", system-ui, sans-serif; min-height: 70vh; position: relative;}
+.mock-scope .ch * {box-sizing: border-box;}
+.mock-scope .ch button, .mock-scope .ch input, .mock-scope .ch select, .mock-scope .ch textarea {font: inherit;}
+.mock-scope .ch button {cursor: pointer;}
+.mock-scope .ch :focus-visible {outline: 3px solid var(--focus); outline-offset: 2px;}
+.mock-scope .ch .bar {background: var(--navy); color: #fff; border-bottom: 3px solid var(--accent);}
+.mock-scope .ch .bar-in {display: flex; align-items: center; gap: 16px; padding: 8px 32px; min-height: 58px; flex-wrap: wrap;}
+.mock-scope .ch .brand {font-weight: 600; font-size: 17px;}
+.mock-scope .ch .brand small {display: block; font-weight: 400; font-size: 12px; color: #c9dde6;}
+.mock-scope .ch .env {background: #fff3d6; color: #6b4a00; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 600;}
+.mock-scope .ch .who {margin-left: auto; font-size: 14px; color: #dbe8ee;}
+.mock-scope .ch main {padding: 28px 32px 48px; outline: none;}
+.mock-scope .ch h1 {font-size: 26px; font-weight: 600; margin: 0 0 6px;}
+.mock-scope .ch h2 {font-size: 18px; font-weight: 600; margin: 0 0 12px;}
+.mock-scope .ch .lead {color: var(--muted); margin: 0 0 20px; font-size: 17px;}
+.mock-scope .ch .sentence {font-size: 18px; margin: 0 0 20px;}
+.mock-scope .ch .muted {color: var(--muted);}
+.mock-scope .ch .small {font-size: 14px;}
+.mock-scope .ch .row {display: flex; gap: 12px; flex-wrap: wrap; align-items: center;}
+.mock-scope .ch .actions-row {margin-bottom: 24px;}
+.mock-scope .ch .tab-actions {margin-bottom: 12px;}
+.mock-scope .ch .txt-late {color: var(--late); font-weight: 600;}
+.mock-scope .ch .txt-soon {color: var(--soon); font-weight: 600;}
+.mock-scope .ch .txt-ok {color: var(--ok); font-weight: 600;}
+.mock-scope .ch .card {background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px 22px; margin-bottom: 20px;}
+.mock-scope .ch .state-card {max-width: 720px; margin: 40px auto;}
+.mock-scope .ch .cols3 {display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start;}
+.mock-scope .ch .cols3 > div > .card:last-child {margin-bottom: 0;}
+.mock-scope .ch .btn {border: 1px solid #c3ccd4; background: #fff; color: var(--ink); border-radius: 8px; padding: 10px 18px; font-weight: 600; min-height: 44px;}
+.mock-scope .ch .btn:hover {background: #f4f7f9;}
+.mock-scope .ch .btn:disabled {opacity: .6; cursor: default;}
+.mock-scope .ch .btn-main {background: var(--accent); border-color: var(--accent); color: #fff;}
+.mock-scope .ch .btn-main:hover {background: var(--accent-dark);}
+.mock-scope .ch .btn-link {background: none; border: 0; color: var(--navy); text-decoration: underline; padding: 6px 0;}
+.mock-scope .ch .when {font-weight: 600; white-space: nowrap; padding: 3px 11px; border-radius: 999px; font-size: 14px; display: inline-block; margin-left: 6px;}
+.mock-scope .ch .w-late {color: var(--late); background: var(--late-bg);}
+.mock-scope .ch .w-soon {color: var(--soon); background: var(--soon-bg);}
+.mock-scope .ch .w-later {color: var(--muted); background: #eef1f4;}
+.mock-scope .ch .w-ok {color: var(--ok); background: var(--ok-bg);}
+.mock-scope .ch .group-title {display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 16px; margin: 14px 0 8px;}
+.mock-scope .ch .group-title:first-child {margin-top: 0;}
+.mock-scope .ch .dot {width: 10px; height: 10px; border-radius: 50%; display: inline-block;}
+.mock-scope .ch .items {list-style: none; margin: 0; padding: 0;}
+.mock-scope .ch .items li {display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 11px 14px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; background: #fff;}
+.mock-scope .ch .items .t {font-weight: 600; display: block;}
+.mock-scope .ch .items .s {color: var(--muted); font-size: 14px;}
+.mock-scope .ch .plain {list-style: none; margin: 0; padding: 0;}
+.mock-scope .ch .plain li {padding: 10px 0; border-bottom: 1px solid #edf0f3; display: flex; justify-content: space-between; gap: 12px; align-items: center;}
+.mock-scope .ch .plain li:last-child {border-bottom: 0;}
+.mock-scope .ch .notice-body {white-space: pre-wrap;}
+.mock-scope .ch .section-note {background: #fff3d6; color: #6b4a00; border-radius: 8px; padding: 8px 12px; font-size: 14px;}
+.mock-scope .ch .manage {border-left: 4px solid var(--navy);}
+.mock-scope .ch .manage .num {font-size: 26px; font-weight: 600; display: block; line-height: 1.2;}
+.mock-scope .ch .manage-grid {display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 14px;}
+.mock-scope .ch .manage-grid div {background: var(--navy-soft); border-radius: 10px; padding: 12px 14px;}
+.mock-scope .ch .tiles {display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-bottom: 24px;}
+.mock-scope .ch .tile {text-align: left; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; min-height: 120px; display: flex; flex-direction: column; gap: 6px; border-top: 5px solid var(--ok); color: var(--ink);}
+.mock-scope .ch .tile:hover {border-color: var(--navy);}
+.mock-scope .ch .tile.has-late {border-top-color: var(--late);}
+.mock-scope .ch .tile.has-warn {border-top-color: var(--accent);}
+.mock-scope .ch .tile b {font-size: 17px;}
+.mock-scope .ch .tile .status {font-size: 14px; color: var(--muted);}
+.mock-scope .ch .tile.view-only {border-top-color: #b8c2cb; background: #fafbfc;}
+.mock-scope .ch .tile .vo {font-size: 12px; font-weight: 600; color: var(--muted); background: #eef1f4; border-radius: 999px; padding: 1px 8px; margin-left: 6px; vertical-align: middle;}
+.mock-scope .ch .tiles-small .tile {min-height: 96px;}
+.mock-scope .ch .other-heading {margin-top: 28px;}
+.mock-scope .ch .other-note {margin: -6px 0 14px;}
+.mock-scope .ch .areastrip {display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 20px; align-items: center;}
+.mock-scope .ch .areastrip button {border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 6px 14px; color: var(--ink);}
+.mock-scope .ch .areastrip button[aria-current="page"] {background: var(--navy); border-color: var(--navy); color: #fff; font-weight: 600;}
+.mock-scope .ch .areastrip button.other {color: var(--muted); border-style: dashed;}
+.mock-scope .ch .areastrip button.other[aria-current="page"] {color: #fff; border-style: solid;}
+.mock-scope .ch .areastrip .back {border: 0; background: none; color: var(--navy); font-weight: 600; margin-right: 10px;}
+.mock-scope .ch .viewonly-bar {background: #eef1f4; border-left: 4px solid #8a96a1; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px;}
+.mock-scope .ch .subtabs {display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 20px; flex-wrap: wrap;}
+.mock-scope .ch .subtabs button {background: none; border: 0; padding: 10px 14px; color: var(--muted); border-bottom: 3px solid transparent; margin-bottom: -1px;}
+.mock-scope .ch .subtabs button[aria-selected="true"] {color: var(--navy); border-bottom-color: var(--navy); font-weight: 600;}
+.mock-scope .ch .scrim {position: fixed; inset: 0; background: rgba(16, 32, 46, .45); display: flex; align-items: flex-start; justify-content: center; padding: 6vh 16px; z-index: 1000; overflow-y: auto;}
+.mock-scope .ch .dialog {background: #fff; border-radius: 12px; width: min(620px, 100%); padding: 24px; box-shadow: 0 12px 40px rgba(0, 0, 0, .25);}
+.mock-scope .ch .field {margin-bottom: 16px;}
+.mock-scope .ch .field label {display: block; font-weight: 600; margin-bottom: 4px;}
+.mock-scope .ch .field .hint {display: block; color: var(--muted); font-size: 14px; margin-bottom: 6px;}
+.mock-scope .ch .field input, .mock-scope .ch .field select, .mock-scope .ch .field textarea {width: 100%; border: 1px solid #c3ccd4; border-radius: 8px; padding: 9px 12px; background: #fff;}
+.mock-scope .ch .field-error, .mock-scope .ch .form-error {color: var(--late); font-weight: 600; font-size: 14px;}
+.mock-scope .ch .field-error:empty, .mock-scope .ch .form-error:empty {display: none;}
+.mock-scope .ch .check {display: block; margin-bottom: 16px;}
+.mock-scope .ch .explain {background: var(--navy-soft); border-radius: 8px; padding: 10px 14px;}
+.mock-scope .ch .toast {position: fixed; right: 24px; bottom: 24px; margin: 0; max-width: 420px; z-index: 1001;}
+.mock-scope .ch .toast:empty {display: none;}
+.mock-scope .ch .toast-ok, .mock-scope .ch .toast-info {background: var(--navy); color: #fff; border-radius: 8px; padding: 12px 16px; box-shadow: 0 6px 20px rgba(0, 0, 0, .2);}
+.mock-scope .ch footer {text-align: center; color: var(--muted); font-size: 12px; padding: 24px;}
+@media (min-width: 1400px) {
+.mock-scope .ch .tiles {grid-template-columns: repeat(var(--cols), 1fr);}
+.mock-scope .ch .cols3 {grid-template-columns: 1.1fr 1fr 1fr;}
+}
+@media (max-width: 900px) {
+.mock-scope .ch .cols3, .mock-scope .ch .manage-grid {grid-template-columns: 1fr;}
+.mock-scope .ch .items li {flex-direction: column; align-items: flex-start;}
+.mock-scope .ch main {padding: 24px 16px;}
+.mock-scope .ch .bar-in {padding: 8px 16px;}
+}
+@media (pointer: coarse) {
+.mock-scope .ch .btn, .mock-scope .ch .areastrip button, .mock-scope .ch .subtabs button {min-height: 44px;}
+}
+
+</style></head><body>
+<div class="mock-bar"><b>Local test with simulated SharePoint – synthetic data only</b><label>Sign in as <select id="mock-user"></select></label>
+<label>Simulate <select id="mock-mode"><option value="">Normal</option><option value="slow">Slow responses</option><option value="people403">People list denied (403)</option><option value="actions404">Actions list missing (404)</option><option value="actionsPartial">Actions over the read limit</option><option value="unknown">Unknown user</option><option value="duplicate">Duplicate person</option><option value="left">Person marked Left</option></select></label></div>
+<div class="mock-scope"><div class="ch" data-ch-root><p>Loading the ESG Competency Hub…</p></div></div>
+<script src="seed.js"></script>
+<script src="mock-sharepoint.js"></script>
+<script src="drivers.js"></script>
+<script src="../dist/competency-hub.js"></script>
+<script>MockSharePoint.start();</script>
+</body></html>
