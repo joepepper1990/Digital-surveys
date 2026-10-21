@@ -3299,6 +3299,34 @@ site.
 - **Size:** a full Apply on the empty site makes about 880 SharePoint requests;
   allow a few minutes with the page open.
 
+### K6.7 Confirmation Check reports list and folder permissions as missing (21 Oct 2026)
+
+**Result.** The Check after Apply (EDF RECORD, 15:28 UTC, confirmation ticked)
+found these in place:
+
+- permission levels, groups, lists, columns, folders, settings and areas;
+- the administrator.
+
+It also reported "Would give … its own permissions" for every list and folder,
+and for the Welcome layouts library. The Welcome errors list showed as OK.
+
+Apply had set and read back all of these grants, so the Check result is
+doubtful. The simulated site does not reproduce it.
+
+**Changes:**
+
+- **Check is diagnostic.** It no longer hides a failed read as "would change".
+  It reports SharePoint's actual answer, and whether the expected grants are
+  already visible.
+- **Retries.** Reads and writes are retried on 429 or 503.
+- **Breaking inheritance never clears sub-folder permissions**
+  (`clearSubscopes=false`).
+- **Tests.** Four new tests cover throttling, unreadable permissions, and folder
+  grants that survive re-securing a list.
+
+**Next.** You upload the new `CH_Setup.js`, run **Check only**, and send the
+log. Apply waits until the cause is known.
+
 ### K6.6 Setup applied on the site (EDF RECORD, 21 Oct 2026 15:22 UTC)
 
 **Result.** Apply finished with no stops and no warnings. It created:

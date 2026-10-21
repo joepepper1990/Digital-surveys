@@ -18,7 +18,8 @@ const deq = (a, b, message) => assert.deepEqual(plain(a), plain(b), message);
 
 // Loads the Setup modules (without the page) and the simulated site into one isolated context.
 function load() {
-  const context = vm.createContext({ Intl, Date, Math, JSON, Promise, console, setTimeout });
+  // Retry waits run immediately, so throttling tests stay fast.
+  const context = vm.createContext({ Intl, Date, Math, JSON, Promise, console, setTimeout: (fn) => setImmediate(fn) });
   context.window = context;
   vm.runInContext('var CHS = {};', context);
   MODULES.filter((m) => m !== 'src/ui.js').forEach((m) => vm.runInContext(fs.readFileSync(path.join(ROOT, m), 'utf8'), context, { filename: m }));
@@ -376,4 +377,43 @@ test('Verbose writes override the OData 4.0 default, and a failed write is never
   const r = await failing.run('apply');
   assert.equal(r.result.ok, false);
   deq(r.entries.filter((e) => e.level === 'create').map((e) => e.text), []);
+});
+
+test('Throttled reads are retried, and a Check after Apply still finds nothing to do', async () => {
+  const { site, run } = newSite('throttle');
+  const applied = await run('apply');
+  assert.equal(applied.result.ok, true, applied.stops.join(' | '));
+  const check = await run('check');
+  assert.equal(check.result.ok, true, check.stops.join(' | '));
+  deq(check.entries.filter((e) => e.level === 'create' || e.level === 'warn').map((e) => e.text), []);
+  assert.ok(rows(listByUrl(site, 'People'))[0].IsAdministrator);
+});
+
+test('Check reports permissions it cannot read, instead of planning to change them', async () => {
+  const { site, run } = newSite();
+  assert.equal((await run('apply')).result.ok, true);
+  site.refuseUniqueRead(true);
+  site.writes.length = 0;
+  const check = await run('check');
+  deq(check.entries.filter((e) => e.level === 'create').map((e) => e.text), []);
+  const warns = check.entries.filter((e) => e.level === 'warn').map((e) => e.text);
+  assert.ok(warns.length >= 38, warns.length + ' warnings: one per list, folder and Welcome list');
+  assert.ok(warns.every((w) => /^Could not read the permissions of ".+" \(HTTP 400: The property HasUniqueRoleAssignments cannot be read\.\)\.$/.test(w)), warns[0]);
+  deq(site.writes, []);
+});
+
+test('Securing a list never clears permissions already set on its folders', async () => {
+  const { site, run } = newSite();
+  assert.equal((await run('apply')).result.ok, true);
+  const updates = listByUrl(site, 'Updates');
+  const before = actualGrants(folder(site, updates, 'FLK').ra);
+  // A list that has lost its own permissions is secured again; its folders keep theirs.
+  updates.unique = false;
+  updates.ra = [];
+  const again = await run('apply');
+  assert.equal(again.result.ok, true, again.stops.join(' | '));
+  assert.ok(updates.unique);
+  deq(actualGrants(folder(site, updates, 'FLK').ra), before);
+  assert.ok(site.writes.some((w) => /breakroleinheritance\(copyRoleAssignments=false,clearSubscopes=false\)/.test(w)));
+  assert.ok(!site.writes.some((w) => /clearSubscopes=true/.test(w)));
 });

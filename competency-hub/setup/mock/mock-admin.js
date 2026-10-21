@@ -365,7 +365,15 @@ window.MockAdmin = (function () {
 
     function Client() {}
     Client.configurations = { v1: {} };
-    Client.prototype.get = function (url) { return get(url.replace(SITE, '')); };
+    var gets = 0;
+    var refuseUnique = false;
+    Client.prototype.get = function (url) {
+      // The 'throttle' scenario answers every fifth read with 429 Too Many Requests, once.
+      if (scenario === 'throttle' && ++gets % 5 === 0) return fail(429, 'The request has been throttled.');
+      // refuseUniqueRead(true) makes the site refuse to say whether an object has its own permissions.
+      if (refuseUnique && /HasUniqueRoleAssignments/.test(url)) return fail(400, 'The property HasUniqueRoleAssignments cannot be read.');
+      return get(url.replace(SITE, ''));
+    };
     // Like SPFx's SPHttpClient, requests are OData 4.0 unless an odata-version header overrides it, and
     // SharePoint cannot read a verbose (__metadata) body under OData 4.0.
     Client.prototype.post = function (url, config, opts) {
@@ -385,6 +393,7 @@ window.MockAdmin = (function () {
       ctx: ctx, writes: writes, lists: lists, groups: groups, roleDefs: roleDefs, users: users, web: web, me: function () { return me; },
       effective: function (list, item) { return effective(list, item); }, findFolder: findFolder,
       setFailAfter: function (n) { failAfter = n; writes.length = 0; },
+      refuseUniqueRead: function (on) { refuseUnique = !!on; },
       // Signs in as another site owner, for tests where someone else runs Setup.
       signInAs: function (email, title) {
         var u = users.filter(function (x) { return x.Email === email; })[0];

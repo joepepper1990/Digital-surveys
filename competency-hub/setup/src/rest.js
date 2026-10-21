@@ -16,8 +16,11 @@ CHS.rest = (function () {
     var digest = '';
     var writes = 0;
 
-    async function send(method, path, body, opts) {
+    function wait(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
+
+    async function send(method, path, body, opts, attempt) {
       opts = opts || {};
+      attempt = attempt || 0;
       var verbose = !!opts.verbose;
       var type = verbose ? 'application/json;odata=verbose' : 'application/json;odata=nometadata';
       var headers = { 'Accept': type };
@@ -35,6 +38,11 @@ CHS.rest = (function () {
         response = method === 'GET' ? await http.get(siteUrl + path, config, options) : await http.post(siteUrl + path, config, options);
       } catch (e) {
         throw new RestError(0, 'Could not reach SharePoint.');
+      }
+      // SharePoint asks busy callers to slow down; it has not acted on the request, so retrying is safe.
+      if ((response.status === 429 || response.status === 503) && attempt < 4) {
+        await wait(1000 * Math.pow(2, attempt));
+        return send(method, path, body, opts, attempt + 1);
       }
       var text = await response.text();
       var json = null;

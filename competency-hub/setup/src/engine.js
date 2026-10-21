@@ -369,9 +369,18 @@ CHS.engine = (function () {
       var expected = (copy ? [] : [['Owners', 'FullControl']]).concat(grants);
       if (!applying()) {
         var planned = expected.some(function (g) { return !principal(g[0]) || !S.roles[g[1]]; });
-        var state = planned ? null : await rest.get(path + '?$select=HasUniqueRoleAssignments').catch(function () { return null; });
-        if (!state || !state.HasUniqueRoleAssignments) {
-          note('create', step, 'Would give "' + label + '" its own permissions: ' + describe(expected) + '.');
+        if (planned) { note('create', step, 'Would give "' + label + '" its own permissions: ' + describe(expected) + '.'); return; }
+        var state;
+        try { state = await rest.get(path + '?$select=HasUniqueRoleAssignments'); } catch (e) {
+          note('warn', step, 'Could not read the permissions of "' + label + '" (' + e.message + ').');
+          return;
+        }
+        if (!state || state.HasUniqueRoleAssignments !== true) {
+          // Report what SharePoint said, and whether the grants are visible anyway, so the log shows which is true.
+          var seen = await assignments(path).catch(function () { return null; });
+          var present = seen && expected.filter(function (g) { return has(seen, principal(g[0]), S.roles[g[1]]); }).length;
+          note('create', step, 'Would give "' + label + '" its own permissions: ' + describe(expected) + '. SharePoint answered ' +
+            JSON.stringify(state).slice(0, 120) + (seen ? '; ' + present + ' of ' + expected.length + ' of these grants are already present.' : '.'));
           return;
         }
         var have = await assignments(path);
@@ -383,7 +392,7 @@ CHS.engine = (function () {
       var cur = await rest.get(path + '?$select=HasUniqueRoleAssignments');
       var changed = false;
       if (!cur.HasUniqueRoleAssignments) {
-        await write(path + '/breakroleinheritance(copyRoleAssignments=' + (copy ? 'true' : 'false') + ',clearSubscopes=true)');
+        await write(path + '/breakroleinheritance(copyRoleAssignments=' + (copy ? 'true' : 'false') + ',clearSubscopes=false)');
         changed = true;
       }
       var before = await assignments(path);
