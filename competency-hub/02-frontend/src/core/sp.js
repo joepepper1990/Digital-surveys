@@ -77,6 +77,19 @@ CH.sp = (function () {
 
     function currentUser() { return req('GET', siteUrl + '/_api/web/currentuser?$select=Id,Title,Email'); }
 
+    // The signed-in user's first name from their Microsoft 365 profile, or '' if it cannot be read.
+    async function myFirstName() {
+      try {
+        var json = await req('GET', siteUrl + '/_api/SP.UserProfiles.PeopleManager/GetMyProperties?$select=UserProfileProperties');
+        var props = json && json.UserProfileProperties;
+        props = props && (props.results || props);
+        var hit = Array.isArray(props) && props.filter(function (p) { return p.Key === 'FirstName'; })[0];
+        return hit && typeof hit.Value === 'string' ? hit.Value.trim() : '';
+      } catch (error) {
+        return '';
+      }
+    }
+
     // Instant direct write into a folder (plan C.8). Every HasException is checked.
     async function addToFolder(listKey, folder, values) {
       var list = CH.config.lists[listKey];
@@ -96,7 +109,7 @@ CH.sp = (function () {
       return idField ? Number(idField.FieldValue) : null;
     }
 
-    return { siteUrl: siteUrl, origin: origin, siteRelative: siteRelative, items: items, currentUser: currentUser, addToFolder: addToFolder };
+    return { siteUrl: siteUrl, origin: origin, siteRelative: siteRelative, items: items, currentUser: currentUser, myFirstName: myFirstName, addToFolder: addToFolder };
   }
 
   // The last folder segment of an item's FileDirRef (e.g. '.../Lists/Noticeboard/FLK' -> 'FLK').

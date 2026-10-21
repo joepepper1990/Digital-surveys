@@ -67,3 +67,24 @@ test('a failed or truncated read is reported, never shown as complete', () => {
   assert.equal(m.sections.notices, 'partial');
   assert.equal(m.sections.meetings, 'complete');
 });
+
+test('a new area is not overdue for a meeting until the limit has passed since tracking started', () => {
+  const comps = (start) => seed.Competencies.map((c) => Object.assign({}, c, { TrackingStart: start }));
+  const empty = { rows: [], complete: true };
+  // Stored as UK midnight in UTC, as SharePoint holds date-only values.
+  const fresh = build(raw({ competencies: { rows: comps('2026-10-20T23:00:00Z'), complete: true }, meetings: empty }));
+  assert.equal(Object.values(fresh.stats).filter((s) => s.meetingStale).length, 0);
+  const old = build(raw({ competencies: { rows: comps('2026-09-14T23:00:00Z'), complete: true }, meetings: empty }));
+  assert.equal(Object.values(old.stats).filter((s) => s.meetingStale).length, 10, '36 days after tracking started');
+  const edge = build(raw({ competencies: { rows: comps('2026-09-15T23:00:00Z'), complete: true }, meetings: empty }));
+  assert.equal(Object.values(edge.stats).filter((s) => s.meetingStale).length, 0, 'exactly 35 days is not yet overdue');
+});
+
+test('the greeting uses the profile first name, then the email address, then the display name', () => {
+  const first = CH.views.home.firstName;
+  const person = { Title: 'Pepper Joseph', Email: 'joseph.pepper@example.test' };
+  assert.equal(first({ firstName: 'Joe', person }), 'Joe');
+  assert.equal(first({ firstName: '', person }), 'Joseph');
+  assert.equal(first({ person: { Title: 'Pepper Joseph', Email: 'JOSEPH.PEPPER@example.test' } }), 'Joseph');
+  assert.equal(first({ person: { Title: 'Rachel Boulden', Email: 'rboulden@example.test' } }), 'Rachel');
+});

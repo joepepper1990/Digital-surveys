@@ -1,11 +1,11 @@
-/* ESG Competency Hub 0.1.0 – built from src/ by tools/build.js. Do not edit. */
+/* ESG Competency Hub 0.1.1 – built from src/ by tools/build.js. Do not edit. */
 window.ESGCompetencyHub = function (ctx) {
   'use strict';
   var CH = {};
   /* src/core/config.js */
   // Fixed names and limits. Lists are addressed by display title; folders by list URL name.
   CH.config = {
-    VERSION: '0.1.0',
+    VERSION: '0.1.1',
     ENVIRONMENT: 'TEST',
     lists: {
       competencies: { title: 'Competencies', url: 'Competencies' },
@@ -226,6 +226,19 @@ window.ESGCompetencyHub = function (ctx) {
 
       function currentUser() { return req('GET', siteUrl + '/_api/web/currentuser?$select=Id,Title,Email'); }
 
+      // The signed-in user's first name from their Microsoft 365 profile, or '' if it cannot be read.
+      async function myFirstName() {
+        try {
+          var json = await req('GET', siteUrl + '/_api/SP.UserProfiles.PeopleManager/GetMyProperties?$select=UserProfileProperties');
+          var props = json && json.UserProfileProperties;
+          props = props && (props.results || props);
+          var hit = Array.isArray(props) && props.filter(function (p) { return p.Key === 'FirstName'; })[0];
+          return hit && typeof hit.Value === 'string' ? hit.Value.trim() : '';
+        } catch (error) {
+          return '';
+        }
+      }
+
       // Instant direct write into a folder (plan C.8). Every HasException is checked.
       async function addToFolder(listKey, folder, values) {
         var list = CH.config.lists[listKey];
@@ -245,7 +258,7 @@ window.ESGCompetencyHub = function (ctx) {
         return idField ? Number(idField.FieldValue) : null;
       }
 
-      return { siteUrl: siteUrl, origin: origin, siteRelative: siteRelative, items: items, currentUser: currentUser, addToFolder: addToFolder };
+      return { siteUrl: siteUrl, origin: origin, siteRelative: siteRelative, items: items, currentUser: currentUser, myFirstName: myFirstName, addToFolder: addToFolder };
     }
 
     // The last folder segment of an item's FileDirRef (e.g. '.../Lists/Noticeboard/FLK' -> 'FLK').
@@ -322,7 +335,7 @@ window.ESGCompetencyHub = function (ctx) {
     var D = CH.dates;
 
     var QUERIES = {
-      competencies: '$select=Id,Title,CompetencyKey,SortOrder,Status',
+      competencies: '$select=Id,Title,CompetencyKey,SortOrder,Status,TrackingStart',
       members: "$select=Id,CompetencyId,PersonId,CanManageMeetings,Status&$filter=Status eq 'Active'",
       actions: '$select=Id,Title,CompetencyId,LinkedCompetenciesId,AssignedToId,RaisedById,DueDay,Status,IsOpen,ExtensionCount,' +
         'RequiresCloseOut,PendingRequestKey,CreatedRequestKey&$filter=IsOpen eq 1 and FSObjType eq 0',
@@ -360,7 +373,10 @@ window.ESGCompetencyHub = function (ctx) {
     function build(raw, people, access, today, now) {
       var nowMs = (now || new Date()).getTime();
       var areas = (raw.competencies.rows || [])
-        .map(function (c) { return { id: c.Id, key: c.CompetencyKey, name: c.Title, status: c.Status, sort: c.SortOrder || 100 }; })
+        .map(function (c) {
+          return { id: c.Id, key: c.CompetencyKey, name: c.Title, status: c.Status, sort: c.SortOrder || 100,
+            trackingStart: c.TrackingStart ? D.localDate(c.TrackingStart) : null };
+        })
         .sort(function (a, b) { return a.sort - b.sort || a.name.localeCompare(b.name); });
       var areaById = {};
       var areaByKey = {};
@@ -463,7 +479,9 @@ window.ESGCompetencyHub = function (ctx) {
       areas.forEach(function (a) {
         var list = actions.filter(function (x) { return inArea(x, a.key); });
         var m = meetingsByArea[a.key] || { next: null, last: null };
-        var stale = !m.next && (!m.last || D.daysBetween(m.last, today) > CH.config.meetingOverdueDays);
+        // Overdue once the gap since the last meeting, or since tracking started, exceeds the limit.
+        var since = m.last || a.trackingStart;
+        var stale = !m.next && (!since || D.daysBetween(since, today) > CH.config.meetingOverdueDays);
         stats[a.key] = {
           open: list.length,
           late: list.filter(function (x) { return x.group === 'late'; }).length,
@@ -594,6 +612,18 @@ window.ESGCompetencyHub = function (ctx) {
       return (hour < 12 ? 'Good morning, ' : hour < 18 ? 'Good afternoon, ' : 'Good evening, ') + first;
     }
 
+    // Profile first name; otherwise the part of firstname.lastname@ addresses before the dot. Display names at
+    // EDF are "Surname Firstname", so the display name is the last resort.
+    function firstName(app) {
+      if (app.firstName) return app.firstName;
+      var local = String(app.person.Email || '').split('@')[0];
+      if (/^[a-z]+[.]/i.test(local)) {
+        var f = local.split('.')[0];
+        return f.charAt(0).toUpperCase() + f.slice(1).toLowerCase();
+      }
+      return (app.person.Title || '').split(' ')[0];
+    }
+
     function myActions(app) {
       var mine = app.model.actions.filter(function (a) { return a.ownerId === app.person.SiteUserId; });
       return ui.card('Your actions', [
@@ -677,8 +707,7 @@ window.ESGCompetencyHub = function (ctx) {
     function render(app) {
       var m = app.model;
       var acc = app.access;
-      var first = (app.person.Title || '').split(' ')[0];
-      var out = [h('h1', { text: greeting(first) })];
+      var out = [h('h1', { text: greeting(firstName(app)) })];
       var postFirst = acc.memberAreas[0] || (m.areas[0] && m.areas[0].key);
 
       if (acc.isManagement) {
@@ -721,7 +750,7 @@ window.ESGCompetencyHub = function (ctx) {
       return out;
     }
 
-    return { render: render, greeting: greeting };
+    return { render: render, greeting: greeting, firstName: firstName };
   })();
 
   /* src/views/area.js */
@@ -1105,6 +1134,7 @@ window.ESGCompetencyHub = function (ctx) {
         }
         app.person = identity.person;
         app.people = people;
+        app.firstName = await app.sp.myFirstName();
         try {
           await reload();
         } catch (error) {

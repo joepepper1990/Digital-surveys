@@ -115,6 +115,7 @@ CH.app = (function () {
       }
       app.person = identity.person;
       app.people = people;
+      app.firstName = await app.sp.myFirstName();
       try {
         await reload();
       } catch (error) {

@@ -2,6 +2,11 @@
 
 Plain HTML, CSS and JavaScript, delivered as a Welcome by Accelerator 365 custom layout. Same-origin SharePoint REST runs as the signed-in user. There are no libraries and no external calls.
 
+## Version 0.1.1: first fixes from the live site
+
+- The greeting uses the first name from the user's Microsoft 365 profile. If that can't be read, it uses the part of a `firstname.lastname@` address before the dot. Display names at EDF are "Surname Firstname", so "Pepper" was shown before.
+- An area counts as overdue for a meeting only once more than 35 days have passed since its last meeting or, with no meeting yet, since its Tracking Start date. Before, a new site showed all ten areas as overdue.
+
 ## Version 0.1.0: the app shell
 
 **What it does:**

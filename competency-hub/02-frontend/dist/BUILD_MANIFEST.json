@@ -1,22 +1,22 @@
 {
   "product": "ESG Competency Hub",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "outputs": {
-    "competency-hub.js": "e66049b541da5346779bc0f088074250dd35840b0a068e60dac23f4b57a86505",
+    "competency-hub.js": "b731a0cbc81e720891cd7e79d91889b96b317e9932aa83313c6bbe983a8a8396",
     "competency-hub.html": "de590ad8627109e7b60d3bf93e0493538a3f51837d9a6091381ecbeb398a3fb6"
   },
   "sources": {
-    "src/core/config.js": "760f19d489bb90a25bfe5cf8e0f0b5bc8030c994c105b799592404215c9ae5c4",
+    "src/core/config.js": "12f93a682bf274007db6b29779bd26a14f942e6e85fbcf75d1838e029274c9c8",
     "src/core/dom.js": "313c1dd6467a0fb4065977850370a95aa80ecd39dd030197bc6d1538b210ff7a",
     "src/core/dates.js": "036ff90f4d36a7ac933fe6ec4428725cb27125393601957d382f2927c01a8875",
-    "src/core/sp.js": "31628c87c9ee36c418887514216e6d8d8f35a5d735562d86ffc561d6564a4749",
+    "src/core/sp.js": "f3ac2f8ea5cfa21d439c4d58ddc75b3f2578a856e29e026d150a9cdb39935ced",
     "src/domain/access.js": "1343abd196d737357f91c922a57a946ded649729ce13ce92bcbfe4c896552712",
-    "src/domain/model.js": "2dae6d2783e2452997f7af336e69d8140bdb0c8af1a170e7b36e80333b165121",
+    "src/domain/model.js": "8d50c789db32eec33ca0b00c874c350dc354b3118d08412dd491a9f17613cf5f",
     "src/ui/components.js": "3f7ad781a0b1313f4f70404f9f806e3e7972b3249cd729e0d6dda49cef03430d",
-    "src/views/home.js": "0c5ffbaea80e65a10c154a05ebf194692eab58cb820ece8948840758cb15e378",
+    "src/views/home.js": "e5d2ff1e22a30d9e9ce62f90b5e871dc4247055cd4f2effad69368b82ec6ae6f",
     "src/views/area.js": "95f695b5835d7ef4d8eeb89206cb353bfdb97d765e81d527cae334e2927d8f59",
     "src/views/notice-form.js": "0f08c7dfdf8aaf22dec8034c4274683b6c933c18b3cd62b594c38f66da5832ea",
-    "src/app.js": "f492ec30841a0fc14797aa968710b5f76d594d1ef9b877a672583827aa3661fe",
+    "src/app.js": "f6b1897a94a2ae6da30d0092f422d82ccc0a3d6d09a3600f542545aeaf8db4a6",
     "styles/app.css": "c34c77b6286900897090cfb10ebfa7bba03e11ea4a3137d37c6a8b2d879ad25d",
     "layout/competency-hub.layout.html": "3a81eaec24e2b794ab927f4cd3d0e5891cdf888ebaa07d210668e0fc77b52c06"
   }

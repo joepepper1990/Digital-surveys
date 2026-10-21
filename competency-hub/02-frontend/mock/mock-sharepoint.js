@@ -74,6 +74,11 @@ window.MockSharePoint = (function () {
       var me = data.People.filter(function (p) { return p.SiteUserId === asId; })[0];
       return respond(200, { Id: asId, Title: me ? me.Title : 'Unknown', Email: me ? me.Email : '' });
     }
+    if (url.indexOf('/_api/SP.UserProfiles.PeopleManager/GetMyProperties') >= 0) {
+      if (mode === 'noProfile') return respond(403, { error: 'Access denied' });
+      var who = data.People.filter(function (p) { return p.SiteUserId === asId; })[0];
+      return respond(200, { UserProfileProperties: [{ Key: 'FirstName', Value: who ? who.Title.split(' ')[0] : '' }, { Key: 'LastName', Value: '' }] });
+    }
     var title = listTitle(url);
     if (mode === 'people403' && title === 'People') return respond(403, { error: 'Access denied' });
     if (mode === 'actions404' && title === 'Actions') return respond(404, { error: 'List not found' });

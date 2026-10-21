@@ -5,7 +5,7 @@ CH.model = (function () {
   var D = CH.dates;
 
   var QUERIES = {
-    competencies: '$select=Id,Title,CompetencyKey,SortOrder,Status',
+    competencies: '$select=Id,Title,CompetencyKey,SortOrder,Status,TrackingStart',
     members: "$select=Id,CompetencyId,PersonId,CanManageMeetings,Status&$filter=Status eq 'Active'",
     actions: '$select=Id,Title,CompetencyId,LinkedCompetenciesId,AssignedToId,RaisedById,DueDay,Status,IsOpen,ExtensionCount,' +
       'RequiresCloseOut,PendingRequestKey,CreatedRequestKey&$filter=IsOpen eq 1 and FSObjType eq 0',
@@ -43,7 +43,10 @@ CH.model = (function () {
   function build(raw, people, access, today, now) {
     var nowMs = (now || new Date()).getTime();
     var areas = (raw.competencies.rows || [])
-      .map(function (c) { return { id: c.Id, key: c.CompetencyKey, name: c.Title, status: c.Status, sort: c.SortOrder || 100 }; })
+      .map(function (c) {
+        return { id: c.Id, key: c.CompetencyKey, name: c.Title, status: c.Status, sort: c.SortOrder || 100,
+          trackingStart: c.TrackingStart ? D.localDate(c.TrackingStart) : null };
+      })
       .sort(function (a, b) { return a.sort - b.sort || a.name.localeCompare(b.name); });
     var areaById = {};
     var areaByKey = {};
@@ -146,7 +149,9 @@ CH.model = (function () {
     areas.forEach(function (a) {
       var list = actions.filter(function (x) { return inArea(x, a.key); });
       var m = meetingsByArea[a.key] || { next: null, last: null };
-      var stale = !m.next && (!m.last || D.daysBetween(m.last, today) > CH.config.meetingOverdueDays);
+      // Overdue once the gap since the last meeting, or since tracking started, exceeds the limit.
+      var since = m.last || a.trackingStart;
+      var stale = !m.next && (!since || D.daysBetween(since, today) > CH.config.meetingOverdueDays);
       stats[a.key] = {
         open: list.length,
         late: list.filter(function (x) { return x.group === 'late'; }).length,

@@ -10,6 +10,18 @@ CH.views.home = (function () {
     return (hour < 12 ? 'Good morning, ' : hour < 18 ? 'Good afternoon, ' : 'Good evening, ') + first;
   }
 
+  // Profile first name; otherwise the part of firstname.lastname@ addresses before the dot. Display names at
+  // EDF are "Surname Firstname", so the display name is the last resort.
+  function firstName(app) {
+    if (app.firstName) return app.firstName;
+    var local = String(app.person.Email || '').split('@')[0];
+    if (/^[a-z]+[.]/i.test(local)) {
+      var f = local.split('.')[0];
+      return f.charAt(0).toUpperCase() + f.slice(1).toLowerCase();
+    }
+    return (app.person.Title || '').split(' ')[0];
+  }
+
   function myActions(app) {
     var mine = app.model.actions.filter(function (a) { return a.ownerId === app.person.SiteUserId; });
     return ui.card('Your actions', [
@@ -93,8 +105,7 @@ CH.views.home = (function () {
   function render(app) {
     var m = app.model;
     var acc = app.access;
-    var first = (app.person.Title || '').split(' ')[0];
-    var out = [h('h1', { text: greeting(first) })];
+    var out = [h('h1', { text: greeting(firstName(app)) })];
     var postFirst = acc.memberAreas[0] || (m.areas[0] && m.areas[0].key);
 
     if (acc.isManagement) {
@@ -137,5 +148,5 @@ CH.views.home = (function () {
     return out;
   }
 
-  return { render: render, greeting: greeting };
+  return { render: render, greeting: greeting, firstName: firstName };
 })();
