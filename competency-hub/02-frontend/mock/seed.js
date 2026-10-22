@@ -85,7 +85,8 @@ window.MockSeed = function (todayIso) {
       ExtensionCount: a[6], RequiresCloseOut: a[5] === 'Completed', PendingRequestKey: '', CreatedRequestKey: 'IMPORT-' + (40 + i),
       FileDirRef: '/sites/ESGCompetencyHub/Lists/Actions/' + a[1],
       Description: 'Synthetic test action: ' + a[0].toLowerCase() + '.', Priority: 'Normal', Revision: 1 + a[6], LastRequestKey: '',
-      DateRaised: at(Math.min(a[4], 0) - 20, '09:30:00'), OriginalDueDate: at(a[4] - 7 * a[6], '12:00:00')
+      DateRaised: at(Math.min(a[4], 0) - 20, '09:30:00'), OriginalDueDate: at(a[4] - 7 * a[6], '12:00:00'),
+      Blocker: a[5] === 'Awaiting Input' ? 'Waiting for a quote from the supplier.' : ''
     };
   });
   // One History row per earlier extension, as the request flow writes them.
@@ -100,6 +101,16 @@ window.MockSeed = function (todayIso) {
         FileDirRef: '/sites/ESGCompetencyHub/Lists/History/' + ACTIONS[i][1] + '/A' + a.Id });
     }
   });
+  // Finished actions, read only when someone asks for them ("Show finished items").
+  [[90, 'Replace FH30 probe', 'FLK', 'Rachel Boulden', 'Kelly Bates', -30, 'Completed', ''],
+   [91, 'Old survey sheets archived', 'RP', 'Rachel Boulden', 'Andrea Medlicott', -12, 'No longer required', 'Sheets were scanned instead.']]
+    .forEach(function (c) {
+      actions.push({ Id: c[0], Title: c[1], CompetencyId: area(c[2]), LinkedCompetenciesId: [], AssignedToId: idOf[c[3]], RaisedById: idOf[c[4]],
+        DueDay: dueDay(c[5]), Status: 'Closed', IsOpen: false, ExtensionCount: 0, RequiresCloseOut: false, PendingRequestKey: '',
+        CreatedRequestKey: 'IMPORT-' + c[0], FileDirRef: '/sites/ESGCompetencyHub/Lists/Actions/' + c[2], Description: 'Synthetic finished action.',
+        Priority: 'Normal', Revision: 2, LastRequestKey: '', DateRaised: at(c[5] - 20, '09:30:00'), OriginalDueDate: at(c[5], '12:00:00'),
+        DateClosed: at(c[5] + 2, '16:00:00'), CloseOutcome: c[6], ClosureNote: c[7], ClosedById: idOf[c[4]] });
+    });
   // An uncommitted create that must never appear on screen.
   actions.push({ Id: 99, Title: 'Half-created action (must stay hidden)', CompetencyId: 1, LinkedCompetenciesId: [], AssignedToId: idOf['Rachel Boulden'],
     RaisedById: idOf['Kelly Bates'], DueDay: dueDay(1), Status: 'Open', IsOpen: true, ExtensionCount: 0, RequiresCloseOut: false,

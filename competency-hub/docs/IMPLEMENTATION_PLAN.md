@@ -3977,6 +3977,153 @@ Solution **1.1.0.0**: flow *1 Daily tasks* and emails in *2 Request queue*.
 - Failed emails are retried the next morning, not after 15 minutes, until the
   queue monitor is built.
 
+### K8.9 Result on the site, 22 Oct 2026
+
+- App 0.2.1 and solution 1.1.0.0 are installed.
+- *1 Daily tasks* is on.
+- Run by hand, it sent "Reminder: TEST … is due in 3 days" to your mailbox.
+- A second run sent nothing.
+
+This proves the ledger, the D.0.1 date rule and the Outlook connection on the
+site. Emails stay in your own name (K8.8 set aside).
+
+## K9. Next build: finish actions (app 0.3.0, solution 1.2.0.0)
+
+**Delivered locally, 22 Oct 2026:** app 0.3.0 and solution 1.2.0.0. All tests pass: 48 unit tests, every browser
+check (including the 8 new ones for status, reassign, close and reopen, edit, close-out and My actions), 60 flow tests,
+20 rejection tests and the package check. Earlier progress note:
+- **Done:** the rules (48 unit tests), and the flow side with five new request
+  types built once in `change_all()`. The request flow is 380 actions, and 60
+  flow tests pass. This was committed and pushed in c0f5459.
+- **Remaining:** the app screens (K9.3), the mock flow cases, the browser
+  drivers, the docs, and the package (app 0.3.0, solution 1.2.0.0).
+
+### K9.1 Context
+
+Raising, updating, extending, marking as done and email reminders now work on
+the site. You chose to **finish actions** next, so they can be piloted with
+real people (B.3 ACT-04 to ACT-09, E.3, F.2).
+
+Emails stay in your own name for now. You decided on 22 Oct 2026 to set aside
+the shared-mailbox question.
+
+**No site changes are needed.** Every column already exists in `schema.json`,
+including `Blocker`, `CloseOutcome`, `ClosureNote`, `ClosedBy`, `DateClosed`,
+the `Status` choices, and the Notification Log's `RAW` type. `RequestType` and
+History `EventType` are text columns.
+
+### K9.2 What people can do (E.3)
+
+| Change | Who | Rules (the same wording in the app and the flow) | History event | Emails |
+|---|---|---|---|---|
+| **Change status**: Open, In progress, Waiting on something | Owner, action managers | Open actions only. "Waiting on something" needs a short description of the blocker (10–1,000 characters), which is stored in `Blocker`. Any other status clears it. | Status Changed | — |
+| **Reassign** | Action managers (raiser, area engineers and meeting administrators, management) | The new owner is an area member or in management, and is not the current owner. A reason of 10–1,000 characters. Open actions only. | Reassigned | **ASG** to the new owner, **RAW** "no longer yours" to the previous owner, never to the person making the change |
+| **Close with an outcome** | Action managers, including the raiser's close-out check of a Completed action | Outcome: Completed, No longer required, Superseded or Other. A note is required unless the outcome is Completed. | Closed | **CLS** to the owner and raiser, except whoever closed it |
+| **Reopen** | Action managers | Closed or Completed actions only. A reason of 10–1,000 characters. It reopens as In progress, and the deadline is kept. | Reopened | — |
+| **Edit details**: title, description, priority, close-out check | Action managers | The same limits as raising. Only changed fields are sent. | Details Edited, with the previous and new values | — |
+
+Every change is queued, as now, with `ExpectedRevision` (a stale revision gives
+the ACT-11 message) and the lock.
+
+### K9.3 App 0.3.0 (`02-frontend/`)
+
+- **`src/domain/rules.js`:**
+  - `validateStatus`, `validateReassign`, `validateClose`, `validateReopen`
+    and `validateEdit`;
+  - `roles()` gains `canStatus`, `canReassign`, `canClose`, `canReopen` and
+    `canEdit`;
+  - `OUTCOMES`.
+
+  The mock flow uses the same module.
+- **`src/views/action-panel.js`:**
+  - The three main buttons stay.
+  - **"More options"** shows only what the person may do: Change status,
+    Reassign, Close, Edit details.
+  - A closed or completed action shows **Reopen**.
+  - The raiser of a Completed action sees **"Confirm close-out"**, which is
+    Close with outcome Completed.
+  - "Waiting on: {blocker}" appears under When.
+  - Each form follows the existing pattern: plain words, errors at the field,
+    then pending until confirmed.
+- **`src/views/raise-form.js`:** its owner picker is reused for Reassign, via
+  `model.ownersFor(area)`.
+- **New `src/views/my-actions.js`:** a page reached from "See all" on the
+  *Your actions* card.
+  - Tabs: **Mine**, **Raised by me** and, for managers, **In my areas**.
+  - One Area filter.
+  - **"Show finished items"** loads closed actions on demand
+    (`IsOpen eq 0 and AssignedToId eq {me}`, or `RaisedById`; both are
+    indexed), the newest 50 first, and offers Reopen in the panel.
+- **`src/domain/model.js`:** reads `Blocker` and `RaisedById`, which it
+  already has; adds `loadFinished(filter)`.
+- **`src/app.js`:** adds view `mine` and the `?view=mine` deep link.
+- **`mock/flow-sim.js`:** the five new types. **`mock/seed.js`:** a few closed
+  actions and one blocked action.
+
+### K9.4 Solution 1.2.0.0 (`04-solution/tools/flows.py`)
+
+- Five new cases in `By_type`, each built with the existing `change_case()`:
+  - `verdict_tail`, `plan_fields`, `values_fields`, `event_fields`,
+    `result_expr` and `notices`;
+  - the same lock, revision, first-run, commit, outbox and release steps.
+- **Reassign** looks the new owner up in People and memberships, then writes
+  `AssignedTo` with claims from `Person/Name`.
+- **Close and Reopen** set or clear `IsOpen`, `DateClosed`, `ClosedBy`,
+  `CloseOutcome` and `ClosureNote`.
+- **Edit** writes only the given fields and stores the previous values in the
+  plan and the event row.
+- **The RAW email type** gets its subject and wording in `outbox_create`:
+  "Action reassigned: {title}" and "{actor} has given this action to {new
+  owner}."
+- **Daily reminders follow the owner automatically**: keys include the
+  recipient, and a retry is skipped when the owner changed. That is already
+  built.
+- `By_type` stays within nesting 8 and 500 actions, which `validate.py`
+  checks. If the request flow gets too large, the action cases move into a
+  child flow: *3 Action requests* (plan F.9).
+
+### K9.5 Tests
+
+**App:**
+- unit tests for every new rule and message;
+- browser drivers for:
+  - change status with a blocker;
+  - reassign, where the new owner is listed and the old owner loses the
+    action;
+  - close with an outcome, then reopen from "Show finished items";
+  - edit details;
+  - the raiser's close-out confirmation;
+  - a view-only user seeing no "More options";
+  - My actions tabs and the Area filter.
+- the static rules still pass.
+
+**Flow (`test_flow.py`):**
+- for each type: accepted, refused (each rule), stale revision, and a locked
+  action;
+- an interruption at every write, then a resubmit;
+- emails: ASG and RAW on reassign, CLS on close, none to the person who made
+  the change;
+- call budgets.
+
+Also `test_validate.py`, the package check and `run_all.sh`.
+
+### K9.6 Your steps
+
+1. Import solution 1.2.0.0 as an upgrade.
+2. Replace both app files (0.3.0), then press Ctrl+F5.
+3. On TEST actions, try:
+   - change status to "Waiting on something";
+   - edit the details;
+   - close it with "No longer required";
+   - find it under "Show finished items" and reopen it.
+4. Reassigning needs a second person on the Hub, so it waits until people are
+   added. It is fully tested locally.
+
+### K9.7 Size
+
+About 8–10 developer-days of the plan's estimate for the Actions UI and the
+Action Requests flow. It is delivered as one package.
+
 ### K6.10 People list confirmed (C-04 resolved, 21 Oct 2026)
 
 **Context.** You supplied the corrected sign-in list: 25 engineers and

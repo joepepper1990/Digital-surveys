@@ -106,6 +106,52 @@ window.MockFlow = (function () {
           DateClosed: status === 'Closed' ? new Date().toISOString() : null, Revision: target.Revision + 1, LastRequestKey: req.RequestKey });
         return finish(req, 'Completed', status === 'Closed' ? 'Action closed.' : 'Marked as done; waiting for a close-out check.', target.Id);
       }
+      function first(errors) { var k = Object.keys(errors); return k.length ? errors[k[0]] : ''; }
+      function change(fields, ev, message) {
+        event(req, target, ev);
+        Object.assign(target, fields, { Revision: target.Revision + 1, LastRequestKey: req.RequestKey });
+        return finish(req, 'Completed', message, target.Id);
+      }
+      var LABEL = { 'Open': 'open', 'In Progress': 'in progress', 'Awaiting Input': 'waiting on something' };
+      var err;
+
+      if (req.RequestType === 'ChangeStatus') {
+        if (!roles.canStatus && R.isOpen(shape.status)) return finish(req, 'Rejected', 'Only the owner or the people who manage this action can change its status.');
+        if ((err = first(R.validateStatus(shape, payload)))) return finish(req, 'Rejected', err);
+        var waiting = payload.status === 'Awaiting Input';
+        return change({ Status: payload.status, Blocker: waiting ? payload.blocker.trim() : '' },
+          { EventType: 'Status Changed', Note: waiting ? payload.blocker.trim() : '' }, 'Status changed to ' + LABEL[payload.status] + '.');
+      }
+      if (req.RequestType === 'ReassignAction') {
+        if (R.isOpen(shape.status) && !roles.canReassign) return finish(req, 'Rejected', 'Only the people who manage this action can reassign it.');
+        var allowed = { ownerAllowed: function (key, id) { var o = person(id); return !!o && o.Status === 'Active' && (management(o) || !!membership(id, key)); } };
+        if ((err = first(R.validateReassign(shape, payload, allowed)))) return finish(req, 'Rejected', err);
+        var newOwner = person(Number(payload.ownerId));
+        return change({ AssignedToId: newOwner.SiteUserId }, { EventType: 'Reassigned', Note: payload.reason },
+          'Reassigned to ' + newOwner.Title + '.');
+      }
+      if (req.RequestType === 'CloseAction') {
+        if (!roles.canClose && (R.isOpen(shape.status) || shape.status === 'Completed')) return finish(req, 'Rejected', 'Only the people who manage this action can close it.');
+        if ((err = first(R.validateClose(shape, payload)))) return finish(req, 'Rejected', err);
+        return change({ Status: 'Closed', IsOpen: false, DateClosed: new Date().toISOString(), ClosedById: requester.SiteUserId,
+          CloseOutcome: payload.outcome, ClosureNote: (payload.note || '').trim() }, { EventType: 'Closed', Note: payload.note || '' }, 'Action closed.');
+      }
+      if (req.RequestType === 'ReopenAction') {
+        if (!roles.canReopen && !R.isOpen(shape.status)) return finish(req, 'Rejected', 'Only the people who manage this action can reopen it.');
+        if ((err = first(R.validateReopen(shape, payload)))) return finish(req, 'Rejected', err);
+        return change({ Status: 'In Progress', IsOpen: true, DateClosed: null, ClosedById: null, CloseOutcome: null, ClosureNote: '' },
+          { EventType: 'Reopened', Note: payload.reason }, 'Action reopened.');
+      }
+      if (req.RequestType === 'EditActionDetails') {
+        if (R.isOpen(shape.status) && !roles.canEdit) return finish(req, 'Rejected', 'Only the people who manage this action can change its details.');
+        if ((err = first(R.validateEdit(shape, payload)))) return finish(req, 'Rejected', err);
+        var f = {};
+        if ('title' in payload) f.Title = payload.title.trim();
+        if ('description' in payload) f.Description = payload.description.trim();
+        if ('priority' in payload) f.Priority = payload.priority;
+        if ('requiresCloseOut' in payload) f.RequiresCloseOut = !!payload.requiresCloseOut;
+        return change(f, { EventType: 'Details Edited' }, 'Details saved.');
+      }
       return finish(req, 'Rejected', 'This kind of request is not handled yet.');
     }
 

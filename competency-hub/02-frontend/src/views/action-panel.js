@@ -25,7 +25,13 @@ CH.views.actionPanel = (function () {
     return null;
   }
 
+  var STATUS_WORDS = { 'Open': 'Open', 'In Progress': 'In progress', 'Awaiting Input': 'Waiting on something' };
+
   function whenText(action) {
+    if (action.status === 'Closed') {
+      return 'Closed' + (action.closedIso ? ' on ' + D.long(action.closedIso) : '') + (action.closeOutcome ? ' – ' + action.closeOutcome.toLowerCase() : '') + '.' +
+        (action.closureNote ? ' “' + action.closureNote + '”' : '');
+    }
     if (action.waitingCloseOut) return 'Done – waiting for a close-out check by ' + action.raisedByName + '.';
     var text = (action.group === 'late' ? 'Was due ' : 'Due ') + D.weekday(action.dueIso) + ' ' + D.long(action.dueIso) + '.';
     if (action.extensions) {
@@ -60,7 +66,15 @@ CH.views.actionPanel = (function () {
     var extensions = null;
     var notFound = false;
 
-    function action() { return app.model.actionById[id]; }
+    // An open action comes with the page; a finished one is read on demand and kept in app.finished.
+    function action() { return app.model.actionById[id] || (app.finished || {})[id]; }
+
+    async function readMissing() {
+      try {
+        var row = await CH.model.loadAction(app.sp, id);
+        if (row) { app.finished = app.finished || {}; app.finished[id] = app.model.actionFrom(row); }
+      } catch (_) { /* shown as not available */ }
+    }
 
     async function loadExtras() {
       var a = action();
@@ -82,12 +96,21 @@ CH.views.actionPanel = (function () {
       var r = R.roles(a, app.person.SiteUserId, app.access);
       var entry = app.tracker.forTarget(a.id);
       var busy = a.locked || (entry && (entry.state === 'submitted' || entry.state === 'slow'));
+      var finished = a.status === 'Closed' || a.waitingCloseOut;
+      // the less common changes sit under "More options" (plan C.9), only those this person may make
+      var more = [
+        r.canStatus ? ui.linkButton('Change status', function () { show('status'); }) : null,
+        r.canReassign ? ui.linkButton('Reassign', function () { show('reassign'); }) : null,
+        r.canEdit ? ui.linkButton('Edit details', function () { show('edit'); }) : null,
+        r.canClose && !a.waitingCloseOut ? ui.linkButton('Close with an outcome', function () { show('close'); }) : null
+      ].filter(Boolean);
       dlg.setTitle(a.title);
       CH.dom.append(dlg.body, [
         h('p', { class: 'muted small', text: a.ref + ' · ' + a.areaName + (a.priority === 'High' ? ' · High priority' : '') }),
         pendingLine(app, a),
         h('dl', { class: 'facts' },
           h('dt', { text: 'When' }), h('dd', null, ui.chip(a.waitingCloseOut ? 'later' : a.group, a.dueText), ' ', whenText(a)),
+          a.blocker ? [h('dt', { text: 'Waiting on' }), h('dd', { class: 'notice-body', text: a.blocker })] : null,
           h('dt', { text: 'Who' }), h('dd', { text: a.ownerName + ' is doing it. Raised by ' + a.raisedByName + (a.raisedIso ? ' on ' + D.long(a.raisedIso) : '') + '.' }),
           h('dt', { text: 'What' }), h('dd', { class: 'notice-body', text: a.description || 'No description.' })),
         extensions && extensions.length ? h('details', { class: 'ext-list' }, h('summary', { text: 'Show all deadline changes (' + extensions.length + ')' }),
@@ -98,10 +121,13 @@ CH.views.actionPanel = (function () {
                 (x.EventTime ? ' · ' + D.short(D.localDate(x.EventTime)) : '') + ' · “' + (x.Note || '') + '”' })));
           }))) : null,
         h('div', { class: 'row actions-row' },
-          r.canUpdate ? ui.button('Add an update', function () { show('update'); }, 'main') : null,
+          r.canUpdate && !finished ? ui.button('Add an update', function () { show('update'); }, 'main') : null,
           r.canExtend ? ui.button('I need more time', function () { show('extend'); }) : null,
-          r.canComplete ? ui.button('Mark as done', function () { show('complete'); }) : null),
-        !r.canUpdate && !r.canExtend && !r.canComplete ? h('p', { class: 'muted small', text: 'You can read this action. Only its owner, the people who manage it and members of ' + a.areaName + ' can change it.' }) : null,
+          r.canComplete ? ui.button('Mark as done', function () { show('complete'); }) : null,
+          a.waitingCloseOut && r.canClose ? ui.button('Confirm close-out', function () { show('closeout'); }, 'main') : null,
+          r.canReopen ? ui.button('Reopen', function () { show('reopen'); }) : null),
+        more.length ? h('details', { class: 'more' }, h('summary', { text: 'More options' }), h('div', { class: 'row' }, more)) : null,
+        !r.canUpdate && !r.canExtend && !r.canComplete && !r.canReopen ? h('p', { class: 'muted small', text: 'You can read this action. Only its owner, the people who manage it and members of ' + a.areaName + ' can change it.' }) : null,
         h('h3', { class: 'group-title', text: 'Updates' }),
         updates === null ? h('p', { class: 'muted', text: 'Loading updates…' })
           : updates === 'error' ? h('p', { class: 'section-note', text: 'Could not load the updates just now.' })
@@ -111,7 +137,7 @@ CH.views.actionPanel = (function () {
                 (u.EntryType === 'Blocker' ? ' · blocker' : '') })));
           })) : h('p', { class: 'muted', text: 'No updates yet.' })
       ]);
-      Array.prototype.forEach.call(dlg.body.querySelectorAll('.actions-row .btn'), function (b) { b.disabled = !!busy; });
+      Array.prototype.forEach.call(dlg.body.querySelectorAll('.actions-row .btn, .more .btn-link'), function (b) { b.disabled = !!busy; });
     }
 
     function show(which) {
@@ -121,6 +147,12 @@ CH.views.actionPanel = (function () {
       if (which === 'update') updateForm(a);
       if (which === 'extend') extendForm(a);
       if (which === 'complete') completeForm(a);
+      if (which === 'status') statusForm(a);
+      if (which === 'reassign') reassignForm(a);
+      if (which === 'close') closeForm(a, false);
+      if (which === 'closeout') closeForm(a, true);
+      if (which === 'reopen') reopenForm(a);
+      if (which === 'edit') editForm(a);
       dlg.focusFirst();
     }
     function back() { view = 'main'; fill(); dlg.focusFirst(); }
@@ -222,11 +254,108 @@ CH.views.actionPanel = (function () {
         });
     }
 
-    notFound = !action();
-    fill();
-    dlg.focusFirst();
-    loadExtras();
-    app.panel = { id: id, refresh: function () { if (view === 'main') { updates = null; fill(); loadExtras(); } } };
+    // A queued change, sent with the revision the person saw; the panel then shows it as being recorded.
+    async function send(form, type, payload, label, errors, order, prefix) {
+      if (errors.action) { form.querySelector('.form-error').textContent = errors.action; return false; }
+      if (CH.ui.dialog.showErrors(form, prefix, errors, order)) return false;
+      await app.tracker.submit({ type: type, targetId: id, expectedRevision: action().revision, payload: payload, label: label });
+      back();
+      return true;
+    }
+
+    function statusForm(a) {
+      var status = h('select', { id: 'ch-s-status' }, R.OPEN_STATUSES.filter(function (st) { return st !== a.status; }).map(function (st) {
+        return h('option', { value: st, text: STATUS_WORDS[st] });
+      }));
+      var blocker = h('textarea', { id: 'ch-s-blocker', rows: '3', maxlength: '1000' });
+      var blockerField = field('What is it waiting on?', blocker, 'For example a part, a decision or another team. Everyone who can see this action can read it.');
+      function toggle() { blockerField.style.display = status.value === 'Awaiting Input' ? '' : 'none'; }
+      status.addEventListener('change', toggle);
+      toggle();
+      formShell('Change status', [h('p', { class: 'muted', text: 'Now: ' + STATUS_WORDS[a.status] + '.' }), field('New status', status), blockerField], 'Change status',
+        function (form) {
+          var v = { status: status.value, blocker: blocker.value };
+          return send(form, 'ChangeStatus', { status: v.status, blocker: v.status === 'Awaiting Input' ? v.blocker.trim() : '' },
+            'Status: ' + STATUS_WORDS[v.status].toLowerCase(), R.validateStatus(a, v), ['status', 'blocker'], 'ch-s-');
+        });
+    }
+
+    function reassignForm(a) {
+      var owners = app.model.ownersFor(a.areaKey).filter(function (o) { return Number(o.id) !== Number(a.ownerId); });
+      var owner = h('select', { id: 'ch-g-ownerId' }, [h('option', { value: '', text: 'Choose a person' })].concat(owners.map(function (o) {
+        return h('option', { value: String(o.id), text: o.name + (CH.config.managementRoles.indexOf(o.role) >= 0 ? ' – ' + o.role : '') });
+      })));
+      var reason = h('textarea', { id: 'ch-g-reason', rows: '3', maxlength: '1000' });
+      formShell('Reassign', [h('p', { class: 'muted', text: 'Now: ' + a.ownerName + '. Both people get an email.' }),
+        field('New owner', owner, 'Members of ' + a.areaName + ', and Team Leaders and the Group Head.'), field('Why?', reason, 'At least 10 characters.')], 'Reassign',
+        function (form) {
+          var v = { ownerId: owner.value ? Number(owner.value) : '', reason: reason.value };
+          var allowed = { ownerAllowed: function (key, pid) { return app.model.ownersFor(key).some(function (o) { return Number(o.id) === pid; }); } };
+          var name = (owners.filter(function (o) { return Number(o.id) === v.ownerId; })[0] || {}).name;
+          return send(form, 'ReassignAction', { ownerId: v.ownerId, reason: v.reason.trim() }, 'Reassign to ' + name,
+            R.validateReassign(a, v, allowed), ['ownerId', 'reason'], 'ch-g-');
+        });
+    }
+
+    function closeForm(a, closeOut) {
+      var outcome = h('select', { id: 'ch-l-outcome' }, R.OUTCOMES.map(function (o) { return h('option', { value: o, text: o }); }));
+      var note = h('textarea', { id: 'ch-l-note', rows: '3', maxlength: '1000' });
+      var outcomeField = field('Outcome', outcome);
+      if (closeOut) outcomeField.style.display = 'none';
+      formShell(closeOut ? 'Confirm close-out' : 'Close with an outcome', [
+        h('p', { class: 'explain', text: closeOut ? a.ownerName + ' has marked this action as done. Closing it confirms the work is complete.'
+          : 'The action will be closed. ' + a.ownerName + ' gets an email, and it stays in the history of ' + a.areaName + '.' }),
+        outcomeField, field(closeOut ? 'Anything to add? (optional)' : 'Note', note, closeOut ? '' : 'Needed unless the outcome is Completed.')],
+        closeOut ? 'Close the action' : 'Close', function (form) {
+          var v = { outcome: closeOut ? 'Completed' : outcome.value, note: note.value };
+          return send(form, 'CloseAction', { outcome: v.outcome, note: v.note.trim() }, 'Close: ' + v.outcome.toLowerCase(),
+            R.validateClose(a, v), ['outcome', 'note'], 'ch-l-');
+        });
+    }
+
+    function reopenForm(a) {
+      var reason = h('textarea', { id: 'ch-o-reason', rows: '3', maxlength: '1000' });
+      formShell('Reopen', [h('p', { class: 'explain', text: 'The action goes back to In progress with ' + a.ownerName + ', with its deadline unchanged.' }),
+        field('Why?', reason, 'At least 10 characters.')], 'Reopen', function (form) {
+        var v = { reason: reason.value };
+        return send(form, 'ReopenAction', { reason: v.reason.trim() }, 'Reopen', R.validateReopen(a, v), ['reason'], 'ch-o-');
+      });
+    }
+
+    function editForm(a) {
+      var title = h('input', { id: 'ch-e-title', type: 'text', maxlength: '255', value: a.title });
+      var description = h('textarea', { id: 'ch-e-description', rows: '5', maxlength: '5000' });
+      description.value = a.description;
+      var priority = h('select', { id: 'ch-e-priority' }, R.PRIORITIES.map(function (p) { return h('option', p === a.priority ? { value: p, selected: true, text: p } : { value: p, text: p }); }));
+      var closeOut = h('input', { id: 'ch-e-closeout', type: 'checkbox' });
+      closeOut.checked = a.requiresCloseOut;
+      formShell('Edit details', [field('What needs doing', title), field('Description', description), field('Priority', priority),
+        h('label', { class: 'check' }, closeOut, ' Needs a close-out check by the raiser before it is closed')], 'Save changes',
+        function (form) {
+          var v = {};
+          if (title.value.trim() !== a.title) v.title = title.value.trim();
+          if (description.value.trim() !== a.description) v.description = description.value.trim();
+          if (priority.value !== a.priority) v.priority = priority.value;
+          if (closeOut.checked !== a.requiresCloseOut) v.requiresCloseOut = closeOut.checked;
+          return send(form, 'EditActionDetails', v, 'Edit details', R.validateEdit(a, v), ['title', 'description', 'priority'], 'ch-e-');
+        });
+    }
+
+    async function refresh() {
+      if (view !== 'main') return;
+      updates = null;
+      if (!action()) await readMissing();
+      fill();
+      loadExtras();
+    }
+
+    (action() ? Promise.resolve() : readMissing()).then(function () {
+      notFound = !action();
+      fill();
+      dlg.focusFirst();
+      loadExtras();
+    });
+    app.panel = { id: id, refresh: refresh };
   }
 
   return { open: open };

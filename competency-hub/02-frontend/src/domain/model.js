@@ -8,8 +8,8 @@ CH.model = (function () {
     competencies: '$select=Id,Title,CompetencyKey,SortOrder,Status,TrackingStart',
     members: "$select=Id,CompetencyId,PersonId,CanManageMeetings,Status&$filter=Status eq 'Active'",
     actions: '$select=Id,Title,Description,CompetencyId,LinkedCompetenciesId,AssignedToId,RaisedById,DateRaised,DueDay,OriginalDueDate,' +
-      'Status,IsOpen,Priority,ExtensionCount,RequiresCloseOut,Revision,PendingRequestKey,LastRequestKey,CreatedRequestKey,FileDirRef' +
-      '&$filter=IsOpen eq 1 and FSObjType eq 0',
+      'Status,IsOpen,Priority,ExtensionCount,RequiresCloseOut,Revision,PendingRequestKey,LastRequestKey,CreatedRequestKey,FileDirRef,' +
+      'Blocker,CloseOutcome,ClosureNote,DateClosed&$filter=IsOpen eq 1 and FSObjType eq 0',
     notices: "$select=Id,Title,Body,Category,IsImportant,ImportantUntil,Status,AuthorId,Created,FileDirRef&$filter=Status eq 'Active' and FSObjType eq 0",
     updates: '$select=Id,EntryType,ParentType,ParentId,AuthorId,Created,FileDirRef,IsHidden&$filter=IsFlagEvent eq 1 and FSObjType eq 0',
     meetings: '$select=Id,CompetencyId,MeetingDate,Status,ChairId&$filter=FSObjType eq 0',
@@ -70,7 +70,8 @@ CH.model = (function () {
       return !!p && CH.config.managementRoles.indexOf(p.Role) >= 0;
     }
 
-    var actions = (raw.actions.rows || []).filter(function (r) { return !isUncommitted(r) && r.Status !== 'Closed'; }).map(function (r) {
+    // One action row as the views use it; also used for finished actions read on demand (actionFrom).
+    function actionFrom(r) {
       var primary = areaById[r.CompetencyId];
       var linked = (r.LinkedCompetenciesId || []).map(function (id) { return areaById[id]; }).filter(Boolean);
       var dueIso = D.fromDueDay(r.DueDay);
@@ -86,9 +87,13 @@ CH.model = (function () {
         description: r.Description || '', priority: r.Priority || 'Normal', requiresCloseOut: !!r.RequiresCloseOut,
         raisedIso: r.DateRaised ? D.localDate(r.DateRaised) : '', raisedByName: nameOf(r.RaisedById),
         revision: Number(r.Revision) || 1, dueDay: Number(r.DueDay), locked: !!r.PendingRequestKey,
-        waitingCloseOut: waitingCloseOut, group: words.group, dueText: words.text
+        waitingCloseOut: waitingCloseOut, group: r.Status === 'Closed' ? 'done' : words.group,
+        dueText: r.Status === 'Closed' ? 'Closed' : words.text,
+        blocker: r.Status === 'Awaiting Input' ? (r.Blocker || '') : '', closeOutcome: r.CloseOutcome || '', closureNote: r.ClosureNote || '',
+        closedIso: r.DateClosed ? D.localDate(r.DateClosed) : ''
       };
-    });
+    }
+    var actions = (raw.actions.rows || []).filter(function (r) { return !isUncommitted(r) && r.Status !== 'Closed'; }).map(actionFrom);
     function inArea(action, key) { return action.areaKey === key || action.linkedKeys.indexOf(key) >= 0; }
 
     // Notices: the area is the folder the item sits in, not a typed value.
@@ -180,7 +185,7 @@ CH.model = (function () {
 
     return {
       today: today, areas: areas, areaByKey: areaByKey, stats: stats, actions: actions, notices: notices, calendar: calendar,
-      inArea: inArea, nameOf: nameOf, ownersFor: ownersFor, actionById: actionById,
+      inArea: inArea, nameOf: nameOf, ownersFor: ownersFor, actionById: actionById, actionFrom: actionFrom,
       sections: {
         actions: section(raw.actions), notices: section(raw.notices), meetings: section(raw.meetings),
         calendar: section(raw.calendar), flags: section(raw.updates), members: section(raw.members)
@@ -188,5 +193,22 @@ CH.model = (function () {
     };
   }
 
-  return { load: load, build: build, isUncommitted: isUncommitted };
+  // Finished (closed) actions are not loaded with the page; they are read on demand, newest first (plan K9.3).
+  // who: 'AssignedToId' or 'RaisedById' – both indexed, so the filter starts with an indexed column.
+  async function loadFinished(sp, who, personId) {
+    var res = await sp.items(CH.config.lists.actions.title, QUERIES.actions.replace('&$filter=IsOpen eq 1 and FSObjType eq 0',
+      '&$filter=' + who + ' eq ' + Number(personId) + ' and IsOpen eq 0 and FSObjType eq 0'), 500);
+    return res.rows.filter(function (r) { return !isUncommitted(r); })
+      .sort(function (a, b) { return String(b.DateClosed || '').localeCompare(String(a.DateClosed || '')); }).slice(0, 50);
+  }
+
+  // One action by its ID (for a link to a finished action, or one that has just been closed).
+  async function loadAction(sp, id) {
+    var res = await sp.items(CH.config.lists.actions.title, QUERIES.actions.replace('&$filter=IsOpen eq 1 and FSObjType eq 0',
+      '&$filter=Id eq ' + Number(id)), 1);
+    var row = res.rows[0];
+    return row && !isUncommitted(row) ? row : null;
+  }
+
+  return { load: load, build: build, isUncommitted: isUncommitted, loadFinished: loadFinished, loadAction: loadAction };
 })();

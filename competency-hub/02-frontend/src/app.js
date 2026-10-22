@@ -127,6 +127,11 @@ CH.app = (function () {
 
     app.goHome = function () { app.state = { view: 'home', area: null, tab: 0 }; render(true); };
     app.openArea = function (key) { app.state = { view: 'area', area: key, tab: 0 }; render(true); };
+    app.showMine = function (tab, areaKey, keepFocus) {
+      app.state = { view: 'mine', area: null, tab: tab || 0, areaFilter: areaKey || '' };
+      render(!keepFocus);
+      if (keepFocus) { var t = app.root.querySelector('.subtabs [aria-selected="true"]'); if (t) t.focus(); }
+    };
     app.comingSoon = function (what) { CH.ui.toast(app.root, what + ' will be available in the next version of the Competency Hub.', 'info'); };
     app.postNotice = function (key) { CH.views.noticeForm.open(app, key); };
     app.raiseAction = function (key) { CH.views.raiseForm.open(app, key); };
@@ -148,7 +153,7 @@ CH.app = (function () {
       if (!app.model) return;
       var content = [requestStrip(), app.state.view === 'area' && app.model.areaByKey[app.state.area]
         ? CH.views.area.render(app, app.state.area, app.state.tab)
-        : CH.views.home.render(app)];
+        : app.state.view === 'mine' ? CH.views.myActions.render(app) : CH.views.home.render(app)];
       paint(content);
       if (moveFocus) {
         var main = app.root.querySelector('#ch-main');
@@ -217,6 +222,7 @@ CH.app = (function () {
       var params = new URLSearchParams(window.location.search);
       var areaParam = (params.get('area') || '').toUpperCase();
       if (app.model.areaByKey[areaParam]) app.state = { view: 'area', area: areaParam, tab: 0 };
+      if (params.get('view') === 'mine') app.state = { view: 'mine', area: null, tab: 0, areaFilter: '' };
       render(false);
       var actionParam = Number(params.get('action'));
       if (actionParam) CH.views.actionPanel.open(app, actionParam);

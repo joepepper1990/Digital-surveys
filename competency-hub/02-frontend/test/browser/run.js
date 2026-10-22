@@ -147,8 +147,31 @@ check('mark as done: explained, then the action is closed', res.ok && /will be c
 res = drive('as=' + RACHEL + '&action=40&drive=staleRevision', SLOW);
 check('a change based on an old version is refused with the plain message, and nothing changes', res.ok &&
   /updated by someone else/.test(res.result.panel) && res.result.status === 'In Progress', JSON.stringify(res));
+// Finishing actions (plan K9): status, reassign, close and reopen, edit, close-out, My actions
+const KELLY = 102, CRAIG = 105;
+res = drive('as=' + RACHEL + '&action=40&drive=statusBlocker', SLOW);
+check('status: "waiting on something" needs what it waits on, then shows it', res.ok && /at least 10 characters/.test(res.result.blockerError) &&
+  /Waiting on/.test(res.result.panel) && res.result.action.Status === 'Awaiting Input' && /replacement probe/.test(res.result.action.Blocker), JSON.stringify(res));
+res = drive('as=' + KELLY + '&action=40&drive=reassign', SLOW);
+check('reassign: the current owner is not offered; the action moves to the new owner', res.ok && !res.result.options.some((o) => /Rachel Boulden/.test(o)) &&
+  res.result.owner === JOE, JSON.stringify(res));
+res = drive('as=' + KELLY + '&action=40&drive=closeAndReopen', SLOW);
+check('close: a note is needed for "Superseded"; the panel then shows it closed', res.ok && /at least 10 characters/.test(res.result.noteError) &&
+  /Closed on .* superseded/.test(res.result.closedPanel), JSON.stringify(res && res.result && res.result.closedPanel));
+check('reopen: the closed action opens again as In progress', res.ok && res.result.action.Status === 'In Progress' && res.result.action.IsOpen === true, JSON.stringify(res));
+res = drive('as=' + KELLY + '&action=40&drive=editDetails', SLOW);
+check('edit details: only the changed title is sent, and saved', res.ok && JSON.stringify(res.result.payload) === JSON.stringify({ title: 'Replace FH40 probe (bay 3)' }) &&
+  res.result.title === 'Replace FH40 probe (bay 3)', JSON.stringify(res));
+res = drive('as=' + CRAIG + '&action=61&drive=closeOut', SLOW);
+check('close-out: the raiser confirms a done action and it is closed as Completed', res.ok && res.result.status === 'Closed' && res.result.outcome === 'Completed', JSON.stringify(res));
+res = drive('as=' + RACHEL + '&view=mine&drive=myActions');
+check('my actions: my open actions, the tabs, and the area filter', res.ok && res.result.mine.includes('Replace FH40 probe') &&
+  res.result.tabs.join('|') === 'Mine|Raised by me' && res.result.filtered.length && res.result.filtered.every((t) => !/FH40/.test(t)), JSON.stringify(res));
+check('my actions: finished items are read on demand and open read-only for the owner', res.ok && res.result.finished.includes('Replace FH30 probe') &&
+  /Closed on/.test(res.result.panel) && !res.result.buttons.includes('Reopen'), JSON.stringify(res));
 res = drive('as=' + RACHEL + '&action=62&drive=viewOnlyAction');
-check('view only: an action in another area has no buttons and says why', res.ok && res.result.buttons === 0 && /You can read this action/.test(res.result.panel), JSON.stringify(res));
+check('view only: an action in another area has no buttons and says why', res.ok && res.result.buttons === 0 && /You can read this action/.test(res.result.panel) &&
+  !/More options/.test(res.result.panel), JSON.stringify(res));
 res = drive('as=' + RACHEL + '&drive=dialogKeyboard');
 check('keyboard: focus moves into the action, Escape closes it and focus returns', res.ok && res.result.inside && res.result.closed && res.result.focusBack, JSON.stringify(res));
 

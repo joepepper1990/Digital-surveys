@@ -11,7 +11,7 @@ const MODULES = [
   'src/core/config.js', 'src/core/dom.js', 'src/core/dates.js', 'src/core/sp.js', 'src/core/requests.js',
   'src/domain/access.js', 'src/domain/rules.js', 'src/domain/model.js',
   'src/ui/components.js', 'src/ui/dialog.js',
-  'src/views/home.js', 'src/views/area.js', 'src/views/notice-form.js', 'src/views/raise-form.js', 'src/views/action-panel.js',
+  'src/views/home.js', 'src/views/area.js', 'src/views/notice-form.js', 'src/views/raise-form.js', 'src/views/action-panel.js', 'src/views/my-actions.js',
   'src/app.js'
 ];
 

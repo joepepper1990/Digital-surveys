@@ -2,6 +2,18 @@
 
 Plain HTML, CSS and JavaScript, delivered as a Welcome by Accelerator 365 custom layout. Same-origin SharePoint REST runs as the signed-in user. There are no libraries and no external calls.
 
+## Version 0.3.0: the rest of an action's life (plan K9)
+
+- **More options** in the action panel, showing only what the person may do: **Change status** (Open, In progress,
+  Waiting on something – which needs what it is waiting on, shown on the action), **Reassign** (to a member of the area
+  or a Team Leader, with a reason; both people are emailed), **Edit details** (only changed fields are sent) and **Close
+  with an outcome** (Completed, No longer required, Superseded or Other; a note unless Completed).
+- **Confirm close-out** for the raiser of an action marked as done, and **Reopen** for a closed one, with a reason.
+- **My actions** (`?view=mine`, or "See all" on *Your actions*): tabs *Mine*, *Raised by me* and, for people who manage,
+  *In my areas*; an Area filter; **Show finished items** reads closed actions on demand (indexed on the owner or raiser).
+- The rules are in `src/domain/rules.js` (`validateStatus`, `validateReassign`, `validateClose`, `validateReopen`,
+  `validateEdit`, `roles()`), shared with the simulated flow; the Power Automate flow uses the same messages.
+
 ## Version 0.2.1: fixes from the first test on the site
 
 - **Changes survive a reload.** On start the app reads the user's own requests that are still `Submitted` or `Processing` and tracks them again, so "being recorded" notes, the panel's pending line and the raise strip come back after a refresh.

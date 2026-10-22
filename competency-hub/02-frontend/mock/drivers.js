@@ -142,6 +142,107 @@ window.MockDrivers = (function () {
         after: q('#ch-a').textContent, writes: MockSharePoint.writes.slice(),
         history: MockSharePoint.data.History.filter(function (h) { return h.RecordId === 40; }).length };
     },
+    // Change status to "waiting on something": the blocker is required, then shown once recorded (plan K9).
+    statusBlocker: async function () {
+      await until(function () { return q('#ch-a .facts'); });
+      q('#ch-a .more summary').click();
+      byText('#ch-a .more button', 'Change status').click();
+      var status = await until(function () { return q('#ch-s-status'); });
+      status.value = 'Awaiting Input';
+      status.dispatchEvent(new Event('change'));
+      type(q('#ch-s-blocker'), 'parts');
+      q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await wait(50);
+      var blockerError = q('#ch-s-blocker-err').textContent;
+      type(q('#ch-s-blocker'), 'Waiting for the replacement probe from stores.');
+      q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-a .pending'); });
+      await until(function () { return text().indexOf('Status changed to waiting on something.') >= 0; }, 120000);
+      await until(function () { return q('#ch-a') && q('#ch-a').textContent.indexOf('Waiting on') >= 0; });
+      return { blockerError: blockerError, panel: q('#ch-a').textContent,
+        action: MockSharePoint.data.Actions.filter(function (a) { return a.Id === 40; })[0] };
+    },
+    // Reassign: the current owner is not offered; once recorded the action belongs to the new owner.
+    reassign: async function () {
+      await until(function () { return q('#ch-a .facts'); });
+      q('#ch-a .more summary').click();
+      byText('#ch-a .more button', 'Reassign').click();
+      var owner = await until(function () { return q('#ch-g-ownerId'); });
+      var options = all('#ch-g-ownerId option').map(function (o) { return o.textContent; });
+      owner.value = String(126);
+      type(q('#ch-g-reason'), 'Joe has the replacement probe.');
+      q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return text().indexOf('Reassigned to Joe Pepper.') >= 0; }, 120000);
+      await until(function () { return q('#ch-a') && q('#ch-a').textContent.indexOf('Joe Pepper is doing it') >= 0; });
+      return { options: options, owner: MockSharePoint.data.Actions.filter(function (a) { return a.Id === 40; })[0].AssignedToId };
+    },
+    // Close with an outcome (a note is needed), then reopen the closed action from the same panel.
+    closeAndReopen: async function () {
+      await until(function () { return q('#ch-a .facts'); });
+      q('#ch-a .more summary').click();
+      byText('#ch-a .more button', 'Close with an outcome').click();
+      var outcome = await until(function () { return q('#ch-l-outcome'); });
+      outcome.value = 'Superseded';
+      q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await wait(50);
+      var noteError = q('#ch-l-note-err').textContent;
+      type(q('#ch-l-note'), 'Replaced by the new probe action.');
+      q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return text().indexOf('Action closed.') >= 0; }, 120000);
+      await until(function () { return q('#ch-a') && q('#ch-a').textContent.indexOf('Closed on') >= 0; });
+      var closedPanel = q('#ch-a').textContent;
+      var listedAfterClose = text().indexOf('Replace FH40 probe') >= 0 && !!q('.items') && all('.items .t').some(function (t) { return t.textContent === 'Replace FH40 probe'; });
+      byText('#ch-a button', 'Reopen').click();
+      type(await until(function () { return q('#ch-o-reason'); }), 'The new probe failed as well.');
+      q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return text().indexOf('Action reopened.') >= 0; }, 120000);
+      await until(function () { return q('#ch-a') && q('#ch-a').textContent.indexOf('I need more time') >= 0; });
+      return { noteError: noteError, closedPanel: closedPanel, listedAfterClose: listedAfterClose,
+        action: MockSharePoint.data.Actions.filter(function (a) { return a.Id === 40; })[0] };
+    },
+    // Edit details: only what changed is sent.
+    editDetails: async function () {
+      await until(function () { return q('#ch-a .facts'); });
+      q('#ch-a .more summary').click();
+      byText('#ch-a .more button', 'Edit details').click();
+      var title = await until(function () { return q('#ch-e-title'); });
+      type(title, 'Replace FH40 probe (bay 3)');
+      q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return text().indexOf('Details saved.') >= 0; }, 120000);
+      var req = MockSharePoint.data.Requests.filter(function (r) { return r.RequestType === 'EditActionDetails'; })[0];
+      return { payload: JSON.parse(req.Payload), title: MockSharePoint.data.Actions.filter(function (a) { return a.Id === 40; })[0].Title };
+    },
+    // The raiser confirms the close-out of an action marked as done.
+    closeOut: async function () {
+      await until(function () { return q('#ch-a .facts'); });
+      byText('#ch-a button', 'Confirm close-out').click();
+      await until(function () { return q('#ch-l-note'); });
+      q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return text().indexOf('Action closed.') >= 0; }, 120000);
+      var a = MockSharePoint.data.Actions.filter(function (x) { return x.Id === 61; })[0];
+      return { status: a.Status, outcome: a.CloseOutcome };
+    },
+    // My actions: the tabs, the area filter and the finished items read on demand.
+    myActions: async function () {
+      await until(function () { return q('#ch-m-area'); });
+      var mine = all('.items .t').map(function (t) { return t.textContent; });
+      var tabs = all('.subtabs button').map(function (b) { return b.textContent; });
+      var areaSelect = q('#ch-m-area');
+      areaSelect.value = 'RP';
+      areaSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      await wait(50);
+      var filtered = all('.items .t').map(function (t) { return t.textContent; });
+      q('#ch-m-area').value = '';
+      q('#ch-m-area').dispatchEvent(new Event('change', { bubbles: true }));
+      await wait(50);
+      byText('button', 'Show finished items').click();
+      await until(function () { return text().indexOf('Old survey sheets archived') >= 0; });
+      var finished = all('.finished .t').map(function (t) { return t.textContent; });
+      all('.finished .item-open')[0].click();
+      await until(function () { return q('#ch-a .facts'); });
+      var panel = q('#ch-a').textContent;
+      return { mine: mine, tabs: tabs, filtered: filtered, finished: finished, panel: panel, buttons: all('#ch-a .actions-row .btn').map(function (b) { return b.textContent; }) };
+    },
     // Reloading while changes are being recorded (plan K7.9): the notes come back, the changes confirm,
     // and the new action opens on click without another reload.
     reloadWhilePending: async function () {

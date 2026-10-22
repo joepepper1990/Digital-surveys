@@ -25,6 +25,7 @@ CH.views.home = (function () {
   function myActions(app) {
     var mine = app.model.actions.filter(function (a) { return a.ownerId === app.person.SiteUserId; });
     return ui.card('Your actions', [
+      h('div', { class: 'row card-link' }, ui.linkButton('See all, including ones you raised', function () { app.showMine(0); })),
       ui.sectionNote(app.model.sections.actions, 'actions'),
       ui.actionList(mine, function (a) { return a.areaName; }, 'You have no open actions. Nice work.', app.model.sections.actions, app.openAction, app.pendingNote)
     ]);

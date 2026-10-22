@@ -1,6 +1,6 @@
 # ESG Competency Hub – Power Automate solution
 
-`ESGCompetencyHub_1_1_0_0_unmanaged.zip` is the solution to import into Power Automate (plan K7.3, K8). It holds:
+`ESGCompetencyHub_1_2_0_0_unmanaged.zip` is the solution to import into Power Automate (plan K7.3, K8). It holds:
 
 | Part | Name |
 |---|---|
@@ -13,6 +13,17 @@
 
 `schema/schema.json` is the single description of the lists. Setup builds the site from it, and the flow tools check every
 column the flow uses against it.
+
+## Version 1.2.0.0: the rest of an action's life (plan K9)
+
+Five more request types: **ChangeStatus**, **ReassignAction**, **CloseAction**, **ReopenAction** and
+**EditActionDetails**, each with the same checks as the app (same messages), the lock and revision, a History event
+(Status Changed, Reassigned, Closed, Reopened, Details Edited) and emails: a reassignment tells the new owner (ASG) and
+the previous owner (RAW); closing tells the owner and the raiser (CLS); never the person who made the change.
+
+The changes to an existing action are built **once** (`change_all()` in `flows.py`): each kind adds only small Switch
+cases that set its verdict, plan, values, event fields, result and emails. That keeps the request flow at about 380
+actions (Power Automate allows 500); building each kind separately had reached 895.
 
 ## Version 1.1.0.0: emails and reminders (plan K8)
 

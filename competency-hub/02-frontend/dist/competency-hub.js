@@ -1,11 +1,11 @@
-/* ESG Competency Hub 0.2.1 – built from src/ by tools/build.js. Do not edit. */
+/* ESG Competency Hub 0.3.0 – built from src/ by tools/build.js. Do not edit. */
 window.ESGCompetencyHub = function (ctx) {
   'use strict';
   var CH = {};
   /* src/core/config.js */
   // Fixed names and limits. Lists are addressed by display title; folders by list URL name.
   CH.config = {
-    VERSION: '0.2.1',
+    VERSION: '0.3.0',
     ENVIRONMENT: 'TEST',
     lists: {
       competencies: { title: 'Competencies', url: 'Competencies' },
@@ -683,8 +683,8 @@ window.ESGCompetencyHub = function (ctx) {
       competencies: '$select=Id,Title,CompetencyKey,SortOrder,Status,TrackingStart',
       members: "$select=Id,CompetencyId,PersonId,CanManageMeetings,Status&$filter=Status eq 'Active'",
       actions: '$select=Id,Title,Description,CompetencyId,LinkedCompetenciesId,AssignedToId,RaisedById,DateRaised,DueDay,OriginalDueDate,' +
-        'Status,IsOpen,Priority,ExtensionCount,RequiresCloseOut,Revision,PendingRequestKey,LastRequestKey,CreatedRequestKey,FileDirRef' +
-        '&$filter=IsOpen eq 1 and FSObjType eq 0',
+        'Status,IsOpen,Priority,ExtensionCount,RequiresCloseOut,Revision,PendingRequestKey,LastRequestKey,CreatedRequestKey,FileDirRef,' +
+        'Blocker,CloseOutcome,ClosureNote,DateClosed&$filter=IsOpen eq 1 and FSObjType eq 0',
       notices: "$select=Id,Title,Body,Category,IsImportant,ImportantUntil,Status,AuthorId,Created,FileDirRef&$filter=Status eq 'Active' and FSObjType eq 0",
       updates: '$select=Id,EntryType,ParentType,ParentId,AuthorId,Created,FileDirRef,IsHidden&$filter=IsFlagEvent eq 1 and FSObjType eq 0',
       meetings: '$select=Id,CompetencyId,MeetingDate,Status,ChairId&$filter=FSObjType eq 0',
@@ -745,7 +745,8 @@ window.ESGCompetencyHub = function (ctx) {
         return !!p && CH.config.managementRoles.indexOf(p.Role) >= 0;
       }
 
-      var actions = (raw.actions.rows || []).filter(function (r) { return !isUncommitted(r) && r.Status !== 'Closed'; }).map(function (r) {
+      // One action row as the views use it; also used for finished actions read on demand (actionFrom).
+      function actionFrom(r) {
         var primary = areaById[r.CompetencyId];
         var linked = (r.LinkedCompetenciesId || []).map(function (id) { return areaById[id]; }).filter(Boolean);
         var dueIso = D.fromDueDay(r.DueDay);
@@ -761,9 +762,13 @@ window.ESGCompetencyHub = function (ctx) {
           description: r.Description || '', priority: r.Priority || 'Normal', requiresCloseOut: !!r.RequiresCloseOut,
           raisedIso: r.DateRaised ? D.localDate(r.DateRaised) : '', raisedByName: nameOf(r.RaisedById),
           revision: Number(r.Revision) || 1, dueDay: Number(r.DueDay), locked: !!r.PendingRequestKey,
-          waitingCloseOut: waitingCloseOut, group: words.group, dueText: words.text
+          waitingCloseOut: waitingCloseOut, group: r.Status === 'Closed' ? 'done' : words.group,
+          dueText: r.Status === 'Closed' ? 'Closed' : words.text,
+          blocker: r.Status === 'Awaiting Input' ? (r.Blocker || '') : '', closeOutcome: r.CloseOutcome || '', closureNote: r.ClosureNote || '',
+          closedIso: r.DateClosed ? D.localDate(r.DateClosed) : ''
         };
-      });
+      }
+      var actions = (raw.actions.rows || []).filter(function (r) { return !isUncommitted(r) && r.Status !== 'Closed'; }).map(actionFrom);
       function inArea(action, key) { return action.areaKey === key || action.linkedKeys.indexOf(key) >= 0; }
 
       // Notices: the area is the folder the item sits in, not a typed value.
@@ -855,7 +860,7 @@ window.ESGCompetencyHub = function (ctx) {
 
       return {
         today: today, areas: areas, areaByKey: areaByKey, stats: stats, actions: actions, notices: notices, calendar: calendar,
-        inArea: inArea, nameOf: nameOf, ownersFor: ownersFor, actionById: actionById,
+        inArea: inArea, nameOf: nameOf, ownersFor: ownersFor, actionById: actionById, actionFrom: actionFrom,
         sections: {
           actions: section(raw.actions), notices: section(raw.notices), meetings: section(raw.meetings),
           calendar: section(raw.calendar), flags: section(raw.updates), members: section(raw.members)
@@ -863,7 +868,24 @@ window.ESGCompetencyHub = function (ctx) {
       };
     }
 
-    return { load: load, build: build, isUncommitted: isUncommitted };
+    // Finished (closed) actions are not loaded with the page; they are read on demand, newest first (plan K9.3).
+    // who: 'AssignedToId' or 'RaisedById' – both indexed, so the filter starts with an indexed column.
+    async function loadFinished(sp, who, personId) {
+      var res = await sp.items(CH.config.lists.actions.title, QUERIES.actions.replace('&$filter=IsOpen eq 1 and FSObjType eq 0',
+        '&$filter=' + who + ' eq ' + Number(personId) + ' and IsOpen eq 0 and FSObjType eq 0'), 500);
+      return res.rows.filter(function (r) { return !isUncommitted(r); })
+        .sort(function (a, b) { return String(b.DateClosed || '').localeCompare(String(a.DateClosed || '')); }).slice(0, 50);
+    }
+
+    // One action by its ID (for a link to a finished action, or one that has just been closed).
+    async function loadAction(sp, id) {
+      var res = await sp.items(CH.config.lists.actions.title, QUERIES.actions.replace('&$filter=IsOpen eq 1 and FSObjType eq 0',
+        '&$filter=Id eq ' + Number(id)), 1);
+      var row = res.rows[0];
+      return row && !isUncommitted(row) ? row : null;
+    }
+
+    return { load: load, build: build, isUncommitted: isUncommitted, loadFinished: loadFinished, loadAction: loadAction };
   })();
 
   /* src/ui/components.js */
@@ -1081,6 +1103,7 @@ window.ESGCompetencyHub = function (ctx) {
     function myActions(app) {
       var mine = app.model.actions.filter(function (a) { return a.ownerId === app.person.SiteUserId; });
       return ui.card('Your actions', [
+        h('div', { class: 'row card-link' }, ui.linkButton('See all, including ones you raised', function () { app.showMine(0); })),
         ui.sectionNote(app.model.sections.actions, 'actions'),
         ui.actionList(mine, function (a) { return a.areaName; }, 'You have no open actions. Nice work.', app.model.sections.actions, app.openAction, app.pendingNote)
       ]);
@@ -1599,7 +1622,13 @@ window.ESGCompetencyHub = function (ctx) {
       return null;
     }
 
+    var STATUS_WORDS = { 'Open': 'Open', 'In Progress': 'In progress', 'Awaiting Input': 'Waiting on something' };
+
     function whenText(action) {
+      if (action.status === 'Closed') {
+        return 'Closed' + (action.closedIso ? ' on ' + D.long(action.closedIso) : '') + (action.closeOutcome ? ' – ' + action.closeOutcome.toLowerCase() : '') + '.' +
+          (action.closureNote ? ' “' + action.closureNote + '”' : '');
+      }
       if (action.waitingCloseOut) return 'Done – waiting for a close-out check by ' + action.raisedByName + '.';
       var text = (action.group === 'late' ? 'Was due ' : 'Due ') + D.weekday(action.dueIso) + ' ' + D.long(action.dueIso) + '.';
       if (action.extensions) {
@@ -1634,7 +1663,15 @@ window.ESGCompetencyHub = function (ctx) {
       var extensions = null;
       var notFound = false;
 
-      function action() { return app.model.actionById[id]; }
+      // An open action comes with the page; a finished one is read on demand and kept in app.finished.
+      function action() { return app.model.actionById[id] || (app.finished || {})[id]; }
+
+      async function readMissing() {
+        try {
+          var row = await CH.model.loadAction(app.sp, id);
+          if (row) { app.finished = app.finished || {}; app.finished[id] = app.model.actionFrom(row); }
+        } catch (_) { /* shown as not available */ }
+      }
 
       async function loadExtras() {
         var a = action();
@@ -1656,12 +1693,21 @@ window.ESGCompetencyHub = function (ctx) {
         var r = R.roles(a, app.person.SiteUserId, app.access);
         var entry = app.tracker.forTarget(a.id);
         var busy = a.locked || (entry && (entry.state === 'submitted' || entry.state === 'slow'));
+        var finished = a.status === 'Closed' || a.waitingCloseOut;
+        // the less common changes sit under "More options" (plan C.9), only those this person may make
+        var more = [
+          r.canStatus ? ui.linkButton('Change status', function () { show('status'); }) : null,
+          r.canReassign ? ui.linkButton('Reassign', function () { show('reassign'); }) : null,
+          r.canEdit ? ui.linkButton('Edit details', function () { show('edit'); }) : null,
+          r.canClose && !a.waitingCloseOut ? ui.linkButton('Close with an outcome', function () { show('close'); }) : null
+        ].filter(Boolean);
         dlg.setTitle(a.title);
         CH.dom.append(dlg.body, [
           h('p', { class: 'muted small', text: a.ref + ' · ' + a.areaName + (a.priority === 'High' ? ' · High priority' : '') }),
           pendingLine(app, a),
           h('dl', { class: 'facts' },
             h('dt', { text: 'When' }), h('dd', null, ui.chip(a.waitingCloseOut ? 'later' : a.group, a.dueText), ' ', whenText(a)),
+            a.blocker ? [h('dt', { text: 'Waiting on' }), h('dd', { class: 'notice-body', text: a.blocker })] : null,
             h('dt', { text: 'Who' }), h('dd', { text: a.ownerName + ' is doing it. Raised by ' + a.raisedByName + (a.raisedIso ? ' on ' + D.long(a.raisedIso) : '') + '.' }),
             h('dt', { text: 'What' }), h('dd', { class: 'notice-body', text: a.description || 'No description.' })),
           extensions && extensions.length ? h('details', { class: 'ext-list' }, h('summary', { text: 'Show all deadline changes (' + extensions.length + ')' }),
@@ -1672,10 +1718,13 @@ window.ESGCompetencyHub = function (ctx) {
                   (x.EventTime ? ' · ' + D.short(D.localDate(x.EventTime)) : '') + ' · “' + (x.Note || '') + '”' })));
             }))) : null,
           h('div', { class: 'row actions-row' },
-            r.canUpdate ? ui.button('Add an update', function () { show('update'); }, 'main') : null,
+            r.canUpdate && !finished ? ui.button('Add an update', function () { show('update'); }, 'main') : null,
             r.canExtend ? ui.button('I need more time', function () { show('extend'); }) : null,
-            r.canComplete ? ui.button('Mark as done', function () { show('complete'); }) : null),
-          !r.canUpdate && !r.canExtend && !r.canComplete ? h('p', { class: 'muted small', text: 'You can read this action. Only its owner, the people who manage it and members of ' + a.areaName + ' can change it.' }) : null,
+            r.canComplete ? ui.button('Mark as done', function () { show('complete'); }) : null,
+            a.waitingCloseOut && r.canClose ? ui.button('Confirm close-out', function () { show('closeout'); }, 'main') : null,
+            r.canReopen ? ui.button('Reopen', function () { show('reopen'); }) : null),
+          more.length ? h('details', { class: 'more' }, h('summary', { text: 'More options' }), h('div', { class: 'row' }, more)) : null,
+          !r.canUpdate && !r.canExtend && !r.canComplete && !r.canReopen ? h('p', { class: 'muted small', text: 'You can read this action. Only its owner, the people who manage it and members of ' + a.areaName + ' can change it.' }) : null,
           h('h3', { class: 'group-title', text: 'Updates' }),
           updates === null ? h('p', { class: 'muted', text: 'Loading updates…' })
             : updates === 'error' ? h('p', { class: 'section-note', text: 'Could not load the updates just now.' })
@@ -1685,7 +1734,7 @@ window.ESGCompetencyHub = function (ctx) {
                   (u.EntryType === 'Blocker' ? ' · blocker' : '') })));
             })) : h('p', { class: 'muted', text: 'No updates yet.' })
         ]);
-        Array.prototype.forEach.call(dlg.body.querySelectorAll('.actions-row .btn'), function (b) { b.disabled = !!busy; });
+        Array.prototype.forEach.call(dlg.body.querySelectorAll('.actions-row .btn, .more .btn-link'), function (b) { b.disabled = !!busy; });
       }
 
       function show(which) {
@@ -1695,6 +1744,12 @@ window.ESGCompetencyHub = function (ctx) {
         if (which === 'update') updateForm(a);
         if (which === 'extend') extendForm(a);
         if (which === 'complete') completeForm(a);
+        if (which === 'status') statusForm(a);
+        if (which === 'reassign') reassignForm(a);
+        if (which === 'close') closeForm(a, false);
+        if (which === 'closeout') closeForm(a, true);
+        if (which === 'reopen') reopenForm(a);
+        if (which === 'edit') editForm(a);
         dlg.focusFirst();
       }
       function back() { view = 'main'; fill(); dlg.focusFirst(); }
@@ -1796,14 +1851,197 @@ window.ESGCompetencyHub = function (ctx) {
           });
       }
 
-      notFound = !action();
-      fill();
-      dlg.focusFirst();
-      loadExtras();
-      app.panel = { id: id, refresh: function () { if (view === 'main') { updates = null; fill(); loadExtras(); } } };
+      // A queued change, sent with the revision the person saw; the panel then shows it as being recorded.
+      async function send(form, type, payload, label, errors, order, prefix) {
+        if (errors.action) { form.querySelector('.form-error').textContent = errors.action; return false; }
+        if (CH.ui.dialog.showErrors(form, prefix, errors, order)) return false;
+        await app.tracker.submit({ type: type, targetId: id, expectedRevision: action().revision, payload: payload, label: label });
+        back();
+        return true;
+      }
+
+      function statusForm(a) {
+        var status = h('select', { id: 'ch-s-status' }, R.OPEN_STATUSES.filter(function (st) { return st !== a.status; }).map(function (st) {
+          return h('option', { value: st, text: STATUS_WORDS[st] });
+        }));
+        var blocker = h('textarea', { id: 'ch-s-blocker', rows: '3', maxlength: '1000' });
+        var blockerField = field('What is it waiting on?', blocker, 'For example a part, a decision or another team. Everyone who can see this action can read it.');
+        function toggle() { blockerField.style.display = status.value === 'Awaiting Input' ? '' : 'none'; }
+        status.addEventListener('change', toggle);
+        toggle();
+        formShell('Change status', [h('p', { class: 'muted', text: 'Now: ' + STATUS_WORDS[a.status] + '.' }), field('New status', status), blockerField], 'Change status',
+          function (form) {
+            var v = { status: status.value, blocker: blocker.value };
+            return send(form, 'ChangeStatus', { status: v.status, blocker: v.status === 'Awaiting Input' ? v.blocker.trim() : '' },
+              'Status: ' + STATUS_WORDS[v.status].toLowerCase(), R.validateStatus(a, v), ['status', 'blocker'], 'ch-s-');
+          });
+      }
+
+      function reassignForm(a) {
+        var owners = app.model.ownersFor(a.areaKey).filter(function (o) { return Number(o.id) !== Number(a.ownerId); });
+        var owner = h('select', { id: 'ch-g-ownerId' }, [h('option', { value: '', text: 'Choose a person' })].concat(owners.map(function (o) {
+          return h('option', { value: String(o.id), text: o.name + (CH.config.managementRoles.indexOf(o.role) >= 0 ? ' – ' + o.role : '') });
+        })));
+        var reason = h('textarea', { id: 'ch-g-reason', rows: '3', maxlength: '1000' });
+        formShell('Reassign', [h('p', { class: 'muted', text: 'Now: ' + a.ownerName + '. Both people get an email.' }),
+          field('New owner', owner, 'Members of ' + a.areaName + ', and Team Leaders and the Group Head.'), field('Why?', reason, 'At least 10 characters.')], 'Reassign',
+          function (form) {
+            var v = { ownerId: owner.value ? Number(owner.value) : '', reason: reason.value };
+            var allowed = { ownerAllowed: function (key, pid) { return app.model.ownersFor(key).some(function (o) { return Number(o.id) === pid; }); } };
+            var name = (owners.filter(function (o) { return Number(o.id) === v.ownerId; })[0] || {}).name;
+            return send(form, 'ReassignAction', { ownerId: v.ownerId, reason: v.reason.trim() }, 'Reassign to ' + name,
+              R.validateReassign(a, v, allowed), ['ownerId', 'reason'], 'ch-g-');
+          });
+      }
+
+      function closeForm(a, closeOut) {
+        var outcome = h('select', { id: 'ch-l-outcome' }, R.OUTCOMES.map(function (o) { return h('option', { value: o, text: o }); }));
+        var note = h('textarea', { id: 'ch-l-note', rows: '3', maxlength: '1000' });
+        var outcomeField = field('Outcome', outcome);
+        if (closeOut) outcomeField.style.display = 'none';
+        formShell(closeOut ? 'Confirm close-out' : 'Close with an outcome', [
+          h('p', { class: 'explain', text: closeOut ? a.ownerName + ' has marked this action as done. Closing it confirms the work is complete.'
+            : 'The action will be closed. ' + a.ownerName + ' gets an email, and it stays in the history of ' + a.areaName + '.' }),
+          outcomeField, field(closeOut ? 'Anything to add? (optional)' : 'Note', note, closeOut ? '' : 'Needed unless the outcome is Completed.')],
+          closeOut ? 'Close the action' : 'Close', function (form) {
+            var v = { outcome: closeOut ? 'Completed' : outcome.value, note: note.value };
+            return send(form, 'CloseAction', { outcome: v.outcome, note: v.note.trim() }, 'Close: ' + v.outcome.toLowerCase(),
+              R.validateClose(a, v), ['outcome', 'note'], 'ch-l-');
+          });
+      }
+
+      function reopenForm(a) {
+        var reason = h('textarea', { id: 'ch-o-reason', rows: '3', maxlength: '1000' });
+        formShell('Reopen', [h('p', { class: 'explain', text: 'The action goes back to In progress with ' + a.ownerName + ', with its deadline unchanged.' }),
+          field('Why?', reason, 'At least 10 characters.')], 'Reopen', function (form) {
+          var v = { reason: reason.value };
+          return send(form, 'ReopenAction', { reason: v.reason.trim() }, 'Reopen', R.validateReopen(a, v), ['reason'], 'ch-o-');
+        });
+      }
+
+      function editForm(a) {
+        var title = h('input', { id: 'ch-e-title', type: 'text', maxlength: '255', value: a.title });
+        var description = h('textarea', { id: 'ch-e-description', rows: '5', maxlength: '5000' });
+        description.value = a.description;
+        var priority = h('select', { id: 'ch-e-priority' }, R.PRIORITIES.map(function (p) { return h('option', p === a.priority ? { value: p, selected: true, text: p } : { value: p, text: p }); }));
+        var closeOut = h('input', { id: 'ch-e-closeout', type: 'checkbox' });
+        closeOut.checked = a.requiresCloseOut;
+        formShell('Edit details', [field('What needs doing', title), field('Description', description), field('Priority', priority),
+          h('label', { class: 'check' }, closeOut, ' Needs a close-out check by the raiser before it is closed')], 'Save changes',
+          function (form) {
+            var v = {};
+            if (title.value.trim() !== a.title) v.title = title.value.trim();
+            if (description.value.trim() !== a.description) v.description = description.value.trim();
+            if (priority.value !== a.priority) v.priority = priority.value;
+            if (closeOut.checked !== a.requiresCloseOut) v.requiresCloseOut = closeOut.checked;
+            return send(form, 'EditActionDetails', v, 'Edit details', R.validateEdit(a, v), ['title', 'description', 'priority'], 'ch-e-');
+          });
+      }
+
+      async function refresh() {
+        if (view !== 'main') return;
+        updates = null;
+        if (!action()) await readMissing();
+        fill();
+        loadExtras();
+      }
+
+      (action() ? Promise.resolve() : readMissing()).then(function () {
+        notFound = !action();
+        fill();
+        dlg.focusFirst();
+        loadExtras();
+      });
+      app.panel = { id: id, refresh: refresh };
     }
 
     return { open: open };
+  })();
+
+  /* src/views/my-actions.js */
+  // My actions (plan B.3 ACT-09, K9.3): the actions I own, the ones I raised and, for people who manage, those in
+  // their areas. One Area filter. Finished actions are read only when asked for ("Show finished items").
+  CH.views = CH.views || {};
+  CH.views.myActions = (function () {
+    var h = CH.dom.h;
+    var ui = CH.ui;
+    var D = CH.dates;
+
+    function tabsFor(app) {
+      var me = app.person.SiteUserId;
+      var tabs = [
+        { label: 'Mine', who: 'AssignedToId', pick: function (a) { return Number(a.ownerId) === Number(me); } },
+        { label: 'Raised by me', who: 'RaisedById', pick: function (a) { return Number(a.raisedById) === Number(me); } }
+      ];
+      var managed = app.model.areas.filter(function (a) { return app.access.canManage(a.key); }).map(function (a) { return a.key; });
+      if (managed.length) {
+        tabs.push({ label: app.access.isManagement ? 'All areas' : 'In my areas',
+          pick: function (a) { return managed.some(function (k) { return app.model.inArea(a, k); }); } });
+      }
+      return tabs;
+    }
+
+    function finishedList(app, rows) {
+      if (!rows.length) return h('p', { class: 'muted', text: 'No finished actions.' });
+      app.finished = app.finished || {};
+      return h('ul', { class: 'items' }, rows.map(function (row) {
+        var a = app.model.actionFrom(row);
+        app.finished[a.id] = a;
+        return h('li', null, h('button', { type: 'button', class: 'item-open', onclick: function () { app.openAction(a); } },
+          h('span', null, h('span', { class: 't', text: a.title }),
+            h('span', { class: 's', text: a.areaName + ' · ' + a.ownerName + (a.closeOutcome ? ' · ' + a.closeOutcome.toLowerCase() : '') })),
+          ui.chip('done', a.closedIso ? 'Closed ' + D.short(a.closedIso) : 'Closed')));
+      }));
+    }
+
+    function render(app) {
+      var st = app.state;
+      var tabs = tabsFor(app);
+      var tab = Math.min(st.tab || 0, tabs.length - 1);
+      var areaKey = st.areaFilter || '';
+      var list = app.model.actions.filter(tabs[tab].pick).filter(function (a) { return !areaKey || app.model.inArea(a, areaKey); });
+      var bar = h('div', { class: 'subtabs', role: 'tablist', 'aria-label': 'My actions' }, tabs.map(function (t, i) {
+        return h('button', { type: 'button', role: 'tab', 'aria-selected': String(i === tab), tabindex: i === tab ? '0' : '-1', text: t.label,
+          onclick: function () { app.showMine(i, areaKey); },
+          onkeydown: function (e) {
+            if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+            app.showMine((i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length, areaKey, true);
+          } });
+      }));
+      var filter = h('select', { id: 'ch-m-area', 'aria-label': 'Area', onchange: function (e) { app.showMine(tab, e.target.value); } },
+        [h('option', { value: '', text: 'All areas' })].concat(app.model.areas.map(function (a) {
+          return h('option', a.key === areaKey ? { value: a.key, selected: true, text: a.name } : { value: a.key, text: a.name });
+        })));
+      var finished = h('div', { class: 'finished' });
+      if (tabs[tab].who) {
+        finished.appendChild(ui.linkButton('Show finished items', async function (e) {
+          e.target.disabled = true;
+          e.target.textContent = 'Loading finished items…';
+          try {
+            var rows = await CH.model.loadFinished(app.sp, tabs[tab].who, app.person.SiteUserId);
+            rows = rows.filter(function (r) { return !areaKey || (app.model.areas.filter(function (x) { return x.id === r.CompetencyId; })[0] || {}).key === areaKey; });
+            CH.dom.clear(finished);
+            CH.dom.append(finished, [h('h3', { class: 'group-title', text: 'Finished' }), finishedList(app, rows)]);
+          } catch (_) {
+            e.target.disabled = false;
+            e.target.textContent = 'Could not load finished items – try again';
+          }
+        }));
+      }
+      return [
+        h('div', { class: 'row' }, ui.linkButton('‹ Overview', app.goHome)),
+        h('h1', { text: 'My actions' }),
+        h('div', { class: 'row' }, h('label', { for: 'ch-m-area', text: 'Area ' }), filter),
+        bar,
+        h('div', { class: 'panel', role: 'tabpanel' },
+          ui.sectionNote(app.model.sections.actions, 'actions'),
+          ui.actionList(list, function (a) { return a.areaName + (tab === 0 ? '' : ' · ' + a.ownerName) + (a.blocker ? ' · waiting on something' : ''); },
+            tab === 0 ? 'You have no open actions. Nice work.' : 'No open actions here.', app.model.sections.actions, app.openAction, app.pendingNote),
+          finished)
+      ];
+    }
+
+    return { render: render };
   })();
 
   /* src/app.js */
@@ -1936,6 +2174,11 @@ window.ESGCompetencyHub = function (ctx) {
 
       app.goHome = function () { app.state = { view: 'home', area: null, tab: 0 }; render(true); };
       app.openArea = function (key) { app.state = { view: 'area', area: key, tab: 0 }; render(true); };
+      app.showMine = function (tab, areaKey, keepFocus) {
+        app.state = { view: 'mine', area: null, tab: tab || 0, areaFilter: areaKey || '' };
+        render(!keepFocus);
+        if (keepFocus) { var t = app.root.querySelector('.subtabs [aria-selected="true"]'); if (t) t.focus(); }
+      };
       app.comingSoon = function (what) { CH.ui.toast(app.root, what + ' will be available in the next version of the Competency Hub.', 'info'); };
       app.postNotice = function (key) { CH.views.noticeForm.open(app, key); };
       app.raiseAction = function (key) { CH.views.raiseForm.open(app, key); };
@@ -1957,7 +2200,7 @@ window.ESGCompetencyHub = function (ctx) {
         if (!app.model) return;
         var content = [requestStrip(), app.state.view === 'area' && app.model.areaByKey[app.state.area]
           ? CH.views.area.render(app, app.state.area, app.state.tab)
-          : CH.views.home.render(app)];
+          : app.state.view === 'mine' ? CH.views.myActions.render(app) : CH.views.home.render(app)];
         paint(content);
         if (moveFocus) {
           var main = app.root.querySelector('#ch-main');
@@ -2026,6 +2269,7 @@ window.ESGCompetencyHub = function (ctx) {
         var params = new URLSearchParams(window.location.search);
         var areaParam = (params.get('area') || '').toUpperCase();
         if (app.model.areaByKey[areaParam]) app.state = { view: 'area', area: areaParam, tab: 0 };
+        if (params.get('view') === 'mine') app.state = { view: 'mine', area: null, tab: 0, areaFilter: '' };
         render(false);
         var actionParam = Number(params.get('action'));
         if (actionParam) CH.views.actionPanel.open(app, actionParam);

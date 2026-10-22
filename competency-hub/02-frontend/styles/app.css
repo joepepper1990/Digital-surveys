@@ -57,6 +57,7 @@ h2 { font-size: calc(18 * var(--u)); font-weight: 600; margin: 0 0 calc(12 * var
 .w-late { color: var(--late); background: var(--late-bg); }
 .w-soon { color: var(--soon); background: var(--soon-bg); }
 .w-later { color: var(--muted); background: #eef1f4; }
+.w-done { color: #1b5e37; background: #e6f3eb; }
 .w-ok { color: var(--ok); background: var(--ok-bg); }
 
 .group-title { display: flex; align-items: center; gap: calc(8 * var(--u)); font-weight: 600; font-size: calc(16 * var(--u)); margin: calc(14 * var(--u)) 0 calc(8 * var(--u)); }
