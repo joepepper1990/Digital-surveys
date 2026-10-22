@@ -18,6 +18,7 @@ DAILY = FLOWS['ESG Competency Hub | 1 Daily tasks']
 UK = ZoneInfo('Europe/London')
 JOE, RACHEL, KELLY, KAI = 7, 112, 103, 110
 KEY = '3f2b1c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d'
+KEY2 = '9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d'
 AREAS = ['FLK', 'INS', 'GRS', 'RPE', 'BA', 'DOS', 'RP', 'DSL', 'ALS', 'RW']
 
 
@@ -294,16 +295,16 @@ class Robustness(unittest.TestCase):
             out[key] = sorted(rows)
         return out
 
-    def interrupted_everywhere(self, rtype, payload, target=None, revision=None):
+    def interrupted_everywhere(self, rtype, payload, target=None, revision=None, sender=RACHEL):
         ref = site()
-        r = submit(ref, RACHEL, rtype, payload, target=target and ref.action, revision=revision)
+        r = submit(ref, sender, rtype, payload, target=target and ref.action, revision=revision)
         status, eng = run(ref, r)
         self.assertEqual(request(ref, r)['Status'], 'Completed', eng.log)
         expected, total = self.snapshot(ref), len(ref.writes)
         for k in range(1, total + 1):
             with self.subTest(write=k, of=total, at=ref.writes[k - 1]):
                 s = site()
-                r = submit(s, RACHEL, rtype, payload, target=target and s.action, revision=revision)
+                r = submit(s, sender, rtype, payload, target=target and s.action, revision=revision)
                 s.fail_at = k
                 first, eng1 = run(s, r)
                 self.assertIn(first, ('Failed', 'Cancelled'))
@@ -330,6 +331,14 @@ class Robustness(unittest.TestCase):
 
     def test_complete_survives_an_interruption_at_every_write(self):
         self.interrupted_everywhere('MarkComplete', {'note': 'Done.'}, target=True, revision=2)
+
+    def test_status_reassign_close_reopen_and_edit_survive_an_interruption_at_every_write(self):
+        for rtype, payload in (('ChangeStatus', {'status': 'Awaiting Input', 'blocker': 'Waiting for the supplier.'}),
+                               ('CloseAction', {'outcome': 'Superseded', 'note': 'Replaced by another action.'}),
+                               ('ReassignAction', {'ownerId': JOE, 'reason': 'Joe will take this one on.'}),
+                               ('EditActionDetails', {'title': 'New title', 'priority': 'High'})):
+            with self.subTest(rtype):
+                self.interrupted_everywhere(rtype, payload, target=True, revision=2, sender=KELLY)
 
     def test_a_completed_request_put_back_changes_nothing(self):
         s = site()
@@ -617,6 +626,117 @@ class Retries(unittest.TestCase):
         run_daily(s, date(2026, 10, 22))
         self.assertEqual(row['State'], 'Sent')
         self.assertIn('already received', s.sent[sent]['body'])
+
+
+class MoreChanges(unittest.TestCase):
+    """Plan K9: status, reassign, close, reopen and edit details – each checked, locked, recorded and confirmed."""
+    def change(self, sender, rtype, payload, s=None, revision=2):
+        s = s or site()
+        r = submit(s, sender, rtype, payload, target=s.action, revision=revision)
+        status, eng = run(s, r)
+        self.assertEqual(status, 'Succeeded', eng.log)
+        return s, r, s.item('actions', s.action)['f'], request(s, r)
+
+    def event(self, s):
+        return s.rows('history', RequestKey=KEY + '|1')[0]['f']
+
+    def test_status_waiting_on_something_stores_the_blocker_and_clears_it_later(self):
+        s, r, a, req = self.change(RACHEL, 'ChangeStatus', {'status': 'Awaiting Input', 'blocker': 'Waiting for the supplier to deliver.'})
+        self.assertEqual((req['Status'], req['ResultMessage']), ('Completed', 'Status changed to waiting on something.'))
+        self.assertEqual((a['Status'], a['Blocker'], float(a['Revision']), a['PendingRequestKey'], a['LastRequestKey']),
+                         ('Awaiting Input', 'Waiting for the supplier to deliver.', 3.0, '', KEY))
+        e = self.event(s)
+        self.assertEqual((e['EventType'], e['PreviousValue'], e['NewValue'], e['Note']),
+                         ('Status Changed', 'In progress', 'Waiting on something', 'Waiting for the supplier to deliver.'))
+        r2 = submit(s, RACHEL, 'ChangeStatus', {'status': 'In Progress'}, target=s.action, revision=3, key=KEY2)
+        run(s, r2)
+        a = s.item('actions', s.action)['f']
+        self.assertEqual((request(s, r2)['Status'], a['Status'], a['Blocker']), ('Completed', 'In Progress', ''))
+
+    def test_status_refusals(self):
+        cases = [({'status': 'In Progress'}, 'Choose a different status.'), ({'status': 'Closed'}, 'Choose a status.'),
+                 ({'status': 'Awaiting Input', 'blocker': 'parts'}, 'Say what it is waiting on (at least 10 characters).')]
+        for payload, message in cases:
+            with self.subTest(message):
+                s, r, a, req = self.change(RACHEL, 'ChangeStatus', payload)
+                self.assertEqual((req['Status'], req['ResultMessage'], float(a['Revision'])), ('Rejected', message, 2.0))
+        s, r, a, req = self.change(KAI, 'ChangeStatus', {'status': 'Open'})
+        self.assertEqual(req['ResultMessage'], 'Only the owner or the people who manage this action can change its status.')
+
+    def test_reassign_moves_the_action_and_tells_both_people(self):
+        s = site()
+        s.add('members', 'FLK', {'Title': 'FLK', 'CompetencyId': 1, 'PersonId': KAI, 'MembershipKey': 'FLK|{0}'.format(KAI),
+                                 'CanManageMeetings': False, 'Status': 'Active'})
+        s, r, a, req = self.change(KELLY, 'ReassignAction', {'ownerId': KAI, 'reason': 'Kai has the replacement probe.'}, s=s)
+        self.assertEqual((req['Status'], req['ResultMessage'], a['AssignedToId']), ('Completed', 'Reassigned to Todd Kai.', KAI))
+        e = self.event(s)
+        self.assertEqual((e['EventType'], e['PreviousValue'], e['NewValue'], e['Note']),
+                         ('Reassigned', 'Boulden Rachel', 'Todd Kai', 'Kai has the replacement probe.'))
+        sent = sorted((m['to'], m['subject']) for m in s.sent)
+        self.assertEqual(sent, [('kai.todd@example.test', 'Action assigned to you: Replace FH40 probe'),
+                                ('rachel.boulden@example.test', 'Action reassigned: Replace FH40 probe')])
+        raw = next(m for m in s.sent if m['to'].startswith('rachel'))['body']
+        self.assertIn('It is no longer yours to do.', raw)
+        self.assertIn('Kai has the replacement probe.', raw)
+
+    def test_reassign_refusals(self):
+        cases = [(RACHEL, {'ownerId': KELLY, 'reason': 'Kelly has the parts.'}, 'Only the people who manage this action can reassign it.'),
+                 (KELLY, {'ownerId': RACHEL, 'reason': 'Rachel has the parts.'}, 'Choose someone other than the current owner.'),
+                 (KELLY, {'ownerId': KAI, 'reason': 'Kai has the parts here.'}, 'Choose a member of this area or a Team Leader.'),
+                 (KELLY, {'ownerId': JOE, 'reason': 'short'}, 'Give a reason of at least 10 characters.'),
+                 (KELLY, {'reason': 'Nobody in particular.'}, 'Choose who will do it.')]
+        for sender, payload, message in cases:
+            with self.subTest(message):
+                s, r, a, req = self.change(sender, 'ReassignAction', payload)
+                self.assertEqual((req['Status'], req['ResultMessage'], a['AssignedToId']), ('Rejected', message, RACHEL))
+        s, r, a, req = self.change(KELLY, 'ReassignAction', {'ownerId': JOE, 'reason': 'Joe will take this on.'})
+        self.assertEqual((req['Status'], a['AssignedToId']), ('Completed', JOE))   # a Team Leader may own any area's action
+
+    def test_close_with_an_outcome_and_reopen(self):
+        s, r, a, req = self.change(KELLY, 'CloseAction', {'outcome': 'Superseded', 'note': 'Replaced by the new probe action.'})
+        self.assertEqual((req['ResultMessage'], a['Status'], a['IsOpen'], a['CloseOutcome'], a['ClosureNote'], a['ClosedById']),
+                         ('Action closed.', 'Closed', False, 'Superseded', 'Replaced by the new probe action.', KELLY))
+        self.assertTrue(a['DateClosed'])
+        self.assertEqual([(m['to'], m['subject']) for m in s.sent], [('rachel.boulden@example.test', 'Action closed: Replace FH40 probe')])
+        r2 = submit(s, KELLY, 'ReopenAction', {'reason': 'The new probe failed as well.'}, target=s.action, revision=3, key=KEY2)
+        run(s, r2)
+        a = s.item('actions', s.action)['f']
+        self.assertEqual((request(s, r2)['ResultMessage'], a['Status'], a['IsOpen'], a['CloseOutcome'], a['DateClosed'], float(a['Revision'])),
+                         ('Action reopened.', 'In Progress', True, None, None, 4.0))
+        self.assertEqual(s.rows('history', RequestKey=KEY2 + '|1')[0]['f']['EventType'], 'Reopened')
+
+    def test_close_refusals_and_the_close_out_check(self):
+        s, r, a, req = self.change(KELLY, 'CloseAction', {'outcome': 'Other', 'note': 'n/a'})
+        self.assertEqual(req['ResultMessage'], 'Explain the outcome in at least 10 characters.')
+        s, r, a, req = self.change(RACHEL, 'CloseAction', {'outcome': 'Completed'})
+        self.assertEqual(req['ResultMessage'], 'Only the people who manage this action can close it.')
+        s = site()
+        s.item('actions', s.action)['f']['Status'] = 'Completed'      # done, waiting for the raiser's close-out check
+        s, r, a, req = self.change(KELLY, 'CloseAction', {'outcome': 'Completed'}, s=s)
+        self.assertEqual((req['Status'], a['Status'], a['CloseOutcome']), ('Completed', 'Closed', 'Completed'))
+        s, r, a, req = self.change(KELLY, 'ReopenAction', {'reason': 'It was never closed.'})
+        self.assertEqual(req['ResultMessage'], 'This action is already open.')
+
+    def test_edit_details_changes_only_what_was_given(self):
+        s, r, a, req = self.change(KELLY, 'EditActionDetails', {'title': 'Replace FH40 probe (bay 3)', 'priority': 'High'})
+        self.assertEqual((req['ResultMessage'], a['Title'], a['Priority'], a['Description']),
+                         ('Details saved.', 'Replace FH40 probe (bay 3)', 'High', 'Probe failed its check.'))
+        e = self.event(s)
+        self.assertEqual(e['EventType'], 'Details Edited')
+        self.assertIn('Replace FH40 probe', e['PreviousValue'])
+        for payload, message in (({}, 'Nothing has changed.'), ({'title': ' '}, 'Enter what needs doing.'), ({'priority': 'Urgent'}, 'Choose a priority.')):
+            with self.subTest(message):
+                s, r, a, req = self.change(KELLY, 'EditActionDetails', payload)
+                self.assertEqual(req['ResultMessage'], message)
+        s, r, a, req = self.change(RACHEL, 'EditActionDetails', {'title': 'Mine now'})
+        self.assertEqual(req['ResultMessage'], 'Only the people who manage this action can change its details.')
+
+    def test_a_stale_revision_is_refused_for_every_kind(self):
+        for rtype, payload in (('ChangeStatus', {'status': 'Open'}), ('CloseAction', {'outcome': 'Completed'}),
+                               ('EditActionDetails', {'title': 'x'})):
+            with self.subTest(rtype):
+                s, r, a, req = self.change(KELLY, rtype, payload, revision=1)
+                self.assertEqual(req['ResultMessage'], 'This action was updated by someone else. Review the latest details and try again.')
 
 
 class Calls(unittest.TestCase):

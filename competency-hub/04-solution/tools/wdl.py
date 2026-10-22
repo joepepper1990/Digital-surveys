@@ -389,6 +389,11 @@ def call(name, a, ctx):
         if not all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in a):
             raise ExprError(name + ' needs numbers')
         return a[0] <= a[1] if name == 'lessOrEquals' else a[0] >= a[1]
+    if name == 'union' and a and all(isinstance(x, dict) for x in a):   # objects: properties merged, later ones win
+        out = {}
+        for o in a:
+            out.update(o)
+        return out
     if name == 'union':   # arrays: keep order, drop duplicates
         if not all(isinstance(x, list) for x in a):
             raise ExprError('union() expects arrays')

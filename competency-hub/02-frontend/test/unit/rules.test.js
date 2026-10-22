@@ -52,11 +52,12 @@ test('extend: the new date must be after the current deadline and not in the pas
 test('who may do what: owner and managers extend and complete; members add updates; others only read', () => {
   const access = (writes, manages) => ({ canWrite: () => writes, canManage: () => manages });
   const a = { ownerId: 112, raisedById: 103, areaKey: 'FLK', status: 'Open' };
-  assert.deepEqual(plain(R.roles(a, 112, access(true, false))), { owner: true, manager: false, canUpdate: true, canExtend: true, canComplete: true });
-  assert.deepEqual(plain(R.roles(a, 103, access(true, false))), { owner: false, manager: true, canUpdate: true, canExtend: true, canComplete: true }, 'the raiser');
-  assert.deepEqual(plain(R.roles(a, 120, access(true, false))), { owner: false, manager: false, canUpdate: true, canExtend: false, canComplete: false }, 'a technician member');
-  assert.deepEqual(plain(R.roles(a, 107, access(true, true))), { owner: false, manager: true, canUpdate: true, canExtend: true, canComplete: true }, 'an engineer of the area');
-  assert.deepEqual(plain(R.roles(a, 130, access(false, false))), { owner: false, manager: false, canUpdate: false, canExtend: false, canComplete: false }, 'a visitor');
+  const base = (r) => { const p = plain(r); return { owner: p.owner, manager: p.manager, canUpdate: p.canUpdate, canExtend: p.canExtend, canComplete: p.canComplete }; };
+  assert.deepEqual(base(R.roles(a, 112, access(true, false))), { owner: true, manager: false, canUpdate: true, canExtend: true, canComplete: true });
+  assert.deepEqual(base(R.roles(a, 103, access(true, false))), { owner: false, manager: true, canUpdate: true, canExtend: true, canComplete: true }, 'the raiser');
+  assert.deepEqual(base(R.roles(a, 120, access(true, false))), { owner: false, manager: false, canUpdate: true, canExtend: false, canComplete: false }, 'a technician member');
+  assert.deepEqual(base(R.roles(a, 107, access(true, true))), { owner: false, manager: true, canUpdate: true, canExtend: true, canComplete: true }, 'an engineer of the area');
+  assert.deepEqual(base(R.roles(a, 130, access(false, false))), { owner: false, manager: false, canUpdate: false, canExtend: false, canComplete: false }, 'a visitor');
   const done = Object.assign({}, a, { status: 'Completed' });
   assert.equal(R.roles(done, 112, access(true, false)).canExtend, false);
   assert.equal(R.roles(done, 112, access(true, false)).canComplete, false);
@@ -65,4 +66,60 @@ test('who may do what: owner and managers extend and complete; members add updat
 test('mark as done closes the action unless a close-out check is required', () => {
   assert.equal(R.completionStatus(false), 'Closed');
   assert.equal(R.completionStatus(true), 'Completed');
+});
+
+const open = { status: 'In Progress', ownerId: 112, raisedById: 103, areaKey: 'FLK', dueIso: '2026-10-28' };
+
+test('status: a different open status; "waiting on something" needs what it is waiting on', () => {
+  assert.deepEqual(plain(R.validateStatus(open, { status: 'Open' })), {});
+  assert.match(R.validateStatus(open, { status: 'In Progress' }).status, /different status/);
+  assert.match(R.validateStatus(open, { status: 'Closed' }).status, /Choose a status/);
+  assert.match(R.validateStatus(open, { status: 'Awaiting Input', blocker: 'parts' }).blocker, /at least 10 characters/);
+  assert.deepEqual(plain(R.validateStatus(open, { status: 'Awaiting Input', blocker: 'Waiting for the supplier.' })), {});
+  assert.match(R.validateStatus(Object.assign({}, open, { status: 'Closed' }), { status: 'Open' }).action, /no longer open/);
+});
+
+test('reassign: someone else, allowed in the area, with a reason', () => {
+  const allowed = { ownerAllowed: (k, id) => k === 'FLK' && [112, 126].includes(id) };
+  assert.deepEqual(plain(R.validateReassign(open, { ownerId: 126, reason: 'Joe has the parts.' }, allowed)), {});
+  assert.match(R.validateReassign(open, { ownerId: 112, reason: 'Joe has the parts.' }, allowed).ownerId, /other than the current owner/);
+  assert.match(R.validateReassign(open, { ownerId: 107, reason: 'Joe has the parts.' }, allowed).ownerId, /member of this area/);
+  assert.match(R.validateReassign(open, { ownerId: 126, reason: 'short' }, allowed).reason, /10 characters/);
+  assert.match(R.validateReassign(open, { reason: 'Joe has the parts.' }, allowed).ownerId, /Choose who/);
+});
+
+test('close: an outcome; a note unless the outcome is Completed; a Completed action can be closed', () => {
+  assert.deepEqual(plain(R.validateClose(open, { outcome: 'Completed' })), {});
+  assert.match(R.validateClose(open, { outcome: 'Superseded', note: 'see' }).note, /at least 10 characters/);
+  assert.deepEqual(plain(R.validateClose(open, { outcome: 'Superseded', note: 'Replaced by ACT-00051.' })), {});
+  assert.match(R.validateClose(open, { outcome: 'Withdrawn' }).outcome, /Choose an outcome/);
+  assert.deepEqual(plain(R.validateClose(Object.assign({}, open, { status: 'Completed' }), { outcome: 'Completed' })), {});
+  assert.match(R.validateClose(Object.assign({}, open, { status: 'Closed' }), { outcome: 'Completed' }).action, /already closed/);
+});
+
+test('reopen: only a closed or completed action, with a reason', () => {
+  assert.deepEqual(plain(R.validateReopen({ status: 'Closed' }, { reason: 'The probe failed again.' })), {});
+  assert.match(R.validateReopen(open, { reason: 'The probe failed again.' }).action, /already open/);
+  assert.match(R.validateReopen({ status: 'Completed' }, { reason: '' }).reason, /10 characters/);
+});
+
+test('edit: only the fields given are checked, and something must change', () => {
+  assert.deepEqual(plain(R.validateEdit(open, { title: 'New title' })), {});
+  assert.match(R.validateEdit(open, { title: ' ' }).title, /what needs doing/);
+  assert.match(R.validateEdit(open, { priority: 'Urgent' }).priority, /priority/);
+  assert.match(R.validateEdit(open, {}).action, /Nothing has changed/);
+});
+
+test('roles: managers reassign, close, reopen and edit; owners change status; nobody else', () => {
+  const access = { canWrite: (k) => k === 'FLK', canManage: () => false };
+  const owner = R.roles(open, 112, access);
+  assert.deepEqual([owner.canStatus, owner.canReassign, owner.canClose, owner.canEdit], [true, false, false, false]);
+  const raiser = R.roles(open, 103, access);
+  assert.deepEqual([raiser.canStatus, raiser.canReassign, raiser.canClose, raiser.canEdit, raiser.canReopen], [true, true, true, true, false]);
+  const closed = R.roles(Object.assign({}, open, { status: 'Closed' }), 103, access);
+  assert.deepEqual([closed.canReopen, closed.canClose, closed.canStatus], [true, false, false]);
+  const waiting = R.roles(Object.assign({}, open, { status: 'Completed' }), 103, access);
+  assert.deepEqual([waiting.canClose, waiting.canReopen], [true, true]);
+  const other = R.roles(open, 999, access);
+  assert.equal([other.canStatus, other.canReassign, other.canClose, other.canReopen, other.canEdit].some(Boolean), false);
 });

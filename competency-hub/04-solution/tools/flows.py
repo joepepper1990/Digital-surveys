@@ -248,23 +248,25 @@ def outbox_create(sfx, items_expr):
                "if(" + is_('EXT') + ", concat('Deadline moved: ', " + T('title') + "), "
                "if(" + is_('RDY') + ", concat('Ready for your close-out check: ', " + T('title') + "), "
                "if(" + is_('CLS') + ", concat('Action closed: ', " + T('title') + "), "
+               "if(" + is_('RAW') + ", concat('Action reassigned: ', " + T('title') + "), "
                "if(" + is_('R7') + ", concat('Reminder: ', " + T('title') + ", ' is due in ', string(" + days + "), " + plural(days, ' day', ' days') + "), "
                "if(" + is_('DUE') + ", concat('Due today: ', " + T('title') + "), "
-               "concat(" + T('title') + ", ' is ', string(" + late + "), " + plural(late, ' day late', ' days late') + ")))))))")
+               "concat(" + T('title') + ", ' is ', string(" + late + "), " + plural(late, ' day late', ' days late') + "))))))))")
     actor = html_text(T('actor'))
     intro = ("if(" + is_('ASG') + ", concat(" + actor + ", ' has given you an action in the ESG Competency Hub.'), "
              "if(" + is_('EXT') + ", concat(" + actor + ", ' has moved the deadline of your action.'), "
              "if(" + is_('RDY') + ", concat(" + actor + ", ' has marked this action as done. It is waiting for your close-out check.'), "
              "if(" + is_('CLS') + ", concat(" + actor + ", ' has closed this action.'), "
+             "if(" + is_('RAW') + ", concat(" + actor + ", ' has given this action to someone else. It is no longer yours to do.'), "
              "if(" + is_('R7') + ", concat('Your action is due in ', string(" + days + "), " + plural(days, ' day.', ' days.') + "), "
              "if(" + is_('DUE') + ", 'Your action is due today.', "
-             "concat('Your action is ', string(" + late + "), " + plural(late, ' day late.', ' days late.') + ")))))))")
+             "concat('Your action is ', string(" + late + "), " + plural(late, ' day late.', ' days late.') + "))))))))")
     td = '<td style="padding:4px 16px 4px 0;color:#5b6774">'
     tv = '<td style="padding:4px 0">'
     deadline = ("@{" + long_or_blank(T('dueIso')) + "}@{if(and(greater(" + T('extCount') + ", 0), not(equals(" + T('originalIso') + ", " + T('dueIso') + "))), "
                 "concat(' (originally ', " + long_or_blank(T('originalIso')) + ", ')'), '')}")
     was_due = ("@{if(" + is_('EXT') + ", concat(" + q('<tr>' + td + 'Was due</td>' + tv) + ", " + long_or_blank(T('previousIso')) + ", '</td></tr>'), '')}")
-    note_row = ("@{if(empty(" + T('note') + "), '', concat(" + q('<tr>' + td) + ", if(" + is_('EXT') + ", 'Reason', 'Note'), " + q('</td>' + tv) + ", "
+    note_row = ("@{if(empty(" + T('note') + "), '', concat(" + q('<tr>' + td) + ", if(contains(createArray('EXT', 'RAW', 'ASG'), " + T('type') + "), 'Reason', 'Note'), " + q('</td>' + tv) + ", "
                 + html_text(T('note')) + ", '</td></tr>'))}")
     html = ('<div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;color:#16222c">'
             '<p style="color:#13516b;font-size:18px;font-weight:600;margin:0 0 12px">ESG Competency Hub</p>'
@@ -435,8 +437,20 @@ def flow_request_queue():
         ev_key_uri = "concat(" + KEY + ", '%7C1')"
         hist_path = "@{outputs('Ids')?['histRoot']}/@{" + area_key_expr + "}/A@{" + action_id_expr + "}"
         ev_values, ev_call = create_in_folder('hist', hist_path, 'Event_values' + sfx, 'Event_body' + sfx)
+        dynamic = event_fields.get('dynamic')
         details = dict({'CompetencyId': '@int(' + area_id_expr + ')', 'ActorId': '@int(' + SENDER + ')', 'EventTime': '@{' + EVENT_TIME + '}',
                         'ProcessedAt': '@{utcNow()}'}, **event_fields.get('json', {}))
+        ev_fixed = {'Title': '@{take(' + event_fields['title'] + ', 255)}', 'RowKind': 'Event', 'RequestKey': '@{' + ev_key + '}',
+                    'RecordType': 'Action', 'RecordId': '@{' + action_id_expr + '}', 'EventType': event_fields['type'],
+                    'RequestType': '@{' + TX + "?['RequestType']}"}
+        # a change's own fields come either written out here (raise) or from variables its Switch case set
+        ev_steps = ([('Event_fixed' + sfx, form(ev_fixed)),
+                     ('Event_values' + sfx, compose("@union(outputs('Event_fixed" + sfx + "'), variables('varEventForm'))"))] if dynamic
+                    else [('Event_values' + sfx, form(dict(ev_fixed, **event_fields.get('form', {}))))])
+        detail_steps = ([('Event_details_fixed' + sfx, compose(details)),
+                         ('Event_details' + sfx, compose("@union(outputs('Event_details_fixed" + sfx + "'), variables('varEventJson'))"))] if dynamic
+                        else [('Event_details' + sfx, compose(details))])
+        notice_step = compose('@' + notices) if isinstance(notices, str) else compose(list(notices))
         found = "body('Find_event" + sfx + "')?['value']"
         return [
             # a committed action always has its History folder (raise makes it before release), so a first change run
@@ -449,10 +463,7 @@ def flow_request_queue():
                 ('Event_found' + sfx, set_var('varEventId', "@int(if(empty(" + found + "), '0', " + idstr("first(" + found + ")?['Id']") + "))")),
             ))),
             ('Need_event' + sfx, cond("@equals(variables('varEventId'), 0)", seq(
-                ('Event_values' + sfx, form(dict({'Title': '@{take(' + event_fields['title'] + ', 255)}', 'RowKind': 'Event', 'RequestKey': '@{' + ev_key + '}',
-                                                  'RecordType': 'Action', 'RecordId': '@{' + action_id_expr + '}',
-                                                  'EventType': event_fields['type'], 'RequestType': '@{' + TX + "?['RequestType']}"},
-                                                 **event_fields.get('form', {})))),
+                *ev_steps,
                 ('Event_body' + sfx, ev_values),
                 ('Create_event' + sfx, ev_call),
                 *created_ok('Create_event' + sfx, 'Event_created' + sfx, 'The History event row could not be created. See Create_event' + sfx + '.'),
@@ -465,11 +476,11 @@ def flow_request_queue():
                     ('Set_event_new' + sfx, set_var('varEventId', "@int(first(body('Event_new_id" + sfx + "'))?['FieldValue'])")),
                 ))),
             ))),
-            ('Event_details' + sfx, compose(details)),
+            *detail_steps,
             ('Save_event' + sfx, merge(L('hist', "/items(@{variables('varEventId')})"), 'Event_details' + sfx)),
             # plan F.1.2 step 9.2: the emails go into the outbox before the change counts as applied; they are sent
             # once the request is Completed (Send_emails)
-            ('Notices' + sfx, compose(list(notices))),
+            ('Notices' + sfx, notice_step),
             ('To_notify' + sfx, query("@outputs('Notices" + sfx + "')", "@equals(item()?['send'], true)")),
             *outbox_create(sfx, "body('To_notify" + sfx + "')"),
             *tx_update('applied' + sfx, {'State': 'Applied', 'StepsDone': 'VALUES;EVENT', 'ProcessedAt': '@{utcNow()}'}),
@@ -569,7 +580,16 @@ def flow_request_queue():
     )
 
     # ---------------------------------------------------------------- shared by ExtendDeadline and MarkComplete
-    def change_case(sfx, verdict_tail, plan_fields, values_fields, event_fields, result_expr, notices):
+    def change_case(sfx, verdict_tail, plan_fields, values_fields, event_fields, result_expr, notices, reads=lambda c: []):
+        """One kind of change to an existing action, as data: the shared steps are built once, in change_all()."""
+        return {'code': sfx, 'verdict': verdict_tail, 'plan': plan_fields, 'values': values_fields, 'event': event_fields,
+                'result': result_expr, 'notices': notices, 'reads': reads}
+
+    def change_all(specs):
+        """Every change to an existing action (plan F.1.3): read it, check it (each kind its own rules), lock it and
+        write the values with its ETag, then the event row, the emails and the release. The shared steps are built
+        once; each kind adds only small Switch cases that set variables, so the flow stays well within 500 actions."""
+        sfx = '_U'
         A = "body('Get_action" + sfx + "')"
         AREA_KEY = A + "?['Competency']?['CompetencyKey']"
         PENDING = "string(coalesce(" + A + "?['PendingRequestKey'], ''))"
@@ -580,18 +600,24 @@ def flow_request_queue():
         MEMBER = "first(body('My_member" + sfx + "'))"
         MANAGE = ("or(" + IS_MGMT + ", and(not(empty(" + MEMBER + ")), or(equals(string(" + ME + "?['Role']), 'Engineer'), "
                   "equals(" + MEMBER + "?['CanManageMeetings'], true))))")
-        ctx = {'A': A, 'OWNER': OWNER, 'ALLOWED': "or(" + OWNER + ", " + RAISER + ", " + MANAGE + ")",
+        ctx = {'A': A, 'OWNER': OWNER, 'ALLOWED': "or(" + OWNER + ", " + RAISER + ", " + MANAGE + ")", 'MANAGER': "or(" + RAISER + ", " + MANAGE + ")",
                'OPEN': "contains(" + OPEN + ", string(" + A + "?['Status']))", 'DUE': due_iso(A + "?['DueDay']"),
                'PLAN': "json(string(coalesce(variables('varTxPlan'), '{}')))",
                'OWNER_P': "first(body('Owner_p" + sfx + "'))", 'RAISER_P': "first(body('Raiser_p" + sfx + "'))",
+               'NEW_P': "first(body('New_p" + sfx + "'))", 'PREV_P': "first(body('Prev_p" + sfx + "'))",
                'OWNER_ID': idstr(A + "?['AssignedToId']"), 'RAISER_ID': idstr(A + "?['RaisedById']"),
                'AREA_NAME': "string(" + A + "?['Competency']?['Title'])", 'ACT_ID': idstr(A + "?['Id']"),
                'ORIGINAL': "if(empty(string(coalesce(" + A + "?['OriginalDueDate'], ''))), '', convertFromUtc(string(coalesce(" + A + "?['OriginalDueDate'], '2000-01-01T00:00:00Z')), 'GMT Standard Time', 'yyyy-MM-dd'))"}
-        verdict = ("@if(" + ALREADY + ", '', "
-                   "if(" + UNCOMMITTED + ", 'That action could not be found.', " + verdict_tail(ctx) + "))")
         action_item = L('act', "/items(@{" + idstr(TX + "?['RecordId']") + "})")
         sel = ('?$select=Id,Title,CompetencyId,AssignedToId,RaisedById,Status,DueDay,OriginalDueDate,ExtensionCount,RequiresCloseOut,'
-               'Revision,PendingRequestKey,LastRequestKey,CreatedRequestKey,Competency/CompetencyKey,Competency/Title&$expand=Competency')
+               'Revision,PendingRequestKey,LastRequestKey,CreatedRequestKey,Description,Priority,Blocker,CloseOutcome,'
+               'Competency/CompetencyKey,Competency/Title&$expand=Competency')
+        TYPE = "@string(" + TX + "?['RequestType'])"
+        def by_type(stage, build, default=None):
+            return (stage + '_by_type', switch(TYPE, {t: seq(*build(sp['code'], sp)) for t, sp in specs.items()},
+                                               default or seq((stage + '_none', compose('none')))))
+        NEW_DUE = "string(coalesce(" + P + "?['newDueIso'], ''))"
+        person = lambda name, id_expr: (name + sfx, query("@body('Get_people" + sfx + "')?['value']", "@equals(" + idstr("item()?['SiteUserId']") + ", " + id_expr + ")"))
         return seq(
             ('Get_action' + sfx, http('GET', action_item + sel, meta=True)),
             ('Action_read' + sfx, after(cond("@equals(actions('Get_action" + sfx + "')?['status'], 'Succeeded')", None, seq(
@@ -599,17 +625,24 @@ def flow_request_queue():
                                               seq(('Action_unreadable' + sfx, fail_here('The action could not be read. See Get_action' + sfx + '.'))))))),
                 {'Get_action' + sfx: TOLERANT})),
             ('My_member' + sfx, query("@body('Get_my_memberships')?['value']", "@equals(" + idstr("item()?['CompetencyId']") + ", " + idstr(A + "?['CompetencyId']") + ")")),
-            *([('Read_due' + sfx, set_var('varDue', "@{formatDateTime(concat(string(coalesce(" + P + "?['newDueIso'], '')), 'T00:00:00Z'), 'yyyy-MM-dd')}"))]
-              if sfx == '_X' else [('Read_due' + sfx, set_var('varDue', ''))]),
-            ('Verdict' + sfx, after(compose(verdict), {'Read_due' + sfx: TOLERANT})),
-            ('Allowed' + sfx, cond("@empty(outputs('Verdict" + sfx + "'))", seq(
+            # a new deadline, if the change has one; a date that is not real fails here and is refused below
+            ('Read_due' + sfx, set_var('varDue', "@{formatDateTime(concat(if(empty(" + NEW_DUE + "), '2000-01-01', " + NEW_DUE + "), 'T00:00:00Z'), 'yyyy-MM-dd')}")),
+            # each kind of change checks its own rules (and reads what it needs) and leaves the verdict
+            ('Check_by_type', after(by_type('Check', lambda code, sp: [
+                *sp['reads'](ctx),
+                ('Verdict' + code, set_var('varVerdict', "@if(" + ALREADY + ", '', if(" + UNCOMMITTED + ", 'That action could not be found.', "
+                                           + sp['verdict'](ctx) + "))"))],
+                default=reject('_type', "'This kind of request is not handled yet.'"))[1], {'Read_due' + sfx: TOLERANT})),
+            ('Allowed' + sfx, cond("@empty(variables('varVerdict'))", seq(
                 ('Not_yet_applied' + sfx, cond("@" + ALREADY, None, seq(
                     # the plan is stored before anything changes, so a resumed run knows the previous values
-                    ('Plan' + sfx, compose(plan_fields(ctx))),
+                    by_type('Plan', lambda code, sp: [('Plan_set' + code, set_var('varPlanObj', sp['plan'](ctx))),
+                                                      ('Values_set' + code, set_var('varValues', sp['values'](ctx)))]),
+                    ('Plan' + sfx, compose("@variables('varPlanObj')")),
                     *tx_update('planned' + sfx, {'State': 'Planned', 'PreviousValue': "@{string(outputs('Plan" + sfx + "'))}"}),
                     ('Set_plan_now' + sfx, set_var('varTxPlan', "@{string(outputs('Plan" + sfx + "'))}")),
-                    ('Values' + sfx, compose(dict({'PendingRequestKey': '@{' + KEY + '}',
-                                                   'Revision': "@add(int(" + idstr(A + "?['Revision']") + "), 1)"}, **values_fields(ctx)))),
+                    ('Values_fixed' + sfx, compose({'PendingRequestKey': '@{' + KEY + '}', 'Revision': "@add(int(" + idstr(A + "?['Revision']") + "), 1)"})),
+                    ('Values' + sfx, compose("@union(outputs('Values_fixed" + sfx + "'), variables('varValues'))")),
                     ('Lock_and_values' + sfx, merge(action_item, 'Values' + sfx, if_match="@{" + A + "?['odata.etag']}")),
                     # someone else changed the action between reading and writing: nothing has been done yet
                     ('Locked' + sfx, after(cond("@equals(actions('Lock_and_values" + sfx + "')?['status'], 'Succeeded')", None, seq(
@@ -618,14 +651,22 @@ def flow_request_queue():
                         {'Lock_and_values' + sfx: TOLERANT})),
                     ('Set_locked_here' + sfx, set_var('varLockedHere', True)),
                 ))),
-                # who may be emailed: the owner and the raiser (plan B.5)
+                # who may be emailed: the owner, the raiser, and for a reassignment the new and the previous owner
                 ('Get_people' + sfx, http('GET', L('people', "/items?$select=Id,Title,SiteUserId,Role,Status,Email,Person/Name,Person/EMail&$expand=Person&$top=5000"))),
-                ('Owner_p' + sfx, query("@body('Get_people" + sfx + "')?['value']", "@equals(" + idstr("item()?['SiteUserId']") + ", " + ctx['OWNER_ID'] + ")")),
-                ('Raiser_p' + sfx, query("@body('Get_people" + sfx + "')?['value']", "@equals(" + idstr("item()?['SiteUserId']") + ", " + ctx['RAISER_ID'] + ")")),
+                person('Owner_p', ctx['OWNER_ID']), person('Raiser_p', ctx['RAISER_ID']), person('New_p', idq(P + "?['ownerId']")),
+                person('Prev_p', "string(" + ctx['PLAN'] + "?['owner'])"),
                 # a resumed run already has the stored plan from the transaction row (Set_tx_plan)
+                by_type('Record', lambda code, sp: [
+                    ('Event_title' + code, set_var('varEventTitle', "@{take(" + sp['event'](ctx)['title'] + ", 255)}")),
+                    ('Event_type' + code, set_var('varEventType', sp['event'](ctx)['type'])),
+                    ('Event_form' + code, set_var('varEventForm', [{'FieldName': k, 'FieldValue': v} for k, v in sp['event'](ctx).get('form', {}).items()])),
+                    ('Event_json' + code, set_var('varEventJson', sp['event'](ctx).get('json', {}))),
+                    ('Result' + code, set_var('varResult', "@{" + sp['result'](ctx) + "}")),
+                    ('Notices_set' + code, set_var('varNoticeList', sp['notices'](ctx)))]),
                 *commit(sfx, idstr(A + "?['Id']"), AREA_KEY, idstr(A + "?['CompetencyId']"),
-                        event_fields(ctx), result_expr(ctx), ensure_hist=False, notices=notices(ctx)),
-            ), reject(sfx, "outputs('Verdict" + sfx + "')"))),
+                        {'title': "variables('varEventTitle')", 'type': "@{variables('varEventType')}", 'dynamic': True},
+                        "variables('varResult')", ensure_hist=False, notices="variables('varNoticeList')"),
+            ), reject(sfx, "variables('varVerdict')"))),
         )
 
     NEW = "string(coalesce(" + P + "?['newDueIso'], ''))"
@@ -697,6 +738,133 @@ def flow_request_queue():
                           "concat('CLS|', " + KEY + ", '|', " + c['OWNER_ID'] + ")", c['OWNER_P'], *complete_common(c), note=NOTE),
                    notice("and(" + CLOSES + ", not(equals(" + c['RAISER_ID'] + ", " + SENDER + ")), not(equals(" + c['RAISER_ID'] + ", " + c['OWNER_ID'] + ")))", 'CLS',
                           "concat('CLS|', " + KEY + ", '|', " + c['RAISER_ID'] + ")", c['RAISER_P'], *complete_common(c), note=NOTE)])
+
+    # ---------------------------------------------------------------- the rest of an action's life (plan K9)
+    def chain(*pairs):
+        """if(c1, m1, if(c2, m2, ... '')): the first rule that fails gives its message."""
+        out = "''"
+        for c, m in reversed(pairs):
+            out = "if(" + c + ", " + (q(m) if not m.startswith('@') else m[1:]) + ", " + out + ")"
+        return out
+
+    def guard(c, state_ok, state_msg, allowed, not_allowed):
+        """The checks every change makes: state, who, lock and revision, then the change's own rules."""
+        return [("not(" + state_ok + ")", state_msg), ("not(" + allowed + ")", not_allowed),
+                ("not(empty(string(coalesce(" + c['A'] + "?['PendingRequestKey'], ''))))", 'This action is being updated. Try again in a minute.'),
+                ("not(equals(" + idstr(c['A'] + "?['Revision']") + ", " + idstr(TX + "?['ExpectedRevision']") + "))", STALE)]
+
+    text_len = lambda field: "length(trim(string(coalesce(" + P + "?['" + field + "'], ''))))"
+    TEXT = lambda field: "trim(string(coalesce(" + P + "?['" + field + "'], '')))"
+    STATUS_NEW = "string(coalesce(" + P + "?['status'], ''))"
+    LABEL = lambda s: "if(equals(" + s + ", 'Awaiting Input'), 'Waiting on something', if(equals(" + s + ", 'In Progress'), 'In progress', " + s + "))"
+    REASON_RULES = [("less(" + text_len('reason') + ", 10)", 'Give a reason of at least 10 characters.'),
+                    ("greater(" + text_len('reason') + ", 1000)", 'Keep the reason to 1,000 characters or fewer.')]
+
+    status_case = change_case(
+        '_S',
+        lambda c: chain(*guard(c, c['OPEN'], 'This action is no longer open.', c['ALLOWED'],
+                               'Only the owner or the people who manage this action can change its status.'),
+                        ("not(contains(" + OPEN + ", " + STATUS_NEW + "))", 'Choose a status.'),
+                        ("equals(" + STATUS_NEW + ", string(" + c['A'] + "?['Status']))", 'Choose a different status.'),
+                        ("and(equals(" + STATUS_NEW + ", 'Awaiting Input'), less(" + text_len('blocker') + ", 10))",
+                         'Say what it is waiting on (at least 10 characters).'),
+                        ("and(equals(" + STATUS_NEW + ", 'Awaiting Input'), greater(" + text_len('blocker') + ", 1000))",
+                         'Keep it to 1,000 characters or fewer.')),
+        lambda c: {'status': '@string(' + c['A'] + "?['Status'])", 'blocker': '@{' + c['A'] + "?['Blocker']}"},
+        lambda c: {'Status': '@{' + STATUS_NEW + '}',
+                   'Blocker': "@{if(equals(" + STATUS_NEW + ", 'Awaiting Input'), " + TEXT('blocker') + ", '')}"},
+        lambda c: {'title': "concat('Status changed to ', " + LABEL(STATUS_NEW) + ")", 'type': 'Status Changed',
+                   'form': {'Note': "@{if(equals(" + STATUS_NEW + ", 'Awaiting Input'), " + TEXT('blocker') + ", '')}",
+                            'PreviousValue': "@{" + LABEL("string(" + c['PLAN'] + "?['status'])") + "}", 'NewValue': '@{' + LABEL(STATUS_NEW) + '}'}},
+        lambda c: "concat('Status changed to ', toLower(" + LABEL(STATUS_NEW) + "), '.')",
+        lambda c: [])
+
+    NEW_OWNER = "first(body('Get_new_owner_A')?['value'])"
+    NEW_OWNER_ID = idq(P + "?['ownerId']")
+    owner_ok = ("and(not(empty(" + NEW_OWNER + ")), equals(string(" + NEW_OWNER + "?['Status']), 'Active'), "
+                "or(contains(" + MANAGEMENT + ", string(" + NEW_OWNER + "?['Role'])), not(empty(body('New_owner_member_A')?['value']))))")
+    PREV_OWNER_ID = "string(" + "json(string(coalesce(variables('varTxPlan'), '{}')))?['owner'])"
+    reassign_case = change_case(
+        '_A',
+        lambda c: chain(*guard(c, c['OPEN'], 'This action is no longer open, so it cannot be reassigned.', c['MANAGER'],
+                               'Only the people who manage this action can reassign it.'),
+                        ("equals(" + NEW_OWNER_ID + ", '0')", 'Choose who will do it.'),
+                        ("equals(" + NEW_OWNER_ID + ", " + c['OWNER_ID'] + ")", 'Choose someone other than the current owner.'),
+                        ("not(" + owner_ok + ")", 'Choose a member of this area or a Team Leader.'),
+                        *REASON_RULES),
+        lambda c: {'owner': '@{' + c['OWNER_ID'] + '}', 'ownerName': "@{first(body('Get_owner_now_A')?['value'])?['Title']}"},
+        lambda c: {'AssignedToId': '@int(' + NEW_OWNER_ID + ')'},
+        lambda c: {'title': "concat('Reassigned to ', string(" + NEW_OWNER + "?['Title']))", 'type': 'Reassigned',
+                   'form': {'Note': '@{' + REASON + '}', 'PreviousValue': "@{" + c['PLAN'] + "?['ownerName']}", 'NewValue': "@{" + NEW_OWNER + "?['Title']}"}},
+        lambda c: "concat('Reassigned to ', string(" + NEW_OWNER + "?['Title']), '.')",
+        # the new owner is told it is theirs, the previous owner that it no longer is
+        lambda c: [notice("not(equals(" + NEW_OWNER_ID + ", " + SENDER + "))", 'ASG', "concat('ASG|', " + KEY + ", '|', " + NEW_OWNER_ID + ")",
+                          c['NEW_P'], "string(" + ME + "?['Title'])", c['ACT_ID'], "string(" + c['A'] + "?['Title'])", c['AREA_NAME'],
+                          c['DUE'], note=REASON),
+                   notice("not(equals(" + PREV_OWNER_ID + ", " + SENDER + "))", 'RAW', "concat('RAW|', " + KEY + ", '|', " + PREV_OWNER_ID + ")",
+                          c['PREV_P'], "string(" + ME + "?['Title'])", c['ACT_ID'], "string(" + c['A'] + "?['Title'])", c['AREA_NAME'],
+                          c['DUE'], note=REASON)],
+        reads=lambda c: [
+            # the current and the new owner, for the checks and the record (the plan keeps the current one)
+            ('Get_owner_now_A', http('GET', L('people', "/items?$select=Id,Title,SiteUserId&$filter=SiteUserId eq @{" + idq(c['A'] + "?['AssignedToId']") + "}"))),
+            ('Get_new_owner_A', http('GET', L('people', "/items?$select=Id,Title,SiteUserId,Role,Status&$filter=SiteUserId eq @{" + NEW_OWNER_ID + "}"))),
+            ('New_owner_member_A', http('GET', L('members', "/items?$select=Id&$filter=PersonId eq @{" + NEW_OWNER_ID + "} and CompetencyId eq @{"
+                                                             + idq(c['A'] + "?['CompetencyId']") + "} and Status eq 'Active'")))])
+
+    OUTCOME = "string(coalesce(" + P + "?['outcome'], ''))"
+    NOTE_LEN = text_len('note')
+    close_case = change_case(
+        '_L',
+        lambda c: chain(*guard(c, "or(" + c['OPEN'] + ", equals(string(" + c['A'] + "?['Status']), 'Completed'))", 'This action is already closed.',
+                               c['MANAGER'], 'Only the people who manage this action can close it.'),
+                        ("not(contains(createArray('Completed', 'No longer required', 'Superseded', 'Other'), " + OUTCOME + "))", 'Choose an outcome.'),
+                        ("and(not(equals(" + OUTCOME + ", 'Completed')), less(" + NOTE_LEN + ", 10))", 'Explain the outcome in at least 10 characters.'),
+                        ("greater(" + NOTE_LEN + ", 1000)", 'Keep the note to 1,000 characters or fewer.')),
+        lambda c: {'status': '@string(' + c['A'] + "?['Status'])"},
+        lambda c: {'Status': 'Closed', 'IsOpen': False, 'DateClosed': '@{' + EVENT_TIME + '}', 'ClosedById': '@int(' + SENDER + ')',
+                   'CloseOutcome': '@{' + OUTCOME + '}', 'ClosureNote': '@{' + NOTE + '}'},
+        lambda c: {'title': "concat('Closed: ', " + OUTCOME + ")", 'type': 'Closed',
+                   'form': {'Note': '@{' + NOTE + '}', 'NewValue': '@{' + OUTCOME + '}'}},
+        lambda c: "'Action closed.'",
+        lambda c: [notice("not(equals(" + c['OWNER_ID'] + ", " + SENDER + "))", 'CLS', "concat('CLS|', " + KEY + ", '|', " + c['OWNER_ID'] + ")",
+                          c['OWNER_P'], *complete_common(c), note=NOTE),
+                   notice("and(not(equals(" + c['RAISER_ID'] + ", " + SENDER + ")), not(equals(" + c['RAISER_ID'] + ", " + c['OWNER_ID'] + ")))", 'CLS',
+                          "concat('CLS|', " + KEY + ", '|', " + c['RAISER_ID'] + ")", c['RAISER_P'], *complete_common(c), note=NOTE)])
+
+    reopen_case = change_case(
+        '_O',
+        lambda c: chain(*guard(c, "contains(createArray('Closed', 'Completed'), string(" + c['A'] + "?['Status']))", 'This action is already open.',
+                               c['MANAGER'], 'Only the people who manage this action can reopen it.'),
+                        *REASON_RULES),
+        lambda c: {'status': '@string(' + c['A'] + "?['Status'])", 'outcome': "@{" + c['A'] + "?['CloseOutcome']}"},
+        lambda c: {'Status': 'In Progress', 'IsOpen': True, 'DateClosed': None, 'DateCompleted': None, 'ClosedById': None, 'CloseOutcome': None,
+                   'ClosureNote': ''},
+        lambda c: {'title': "'Reopened'", 'type': 'Reopened',
+                   'form': {'Note': '@{' + REASON + '}', 'PreviousValue': "@{" + c['PLAN'] + "?['status']}", 'NewValue': 'In Progress'}},
+        lambda c: "'Action reopened.'",
+        lambda c: [])
+
+    HAS = lambda f: "contains(" + P + ", '" + f + "')"
+    EDIT = {'title': 'Title', 'description': 'Description', 'priority': 'Priority'}
+    edit_case = change_case(
+        '_E',
+        lambda c: chain(*guard(c, c['OPEN'], 'This action is no longer open.', c['MANAGER'], 'Only the people who manage this action can change its details.'),
+                        ("not(or(" + ", ".join(HAS(f) for f in ('title', 'description', 'priority', 'requiresCloseOut')) + "))", 'Nothing has changed.'),
+                        ("and(" + HAS('title') + ", equals(" + text_len('title') + ", 0))", 'Enter what needs doing.'),
+                        ("and(" + HAS('title') + ", greater(" + text_len('title') + ", 255))", 'Keep the title to 255 characters or fewer.'),
+                        ("and(" + HAS('description') + ", equals(" + text_len('description') + ", 0))", 'Add a short description.'),
+                        ("and(" + HAS('description') + ", greater(" + text_len('description') + ", 5000))", 'Keep the description to 5,000 characters or fewer.'),
+                        ("and(" + HAS('priority') + ", not(contains(createArray('Low', 'Normal', 'High'), string(coalesce(" + P + "?['priority'], '')))))",
+                         'Choose a priority.')),
+        lambda c: {'title': "@{" + c['A'] + "?['Title']}", 'description': "@{" + c['A'] + "?['Description']}",
+                   'priority': "@{" + c['A'] + "?['Priority']}", 'closeOut': "@equals(" + c['A'] + "?['RequiresCloseOut'], true)"},
+        # a field not given keeps its value (it is written back unchanged)
+        lambda c: dict({col: "@{if(" + HAS(f) + ", " + TEXT(f) + ", string(coalesce(" + c['A'] + "?['" + col + "'], '')))}" for f, col in EDIT.items()},
+                       RequiresCloseOut="@if(" + HAS('requiresCloseOut') + ", equals(" + P + "?['requiresCloseOut'], true), equals(" + c['A'] + "?['RequiresCloseOut'], true))"),
+        lambda c: {'title': "'Details edited'", 'type': 'Details Edited',
+                   'form': {'PreviousValue': "@{string(" + c['PLAN'] + ")}", 'NewValue': "@{string(" + P + ")}"}},
+        lambda c: "'Details saved.'",
+        lambda c: [])
 
     # ---------------------------------------------------------------- common part
     IN_OWN = ("and(equals(string(" + R + "?['FileDirRef']), concat(outputs('Ids')?['reqRoot'], '/', outputs('Folder_name'))), "
@@ -789,8 +957,10 @@ def flow_request_queue():
         ('Payload_read', after(cond("@equals(actions('Payload')?['status'], 'Succeeded')", None, reject('_payload', "'The request could not be read.'")),
                                {'Payload': TOLERANT})),
         ('By_type', switch("@string(" + TX + "?['RequestType'])",
-                           {'RaiseAction': raise_case, 'ExtendDeadline': extend_case, 'MarkComplete': complete_case},
-                           reject('_type', "'This kind of request is not handled yet.'"))),
+                           {'RaiseAction': raise_case},
+                           change_all({'ExtendDeadline': extend_case, 'MarkComplete': complete_case, 'ChangeStatus': status_case,
+                                       'ReassignAction': reassign_case, 'CloseAction': close_case, 'ReopenAction': reopen_case,
+                                       'EditActionDetails': edit_case}))),
     )
     fail_body = {'Status': 'Failed', 'ResultMessage': 'This change has not been recorded yet. A Competency Hub administrator can see it in History.'}
     catch = after(scope(seq(
@@ -812,8 +982,18 @@ def flow_request_queue():
                   ('Initialize_varFolderExists', init_var('varFolderExists', 'boolean', False)),
                   ('Initialize_varEventId', init_var('varEventId', 'integer', 0)),
                   ('Initialize_varLockedHere', init_var('varLockedHere', 'boolean', False)),
-                  ('Initialize_varOutbox', init_var('varOutbox', 'array', [])))
-    actions['Try'] = after(scope(try_actions), {'Initialize_varOutbox': OK})
+                  ('Initialize_varOutbox', init_var('varOutbox', 'array', [])),
+                  # what each kind of change sets for the shared steps (change_all)
+                  ('Initialize_varVerdict', init_var('varVerdict', 'string', '')),
+                  ('Initialize_varPlanObj', init_var('varPlanObj', 'object', {})),
+                  ('Initialize_varValues', init_var('varValues', 'object', {})),
+                  ('Initialize_varEventTitle', init_var('varEventTitle', 'string', '')),
+                  ('Initialize_varEventType', init_var('varEventType', 'string', '')),
+                  ('Initialize_varEventForm', init_var('varEventForm', 'array', [])),
+                  ('Initialize_varEventJson', init_var('varEventJson', 'object', {})),
+                  ('Initialize_varResult', init_var('varResult', 'string', '')),
+                  ('Initialize_varNoticeList', init_var('varNoticeList', 'array', [])))
+    actions['Try'] = after(scope(try_actions), {'Initialize_varNoticeList': OK})
     # emails for a change that is complete: a failure here never touches the request, and the daily run retries
     email_loop, email_act = send_outbox('')
     actions['Send_emails'] = after(scope({email_loop: email_act}), {'Try': OK})

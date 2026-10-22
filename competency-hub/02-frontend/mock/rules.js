@@ -121,6 +121,7 @@ window.MockRules = (function () {
     var D = CH.dates;
     var OPEN_STATUSES = ['Open', 'In Progress', 'Awaiting Input'];
     var PRIORITIES = ['Low', 'Normal', 'High'];
+    var OUTCOMES = ['Completed', 'No longer required', 'Superseded', 'Other'];
 
     // The same calendar date N years on; 29 February becomes 28 February in a non-leap year.
     function addYears(iso, years) {
@@ -172,6 +173,82 @@ window.MockRules = (function () {
       return e;
     }
 
+    function text(v, field, min, max, missing, short, long) {
+      var t = String(v[field] || '').trim();
+      if (!t) return missing;
+      if (t.length < min) return short;
+      if (t.length > max) return long;
+      return '';
+    }
+    function reasonError(v, field) {
+      return text(v, field || 'reason', 10, 1000, 'Give a reason of at least 10 characters.', 'Give a reason of at least 10 characters.',
+        'Keep the reason to 1,000 characters or fewer.');
+    }
+
+    // v: { status, blocker }. "Awaiting Input" is shown as "Waiting on something" and needs the blocker.
+    function validateStatus(action, v) {
+      var e = {};
+      if (!isOpen(action.status)) e.action = 'This action is no longer open.';
+      if (OPEN_STATUSES.indexOf(v.status) < 0) e.status = 'Choose a status.';
+      else if (v.status === action.status) e.status = 'Choose a different status.';
+      if (v.status === 'Awaiting Input') {
+        var b = text(v, 'blocker', 10, 1000, 'Say what it is waiting on (at least 10 characters).', 'Say what it is waiting on (at least 10 characters).',
+          'Keep it to 1,000 characters or fewer.');
+        if (b) e.blocker = b;
+      }
+      return e;
+    }
+
+    // ctx: { ownerAllowed(areaKey, ownerId) }
+    function validateReassign(action, v, ctx) {
+      var e = {};
+      if (!isOpen(action.status)) e.action = 'This action is no longer open, so it cannot be reassigned.';
+      if (!v.ownerId) e.ownerId = 'Choose who will do it.';
+      else if (Number(v.ownerId) === Number(action.ownerId)) e.ownerId = 'Choose someone other than the current owner.';
+      else if (!ctx.ownerAllowed(action.areaKey, Number(v.ownerId))) e.ownerId = 'Choose a member of this area or a Team Leader.';
+      var r = reasonError(v);
+      if (r) e.reason = r;
+      return e;
+    }
+
+    // v: { outcome, note }. A Completed action waiting for its close-out check can be closed too.
+    function validateClose(action, v) {
+      var e = {};
+      if (!isOpen(action.status) && action.status !== 'Completed') e.action = 'This action is already closed.';
+      if (OUTCOMES.indexOf(v.outcome) < 0) e.outcome = 'Choose an outcome.';
+      var note = String(v.note || '').trim();
+      if (v.outcome && v.outcome !== 'Completed' && note.length < 10) e.note = 'Explain the outcome in at least 10 characters.';
+      else if (note.length > 1000) e.note = 'Keep the note to 1,000 characters or fewer.';
+      return e;
+    }
+
+    function validateReopen(action, v) {
+      var e = {};
+      if (action.status !== 'Closed' && action.status !== 'Completed') e.action = 'This action is already open.';
+      var r = reasonError(v);
+      if (r) e.reason = r;
+      return e;
+    }
+
+    // v: the fields being changed (title, description, priority, requiresCloseOut); anything not given stays.
+    function validateEdit(action, v) {
+      var e = {};
+      if (!isOpen(action.status)) e.action = 'This action is no longer open.';
+      if ('title' in v) {
+        var t = String(v.title || '').trim();
+        if (!t) e.title = 'Enter what needs doing.';
+        else if (t.length > 255) e.title = 'Keep the title to 255 characters or fewer.';
+      }
+      if ('description' in v) {
+        var d = String(v.description || '').trim();
+        if (!d) e.description = 'Add a short description.';
+        else if (d.length > 5000) e.description = 'Keep the description to 5,000 characters or fewer.';
+      }
+      if ('priority' in v && PRIORITIES.indexOf(v.priority) < 0) e.priority = 'Choose a priority.';
+      if (!['title', 'description', 'priority', 'requiresCloseOut'].some(function (k) { return k in v; })) e.action = 'Nothing has changed.';
+      return e;
+    }
+
     function validateUpdate(v) {
       var body = String(v.body || '').trim();
       if (!body) return { body: 'Write your update.' };
@@ -184,12 +261,18 @@ window.MockRules = (function () {
       var owner = Number(action.ownerId) === Number(personId);
       var manager = Number(action.raisedById) === Number(personId) || access.canManage(action.areaKey);
       var open = isOpen(action.status);
+      var finished = action.status === 'Closed' || action.status === 'Completed';
       return {
         owner: owner,
         manager: manager,
         canUpdate: access.canWrite(action.areaKey) || owner,
         canExtend: open && (owner || manager),
-        canComplete: open && (owner || manager)
+        canComplete: open && (owner || manager),
+        canStatus: open && (owner || manager),
+        canReassign: open && manager,
+        canClose: (open || action.status === 'Completed') && manager,
+        canReopen: finished && manager,
+        canEdit: open && manager
       };
     }
 
@@ -198,8 +281,9 @@ window.MockRules = (function () {
 
     return {
       addYears: addYears, isOpen: isOpen, validateRaise: validateRaise, validateExtend: validateExtend,
-      validateComplete: validateComplete, validateUpdate: validateUpdate, roles: roles,
-      completionStatus: completionStatus, PRIORITIES: PRIORITIES, OPEN_STATUSES: OPEN_STATUSES
+      validateComplete: validateComplete, validateUpdate: validateUpdate, validateStatus: validateStatus,
+      validateReassign: validateReassign, validateClose: validateClose, validateReopen: validateReopen, validateEdit: validateEdit,
+      roles: roles, completionStatus: completionStatus, PRIORITIES: PRIORITIES, OPEN_STATUSES: OPEN_STATUSES, OUTCOMES: OUTCOMES
     };
   })();
 

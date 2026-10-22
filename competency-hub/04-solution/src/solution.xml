@@ -8,7 +8,7 @@
     <Descriptions>
       <Description description="ESG Competency Hub: the request queue flow that applies changes sent from the Competency Hub page, and the daily reminders." languagecode="1033" />
     </Descriptions>
-    <Version>1.1.0.0</Version>
+    <Version>1.2.0.0</Version>
     <Managed>0</Managed>
     <Publisher>
       <UniqueName>ESGCompetencyHub</UniqueName>
