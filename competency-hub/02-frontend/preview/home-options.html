@@ -14,8 +14,8 @@
   body { font-family: "Segoe UI", Arial, sans-serif; font-size: 15px; color: var(--ink); background: var(--bg); display: flex; flex-direction: column; overflow: hidden; }
   button { font: inherit; cursor: pointer; }
   /* the switcher stands in for SharePoint's own bar */
-  .switch { background: #222; color: #fff; padding: 6px 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; }
-  .switch button { background: #3a3a3a; color: #fff; border: 1px solid #555; border-radius: 4px; padding: 3px 9px; }
+  .switch { background: #222; color: #fff; padding: 5px 12px; display: flex; gap: 6px; align-items: center; white-space: nowrap; overflow-x: auto; font-size: 12px; }
+  .switch button { background: #3a3a3a; color: #fff; border: 1px solid #555; border-radius: 4px; padding: 2px 7px; font-size: 12px; }
   .switch button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); }
   .switch .sep { margin-left: auto; }
   .bar { background: var(--navy); color: #fff; display: flex; align-items: center; gap: 14px; padding: 8px 22px; border-bottom: 3px solid var(--accent); }
@@ -232,6 +232,71 @@
         return [header(), h('div', { class: 'row fill' }, h('div', { style: 'flex:3;display:flex;flex-direction:column;gap:12px;min-height:0' }, week,
           card('Coming up later', fitList(D().mine.filter(function (x) { return x.g === 'later'; }), actionItem, 'Nothing else.', 'See all'), 'grow')),
           h('div', { class: 'grow', style: 'display:flex;flex-direction:column;gap:12px;min-height:0' }, card('Late', late, 'fill'), card('Areas', areas, 'fill')))];
+      } }    ,
+    { name: '1A Big numbers', about: 'Tiles show the open count large, with late and the next meeting underneath; below, your actions are wider and attention shares a column with meetings.',
+      build: function () {
+        var tiles = h('div', { style: 'display:grid;grid-template-columns:repeat(5,1fr);gap:8px' }, D().areas.map(function (a) {
+          return h('button', { type: 'button', class: 'card', style: 'padding:8px 12px;text-align:left;flex-direction:row;align-items:center;gap:12px;border-left:5px solid ' + (a.late ? 'var(--late)' : 'var(--ok)') },
+            h('span', { style: 'font-size:26px;font-weight:700;min-width:34px;text-align:center', text: String(a.open) }),
+            h('span', null, h('b', { style: 'display:block', text: a.name }), h('span', { class: 'small' }, a.late ? h('span', { class: 'late', text: a.late + ' late' }) : h('span', { class: 'ok', text: 'Nothing late' }),
+              h('span', { class: 'muted', text: ' · ' + (a.meeting ? 'meets ' + a.meeting.split(' ').slice(0, 2).join(' ') : 'no meeting') }))));
+        }));
+        return [header(), tiles, h('div', { class: 'row fill' }, card('Your actions', myActions(), 'grow', 'flex:1.4'),
+          card('Needs your attention', attention(), 'grow'), card('Coming meetings', meetings(), 'grow'))];
+      } },
+    { name: '1B One row of 10', about: 'All ten areas in a single row of square tiles (late shown as a red badge), leaving more height for the three cards.',
+      build: function () {
+        var tiles = h('div', { style: 'display:grid;grid-template-columns:repeat(10,1fr);gap:8px' }, D().areas.map(function (a) {
+          return h('button', { type: 'button', class: 'card', style: 'padding:8px;text-align:center;align-items:center;gap:2px;position:relative' },
+            a.late ? h('span', { class: 'chip c-late', style: 'position:absolute;top:-8px;right:-6px', text: a.late + ' late' }) : null,
+            h('span', { style: 'font-size:24px;font-weight:700;color:var(--navy)', text: String(a.open) }), h('span', { class: 'small muted', text: 'open' }),
+            h('b', { class: 'small', style: 'margin-top:2px', text: a.short }));
+        }));
+        return [header(), tiles, h('div', { class: 'row fill' }, card('Needs your attention', attention(), 'grow'), card('Your actions', myActions(), 'grow'), card('Coming meetings', meetings(), 'grow'))];
+      } },
+    { name: '1C Tiles on the left', about: 'Tiles in two columns down the left (5 rows), with your actions and attention side by side on the right; meetings appear on the tiles themselves.',
+      build: function () {
+        var tiles = h('div', { style: 'display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:1fr;gap:8px;width:46%;min-height:0' }, D().areas.map(function (a) {
+          return h('button', { type: 'button', class: 'card', style: 'padding:6px 12px;text-align:left;justify-content:center;border-top:3px solid ' + (a.late ? 'var(--late)' : 'var(--ok)') },
+            h('b', { text: a.name }), h('span', { class: 'small' }, lateWord(a), ' · ' + a.open + ' open'),
+            h('span', { class: 'small ' + (a.meeting ? 'muted' : 'soon'), text: a.meeting ? 'Meeting ' + a.meeting : 'No meeting booked' }));
+        }));
+        return [header(), h('div', { class: 'row fill' }, tiles, card('Your actions', myActions(), 'grow'), card('Needs your attention', attention(), 'grow'))];
+      } },
+    { name: '1D Tiles + tabbed card', about: 'Today’s tiles, then one wide card with tabs – Your actions, Needs attention, Meetings – each with its count, so whichever you pick gets the full width.',
+      build: function () {
+        var tiles = h('div', { style: 'display:grid;grid-template-columns:repeat(5,1fr);gap:8px' }, D().areas.map(function (a) {
+          return h('button', { type: 'button', class: 'card', style: 'padding:8px 12px;border-top:3px solid ' + (a.late ? 'var(--late)' : 'var(--ok)') + ';text-align:left' },
+            h('b', { text: a.name }), h('span', { class: 'small' }, lateWord(a), ' · ' + a.open + ' open'),
+            h('span', { class: 'small ' + (a.meeting ? 'muted' : 'soon'), text: a.meeting ? 'Meeting ' + a.meeting : 'No meeting booked' }));
+        }));
+        var body = h('div', { class: 'fill', style: 'display:flex;min-height:0' });
+        var parts = [['Your actions', myActions, D().mine.length], ['Needs your attention', attention, D().attention.length], ['Coming meetings', meetings, D().meetings.length]];
+        var bar = h('div', { style: 'display:flex;gap:4px;border-bottom:2px solid var(--line);margin-bottom:8px' });
+        function show(i) {
+          Array.prototype.forEach.call(bar.children, function (b, j) { b.style.borderBottom = i === j ? '3px solid var(--accent)' : '3px solid transparent'; b.style.fontWeight = i === j ? '700' : '400'; });
+          body.innerHTML = '';
+          var list = parts[i][1]();
+          list.style.display = 'grid'; list.style.gridTemplateColumns = 'repeat(2,1fr)'; list.style.alignContent = 'start';
+          add(body, list);
+          fitAll();
+        }
+        parts.forEach(function (p, i) { add(bar, h('button', { type: 'button', style: 'background:none;border:0;padding:6px 12px', onclick: function () { show(i); } }, p[0] + ' ', h('span', { class: 'chip c-later', text: String(p[2]) }))); });
+        setTimeout(function () { show(0); });
+        return [header(), tiles, h('section', { class: 'card fill' }, bar, body)];
+      } },
+    { name: '1E Late first', about: 'Tiles sorted so areas with late actions come first and stand out in red; below, Late and Due this week are pulled out of your actions so they can’t be missed.',
+      build: function () {
+        var sorted = D().areas.slice().sort(function (a, b) { return b.late - a.late || b.open - a.open; });
+        var tiles = h('div', { style: 'display:grid;grid-template-columns:repeat(5,1fr);gap:8px' }, sorted.map(function (a) {
+          return h('button', { type: 'button', class: 'card', style: 'padding:8px 12px;text-align:left;' + (a.late ? 'background:var(--late-bg);border-color:#f3b8bb' : '') },
+            h('span', { style: 'display:flex;justify-content:space-between;gap:6px' }, h('b', { text: a.name }), a.late ? h('b', { class: 'late', text: a.late + ' late' }) : h('span', { class: 'ok small', text: '✓' })),
+            h('span', { class: 'small muted', text: a.open + ' open · ' + (a.meeting ? 'meets ' + a.meeting : 'no meeting booked') }));
+        }));
+        var urgent = fitList(D().mine.filter(function (x) { return x.g !== 'later'; }), actionItem, 'Nothing late or due this week. Nice work.', 'See all your actions');
+        var later = fitList(D().mine.filter(function (x) { return x.g === 'later'; }), actionItem, 'Nothing else coming up.', 'See all');
+        return [header(), tiles, h('div', { class: 'row fill' }, card('Late or due this week', urgent, 'grow'), card('Coming up', later, 'grow'),
+          card('Needs your attention', attention(), 'grow'), card('Coming meetings', meetings(), 'grow'))];
       } }
   ];
 
