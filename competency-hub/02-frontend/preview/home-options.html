@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home page options</title>
+<style>
+  :root {
+    --navy: #13516b; --navy-soft: #e7f0f6; --accent: #ef7d3a; --ink: #16222c; --muted: #5b6774; --bg: #f3f6f8; --card: #fff;
+    --line: #dde3e8; --late: #a4262c; --late-bg: #fde8e9; --soon: #8a5a00; --soon-bg: #fff3d6; --ok: #1b7a45; --ok-bg: #e6f3eb;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font-family: "Segoe UI", Arial, sans-serif; font-size: 15px; color: var(--ink); background: var(--bg); display: flex; flex-direction: column; overflow: hidden; }
+  button { font: inherit; cursor: pointer; }
+  /* the switcher stands in for SharePoint's own bar */
+  .switch { background: #222; color: #fff; padding: 6px 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+  .switch button { background: #3a3a3a; color: #fff; border: 1px solid #555; border-radius: 4px; padding: 3px 9px; }
+  .switch button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); }
+  .switch .sep { margin-left: auto; }
+  .bar { background: var(--navy); color: #fff; display: flex; align-items: center; gap: 14px; padding: 8px 22px; border-bottom: 3px solid var(--accent); }
+  .bar b { font-size: 16px; } .bar small { display: block; opacity: .8; font-size: 11px; }
+  .bar .who { margin-left: auto; font-size: 13px; }
+  .env { background: #fff3d6; color: #6b4a00; border-radius: 10px; padding: 1px 8px; font-size: 11px; }
+  main { flex: 1; min-height: 0; padding: 14px 22px 10px; display: flex; flex-direction: column; gap: 12px; }
+  footer { text-align: center; color: var(--muted); font-size: 11px; padding: 4px; }
+  h1 { font-size: 22px; margin: 0; } h2 { font-size: 15px; margin: 0 0 8px; }
+  .muted { color: var(--muted); } .small { font-size: 12.5px; }
+  .head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .head .sum { font-size: 15px; } .head .btns { margin-left: auto; display: flex; gap: 8px; }
+  .btn { border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: 7px 14px; font-weight: 600; color: var(--ink); }
+  .btn-main { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .link { background: none; border: 0; padding: 0; color: var(--navy); text-decoration: underline; font-weight: 600; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; min-height: 0; display: flex; flex-direction: column; }
+  .fill { flex: 1; min-height: 0; }
+  .fit { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 6px; }
+  .more { color: var(--navy); font-weight: 600; font-size: 13px; padding-top: 2px; }
+  .late { color: var(--late); } .ok { color: var(--ok); } .soon { color: var(--soon); }
+  .chip { border-radius: 10px; padding: 1px 8px; font-size: 12px; white-space: nowrap; font-weight: 600; }
+  .c-late { color: var(--late); background: var(--late-bg); } .c-soon { color: var(--soon); background: var(--soon-bg); }
+  .c-later { color: var(--muted); background: #eef1f4; } .c-ok { color: var(--ok); background: var(--ok-bg); }
+  .item { display: flex; justify-content: space-between; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: #fff; }
+  .item .t { font-weight: 600; display: block; } .item .s { color: var(--muted); font-size: 12.5px; }
+  .row { display: flex; gap: 12px; min-height: 0; }
+  .grow { flex: 1; min-width: 0; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .gtitle { font-size: 12.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; margin-top: 4px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); font-size: 14px; }
+  th { color: var(--muted); font-size: 12px; font-weight: 600; }
+  td.n, th.n { text-align: right; width: 64px; }
+  tr.click:hover td { background: var(--navy-soft); cursor: pointer; }
+  .note { color: var(--muted); font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="switch" role="toolbar" aria-label="Choose a design">
+  <b>Home page options</b>
+  <span id="designs"></span>
+  <span class="sep">Data:</span>
+  <button type="button" data-load="quiet" aria-pressed="false">Quiet (like now)</button>
+  <button type="button" data-load="busy" aria-pressed="true">Busy</button>
+</div>
+<div class="bar"><div><b>ESG Competency Hub</b><small>Environmental Safety Group</small></div><span class="env">PREVIEW – sample data</span>
+  <span class="who">Pepper Joseph · Team Leader</span></div>
+<main id="main"></main>
+<footer>ESG Competency Hub · design preview · nothing here is saved</footer>
+<script>
+(function () {
+  'use strict';
+  // ---- sample data -------------------------------------------------------------------------------------------
+  var AREAS = ['Flask', 'Instruments', 'Green Stream', 'RPE', 'BA', 'Dosimetry', 'Radiological Protection', 'DSL', 'Active Lab & Sampling', 'Radwaste'];
+  var SHORT = ['Flask', 'Instruments', 'Green Stream', 'RPE', 'BA', 'Dosimetry', 'RP', 'DSL', 'ALS', 'Radwaste'];
+  var DATA = {
+    quiet: {
+      areas: AREAS.map(function (n, i) { return { name: n, short: SHORT[i], open: [1, 0, 0, 0, 1, 0, 1, 0, 0, 0][i], late: 0, meeting: '' }; }),
+      mine: [{ t: 'TEST Action – Due in 3 days', a: 'Flask', g: 'soon', w: 'Due Sunday' }, { t: 'TEST Action 1 Title', a: 'Radiological Protection', g: 'later', w: 'Due 30 Oct' },
+        { t: 'TEST Action Post Optimisation', a: 'BA', g: 'later', w: 'Due 28 Dec' }],
+      attention: [], meetings: [], notices: []
+    },
+    busy: {
+      areas: [['Flask', 12, 1, 'Wed 11 Nov'], ['Instruments', 6, 0, 'Thu 12 Nov'], ['Green Stream', 18, 3, ''], ['RPE', 9, 0, 'Tue 17 Nov'], ['BA', 7, 1, 'Mon 9 Nov'],
+        ['Dosimetry', 5, 0, 'Fri 13 Nov'], ['Radiological Protection', 21, 2, 'Wed 4 Nov'], ['DSL', 4, 0, ''], ['Active Lab & Sampling', 8, 1, 'Thu 5 Nov'], ['Radwaste', 11, 2, 'Tue 10 Nov']]
+        .map(function (a, i) { return { name: a[0], short: SHORT[i], open: a[1], late: a[2], meeting: a[3] }; }),
+      mine: [
+        { t: 'Replace FH40 probe', a: 'Flask', g: 'late', w: '2 days late' }, { t: 'Sign off Radwaste audit response', a: 'Radwaste', g: 'late', w: '1 day late' },
+        { t: 'Agree Q4 training priorities', a: 'Radiological Protection', g: 'soon', w: 'Due Friday' }, { t: 'Review BA servicing schedule', a: 'BA', g: 'soon', w: 'Due Monday' },
+        { t: 'Update dosimetry issue log', a: 'Dosimetry', g: 'soon', w: 'Due Tuesday' }, { t: 'Check sampling line flow rates', a: 'Active Lab & Sampling', g: 'later', w: 'Due 9 Nov' },
+        { t: 'Green Stream handover notes', a: 'Green Stream', g: 'later', w: 'Due 16 Nov' }, { t: 'RPE fit-test record review', a: 'RPE', g: 'later', w: 'Due 20 Nov' },
+        { t: 'Update DSL operating instruction', a: 'DSL', g: 'later', w: 'Due 2 Dec' }],
+      attention: [
+        { t: 'Green Stream sampling backlog', s: 'Green Stream · Luke Cain · moved 3 times', w: '9 days late', g: 'late' },
+        { t: 'Hand monitor replacement plan', s: 'Radiological Protection · Doti Cange-Ainsworth', w: '6 days late', g: 'late' },
+        { t: 'Green Stream', s: 'has not met since 2 Sep', w: 'Meeting overdue', g: 'soon' },
+        { t: 'DSL', s: 'no meeting on record', w: 'Meeting overdue', g: 'soon' },
+        { t: 'Pump seal inspection', s: 'Green Stream · Kevin Hewitt', w: '3 days late', g: 'late' },
+        { t: '2 actions are', s: 'waiting for a close-out check', w: 'Close-out', g: 'later' }],
+      meetings: [['Radiological Protection', 'Wed 4 Nov', 3], ['Active Lab & Sampling', 'Thu 5 Nov', 1], ['BA', 'Mon 9 Nov', 0], ['Radwaste', 'Tue 10 Nov', 2],
+        ['Flask', 'Wed 11 Nov', 3], ['Instruments', 'Thu 12 Nov', 0]],
+      notices: [['Calibration rig out of service', 'Flask · Nick Pearce'], ['Spare probe stock levels', 'Flask · Kelly Bates'], ['Revised survey route map', 'RP · Andrea Medlicott']]
+    }
+  };
+  var load = 'busy';
+  function D() { return DATA[load]; }
+
+  // ---- tiny DOM helper ---------------------------------------------------------------------------------------
+  function h(tag, attrs) {
+    var n = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) {
+      if (k === 'class') n.className = attrs[k]; else if (k === 'text') n.textContent = attrs[k];
+      else if (k === 'style') n.setAttribute('style', attrs[k]); else if (k.indexOf('on') === 0) n.addEventListener(k.slice(2), attrs[k]); else n.setAttribute(k, attrs[k]);
+    });
+    for (var i = 2; i < arguments.length; i++) add(n, arguments[i]);
+    return n;
+  }
+  function add(p, c) { if (c == null || c === false) return; if (Array.isArray(c)) return c.forEach(function (x) { add(p, x); }); p.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); }
+  function chip(g, text) { return h('span', { class: 'chip c-' + g, text: text }); }
+  function totals() { var o = 0, l = 0; D().areas.forEach(function (a) { o += a.open; l += a.late; }); return { open: o, late: l }; }
+  function lateWord(a) { return a.late ? h('span', { class: 'late', text: a.late + ' late' }) : h('span', { class: 'ok', text: 'Nothing late' }); }
+
+  function header() {
+    var t = totals();
+    return h('div', { class: 'head' }, h('h1', { text: 'Good afternoon, Joseph' }),
+      h('span', { class: 'sum' }, 'Across the group: ', h('b', { text: t.open + ' open actions' }), ', ', h('b', { class: t.late ? 'late' : '', text: t.late + ' late' }), '.'),
+      h('span', { class: 'btns' }, h('button', { type: 'button', class: 'btn btn-main', text: 'Raise an action' }), h('button', { type: 'button', class: 'btn', text: 'Post a notice' })));
+  }
+  // A list that shows as many items as fit, then "+ N more" – the page itself never scrolls.
+  function fitList(items, render, empty, moreText) {
+    var box = h('div', { class: 'fit', 'data-fit': '1' });
+    if (!items.length) add(box, h('p', { class: 'muted', style: 'margin:0', text: empty }));
+    items.forEach(function (x) { add(box, render(x)); });
+    box._more = moreText || 'See all';
+    return box;
+  }
+  function actionItem(x) { return h('div', { class: 'item' }, h('span', null, h('span', { class: 't', text: x.t }), h('span', { class: 's', text: x.a })), chip(x.g, x.w)); }
+  function attentionItem(x) { return h('div', { class: 'item' }, h('span', null, h('span', { class: 't', text: x.t }), h('span', { class: 's', text: x.s })), chip(x.g, x.w)); }
+  function meetingItem(m) { return h('div', { class: 'item' }, h('span', null, h('span', { class: 't', text: m[0] }), h('span', { class: 's', text: m[1] })), m[2] ? chip('later', m[2] + ' to discuss') : null); }
+  function card(title, body, extra, style) { return h('section', { class: 'card ' + (extra || ''), style: style || '' }, title ? h('h2', { text: title }) : null, body); }
+  function myActions() { return fitList(D().mine, actionItem, 'You have no open actions. Nice work.', 'See all your actions'); }
+  function attention() { return fitList(D().attention, attentionItem, 'Nothing needs your attention right now.', 'See all'); }
+  function meetings() { return fitList(D().meetings, meetingItem, 'No meetings booked yet.', 'See all meetings'); }
+
+  // ---- the designs -------------------------------------------------------------------------------------------
+  var DESIGNS = [
+    { name: '1 Compact tiles', about: 'Today’s layout, tightened: slim one-line tiles (2 rows of 5), then the three cards fill exactly the space left.',
+      build: function () {
+        var tiles = h('div', { style: 'display:grid;grid-template-columns:repeat(5,1fr);gap:8px' }, D().areas.map(function (a) {
+          return h('button', { type: 'button', class: 'card', style: 'padding:8px 12px;border-top:3px solid ' + (a.late ? 'var(--late)' : 'var(--ok)') + ';text-align:left' },
+            h('b', { text: a.name }), h('span', { class: 'small' }, lateWord(a), ' · ' + a.open + ' open'));
+        }));
+        return [header(), tiles, h('div', { class: 'row fill' }, card('Needs your attention', attention(), 'grow'), card('Your actions', myActions(), 'grow'), card('Coming meetings', meetings(), 'grow'))];
+      } },
+    { name: '2 Table + panel', about: 'Areas as a short table on the left (one row each); your actions, attention and meetings stacked on the right.',
+      build: function () {
+        var table = h('table', null, h('tr', null, h('th', { text: 'Area' }), h('th', { class: 'n', text: 'Open' }), h('th', { class: 'n', text: 'Late' }), h('th', { text: 'Next meeting' })),
+          D().areas.map(function (a) { return h('tr', { class: 'click' }, h('td', { text: a.name }), h('td', { class: 'n', text: String(a.open) }),
+            h('td', { class: 'n ' + (a.late ? 'late' : 'muted'), text: a.late ? String(a.late) : '–' }), h('td', { class: a.meeting ? '' : 'soon', text: a.meeting || 'Not booked' })); }));
+        return [header(), h('div', { class: 'row fill' }, card('All areas', table, 'grow'),
+          h('div', { class: 'grow', style: 'display:flex;flex-direction:column;gap:12px;min-height:0' }, card('Your actions', myActions(), 'fill'),
+            h('div', { class: 'row fill' }, card('Needs your attention', attention(), 'grow'), card('Coming meetings', meetings(), 'grow'))))];
+      } },
+    { name: '3 Actions first', about: 'Your actions get the most room; areas shrink to a row of chips; attention and meetings in a narrow column.',
+      build: function () {
+        var chips = h('div', { style: 'display:flex;gap:6px;flex-wrap:wrap' }, D().areas.map(function (a) {
+          return h('button', { type: 'button', class: 'btn', style: 'padding:4px 10px;font-weight:600' }, a.short + ' ', a.late ? h('span', { class: 'chip c-late', text: a.late + ' late' }) : h('span', { class: 'muted small', text: a.open + '' }));
+        }));
+        return [header(), chips, h('div', { class: 'row fill' }, card('Your actions', myActions(), 'grow', 'flex:2'),
+          h('div', { class: 'grow', style: 'display:flex;flex-direction:column;gap:12px;min-height:0' }, card('Needs your attention', attention(), 'fill'), card('Coming meetings', meetings(), 'fill')))];
+      } },
+    { name: '4 Home tabs', about: 'One section at a time under tabs. Always fits; you click to switch.',
+      build: function () {
+        var panel = h('div', { class: 'fill', style: 'display:flex;min-height:0' });
+        var tabs = ['Overview', 'Your actions', 'Areas', 'Meetings'];
+        var bar = h('div', { role: 'tablist', style: 'display:flex;gap:4px;border-bottom:2px solid var(--line)' });
+        function show(i) {
+          Array.prototype.forEach.call(bar.children, function (b, j) { b.style.borderBottom = i === j ? '3px solid var(--accent)' : '3px solid transparent'; b.style.fontWeight = i === j ? '700' : '400'; });
+          panel.innerHTML = '';
+          if (i === 0) add(panel, h('div', { class: 'row grow' }, card('Needs your attention', attention(), 'grow'), card('Your actions', myActions(), 'grow'), card('Coming meetings', meetings(), 'grow')));
+          if (i === 1) add(panel, card('Your actions', myActions(), 'grow'));
+          if (i === 2) add(panel, h('div', { class: 'grow', style: 'display:grid;grid-template-columns:repeat(5,1fr);gap:10px;align-content:start' }, D().areas.map(function (a) {
+            return h('div', { class: 'card' }, h('b', { text: a.name }), h('span', { class: 'small' }, lateWord(a), ' · ' + a.open + ' open'), h('span', { class: 'small muted', text: a.meeting ? 'Meeting ' + a.meeting : 'No meeting booked' }));
+          })));
+          if (i === 3) add(panel, card('Coming meetings', meetings(), 'grow'));
+          fitAll();
+        }
+        tabs.forEach(function (t, i) { add(bar, h('button', { type: 'button', role: 'tab', style: 'background:none;border:0;padding:8px 14px', text: t, onclick: function () { show(i); } })); });
+        setTimeout(function () { show(0); });
+        return [header(), bar, panel];
+      } },
+    { name: '5 Side menu', about: 'Areas listed down the left like Outlook folders, with late counts; the overview fills the right.',
+      build: function () {
+        var side = h('nav', { class: 'card', style: 'width:250px;padding:8px 6px;gap:2px' }, h('button', { type: 'button', class: 'btn', style: 'text-align:left;border:0;background:var(--navy-soft)', text: 'Overview' }),
+          D().areas.map(function (a) { return h('button', { type: 'button', style: 'display:flex;justify-content:space-between;background:none;border:0;padding:5px 10px;border-radius:6px;text-align:left' },
+            h('span', { text: a.name }), a.late ? chip('late', a.late + ' late') : h('span', { class: 'muted small', text: String(a.open) })); }));
+        return [header(), h('div', { class: 'row fill' }, side, h('div', { class: 'grow', style: 'display:flex;flex-direction:column;gap:12px;min-height:0' },
+          card('Your actions', myActions(), 'fill'), h('div', { class: 'row fill' }, card('Needs your attention', attention(), 'grow'), card('Coming meetings', meetings(), 'grow'))))];
+      } },
+    { name: '6 Numbers + 2×2', about: 'Four big numbers you can click, then a 2×2 grid: your actions, attention, meetings, areas.',
+      build: function () {
+        var t = totals();
+        var soon = D().mine.filter(function (x) { return x.g === 'soon'; }).length;
+        function num(n, label, cls) { return h('button', { type: 'button', class: 'card grow', style: 'text-align:left;padding:10px 14px' }, h('span', { class: cls || '', style: 'font-size:28px;font-weight:700', text: String(n) }), h('span', { class: 'muted', text: label })); }
+        var nums = h('div', { class: 'row' }, num(t.open, 'open actions'), num(t.late, 'late', t.late ? 'late' : 'ok'), num(soon, 'of yours due this week', soon ? 'soon' : ''),
+          num(D().meetings.length, 'meetings in the next 3 weeks'));
+        var areas = fitList(D().areas.slice().sort(function (a, b) { return b.late - a.late; }), function (a) { return h('div', { class: 'item' }, h('span', { class: 't', text: a.name }), h('span', { class: 'small' }, lateWord(a), ' · ' + a.open + ' open')); }, '', 'All areas');
+        return [header(), nums, h('div', { class: 'fill', style: 'display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:12px;min-height:0' },
+          card('Your actions', myActions()), card('Needs your attention', attention()), card('Coming meetings', meetings()), card('Areas (most late first)', areas))];
+      } },
+    { name: '7 Board', about: 'Your actions as three columns – Late, This week, Later – with areas as a slim strip above.',
+      build: function () {
+        var strip = h('div', { style: 'display:grid;grid-template-columns:repeat(10,1fr);gap:6px' }, D().areas.map(function (a) {
+          return h('button', { type: 'button', class: 'card', style: 'padding:6px 8px;text-align:left;border-top:3px solid ' + (a.late ? 'var(--late)' : 'var(--ok)') },
+            h('b', { class: 'small', text: a.short }), h('span', { class: 'small ' + (a.late ? 'late' : 'muted'), text: a.late ? a.late + ' late' : a.open + ' open' }));
+        }));
+        function col(title, g, dot) { return card('', [h('h2', null, h('span', { class: 'dot', style: 'background:' + dot }), title + ' (' + D().mine.filter(function (x) { return x.g === g; }).length + ')'),
+          fitList(D().mine.filter(function (x) { return x.g === g; }), actionItem, 'Nothing here.', 'See all')], 'grow'); }
+        return [header(), strip, h('div', { class: 'row fill' }, col('Late', 'late', 'var(--late)'), col('Due this week', 'soon', 'var(--soon)'), col('Coming up', 'later', '#9aa5af'),
+          h('div', { class: 'grow', style: 'display:flex;flex-direction:column;gap:12px;min-height:0' }, card('Needs your attention', attention(), 'fill'), card('Coming meetings', meetings(), 'fill')))];
+      } },
+    { name: '8 This week', about: 'A week planner: each day shows what is due and any meetings; late items and areas sit alongside.',
+      build: function () {
+        var days = ['Mon 2', 'Tue 3', 'Wed 4', 'Thu 5', 'Fri 6'];
+        var by = { 'Mon 2': [], 'Tue 3': [], 'Wed 4': [], 'Thu 5': [], 'Fri 6': [] };
+        D().mine.filter(function (x) { return x.g === 'soon'; }).forEach(function (x, i) { by[days[[4, 0, 1][i % 3]]].push(x); });
+        D().meetings.forEach(function (m) { var d = { 'Wed 4 Nov': 'Wed 4', 'Thu 5 Nov': 'Thu 5' }[m[1]]; if (d) by[d].push({ t: m[0] + ' meeting', a: m[2] ? m[2] + ' to discuss' : '', g: 'later', w: 'Meeting' }); });
+        var week = h('div', { class: 'grow', style: 'display:grid;grid-template-columns:repeat(5,1fr);gap:8px;min-height:0' }, days.map(function (d) {
+          return card(d + ' Nov', fitList(by[d], actionItem, 'Nothing due.', 'More'));
+        }));
+        var late = fitList(D().mine.filter(function (x) { return x.g === 'late'; }).concat(D().attention.filter(function (x) { return x.g === 'late'; }).map(function (x) { return { t: x.t, a: x.s, g: 'late', w: x.w }; })),
+          actionItem, 'Nothing late.', 'See all');
+        var areas = fitList(D().areas, function (a) { return h('div', { class: 'item', style: 'padding:4px 10px' }, h('span', { text: a.name }), a.late ? chip('late', a.late + ' late') : h('span', { class: 'muted small', text: a.open + ' open' })); }, '', 'All areas');
+        return [header(), h('div', { class: 'row fill' }, h('div', { style: 'flex:3;display:flex;flex-direction:column;gap:12px;min-height:0' }, week,
+          card('Coming up later', fitList(D().mine.filter(function (x) { return x.g === 'later'; }), actionItem, 'Nothing else.', 'See all'), 'grow')),
+          h('div', { class: 'grow', style: 'display:flex;flex-direction:column;gap:12px;min-height:0' }, card('Late', late, 'fill'), card('Areas', areas, 'fill')))];
+      } }
+  ];
+
+  // ---- fitting: hide what does not fit, and say how many more there are ---------------------------------------
+  function fitAll() {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-fit]'), function (box) {
+      Array.prototype.forEach.call(box.children, function (c) { c.style.display = ''; });
+      var old = box.querySelector('.more'); if (old) old.remove();
+      var kids = Array.prototype.filter.call(box.children, function (c) { return c.classList.contains('item'); });
+      if (box.scrollHeight <= box.clientHeight + 1) return;
+      var more = h('button', { type: 'button', class: 'link more' });
+      box.appendChild(more);
+      var hidden = 0;
+      for (var i = kids.length - 1; i >= 0 && box.scrollHeight > box.clientHeight + 1; i--) { kids[i].style.display = 'none'; hidden++; more.textContent = '+ ' + hidden + ' more · ' + box._more; }
+    });
+  }
+
+  var current = 0;
+  function render() {
+    var main = document.getElementById('main');
+    main.innerHTML = '';
+    add(main, DESIGNS[current].build());
+    add(main, h('p', { class: 'note', style: 'margin:0', text: DESIGNS[current].about }));
+    Array.prototype.forEach.call(document.querySelectorAll('#designs button'), function (b, i) { b.setAttribute('aria-pressed', String(i === current)); });
+    fitAll();
+  }
+  DESIGNS.forEach(function (d, i) { add(document.getElementById('designs'), h('button', { type: 'button', text: d.name, onclick: function () { current = i; render(); } }), ' '); });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-load]'), function (b) {
+    b.addEventListener('click', function () {
+      load = b.getAttribute('data-load');
+      Array.prototype.forEach.call(document.querySelectorAll('[data-load]'), function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+      render();
+    });
+  });
+  window.addEventListener('resize', fitAll);
+  var q = new URLSearchParams(location.search);
+  current = Math.max(0, Math.min(DESIGNS.length - 1, Number(q.get('design') || 1) - 1));
+  if (q.get('data')) { load = q.get('data'); Array.prototype.forEach.call(document.querySelectorAll('[data-load]'), function (x) { x.setAttribute('aria-pressed', String(x.getAttribute('data-load') === load)); }); }
+  render();
+})();
+</script>
+</body>
+</html>
