@@ -41,6 +41,8 @@ class HubFake:
         self.calls = []                   # every SharePoint call, in order: (method, uri)
         self.fail_at = None               # 1-based index of a write that fails once (simulated interruption)
         self.return_new_id = True         # AddValidateUpdateItemUsingPath lists the new item's Id among its results
+        self.sent = []                    # emails the Outlook connector sent: {'to', 'subject', 'body'}
+        self.mail_fail = []               # outcomes for the next sends, in order: 400 (refused), 500 or 'timeout' (unclear)
         self.clock = datetime(2026, 10, 21, 9, 30, tzinfo=timezone.utc)
         for l in LISTS:
             lid = str(uuid.uuid4())
@@ -53,7 +55,7 @@ class HubFake:
 
     # ------------------------------------------------------------------ test helpers
     def add_user(self, uid, title, email):
-        self.users[uid] = {'Id': uid, 'Title': title, 'LoginName': 'i:0#.f|membership|' + email}
+        self.users[uid] = {'Id': uid, 'Title': title, 'LoginName': 'i:0#.f|membership|' + email, 'Email': email}
 
     def folder(self, key, path, author=None):
         """Creates folders along path (relative to the list root) as the given author (default: the flow's account)."""
@@ -115,6 +117,10 @@ class HubFake:
                 # a projected lookup column (needs $expand in the real API): Competency/CompetencyKey
                 look, _, col = name.partition('/')
                 f = lst['fields'].get(look)
+                if f is not None and f['type'] == 'User':
+                    u = self.users.get(it['f'].get(look + 'Id'))
+                    o.setdefault(look, {})[col] = {'Name': u['LoginName'], 'EMail': u['Email'], 'Title': u['Title'], 'Id': u['Id']}[col] if u else None
+                    continue
                 if f is None or f['type'] != 'Lookup':
                     fail(400, "The field or property '{0}' does not exist.".format(look))
                 target = self.by_key[f['lookup']]['items'].get(it['f'].get(look + 'Id'))
@@ -147,11 +153,29 @@ class HubFake:
 
     # ------------------------------------------------------------------ connector
     def __call__(self, api, op, p):
+        if api == 'shared_office365':
+            return self.send_email(op, p)
         assert api == 'shared_sharepointonline', api
         if p.get('dataset') != SITE:
             fail(400, 'wrong site ' + str(p.get('dataset')))
         assert op == 'HttpRequest', op
         return self.rest(p['parameters/method'], p['parameters/uri'], p.get('parameters/headers') or {}, p.get('parameters/body'))
+
+    def send_email(self, op, p):
+        assert op == 'SendEmailV2', op
+        for k in ('emailMessage/To', 'emailMessage/Subject', 'emailMessage/Body'):
+            if not p.get(k):
+                fail(400, 'Missing ' + k)
+        outcome = self.mail_fail.pop(0) if self.mail_fail else None
+        if outcome == 'timeout':
+            raise ActionFailed('The operation timed out.')   # no status code: the send may or may not have happened
+        if outcome == 500:
+            self.sent.append({'to': p['emailMessage/To'], 'subject': p['emailMessage/Subject'], 'body': p['emailMessage/Body']})
+            fail(500, 'Internal server error after the message was accepted.')
+        if outcome:
+            fail(outcome, 'The request was refused.')
+        self.sent.append({'to': p['emailMessage/To'], 'subject': p['emailMessage/Subject'], 'body': p['emailMessage/Body']})
+        return {}
 
     def _write(self, method, path):
         self.writes.append((method, path))
@@ -240,10 +264,12 @@ class HubFake:
         if not flt:
             return True
         for clause in re.split(r'\s+and\s+', flt):
-            m = re.match(r"^(\w+) eq (?:'((?:[^']|'')*)'|(-?\d+(?:\.\d+)?))$", clause.strip())
+            m = re.match(r"^(\w+) (eq|le|ge|lt|gt) (?:'((?:[^']|'')*)'|(-?\d+(?:\.\d+)?))$", clause.strip())
             if not m:
                 fail(400, 'filter not simulated: ' + clause)
-            col, s, n = m.group(1), m.group(2), m.group(3)
+            col, op, s, n = m.group(1), m.group(2), m.group(3), m.group(4)
+            if op != 'eq' and n is None:
+                fail(400, 'filter not simulated: ' + clause)
             want = s.replace("''", "'") if s is not None else float(n)
             if col in ('Id', 'ID'):
                 have = it['id']
@@ -262,7 +288,10 @@ class HubFake:
                 if f['type'] == 'Boolean':
                     want = bool(want)
             if isinstance(want, float):
-                if have is None or float(have) != want:
+                if have is None:
+                    return False
+                h = float(have)
+                if not {'eq': h == want, 'le': h <= want, 'ge': h >= want, 'lt': h < want, 'gt': h > want}[op]:
                     return False
             elif have != want:
                 return False

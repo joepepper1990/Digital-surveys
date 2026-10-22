@@ -3765,6 +3765,218 @@ Tests:
   time to the minute.
 - The 19 rejection tests and the package comparison pass.
 
+### K7.11 Result on the site, 22 Oct 2026
+
+You imported solution 1.0.0.1 and raised a TEST action. The run took
+**1 min 23 s, down from 9 min 35 s**.
+
+## K8. Next build: emails and reminders (solution 1.1.0.0)
+
+### K8.1 Context
+
+Raising and updating actions now work on the site, and runs take about 1–2
+minutes. You chose emails and reminders as the next build (Phase 2, plan B.5,
+F.4). They send from **your own mailbox** (D-03 option C).
+
+Nobody else has been added yet, so for now every email goes only to you. That
+makes it safe to test on the live site.
+
+**The site needs no changes.** Setup already made the Notification Log list
+(`schema.json`, `notifications`) with every column F.4.2 needs, and the
+Settings rows `ReminderDaysBefore`, `OverdueReminderIntervalDays`,
+`NotifyRaiserOnExtension`, `NotifyOnClosure` and `LastDailyRun`. The app needs
+no change either, because email links use the existing `?action=` deep link.
+
+### K8.2 Scope
+
+| Email | Who gets it | When |
+|---|---|---|
+| **ASG** Assigned to you (NOT-04) | The new owner, unless they raised it themselves | When the action is raised |
+| **EXT** Deadline moved (NOT-06) | The owner, unless they made the change. The raiser too if `NotifyRaiserOnExtension` is Yes. | On each extension |
+| **RDY** Ready for close-out (NOT-07) | The raiser | When an action needing a close-out check is marked done |
+| **CLS** Closed (NOT-08) | The owner and the raiser, unless they closed it themselves (`NotifyOnClosure`) | When an action is closed |
+| **R7** 7-day reminder (NOT-01) | The owner | At the first daily run with 1–7 days left. Skipped if an ASG or EXT email for that deadline was **sent** while 7 days or fewer remained. |
+| **DUE** Due today (NOT-02) | The owner | On the deadline day, the same suppression |
+| **OD** Late (NOT-03) | The owner | On day 1 late, then every `OverdueReminderIntervalDays` (7). Missed runs are caught up. |
+
+**Left for later:**
+- reassignment emails, which come with reassign;
+- minutes, the weekly management summary, the calendar digest and
+  administrator alerts;
+- searching Sent Items to settle an uncertain send (P-12).
+
+Until P-12 is done, the plan's own fallback applies. A send whose outcome is
+unclear (a time-out or a 5xx error) is marked **Unknown** and tried again at the
+next daily run. That email says "If you have already received this message,
+please ignore it." No reminder is lost, and a rare duplicate is possible.
+
+### K8.3 Design (`04-solution/tools/flows.py`)
+
+**Outbox and ledger (plan F.4.2).**
+- One Notification Log row per email, keyed by `NotificationKey` (D.2 #14):
+  `ASG|{requestKey}|{recipientId}`, `R7|{actionId}|{DueDay}|{recipientId}`,
+  `OD|{actionId}|{DueDay}|{n}|{recipientId}` and so on.
+- Each row holds `RenderData`, the values the email needs, and a `Token` such
+  as `ESGN000012K7Q2`.
+- The unique key means a row is never made twice. Retries update the same row.
+- States: Queued → Sending (claimed with `IF-MATCH`, Attempts + 1) → Sent,
+  Failed or Unknown; or Skipped when it no longer applies.
+
+**One send block, generated once by `send_block(sfx)` and used in both flows**
+(there are no child flows, so there are no connection-sharing questions):
+1. Claim the row with its ETag.
+2. Re-check the action: still open, and the same owner and deadline for
+   reminders. If not, set Skipped.
+3. Send with **Office 365 Outlook "Send an email (V2)"**, retry policy **none**,
+   Importance Normal.
+4. Record the outcome:
+   - Sent, with `SentAt`;
+   - **Failed** for a definite 4xx;
+   - **Unknown** for anything else.
+5. After a successful ASG or EXT send with 0–7 days left, write the R7 or DUE
+   row for that deadline as **Skipped (covered)**.
+
+**Email content.**
+- Plain, consistent HTML, matching the app's look: navy header text and no
+  images.
+- **Every value is HTML-escaped** with a chain of `replace()` calls for
+  `& < > " '`.
+- Content: title and reference, area, owner, deadline ("extended from …" where
+  relevant), status, "N days left" or "N days late", and a button-style link to
+  `{site}/SitePages/Hub.aspx?action={id}`.
+- Footer: "This is an automated message from the ESG Competency Hub. Reference
+  {token}."
+- Subject examples: "Action assigned to you: {title}", "Reminder: {title} is due
+  in 3 days", "{title} is 2 days late".
+
+**Request queue flow (existing).** The commit adds the outbox rows (Queued) for
+the change, after the event row and before Applied (F.1.2 step 9.2):
+- RaiseAction → ASG;
+- ExtendDeadline → EXT;
+- MarkComplete → RDY or CLS.
+
+After Completed, the flow sends those rows with the send block. A failure there
+does not undo the change: the row stays Queued and the daily run sends it.
+Rows are found by key, so a resumed run never makes a second one.
+
+**New flow: "ESG Competency Hub | 1 Daily tasks"**, ships **Off**.
+- Recurrence daily at **06:00 GMT Standard Time**.
+- Concurrency 1, with Try/Catch.
+
+Steps:
+1. **Dates** (D.0.1): `todayIso`, then `plus7Day` worked out with
+   `addDays(…,'yyyy-MM-dd')`. There is never arithmetic on `DueDay`.
+2. **Candidates:** one indexed query, `IsOpen eq 1 and DueDay le {plus7Day}`,
+   paginated. Uncommitted creates and actions waiting for a close-out check are
+   left out.
+3. **Existing ledger rows** for those deadlines, fetched in a few indexed
+   queries (`DueDay ge …`) rather than one query per action.
+4. **For each candidate** (concurrency 1):
+   - work out `daysRemaining`;
+   - decide R7, DUE or OD, and the overdue number `n`;
+   - if its key has no row, add a Queued row.
+5. **Send** every row that is Queued, Failed, or Unknown past
+   `NextAttemptAfter`, up to 3 attempts. After 3 attempts the row is
+   **Abandoned**.
+   - Retry gaps: 15 min, then the next daily run.
+   - This also sends outbox rows the request flow could not send.
+6. Write `LastDailyRun` in Settings.
+
+Expected request use: about 30–80 calls a day while nobody else is added.
+
+**Solution 1.1.0.0:**
+- **New connection reference:** `esghub_sharedoffice365_hub` (Outlook).
+- **New environment variable:** `esghub_CompetencyHubPageUrl`, defaulting to
+  `{site}/SitePages/Hub.aspx`. The flow builds this from the site URL; no
+  variable is needed unless your page has another name.
+- **Second workflow:** Daily tasks.
+- `build_solution.py` and `check_package.py` are extended for two flows and
+  two connection references, still compared against the 1-to-1 zip, which has
+  an Outlook reference.
+
+### K8.4 Tests (all LOCAL / OFFLINE-SIMULATED)
+
+**Simulator** (`hub_fake.py` and `wdl.py`):
+- an Outlook fake records sent emails and can fail with 400, 500 or a
+  time-out;
+- the Recurrence trigger and Apply to each.
+
+**`test_flow.py`:**
+- **Email per change:** raise → ASG to the owner, and none when you raise for
+  yourself. Extend on behalf → EXT to the owner. Complete → RDY or CLS.
+- **Once only:** an interruption at every write, then a resubmit, still gives
+  exactly one row and one send per email.
+- **Escaping:** attack strings in the title or reason appear escaped in the
+  body.
+- **Daily tasks, the D.0.1 matrix:** every reminder row runs the real flow with
+  the clock set to that date. That covers the month end, the BST end, the year
+  end, the new year, a non-leap and a leap February, the BST start, a missed
+  run with catch-up, raising 5 days before (suppressed), overdue on days 1, 8
+  and 15, and a date-only value read in BST.
+- **Retries:** 400 → Failed, then retried; 500 or a time-out → Unknown, then
+  retried with the "already received" line; 3 failures → Abandoned.
+- **Re-checks:** a closed action or a moved deadline before sending → Skipped.
+- **Call budgets:** raise stays ≤ 22 calls plus its email steps. The daily run
+  uses few calls when there is nothing to send.
+
+**Also:** `test_validate.py` adds a test for an unescaped value in an email
+body, and `check_package.py` and `run_all.sh` must pass.
+
+### K8.5 Your steps (each needs your go-ahead)
+
+1. Import `ESGCompetencyHub_1_1_0_0_unmanaged.zip` as an **upgrade**. Choose
+   your **Office 365 Outlook** connection for the new reference.
+2. Turn on *1 Daily tasks*. *2 Request queue* stays on.
+3. Test on the site:
+   - raise a TEST action owned by yourself, due in 3 days. You get no ASG email,
+     because you raised it yourself;
+   - use *Run* on Daily tasks: you get "Reminder: … is due in 3 days";
+   - run it again: no second email.
+   - send screenshots of the emails.
+
+**Testing other people's emails.** ASG and EXT are not sent to the person who
+made the change. To test them before anyone is added, Setup could add one test
+account (probe P1 needs two anyway). That waits for your go-ahead.
+
+### K8.6 Size
+
+About 7–9 developer-days of the plan's estimate:
+- the send ledger;
+- the reminders in Daily Tasks;
+- the email templates.
+
+It is delivered as one package.
+
+### K8.7 Delivered locally, 22 Oct 2026
+
+Solution **1.1.0.0**: flow *1 Daily tasks* and emails in *2 Request queue*.
+
+**Tests (LOCAL / OFFLINE-SIMULATED):**
+- **51 flow tests pass.** They cover:
+  - every email type, and who gets it;
+  - escaping;
+  - the full D.0.1 reminder matrix, run as the real flow morning by morning;
+  - a missed morning, due today, and late on days 1, 8 and 15;
+  - a second run, and reminders covered by an earlier email;
+  - closed actions and actions waiting for a close-out check;
+  - retries (refused, unclear, left sending), abandoning after 3 tries, and an email no longer needed;
+  - an interruption at every write: no email row is made twice, and no email is sent twice.
+- **20 rejection tests pass**, one of them new: an unescaped email body is refused.
+- **The package check passes**, with 2 flows and 2 connection references.
+
+**Calls:**
+- A change makes the same number of calls as in 1.0.0.1. Extend and complete
+  add one People read.
+- Each email adds at most 3 calls.
+- A quiet morning takes 8 calls.
+
+**Differences from K8.3:**
+- No `PageUrl` variable: the link is `{site}/SitePages/Hub.aspx`.
+- The two settings `NotifyRaiserOnExtension` and `NotifyOnClosure` are not read
+  yet. Closure emails always go, and the raiser is not told about extensions.
+- Failed emails are retried the next morning, not after 15 minutes, until the
+  queue monitor is built.
+
 ### K6.10 People list confirmed (C-04 resolved, 21 Oct 2026)
 
 **Context.** You supplied the corrected sign-in list: 25 engineers and

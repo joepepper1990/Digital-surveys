@@ -368,12 +368,39 @@ def validate_all(flows):
         probs += check_rest_columns(f)
         probs += check_platform(f)
         probs += check_nesting(f['name'], f['json']['properties']['definition'])
+        probs += check_email_escaping(f)
         refs = f['json']['properties']['connectionReferences']
         used = set(re.findall(r'"connectionName": "([^"]+)"', json.dumps(f['json'])))
         if used - set(refs):
             probs.append('[{0}] connection(s) used but not referenced: {1}'.format(f['name'], used - set(refs)))
         if set(refs) - used:
             probs.append('[{0}] connection reference(s) declared but unused: {1}'.format(f['name'], set(refs) - used))
+    return probs
+
+
+TYPED = ("['title']", "['area']", "['actor']", "['note']")
+
+
+def check_email_escaping(f):
+    """An email body (a Compose named Html...) may show what people typed only through the HTML escaping chain."""
+    probs = []
+
+    def walk(actions):
+        for n, a in actions.items():
+            if a.get('type') == 'Compose' and n.startswith('Html') and isinstance(a.get('inputs'), str):
+                for e in expressions(a['inputs']):
+                    if any(t in e for t in TYPED) and "'&amp;'" not in e:
+                        probs.append('[{0}] {1}: a typed value is not HTML-escaped: {2}'.format(f['name'], n, e[:80]))
+            for k in ('actions',):
+                if k in a:
+                    walk(a[k])
+            if 'else' in a:
+                walk(a['else']['actions'])
+            for c in (a.get('cases') or {}).values():
+                walk(c['actions'])
+            if a.get('default'):
+                walk(a['default']['actions'])
+    walk(f['json']['properties']['definition']['actions'])
     return probs
 
 

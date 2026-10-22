@@ -306,6 +306,16 @@ def call(name, a, ctx):
         return to_str(a[0]).lower()
     if name == 'startsWith':
         return to_str(a[0]).startswith(to_str(a[1]))
+    if name == 'guid':
+        import uuid
+        return str(uuid.uuid4())
+    if name == 'toUpper':
+        return to_str(a[0]).upper()
+    if name == 'min':
+        vals = a[0] if len(a) == 1 and isinstance(a[0], list) else a
+        if not vals or not all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in vals):
+            raise ExprError('min needs numbers')
+        return min(vals)
     if name == 'uriPath':
         from urllib.parse import urlsplit
         return urlsplit(to_str(a[0])).path or '/'
@@ -349,10 +359,9 @@ def call(name, a, ctx):
     if name == 'startOfMonth':
         dt = parse_ts(a[0])
         return iso(dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0))
-    if name == 'addDays':
-        return iso(parse_ts(a[0]) + timedelta(days=a[1]))
-    if name == 'addMinutes':
-        return iso(parse_ts(a[0]) + timedelta(minutes=a[1]))
+    if name in ('addDays', 'addMinutes'):
+        dt = parse_ts(a[0]) + (timedelta(days=a[1]) if name == 'addDays' else timedelta(minutes=a[1]))
+        return fmt(dt, a[2]) if len(a) > 2 else iso(dt)
     if name == 'addToTime':
         dt = parse_ts(a[0])
         if a[2] != 'Month':

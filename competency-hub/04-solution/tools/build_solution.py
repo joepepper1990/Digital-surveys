@@ -22,16 +22,16 @@ import validate
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, '..'))
 SRC = os.path.join(ROOT, 'src')
-VERSION = '1.0.0.1'
-INTRODUCED = '1.0.0.0'   # the version the flow and environment variable first appeared in
+VERSION = '1.1.0.0'
+INTRODUCED = '1.0.0.0'   # the version the request flow and environment variable first appeared in
 UNIQUE = 'ESGCompetencyHub'
 DISPLAY = 'ESG Competency Hub'
 PREFIX = 'esghub'
 OPTION_PREFIX = '63587'
 ZIP = os.path.join(ROOT, 'ESGCompetencyHub_{0}_unmanaged.zip'.format(VERSION.replace('.', '_')))
 BOM = '﻿'
-DESCRIPTION = 'ESG Competency Hub: the request queue flow that applies changes sent from the Competency Hub page.'
-CONN_DISPLAY = {'shared_sharepointonline': 'ESG Competency Hub SharePoint'}
+DESCRIPTION = 'ESG Competency Hub: the request queue flow that applies changes sent from the Competency Hub page, and the daily reminders.'
+CONN_DISPLAY = {'shared_sharepointonline': 'ESG Competency Hub SharePoint', 'shared_office365': 'ESG Competency Hub Outlook'}
 
 
 def esc(s):
@@ -56,7 +56,7 @@ def workflow_xml(f):
         '      <TriggerOnDelete>0</TriggerOnDelete>', '      <AsyncAutodelete>0</AsyncAutodelete>',
         '      <SyncWorkflowLogOnFailure>0</SyncWorkflowLogOnFailure>',
         '      <StateCode>{0}</StateCode>'.format(1 if on else 0), '      <StatusCode>{0}</StatusCode>'.format(2 if on else 1),
-        '      <RunAs>1</RunAs>', '      <IsTransacted>1</IsTransacted>', '      <IntroducedVersion>{0}</IntroducedVersion>'.format(INTRODUCED),
+        '      <RunAs>1</RunAs>', '      <IsTransacted>1</IsTransacted>', '      <IntroducedVersion>{0}</IntroducedVersion>'.format(f.get('introduced', INTRODUCED)),
         '      <IsCustomizable>1</IsCustomizable>', '      <BusinessProcessType>0</BusinessProcessType>',
         '      <IsCustomProcessingStepAllowedForOtherPublishers>1</IsCustomProcessingStepAllowedForOtherPublishers>',
         '      <ModernFlowType>0</ModernFlowType>', '      <PrimaryEntity>none</PrimaryEntity>',

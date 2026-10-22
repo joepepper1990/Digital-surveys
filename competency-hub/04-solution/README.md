@@ -1,16 +1,48 @@
 # ESG Competency Hub – Power Automate solution
 
-`ESGCompetencyHub_1_0_0_1_unmanaged.zip` is the solution to import into Power Automate (plan K7.3). It holds:
+`ESGCompetencyHub_1_1_0_0_unmanaged.zip` is the solution to import into Power Automate (plan K7.3, K8). It holds:
 
 | Part | Name |
 |---|---|
+| Flow | **ESG Competency Hub \| 1 Daily tasks** – every morning at 06:00 UK time; ships **Off** |
 | Flow | **ESG Competency Hub \| 2 Request queue** – ships **Off**; turn it on after import |
 | Connection reference | `esghub_sharedsharepointonline_hub` – ESG Competency Hub SharePoint |
+| Connection reference | `esghub_sharedoffice365_hub` – ESG Competency Hub Outlook (emails are sent from this connection's mailbox) |
 | Environment variable | `esghub_CompetencyHubSiteUrl` – ESG Competency Hub Site URL (no trailing slash) |
 | Publisher | ESG Competency Hub, prefix `esghub` (its own, so nothing clashes with the ESG 1-to-1 solution in the same environment) |
 
 `schema/schema.json` is the single description of the lists. Setup builds the site from it, and the flow tools check every
 column the flow uses against it.
+
+## Version 1.1.0.0: emails and reminders (plan K8)
+
+| Email | To | When |
+|---|---|---|
+| Action assigned to you (ASG) | The owner, unless they raised it | When the action is raised |
+| Deadline moved (EXT) | The owner, unless they moved it | On each extension |
+| Ready for your close-out check (RDY) | The raiser, unless they marked it done | An action needing a close-out check is marked done |
+| Action closed (CLS) | The owner and the raiser, except whoever closed it | An action is closed |
+| Reminder: due in N days (R7) | The owner | The first morning with 1–7 days left (`ReminderDaysBefore`) |
+| Due today (DUE) | The owner | The morning of the deadline |
+| N days late (OD) | The owner | Day 1 late, then every `OverdueReminderIntervalDays` |
+
+- **Notification Log is the ledger** (plan F.4.2). Each email has one row, keyed so it is never made twice
+  (`ASG|{request}|{person}`, `R7|{action}|{DueDay}|{person}`, `OD|{action}|{DueDay}|{n}|{person}` …). The row holds the
+  rendered email and a reference (`ESGN…`) that is also printed in the email.
+- **Request queue.** The rows are made before the change counts as applied; the emails are sent after the request is
+  Completed (`Send_emails`), so a mail problem never touches the change.
+- **Daily tasks.** One indexed query finds every open action due by the end of the reminder window, one more finds the
+  reminders already made, and only missing keys are queued, so a missed morning is caught up and a second run sends
+  nothing. An assignment or new deadline 0–7 days away that was **sent** marks that reminder Skipped.
+- **Retries.** A refused send (4xx) is Failed; anything unclear (time-out, 5xx) is Unknown. The daily run tries both
+  again, Unknown ones with "If you have already received this message, please ignore it", and gives up after 3 attempts
+  (Abandoned). Rows left Sending for 30 minutes by a run that stopped count as Unknown. The connector never retries on
+  its own. Searching Sent Items to settle an Unknown row (probe P-12) is not built yet.
+- **Escaping.** Every value a person typed is HTML-escaped; `validate.py` refuses an email body that shows one without
+  the escaping.
+- **Not yet:** reassignment, minutes, the weekly summary, the calendar digest, administrator alerts, and the
+  `NotifyRaiserOnExtension` / `NotifyOnClosure` settings (closure emails always go; the raiser is not told about
+  extensions).
 
 ## Version 1.0.0.1: fewer SharePoint calls (plan K7.10)
 

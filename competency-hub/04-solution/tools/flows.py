@@ -14,7 +14,8 @@ Nothing tenant-specific is in here: the site address is an environment variable 
 from hub_schema import BY_KEY
 
 SP_API = '/providers/Microsoft.PowerApps/apis/shared_sharepointonline'
-CONN = {'shared_sharepointonline': 'esghub_sharedsharepointonline_hub'}
+CONN = {'shared_sharepointonline': 'esghub_sharedsharepointonline_hub', 'shared_office365': 'esghub_sharedoffice365_hub'}
+OUTLOOK_API = '/providers/Microsoft.PowerApps/apis/shared_office365'
 ENV_SITE = 'ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)'
 ENV_VARS = [
     {'schema': 'esghub_CompetencyHubSiteUrl', 'param': ENV_SITE, 'display': 'ESG Competency Hub Site URL',
@@ -27,11 +28,9 @@ TOLERANT = ['Succeeded', 'Failed', 'TimedOut']
 SECURE = {'secureData': {'properties': ['inputs', 'outputs']}}
 
 # The lists the flow uses, by the key it uses in outputs('Ids'), and their web address (RootFolder name).
-LIST_KEYS = {'req': BY_KEY['requests']['title'], 'act': BY_KEY['actions']['title'], 'hist': BY_KEY['history']['title'],
-             'upd': BY_KEY['updates']['title'], 'people': BY_KEY['people']['title'], 'members': BY_KEY['members']['title'],
-             'comps': BY_KEY['competencies']['title']}
 LIST_URLS = {'req': 'requests', 'act': 'actions', 'hist': 'history', 'upd': 'updates', 'people': 'people', 'members': 'members',
-             'comps': 'competencies'}
+             'comps': 'competencies', 'notif': 'notifications', 'settings': 'settings'}
+LIST_KEYS = {k: BY_KEY[v]['title'] for k, v in LIST_URLS.items()}
 REQUEST_LIST = BY_KEY['requests']['title']
 MANAGEMENT = "createArray('Team Leader', 'Group Head')"
 OPEN = "createArray('Open', 'In Progress', 'Awaiting Input')"
@@ -190,6 +189,184 @@ def created_ok(call_step, check_name, message):
             (check_name, cond("@empty(body('Refused_" + call_step + "'))", None, seq((check_name + '_stop', fail_here(message)))))]
 
 
+# --------------------------------------------------------------------------------------------- emails (plan B.5, F.4.2)
+def site_and_ids():
+    """The site's address and every list's web address under it (Setup made them), so no call finds the lists."""
+    path = "uriPath(" + SITE + ")"
+    ids = {}
+    for key in LIST_KEYS:
+        ids[key] = "@{outputs('Site_path')}/Lists/" + BY_KEY[LIST_URLS[key]]['url']
+    for key in ('req', 'act', 'hist', 'upd', 'notif'):
+        ids[key + 'Root'] = ids[key]
+    return [('Site_path', compose("@if(endsWith(" + path + ", '/'), take(" + path + ", sub(length(" + path + "), 1)), " + path + ")")),
+            ('Site_url', compose("@if(endsWith(" + SITE + ", '/'), take(" + SITE + ", sub(length(" + SITE + "), 1)), " + SITE + ")")),
+            ('Ids', compose(ids))]
+
+
+def html_text(expr):
+    """Text for an email body: every value is escaped, so nothing a person typed can become markup."""
+    return ("replace(replace(replace(replace(replace(string(coalesce(" + expr + ", '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), "
+            "'\"', '&quot;'), " + q("'") + ", '&#39;')")
+
+
+def long_or_blank(iso_expr):
+    """'d MMMM yyyy', or '' for a missing date (both branches are always evaluated, so the date is never invalid)."""
+    blank = "empty(string(coalesce(" + iso_expr + ", '')))"
+    return ("if(" + blank + ", '', formatDateTime(concat(if(" + blank + ", '2000-01-01', string(" + iso_expr + ")), 'T00:00:00Z'), 'd MMMM yyyy'))")
+
+
+def days_until(iso_expr):
+    """Whole days from today (outputs('Today'), a UK date) to a UK date (plan D.0.1)."""
+    blank = "empty(string(coalesce(" + iso_expr + ", '')))"
+    return ("div(sub(ticks(concat(if(" + blank + ", outputs('Today'), string(" + iso_expr + ")), 'T00:00:00Z')), "
+            "ticks(concat(outputs('Today'), 'T00:00:00Z'))), " + str(DAY_TICKS) + ")")
+
+
+def notice(send, ntype, key, person, actor_name, action_id, title, area, due_iso, original_iso=None, previous_iso="''", ext_count='0', note="''"):
+    """One email to queue, as plain values; `person` is a People row read with Person/Name and Person/EMail."""
+    return {'send': '@and(' + send + ", equals(string(" + person + "?['Status']), 'Active'))", 'type': ntype, 'key': '@{' + key + '}',
+            'recipientId': '@{' + idstr(person + "?['SiteUserId']") + '}', 'login': '@{' + person + "?['Person']?['Name']}",
+            'email': "@{coalesce(" + person + "?['Person']?['EMail'], " + person + "?['Email'])}",
+            'actor': '@{' + actor_name + '}', 'actionId': '@{' + action_id + '}', 'title': '@{' + title + '}', 'area': '@{' + area + '}',
+            'dueIso': '@{' + due_iso + '}', 'originalIso': '@{' + (original_iso or due_iso) + '}', 'previousIso': '@{' + previous_iso + '}',
+            'extCount': '@int(' + ext_count + ')', 'note': '@{' + note + '}'}
+
+
+def outbox_create(sfx, items_expr):
+    """Plan F.4.2: one Notification Log row per email, keyed so it is never made twice. A row this run makes is born
+    'Sending' and goes on varOutbox, to be sent when the work is complete; a key that already has its row (made by an
+    earlier run) is left to the daily run."""
+    loop = 'Each_new_notice' + sfx
+    N = "items('" + loop + "')"
+    T = lambda f: N + "?['" + f + "']"
+    is_ = lambda t: "equals(" + T('type') + ", '" + t + "')"
+    days = days_until(T('dueIso'))
+    late = "sub(0, " + days + ")"
+    plural = lambda n, one, many: "if(equals(" + n + ", 1), " + q(one) + ", " + q(many) + ")"
+    ref = "concat('ACT-', substring(concat('0000', " + T('actionId') + "), sub(length(concat('0000', " + T('actionId') + ")), 5), 5))"
+    subject = ("@if(" + is_('ASG') + ", concat('Action assigned to you: ', " + T('title') + "), "
+               "if(" + is_('EXT') + ", concat('Deadline moved: ', " + T('title') + "), "
+               "if(" + is_('RDY') + ", concat('Ready for your close-out check: ', " + T('title') + "), "
+               "if(" + is_('CLS') + ", concat('Action closed: ', " + T('title') + "), "
+               "if(" + is_('R7') + ", concat('Reminder: ', " + T('title') + ", ' is due in ', string(" + days + "), " + plural(days, ' day', ' days') + "), "
+               "if(" + is_('DUE') + ", concat('Due today: ', " + T('title') + "), "
+               "concat(" + T('title') + ", ' is ', string(" + late + "), " + plural(late, ' day late', ' days late') + ")))))))")
+    actor = html_text(T('actor'))
+    intro = ("if(" + is_('ASG') + ", concat(" + actor + ", ' has given you an action in the ESG Competency Hub.'), "
+             "if(" + is_('EXT') + ", concat(" + actor + ", ' has moved the deadline of your action.'), "
+             "if(" + is_('RDY') + ", concat(" + actor + ", ' has marked this action as done. It is waiting for your close-out check.'), "
+             "if(" + is_('CLS') + ", concat(" + actor + ", ' has closed this action.'), "
+             "if(" + is_('R7') + ", concat('Your action is due in ', string(" + days + "), " + plural(days, ' day.', ' days.') + "), "
+             "if(" + is_('DUE') + ", 'Your action is due today.', "
+             "concat('Your action is ', string(" + late + "), " + plural(late, ' day late.', ' days late.') + ")))))))")
+    td = '<td style="padding:4px 16px 4px 0;color:#5b6774">'
+    tv = '<td style="padding:4px 0">'
+    deadline = ("@{" + long_or_blank(T('dueIso')) + "}@{if(and(greater(" + T('extCount') + ", 0), not(equals(" + T('originalIso') + ", " + T('dueIso') + "))), "
+                "concat(' (originally ', " + long_or_blank(T('originalIso')) + ", ')'), '')}")
+    was_due = ("@{if(" + is_('EXT') + ", concat(" + q('<tr>' + td + 'Was due</td>' + tv) + ", " + long_or_blank(T('previousIso')) + ", '</td></tr>'), '')}")
+    note_row = ("@{if(empty(" + T('note') + "), '', concat(" + q('<tr>' + td) + ", if(" + is_('EXT') + ", 'Reason', 'Note'), " + q('</td>' + tv) + ", "
+                + html_text(T('note')) + ", '</td></tr>'))}")
+    html = ('<div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;color:#16222c">'
+            '<p style="color:#13516b;font-size:18px;font-weight:600;margin:0 0 12px">ESG Competency Hub</p>'
+            '<p>@{' + intro + '}</p><table style="border-collapse:collapse;font-size:15px">'
+            '<tr>' + td + 'Action</td>' + tv + '@{' + ref + '} – @{' + html_text(T('title')) + '}</td></tr>'
+            '<tr>' + td + 'Area</td>' + tv + '@{' + html_text(T('area')) + '}</td></tr>'
+            '<tr>' + td + 'Deadline</td>' + tv + deadline + '</td></tr>' + was_due + note_row +
+            '</table><p style="margin:20px 0"><a href="@{outputs(\'Site_url\')}/SitePages/Hub.aspx?action=@{' + T('actionId') + '}" '
+            'style="background:#13516b;color:#ffffff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600">Open the action</a></p>'
+            '<p style="color:#5b6774;font-size:12px">This is an automated message from the ESG Competency Hub. '
+            'Reference @{outputs(\'Token' + sfx + '\')}.</p></div>')
+    mail = {'to': '@{' + T('email') + '}', 'subject': "@{outputs('Subject" + sfx + "')}", 'html': "@{outputs('Html" + sfx + "')}",
+            'type': '@{' + T('type') + '}', 'dueIso': '@{' + T('dueIso') + '}', 'actionId': '@{' + T('actionId') + '}',
+            'recipientId': '@{' + T('recipientId') + '}', 'login': '@{' + T('login') + '}'}
+    values, call = create_in_folder('notif', "@{outputs('Ids')?['notifRoot']}", 'Notice_values' + sfx, 'Notice_body' + sfx)
+    find = L('notif', "/items?$select=Id&$filter=NotificationKey eq '@{" + esc(T('key')) + "}'")
+    created = "and(equals(actions('Create_notice" + sfx + "')?['status'], 'Succeeded'), empty(body('Notice_refused" + sfx + "')))"
+    append = lambda name, id_expr: (name, {'type': 'AppendToArrayVariable', 'inputs': {'name': 'varOutbox', 'value': dict(mail, id=id_expr)}})
+    return [(loop, {'type': 'Foreach', 'foreach': '@' + items_expr, 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
+        ('Token' + sfx, compose("@concat('ESGN', toUpper(take(replace(guid(), '-', ''), 10)))")),
+        ('Subject' + sfx, compose(subject)),
+        ('Html' + sfx, compose(html)),
+        ('Render' + sfx, compose(mail)),
+        ('Notice_values' + sfx, form({
+            'Title': "@{take(outputs('Subject" + sfx + "'), 255)}", 'NotificationKey': '@{' + T('key') + '}', 'Token': "@{outputs('Token" + sfx + "')}",
+            'NotificationType': '@{' + T('type') + '}', 'Recipient': "@{concat('[{\"Key\":\"', " + T('login') + ", '\"}]')}",
+            'RecipientEmail': '@{' + T('email') + '}', 'RecordType': 'Action', 'RecordId': '@{' + T('actionId') + '}', 'State': 'Sending', 'Attempts': '1',
+            'SendingSince': "@{convertFromUtc(utcNow(), 'GMT Standard Time', 'dd/MM/yyyy HH:mm')}",
+            'RenderData': "@{string(outputs('Render" + sfx + "'))}", 'DueDay': '@{' + day_num(T('dueIso')) + '}'})),
+        ('Notice_body' + sfx, values),
+        ('Create_notice' + sfx, call),
+        ('Notice_refused' + sfx, after(query("@coalesce(body('Create_notice" + sfx + "')?['value'], createArray())", "@equals(item()?['HasException'], true)"),
+                                       {'Create_notice' + sfx: TOLERANT})),
+        # made now: it is sent when the work is complete. If not, the key may already have its row from an earlier
+        # run (the daily run follows that one up); anything else is a real failure.
+        ('Notice_made' + sfx, cond("@" + created, seq(
+            ('Notice_id' + sfx, query("@body('Create_notice" + sfx + "')?['value']", "@equals(item()?['FieldName'], 'Id')")),
+            ('Has_notice_id' + sfx, cond("@empty(body('Notice_id" + sfx + "'))", seq(
+                ('Get_notice' + sfx, http('GET', find)),
+                append('Queue_read' + sfx, "@first(body('Get_notice" + sfx + "')?['value'])?['Id']"),
+            ), seq(
+                append('Queue_new' + sfx, "@int(first(body('Notice_id" + sfx + "'))?['FieldValue'])"),
+            ))),
+        ), seq(
+            ('Find_notice' + sfx, http('GET', find)),
+            ('Notice_exists' + sfx, cond("@empty(body('Find_notice" + sfx + "')?['value'])",
+                                         seq(('Notice_failed' + sfx, fail_here('An email could not be queued. See Create_notice' + sfx + '.'))))),
+        ))),
+    )})]
+
+
+def send_email(to, subject, body):
+    return {'type': 'OpenApiConnection',
+            'inputs': {'host': {'connectionName': 'shared_office365', 'operationId': 'SendEmailV2', 'apiId': OUTLOOK_API},
+                       'parameters': {'emailMessage/To': to, 'emailMessage/Subject': subject, 'emailMessage/Body': body,
+                                      'emailMessage/Importance': 'Normal'},
+                       'authentication': "@parameters('$authentication')",
+                       # never resent by the connector itself: an unclear send is recorded as Unknown instead
+                       'retryPolicy': {'type': 'none'}},
+            'runtimeConfiguration': SECURE}
+
+
+def send_outbox(sfx):
+    """Sends every email on varOutbox and records the outcome on its row (plan F.4.2): Sent; Failed for a definite
+    refusal; Unknown for anything unclear. The daily run tries Failed and Unknown rows again."""
+    loop = 'Each_email' + sfx
+    M = "items('" + loop + "')"
+    T = lambda f: M + "?['" + f + "']"
+    item = L('notif', "/items(@{" + T('id') + "})")
+    days = days_until(T('dueIso'))
+    cover_key = ("concat(if(equals(" + days + ", 0), 'DUE', 'R7'), '|', " + T('actionId') + ", '|', string(" + day_num(T('dueIso')) + "), '|', "
+                 + T('recipientId') + ")")
+    cover_values, cover_call = create_in_folder('notif', "@{outputs('Ids')?['notifRoot']}", 'Cover_values' + sfx, 'Cover_body' + sfx)
+    return (loop, {'type': 'Foreach', 'foreach': "@variables('varOutbox')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
+        ('Send_mail' + sfx, send_email('@{' + T('to') + '}', '@{' + T('subject') + '}', '@{' + T('html') + '}')),
+        ('Mail_sent' + sfx, after(cond("@equals(actions('Send_mail" + sfx + "')?['status'], 'Succeeded')", seq(
+            ('Sent_body' + sfx, compose({'State': 'Sent', 'SentAt': '@{utcNow()}', 'LastError': ''})),
+            ('Mark_sent' + sfx, merge(item, 'Sent_body' + sfx)),
+            # an assignment or new deadline 0-7 days away has told the owner already: that reminder is not needed
+            ('Covers' + sfx, cond("@and(contains(createArray('ASG', 'EXT'), " + T('type') + "), greaterOrEquals(" + days + ", 0), lessOrEquals(" + days + ", 7))", seq(
+                ('Cover_values' + sfx, form({'Title': 'Covered by an earlier email', 'NotificationKey': '@{' + cover_key + '}',
+                                             'NotificationType': "@{if(equals(" + days + ", 0), 'DUE', 'R7')}",
+                                             'Recipient': "@{concat('[{\"Key\":\"', " + T('login') + ", '\"}]')}", 'RecipientEmail': '@{' + T('to') + '}',
+                                             'RecordType': 'Action', 'RecordId': '@{' + T('actionId') + '}', 'State': 'Skipped',
+                                             'SkipReason': "@{concat('Covered by the ', " + T('type') + ", ' email')}", 'RenderData': '{}',
+                                             'DueDay': '@{' + day_num(T('dueIso')) + '}'})),
+                ('Cover_body' + sfx, cover_values),
+                ('Cover' + sfx, cover_call),
+                # a cover row that already exists is fine
+                ('Covered' + sfx, after(compose('done'), {'Cover' + sfx: TOLERANT})),
+            ))),
+        ), seq(
+            ('Send_code' + sfx, compose("@coalesce(outputs('Send_mail" + sfx + "')?['statusCode'], 0)")),
+            ('Unsent_body' + sfx, compose({
+                'State': "@{if(contains(createArray(400, 401, 403, 404, 413, 429), outputs('Send_code" + sfx + "')), 'Failed', 'Unknown')}",
+                'LastError': "@{concat('The email was not confirmed as sent (', string(outputs('Send_code" + sfx + "')), '). Run ', workflow()?['run']?['name'], '.')}",
+                'NextAttemptAfter': "@{addMinutes(utcNow(), 15)}"})),
+            ('Mark_unsent' + sfx, merge(item, 'Unsent_body' + sfx)),
+        )), {'Send_mail' + sfx: TOLERANT})),
+    )})
+
+
 # --------------------------------------------------------------------------------------------- the flow
 def flow_request_queue():
     """Applies a queued request (plan F.1, cut to RaiseAction, ExtendDeadline and MarkComplete for app 0.2.0).
@@ -252,7 +429,7 @@ def flow_request_queue():
             ))),
         ]
 
-    def commit(sfx, action_id_expr, area_key_expr, area_id_expr, event_fields, result_expr, ensure_hist=True):
+    def commit(sfx, action_id_expr, area_key_expr, area_id_expr, event_fields, result_expr, ensure_hist=True, notices=()):
         """Plan F.1.2 step 9: event row, transaction Applied, lock released, request Completed."""
         ev_key = "concat(" + KEY + ", '|1')"
         ev_key_uri = "concat(" + KEY + ", '%7C1')"
@@ -290,6 +467,11 @@ def flow_request_queue():
             ))),
             ('Event_details' + sfx, compose(details)),
             ('Save_event' + sfx, merge(L('hist', "/items(@{variables('varEventId')})"), 'Event_details' + sfx)),
+            # plan F.1.2 step 9.2: the emails go into the outbox before the change counts as applied; they are sent
+            # once the request is Completed (Send_emails)
+            ('Notices' + sfx, compose(list(notices))),
+            ('To_notify' + sfx, query("@outputs('Notices" + sfx + "')", "@equals(item()?['send'], true)")),
+            *outbox_create(sfx, "body('To_notify" + sfx + "')"),
             *tx_update('applied' + sfx, {'State': 'Applied', 'StepsDone': 'VALUES;EVENT', 'ProcessedAt': '@{utcNow()}'}),
             # this run took the lock, and only these one-at-a-time runs write Actions: release it directly.
             # A resumed run reads the action first and releases only its own lock.
@@ -333,13 +515,13 @@ def flow_request_queue():
                  "if(not(contains(createArray('Low', 'Normal', 'High'), " + PRIO + ")), 'Choose a priority.', '')))))))))))")
     action_path = "@{outputs('Ids')?['actRoot']}/@{" + AREA_R + "?['CompetencyKey']}"
     act_values, act_call = create_in_folder('act', action_path, 'Action_values_R', 'Action_body_R')
-    claims = lambda step: "@{concat('[{\"Key\":\"', first(body('" + step + "'))?['LoginName'], '\"}]')}"
+    claims = lambda person: "@{concat('[{\"Key\":\"', " + person + "?['Person']?['Name'], '\"}]')}"
     OWNER_ID_R = idstr(OWNER_R + "?['SiteUserId']")
     ACT_ID_R = "string(variables('varActionId'))"
     raise_case = seq(
-        ('Get_area_R', http('GET', L('comps', "/items?$select=Id,CompetencyKey,Status&$filter=CompetencyKey eq '@{" + esc(P + "?['areaKey']") + "}' and Status eq 'Active'"))),
+        ('Get_area_R', http('GET', L('comps', "/items?$select=Id,Title,CompetencyKey,Status&$filter=CompetencyKey eq '@{" + esc(P + "?['areaKey']") + "}' and Status eq 'Active'"))),
         ('My_member_R', query("@body('Get_my_memberships')?['value']", "@equals(" + idstr("item()?['CompetencyId']") + ", " + idstr(AREA_R + "?['Id']") + ")")),
-        ('Get_owner_R', http('GET', L('people', "/items?$select=Id,Title,SiteUserId,Role,Status&$filter=SiteUserId eq @{" + idq(P + "?['ownerId']") + "}"))),
+        ('Get_owner_R', http('GET', L('people', "/items?$select=Id,Title,SiteUserId,Role,Status,Email,Person/Name,Person/EMail&$expand=Person&$filter=SiteUserId eq @{" + idq(P + "?['ownerId']") + "}"))),
         ('Owner_member_R', http('GET', L('members', "/items?$select=Id&$filter=PersonId eq @{" + idq(P + "?['ownerId']") + "} and CompetencyId eq @{"
                                          + idq(AREA_R + "?['Id']") + "} and Status eq 'Active'"))),
         ('Check_existing_R', cond("@not(variables('varFresh'))", seq(
@@ -352,13 +534,10 @@ def flow_request_queue():
         ('Verdict_R', compose(verdict_r)),
         ('Allowed_R', cond("@empty(outputs('Verdict_R'))", seq(
             ('Is_new_R', cond("@equals(variables('varExistingId'), 0)", seq(
-                # both people's sign-in names in one call; the owner is the People row the checks found
-                ('Get_logins_R', http('GET', "_api/web/siteusers?$select=Id,LoginName&$filter=Id eq @{" + OWNER_ID_R + "} or Id eq @{" + SENDER + "}")),
-                ('Get_owner_login_R', query("@body('Get_logins_R')?['value']", "@equals(string(item()?['Id']), " + OWNER_ID_R + ")")),
-                ('Get_my_login_R', query("@body('Get_logins_R')?['value']", "@equals(string(item()?['Id']), " + SENDER + ")")),
                 ('Action_values_R', form({
                     'Title': '@{' + TITLE + '}', 'Description': '@{' + DESC + '}', 'Competency': '@{' + idstr(AREA_R + "?['Id']") + '}',
-                    'AssignedTo': claims('Get_owner_login_R'), 'RaisedBy': claims('Get_my_login_R'),
+                    # sign-in names come with the People rows the checks read (Person/Name)
+                    'AssignedTo': claims(OWNER_R), 'RaisedBy': claims(ME),
                     'DateRaised': "@{convertFromUtc(" + EVENT_TIME + ", 'GMT Standard Time', 'dd/MM/yyyy HH:mm')}",
                     'OriginalDueDate': '@{' + uk_form_date(DUE) + '}', 'CurrentDueDate': '@{' + uk_form_date(DUE) + '}',
                     'DueDay': '@{' + day_num(DUE) + '}', 'Status': 'Open', 'IsOpen': '1', 'Priority': '@{' + PRIO + '}',
@@ -383,12 +562,14 @@ def flow_request_queue():
             *commit('_R', ACT_ID_R, AREA_R + "?['CompetencyKey']", idstr(AREA_R + "?['Id']"),
                     {'title': "concat('Action raised: ', " + TITLE + ")", 'type': 'Action Raised',
                      'json': {'NewDueDate': '@{' + uk_midnight(DUE) + '}'}},
-                    "concat('ACT-', substring(concat('0000', " + ACT_ID_R + "), sub(length(concat('0000', " + ACT_ID_R + ")), 5), 5), ' raised.')"),
+                    "concat('ACT-', substring(concat('0000', " + ACT_ID_R + "), sub(length(concat('0000', " + ACT_ID_R + ")), 5), 5), ' raised.')",
+                    notices=[notice("not(equals(" + OWNER_ID_R + ", " + SENDER + "))", 'ASG', "concat('ASG|', " + KEY + ", '|', " + OWNER_ID_R + ")",
+                                    OWNER_R, "string(" + ME + "?['Title'])", ACT_ID_R, TITLE, "string(" + AREA_R + "?['Title'])", DUE)]),
         ), reject('_R', "outputs('Verdict_R')"))),
     )
 
     # ---------------------------------------------------------------- shared by ExtendDeadline and MarkComplete
-    def change_case(sfx, verdict_tail, plan_fields, values_fields, event_fields, result_expr):
+    def change_case(sfx, verdict_tail, plan_fields, values_fields, event_fields, result_expr, notices):
         A = "body('Get_action" + sfx + "')"
         AREA_KEY = A + "?['Competency']?['CompetencyKey']"
         PENDING = "string(coalesce(" + A + "?['PendingRequestKey'], ''))"
@@ -401,12 +582,16 @@ def flow_request_queue():
                   "equals(" + MEMBER + "?['CanManageMeetings'], true))))")
         ctx = {'A': A, 'OWNER': OWNER, 'ALLOWED': "or(" + OWNER + ", " + RAISER + ", " + MANAGE + ")",
                'OPEN': "contains(" + OPEN + ", string(" + A + "?['Status']))", 'DUE': due_iso(A + "?['DueDay']"),
-               'PLAN': "json(string(coalesce(variables('varTxPlan'), '{}')))"}
+               'PLAN': "json(string(coalesce(variables('varTxPlan'), '{}')))",
+               'OWNER_P': "first(body('Owner_p" + sfx + "'))", 'RAISER_P': "first(body('Raiser_p" + sfx + "'))",
+               'OWNER_ID': idstr(A + "?['AssignedToId']"), 'RAISER_ID': idstr(A + "?['RaisedById']"),
+               'AREA_NAME': "string(" + A + "?['Competency']?['Title'])", 'ACT_ID': idstr(A + "?['Id']"),
+               'ORIGINAL': "if(empty(string(coalesce(" + A + "?['OriginalDueDate'], ''))), '', convertFromUtc(string(coalesce(" + A + "?['OriginalDueDate'], '2000-01-01T00:00:00Z')), 'GMT Standard Time', 'yyyy-MM-dd'))"}
         verdict = ("@if(" + ALREADY + ", '', "
                    "if(" + UNCOMMITTED + ", 'That action could not be found.', " + verdict_tail(ctx) + "))")
         action_item = L('act', "/items(@{" + idstr(TX + "?['RecordId']") + "})")
         sel = ('?$select=Id,Title,CompetencyId,AssignedToId,RaisedById,Status,DueDay,OriginalDueDate,ExtensionCount,RequiresCloseOut,'
-               'Revision,PendingRequestKey,LastRequestKey,CreatedRequestKey,Competency/CompetencyKey&$expand=Competency')
+               'Revision,PendingRequestKey,LastRequestKey,CreatedRequestKey,Competency/CompetencyKey,Competency/Title&$expand=Competency')
         return seq(
             ('Get_action' + sfx, http('GET', action_item + sel, meta=True)),
             ('Action_read' + sfx, after(cond("@equals(actions('Get_action" + sfx + "')?['status'], 'Succeeded')", None, seq(
@@ -433,9 +618,13 @@ def flow_request_queue():
                         {'Lock_and_values' + sfx: TOLERANT})),
                     ('Set_locked_here' + sfx, set_var('varLockedHere', True)),
                 ))),
+                # who may be emailed: the owner and the raiser (plan B.5)
+                ('Get_people' + sfx, http('GET', L('people', "/items?$select=Id,Title,SiteUserId,Role,Status,Email,Person/Name,Person/EMail&$expand=Person&$top=5000"))),
+                ('Owner_p' + sfx, query("@body('Get_people" + sfx + "')?['value']", "@equals(" + idstr("item()?['SiteUserId']") + ", " + ctx['OWNER_ID'] + ")")),
+                ('Raiser_p' + sfx, query("@body('Get_people" + sfx + "')?['value']", "@equals(" + idstr("item()?['SiteUserId']") + ", " + ctx['RAISER_ID'] + ")")),
                 # a resumed run already has the stored plan from the transaction row (Set_tx_plan)
                 *commit(sfx, idstr(A + "?['Id']"), AREA_KEY, idstr(A + "?['CompetencyId']"),
-                        event_fields(ctx), result_expr(ctx), ensure_hist=False),
+                        event_fields(ctx), result_expr(ctx), ensure_hist=False, notices=notices(ctx)),
             ), reject(sfx, "outputs('Verdict" + sfx + "')"))),
         )
 
@@ -475,11 +664,19 @@ def flow_request_queue():
                             'NewDueDate': '@{' + uk_midnight(NEW) + '}', 'WasOverdue': '@greater(' + DAYS_LATE + ', 0)',
                             'DaysOverdue': '@max(' + DAYS_LATE + ', 0)',
                             'IsOnBehalf': "@not(equals(json(string(coalesce(variables('varTxPlan'), '{}')))?['owner'], true))"}},
-        lambda c: "concat('Deadline moved to ', " + long_date(NEW) + ", '.')")
+        lambda c: "concat('Deadline moved to ', " + long_date(NEW) + ", '.')",
+        # the owner hears about a deadline someone else moved
+        lambda c: [notice("not(" + c['OWNER'] + ")", 'EXT', "concat('EXT|', " + KEY + ", '|', " + c['OWNER_ID'] + ")", c['OWNER_P'],
+                          "string(" + ME + "?['Title'])", c['ACT_ID'], "string(" + c['A'] + "?['Title'])", c['AREA_NAME'], NEW,
+                          original_iso="if(empty(" + c['ORIGINAL'] + "), " + NEW + ", " + c['ORIGINAL'] + ")", previous_iso=PREV_DUE,
+                          ext_count=EXT_N, note=REASON)])
 
     def complete_tail(c):
         return (common_checks(c, 'Only the owner or the people who manage this action can mark it as done.', 'This action is already done.') +
                 "if(greater(length(" + NOTE + "), 1000), 'Keep the note to 1,000 characters or fewer.', '')))))")
+
+    def complete_common(c):
+        return ["string(" + ME + "?['Title'])", c['ACT_ID'], "string(" + c['A'] + "?['Title'])", c['AREA_NAME'], c['DUE']]
 
     CLOSES = "not(equals(" + "json(string(coalesce(variables('varTxPlan'), '{}')))?['closeOut'], true))"
     complete_case = change_case(
@@ -492,15 +689,16 @@ def flow_request_queue():
                    'CloseOutcome': "@if(equals(" + c['A'] + "?['RequiresCloseOut'], true), null, 'Completed')"},
         lambda c: {'title': "if(" + CLOSES + ", 'Action closed', 'Action marked as done')", 'type': '@{if(' + CLOSES + ", 'Closed', 'Completed')}",
                    'form': {'Note': '@{' + NOTE + '}'}},
-        lambda c: "if(" + CLOSES + ", 'Action closed.', 'Marked as done; waiting for a close-out check.')")
+        lambda c: "if(" + CLOSES + ", 'Action closed.', 'Marked as done; waiting for a close-out check.')",
+        # the raiser is asked for the close-out check; a closed action is reported to its owner and raiser
+        lambda c: [notice("and(not(" + CLOSES + "), not(equals(" + c['RAISER_ID'] + ", " + SENDER + ")))", 'RDY',
+                          "concat('RDY|', " + KEY + ", '|', " + c['RAISER_ID'] + ")", c['RAISER_P'], *complete_common(c), note=NOTE),
+                   notice("and(" + CLOSES + ", not(equals(" + c['OWNER_ID'] + ", " + SENDER + ")))", 'CLS',
+                          "concat('CLS|', " + KEY + ", '|', " + c['OWNER_ID'] + ")", c['OWNER_P'], *complete_common(c), note=NOTE),
+                   notice("and(" + CLOSES + ", not(equals(" + c['RAISER_ID'] + ", " + SENDER + ")), not(equals(" + c['RAISER_ID'] + ", " + c['OWNER_ID'] + ")))", 'CLS',
+                          "concat('CLS|', " + KEY + ", '|', " + c['RAISER_ID'] + ")", c['RAISER_P'], *complete_common(c), note=NOTE)])
 
     # ---------------------------------------------------------------- common part
-    ids = {}
-    for key in LIST_KEYS:
-        ids[key] = "@{outputs('Site_path')}/Lists/" + BY_KEY[LIST_URLS[key]]['url']
-    for key in ('req', 'act', 'hist', 'upd'):
-        ids[key + 'Root'] = ids[key]
-    SITE_PATH = "uriPath(" + SITE + ")"
     IN_OWN = ("and(equals(string(" + R + "?['FileDirRef']), concat(outputs('Ids')?['reqRoot'], '/', outputs('Folder_name'))), "
               "startsWith(outputs('Folder_name'), 'u'))")
     FOLDER = "outputs('Folder_item')"
@@ -514,8 +712,7 @@ def flow_request_queue():
                         "&$filter=RequestItemId eq @{" + TB + "?['ID']} and RowKind eq 'Transaction'")
     try_actions = seq(
         # the lists by their web addresses under the site (Setup made them), so no call is needed to find them
-        ('Site_path', compose("@if(endsWith(" + SITE_PATH + ", '/'), take(" + SITE_PATH + ", sub(length(" + SITE_PATH + "), 1)), " + SITE_PATH + ")")),
-        ('Ids', compose(ids)),
+        *site_and_ids(),
         ('Get_flow_account', http('GET', '_api/web/currentuser?$select=Id')),
         ('Get_request', http('GET', req_item + '?$select=Id,RequestKey,RequestType,TargetId,ExpectedRevision,Payload,Status,Created,AuthorId,FileDirRef,FSObjType',
                              meta=True)),
@@ -534,7 +731,7 @@ def flow_request_queue():
         ('Find_folder', after(http('GET', "_api/web/GetFolderByServerRelativePath(decodedurl='@{outputs('Ids')?['reqRoot']}/@{" + esc("outputs('Folder_name')") + "}')/ListItemAllFields?$select=Id,AuthorId,FileSystemObjectType"),
                               {'Sender_id': OK})),
         ('Folder_item', after(compose("@if(equals(actions('Find_folder')?['status'], 'Succeeded'), body('Find_folder'), null)"), {'Find_folder': TOLERANT})),
-        ('Get_requester', http('GET', L('people', "/items?$select=Id,Title,SiteUserId,Role,Status&$filter=SiteUserId eq @{" + esc(SENDER) + "}"))),
+        ('Get_requester', http('GET', L('people', "/items?$select=Id,Title,SiteUserId,Role,Status,Email,Person/Name,Person/EMail&$expand=Person&$filter=SiteUserId eq @{" + esc(SENDER) + "}"))),
         ('Requester', compose("@first(body('Get_requester')?['value'])")),
         # the requester comes from the folder; a request anywhere else is refused without a transaction (plan F.1.2 step 1)
         ('Trusted', cond(TRUSTED, None, seq(
@@ -614,8 +811,12 @@ def flow_request_queue():
                   ('Initialize_varExistingId', init_var('varExistingId', 'integer', 0)),
                   ('Initialize_varFolderExists', init_var('varFolderExists', 'boolean', False)),
                   ('Initialize_varEventId', init_var('varEventId', 'integer', 0)),
-                  ('Initialize_varLockedHere', init_var('varLockedHere', 'boolean', False)))
-    actions['Try'] = after(scope(try_actions), {'Initialize_varLockedHere': OK})
+                  ('Initialize_varLockedHere', init_var('varLockedHere', 'boolean', False)),
+                  ('Initialize_varOutbox', init_var('varOutbox', 'array', [])))
+    actions['Try'] = after(scope(try_actions), {'Initialize_varOutbox': OK})
+    # emails for a change that is complete: a failure here never touches the request, and the daily run retries
+    email_loop, email_act = send_outbox('')
+    actions['Send_emails'] = after(scope({email_loop: email_act}), {'Try': OK})
     actions['Catch'] = catch
     triggers = {'When_a_request_is_submitted': {
         'type': 'OpenApiConnection',
@@ -628,6 +829,122 @@ def flow_request_queue():
                    'parameters': {'dataset': '@' + SITE, 'table': REQUEST_LIST},
                    'authentication': "@parameters('$authentication')"}}}
     return definition(triggers, actions)
+
+# --------------------------------------------------------------------------------------------- daily tasks
+def flow_daily_tasks():
+    """Plan F.4.1, cut to the reminders: every morning at 06:00 UK time it queues the 7-day, due-today and late
+    reminders that have no row yet (so a missed run catches up and nothing is sent twice), tries again the emails
+    that failed or whose outcome was unclear, and records LastDailyRun."""
+    TODAY = "outputs('Today')"
+    PEOPLE = "body('Get_people')?['value']"
+    C = "items('Each_candidate')"
+    setting = lambda name, default: ("@max(0, int(if(empty(string(coalesce(first(body('" + name + "_row'))?['Value'], ''))), " + q(default) + ", "
+                                     "string(first(body('" + name + "_row'))?['Value']))))")
+    left = "outputs('Left_c')"
+    kind = "outputs('Kind_c')"
+    uncommitted = "and(not(empty(string(coalesce(item()?['PendingRequestKey'], '')))), equals(string(item()?['CreatedRequestKey']), concat('F|', string(item()?['PendingRequestKey']))))"
+    reminder = notice("true", "@{" + kind + "}", "outputs('Key_c')", "first(body('Owner_c'))", "''", idstr(C + "?['Id']"),
+                      "string(" + C + "?['Title'])", "string(" + C + "?['Competency']?['Title'])", "outputs('Due_iso_c')",
+                      original_iso="if(empty(string(coalesce(" + C + "?['OriginalDueDate'], ''))), outputs('Due_iso_c'), convertFromUtc(string(coalesce("
+                                   + C + "?['OriginalDueDate'], '2000-01-01T00:00:00Z')), 'GMT Standard Time', 'yyyy-MM-dd'))",
+                      ext_count="int(" + idq(C + "?['ExtensionCount']") + ")")
+    # retries (plan F.4.2): Failed or Unknown rows whose wait is over, and rows left 'Sending' by a run that stopped
+    RI = "items('Each_retry')"
+    RD = "outputs('Render_r')"
+    wanted_r = ("@and(not(empty(body('Person_r'))), equals(actions('Get_action_r')?['status'], 'Succeeded'), equals(body('Get_action_r')?['IsOpen'], true), "
+                "or(not(contains(createArray('R7', 'DUE', 'OD'), string(" + RI + "?['NotificationType']))), "
+                "and(equals(" + idstr("body('Get_action_r')?['DueDay']") + ", " + idstr(RI + "?['DueDay']") + "), "
+                "equals(" + idstr("body('Get_action_r')?['AssignedToId']") + ", string(" + RD + "?['recipientId'])))))")
+    again = "<p style=\"color:#5b6774\"><i>If you have already received this message, please ignore it.</i></p>"
+    retry_mail = {'id': "@" + RI + "?['Id']", 'to': "@{" + RD + "?['to']}", 'subject': "@{" + RD + "?['subject']}",
+                  'html': "@{if(contains(createArray('Unknown', 'Sending'), string(" + RI + "?['State'])), concat(" + q(again) + ", string(" + RD + "?['html'])), string(" + RD + "?['html']))}",
+                  'type': "@{" + RD + "?['type']}", 'dueIso': "@{" + RD + "?['dueIso']}", 'actionId': "@{" + RD + "?['actionId']}",
+                  'recipientId': "@{" + RD + "?['recipientId']}", 'login': "@{" + RD + "?['login']}"}
+    row_item = L('notif', "/items(@{" + RI + "?['Id']})")
+    states = lambda st: ('Get_' + st.lower(), http('GET', L('notif', "/items?$select=Id,NotificationKey,NotificationType,State,Attempts,DueDay,NextAttemptAfter,"
+                                                              "SendingSince,RenderData&$filter=State eq '" + st + "'&$top=5000"), meta=True))
+    waited = ("@or(and(not(equals(item()?['State'], 'Sending')), lessOrEquals(ticks(string(coalesce(item()?['NextAttemptAfter'], '2000-01-01T00:00:00Z'))), ticks(utcNow()))), "
+              "and(equals(item()?['State'], 'Sending'), lessOrEquals(ticks(string(coalesce(item()?['SendingSince'], '2000-01-01T00:00:00Z'))), ticks(addMinutes(utcNow(), -30)))))")
+    full = lambda step: (step + '_complete', cond("@empty(string(coalesce(body('" + step + "')?['odata.nextLink'], '')))", None,
+                                                  seq((step + '_too_many', fail_here('More than 5,000 rows: see ' + step + '.')))))
+    try_actions = seq(
+        *site_and_ids(),
+        ('Today', compose("@convertFromUtc(utcNow(), 'GMT Standard Time', 'yyyy-MM-dd')")),
+        ('Get_settings', http('GET', L('settings', "/items?$select=Id,Title,Value&$top=500"))),
+        ('Interval_row', query("@body('Get_settings')?['value']", "@equals(item()?['Title'], 'OverdueReminderIntervalDays')")),
+        ('Before_row', query("@body('Get_settings')?['value']", "@equals(item()?['Title'], 'ReminderDaysBefore')")),
+        ('Run_row', query("@body('Get_settings')?['value']", "@equals(item()?['Title'], 'LastDailyRun')")),
+        ('Interval', compose(setting('Interval', '7').replace('@max(0,', '@max(1,'))),
+        ('Days_before', compose(setting('Before', '7'))),
+        ('Window_end', compose("@addDays(concat(" + TODAY + ", 'T00:00:00Z'), outputs('Days_before'), 'yyyy-MM-dd')")),
+        ('Get_people', http('GET', L('people', "/items?$select=Id,Title,SiteUserId,Status,Email,Person/Name,Person/EMail&$expand=Person&$top=5000"))),
+        # one indexed query: every open action due by the end of the reminder window, late ones included (plan F.4.1)
+        ('Get_candidates', http('GET', L('act', "/items?$select=Id,Title,AssignedToId,DueDay,OriginalDueDate,ExtensionCount,Status,PendingRequestKey,"
+                                                "CreatedRequestKey,Competency/Title&$expand=Competency&$filter=IsOpen eq 1 and DueDay le @{"
+                                                + day_num("outputs('Window_end')") + "}&$top=5000"))),
+        full('Get_candidates'),
+        # waiting for a close-out check is not the owner's to do; an action still being created is not there yet
+        ('Live', query("@body('Get_candidates')?['value']", "@and(not(equals(item()?['Status'], 'Completed')), not(" + uncommitted + "))")),
+        ('Due_days', {'type': 'Select', 'inputs': {'from': "@body('Live')", 'select': "@int(" + idq("item()?['DueDay']") + ")"}}),
+        ('Earliest', compose("@min(union(body('Due_days'), createArray(99991231)))")),
+        # the reminders already made for these deadlines, in one indexed query
+        ('Get_ledger', http('GET', L('notif', "/items?$select=NotificationKey&$filter=DueDay ge @{outputs('Earliest')}&$top=5000"))),
+        full('Get_ledger'),
+        ('Known_keys', {'type': 'Select', 'inputs': {'from': "@body('Get_ledger')?['value']", 'select': "@item()?['NotificationKey']"}}),
+        ('Each_candidate', {'type': 'Foreach', 'foreach': "@body('Live')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
+            ('Due_iso_c', compose('@' + due_iso(C + "?['DueDay']"))),
+            ('Left_c', compose('@' + days_until("outputs('Due_iso_c')"))),
+            ('Kind_c', compose("@if(greaterOrEquals(" + left + ", 1), 'R7', if(equals(" + left + ", 0), 'DUE', 'OD'))")),
+            # late reminders: day 1, then every interval; the n-th one has its own key, so a missed day is caught up
+            ('Round_c', compose("@if(less(" + left + ", 0), div(sub(sub(0, " + left + "), 1), outputs('Interval')), 0)")),
+            ('Key_c', compose("@concat(" + kind + ", '|', " + idstr(C + "?['Id']") + ", '|', " + idstr(C + "?['DueDay']") + ", "
+                              "if(equals(" + kind + ", 'OD'), concat('|', string(outputs('Round_c'))), ''), '|', " + idstr(C + "?['AssignedToId']") + ")")),
+            ('Owner_c', query('@' + PEOPLE, "@equals(" + idstr("item()?['SiteUserId']") + ", " + idstr(C + "?['AssignedToId']") + ")")),
+            ('New_c', cond("@not(contains(body('Known_keys'), outputs('Key_c')))", seq(
+                ('Add_reminder', {'type': 'AppendToArrayVariable', 'inputs': {'name': 'varNotices', 'value': reminder}}),
+            ))),
+        )}),
+        ('To_remind', query("@variables('varNotices')", "@equals(item()?['send'], true)")),
+        *outbox_create('_D', "body('To_remind')"),
+        states('Failed'), states('Unknown'), states('Sending'),
+        ('Retry_due', query("@union(body('Get_failed')?['value'], body('Get_unknown')?['value'], body('Get_sending')?['value'])", waited)),
+        ('Each_retry', {'type': 'Foreach', 'foreach': "@body('Retry_due')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
+            ('Render_r', compose("@json(string(coalesce(" + RI + "?['RenderData'], '{}')))")),
+            ('Give_up_r', cond("@greaterOrEquals(int(" + idq(RI + "?['Attempts']") + "), 3)", seq(
+                ('Abandon_body', compose({'State': 'Abandoned', 'LastError': 'Not sent after 3 attempts.'})),
+                ('Abandon', merge(row_item, 'Abandon_body', if_match="@{" + RI + "?['odata.etag']}")),
+            ), seq(
+                ('Person_r', query('@' + PEOPLE, "@and(equals(" + idstr("item()?['SiteUserId']") + ", string(" + RD + "?['recipientId'])), equals(item()?['Status'], 'Active'))")),
+                ('Get_action_r', http('GET', L('act', "/items(@{" + idq(RD + "?['actionId']") + "})?$select=Id,IsOpen,DueDay,AssignedToId"))),
+                ('Still_wanted_r', after(cond(wanted_r, seq(
+                    ('Claim_body_r', compose({'State': 'Sending', 'Attempts': "@add(int(" + idq(RI + "?['Attempts']") + "), 1)", 'SendingSince': '@{utcNow()}'})),
+                    ('Claim_r', merge(row_item, 'Claim_body_r', if_match="@{" + RI + "?['odata.etag']}")),
+                    ('Requeue_r', {'type': 'AppendToArrayVariable', 'inputs': {'name': 'varOutbox', 'value': retry_mail}}),
+                ), seq(
+                    ('Skip_body_r', compose({'State': 'Skipped', 'SkipReason': 'No longer needed: the action or its owner changed.'})),
+                    ('Skip_r', merge(row_item, 'Skip_body_r', if_match="@{" + RI + "?['odata.etag']}")),
+                )), {'Get_action_r': TOLERANT})),
+            ))),
+        )}),
+        ('Ran_body', compose({'Value': '@{utcNow()}'})),
+        ('Record_run', cond("@empty(body('Run_row'))", None, seq(
+            ('Save_run', merge(L('settings', "/items(@{first(body('Run_row'))?['Id']})"), 'Ran_body')),
+        ))),
+    )
+    actions = seq(('Initialize_varOutbox', init_var('varOutbox', 'array', [])),
+                  ('Initialize_varNotices', init_var('varNotices', 'array', [])))
+    actions['Try'] = after(scope(try_actions), {'Initialize_varNotices': OK})
+    email_loop, email_act = send_outbox('')
+    actions['Send_emails'] = after(scope({email_loop: email_act}), {'Try': OK})
+    actions['Catch'] = after(scope(seq(('Terminate_failed', terminate('Failed', 'The daily tasks failed. See the failed action in the run history.')))),
+                             {'Try': FAILED})
+    triggers = {'Every_morning': {
+        'type': 'Recurrence',
+        'recurrence': {'frequency': 'Day', 'interval': 1, 'startTime': '2026-10-01T06:00:00', 'timeZone': 'GMT Standard Time',
+                       'schedule': {'hours': [6], 'minutes': [0]}},
+        'runtimeConfiguration': {'concurrency': {'runs': 1}}}}
+    return definition(triggers, actions)
+
 
 
 def definition(triggers, actions):
@@ -646,8 +963,12 @@ def flow_json(defn, connectors):
 
 FLOWS = [
     {'id': '7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f02', 'name': 'ESG Competency Hub | 2 Request queue', 'build': flow_request_queue,
-     'connectors': ['shared_sharepointonline'], 'on': False,
+     'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': False,
      'description': 'Applies the requests people send from the Competency Hub page: raise an action, move its deadline, mark it as done.'},
+    {'id': '7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f01', 'name': 'ESG Competency Hub | 1 Daily tasks', 'build': flow_daily_tasks,
+     'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': False,
+     'description': 'Every morning: the 7-day, due-today and late reminders, and another try for emails that were not sent.',
+     'introduced': '1.1.0.0'},
 ]
 
 

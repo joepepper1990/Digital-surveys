@@ -103,8 +103,14 @@ class BrokenFlowsAreRejected(unittest.TestCase):
 
     def test_unused_connection_reference(self):
         def change(d, f):
-            f['json']['properties']['connectionReferences']['shared_office365'] = {'runtimeSource': 'embedded'}
+            f['json']['properties']['connectionReferences']['shared_office365users'] = {'runtimeSource': 'embedded'}
         self.expect(change, 'declared but unused')
+
+    def test_an_email_showing_typed_text_unescaped(self):
+        def change(d, f):
+            a = find(d, 'Html_R')
+            a['inputs'] += "@{items('Each_new_notice_R')?['title']}"
+        self.expect(change, 'a typed value is not HTML-escaped')
 
     def test_hidden_failure(self):
         self.expect(lambda d, f: find(d, 'Requester').__setitem__('runAfter', {'Get_requester': ['Succeeded', 'Skipped']}), 'upstream failure would be hidden')

@@ -5,13 +5,17 @@ Evidence class: LOCAL / OFFLINE-SIMULATED. The tenant behaviour is proven only b
 import json
 import sys
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import flows
 from hub_fake import HubFake, SITE
 from wdl import Engine
 
-FLOW = flows.build_all()[0]['json']['properties']['definition']
+FLOWS = {f['name']: f['json']['properties']['definition'] for f in flows.build_all()}
+FLOW = FLOWS['ESG Competency Hub | 2 Request queue']
+DAILY = FLOWS['ESG Competency Hub | 1 Daily tasks']
+UK = ZoneInfo('Europe/London')
 JOE, RACHEL, KELLY, KAI = 7, 112, 103, 110
 KEY = '3f2b1c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d'
 AREAS = ['FLK', 'INS', 'GRS', 'RPE', 'BA', 'DOS', 'RP', 'DSL', 'ALS', 'RW']
@@ -46,6 +50,8 @@ def site():
         'ExtensionCount': 1.0, 'Revision': 2.0, 'PendingRequestKey': None, 'LastRequestKey': None, 'CreatedRequestKey': 'IMPORT-1'})
     s.folder('updates', 'FLK/A{0}'.format(s.action))
     s.folder('history', 'FLK/A{0}'.format(s.action))   # made when the action was raised
+    for title, value in (('OverdueReminderIntervalDays', '7'), ('ReminderDaysBefore', '7'), ('LastDailyRun', '')):
+        s.add('settings', '', {'Title': title, 'Value': value})
     return s
 
 
@@ -311,6 +317,10 @@ class Robustness(unittest.TestCase):
                 got = self.snapshot(s)
                 for key in ('actions', 'history', 'updates'):
                     self.assertEqual(got[key], expected[key], key)
+                # each email has exactly one row, and is never sent twice
+                keys = sorted(it['f']['NotificationKey'] for it in s.by_key['notifications']['items'].values())
+                self.assertEqual(keys, sorted(it['f']['NotificationKey'] for it in ref.by_key['notifications']['items'].values()))
+                self.assertLessEqual(len(s.sent), len(ref.sent))
 
     def test_raise_survives_an_interruption_at_every_write(self):
         self.interrupted_everywhere('RaiseAction', RaiseAction.good)
@@ -375,9 +385,244 @@ class Robustness(unittest.TestCase):
         self.assertEqual(s.rows('history', RowKind='Transaction')[0]['f']['State'], 'Failed')
 
 
+class Emails(unittest.TestCase):
+    """Plan B.5 / F.4.2: one email per change and person, never to the person who made the change."""
+    def notices(self, s):
+        return {it['f']['NotificationKey']: it['f'] for it in s.by_key['notifications']['items'].values()}
+
+    def test_raising_for_yourself_sends_nothing(self):
+        s = site()
+        r = submit(s, RACHEL, 'RaiseAction', RaiseAction.good)
+        run(s, r)
+        self.assertEqual((request(s, r)['Status'], s.sent, self.notices(s)), ('Completed', [], {}))
+
+    def test_raising_for_someone_else_tells_them_and_covers_the_7_day_reminder(self):
+        s = site()
+        r = submit(s, RACHEL, 'RaiseAction', dict(RaiseAction.good, ownerId=KELLY, dueIso='2026-10-25'))
+        run(s, r)
+        self.assertEqual(request(s, r)['Status'], 'Completed')
+        self.assertEqual([(m['to'], m['subject']) for m in s.sent], [('kelly.bates@example.test', 'Action assigned to you: Order replacement smear papers')])
+        body = s.sent[0]['body']
+        for text in ('Boulden Rachel has given you an action', '25 October 2026', 'Hub.aspx?action=', 'Reference ESGN'):
+            self.assertIn(text, body)
+        aid = s.rows('actions', CreatedRequestKey='F|' + KEY)[0]['id']
+        n = self.notices(s)
+        self.assertEqual(n['ASG|{0}|{1}'.format(KEY, KELLY)]['State'], 'Sent')
+        self.assertIn(n['ASG|{0}|{1}'.format(KEY, KELLY)]['Token'], body)
+        self.assertEqual(n['R7|{0}|20261025|{1}'.format(aid, KELLY)]['State'], 'Skipped')
+
+    def test_a_deadline_far_away_leaves_the_reminder_to_the_daily_run(self):
+        s = site()
+        r = submit(s, RACHEL, 'RaiseAction', dict(RaiseAction.good, ownerId=KELLY, dueIso='2026-11-30'))
+        run(s, r)
+        self.assertEqual(sorted(k.split('|')[0] for k in self.notices(s)), ['ASG'])
+
+    def test_text_people_typed_is_escaped(self):
+        s = site()
+        r = submit(s, RACHEL, 'RaiseAction', dict(RaiseAction.good, ownerId=KELLY, title='<img src=x onerror=alert(1)> & "it\'s"'))
+        run(s, r)
+        body = s.sent[0]['body']
+        self.assertNotIn('<img', body)
+        self.assertIn('&lt;img src=x onerror=alert(1)&gt; &amp; &quot;it&#39;s&quot;', body)
+
+    def test_a_deadline_moved_on_the_owners_behalf_tells_the_owner(self):
+        s = site()
+        r = submit(s, KELLY, 'ExtendDeadline', Extend().payload(), target=s.action, revision=2)
+        run(s, r)
+        self.assertEqual([(m['to'], m['subject']) for m in s.sent], [('rachel.boulden@example.test', 'Deadline moved: Replace FH40 probe')])
+        body = s.sent[0]['body']
+        for text in ('Bates Kelly has moved the deadline', '28 October 2026 (originally 12 October 2026)', 'Was due', '19 October 2026',
+                     'Reason', 'Waiting for the replacement probe.'):
+            self.assertIn(text, body)
+
+    def test_the_owner_moving_their_own_deadline_sends_nothing(self):
+        s = site()
+        r = submit(s, RACHEL, 'ExtendDeadline', Extend().payload(), target=s.action, revision=2)
+        run(s, r)
+        self.assertEqual(s.sent, [])
+
+    def test_closing_tells_the_raiser_and_a_close_out_asks_the_raiser(self):
+        for close_out, kind, subject in ((False, 'CLS', 'Action closed: Replace FH40 probe'),
+                                         (True, 'RDY', 'Ready for your close-out check: Replace FH40 probe')):
+            with self.subTest(kind):
+                s = site()
+                s.item('actions', s.action)['f']['RequiresCloseOut'] = close_out
+                r = submit(s, RACHEL, 'MarkComplete', {'note': 'Probe fitted & tested.'}, target=s.action, revision=2)
+                run(s, r)
+                self.assertEqual([(m['to'], m['subject']) for m in s.sent], [('kelly.bates@example.test', subject)])
+                self.assertIn('Probe fitted &amp; tested.', s.sent[0]['body'])
+                self.assertEqual(list(self.notices(s)), ['{0}|{1}|{2}'.format(kind, KEY, KELLY)])
+
+    def test_a_refused_send_is_failed_and_an_unclear_one_unknown(self):
+        for outcome, state, sent in ((400, 'Failed', 0), (500, 'Unknown', 1), ('timeout', 'Unknown', 0)):
+            with self.subTest(outcome):
+                s = site()
+                s.mail_fail = [outcome]
+                r = submit(s, KELLY, 'ExtendDeadline', Extend().payload(), target=s.action, revision=2)
+                status, eng = run(s, r)
+                self.assertEqual(request(s, r)['Status'], 'Completed')   # the change stands whatever happens to the email
+                row = list(self.notices(s).values())[0]
+                self.assertEqual((row['State'], len(s.sent)), (state, sent))
+                self.assertTrue(row['NextAttemptAfter'])
+
+
+def run_daily(s, uk_day, hour=6):
+    """The daily flow as it runs at 06:00 UK time on the given date."""
+    s.clock = datetime(uk_day.year, uk_day.month, uk_day.day, hour, 0, tzinfo=UK).astimezone(timezone.utc)
+    eng = Engine(DAILY, s, {flows.ENV_SITE: SITE, '$authentication': {}}, s.clock)
+    return eng.run(), eng
+
+
+def due_on(s, iso, action=None):
+    a = s.item('actions', action or s.action)['f']
+    d = date.fromisoformat(iso)
+    a['DueDay'] = float(d.strftime('%Y%m%d'))
+    a['CurrentDueDate'] = datetime(d.year, d.month, d.day, tzinfo=UK).astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+class Daily(unittest.TestCase):
+    """Plan F.4.1 and the D.0.1 date matrix, run as the real flow on each morning."""
+    def days(self, start, end):
+        d = date.fromisoformat(start)
+        while d <= date.fromisoformat(end):
+            yield d
+            d += timedelta(days=1)
+
+    def emails_by_day(self, s, start, end, skip=()):
+        out = []
+        for d in self.days(start, end):
+            if d.isoformat() in skip:
+                continue
+            before = len(s.sent)
+            status, eng = run_daily(s, d)
+            self.assertEqual(status, 'Succeeded', (d, eng.log))
+            out += [(d.isoformat(), m['subject']) for m in s.sent[before:]]
+        return out
+
+    def test_the_7_day_reminder_comes_once_on_the_right_day(self):
+        matrix = [('2026-10-28', '2026-10-21'), ('2026-11-02', '2026-10-26'), ('2026-11-01', '2026-10-25'), ('2026-12-31', '2026-12-24'),
+                  ('2027-01-03', '2026-12-27'), ('2027-03-01', '2027-02-22'), ('2027-04-04', '2027-03-28'), ('2028-03-07', '2028-02-29'),
+                  ('2028-03-01', '2028-02-23')]
+        for due, expected in matrix:
+            with self.subTest(due=due):
+                s = site()
+                due_on(s, due)
+                start = (date.fromisoformat(due) - timedelta(days=10)).isoformat()
+                last = (date.fromisoformat(due) - timedelta(days=1)).isoformat()
+                got = self.emails_by_day(s, start, last)
+                self.assertEqual(got, [(expected, 'Reminder: Replace FH40 probe is due in 7 days')])
+                self.assertEqual(s.sent[0]['to'], 'rachel.boulden@example.test')
+
+    def test_a_missed_morning_is_caught_up(self):
+        s = site()
+        due_on(s, '2026-10-28')
+        got = self.emails_by_day(s, '2026-10-20', '2026-10-23', skip=('2026-10-21',))
+        self.assertEqual(got, [('2026-10-22', 'Reminder: Replace FH40 probe is due in 6 days')])
+
+    def test_due_today_and_late_reminders(self):
+        s = site()
+        due_on(s, '2026-10-19')
+        got = self.emails_by_day(s, '2026-10-19', '2026-11-04')
+        self.assertEqual(got, [('2026-10-19', 'Due today: Replace FH40 probe'), ('2026-10-20', 'Replace FH40 probe is 1 day late'),
+                               ('2026-10-27', 'Replace FH40 probe is 8 days late'), ('2026-11-03', 'Replace FH40 probe is 15 days late')])
+
+    def test_running_twice_on_one_morning_sends_once(self):
+        s = site()
+        due_on(s, '2026-10-28')
+        run_daily(s, date(2026, 10, 21))
+        run_daily(s, date(2026, 10, 21), hour=9)
+        self.assertEqual(len(s.sent), 1)
+
+    def test_an_assignment_within_7_days_covers_the_reminder(self):
+        s = site()
+        s.item('actions', s.action)['f'].update({'IsOpen': False, 'Status': 'Closed'})
+        r = submit(s, RACHEL, 'RaiseAction', dict(RaiseAction.good, ownerId=KELLY, dueIso='2026-10-26'))
+        run(s, r)
+        got = self.emails_by_day(s, '2026-10-22', '2026-10-25')
+        self.assertEqual(got, [])
+        self.assertEqual(len(s.sent), 1)                     # the assignment only
+
+    def test_closed_or_waiting_for_close_out_actions_get_no_reminder(self):
+        for change in ({'IsOpen': False, 'Status': 'Closed'}, {'Status': 'Completed'}):
+            with self.subTest(change):
+                s = site()
+                due_on(s, '2026-10-28')
+                s.item('actions', s.action)['f'].update(change)
+                self.assertEqual(self.emails_by_day(s, '2026-10-21', '2026-10-21'), [])
+
+    def test_the_email_reads_well(self):
+        s = site()
+        due_on(s, '2026-10-28')
+        run_daily(s, date(2026, 10, 25))
+        body = s.sent[0]['body']
+        for text in ('Your action is due in 3 days.', 'Replace FH40 probe', '28 October 2026 (originally 12 October 2026)', 'Hub.aspx?action='):
+            self.assertIn(text, body)
+
+    def test_the_run_is_recorded(self):
+        s = site()
+        run_daily(s, date(2026, 10, 21))
+        self.assertTrue(s.rows('settings', Title='LastDailyRun')[0]['f']['Value'].startswith('2026-10-21T05:00:00'))
+
+    def test_a_quiet_morning_uses_few_calls(self):
+        s = site()
+        due_on(s, '2026-12-31')
+        run_daily(s, date(2026, 10, 21))
+        self.assertLessEqual(len(s.calls), 8, s.calls)   # settings, people, actions, ledger, 3 retry states, LastDailyRun
+
+
+class Retries(unittest.TestCase):
+    """Plan F.4.2: a refused email is tried again, an unclear one is sent again with a note, and three tries is the end."""
+    def failed_extension_email(self, outcome):
+        s = site()
+        s.mail_fail = [outcome]
+        # a deadline beyond the reminder window, so only this email is in play
+        r = submit(s, KELLY, 'ExtendDeadline', Extend().payload(newDueIso='2026-12-31'), target=s.action, revision=2)
+        run(s, r)
+        return s, next(iter(s.by_key['notifications']['items'].values()))['f']
+
+    def test_a_refused_email_is_sent_the_next_morning(self):
+        s, row = self.failed_extension_email(400)
+        run_daily(s, date(2026, 10, 22))
+        self.assertEqual((row['State'], float(row['Attempts']), len(s.sent)), ('Sent', 2.0, 1))
+        self.assertNotIn('already received', s.sent[0]['body'])
+
+    def test_an_unclear_email_is_sent_again_with_a_note(self):
+        s, row = self.failed_extension_email('timeout')
+        run_daily(s, date(2026, 10, 22))
+        self.assertEqual(row['State'], 'Sent')
+        self.assertIn('If you have already received this message, please ignore it.', s.sent[-1]['body'])
+
+    def test_three_failures_and_it_is_abandoned(self):
+        s, row = self.failed_extension_email(400)
+        s.mail_fail = [400, 400]
+        run_daily(s, date(2026, 10, 22))
+        run_daily(s, date(2026, 10, 23))
+        run_daily(s, date(2026, 10, 24))
+        self.assertEqual((row['State'], float(row['Attempts']), len(s.sent)), ('Abandoned', 3.0, 0))
+
+    def test_an_email_that_no_longer_applies_is_skipped(self):
+        s = site()
+        due_on(s, '2026-10-28')
+        s.mail_fail = [400]
+        run_daily(s, date(2026, 10, 21))
+        s.item('actions', s.action)['f'].update({'IsOpen': False, 'Status': 'Closed'})
+        run_daily(s, date(2026, 10, 22))
+        row = next(iter(s.by_key['notifications']['items'].values()))['f']
+        self.assertEqual((row['State'], len(s.sent)), ('Skipped', 0))
+
+    def test_an_email_left_sending_by_a_stopped_run_is_sent_with_a_note(self):
+        s, row = self.failed_extension_email(None)
+        row.update({'State': 'Sending', 'SendingSince': '2026-10-21T09:30:00Z'})
+        sent = len(s.sent)
+        run_daily(s, date(2026, 10, 22))
+        self.assertEqual(row['State'], 'Sent')
+        self.assertIn('already received', s.sent[sent]['body'])
+
+
 class Calls(unittest.TestCase):
     """Fewer SharePoint calls per request (plan K7.10): a first run skips every "already done?" look-up."""
-    BUDGET = {'RaiseAction': 20, 'ExtendDeadline': 16, 'MarkComplete': 16}
+    # SharePoint calls for the change itself; each email adds at most 3 (queue it, record the outcome, cover a reminder)
+    BUDGET = {'RaiseAction': 19, 'ExtendDeadline': 17, 'MarkComplete': 17}
 
     def first_run(self, rtype, s=None):
         s = s or site()
@@ -391,7 +636,9 @@ class Calls(unittest.TestCase):
             with self.subTest(rtype):
                 s, r, status, eng = self.first_run(rtype)
                 self.assertEqual(request(s, r)['Status'], 'Completed', eng.log)
-                self.assertLessEqual(len(s.calls), budget, '\n'.join(m + ' ' + u for m, u in s.calls))
+                work = [c for c in s.calls if 'NotificationLog' not in c[1]]
+                self.assertLessEqual(len(work), budget, '\n'.join(m + ' ' + u for m, u in work))
+                self.assertLessEqual(len(s.calls) - len(work), 3 * len(s.sent), s.calls)
 
     def test_lists_are_reached_by_address_with_no_look_up(self):
         s, r, status, eng = self.first_run('RaiseAction')
