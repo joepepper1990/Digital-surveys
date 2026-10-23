@@ -74,6 +74,29 @@ window.MockFlow = (function () {
         return finish(req, 'Completed', 'ACT-' + ('0000' + id).slice(-5) + ' raised.', id);
       }
 
+      // An administrator's decision about a change needing attention (plan REV5 REL-3), much simplified.
+      if (['RetryTransaction', 'CancelTransaction', 'RevertTransaction'].indexOf(req.RequestType) >= 0) {
+        if (!requester.IsAdministrator) return finish(req, 'Rejected', 'Only a Competency Hub administrator can do this.');
+        var tx = data.History.filter(function (h) { return h.Id === Number(payload.txId) && h.RowKind === 'Transaction'; })[0];
+        if (!tx || ['Applied', 'Void', 'Cancelled', 'Reverted'].indexOf(tx.State) >= 0) return finish(req, 'Rejected', 'This change is already finished.');
+        var locked = data.Actions.filter(function (a) { return a.PendingRequestKey === tx.RequestKey; })[0];
+        if (req.RequestType === 'CancelTransaction') {
+          if (locked) return finish(req, 'Rejected', 'Part of this change has already been made, so it cannot be cancelled. Use Finish or Revert.');
+          tx.State = 'Cancelled';
+          return finish(req, 'Completed', 'Cancelled. Nothing was changed.', tx.Id);
+        }
+        if (req.RequestType === 'RevertTransaction') {
+          if (!locked) return finish(req, 'Rejected', 'Nothing of this change is waiting to be resolved, so there is nothing to revert. Use Retry.');
+          locked.PendingRequestKey = '';
+          locked.LastRequestKey = req.RequestKey;
+          tx.State = 'Reverted';
+          return finish(req, 'Completed', 'Reverted.', tx.Id);
+        }
+        if (locked) { locked.PendingRequestKey = ''; locked.LastRequestKey = tx.RequestKey; }
+        tx.State = 'Applied';   // the retried change goes through at once in the simulation
+        return finish(req, 'Completed', 'Being tried again.', tx.Id);
+      }
+
       var target = data.Actions.filter(function (a) { return a.Id === Number(req.TargetId); })[0];
       if (!target) return finish(req, 'Rejected', 'That action could not be found.');
       if (target.PendingRequestKey) return finish(req, 'Rejected', 'This action is being updated. Try again in a minute.');

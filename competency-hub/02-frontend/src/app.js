@@ -6,6 +6,8 @@ CH.app = (function () {
     var started = false;
     var disposed = false;
     var observer = null;
+    var healthTimer = null;
+    var HEALTH_EVERY_MS = 5 * 60 * 1000;
     var app = { state: { view: 'home', area: null, tab: 0 } };
 
     function findRoot() { return document.querySelector('[data-ch-root]'); }
@@ -34,6 +36,9 @@ CH.app = (function () {
       return [
         app.stale ? h('p', { class: 'stale-copy', role: 'alert' }, h('b', { text: 'A newer version of the Competency Hub is available. ' }),
           'Press Ctrl+F5 to load it. Until then some buttons may not work.') : null,
+        // Limited mode (plan REV5 REL-5): only the changes that need automatic processing are paused.
+        app.queueBlocked() ? h('p', { class: 'stale-copy limited', role: 'alert' }, h('b', { text: 'Changes can\'t be processed at the moment. ' }),
+          'You can still read everything, add updates to actions and post notices. Raising and changing actions will be back shortly – nothing you have already sent is lost.') : null,
         h('header', { class: 'bar' }, h('div', { class: 'bar-in' },
           h('div', { class: 'brand' }, 'ESG Competency Hub', h('small', { text: 'Environmental Safety Group' })),
           C.ENVIRONMENT !== 'PRODUCTION' ? h('span', { class: 'env', text: C.ENVIRONMENT + ' – not live data' }) : null,
@@ -91,13 +96,16 @@ CH.app = (function () {
       if (!app.tracker) return null;
       var items = app.tracker.entries().filter(function (e) {
         if (e.dismissed) return false;
+        if (CH.requests.ADMIN_TYPES.indexOf(e.type) >= 0) return false;   // shown on the Administration page
         if (e.type === 'RaiseAction') return e.state !== 'done';
-        return e.state === 'rejected' || e.state === 'failed';
+        return ['rejected', 'attention', 'cancelled', 'reverted'].indexOf(e.state) >= 0;
       }).map(function (e) {
         var waiting = e.state === 'submitted' || e.state === 'slow';
+        var how = { rejected: 'not accepted: ', attention: 'not recorded: ', cancelled: 'cancelled: ', reverted: 'reverted: ' }[e.state];
         return h('li', { class: waiting ? 'pending' : 'section-note' }, h('b', { text: e.label }),
-          waiting ? ' – submitted ' + CH.dates.ukTime(e.submittedAt) + ', being recorded (usually under 5 minutes).' + (e.state === 'slow' ? ' ' + e.message : '')
-            : ' – ' + (e.state === 'rejected' ? 'not accepted: ' : 'not recorded yet: ') + e.message + ' ',
+          waiting ? ' – submitted ' + CH.dates.ukTime(e.submittedAt) + (e.retrying ? '. ' + e.message
+            : ', being recorded (usually under 5 minutes).' + (e.state === 'slow' ? ' ' + e.message : ''))
+            : ' – ' + how + e.message + ' ',
           waiting ? null : CH.ui.linkButton('Dismiss', function () { app.tracker.dismiss(e); }));
       });
       var unsent = app.tracker.unsent();
@@ -110,7 +118,24 @@ CH.app = (function () {
       return items.length ? h('ul', { class: 'request-strip', 'aria-live': 'polite' }, items) : null;
     }
 
+    // Every few minutes: is automatic processing still working (or working again)? Repaints only on a change.
+    async function checkHealth() {
+      if (disposed) return;
+      try {
+        var res = await app.sp.items(CH.config.lists.settings.title, CH.model.QUERIES.settings);
+        var next = CH.health.judge(res.rows, new Date());
+        var changed = !app.health || next.processing !== app.health.processing || next.reminders !== app.health.reminders;
+        app.health = next;
+        if (changed) render(false);
+      } catch (_) { /* the next check tries again */ }
+    }
+
     function onRequestChange(entry) {
+      if (CH.requests.ADMIN_TYPES.indexOf(entry.type) >= 0) {
+        render(false);
+        if (entry.state === 'done' && app.state.view === 'admin') setTimeout(function () { CH.views.admin.refresh(app); }, 1500);
+        return;
+      }
       if (entry.state !== 'done') { render(false); if (app.panel) app.panel.refresh(); return; }
       reload().then(function () {
         render(false);
@@ -126,6 +151,10 @@ CH.app = (function () {
     }
 
     app.goHome = function () { app.state = { view: 'home', area: null, tab: 0 }; render(true); };
+    app.showAdmin = function () { app.admin = null; app.state = { view: 'admin', area: null, tab: 0 }; render(true); };
+    app.refreshView = function () { render(false); };
+    // True while automatic processing is down: queued changes are not offered and not sent.
+    app.queueBlocked = function () { return !!app.health && app.health.processing === 'down'; };
     app.openArea = function (key) { app.state = { view: 'area', area: key, tab: 0 }; render(true); };
     app.showMine = function (tab, areaKey, keepFocus) {
       app.state = { view: 'mine', area: null, tab: tab || 0, areaFilter: areaKey || '' };
@@ -134,12 +163,16 @@ CH.app = (function () {
     };
     app.comingSoon = function (what) { CH.ui.toast(app.root, what + ' will be available in the next version of the Competency Hub.', 'info'); };
     app.postNotice = function (key) { CH.views.noticeForm.open(app, key); };
-    app.raiseAction = function (key) { CH.views.raiseForm.open(app, key); };
+    app.raiseAction = function (key) {
+      if (app.queueBlocked()) { CH.ui.toast(app.root, 'Raising actions is paused while changes can\'t be processed. Please try again later.', 'info'); return; }
+      CH.views.raiseForm.open(app, key);
+    };
     app.openAction = function (a) { CH.views.actionPanel.open(app, a.id); };
     app.pendingNote = function (a) {
       var e = app.tracker && app.tracker.forTarget(a.id);
       if (e && (e.state === 'submitted' || e.state === 'slow')) return 'change being recorded';
       if (e && e.state === 'rejected') return 'change not accepted';
+      if (e && e.state === 'attention') return 'change not recorded';
       return a.locked ? 'being updated' : '';
     };
     app.noticePosted = async function (key) {
@@ -153,7 +186,8 @@ CH.app = (function () {
       if (!app.model) return;
       var content = [requestStrip(), app.state.view === 'area' && app.model.areaByKey[app.state.area]
         ? CH.views.area.render(app, app.state.area, app.state.tab)
-        : app.state.view === 'mine' ? CH.views.myActions.render(app) : CH.views.home.render(app)];
+        : app.state.view === 'mine' ? CH.views.myActions.render(app)
+        : app.state.view === 'admin' ? CH.views.admin.render(app) : CH.views.home.render(app)];
       paint(content);
       if (moveFocus) {
         var main = app.root.querySelector('#ch-main');
@@ -177,6 +211,7 @@ CH.app = (function () {
       if (raw.competencies.error !== undefined) throw new CH.sp.SpError(raw.competencies.error, 'The list of areas could not be loaded.');
       if (raw.members.error !== undefined) throw new CH.sp.SpError(raw.members.error, 'Area memberships could not be loaded.');
       app.access = CH.access.build(app.person, memberships, areasByKey);
+      app.health = CH.health.judge(raw.settings.rows, now);
       app.model = CH.model.build(raw, app.people, app.access, today, now);
     }
 
@@ -223,6 +258,8 @@ CH.app = (function () {
       var areaParam = (params.get('area') || '').toUpperCase();
       if (app.model.areaByKey[areaParam]) app.state = { view: 'area', area: areaParam, tab: 0 };
       if (params.get('view') === 'mine') app.state = { view: 'mine', area: null, tab: 0, areaFilter: '' };
+      if (params.get('view') === 'admin') app.state = { view: 'admin', area: null, tab: 0 };
+      healthTimer = setInterval(checkHealth, HEALTH_EVERY_MS);
       render(false);
       var actionParam = Number(params.get('action'));
       if (actionParam) CH.views.actionPanel.open(app, actionParam);
@@ -246,6 +283,7 @@ CH.app = (function () {
       onDispose: function () {
         disposed = true;
         if (app.tracker) app.tracker.stop();
+        if (healthTimer) clearInterval(healthTimer);
         if (observer) observer.disconnect();
         window.removeEventListener('resize', applySize);
       }

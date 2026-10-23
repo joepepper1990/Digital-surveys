@@ -331,6 +331,49 @@ window.MockDrivers = (function () {
       await wait(50);
       return { inside: inside, closed: !q('#ch-a'), focusBack: document.activeElement === item };
     },
+    // Limited mode (plan REV5 REL-5): a banner for everyone; queued changes are not offered; the instant update still is.
+    limitedMode: async function () {
+      await until(function () { return q('.limited'); });
+      var banner = q('.limited').textContent;
+      byText('button', 'Raise an action').click();
+      await wait(100);
+      var raiseOpened = !!q('#ch-r');
+      var toast = q('[data-ch-live]').textContent;
+      (await until(function () { return all('.item-open').filter(function (b) { return b.textContent.indexOf('Replace FH40 probe') >= 0; })[0]; })).click();
+      await until(function () { return q('#ch-a .actions-row'); });
+      var buttons = all('#ch-a .actions-row .btn').map(function (b) { return [b.textContent, b.disabled]; });
+      return { banner: banner, raiseOpened: raiseOpened, toast: toast, buttons: buttons, note: q('#ch-a .actions-row').textContent, writes: MockSharePoint.writes.length };
+    },
+    // A change the flow fails on is shown as retrying, never as saved and never as given up (plan REV5 REL-2).
+    retrying: async function () {
+      (await until(function () { return all('.item-open').filter(function (b) { return b.textContent.indexOf('Replace FH40 probe') >= 0; })[0]; })).click();
+      await until(function () { return q('#ch-a .actions-row'); });
+      byText('#ch-a button', 'Mark as done').click();
+      await until(function () { return q('#ch-c-note'); });
+      q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-a .pending') && q('#ch-a .pending').textContent.indexOf('retrying automatically') >= 0; }, 120000);
+      return { pending: q('#ch-a .pending').textContent, saved: text().indexOf('Action closed.') >= 0 };
+    },
+    // The administrator's page: health, the two changes that need attention, and the honest choices for each.
+    adminPage: async function () {
+      var line = (await until(function () { return q('.admin-line'); })).textContent;
+      byText('button', 'Open Administration').click();
+      await until(function () { return q('.admin-change'); }, 8000);
+      var page = text();
+      var items = all('.admin-change').map(function (li) { return { text: li.textContent, buttons: Array.prototype.map.call(li.querySelectorAll('.btn'), function (b) { return b.textContent; }) }; });
+      var nothing = all('.admin-change').filter(function (li) { return li.textContent.indexOf('nothing was changed') >= 0; })[0];
+      byText('.admin-change .btn', 'Cancel').click();
+      var confirmText = nothing.textContent;
+      byText('.admin-change .btn', 'Yes, cancel').click();
+      await until(function () { return text().indexOf('Done: Cancelled. Nothing was changed.') >= 0 || text().indexOf('Every change has been recorded') >= 0; }, 120000);
+      var partly = all('.admin-change').filter(function (li) { return li.textContent.indexOf('Part made') >= 0; })[0];
+      byText('.admin-change .btn', 'Revert').click();
+      byText('.admin-change .btn', 'Yes, revert').click();
+      await until(function () { return text().indexOf('Every change has been recorded') >= 0; }, 120000);
+      var tx = MockSharePoint.data.History.filter(function (h) { return h.RowKind === 'Transaction'; }).map(function (h) { return [h.RequestKey, h.State]; });
+      return { line: line, page: page, items: items, confirmText: confirmText, partlyFound: !!partly, tx: tx,
+        unlocked: !MockSharePoint.data.Actions[1].PendingRequestKey, writes: MockSharePoint.writes.slice() };
+    },
     // Open every area and every tab: the shell must make no writes at all.
     readOnlyAudit: async function () {
       await until(function () { return q('.tile'); });

@@ -884,6 +884,10 @@
                       "FieldValue": "1"
                     },
                     {
+                      "FieldName": "Actor",
+                      "FieldValue": "@{concat('[{\"Key\":\"', outputs('Requester')?['Person']?['Name'], '\"}]')}"
+                    },
+                    {
                       "FieldName": "FirstClaimedAt",
                       "FieldValue": "@{convertFromUtc(outputs('Claim_now'), 'GMT Standard Time', 'dd/MM/yyyy HH:mm')}"
                     }

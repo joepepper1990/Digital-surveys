@@ -195,5 +195,27 @@ open('as=' + RACHEL + '&area=RW', ['--window-size=1366,1100', '--screenshot=' + 
 open('as=' + RACHEL + '&mode=unknown', ['--window-size=1366,700', '--screenshot=' + path.join(SHOTS, 'unknown-user-1366.png')]);
 check('screenshots written', fs.readdirSync(SHOTS).filter((f) => f.endsWith('.png')).length >= 11);
 
+// Safety net (plan REV5 REL-2, REL-3, REL-5)
+res = drive('as=' + RACHEL + '&mode=limited&drive=limitedMode');
+check('limited mode: a banner explains that changes are paused and nothing is lost', res.ok && /can't be processed at the moment/.test(res.result.banner) && /nothing you have already sent is lost/.test(res.result.banner), JSON.stringify(res));
+check('limited mode: raising is not offered, with a plain message', res.ok && !res.result.raiseOpened && /Raising actions is paused/.test(res.result.toast), JSON.stringify(res));
+check('limited mode: only "Add an update" stays available in an action', res.ok && res.result.buttons.every((b) => b[1] === (b[0] !== 'Add an update')) && /You can still add an update/.test(res.result.note) && res.result.writes === 0, JSON.stringify(res));
+res = drive('as=' + RACHEL + '&mode=flowFail&drive=retrying', SLOW);
+check('a failed change is shown as retrying automatically, never as saved', res.ok && /retrying automatically/.test(res.result.pending) && !res.result.saved, JSON.stringify(res));
+res = drive('as=' + JOE + '&mode=attention&drive=adminPage', SLOW);
+check('administrator home: says how many changes need attention, with a link', res.ok && /2 changes need your attention/.test(res.result.line), JSON.stringify(res));
+check('admin page: health, then each change with who asked, attempts and the last error', res.ok && /Automatic processing is working/.test(res.result.page) && /Reminders ran/.test(res.result.page) &&
+  res.result.items.length === 2 && res.result.items.every((i) => /Asked by Rachel Boulden/.test(i.text) && /3 attempts/.test(i.text) && /Last error/.test(i.text)), JSON.stringify(res));
+check('admin page: nothing changed offers Try again or Cancel; part made offers Finish or Revert', res.ok &&
+  JSON.stringify(res.result.items.map((i) => i.buttons)) === JSON.stringify([['Try again', 'Cancel'], ['Finish', 'Revert']]), JSON.stringify(res && res.result && res.result.items));
+check('admin page: a choice is confirmed in plain words before it is sent', res.ok && /Close this change without making it/.test(res.result.confirmText), JSON.stringify(res));
+check('admin page: Cancel and Revert are sent as requests and their results shown; the locked action is released',
+  res.ok && res.result.unlocked && JSON.stringify(res.result.tx) === JSON.stringify([['tx-nothing', 'Cancelled'], ['tx-partly', 'Reverted']]) &&
+  res.result.writes.every((w) => w.list === 'Requests' && w.folder === 'u' + JOE), JSON.stringify(res));
+t = text(dump('as=' + RACHEL + '&mode=attention').dom);
+check('staff see no administration line', !t.includes('Open Administration') && !t.includes('need your attention'));
+t = text(dump('as=' + RACHEL + '&view=admin').dom);
+check('the admin page refuses anyone who is not an administrator', t.includes('Only Competency Hub administrators can use this page.') && !t.includes('Automatic processing'));
+
 console.log(failures ? failures + ' browser check(s) failed' : 'All browser checks passed');
 process.exit(failures ? 1 : 0);

@@ -167,6 +167,12 @@ window.MockSeed = function (todayIso) {
   return {
     'Competencies': competencies, 'People': people, 'Competency Members': members, 'Actions': actions,
     'Noticeboard': notices, 'Updates': updates, 'Meetings': meetings, 'Calendar Events': calendar,
-    'Requests': [], 'History': history
+    'Requests': [], 'History': history,
+    // The queue monitor reported five minutes ago and reminders ran this morning (plan REV5 REL-5).
+    'Competency Hub Settings': [
+      { Id: 1, Title: 'QueueHealth', Value: JSON.stringify({ state: 'Healthy', reason: '', checkedAt: new Date(Date.now() - 5 * 60000).toISOString(), attention: 0 }) },
+      { Id: 2, Title: 'LastDailyRun', Value: at(0, '05:00:00') },
+      { Id: 3, Title: 'MonitorHours', Value: '07:00|19:45|60' }
+    ]
   };
 };

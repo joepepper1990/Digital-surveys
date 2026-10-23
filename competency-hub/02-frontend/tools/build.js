@@ -9,9 +9,9 @@ const crypto = require('crypto');
 const ROOT = path.join(__dirname, '..');
 const MODULES = [
   'src/core/config.js', 'src/core/dom.js', 'src/core/dates.js', 'src/core/sp.js', 'src/core/requests.js',
-  'src/domain/access.js', 'src/domain/rules.js', 'src/domain/model.js',
+  'src/domain/access.js', 'src/domain/rules.js', 'src/domain/model.js', 'src/domain/health.js',
   'src/ui/components.js', 'src/ui/dialog.js',
-  'src/views/home.js', 'src/views/area.js', 'src/views/notice-form.js', 'src/views/raise-form.js', 'src/views/action-panel.js', 'src/views/my-actions.js',
+  'src/views/home.js', 'src/views/area.js', 'src/views/notice-form.js', 'src/views/raise-form.js', 'src/views/action-panel.js', 'src/views/my-actions.js', 'src/views/admin.js',
   'src/app.js'
 ];
 
@@ -72,7 +72,8 @@ function build() {
       '<option value="people403">People list denied (403)</option><option value="actions404">Actions list missing (404)</option>' +
       '<option value="actionsPartial">Actions over the read limit</option><option value="unknown">Unknown user</option>' +
       '<option value="duplicate">Duplicate person</option><option value="left">Person marked Left</option><option value="flowSlow">Request flow very slow</option>' +
-      '<option value="flowFail">Request flow fails</option></select></label></div>',
+      '<option value="flowFail">Request flow fails</option><option value="limited">Processing down (limited mode)</option>' +
+      '<option value="attention">Changes needing attention</option></select></label></div>',
     '<div class="mock-scope"><div class="ch" data-ch-root data-ch-version="' + pkgVersion + '"><p>Loading the ESG Competency Hub…</p></div></div>',
     '<script src="seed.js"></script>',
     '<script src="rules.js"></script>',

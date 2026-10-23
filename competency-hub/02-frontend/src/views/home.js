@@ -104,10 +104,23 @@ CH.views.home = (function () {
     ]);
   }
 
+  // Administrators see at once when something needs them (plan REV5 REL-4, REL-5).
+  function adminLine(app) {
+    if (!app.access.isAdministrator) return null;
+    var hl = app.health || {};
+    var notes = [];
+    if (hl.attention) notes.push(hl.attention + (hl.attention === 1 ? ' change needs' : ' changes need') + ' your attention.');
+    if (hl.processing === 'down') notes.push('Automatic processing is not working.');
+    if (hl.processing === 'unknown') notes.push('The queue monitor has not reported yet.');
+    if (hl.reminders === 'stale') notes.push('Reminders have not run for more than a day.');
+    return h('p', { class: notes.length ? 'section-note admin-line' : 'admin-line muted' }, notes.length ? h('b', { text: notes.join(' ') + ' ' }) : 'Everything is running. ',
+      ui.linkButton('Open Administration', app.showAdmin));
+  }
+
   function render(app) {
     var m = app.model;
     var acc = app.access;
-    var out = [h('h1', { text: greeting(firstName(app)) })];
+    var out = [h('h1', { text: greeting(firstName(app)) }), adminLine(app)];
     var postFirst = acc.memberAreas[0] || (m.areas[0] && m.areas[0].key);
 
     if (acc.isManagement) {

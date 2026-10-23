@@ -15,10 +15,11 @@ CH.views.actionPanel = (function () {
     var entry = app.tracker.forTarget(action.id);
     if (entry && (entry.state === 'submitted' || entry.state === 'slow')) {
       return h('p', { class: 'pending', role: 'status' }, h('b', { text: entry.label }), ' – submitted ' + timeOf(entry.submittedAt) +
-        ', being recorded (usually under 5 minutes).' + (entry.state === 'slow' ? ' ' + entry.message : ''));
+        (entry.retrying ? '. ' + entry.message : ', being recorded (usually under 5 minutes).' + (entry.state === 'slow' ? ' ' + entry.message : '')));
     }
-    if (entry && (entry.state === 'rejected' || entry.state === 'failed')) {
-      return h('div', { class: 'section-note', role: 'alert' }, h('b', { text: entry.state === 'rejected' ? 'Not accepted: ' : 'Not recorded yet: ' }),
+    var heading = { rejected: 'Not accepted: ', attention: 'Not recorded: ', cancelled: 'Cancelled: ', reverted: 'Reverted: ' }[entry && entry.state];
+    if (heading) {
+      return h('div', { class: 'section-note', role: 'alert' }, h('b', { text: heading }),
         entry.message + ' ', ui.linkButton('Dismiss', function () { app.tracker.dismiss(entry); }));
     }
     if (action.locked) return h('p', { class: 'pending', role: 'status', text: 'Being updated… Try again in a minute.' });
@@ -137,7 +138,13 @@ CH.views.actionPanel = (function () {
                 (u.EntryType === 'Blocker' ? ' · blocker' : '') })));
           })) : h('p', { class: 'muted', text: 'No updates yet.' })
       ]);
-      Array.prototype.forEach.call(dlg.body.querySelectorAll('.actions-row .btn, .more .btn-link'), function (b) { b.disabled = !!busy; });
+      // In limited mode only the instant update stays available (plan REV5 REL-5).
+      var blocked = app.queueBlocked();
+      Array.prototype.forEach.call(dlg.body.querySelectorAll('.actions-row .btn, .more .btn-link'), function (b) {
+        b.disabled = !!busy || (blocked && b.textContent !== 'Add an update');
+      });
+      if (blocked && !finished) CH.dom.append(dlg.body.querySelector('.actions-row'), h('span', { class: 'muted small',
+        text: 'Changes to actions are paused while they can\'t be processed. You can still add an update.' }));
     }
 
     function show(which) {

@@ -6,7 +6,15 @@ CH.requests = (function () {
   var SCHEDULE = [20, 40, 60];
   var EVERY = 60;
   var GIVE_UP_MINUTES = 15;
-  var OPEN_STATUSES = ['Submitted', 'Processing'];
+  var STOP_MINUTES = 120;
+  // Still on its way: waiting, being processed, or failed and being retried by the queue monitor (plan REV5 REL-2).
+  var OPEN_STATUSES = ['Submitted', 'Processing', 'Failed'];
+  // An administrator's decision about another change: it is confirmed by its own request alone.
+  var ADMIN_TYPES = ['RetryTransaction', 'CancelTransaction', 'RevertTransaction'];
+
+  // Thrown instead of sending while automatic processing is down (limited mode).
+  function LimitedError(message) { this.name = 'LimitedError'; this.message = message; this.friendly = message; }
+  LimitedError.prototype = Object.create(Error.prototype);
 
   function newKey() {
     if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
@@ -49,6 +57,9 @@ CH.requests = (function () {
 
     // spec: { type, targetId, expectedRevision, payload, label, key? }. Resolves to the tracked entry.
     async function submit(spec) {
+      if (ADMIN_TYPES.indexOf(spec.type) < 0 && app.queueBlocked && app.queueBlocked()) {
+        throw new LimitedError('Changes cannot be processed at the moment, so nothing was sent. You can still read everything and add updates. Please try again later.');
+      }
       spec.key = spec.key || newKey();
       try {
         await app.sp.addToFolder('requests', folder(), values(spec));
@@ -76,9 +87,10 @@ CH.requests = (function () {
     // Status is indexed, so it leads the filter; AuthorId keeps it to this person's requests.
     async function resume() {
       var found = [];
-      for (var i = 0; i < OPEN_STATUSES.length; i++) {
+      var statuses = OPEN_STATUSES.concat(['Needs attention']);
+      for (var i = 0; i < statuses.length; i++) {
         var res = await app.sp.items(CH.config.lists.requests.title, '$select=Id,Title,RequestKey,RequestType,TargetId,Created' +
-          "&$filter=Status eq '" + OPEN_STATUSES[i] + "' and AuthorId eq " + Number(app.person.SiteUserId), 100);
+          "&$filter=Status eq '" + statuses[i] + "' and AuthorId eq " + Number(app.person.SiteUserId), 100);
         found = found.concat(res.rows);
       }
       found.sort(function (a, b) { return a.Id - b.Id; }).forEach(function (row) {
@@ -104,24 +116,39 @@ CH.requests = (function () {
       try { row = await findRequest(entry.key); } catch (_) { row = null; }
       var status = row && row.Status;
       if (status === 'Rejected') return settle(entry, 'rejected', row.ResultMessage || 'This change was not accepted.');
-      if (status === 'Failed' || status === 'Needs attention') {
-        return settle(entry, 'failed', 'This change has not been recorded yet. A Competency Hub administrator can see it and will put it right.');
+      // Honest states (plan REV5 REL-2): only Completed, confirmed on the record, ever reads as saved.
+      if (status === 'Needs attention') {
+        return settle(entry, 'attention', row.ResultMessage || 'Not recorded – an administrator has been told.');
       }
+      if (status === 'Cancelled') return settle(entry, 'cancelled', row.ResultMessage || 'Cancelled by an administrator. Nothing was changed.');
+      if (status === 'Reverted') return settle(entry, 'reverted', row.ResultMessage || 'Reverted by an administrator.');
       if (status === 'Completed' && await confirmed(entry, row)) {
         entry.resultId = row.ResultId || entry.targetId;
         return settle(entry, 'done', row.ResultMessage || 'Recorded.');
       }
       var minutes = (Date.now() - entry.submittedAt.getTime()) / 60000;
-      if (minutes >= GIVE_UP_MINUTES && entry.state !== 'slow') {
-        entry.state = 'slow';
-        entry.message = 'This is taking longer than usual. It will be recorded; you can keep working.';
+      var retrying = status === 'Failed';
+      if (retrying && entry.message !== RETRYING) {
+        entry.message = RETRYING;
+        entry.retrying = true;
+        onChange(entry);
+      } else if (!retrying && entry.retrying) {
+        entry.retrying = false;
+        entry.message = '';
         onChange(entry);
       }
+      if (minutes >= GIVE_UP_MINUTES && entry.state !== 'slow') {
+        entry.state = 'slow';
+        if (!retrying) entry.message = 'This is taking longer than usual. It will be recorded; you can keep working.';
+        onChange(entry);
+      }
+      if (minutes >= STOP_MINUTES) return;   // the page stops asking; a reload shows where it has got to
       schedule(entry);
     }
 
     // The action itself must show this change, with no lock left on it.
     async function confirmed(entry, row) {
+      if (ADMIN_TYPES.indexOf(entry.type) >= 0) return true;
       var id = Number(row.ResultId || entry.targetId);
       if (!id) return false;
       try {
@@ -162,5 +189,8 @@ CH.requests = (function () {
     };
   }
 
-  return { tracker: tracker, newKey: newKey, SCHEDULE: SCHEDULE, GIVE_UP_MINUTES: GIVE_UP_MINUTES };
+  var RETRYING = 'Not recorded yet – retrying automatically.';
+
+  return { tracker: tracker, newKey: newKey, SCHEDULE: SCHEDULE, GIVE_UP_MINUTES: GIVE_UP_MINUTES, ADMIN_TYPES: ADMIN_TYPES,
+    LimitedError: LimitedError, RETRYING: RETRYING };
 })();

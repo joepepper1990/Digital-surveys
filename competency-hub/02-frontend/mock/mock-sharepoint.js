@@ -18,6 +18,25 @@ window.MockSharePoint = (function () {
     if (me) data.People.push(Object.assign({}, me, { Id: 900 }));
   }
   if (mode === 'left') data.People.forEach(function (p) { if (p.SiteUserId === asId) p.Status = 'Left'; });
+  // Limited mode: the queue monitor reports that changes are not being picked up.
+  if (mode === 'limited') {
+    data['Competency Hub Settings'][0].Value = JSON.stringify({ state: 'Down', reason: 'Changes are not being picked up by the request flow.',
+      checkedAt: new Date(Date.now() - 5 * 60000).toISOString(), attention: 0 });
+  }
+  // Two changes needing an administrator: one that changed nothing, one that is part-made (its action locked).
+  if (mode === 'attention') {
+    var old = new Date(Date.now() - 60 * 60000).toISOString();
+    var hist = '/sites/ESGCompetencyHub/Lists/History/Transactions';
+    var actor = data.People.filter(function (p) { return p.Title === 'Rachel Boulden'; })[0].SiteUserId;
+    data.History.push({ Id: 9001, Title: 'Request 501: ExtendDeadline', RowKind: 'Transaction', RequestKey: 'tx-nothing', RequestType: 'ExtendDeadline',
+      RecordId: data.Actions[0].Id, State: 'Needs attention', Attempts: 3, LastError: 'Run 0858 failed. See its run history.', FirstClaimedAt: old,
+      ActorId: actor, Payload: '{}', Created: old, Modified: old, FileDirRef: hist });
+    data.History.push({ Id: 9002, Title: 'Request 502: ChangeStatus', RowKind: 'Transaction', RequestKey: 'tx-partly', RequestType: 'ChangeStatus',
+      RecordId: data.Actions[1].Id, State: 'Needs attention', Attempts: 3, LastError: 'Run 0859 failed. See its run history.', FirstClaimedAt: old,
+      ActorId: actor, Payload: '{}', Created: old, Modified: old, FileDirRef: hist });
+    data.Actions[1].PendingRequestKey = 'tx-partly';
+    data['Competency Hub Settings'][0].Value = JSON.stringify({ state: 'Healthy', reason: '', checkedAt: new Date(Date.now() - 5 * 60000).toISOString(), attention: 2 });
+  }
   if (mode === 'actionsPartial') {
     for (var i = 0; i < 5200; i++) {
       data.Actions.push(Object.assign({}, data.Actions[i % 20], { Id: 1000 + i, Title: 'Bulk test action ' + (i + 1) }));

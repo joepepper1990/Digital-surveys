@@ -4,7 +4,7 @@ window.MockRules = (function () {
   var CH = {};
   // Fixed names and limits. Lists are addressed by display title; folders by list URL name.
   CH.config = {
-    VERSION: '0.3.0',
+    VERSION: '0.4.0',
     ENVIRONMENT: 'TEST',
     lists: {
       competencies: { title: 'Competencies', url: 'Competencies' },
@@ -16,7 +16,8 @@ window.MockRules = (function () {
       calendar: { title: 'Calendar Events', url: 'CalendarEvents' },
       meetings: { title: 'Meetings', url: 'Meetings' },
       requests: { title: 'Requests', url: 'Requests' },
-      history: { title: 'History', url: 'History' }
+      history: { title: 'History', url: 'History' },
+      settings: { title: 'Competency Hub Settings', url: 'Settings' }
     },
     pageSize: 500,
     maxRows: 5000,
