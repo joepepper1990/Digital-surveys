@@ -17,11 +17,13 @@ CH.views.admin = (function () {
     UpdateSetting: 'Change a setting', RetryTransaction: 'Try a change again', CancelTransaction: 'Cancel a change', RevertTransaction: 'Revert a change',
     EditNotice: 'Edit a notice', ArchiveNotice: 'Archive a notice', PinNotice: 'Pin or unpin a notice', HideComment: 'Hide a comment',
     RaiseRegisterEntry: 'Raise an improvement or degradation', UpdateRegisterEntry: 'Change an improvement or degradation',
-    LinkActionToEntry: 'Link an action to an entry', UnlinkActionFromEntry: 'Unlink an action from an entry'
+    LinkActionToEntry: 'Link an action to an entry', UnlinkActionFromEntry: 'Unlink an action from an entry',
+    ScheduleMeeting: 'Book a meeting', UpdateMeeting: 'Change a meeting', CancelMeeting: 'Cancel a meeting', StartMeeting: 'Start a meeting'
   };
   var SETTING_WORDS = {
     OverdueReminderIntervalDays: 'days between late reminders', ReminderDaysBefore: 'days before the deadline for the first reminder',
-    MaxDeadlineYears: 'furthest deadline in years', MonitorHours: 'queue monitor hours', DueSoonDays: 'days counted as due soon'
+    MaxDeadlineYears: 'furthest deadline in years', MonitorHours: 'queue monitor hours', DueSoonDays: 'days counted as due soon',
+    InvitesEnabled: 'Outlook invitations', PdfEnabled: 'PDF minutes'
   };
 
   function parse(text) { try { return JSON.parse(text || '{}') || {}; } catch (_) { return {}; } }
@@ -95,6 +97,8 @@ CH.views.admin = (function () {
       'Check that the flow ESG Competency Hub | 3 Queue monitor is turned on.'), ui.chip('soon', 'Unknown')));
     if (hl.records === 'down') lines.push(h('li', null, h('span', null, h('b', { text: 'Changes to notices and the register are not being processed. ' }), hl.recordsReason,
       ' Actions carry on as normal. In Power Automate, check that ESG Competency Hub | 4 Records is turned on.'), ui.chip('late', 'Not working')));
+    if (hl.meetings === 'down') lines.push(h('li', null, h('span', null, h('b', { text: 'Meeting bookings and changes are not being processed. ' }), hl.meetingsReason,
+      ' Everything else carries on. In Power Automate, check that ESG Competency Hub | 5 Meetings is turned on.'), ui.chip('late', 'Not working')));
     if (hl.administration === 'down') lines.push(h('li', null, h('span', null, h('b', { text: 'Administration changes are not being processed. ' }), hl.adminReason,
       ' Staff can carry on as normal. In Power Automate, check that ESG Competency Hub | 6 Administration is turned on.'), ui.chip('late', 'Not working')));
     if (hl.reminders === 'ok') lines.push(h('li', null, h('span', null, h('b', { text: 'Reminders ran ' }), D.short(D.localDate(hl.lastDailyRun)) + ' at ' + D.ukTime(hl.lastDailyRun) + '.'), ui.chip('done', 'Working')));

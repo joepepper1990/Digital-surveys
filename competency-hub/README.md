@@ -11,23 +11,23 @@ This project is separate from the other applications in this repository.
 
 | Part | State |
 |---|---|
-| Site and Setup (`setup/`) | Setup 1.1 applied on the site. **Setup 1.2** (Feedback list, Meeting Minutes library, Notice Posters group, new columns and settings) built and tested locally |
-| App (`02-frontend/`) | 0.3.0 running on the site. **0.7.0** (safety net, Administration with People, Settings and Feedback, *My week* home page, notices, register, Management page) built and tested locally |
-| Flows (`04-solution/`) | 1.2.0.0 running on the site. **1.5.0.0** (five flows: Daily tasks, Request queue, Queue monitor, Records, Administration) built and tested locally |
+| Site and Setup (`setup/`) | Setup 1.1 applied on the site. **Setup 1.3** (1.2: Feedback list, Meeting Minutes library, Notice Posters group, new columns and settings; 1.3: the meeting end time and the *Outlook invitations* and *PDF minutes* switches) built and tested locally |
+| App (`02-frontend/`) | 0.3.0 running on the site. **0.8.0** (safety net, Administration with People, Settings and Feedback, *My week* home page, notices, register, Management page, booking meetings and the agenda) built and tested locally |
+| Flows (`04-solution/`) | 1.2.0.0 running on the site. **1.6.0.0** (six flows: Daily tasks, Request queue, Queue monitor, Records, Meetings, Administration; plus the invitations probe *P-INV*, run by hand) built and tested locally |
 | Permission probe (`probe/CH_Probe_P2.*`) | Built and tested locally; to be run on the site with an ordinary test account |
 
 The plan for everything left to go-live is in `docs/REMAINING-PLAN.md`.
 
-Phase 1 is delivered in six releases; Releases 1 (safety net), 2 (administration and permissions) and 3 (noticeboard,
-register, feedback, settings, dashboard) are built. Releases 4 and 5 (meetings) and Release 6 (go-live checks)
-follow. The steps for installing are in `docs/HOW-TO.html`.
+Phase 1 is delivered in six releases; Releases 1 (safety net), 2 (administration and permissions), 3 (noticeboard,
+register, feedback, settings, dashboard) and 4 (booking meetings with Outlook invitations, the agenda) are built.
+Release 5 (the live meeting and minutes) and Release 6 (go-live checks) follow. The steps for installing are in `docs/HOW-TO.html`.
 
 **Site layout (23 October 2026):** site navigation is turned off (Change the look → Navigation), and staff are to be
 given the Hub page address ending `?env=WebView`, which hides SharePoint's own bars so the Hub fills the window.
 
-**Not built yet, by design:** the meeting-rights grants on an open meeting's Record folder (plan §4.3) come with
-meetings in Release 4. Until then "Can run meetings" is recorded and used by every rule; there are no meeting folders
-to grant on.
+**Meeting rights (plan §4.3):** booking a meeting gives its Record folder its own permissions – the area's meeting
+runners and management can add to it – and switching *Can run meetings* on or off in Administration also changes
+the open meetings' folders, removing before recording a removal and adding after recording a grant, each read back.
 
 ## Platform
 

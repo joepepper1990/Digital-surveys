@@ -1,8 +1,8 @@
 {
   "product": "ESG Competency Hub Setup",
-  "schemaVersion": "1.2.0",
+  "schemaVersion": "1.3.0",
   "outputs": {
-    "CH_Setup.js": "2936e033e9d9bd54dd004edaedd8ddc2584c2bfa848d2b8cec0ee93bc1fad4b8",
+    "CH_Setup.js": "f14e865312f7ba59734ef08d93a5cc809bfb6cd498404f259714a48bd079410a",
     "CH_Setup.html": "5608015d0aeaca511b3d85a1e178d037f588f5648a7927acca6f33fb2987fef6"
   }
 }

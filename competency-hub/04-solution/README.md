@@ -1,14 +1,17 @@
 # ESG Competency Hub – Power Automate solution
 
-`ESGCompetencyHub_1_4_1_0_unmanaged.zip` is the solution to import into Power Automate. It holds four flows, which all
-ship **Off** so nothing runs until you turn them on:
+`ESGCompetencyHub_1_6_0_0_unmanaged.zip` is the solution to import into Power Automate. It holds seven flows, which
+all ship **Off** so nothing runs until you turn them on:
 
 | Flow | What it does |
 |---|---|
 | **ESG Competency Hub \| 1 Daily tasks** | Every morning at 06:00 UK time: deadline reminders, another try for emails that were not sent, and the end of temporary access to an area |
 | **ESG Competency Hub \| 2 Request queue** | Records the changes to actions that people send from the Hub: raise, move a deadline, mark as done, change status, reassign, edit, close and reopen |
 | **ESG Competency Hub \| 3 Queue monitor** | Every 15 minutes in working hours and hourly outside them: puts stalled changes back in the queue, retries emails, tells the administrators about anything that needs them, and records whether processing is healthy |
+| **ESG Competency Hub \| 4 Records** | Records changes to notices and the register: edit, pin, archive, hide a comment; raise and update improvements and degradations, and link actions to them |
+| **ESG Competency Hub \| 5 Meetings** | Books, changes, cancels and starts monthly meetings. It sends the Outlook invitation, update or cancellation from the Outlook connection's calendar, and fixes the agenda when the meeting starts |
 | **ESG Competency Hub \| 6 Administration** | Records administrators' changes: people, their areas, meeting rights and notice posting, settings, and the decisions on changes needing attention |
+| **ESG Competency Hub \| P-INV Invitations probe** | Run by hand, once, before invitations are relied on: makes a TEST event with one attendee, moves it, finds it by its hidden reference and cancels it. Turn it off again afterwards |
 
 | Part | Name |
 |---|---|
@@ -17,7 +20,11 @@ ship **Off** so nothing runs until you turn them on:
 | Environment variable | `esghub_CompetencyHubSiteUrl` – ESG Competency Hub Site URL (no trailing slash) |
 | Publisher | ESG Competency Hub, prefix `esghub` (its own, so nothing clashes with the ESG 1-to-1 solution in the same environment) |
 
-Flows 4 (Records) and 5 (Meetings) come with Releases 3 to 5.
+**Invitations without duplicates.** Each meeting carries a hidden reference (`InviteToken`, also written into the
+event). Before every new attempt, and whenever a call's result was uncertain, *5 Meetings* looks for an event with that
+reference and uses it rather than making another. A cancellation that finds no event counts as done. The queue monitor
+tries a failed invitation again, up to three times, then tells the administrators; the meeting itself stands. With the
+setting *Outlook invitations* off, no invitations are sent and people add meetings to their calendars from the Hub.
 
 `schema/schema.json` is the single description of the lists. Setup builds the site from it, and the flow tools check
 every column a flow uses against it.

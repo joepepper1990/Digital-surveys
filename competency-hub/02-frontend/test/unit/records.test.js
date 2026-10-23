@@ -81,7 +81,10 @@ test('settings: the same ranges as the Administration flow', () => {
   assert.equal(CH.views.settings.check(item('MonitorHours'), '07:00|19:45|60'), '');
   assert.match(CH.views.settings.check(item('MonitorHours'), '19:45|07:00|60'), /start before end/);
   assert.match(CH.views.settings.check(item('MonitorHours'), '07:00|19:45|5'), /at least 15 minutes/);
-  assert.deepEqual(plain(CH.views.settings.ITEMS.map((i) => i.name)), ['ReminderDaysBefore', 'DueSoonDays', 'OverdueReminderIntervalDays', 'MaxDeadlineYears', 'MonitorHours']);
+  assert.deepEqual(plain(CH.views.settings.ITEMS.map((i) => i.name)), ['ReminderDaysBefore', 'DueSoonDays', 'OverdueReminderIntervalDays', 'MaxDeadlineYears', 'MonitorHours',
+    'InvitesEnabled', 'PdfEnabled']);
+  assert.equal(CH.views.settings.check(item('InvitesEnabled'), 'No'), '');
+  assert.equal(CH.views.settings.check(item('PdfEnabled'), 'Maybe'), 'Choose Yes or No.');
 });
 
 test('feedback: one of the four types, and a description', () => {

@@ -9,10 +9,10 @@ const crypto = require('crypto');
 const ROOT = path.join(__dirname, '..');
 const MODULES = [
   'src/core/config.js', 'src/core/dom.js', 'src/core/names.js', 'src/core/dates.js', 'src/core/sp.js', 'src/core/requests.js',
-  'src/domain/access.js', 'src/domain/rules.js', 'src/domain/model.js', 'src/domain/health.js',
+  'src/domain/access.js', 'src/domain/rules.js', 'src/domain/model.js', 'src/domain/health.js', 'src/domain/agenda.js',
   'src/ui/components.js', 'src/ui/dialog.js',
   'src/views/home.js', 'src/views/area.js', 'src/views/notice-form.js', 'src/views/raise-form.js', 'src/views/action-panel.js', 'src/views/my-actions.js', 'src/views/people.js', 'src/views/record-panel.js', 'src/views/entry-form.js', 'src/views/feedback.js', 'src/views/settings.js',
-  'src/views/dashboard.js', 'src/views/admin.js',
+  'src/views/dashboard.js', 'src/views/meeting-form.js', 'src/views/meeting-panel.js', 'src/views/admin.js',
   'src/app.js'
 ];
 
@@ -95,10 +95,10 @@ function build() {
   }, null, 2) + '\n';
 
   // The simulated request flow in the mock applies the same rules as the app (plan K7.3).
-  const rules = ['/* Built by tools/build.js from src/core/config.js, dates.js and domain/rules.js for the mock. Do not edit. */',
+  const rules = ['/* Built by tools/build.js from src/core/config.js, dates.js, domain/rules.js and agenda.js for the mock. Do not edit. */',
     'window.MockRules = (function () {', "  'use strict';", '  var CH = {};',
-    ['src/core/config.js', 'src/core/dates.js', 'src/domain/rules.js'].map((m) => read(m).split('\n').map((l) => l ? '  ' + l : l).join('\n')).join('\n'),
-    '  return { config: CH.config, dates: CH.dates, rules: CH.rules };', '})();', ''].join('\n');
+    ['src/core/config.js', 'src/core/dates.js', 'src/domain/rules.js', 'src/domain/agenda.js'].map((m) => read(m).split('\n').map((l) => l ? '  ' + l : l).join('\n')).join('\n'),
+    '  return { config: CH.config, dates: CH.dates, rules: CH.rules, agenda: CH.agenda };', '})();', ''].join('\n');
 
   return { 'dist/competency-hub.js': js, 'dist/competency-hub.html': layout, 'dist/BUILD_MANIFEST.json': manifest, 'mock/index.html': mock, 'mock/rules.js': rules };
 }

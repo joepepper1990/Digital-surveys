@@ -252,6 +252,56 @@ CH.rules = (function () {
     return {};
   }
 
+  // ---- monthly meetings (spec MTG-1): the same checks as the Meetings flow
+  // v: { areaKey, dateIso, start, end, location, onlineLink, chairId, attendeeIds }
+  // ctx: { today, runsMeetings(areaKey), chairAllowed(areaKey, id), attendeeAllowed(areaKey, id) }
+  function validateMeeting(v, ctx) {
+    var e = {};
+    if (!v.areaKey || !ctx.runsMeetings(v.areaKey)) e.areaKey = 'Only the people who run meetings in this area, and management, can do this.';
+    var hhmm = /^([01]\d|2[0-3]):[0-5]\d$/;
+    if (!D.isIso(v.dateIso || '') || isNaN(Date.parse(v.dateIso + 'T00:00:00Z')) || D.addDays(v.dateIso, 0) !== v.dateIso) e.dateIso = 'Choose a date, and a start and end time.';
+    else if (v.dateIso < ctx.today) e.dateIso = 'Choose a date from today onwards.';
+    else if (v.dateIso > D.addDays(ctx.today, 730)) e.dateIso = 'Choose a date within two years.';
+    if (!hhmm.test(v.start || '') || !hhmm.test(v.end || '')) e.start = 'Choose a date, and a start and end time.';
+    else if (v.end <= v.start) e.end = 'The meeting must end after it starts.';
+    if (String(v.location || '').trim().length > 255) e.location = 'Keep the place to 255 characters or fewer.';
+    var link = String(v.onlineLink || '').trim();
+    if (link && (!/^https:\/\//i.test(link) || link.length > 1000)) e.onlineLink = 'Give a secure online link: it starts with https.';
+    if (!e.areaKey && !ctx.chairAllowed(v.areaKey, Number(v.chairId))) e.chairId = 'Choose a chair who runs meetings in this area, or a Team Leader.';
+    var ids = (v.attendeeIds || []).map(Number);
+    if (!e.areaKey && (!ids.length || ids.length > 60 || ids.some(function (id) { return !ctx.attendeeAllowed(v.areaKey, id); }))) {
+      e.attendeeIds = 'Choose the attendees from the members of the area and management (up to 60).';
+    }
+    return e;
+  }
+
+  function validateCancelMeeting(v) {
+    var r = String(v.reason || '').trim();
+    if (r.length < 10) return { reason: 'Give a reason of at least 10 characters.' };
+    if (r.length > 1000) return { reason: 'Keep the reason to 1,000 characters or fewer.' };
+    return {};
+  }
+
+  // The same date in the following months, on the same weekday of the month (the second Wednesday stays the second
+  // Wednesday); a fifth weekday that a month does not have becomes the last one.
+  function nextMonths(iso, count) {
+    var y = +iso.slice(0, 4), m = +iso.slice(5, 7), d = +iso.slice(8, 10);
+    var dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+    var nth = Math.ceil(d / 7);
+    var out = [];
+    for (var i = 1; i <= count; i++) {
+      var mm = m - 1 + i;
+      var yy = y + Math.floor(mm / 12);
+      mm = mm % 12;
+      var first = new Date(Date.UTC(yy, mm, 1)).getUTCDay();
+      var day = 1 + ((dow - first + 7) % 7) + (nth - 1) * 7;
+      var last = new Date(Date.UTC(yy, mm + 1, 0)).getUTCDate();
+      while (day > last) day -= 7;
+      out.push(yy + '-' + ('0' + (mm + 1)).slice(-2) + '-' + ('0' + day).slice(-2));
+    }
+    return out;
+  }
+
   // Mark complete closes the action unless a close-out check is required (D-07).
   function completionStatus(requiresCloseOut) { return requiresCloseOut ? 'Completed' : 'Closed'; }
 
@@ -262,6 +312,6 @@ CH.rules = (function () {
     roles: roles, completionStatus: completionStatus,
     validateEntry: validateEntry, validateEntryUpdate: validateEntryUpdate, managesEntry: managesEntry, noticeRoles: noticeRoles,
     validateNoticeEdit: validateNoticeEdit, validateComment: validateComment, ENTRY_TYPES: ENTRY_TYPES, IMPACTS: IMPACTS, ENTRY_STATUSES: ENTRY_STATUSES,
-    NOTICE_CATEGORIES: NOTICE_CATEGORIES, SELF_ONLY: SELF_ONLY, PRIORITIES: PRIORITIES, OPEN_STATUSES: OPEN_STATUSES, OUTCOMES: OUTCOMES
+    NOTICE_CATEGORIES: NOTICE_CATEGORIES, validateMeeting: validateMeeting, validateCancelMeeting: validateCancelMeeting, nextMonths: nextMonths, SELF_ONLY: SELF_ONLY, PRIORITIES: PRIORITIES, OPEN_STATUSES: OPEN_STATUSES, OUTCOMES: OUTCOMES
   };
 })();

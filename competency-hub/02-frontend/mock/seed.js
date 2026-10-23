@@ -178,9 +178,14 @@ window.MockSeed = function (todayIso) {
   var MEETINGS = [['FLK', 21, -7], ['INS', 22, -6], ['GRS', null, -49], ['RPE', 28, -1], ['BA', 23, -12], ['DOS', 29, 0],
     ['RP', 27, -8], ['DSL', 30, -5], ['ALS', 34, 1], ['RW', 22, -13]];
   var meetings = [];
+  function membersOf(key) { return PEOPLE.filter(function (p) { return p[2].indexOf(key) >= 0; }).map(function (p) { return idOf[p[0]]; }); }
   MEETINGS.forEach(function (m) {
-    meetings.push({ Id: meetings.length + 1, CompetencyId: area(m[0]), MeetingDate: at(Math.min(m[2], 0) - 1, '10:00:00'), Status: 'Finalised', ChairId: idOf['Kelly Bates'] });
-    if (m[1] !== null) meetings.push({ Id: meetings.length + 1, CompetencyId: area(m[0]), MeetingDate: at(m[1], '10:00:00'), Status: 'Scheduled', ChairId: idOf['Kelly Bates'] });
+    var base = { CompetencyId: area(m[0]), ChairId: idOf['Kelly Bates'], Location: 'Meeting room 2', OnlineLink: '', Attendees: JSON.stringify(membersOf(m[0])),
+      Revision: 1, LastRequestKey: '', CreatedRequestKey: 'IMPORT-MTG', FileDirRef: '/sites/ESGCompetencyHub/Lists/Meetings/' + m[0] };
+    meetings.push(Object.assign({ Id: meetings.length + 1, MeetingDate: at(Math.min(m[2], 0) - 1, '10:00:00'), EndTime: at(Math.min(m[2], 0) - 1, '11:00:00'),
+      Status: 'Finalised', CutoffTime: at(Math.min(m[2], 0) - 1, '10:00:00'), InviteState: 'Sent', InviteToken: 'ESGMseed' + meetings.length }, base));
+    if (m[1] !== null) meetings.push(Object.assign({ Id: meetings.length + 1, MeetingDate: at(m[1], '10:00:00'), EndTime: at(m[1], '11:00:00'), Status: 'Scheduled',
+      InviteState: 'Sent', InviteToken: 'ESGMseed' + meetings.length, OutlookEventId: 'AAMkseed' + meetings.length }, base));
   });
 
   var calendar = [
@@ -193,7 +198,7 @@ window.MockSeed = function (todayIso) {
   return {
     'Competencies': competencies, 'People': people, 'Competency Members': members, 'Actions': actions,
     'Noticeboard': notices, 'Updates': updates, 'Meetings': meetings, 'Calendar Events': calendar,
-    'Requests': [], 'History': history, 'Improvements and Degradations': register,
+    'Requests': [], 'History': history, 'Improvements and Degradations': register, 'Meeting Items': [],
     'Feedback': [
       { Id: 1, Title: 'Report a bug: dates', FeedbackType: 'Report a bug', Description: 'The calendar shows the wrong day for all-day events.', Status: 'New',
         AuthorId: idOf['Rachel Boulden'], Created: at(-2, '09:12:00'), ClientKey: 'seed-fb-1', PageView: 'area' },
@@ -208,7 +213,10 @@ window.MockSeed = function (todayIso) {
       { Id: 4, Title: 'ReminderDaysBefore', Value: '7' },
       { Id: 5, Title: 'DueSoonDays', Value: '7' },
       { Id: 6, Title: 'OverdueReminderIntervalDays', Value: '7' },
-      { Id: 7, Title: 'MaxDeadlineYears', Value: '2' }
+      { Id: 7, Title: 'MaxDeadlineYears', Value: '2' },
+      { Id: 8, Title: 'InvitesEnabled', Value: 'Yes' },
+      { Id: 9, Title: 'PdfEnabled', Value: 'Yes' },
+      { Id: 10, Title: 'AgendaLookaheadDays', Value: '60' }
     ]
   };
 };

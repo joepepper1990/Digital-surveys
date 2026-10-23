@@ -17,10 +17,13 @@ PARTS = {
               'L': 'close', 'O': 'reopen', 'E': 'edit', 'K': 'unknown kind', 'K0': 'unreadable', 'H': 'history folder',
               'r': 'retry', '': ''},
     'daily': {'D': 'reminders', 'A': 'alerts', 'c': 'reminder', 'x': 'temporary access', 'r': 'retry', '': ''},
-    'monitor': {'A': 'alerts', 'm': 'stuck change', 'r': 'retry', '': ''},
+    'monitor': {'A': 'alerts', 'm': 'stuck change', 'r': 'retry', 'v': 'invitation', '': ''},
     'records': {'NE': 'edit notice', 'NA': 'archive notice', 'NP': 'pin notice', 'NH': 'hide comment', 'RR': 'raise entry',
                 'RU': 'update entry', 'RL': 'link action', 'RX': 'unlink action', 'N': 'records', 'K': 'unknown kind', 'K0': 'unreadable',
                 'missing': 'missing', 'r': 'retry', '': ''},
+    'probe': {'': ''},
+    'meetings': {'M': 'meeting', 'MB': 'book', 'MU': 'change meeting', 'MC': 'cancel meeting', 'MS': 'start meeting', 'MF': 'meeting folder', 'MR': 'record folder', 'M404': 'meeting missing', 'MK': 'unknown kind', 'K': 'unknown kind',
+                 'K0': 'unreadable', 'r': 'retry', '': ''},
     'admin': {'T': 'decision', 'P': 'people', 'G': 'setting', 'RH': 'history folder', 'K0': 'unreadable', 'r': 'retry', '': ''},
 }
 

@@ -29,7 +29,8 @@ SECURE = {'secureData': {'properties': ['inputs', 'outputs']}}
 
 # The lists the flow uses, by the key it uses in outputs('Ids'), and their web address (RootFolder name).
 LIST_URLS = {'req': 'requests', 'act': 'actions', 'hist': 'history', 'upd': 'updates', 'people': 'people', 'members': 'members',
-             'comps': 'competencies', 'notif': 'notifications', 'settings': 'settings', 'notices': 'notices', 'reg': 'register'}
+             'comps': 'competencies', 'notif': 'notifications', 'settings': 'settings', 'notices': 'notices', 'reg': 'register',
+             'mtg': 'meetings', 'items': 'meetingItems', 'cal': 'calendar'}
 LIST_KEYS = {k: BY_KEY[v]['title'] for k, v in LIST_URLS.items()}
 REQUEST_LIST = BY_KEY['requests']['title']
 MANAGEMENT = "createArray('Team Leader', 'Group Head')"
@@ -199,7 +200,7 @@ def site_and_ids():
     ids = {}
     for key in LIST_KEYS:
         ids[key] = "@{outputs('Site_path')}/Lists/" + BY_KEY[LIST_URLS[key]]['url']
-    for key in ('req', 'act', 'hist', 'upd', 'notif', 'members', 'people', 'reg', 'notices'):
+    for key in ('req', 'act', 'hist', 'upd', 'notif', 'members', 'people', 'reg', 'notices', 'mtg', 'items'):
         ids[key + 'Root'] = ids[key]
     return [('Site_path', compose("@if(endsWith(" + path + ", '/'), take(" + path + ", sub(length(" + path + "), 1)), " + path + ")")),
             ('Site_url', compose("@if(endsWith(" + SITE + ", '/'), take(" + SITE + ", sub(length(" + SITE + "), 1)), " + SITE + ")")),
@@ -509,6 +510,129 @@ def retry_emails():
     ]
 
 
+# --------------------------------------------------------------------------------------------- meeting invitations (spec §5.4)
+def outlook(op, params):
+    """An Office 365 Outlook calendar call. The connector never retries by itself: a call that may or may not have
+    worked is recorded as Unknown and looked up by its reference before anything is tried again."""
+    return {'type': 'OpenApiConnection',
+            'inputs': {'host': {'connectionName': 'shared_office365', 'operationId': op, 'apiId': OUTLOOK_API},
+                       'parameters': params, 'authentication': "@parameters('$authentication')", 'retryPolicy': {'type': 'none'}},
+            'runtimeConfiguration': SECURE}
+
+
+INVITE_PENDING = "createArray('Creating', 'Updating', 'Cancelling', 'Unknown', 'Failed')"
+
+
+def invite_steps(sfx, meeting_id_expr):
+    """Brings one meeting's Outlook invitation into line with the meeting (spec MTG-1, §5.4). What to do follows from the
+    meeting itself: cancelled – cancel the event; no event yet – create it; otherwise – update it. Before creating or
+    cancelling without a stored event, a call that has been tried before first looks for the event carrying the
+    meeting's reference (InviteToken), so a call that timed out never sends a second invitation. The outcome is
+    saved with the meeting's ETag: Sent or Cancelled; Failed for a definite refusal; Unknown for anything unclear.
+    When invitations are switched off (InvitesEnabled No) nothing is sent and people use the download in the Hub."""
+    s = sfx
+    M = "body('Inv_get" + s + "')"
+    STATE = "string(coalesce(" + M + "?['InviteState'], 'None'))"
+    ATTEMPTS = "int(" + idq(M + "?['InviteAttempts']") + ")"
+    TOKEN = "string(coalesce(" + M + "?['InviteToken'], ''))"
+    EVENT = "string(coalesce(" + M + "?['OutlookEventId'], ''))"
+    ON = "not(equals(string(coalesce(first(body('Inv_switch" + s + "'))?['Value'], 'Yes')), 'No'))"
+    OP = "outputs('Inv_op" + s + "')"
+    FOUND = "string(coalesce(first(body('Inv_match" + s + "'))?['id'], ''))"
+    ID = "variables('varInvEvent')"
+    when = lambda col, fallback: ("formatDateTime(convertFromUtc(string(coalesce(" + M + "?['" + col + "'], " + fallback + ")), 'GMT Standard Time'), "
+                                  "'yyyy-MM-ddTHH:mm:ss')")
+    START = when('MeetingDate', "'2000-01-01T00:00:00Z'")
+    END = when('EndTime', "addHours(string(coalesce(" + M + "?['MeetingDate'], '2000-01-01T00:00:00Z')), 1)")
+    area = "string(coalesce(first(body('Inv_area" + s + "'))?['Title'], 'Competency'))"
+    subject = "concat('[ESG Competency Hub] ', " + area + ", ' monthly meeting')"
+    link = "concat(outputs('Site_url'), '/SitePages/Hub.aspx?meeting=', string(" + M + "?['Id']))"
+    body = ("concat('<p>The ', " + html_text(area) + ", ' monthly meeting.</p>', "
+            "if(empty(string(coalesce(" + M + "?['Location'], ''))), '', concat('<p>Where: ', " + html_text(M + "?['Location']") + ", '</p>')), "
+            "if(empty(string(coalesce(" + M + "?['OnlineLink'], ''))), '', concat('<p>Online: ', " + html_text(M + "?['OnlineLink']") + ", '</p>')), "
+            "'<p>The agenda is in the Competency Hub: <a href=\"', " + html_text(link) + ", '\">open the meeting</a>.</p>', "
+            "'<p style=\"color:#5b6774;font-size:12px\">Sent by the ESG Competency Hub. Reference ', " + TOKEN + ", '</p>')")
+    item = lambda: {'table': 'Calendar', 'item/subject': '@' + subject, 'item/start': '@' + START, 'item/end': '@' + END,
+                    'item/timeZone': 'GMT Standard Time', 'item/requiredAttendees': "@join(body('Inv_emails" + s + "'), ';')",
+                    'item/body': '@' + body, 'item/location': "@{coalesce(" + M + "?['Location'], '')}", 'item/importance': 'normal',
+                    'item/showAs': 'busy', 'item/responseRequested': True}
+    result = lambda call: ("if(equals(actions('" + call + "')?['status'], 'Succeeded'), 'ok', if(and(greaterOrEquals(int(coalesce(outputs('" + call + "')?['statusCode'], 0)), 400), "
+                           "less(int(coalesce(outputs('" + call + "')?['statusCode'], 0)), 500)), 'refused', 'unclear'))")
+    attended = ("@and(equals(item()?['Status'], 'Active'), contains(json(if(empty(string(coalesce(" + M + "?['Attendees'], ''))), '[]', string(" + M + "?['Attendees']))), "
+                "int(" + idq("item()?['SiteUserId']") + ")))")
+    return [
+        ('Inv_get' + s, http('GET', L('mtg', "/items(@{" + meeting_id_expr + "})?$select=Id,Title,Status,MeetingDate,EndTime,Location,OnlineLink,Attendees,"
+                                           "OutlookEventId,InviteState,InviteToken,InviteAttempts,CompetencyId"), meta=True)),
+        ('Inv_due' + s, cond("@and(contains(" + INVITE_PENDING + ", " + STATE + "), less(" + ATTEMPTS + ", 3))", seq(
+            ('Inv_settings' + s, http('GET', L('settings', "/items?$select=Title,Value&$top=500"))),
+            ('Inv_switch' + s, query("@body('Inv_settings" + s + "')?['value']", "@equals(item()?['Title'], 'InvitesEnabled')")),
+            ('Inv_op' + s, compose("@if(equals(string(" + M + "?['Status']), 'Cancelled'), 'cancel', if(empty(" + EVENT + "), 'create', 'update'))")),
+            ('Inv_off' + s, cond("@and(not(" + ON + "), not(equals(" + OP + ", 'cancel')))", seq(
+                # switched off: nothing is sent, and the Hub offers the meeting as a download instead
+                ('Inv_none' + s, compose({'InviteState': 'None', 'InviteError': ''})),
+                ('Save_inv_none' + s, after(merge(L('mtg', "/items(@{" + meeting_id_expr + "})"), 'Inv_none' + s, if_match="@{" + M + "?['odata.etag']}"),
+                                            {'Inv_none' + s: OK})),
+            ), seq(
+                ('Inv_comps' + s, http('GET', L('comps', "/items?$select=Id,Title&$top=500"))),
+                ('Inv_area' + s, query("@body('Inv_comps" + s + "')?['value']", "@equals(" + idstr("item()?['Id']") + ", " + idstr(M + "?['CompetencyId']") + ")")),
+                ('Inv_people' + s, http('GET', L('people', "/items?$select=SiteUserId,Status,Person/EMail&$expand=Person&$top=5000"))),
+                ('Inv_attending' + s, query("@body('Inv_people" + s + "')?['value']", attended)),
+                ('Inv_emails' + s, {'type': 'Select', 'inputs': {'from': "@body('Inv_attending" + s + "')", 'select': "@item()?['Person']?['EMail']"}}),
+                ('Inv_start_id' + s, set_var('varInvEvent', '@' + EVENT)),
+                # tried before and nothing stored: look for the event that carries this meeting's reference
+                ('Inv_look' + s, cond("@and(empty(" + EVENT + "), or(greater(" + ATTEMPTS + ", 0), not(equals(" + STATE + ", 'Creating'))), not(empty(" + TOKEN + ")))", seq(
+                    ('Inv_search' + s, outlook('GetEventsCalendarViewV3', {
+                        'calendarId': 'Calendar', 'search': '@' + TOKEN,
+                        'startDateTimeUtc': "@formatDateTime(addDays(string(coalesce(" + M + "?['MeetingDate'], utcNow())), -1), 'yyyy-MM-ddTHH:mm:ss')",
+                        'endDateTimeUtc': "@formatDateTime(addDays(string(coalesce(" + M + "?['MeetingDate'], utcNow())), 2), 'yyyy-MM-ddTHH:mm:ss')"})),
+                    ('Inv_match' + s, after(query("@if(equals(actions('Inv_search" + s + "')?['status'], 'Succeeded'), coalesce(body('Inv_search" + s + "')?['value'], createArray()), createArray())",
+                                                  "@contains(string(coalesce(item()?['body'], '')), " + TOKEN + ")"), {'Inv_search' + s: TOLERANT})),
+                    # a search that failed says nothing: nothing is created this time (it could make a second invitation)
+                    ('Inv_looked' + s, set_var('varInvLook', "@if(equals(actions('Inv_search" + s + "')?['status'], 'Succeeded'), 'ok', 'unclear')")),
+                    ('Inv_take' + s, set_var('varInvEvent', '@' + FOUND)),
+                ), seq(('Inv_no_look' + s, set_var('varInvLook', 'ok'))))),
+                ('Inv_do' + s, cond("@equals(variables('varInvLook'), 'ok')", seq(
+                    ('Inv_kind' + s, switch('@' + OP, {
+                        'create': seq(('Inv_need_create' + s, cond("@empty(" + ID + ")", seq(
+                            ('Inv_create' + s, outlook('V4CalendarPostItem', item())),
+                            ('Inv_created' + s, after(set_var('varInvResult', "@" + result('Inv_create' + s)), {'Inv_create' + s: TOLERANT})),
+                            ('Inv_new_id' + s, after(set_var('varInvEvent', "@if(equals(actions('Inv_create" + s + "')?['status'], 'Succeeded'), "
+                                                                            "string(coalesce(body('Inv_create" + s + "')?['id'], '')), '')"), {'Inv_created' + s: OK})),
+                        ), seq(
+                            ('Inv_adopted' + s, set_var('varInvResult', 'ok')),
+                        )))),
+                        'update': seq(
+                            ('Inv_update' + s, outlook('V4CalendarPatchItem', dict(item(), id='@' + ID))),
+                            ('Inv_updated' + s, after(set_var('varInvResult', "@" + result('Inv_update' + s)), {'Inv_update' + s: TOLERANT})),
+                        ),
+                    }, seq(
+                        # cancel: delete the event if there is one; one already gone counts as done
+                        ('Inv_has_event' + s, cond("@empty(" + ID + ")", seq(('Inv_nothing' + s, set_var('varInvResult', 'ok'))), seq(
+                            ('Inv_delete' + s, outlook('CalendarDeleteItem_V2', {'calendar': 'Calendar', 'event': '@' + ID})),
+                            ('Inv_deleted' + s, after(set_var('varInvResult', "@if(equals(outputs('Inv_delete" + s + "')?['statusCode'], 404), 'ok', " + result('Inv_delete' + s) + ")"),
+                                                      {'Inv_delete' + s: TOLERANT})),
+                        ))),
+                    ))),
+                ), seq(('Inv_unclear' + s, set_var('varInvResult', 'unclear'))))),
+                ('Inv_outcome' + s, compose({
+                    'InviteState': "@{if(equals(variables('varInvResult'), 'ok'), if(equals(" + OP + ", 'cancel'), 'Cancelled', 'Sent'), "
+                                   "if(equals(variables('varInvResult'), 'refused'), 'Failed', 'Unknown'))}",
+                    'OutlookEventId': "@{if(equals(" + OP + ", 'cancel'), '', variables('varInvEvent'))}",
+                    'InviteAttempts': "@if(equals(variables('varInvResult'), 'ok'), 0, add(" + ATTEMPTS + ", 1))",
+                    'InviteError': "@{if(equals(variables('varInvResult'), 'ok'), '', concat('Run ', workflow()?['run']?['name'], ': the ', " + OP + ", ' call was ', "
+                                   "variables('varInvResult'), '.'))}"})),
+                # with the meeting's ETag: a change made meanwhile wins, and the next try follows it
+                ('Save_inv' + s, merge(L('mtg', "/items(@{" + meeting_id_expr + "})"), 'Inv_outcome' + s, if_match="@{" + M + "?['odata.etag']}")),
+                ('Inv_saved' + s, after(compose('done'), {'Save_inv' + s: TOLERANT})),
+            ))),
+        ))),
+    ]
+
+
+INVITE_VARS = [('Initialize_varInvResult', init_var('varInvResult', 'string', '')), ('Initialize_varInvEvent', init_var('varInvEvent', 'string', '')),
+               ('Initialize_varInvLook', init_var('varInvLook', 'string', 'ok'))]
+
+
 # --------------------------------------------------------------------------------------------- the flow
 # Which flow applies which kind of request (spec §5.3): each flow's trigger takes only its own kinds, and the
 # Request queue takes everything else (so an unknown kind is still answered, with a refusal).
@@ -516,10 +640,11 @@ DOMAIN_TYPES = {
     'admin': ['RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting'],
     'records': ['EditNotice', 'ArchiveNotice', 'PinNotice', 'HideComment', 'RaiseRegisterEntry', 'UpdateRegisterEntry', 'LinkActionToEntry',
                 'UnlinkActionFromEntry'],
+    'meetings': ['ScheduleMeeting', 'UpdateMeeting', 'CancelMeeting', 'StartMeeting'],
 }
 # Changes decided once and carried out step by step (StepsDone DECIDED): once decided they may be part-made, so they
 # can be finished but not cancelled. Only changes to actions hold a lock and can be reverted.
-DECIDED_TYPES = [t for d in ('admin', 'records') for t in DOMAIN_TYPES[d]]
+DECIDED_TYPES = [t for d in ('admin', 'records', 'meetings') for t in DOMAIN_TYPES[d]]
 ACTION_TYPES = ['RaiseAction', 'ExtendDeadline', 'MarkComplete', 'ChangeStatus', 'ReassignAction', 'CloseAction', 'ReopenAction', 'EditActionDetails']
 FINAL_TX = "createArray('Applied', 'Void', 'Cancelled', 'Reverted', 'Rolled Back')"
 
@@ -1322,6 +1447,35 @@ def flow_request_queue(domain='actions'):
             ("not(empty(" + blocked + "))", "@concat('Not removed from ', join(" + blocked + ", ', '), ': open actions there are still theirs. Reassign them first.')"),
             ("and(equals(" + PERSON + "?['IsAdministrator'], true), not(" + ADMINW + "), lessOrEquals(length(body('Get_admins" + sfx + "')?['value']), 1))",
              'There must always be at least one active administrator.'))
+
+        # meeting rights reach the open meetings (spec §4.3): a person who runs meetings in an area may write in the record
+        # folder of each of its open meetings. Taken away before the records change, given after, each read back.
+        def record_rights(name, add):
+            MT = "items('" + name + "')"
+            K = "last(split(string(" + MT + "?['FileDirRef']), '/'))"
+            ra = ("_api/web/GetFolderByServerRelativePath(decodedurl='@{outputs('Ids')?['itemsRoot']}/@{" + K + "}/MTG-@{" + MT + "?['Id']}/Record')"
+                  "/ListItemAllFields/roleassignments")
+            check = ra + "?$filter=PrincipalId eq @{" + UID + "}&$expand=RoleDefinitionBindings&$select=PrincipalId,RoleDefinitionBindings/Id"
+            has = lambda step: "contains(string(coalesce(first(body('" + step + "')?['value'])?['RoleDefinitionBindings'], '')), concat(':', " + role_id('Contribute') + ", '}'))"
+            want = "and(not(" + LEAVING + "), not(" + MGMTW + "), not(empty(body('" + name + "_want'))))"
+            return (name, {'type': 'Foreach', 'foreach': "@outputs('Open_mtgs" + sfx + "')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
+                (name + '_want', query("@" + AREAS, "@and(equals(string(item()?['key']), " + K + "), equals(item()?['chair'], true))")),
+                (name + '_now', http('GET', check)),
+                # no record folder (a meeting made before Release 4): nothing to do
+                (name + '_change', after(cond("@and(equals(actions('" + name + "_now')?['status'], 'Succeeded'), " +
+                                              ("and(" + want + ", not(" + has(name + '_now') + ")))" if add else "and(not(" + want + "), " + has(name + '_now') + "))"), seq(
+                    (name + '_do', http('POST', ra + "/" + ('addroleassignment' if add else 'removeroleassignment') + "(principalid=@{" + UID + "},roledefid=@{" + role_id('Contribute') + "})")),
+                    (name + '_back', http('GET', check)),
+                    (name + '_kept', cond("@" + (("not(" + has(name + '_back') + ")") if add else has(name + '_back')),
+                                          seq((name + '_stop', fail_here('A meeting record folder did not change as asked. See ' + name + '_do.'))))),
+                )), {name + '_now': TOLERANT})),
+            )})
+        open_meetings = [
+            ('Open_sched' + sfx, http('GET', L('mtg', "/items?$select=Id,FileDirRef&$filter=Status eq 'Scheduled'&$top=5000"))),
+            ('Open_live' + sfx, http('GET', L('mtg', "/items?$select=Id,FileDirRef&$filter=Status eq 'In Progress'&$top=5000"))),
+            ('Open_mtgs' + sfx, compose("@union(body('Open_sched" + sfx + "')?['value'], body('Open_live" + sfx + "')?['value'])")),
+        ]
+
         return seq(
             ('Get_groups' + sfx, http('GET', "_api/web/sitegroups?$select=Id,Title&$top=1000")),
             *[('Groups' + sfx + '_' + k, query("@body('Get_groups" + sfx + "')?['value']", "@equals(item()?['Title'], " + q(title) + ")")) for k, title in GROUP_TITLES.items()],
@@ -1395,6 +1549,8 @@ def flow_request_queue(domain='actions'):
                 ('Break_fold' + sfx, http('POST', folder_api + "/breakroleinheritance(copyRoleAssignments=true,clearSubscopes=true)")),
                 *grant('Grant_fold' + sfx, True, role_id('Contribute')),
             ))),
+            *open_meetings,
+            record_rights('Rec_out' + sfx, False),
             # narrow first: the groups this person is leaving, each read back, before the records say so
             ('Each_remove' + sfx, {'type': 'Foreach', 'foreach': "@" + COMPS, 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
                 ('Rows_r' + sfx, query("@body('Active_rows" + sfx + "')", "@equals(" + idstr("item()?['CompetencyId']") + ", " + idstr("items('Each_remove" + sfx + "')?['Id']") + ")")),
@@ -1479,6 +1635,7 @@ def flow_request_queue(domain='actions'):
                 ('P_event_details' + sfx, compose({'ActorId': '@int(' + SENDER + ')', 'EventTime': '@{' + EVENT_TIME + '}', 'ProcessedAt': '@{utcNow()}'})),
                 ('Save_p_event' + sfx, merge(L('hist', "/items(@{first(body('Get_p_event" + sfx + "')?['value'])?['Id']})"), 'P_event_details' + sfx)),
             ))),
+            record_rights('Rec_in' + sfx, True),
             *tx_update('applied' + sfx, {'State': 'Applied', 'ProcessedAt': '@{utcNow()}'}),
             *finish_request(sfx, 'Completed', "concat(if(" + TYPE_IS('AddPerson') + ", 'Added ', if(" + LEAVING + ", 'Marked as left: ', if(" + TYPE_IS('ReactivatePerson') + ", "
                             "'Reactivated ', 'Saved the changes for '))), " + NAME + ", '.')", "int(" + UID + ")"),
@@ -1486,7 +1643,8 @@ def flow_request_queue(domain='actions'):
 
     # ---------------------------------------------------------------- administrators: the settings editor (spec ADM-4)
     def settings_switch():
-        """Four safe settings, each checked on the server: whole numbers in range, or working hours as HH:MM|HH:MM|N."""
+        """The safe settings, each checked on the server: whole numbers in range, working hours as HH:MM|HH:MM|N, or Yes/No
+        for the two switches that fall back when Outlook invitations or PDF conversion cannot be used."""
         sfx = '_G'
         NAME = "string(coalesce(" + P + "?['name'], ''))"
         VALUE = "outputs('New_value" + sfx + "')"
@@ -1515,7 +1673,8 @@ def flow_request_queue(domain='actions'):
         ev_values, ev_call = create_in_folder('hist', "@{outputs('Ids')?['histRoot']}/Administration", 'S_event_values' + sfx, 'S_event_body' + sfx)
         verdict = chain(
             ("not(" + IS_ADMIN + ")", 'Only a Competency Hub administrator can do this.'),
-            ("not(contains(createArray('OverdueReminderIntervalDays', 'ReminderDaysBefore', 'DueSoonDays', 'MaxDeadlineYears', 'MonitorHours'), " + NAME + "))", 'Choose a setting.'),
+            ("not(contains(createArray('OverdueReminderIntervalDays', 'ReminderDaysBefore', 'DueSoonDays', 'MaxDeadlineYears', 'MonitorHours', 'InvitesEnabled', 'PdfEnabled'), " + NAME + "))", 'Choose a setting.'),
+            ("and(contains(createArray('InvitesEnabled', 'PdfEnabled'), " + NAME + "), not(contains(createArray('Yes', 'No'), " + VALUE + ")))", 'Choose Yes or No.'),
             ("empty(" + ROW + ")", 'That setting is missing. Run Setup again.'),
             ("and(contains(createArray('OverdueReminderIntervalDays', 'ReminderDaysBefore', 'DueSoonDays'), " + NAME + "), or(not(" + whole(VALUE) + "), less(" + NUM + ", 1), greater(" + NUM + ", 30)))",
              'Enter a whole number of days from 1 to 30.'),
@@ -1544,7 +1703,8 @@ def flow_request_queue(domain='actions'):
             ('Need_s_event' + sfx, cond("@empty(body('Find_s_event" + sfx + "')?['value'])", seq(
                 ('S_event_values' + sfx, form({'Title': "@{concat('Setting changed: ', if(equals(" + NAME + ", 'OverdueReminderIntervalDays'), 'days between late reminders', if(equals(" + NAME + ", 'ReminderDaysBefore'), "
                                                        "'days before the deadline for the first reminder', if(equals(" + NAME + ", 'DueSoonDays'), 'days counted as due soon', "
-                                                       "if(equals(" + NAME + ", 'MaxDeadlineYears'), 'furthest deadline in years', 'queue monitor hours')))))}", 'RowKind': 'Event', 'RequestKey': '@{' + ev_key + '}',
+                                                       "if(equals(" + NAME + ", 'MaxDeadlineYears'), 'furthest deadline in years', if(equals(" + NAME + ", 'InvitesEnabled'), 'Outlook invitations', "
+                                                       "if(equals(" + NAME + ", 'PdfEnabled'), 'PDF minutes', 'queue monitor hours')))))))}", 'RowKind': 'Event', 'RequestKey': '@{' + ev_key + '}',
                                                'RecordType': 'Setting', 'RecordId': "@{" + ROW + "?['Id']}", 'EventType': 'Setting Changed', 'RequestType': 'UpdateSetting',
                                                'PreviousValue': "@{outputs('Previous" + sfx + "')}", 'NewValue': '@{' + VALUE + '}'})),
                 ('S_event_body' + sfx, ev_values),
@@ -1833,6 +1993,390 @@ def flow_request_queue(domain='actions'):
                                    reject('_K', "'This kind of change is not recognised.'"))),
         )
 
+    def meetings_switch():
+        """Monthly meetings (spec MTG-1, MTG-2, §4.3): book, change, cancel and start. Each is decided once with the
+        same rules as the app, then carried out step by step. Booking makes the meeting's folders – MTG-{id} for the
+        agenda, and its Record folder, where the area's meeting runners and management may write while the meeting is
+        open. Starting fixes the cut-off and writes the agenda from the records as they are then. The Outlook
+        invitation is sent after the change is recorded, by invite_steps, so a slow or failed invitation never
+        holds up the meeting itself."""
+        OWN = "string(" + TX + "?['RequestType'])"
+        TYPE_IS = lambda x: "equals(" + OWN + ", '" + x + "')"
+        TEXT = lambda f: "trim(string(coalesce(" + P + "?['" + f + "'], '')))"
+        HAS = lambda f: "contains(" + P + ", '" + f + "')"
+        COMPS = "body('Get_comps_M')?['value']"
+        PEOPLE = "body('Get_people_M')?['value']"
+        M = "variables('varMtg')"
+        BOOK = TYPE_IS('ScheduleMeeting')
+        AREA_KEY = "string(if(" + BOOK + ", coalesce(" + P + "?['areaKey'], ''), last(split(string(coalesce(" + M + "?['FileDirRef'], '')), '/'))))"
+        AREA = "first(body('Area_M'))"
+        A_ID = idstr(AREA + "?['Id']")
+        MEMBER = "first(body('My_member_M'))"
+        RUNS = "or(" + IS_MGMT + ", and(not(empty(" + MEMBER + ")), equals(" + MEMBER + "?['CanManageMeetings'], true)))"
+        MID = "string(variables('varActionId'))"
+        MTG_PATH = "@{outputs('Ids')?['itemsRoot']}/@{" + AREA_KEY + "}/MTG-@{" + MID + "}"
+        REC_API = "_api/web/GetFolderByServerRelativePath(decodedurl='" + MTG_PATH + "/Record')/ListItemAllFields"
+        ALREADY = "equals(string(coalesce(" + M + "?['LastRequestKey'], '')), " + KEY + ")"
+        ev_key_uri = "concat(" + KEY + ", '%7C1')"
+        ON = "not(equals(string(coalesce(first(body('Invites_M'))?['Value'], 'Yes')), 'No'))"
+        claims = lambda person: "@{concat('[{\"Key\":\"', " + person + "?['Person']?['Name'], '\"}]')}"
+        local = lambda col, fmt, fallback: ("formatDateTime(convertFromUtc(string(coalesce(" + M + "?['" + col + "'], " + fallback + ")), 'GMT Standard Time'), '" + fmt + "')")
+        # what the meeting will be: what the request gives, otherwise what the meeting has now
+        DATE = "string(if(" + HAS('dateIso') + ", " + P + "?['dateIso'], " + local('MeetingDate', 'yyyy-MM-dd', "'2000-01-01T00:00:00Z'") + "))"
+        START = "string(if(" + HAS('start') + ", " + P + "?['start'], " + local('MeetingDate', 'HH:mm', "'2000-01-01T00:00:00Z'") + "))"
+        END = "string(if(" + HAS('end') + ", " + P + "?['end'], " + local('EndTime', 'HH:mm', "'2000-01-01T01:00:00Z'") + "))"
+        CHAIR = "string(if(" + HAS('chairId') + ", " + P + "?['chairId'], " + idstr(M + "?['ChairId']") + "))"
+        ATTENDEES = "if(" + HAS('attendeeIds') + ", coalesce(" + P + "?['attendeeIds'], createArray()), json(if(empty(string(coalesce(" + M + "?['Attendees'], ''))), '[]', string(" + M + "?['Attendees']))))"
+        LOCATION = "string(if(" + HAS('location') + ", " + TEXT('location') + ", coalesce(" + M + "?['Location'], '')))"
+        ONLINE = "string(if(" + HAS('onlineLink') + ", " + TEXT('onlineLink') + ", coalesce(" + M + "?['OnlineLink'], '')))"
+        T = "outputs('When_M')"
+        CHAIR_ROW = "first(body('Chair_M'))"
+        SAFE_DATE = "if(" + T + "?['ok'], " + DATE + ", " + TODAY + ")"
+        mtg_values, mtg_call = create_in_folder('mtg', "@{outputs('Ids')?['mtgRoot']}/@{" + AREA_KEY + "}", 'Mtg_values_M', 'Mtg_body_M')
+        find_ev = L('hist', "/items?$select=Id&$filter=RequestKey eq '@{" + ev_key_uri + "}'")
+        role_id = "string(first(body('Contribute_M'))?['Id'])"
+        mgmt_gid = "string(first(body('Mgmt_group_M'))?['Id'])"
+
+        # ---- reading: the area, who runs its meetings, the people, and (for a change) the meeting
+        reads = [
+            ('Get_comps_M', http('GET', L('comps', "/items?$select=Id,Title,CompetencyKey,Status,TrackingStart&$top=500"))),
+            ('Get_people_M', http('GET', L('people', "/items?$select=Id,Title,SiteUserId,Role,Status,Person/Name,Person/EMail&$expand=Person&$top=5000"))),
+            ('Is_book_M', cond('@' + BOOK, seq(('Book_no_meeting_M', set_var('varMtg', {}))), seq(
+                ('Get_mtg_read_M', http('GET', L('mtg', "/items(@{" + idq(TX + "?['RecordId']") + "})?$select=Id,Title,Status,MeetingDate,EndTime,Location,OnlineLink,"
+                                                        "ChairId,Attendees,Revision,LastRequestKey,FileDirRef,CompetencyId,OutlookEventId,InviteState,PreviousMeetingId,"
+                                                        "CutoffTime,CutoffUpdatesId,IntervalStart"), meta=True)),
+                ('Mtg_found_M', after(cond("@equals(actions('Get_mtg_read_M')?['status'], 'Succeeded')", None,
+                                           reject('_M404', "'That meeting could not be found.'")), {'Get_mtg_read_M': TOLERANT})),
+                ('Set_mtg_id_M', set_var('varActionId', "@int(" + idq(TX + "?['RecordId']") + ")")),
+                ('Set_mtg_M', set_var('varMtg', "@body('Get_mtg_read_M')")),
+            ))),
+            ('Area_M', query('@' + COMPS, "@equals(string(item()?['CompetencyKey']), " + AREA_KEY + ")")),
+            ('My_member_M', query("@body('Get_my_memberships')?['value']", "@equals(" + idstr("item()?['CompetencyId']") + ", " + A_ID + ")")),
+            ('Area_members_M', http('GET', L('members', "/items?$select=PersonId,CanManageMeetings&$filter=CompetencyId eq @{" + idq(AREA + "?['Id']") + "} and Status eq 'Active'&$top=5000"))),
+            ('Member_ids_M', {'type': 'Select', 'inputs': {'from': "@body('Area_members_M')?['value']", 'select': "@" + idstr("item()?['PersonId']")}}),
+            ('Chair_rows_M', query("@body('Area_members_M')?['value']", "@equals(item()?['CanManageMeetings'], true)")),
+            ('Chair_ids_M', {'type': 'Select', 'inputs': {'from': "@body('Chair_rows_M')", 'select': "@" + idstr("item()?['PersonId']")}}),
+            ('Get_settings_M', http('GET', L('settings', "/items?$select=Title,Value&$top=500"))),
+            ('Invites_M', query("@body('Get_settings_M')?['value']", "@equals(item()?['Title'], 'InvitesEnabled')")),
+            ('Testing_M', query("@body('Get_settings_M')?['value']", "@and(equals(item()?['Title'], 'PreGoLiveTesting'), equals(item()?['Value'], 'Yes'))")),
+            # the date and times, read without ever failing: a value that is not a date simply fails the check below
+            ('When_parts_M', compose({'date': '@' + DATE, 'start': '@' + START, 'end': '@' + END})),
+            ('Start_utc_M', compose("@convertToUtc(concat(outputs('When_parts_M')?['date'], 'T', outputs('When_parts_M')?['start'], ':00'), 'GMT Standard Time')")),
+            ('End_utc_M', after(compose("@convertToUtc(concat(outputs('When_parts_M')?['date'], 'T', outputs('When_parts_M')?['end'], ':00'), 'GMT Standard Time')"),
+                                {'Start_utc_M': TOLERANT})),
+            ('When_M', after(compose({
+                'ok': "@and(equals(actions('Start_utc_M')?['status'], 'Succeeded'), equals(actions('End_utc_M')?['status'], 'Succeeded'), "
+                      "equals(length(outputs('When_parts_M')?['date']), 10), equals(length(outputs('When_parts_M')?['start']), 5), equals(length(outputs('When_parts_M')?['end']), 5))",
+                'start': "@if(equals(actions('Start_utc_M')?['status'], 'Succeeded'), outputs('Start_utc_M'), '2000-01-01T00:00:00Z')",
+                'end': "@if(equals(actions('End_utc_M')?['status'], 'Succeeded'), outputs('End_utc_M'), '2000-01-01T00:00:00Z')"}), {'End_utc_M': TOLERANT})),
+            ('Att_ids_M', {'type': 'Select', 'inputs': {'from': "@" + ATTENDEES, 'select': "@string(item())"}}),
+            ('Att_ok_M', query('@' + PEOPLE, "@and(equals(item()?['Status'], 'Active'), contains(body('Att_ids_M'), " + idstr("item()?['SiteUserId']") + "), "
+                                            "or(contains(" + MANAGEMENT + ", string(item()?['Role'])), contains(body('Member_ids_M'), " + idstr("item()?['SiteUserId']") + ")))")),
+            ('Chair_M', query('@' + PEOPLE, "@and(equals(item()?['Status'], 'Active'), equals(" + idstr("item()?['SiteUserId']") + ", " + CHAIR + "), "
+                                           "or(contains(" + MANAGEMENT + ", string(item()?['Role'])), contains(body('Chair_ids_M'), " + idstr("item()?['SiteUserId']") + ")))")),
+        ]
+        # the rules the app applies too (views/meeting-form.js, CH.rules.validateMeeting)
+        details_rules = [
+            ("not(" + T + "?['ok'])", 'Choose a date, and a start and end time.'),
+            ("lessOrEquals(ticks(" + T + "?['end']), ticks(" + T + "?['start']))", 'The meeting must end after it starts.'),
+            ("less(" + day_num(SAFE_DATE) + ", " + day_num(TODAY) + ")", 'Choose a date from today onwards.'),
+            ("greater(" + day_num(SAFE_DATE) + ", " + day_num("formatDateTime(addDays(concat(" + TODAY + ", 'T00:00:00Z'), 730), 'yyyy-MM-dd')") + ")", 'Choose a date within two years.'),
+            ("greater(length(" + LOCATION + "), 255)", 'Keep the place to 255 characters or fewer.'),
+            ("and(not(empty(" + ONLINE + ")), or(not(startsWith(toLower(" + ONLINE + "), 'https://')), greater(length(" + ONLINE + "), 1000)))", 'Give a secure online link: it starts with https.'),
+            ("empty(body('Chair_M'))", 'Choose a chair who runs meetings in this area, or a Team Leader.'),
+            ("or(empty(body('Att_ids_M')), greater(length(body('Att_ids_M')), 60), not(equals(length(body('Att_ok_M')), length(union(body('Att_ids_M'), body('Att_ids_M'))))))",
+             'Choose the attendees from the members of the area and management (up to 60).')]
+        common_rules = [
+            ("or(empty(" + AREA + "), not(equals(string(" + AREA + "?['Status']), 'Active')))", 'Choose an active area.'),
+            ("not(" + RUNS + ")", 'Only the people who run meetings in this area, and management, can do this.')]
+        STATUS = "string(coalesce(" + M + "?['Status'], ''))"
+        stale = ("and(greater(int(" + idq(TX + "?['ExpectedRevision']") + "), 0), not(equals(" + idstr(M + "?['Revision']") + ", " + idstr(TX + "?['ExpectedRevision']") + ")))")
+        COMMON = "outputs('Verdict_common_M')"
+        DETAILS = "outputs('Verdict_details_M')"
+        verdict = ("if(not(empty(" + COMMON + ")), " + COMMON + ", "
+                   "if(" + BOOK + ", " + DETAILS + ", "
+                   "if(" + ALREADY + ", '', "
+                   "if(" + stale + ", " + q('This meeting was changed by someone else. Review the latest details and try again.') + ", "
+                   "if(" + TYPE_IS('UpdateMeeting') + ", if(not(equals(" + STATUS + ", 'Scheduled')), " + q('Only a meeting that has not started can be changed.') + ", " + DETAILS + "), "
+                   "if(" + TYPE_IS('CancelMeeting') + ", " + chain(
+                       ("not(contains(createArray('Scheduled', 'In Progress'), " + STATUS + "))", 'This meeting is already finished or cancelled.'),
+                       ("less(length(" + TEXT('reason') + "), 10)", 'Give a reason of at least 10 characters.'),
+                       ("greater(length(" + TEXT('reason') + "), 1000)", 'Keep the reason to 1,000 characters or fewer.')) + ", "
+                   "if(not(equals(" + STATUS + ", 'Scheduled')), " + q('This meeting has already started, or is finished or cancelled.') + ", '')))))))")
+        decide = [('Decide_M', cond('@' + UNDECIDED, seq(
+            ('Verdict_common_M', compose('@' + chain(*common_rules))),
+            ('Verdict_details_M', compose('@' + chain(*details_rules))),
+            ('Verdict_M', compose('@' + verdict)),
+            ('Decided_M', cond("@empty(outputs('Verdict_M'))", seq(*tx_update('planned_M', {'State': 'Planned', 'StepsDone': 'DECIDED'})),
+                               reject('_M', "outputs('Verdict_M')"))),
+        )))]
+
+        # ---- the meeting's folders, and who may write in its Record folder while it is open (§4.3)
+        def wanted_principals():
+            # management as a group; each of the area's meeting runners by name
+            return [
+                ('Contribute_all_M', http('GET', '_api/web/roledefinitions?$select=Id,Name')),
+                ('Contribute_M', query("@body('Contribute_all_M')?['value']", "@equals(item()?['Name'], 'Competency Hub Contribute')")),
+                ('Groups_all_M', http('GET', '_api/web/sitegroups?$select=Id,Title')),
+                ('Mgmt_group_M', query("@body('Groups_all_M')?['value']", "@equals(item()?['Title'], " + q(next(g['title'] for g in SCHEMA['groups'] if g['key'] == 'Management')) + ")")),
+                ('Wanted_M', compose("@union(createArray(" + mgmt_gid + "), body('Chair_ids_M'))")),
+            ]
+        grants = [
+            *ensure_folder('_MF', 'items', 'itemsRoot', AREA_KEY, "concat('MTG-', " + MID + ")"),
+            *ensure_folder('_MR', 'items', 'itemsRoot', "concat(" + AREA_KEY + ", '/MTG-', " + MID + ")", "'Record'"),
+            *wanted_principals(),
+            ('Break_record_M', http('POST', REC_API + "/breakroleinheritance(copyRoleAssignments=true,clearSubscopes=true)")),
+            ('Each_grant_M', {'type': 'Foreach', 'foreach': "@outputs('Wanted_M')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
+                ('Grant_now_M', http('GET', REC_API + "/roleassignments?$filter=PrincipalId eq @{items('Each_grant_M')}&$expand=RoleDefinitionBindings&$select=PrincipalId,RoleDefinitionBindings/Id")),
+                ('Grant_levels_M', {'type': 'Select', 'inputs': {'from': "@coalesce(first(body('Grant_now_M')?['value'])?['RoleDefinitionBindings'], createArray())", 'select': "@string(item()?['Id'])"}}),
+                ('Grant_needed_M', cond("@not(contains(body('Grant_levels_M'), " + role_id + "))", seq(
+                    ('Grant_M', http('POST', REC_API + "/roleassignments/addroleassignment(principalid=@{items('Each_grant_M')},roledefid=@{" + role_id + "})")),
+                ))),
+            )}),
+            # read back: every wanted principal now has the level
+            ('Grants_back_M', http('GET', REC_API + "/roleassignments?$expand=RoleDefinitionBindings&$select=PrincipalId,RoleDefinitionBindings/Id")),
+            ('Granted_M', query("@body('Grants_back_M')?['value']", "@contains(string(item()?['RoleDefinitionBindings']), concat(':', " + role_id + ", '}'))")),
+            ('Granted_ids_M', {'type': 'Select', 'inputs': {'from': "@body('Granted_M')", 'select': "@" + idstr("item()?['PrincipalId']")}}),
+            ('Missing_M', query("@outputs('Wanted_M')", "@not(contains(body('Granted_ids_M'), item()))")),
+            ('Grants_ok_M', cond("@empty(body('Missing_M'))", None, seq(('Grants_stop_M', fail_here('The meeting record folder permissions did not change as asked. See Each_grant_M.'))))),
+        ]
+        reset_record = [
+            ('Find_record_M', http('GET', REC_API + "?$select=Id,HasUniqueRoleAssignments")),
+            ('Record_there_M', after(cond("@and(equals(actions('Find_record_M')?['status'], 'Succeeded'), equals(body('Find_record_M')?['HasUniqueRoleAssignments'], true))", seq(
+                ('Reset_record_M', http('POST', REC_API + "/resetroleinheritance")),
+                ('Record_back_M', http('GET', REC_API + "?$select=Id,HasUniqueRoleAssignments")),
+                ('Record_reset_M', cond("@equals(body('Record_back_M')?['HasUniqueRoleAssignments'], true)", seq(
+                    ('Record_stop_M', fail_here('The meeting record folder could not be made read-only. See Reset_record_M.'))))),
+            )), {'Find_record_M': TOLERANT})),
+        ]
+
+        def event(c, title_expr, event_type, more=None):
+            ev_values, ev_call = create_in_folder('hist', "@{outputs('Ids')?['histRoot']}/@{" + AREA_KEY + "}", 'Mtg_event_values' + c, 'Mtg_event_body' + c)
+            return [
+                ('Find_mtg_event' + c, http('GET', find_ev)),
+                ('Need_mtg_event' + c, cond("@empty(body('Find_mtg_event" + c + "')?['value'])", seq(
+                    ('Mtg_event_values' + c, form(dict({'Title': '@{take(' + title_expr + ', 255)}', 'RowKind': 'Event', 'RequestKey': '@{concat(' + KEY + ", '|1')}",
+                                                      'RecordType': 'Meeting', 'RecordId': '@{' + MID + '}', 'EventType': event_type, 'RequestType': '@{' + OWN + '}',
+                                                      'MeetingId': '@{' + MID + '}'}, **(more or {})))),
+                    ('Mtg_event_body' + c, ev_values),
+                    ('Mtg_event' + c, ev_call),
+                    *created_ok('Mtg_event' + c, 'Mtg_event_made' + c, 'The History event could not be created. See Mtg_event' + c + '.'),
+                ))),
+                ('Get_mtg_event' + c, http('GET', find_ev)),
+                ('Mtg_event_details' + c, compose({'ActorId': '@int(' + SENDER + ')', 'EventTime': '@{' + EVENT_TIME + '}', 'ProcessedAt': '@{utcNow()}',
+                                                 'CompetencyId': '@int(' + A_ID + ')'})),
+                ('Save_mtg_event' + c, merge(L('hist', "/items(@{first(body('Get_mtg_event" + c + "')?['value'])?['Id']})"), 'Mtg_event_details' + c)),
+            ]
+
+        def done(c, message_expr):
+            return [*tx_update('applied' + c, {'State': 'Applied', 'ProcessedAt': '@{utcNow()}'}),
+                    *finish_request(c, 'Completed', message_expr, 'int(' + MID + ')')]
+
+        when_text = "concat(formatDateTime(concat(" + DATE + ", 'T00:00:00Z'), 'dddd d MMMM yyyy'), ' at ', " + START + ")"
+
+        # ---- book
+        FOUND = "body('Find_mtg_M')?['value']"
+        token = "concat('ESGM', take(replace(" + KEY + ", '-', ''), 10))"
+        book = seq(
+            ('Find_mtg_M', http('GET', L('mtg', "/items?$select=Id&$filter=CreatedRequestKey eq 'F%7C@{" + esc(KEY) + "}'"))),
+            ('Need_mtg_M', cond("@empty(" + FOUND + ")", seq(
+                ('Att_num_M', {'type': 'Select', 'inputs': {'from': "@body('Att_ok_M')", 'select': "@int(" + idq("item()?['SiteUserId']") + ")"}}),
+                ('Mtg_values_M', form({
+                    'Title': "@{take(concat(string(" + AREA + "?['Title']), ' meeting ', " + DATE + "), 255)}", 'Competency': '@{' + A_ID + '}',
+                    'MeetingDate': "@{convertFromUtc(" + T + "?['start'], 'GMT Standard Time', 'dd/MM/yyyy HH:mm')}",
+                    'EndTime': "@{convertFromUtc(" + T + "?['end'], 'GMT Standard Time', 'dd/MM/yyyy HH:mm')}",
+                    'Location': '@{' + LOCATION + '}', 'OnlineLink': '@{' + ONLINE + '}', 'Chair': claims(CHAIR_ROW), 'Status': 'Scheduled',
+                    'Attendees': "@{string(body('Att_num_M'))}", 'InviteToken': '@{' + token + '}', 'InviteState': "@{if(" + ON + ", 'Creating', 'None')}",
+                    'InviteAttempts': '0', 'AmendmentCount': '0', 'PendingChanges': '0', 'Revision': '1', 'LastRequestKey': '@{' + KEY + '}',
+                    'CreatedRequestKey': 'F|@{' + KEY + '}', 'IsTestRecord': "@{if(empty(body('Testing_M')), '0', '1')}"})),
+                ('Mtg_body_M', mtg_values),
+                ('Create_mtg_M', mtg_call),
+                *created_ok('Create_mtg_M', 'Mtg_created_M', 'The meeting could not be created. See Create_mtg_M.'),
+                ('Get_new_mtg_M', http('GET', L('mtg', "/items?$select=Id&$filter=CreatedRequestKey eq 'F%7C@{" + esc(KEY) + "}'"))),
+                ('Set_new_mtg_M', set_var('varActionId', "@int(" + idstr("first(body('Get_new_mtg_M')?['value'])?['Id']") + ")")),
+            ), seq(
+                ('Set_found_mtg_M', set_var('varActionId', "@int(" + idstr("first(" + FOUND + ")?['Id']") + ")")),
+            ))),
+            *grants,
+            *event('_MB', "concat('Meeting booked: ', " + when_text + ")", 'Meeting Booked'),
+            *done('_MB', "concat('Meeting booked for ', " + when_text + ", '.')"),
+        )
+
+        # ---- change: the details given; the invitation follows (an update, or the first invitation if none went yet)
+        upd_body = {'MeetingDate': "@{" + T + "?['start']}", 'EndTime': "@{" + T + "?['end']}", 'Location': '@{' + LOCATION + '}', 'OnlineLink': '@{' + ONLINE + '}',
+                    'ChairId': '@int(' + CHAIR + ')', 'Attendees': "@{string(body('Att_num_U_M'))}",
+                    'InviteState': "@{if(" + ON + ", if(empty(string(coalesce(" + M + "?['OutlookEventId'], ''))), 'Creating', 'Updating'), 'None')}",
+                    'InviteAttempts': 0, 'Revision': "@add(int(" + idq(M + "?['Revision']") + "), 1)", 'LastRequestKey': '@{' + KEY + '}'}
+        update = seq(
+            ('Apply_update_M', cond("@not(" + ALREADY + ")", seq(
+                ('Att_num_U_M', {'type': 'Select', 'inputs': {'from': "@body('Att_ok_M')", 'select': "@int(" + idq("item()?['SiteUserId']") + ")"}}),
+                ('Update_values_M', compose(upd_body)),
+                ('Save_update_M', merge(L('mtg', "/items(@{" + MID + "})"), 'Update_values_M', if_match="@{" + M + "?['odata.etag']}")),
+            ))),
+            *event('_MU', "concat('Meeting changed: ', " + when_text + ")", 'Meeting Changed'),
+            *done('_MU', "concat('Meeting changed to ', " + when_text + ", '.')"),
+        )
+
+        # ---- cancel: the Record folder goes back to read-only first; then the meeting says so
+        cancel = seq(
+            *reset_record,
+            ('Apply_cancel_M', cond("@not(" + ALREADY + ")", seq(
+                ('Cancel_values_M', compose({'Status': 'Cancelled', 'CancellationReason': '@{' + TEXT('reason') + '}',
+                                             'InviteState': "@{if(or(not(empty(string(coalesce(" + M + "?['OutlookEventId'], '')))), contains(createArray('Creating', 'Updating', 'Unknown', 'Failed'), "
+                                                            "string(coalesce(" + M + "?['InviteState'], 'None')))), 'Cancelling', 'None')}",
+                                             'InviteAttempts': 0, 'Revision': "@add(int(" + idq(M + "?['Revision']") + "), 1)", 'LastRequestKey': '@{' + KEY + '}'})),
+                ('Save_cancel_M', merge(L('mtg', "/items(@{" + MID + "})"), 'Cancel_values_M', if_match="@{" + M + "?['odata.etag']}")),
+            ))),
+            *event('_MC', "concat('Meeting cancelled: ', " + TEXT('reason') + ")", 'Meeting Cancelled', {'Note': '@{take(' + TEXT('reason') + ', 1000)}'}),
+            *done('_MC', "'Meeting cancelled.'"),
+        )
+
+        # ---- start: fix the cut-off, then write the agenda from the records as they are at the cut-off (MTG-2, plan F.7.3).
+        # The same rules as the app's preview (domain/agenda.js); test_meetings.py checks that the two agree.
+        def start_steps():
+            S = "body('Get_started_M')"
+            CUT = "string(" + S + "?['CutoffTime'])"
+            SINCE = "string(coalesce(" + S + "?['IntervalStart'], '2000-01-01T00:00:00Z'))"
+            CUT_ID = "int(" + idq(S + "?['CutoffUpdatesId']") + ")"
+            K = AREA_KEY
+            IT = lambda col: "item()?['" + col + "']"
+            in_area = ("or(equals(" + idstr(IT('CompetencyId')) + ", " + A_ID + "), contains(coalesce(" + IT('LinkedCompetenciesId') + ", createArray()), int(" + A_ID + ")))")
+            uncommitted = ("and(not(empty(string(coalesce(" + IT('PendingRequestKey') + ", '')))), "
+                           "equals(string(" + IT('CreatedRequestKey') + "), concat('F|', string(" + IT('PendingRequestKey') + "))))")
+            tk = lambda col: "ticks(string(coalesce(" + IT(col) + ", '2000-01-01T00:00:00Z')))"
+            by_cut = lambda col: "lessOrEquals(" + tk(col) + ", ticks(" + CUT + "))"
+            since = lambda col: "greater(" + tk(col) + ", ticks(" + SINCE + "))"
+            here = "equals(last(split(string(" + IT('FileDirRef') + "), '/')), " + K + ")"
+            skey = lambda typ: "concat('" + typ + ":', " + idstr(IT('Id')) + ")"
+            CARRIED = "body('Carried_keys_M')"
+            ON = "variables('varFlagOn')"
+            F = "items('Each_flag_M')"
+            FAUTH = idstr(F + "?['AuthorId']")
+            FKEY = "outputs('Flag_key_M')"
+            act_sel = ('Id,Title,AssignedToId,Status,DueDay,OriginalDueDate,ExtensionCount,Blocker,DateRaised,DateClosed,CloseOutcome,CompetencyId,'
+                       'LinkedCompetenciesId,PendingRequestKey,CreatedRequestKey')
+            date_text = lambda col: ("if(empty(string(coalesce(" + IT(col) + ", ''))), '', convertFromUtc(string(coalesce(" + IT(col) + ", '2000-01-01T00:00:00Z')), "
+                                     "'GMT Standard Time', 'dd/MM/yyyy'))")
+            due_text = "if(empty(" + idstr(IT('DueDay')) + "), '', " + uk_form_date(due_iso(IT('DueDay'))) + ")"
+
+            def section(name, frm, title, order, typ, extra=None, typ_expr=None, id_col='Id'):
+                """One agenda section: a row for each source, as validateUpdate form values, keyed by RowKey."""
+                t = typ_expr or q(typ)
+                key = "concat('F|', " + MID + ", '|A|', " + t + ", '|', " + idstr(IT(id_col)) + ")"
+                fields = {'RowKey': '@{' + key + '}', 'MeetingId': '@{' + MID + '}', 'RowType': 'Agenda Item', 'Section': title, 'SortOrder': str(order),
+                          'SourceType': '@{' + t + '}' if typ != 'Date' else '', 'SourceId': '@{' + idstr(IT(id_col)) + '}',
+                          'Title': "@{take(string(coalesce(" + IT('Title') + ", '')), 255)}"}
+                fields.update(extra or {})
+                return (name, {'type': 'Select', 'inputs': {'from': '@' + frm, 'select': {'key': '@' + key, 'fields': [{'FieldName': k, 'FieldValue': v} for k, v in fields.items()]}}})
+            action_fields = {'SnapshotOwner': '@{' + idstr(IT('AssignedToId')) + '}', 'SnapshotStatus': "@{" + IT('Status') + "}",
+                             'SnapshotDueDate': '@{' + due_text + '}', 'SnapshotOriginalDueDate': '@{' + date_text('OriginalDueDate') + '}',
+                             'SnapshotExtensionCount': '@{' + idq(IT('ExtensionCount')) + '}', 'SnapshotBlocker': "@{coalesce(" + IT('Blocker') + ", '')}"}
+            entry_fields = {'SnapshotStatus': "@{" + IT('Status') + "}", 'SnapshotDetails': "@{concat(string(" + IT('EntryType') + "), ' · ', string(" + IT('Impact') + "), ' impact')}"}
+            items_values, items_call = create_in_folder('items', MTG_PATH, 'Agenda_values_M', 'Agenda_body_M')
+            R_ = "items('Each_row_M')"
+            look = "first(body('Lookahead_M'))?['Value']"
+            return seq(
+                # the area's last finalised meeting: the agenda covers the time since its cut-off
+                ('Get_previous_M', http('GET', L('mtg', "/items?$select=Id,CutoffTime,MeetingDate&$filter=CompetencyId eq @{" + idq(AREA + "?['Id']") + "} and Status eq 'Finalised'"
+                                                      "&$orderby=MeetingDate desc&$top=1"))),
+                ('Get_last_update_M', http('GET', L('upd', "/items?$select=Id&$orderby=Id desc&$top=1"))),
+                ('Apply_start_M', cond("@not(" + ALREADY + ")", seq(
+                    ('Start_values_M', compose({
+                        'Status': 'In Progress', 'CutoffTime': '@{' + EVENT_TIME + '}',
+                        'CutoffUpdatesId': "@int(" + idq("first(body('Get_last_update_M')?['value'])?['Id']") + ")",
+                        'IntervalStart': "@{coalesce(first(body('Get_previous_M')?['value'])?['CutoffTime'], " + AREA + "?['TrackingStart'], '2000-01-01T00:00:00Z')}",
+                        'PreviousMeetingId': "@if(empty(body('Get_previous_M')?['value']), null, int(" + idq("first(body('Get_previous_M')?['value'])?['Id']") + "))",
+                        'StartedById': '@int(' + SENDER + ')', 'Revision': "@add(int(" + idq(M + "?['Revision']") + "), 1)", 'LastRequestKey': '@{' + KEY + '}'})),
+                    ('Save_start_M', merge(L('mtg', "/items(@{" + MID + "})"), 'Start_values_M', if_match="@{" + M + "?['odata.etag']}")),
+                ))),
+                # from here on everything follows the cut-off stored on the meeting, so a resumed run writes the same agenda
+                ('Get_started_M', http('GET', L('mtg', "/items(@{" + MID + "})?$select=Id,CutoffTime,CutoffUpdatesId,IntervalStart,PreviousMeetingId"))),
+                ('Sn_open_M', http('GET', L('act', "/items?$select=" + act_sel + "&$filter=IsOpen eq 1&$top=5000"))),
+                ('Sn_open_here_M', query("@body('Sn_open_M')?['value']", "@and(" + in_area + ", not(" + uncommitted + "), " + by_cut('DateRaised') + ")")),
+                ('Sn_closed_M', http('GET', L('act', "/items?$select=" + act_sel + "&$filter=IsOpen eq 0 and DateClosed ge datetime'@{" + SINCE + "}'&$top=5000"))),
+                ('Sn_closed_here_M', query("@body('Sn_closed_M')?['value']", "@and(" + in_area + ", not(" + uncommitted + "), " + since('DateClosed') + ", " + by_cut('DateClosed') + ")")),
+                ('Sn_notices_M', http('GET', L('notices', "/items?$select=Id,Title,AuthorId,FileDirRef&$filter=Status eq 'Active'&$top=5000"))),
+                ('Sn_notices_here_M', query("@body('Sn_notices_M')?['value']", '@' + here)),
+                ('Sn_entries_M', http('GET', L('reg', "/items?$select=Id,Title,EntryType,Impact,Status,RaisedById,DateRaised,FileDirRef&$filter=CompetencyId eq @{"
+                                                      + idq(AREA + "?['Id']") + "}&$top=5000"))),
+                ('Sn_entries_here_M', query("@body('Sn_entries_M')?['value']", '@' + here)),
+                ('Sn_sources_M', {'type': 'Select', 'inputs': {'from': "@union(body('Sn_notices_here_M'), body('Sn_entries_here_M'))",
+                                                               'select': "@concat(if(empty(string(coalesce(" + IT('EntryType') + ", ''))), 'Notice', 'Register Entry'), ':', " + idstr(IT('Id')) + ")"}}),
+                ('Sn_authors_M', {'type': 'Select', 'inputs': {'from': "@union(body('Sn_notices_here_M'), body('Sn_entries_here_M'))",
+                                                               'select': "@concat(if(empty(string(coalesce(" + IT('EntryType') + ", ''))), 'Notice', 'Register Entry'), ':', " + idstr(IT('Id')) + ", '=', "
+                                                                         "if(empty(string(coalesce(" + IT('EntryType') + ", ''))), " + idstr(IT('AuthorId')) + ", " + idstr(IT('RaisedById')) + "))"}}),
+                ('Sn_mgmt_M', query('@' + PEOPLE, "@contains(" + MANAGEMENT + ", string(" + IT('Role') + "))")),
+                ('Sn_mgmt_ids_M', {'type': 'Select', 'inputs': {'from': "@body('Sn_mgmt_M')", 'select': "@" + idstr(IT('SiteUserId'))}}),
+                # flags (plan F.5): in this area's folder, up to the cut-off, oldest first; who may raise and withdraw them as in the app
+                ('Sn_flags_M', http('GET', L('upd', "/items?$select=Id,EntryType,ParentType,ParentId,AuthorId,FileDirRef,IsHidden&$filter=IsFlagEvent eq 1&$top=5000"))),
+                ('Sn_flags_here_M', query("@body('Sn_flags_M')?['value']", "@and(" + here + ", not(equals(" + IT('IsHidden') + ", true)), "
+                                                                           "lessOrEquals(int(" + idq(IT('Id')) + "), " + CUT_ID + "))")),
+                ('Each_flag_M', {'type': 'Foreach', 'foreach': "@body('Sn_flags_here_M')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
+                    ('Flag_key_M', compose("@concat(string(" + F + "?['ParentType']), ':', " + idstr(F + "?['ParentId']") + ")")),
+                    ('Flag_kind_M', cond("@and(contains(body('Sn_sources_M'), " + FKEY + "), equals(string(" + F + "?['EntryType']), 'Flagged'), "
+                                         "or(contains(body('Member_ids_M'), " + FAUTH + "), contains(body('Sn_mgmt_ids_M'), " + FAUTH + ")))", seq(
+                        # flagged (again): this person is now the one who flagged it
+                        ('Flag_on_rest_M', query('@' + ON, "@not(equals(item(), " + FKEY + "))")),
+                        ('Flag_by_rest_M', query("@variables('varFlagBy')", "@not(startsWith(item(), concat(" + FKEY + ", '=')))")),
+                        ('Flag_on_set_M', set_var('varFlagOn', "@union(body('Flag_on_rest_M'), createArray(" + FKEY + "))")),
+                        ('Flag_by_set_M', set_var('varFlagBy', "@union(body('Flag_by_rest_M'), createArray(concat(" + FKEY + ", '=', " + FAUTH + ")))")),
+                    ), seq(
+                        ('Withdrawn_M', cond("@and(equals(string(" + F + "?['EntryType']), 'Flag Withdrawn'), contains(" + ON + ", " + FKEY + "), "
+                                             "or(contains(variables('varFlagBy'), concat(" + FKEY + ", '=', " + FAUTH + ")), contains(body('Sn_mgmt_ids_M'), " + FAUTH + "), "
+                                             "contains(body('Chair_ids_M'), " + FAUTH + "), contains(body('Sn_authors_M'), concat(" + FKEY + ", '=', " + FAUTH + "))))", seq(
+                            ('Flag_off_rest_M', query('@' + ON, "@not(equals(item(), " + FKEY + "))")),
+                            ('Flag_off_by_M', query("@variables('varFlagBy')", "@not(startsWith(item(), concat(" + FKEY + ", '=')))")),
+                            ('Flag_off_set_M', set_var('varFlagOn', "@body('Flag_off_rest_M')")),
+                            ('Flag_off_by_set_M', set_var('varFlagBy', "@body('Flag_off_by_M')")),
+                        ))),
+                    ))),
+                )}),
+                # items the last meeting deferred or did not reach come back first (outcomes are recorded from Release 5)
+                ('Get_carried_M', http('GET', L('items', "/items?$select=Title,SourceType,SourceId,Outcome&$filter=MeetingId eq @{" + idq(S + "?['PreviousMeetingId']")
+                                                        + "} and RowType eq 'Outcome'&$top=5000"))),
+                ('Carried_M', query("@body('Get_carried_M')?['value']", "@and(contains(createArray('Deferred', 'Not reached'), string(" + IT('Outcome') + ")), "
+                                                                       "contains(createArray('Notice', 'Register Entry', 'New Business'), string(" + IT('SourceType') + ")))")),
+                ('Carried_keys_M', {'type': 'Select', 'inputs': {'from': "@body('Carried_M')", 'select': "@concat(string(" + IT('SourceType') + "), ':', " + idstr(IT('SourceId')) + ")"}}),
+                ('Sec4_src_M', query("@body('Sn_notices_here_M')", "@and(contains(" + ON + ", " + skey('Notice') + "), not(contains(" + CARRIED + ", " + skey('Notice') + ")))")),
+                ('Sec5_src_M', query("@body('Sn_entries_here_M')", "@and(not(contains(" + CARRIED + ", " + skey('Register Entry') + ")), "
+                                                                     "or(contains(" + ON + ", " + skey('Register Entry') + "), and(" + since('DateRaised') + ", " + by_cut('DateRaised') + ")))")),
+                ('Sec5_ids_M', {'type': 'Select', 'inputs': {'from': "@body('Sec5_src_M')", 'select': '@' + idstr(IT('Id'))}}),
+                ('Sec6_src_M', query("@body('Sn_entries_here_M')", "@and(equals(string(" + IT('EntryType') + "), 'Degradation'), contains(createArray('Open', 'Under Review'), string(" + IT('Status') + ")), "
+                                                                     "not(contains(body('Sec5_ids_M'), " + idstr(IT('Id')) + ")), not(contains(" + CARRIED + ", " + skey('Register Entry') + ")))")),
+                ('Get_dates_M', http('GET', L('cal', "/items?$select=Id,Title,StartTime,FileDirRef&$filter=IsImportant eq 1 and Status eq 'Scheduled'&$top=5000"))),
+                ('Lookahead_M', query("@body('Get_settings_M')?['value']", "@equals(" + IT('Title') + ", 'AgendaLookaheadDays')")),
+                ('Cut_day_M', compose("@convertFromUtc(" + CUT + ", 'GMT Standard Time', 'yyyy-MM-dd')")),
+                ('Last_day_M', compose("@formatDateTime(addDays(concat(outputs('Cut_day_M'), 'T00:00:00Z'), int(if(empty(" + idstr(look) + "), '60', " + idstr(look) + "))), 'yyyy-MM-dd')")),
+                ('Sec7_src_M', query("@body('Get_dates_M')?['value']", "@and(" + here + ", greaterOrEquals(int(convertFromUtc(string(coalesce(" + IT('StartTime') + ", '2000-01-01T00:00:00Z')), "
+                                                                       "'GMT Standard Time', 'yyyyMMdd')), " + day_num("outputs('Cut_day_M')") + "), lessOrEquals(int(convertFromUtc(string(coalesce("
+                                                                       + IT('StartTime') + ", '2000-01-01T00:00:00Z')), 'GMT Standard Time', 'yyyyMMdd')), " + day_num("outputs('Last_day_M')") + "))")),
+                section('Sec1_M', "body('Sn_open_here_M')", 'Open actions', 1, 'Action', dict(action_fields, AgendaMarker="@{if(" + since('DateRaised') + ", 'Raised since last meeting', 'Still open')}")),
+                section('Sec2_M', "body('Sn_closed_here_M')", 'Closed since last meeting', 2, 'Action',
+                        dict(action_fields, SnapshotDateClosed='@{' + date_text('DateClosed') + '}', SnapshotDetails="@{coalesce(" + IT('CloseOutcome') + ", '')}")),
+                section('Sec3_M', "body('Carried_M')", 'Carried forward', 3, None, {'AgendaMarker': 'Carried forward'}, typ_expr="string(" + IT('SourceType') + ")", id_col='SourceId'),
+                section('Sec4_M', "body('Sec4_src_M')", 'Noticeboard', 4, 'Notice'),
+                section('Sec5_M', "body('Sec5_src_M')", 'New improvements and degradations', 5, 'Register Entry', entry_fields),
+                section('Sec6_M', "body('Sec6_src_M')", 'Unresolved degradations', 6, 'Register Entry', entry_fields),
+                section('Sec7_M', "body('Sec7_src_M')", 'Important dates', 7, 'Date', {'SnapshotDetails': '@{' + date_text('StartTime') + '}'}),
+                ('Rows_M', compose("@union(body('Sec1_M'), body('Sec2_M'), body('Sec3_M'), body('Sec4_M'), body('Sec5_M'), body('Sec6_M'), body('Sec7_M'))")),
+                ('Get_agenda_M', http('GET', L('items', "/items?$select=RowKey&$filter=MeetingId eq @{" + MID + "} and RowType eq 'Agenda Item'&$top=5000"))),
+                ('Agenda_keys_M', {'type': 'Select', 'inputs': {'from': "@body('Get_agenda_M')?['value']", 'select': "@string(" + IT('RowKey') + ")"}}),
+                ('Each_row_M', {'type': 'Foreach', 'foreach': "@outputs('Rows_M')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
+                    ('Row_new_M', cond("@not(contains(body('Agenda_keys_M'), string(" + R_ + "?['key'])))", seq(
+                        ('Agenda_values_M', compose("@" + R_ + "?['fields']")),
+                        ('Agenda_body_M', items_values),
+                        ('Agenda_row_M', items_call),
+                        *created_ok('Agenda_row_M', 'Agenda_made_M', 'An agenda row could not be created. See Agenda_row_M.'),
+                    ))),
+                )}),
+                *event('_MS', "concat('Meeting started: ', string(length(outputs('Rows_M'))), ' agenda items')", 'Meeting Started'),
+                *done('_MS', "concat('Meeting started. The agenda is fixed with ', string(length(outputs('Rows_M'))), ' items.')"),
+            )
+
+        return seq(*reads, *decide, ('Meeting_type', switch("@" + OWN, {
+            'ScheduleMeeting': book, 'UpdateMeeting': update, 'CancelMeeting': cancel, 'StartMeeting': start_steps()},
+            reject('_MK', "'This kind of change is not recognised.'"))))
+
     # ---------------------------------------------------------------- common part
     IN_OWN = ("and(equals(string(" + R + "?['FileDirRef']), concat(outputs('Ids')?['reqRoot'], '/', outputs('Folder_name'))), "
               "startsWith(outputs('Folder_name'), 'u'))")
@@ -1942,7 +2486,7 @@ def flow_request_queue(domain='actions'):
                                          'ReassignAction': reassign_case, 'CloseAction': close_case, 'ReopenAction': reopen_case,
                                          'EditActionDetails': edit_case})))),
                          reject('_K', "'This kind of change is not recognised.'"))
-         if domain == 'actions' else scope(records_switch()) if domain == 'records' else
+         if domain == 'actions' else scope(records_switch()) if domain == 'records' else scope(meetings_switch()) if domain == 'meetings' else
          cond("@contains(createArray('RetryTransaction', 'CancelTransaction', 'RevertTransaction'), string(" + TX + "?['RequestType']))",
               admin_switch(),
               seq(('Settings_or_people', cond("@equals(string(" + TX + "?['RequestType']), 'UpdateSetting')", settings_switch(), people_switch()))))),
@@ -1983,10 +2527,18 @@ def flow_request_queue(domain='actions'):
                   ('Initialize_varEventForm', init_var('varEventForm', 'array', [])),
                   ('Initialize_varEventJson', init_var('varEventJson', 'object', {})),
                   ('Initialize_varResult', init_var('varResult', 'string', '')),
-                  ('Initialize_varNoticeList', init_var('varNoticeList', 'array', [])))
-    actions['Try'] = after(scope(try_actions), {'Initialize_varNoticeList': OK})
+                  ('Initialize_varNoticeList', init_var('varNoticeList', 'array', [])),
+                  *([('Initialize_varMtg', init_var('varMtg', 'object', {})), ('Initialize_varFlagOn', init_var('varFlagOn', 'array', [])), ('Initialize_varFlagBy', init_var('varFlagBy', 'array', []))] + INVITE_VARS
+                    if domain == 'meetings' else []))
+    actions['Try'] = after(scope(try_actions), {list(actions)[-1]: OK})
     # emails for a change that is complete: a failure here never touches the request, and the daily run retries
     actions['Send_emails'] = after(scope(send_outbox_steps('')), {'Try': OK})
+    if domain == 'meetings':
+        # the Outlook invitation, once the meeting change is recorded: a failure here never touches the meeting,
+        # and the queue monitor tries again (spec §5.4)
+        actions['Send_invitation'] = after(scope(seq(('Invitation_due', cond(
+            "@and(greater(variables('varActionId'), 0), not(equals(string(variables('varTx')?['RequestType']), 'StartMeeting')))",
+            seq(*invite_steps('', "variables('varActionId')")))))), {'Try': OK})
     actions['Catch'] = catch
     others = [t for d, types in DOMAIN_TYPES.items() if d != domain for t in types]
     mine = ("@not(contains(createArray(" + ", ".join(q(x) for x in others) + "), string(triggerBody()?['RequestType'])))" if domain == 'actions'
@@ -2168,6 +2720,7 @@ def flow_queue_monitor():
     partly_admin = 'Not fully recorded – an administrator has been told and will finish it.'
     ADMIN_TYPE = "contains(createArray(" + ", ".join(q(x) for x in DOMAIN_TYPES['admin']) + "), string(" + S + "?['RequestType']))"
     RECORD_TYPE = "contains(createArray(" + ", ".join(q(x) for x in DOMAIN_TYPES['records']) + "), string(" + S + "?['RequestType']))"
+    MEETING_TYPE = "contains(createArray(" + ", ".join(q(x) for x in DOMAIN_TYPES['meetings']) + "), string(" + S + "?['RequestType']))"
     # decided once, then carried out step by step: part-made as soon as it was decided
     DECIDED_TYPE = "contains(createArray(" + ", ".join(q(x) for x in DECIDED_TYPES) + "), string(" + S + "?['RequestType']))"
     ASKER = "string(coalesce(first(body('Asker'))?['Title'], 'someone'))"
@@ -2200,7 +2753,8 @@ def flow_queue_monitor():
             ('Not_picked_up', cond("@and(equals(" + S + "?['Status'], 'Submitted'), empty(" + TXM + "), greater(int(" + idq(S + "?['Attempts']") + "), 0))", seq(
                 ('Which_flow_down', cond("@" + ADMIN_TYPE, seq(('Mark_admin_down', set_var('varAdminDown', True))),
                                          seq(('Records_or_actions', cond("@" + RECORD_TYPE, seq(('Mark_records_down', set_var('varRecordsDown', True))),
-                                                                         seq(('Mark_down', set_var('varDown', True)))))))),
+                                                                         seq(('Meetings_or_actions', cond("@" + MEETING_TYPE, seq(('Mark_meetings_down', set_var('varMeetingsDown', True))),
+                                                                                                          seq(('Mark_down', set_var('varDown', True))))))))))),
             ))),
             # three attempts, or a request that never got as far as its transaction after three tries
             ('Give_up', cond("@or(and(not(empty(" + TXM + ")), not(" + FINAL_M + "), greaterOrEquals(" + ATTEMPTS + ", 3)), "
@@ -2239,6 +2793,21 @@ def flow_queue_monitor():
                 ))),
             ))),
         )}),
+        # Outlook invitations left part-way (spec §5.4): tried again, at most 3 times, then the administrators are told
+        ('Get_inv', http('GET', L('mtg', "/items?$select=Id,Title,InviteState,InviteAttempts,InviteError,Modified,MeetingDate&$filter="
+                                           + " or ".join("InviteState eq '" + st + "'" for st in ('Creating', 'Updating', 'Cancelling', 'Unknown', 'Failed')) + "&$top=5000"))),
+        ('Inv_all', compose("@body('Get_inv')?['value']")),
+        ('Inv_retry', query("@outputs('Inv_all')", "@and(less(int(" + idq("item()?['InviteAttempts']") + "), 3), " + older('Modified', 10) + ")")),
+        ('Each_invite', {'type': 'Foreach', 'foreach': "@body('Inv_retry')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}},
+                         'actions': seq(*invite_steps('_v', "items('Each_invite')?['Id']"))}),
+        ('Inv_given_up', query("@outputs('Inv_all')", "@greaterOrEquals(int(" + idq("item()?['InviteAttempts']") + "), 3)")),
+        ('Each_invite_failed', {'type': 'Foreach', 'foreach': "@body('Inv_given_up')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
+            alert_if('Invite_alert', 'true', "concat('invite|', string(items('Each_invite_failed')?['Id']))",
+                     "concat('A meeting invitation could not be sent: ', string(items('Each_invite_failed')?['Title']))",
+                     "concat('The Outlook invitation for this meeting failed 3 times. The meeting itself stands, and people can add it to their calendar from the Hub. ', "
+                     "'Last error: ', string(coalesce(items('Each_invite_failed')?['InviteError'], 'none recorded')), ' In Power Automate, check the Outlook connection of the ESG Competency Hub flows. ', "
+                     "'To try again, change the meeting in the Hub.')"),
+        )}),
         ('Get_attention', http('GET', L('req', "/items?$select=Id&$filter=Status eq 'Needs attention'&$top=5000"))),
         # Daily tasks writes LastDailyRun every morning: 26 hours without it means reminders have stopped
         ('Run_row', query("@body('Get_settings')?['value']", "@equals(item()?['Title'], 'LastDailyRun')")),
@@ -2258,6 +2827,8 @@ def flow_queue_monitor():
                                   # notices and the register have their own flow: when only that one is behind, actions carry on
                                   'records': "@{if(variables('varRecordsDown'), 'Down', 'Healthy')}",
                                   'recordsReason': "@{if(variables('varRecordsDown'), 'Changes to notices and the register are not being picked up by ESG Competency Hub | 4 Records.', '')}",
+                                  'meetings': "@{if(variables('varMeetingsDown'), 'Down', 'Healthy')}",
+                                  'meetingsReason': "@{if(variables('varMeetingsDown'), 'Meeting bookings and changes are not being picked up by ESG Competency Hub | 5 Meetings.', '')}",
                                   'checkedAt': '@{utcNow()}', 'attention': "@length(body('Get_attention')?['value'])"})),
         ('Health_body', compose({'Value': "@{string(outputs('Health_value'))}"})),
         ('Record_health', cond("@empty(body('Health_row'))", None, seq(
@@ -2269,8 +2840,10 @@ def flow_queue_monitor():
                   ('Initialize_varDown', init_var('varDown', 'boolean', False)),
                   ('Initialize_varAdminDown', init_var('varAdminDown', 'boolean', False)),
                   ('Initialize_varRecordsDown', init_var('varRecordsDown', 'boolean', False)),
-                  ('Initialize_varPart', init_var('varPart', 'boolean', False)))
-    actions['Try'] = after(scope(try_actions), {'Initialize_varPart': OK})
+                  ('Initialize_varMeetingsDown', init_var('varMeetingsDown', 'boolean', False)),
+                  ('Initialize_varPart', init_var('varPart', 'boolean', False)),
+                  *INVITE_VARS)
+    actions['Try'] = after(scope(try_actions), {list(actions)[-1]: OK})
     actions['Send_emails'] = after(scope(send_outbox_steps('')), {'Try': OK})
     actions['Catch'] = after(scope(seq(('Terminate_failed', terminate('Failed', 'The queue monitor failed. See the failed action in the run history.')))),
                              {'Try': FAILED})
@@ -2280,6 +2853,46 @@ def flow_queue_monitor():
         'runtimeConfiguration': {'concurrency': {'runs': 1}}}}
     return definition(triggers, actions)
 
+
+
+def flow_probe_invitations():
+    """Probe P-INV (spec §5.4), run by hand once, before invitations are relied on. On the flow account's calendar it
+    makes a TEST event for tomorrow with the given attendee, moves it an hour, finds it again by its hidden reference,
+    and cancels it. Each step's result is recorded, whatever the others do; the run's last step lists them all."""
+    TOKEN = "outputs('Probe_reference')"
+    day = "formatDateTime(addDays(convertFromUtc(utcNow(), 'GMT Standard Time'), 1), 'yyyy-MM-dd')"
+    attendees = "@concat(string(triggerBody()?['text']), ';', string(coalesce(body('Probe_me')?['Email'], '')))"
+    item = lambda start, end: {'table': 'Calendar', 'item/subject': 'TEST – ESG Competency Hub invitation probe',
+                               'item/start': "@concat(" + day + ", 'T" + start + ":00')", 'item/end': "@concat(" + day + ", 'T" + end + ":00')",
+                               'item/timeZone': 'GMT Standard Time', 'item/requiredAttendees': attendees,
+                               'item/body': "@concat('<p>A test of the ESG Competency Hub meeting invitations. Please ignore it; it is cancelled straight away.</p><p>Reference ', " + TOKEN + ", '</p>')",
+                               'item/importance': 'normal', 'item/showAs': 'free', 'item/responseRequested': False}
+    status = lambda step: "@{actions('" + step + "')?['status']}"
+    actions = seq(
+        *site_and_ids(),
+        ('Probe_me', http('GET', '_api/web/currentuser?$select=Id,Email')),
+        ('Probe_reference', compose("@concat('ESGPINV', take(replace(guid(), '-', ''), 10))")),
+        ('Probe_create', outlook('V4CalendarPostItem', item('12:00', '12:15'))),
+        ('Probe_update', after(outlook('V4CalendarPatchItem', dict(item('13:00', '13:15'), id="@{body('Probe_create')?['id']}")), {'Probe_create': TOLERANT})),
+        ('Probe_search', after(outlook('GetEventsCalendarViewV3', {
+            'calendarId': 'Calendar', 'search': '@' + TOKEN,
+            'startDateTimeUtc': "@formatDateTime(utcNow(), 'yyyy-MM-ddTHH:mm:ss')", 'endDateTimeUtc': "@formatDateTime(addDays(utcNow(), 3), 'yyyy-MM-ddTHH:mm:ss')"}),
+            {'Probe_update': TOLERANT})),
+        ('Probe_found', after(query("@if(equals(actions('Probe_search')?['status'], 'Succeeded'), coalesce(body('Probe_search')?['value'], createArray()), createArray())",
+                                    "@contains(string(coalesce(item()?['body'], '')), " + TOKEN + ")"), {'Probe_search': TOLERANT})),
+        ('Probe_cancel', after(outlook('CalendarDeleteItem_V2', {'calendar': 'Calendar', 'event': "@{body('Probe_create')?['id']}"}), {'Probe_found': TOLERANT})),
+        ('Probe_results', after(compose({
+            'reference': '@{' + TOKEN + '}', 'create': status('Probe_create'), 'update': status('Probe_update'), 'search': status('Probe_search'),
+            'foundByReference': "@equals(length(body('Probe_found')), 1)", 'organiser': "@{body('Probe_create')?['organizer']}", 'cancel': status('Probe_cancel'),
+            'next': 'Check that the attendee received the invitation, the update and the cancellation, and that you are the organiser. Send these results.'}),
+            {'Probe_cancel': TOLERANT})),
+    )
+    triggers = {'manual': {'type': 'Request', 'kind': 'Button', 'inputs': {'schema': {
+        'type': 'object', 'required': ['text'],
+        'properties': {'text': {'title': 'Attendee email', 'type': 'string', 'x-ms-dynamically-added': True,
+                                'description': 'The test colleague who should receive the invitation, its update and its cancellation',
+                                'x-ms-content-hint': 'TEXT'}}}}}}
+    return definition(triggers, actions)
 
 
 def definition(triggers, actions):
@@ -2314,6 +2927,15 @@ FLOWS = [
      'description': 'Records changes to notices, comments and the improvements and degradations register sent from the Competency Hub page, '
                     'and links between register entries and actions.',
      'introduced': '1.5.0.0'},
+    {'id': '7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f05', 'name': 'ESG Competency Hub | 5 Meetings', 'build': lambda: flow_request_queue('meetings'),
+     'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': False,
+     'description': 'Books, changes, cancels and starts monthly meetings sent from the Competency Hub page, sends the Outlook invitations, '
+                    'and writes each meeting\'s agenda when it starts.',
+     'introduced': '1.6.0.0'},
+    {'id': '7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f07', 'name': 'ESG Competency Hub | P-INV Invitations probe', 'build': flow_probe_invitations,
+     'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': False,
+     'description': 'Run once by hand before meeting invitations are relied on: makes a TEST event for tomorrow, moves it, finds it by its reference and cancels it.',
+     'introduced': '1.6.0.0'},
     {'id': '7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f06', 'name': 'ESG Competency Hub | 6 Administration', 'build': lambda: flow_request_queue('admin'),
      'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': False,
      'description': "Records administrators' changes from the Competency Hub page: people, their areas and permissions, settings, and decisions on changes needing attention.",
@@ -2321,7 +2943,7 @@ FLOWS = [
 ]
 
 
-KIND = {'1': 'daily', '2': 'queue', '3': 'monitor', '4': 'records', '6': 'admin'}
+KIND = {'P': 'probe', '1': 'daily', '2': 'queue', '3': 'monitor', '4': 'records', '5': 'meetings', '6': 'admin'}
 
 
 def build_all(raw=False):

@@ -23,7 +23,9 @@ It creates, from `../04-solution/schema/schema.json`:
 warnings. **Version 1.2** (Release 2) adds the Feedback list, the Meeting Minutes
 library with its area folders, the Notice Posters group, `People.CanPostNotices`,
 the History reporting columns, the test-record markers, new settings and the new
-choices on existing columns. Built and tested locally.
+choices on existing columns. **Version 1.3** (Release 4) adds the meeting end time
+(`Meetings.EndTime`) and two settings, `InvitesEnabled` and `PdfEnabled` (both Yes).
+Built and tested locally.
 
 **Check** changes nothing and lists what Apply would do. **Apply** needs `SETUP`
 typed first. It only adds what is missing and reads every change back, and can

@@ -21,11 +21,13 @@ test('S5: no external resources or absolute URLs', () => {
   for (const s of sources) assert.doesNotMatch(s.text, /https?:\/\//, s.name);
 });
 
-test('S6/S8: writes go only to notices, updates, feedback and the own request folder; no permission or sharing calls', () => {
+test('S6/S8: writes go only to notices, updates, feedback, meeting record folders and the own request folder; no permission or sharing calls', () => {
   const all = sources.map((s) => s.text).join('\n');
   assert.doesNotMatch(all, /breakroleinheritance|roleassignments|ensureuser|sitegroups|X-HTTP-Method|MERGE/i);
   const writes = all.match(/addToFolder\('(\w+)'/g) || [];
-  assert.deepEqual([...new Set(writes)].sort(), ["addToFolder('feedback'", "addToFolder('notices'", "addToFolder('requests'", "addToFolder('updates'"]);
+  assert.deepEqual([...new Set(writes)].sort(), ["addToFolder('feedback'", "addToFolder('meetingItems'", "addToFolder('notices'", "addToFolder('requests'", "addToFolder('updates'"]);
+  // agenda items added by hand go only into a meeting's own Record folder (spec §4.3: only its runners and management may write there)
+  assert.match(all, /addToFolder\('meetingItems', x\.areaKey \+ '\/MTG-' \+ x\.id \+ '\/Record'/);
   // The one edit the app makes directly: administrators answering feedback (only they may edit that list).
   assert.equal((all.match(/ValidateUpdateListItem/g) || []).length, 1, 'only sp.update edits an item');
   const updates = all.match(/\.update\('(\w+)'/g) || [];

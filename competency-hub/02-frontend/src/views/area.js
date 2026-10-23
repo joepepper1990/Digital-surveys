@@ -80,14 +80,27 @@ CH.views.area = (function () {
       rows.length ? h('ul', { class: 'plain' }, rows) : h('p', { class: 'muted', text: 'Nothing in the calendar for the next 60 days.' })];
   }
 
+  // Meetings to come, and those held or cancelled, newest first (spec MTG-1).
   function meetingsTab(app, area) {
-    var s = app.model.stats[area.key];
-    return [ui.sectionNote(app.model.sections.meetings, 'meetings'), h('ul', { class: 'plain' },
-      h('li', null, h('span', null, h('b', { text: 'Next meeting' }), h('br'),
-        h('span', { class: 'muted small', text: (s.nextMeeting ? D.weekday(s.nextMeeting) + ' ' + D.long(s.nextMeeting) : 'Not booked') + (s.flagged ? ' · ' + s.flagged + ' items to discuss' : '') }))),
-      h('li', null, h('span', null, h('b', { text: 'Last meeting' }), h('br'),
-        h('span', { class: 'muted small', text: s.lastMeeting ? D.long(s.lastMeeting) : 'None on record' })))),
-      h('p', { class: 'muted small', text: 'Running meetings, agendas and minutes arrive in a later version.' })];
+    var m = app.model;
+    var list = m.meetings.filter(function (x) { return x.areaKey === area.key; });
+    var coming = list.filter(function (x) { return x.status === 'In Progress' || (x.status === 'Scheduled' && x.dateIso >= m.today); });
+    var past = list.filter(function (x) { return coming.indexOf(x) < 0; }).reverse();
+    var item = function (x) {
+      var st = { 'Scheduled': ['later', 'Booked'], 'In Progress': ['soon', 'In progress'], 'Finalised': ['done', 'Minutes'], 'Cancelled': ['late', 'Cancelled'] }[x.status] || ['later', x.status];
+      return h('li', null, h('button', { type: 'button', class: 'item-open', onclick: function () { app.openMeeting(x); } },
+        h('span', null, h('span', { class: 't', text: D.weekday(x.dateIso) + ' ' + D.long(x.dateIso) + ', ' + x.start }),
+          h('span', { class: 's', text: [x.location || (x.onlineLink ? 'Online' : ''), x.chairName ? x.chairName + ' chairs' : '', x.attendeeIds.length + ' invited'].filter(Boolean).join(' · ') })),
+        ui.chip(st[0], st[1])));
+    };
+    return [
+      h('div', { class: 'row tab-actions' }, app.access.runsMeetings(area.key) ? ui.button('Book a meeting', function () { app.bookMeeting(area.key); }) : null),
+      ui.sectionNote(m.sections.meetings, 'meetings'),
+      h('h2', { class: 'group-title', text: 'Coming up' }),
+      coming.length ? h('ul', { class: 'items' }, coming.map(item)) : h('p', { class: 'muted', text: 'No meeting is booked.' }),
+      h('h2', { class: 'group-title', text: 'Earlier' }),
+      past.length ? h('ul', { class: 'items' }, past.map(item)) : h('p', { class: 'muted', text: 'No earlier meetings in the Hub.' })
+    ];
   }
 
   function render(app, key, tabIndex) {
@@ -118,7 +131,7 @@ CH.views.area = (function () {
       out.push(h('div', { class: 'row actions-row' },
         ui.button('Raise an action', function () { app.raiseAction(key); }, 'main'),
         acc.canPostNotice(key) ? ui.button('Post a notice', function () { app.postNotice(key); }) : null,
-        acc.runsMeetings(key) ? ui.button(s.nextMeeting ? 'Start meeting' : 'Book a meeting', function () { app.comingSoon('Meetings'); }) : null));
+        acc.runsMeetings(key) ? ui.button('Book a meeting', function () { app.bookMeeting(key); }) : null));
     }
 
     var tabs = h('div', { class: 'subtabs', role: 'tablist', 'aria-label': area.name + ' sections' });

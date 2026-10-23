@@ -6,4 +6,5 @@ python3 build_solution.py --check
 python3 test_validate.py
 python3 test_flow.py
 python3 test_records.py
+python3 test_meetings.py
 python3 check_package.py

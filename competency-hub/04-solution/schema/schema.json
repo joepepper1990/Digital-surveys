@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.2.0",
+  "schemaVersion": "1.3.0",
   "areas": [
     { "key": "FLK", "title": "Flask", "sort": 10 },
     { "key": "INS", "title": "Instruments", "sort": 20 },
@@ -233,6 +233,7 @@
       "fields": [
         { "name": "Competency", "title": "Competency", "type": "Lookup", "lookup": "competencies", "required": true, "indexed": true },
         { "name": "MeetingDate", "title": "Meeting Date", "type": "DateTime", "required": true, "indexed": true },
+        { "name": "EndTime", "title": "End Time", "type": "DateTime" },
         { "name": "Location", "title": "Location", "type": "Text", "max": 255 },
         { "name": "OnlineLink", "title": "Online Link", "type": "Note" },
         { "name": "Chair", "title": "Chair", "type": "User" },
@@ -389,6 +390,8 @@
     ["TestFailSend", "", "Test environments only"],
     ["QueueHealth", "", "Written by the queue monitor: processing health and its last check"],
     ["MonitorHours", "07:00|19:45|60", "Queue monitor: working hours start|end, and minutes between checks outside them"],
-    ["PreGoLiveTesting", "Yes", "While Yes, everything created is marked as a test record, to be removed before go-live"]
+    ["PreGoLiveTesting", "Yes", "While Yes, everything created is marked as a test record, to be removed before go-live"],
+    ["InvitesEnabled", "Yes", "Yes: meetings send Outlook invitations from the flow account's calendar. No: people add meetings to their calendar from a download in the Hub"],
+    ["PdfEnabled", "Yes", "Yes: finalised minutes are saved as a PDF. No: the Hub offers a print-ready page instead"]
   ]
 }

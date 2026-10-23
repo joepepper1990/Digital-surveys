@@ -139,7 +139,7 @@ CH.app = (function () {
       var items = app.tracker.entries().filter(function (e) {
         if (e.dismissed) return false;
         if (CH.requests.ADMIN_TYPES.indexOf(e.type) >= 0) return false;   // shown on the Administration page
-        if (e.type === 'RaiseAction' || e.type === 'RaiseRegisterEntry') return e.state !== 'done';
+        if (e.type === 'RaiseAction' || e.type === 'RaiseRegisterEntry' || e.type === 'ScheduleMeeting') return e.state !== 'done';
         return ['rejected', 'attention', 'cancelled', 'reverted'].indexOf(e.state) >= 0;
       }).map(function (e) {
         var waiting = e.state === 'submitted' || e.state === 'slow';
@@ -212,6 +212,10 @@ CH.app = (function () {
     app.queueBlocked = function () { return !!app.health && app.health.processing === 'down'; };
     // Notices and the register have their own flow (4 Records); it pauses with the queue, or on its own.
     app.recordsBlocked = function () { return app.queueBlocked() || (!!app.health && app.health.records === 'down'); };
+    // Meetings have their own flow too (5 Meetings).
+    app.meetingsBlocked = function () { return app.queueBlocked() || (!!app.health && app.health.meetings === 'down'); };
+    app.openMeeting = function (mt) { CH.views.meetingPanel.open(app, mt.id); };
+    app.bookMeeting = function (key) { CH.views.meetingForm.open(app, key); };
     app.openArea = function (key) { app.state = { view: 'area', area: key, tab: 0 }; render(true); };
     app.showMine = function (tab, areaKey, keepFocus) {
       app.state = { view: 'mine', area: null, tab: tab || 0, areaFilter: areaKey || '' };
@@ -349,6 +353,7 @@ CH.app = (function () {
       if (actionParam) CH.views.actionPanel.open(app, actionParam);
       else if (Number(params.get('notice'))) CH.views.recordPanel.openNotice(app, Number(params.get('notice')));
       else if (Number(params.get('entry'))) CH.views.recordPanel.openEntry(app, Number(params.get('entry')));
+      else if (Number(params.get('meeting'))) CH.views.meetingPanel.open(app, Number(params.get('meeting')));
     }
 
     return {

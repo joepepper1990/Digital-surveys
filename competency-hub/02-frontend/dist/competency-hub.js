@@ -1,11 +1,11 @@
-/* ESG Competency Hub 0.7.0 – built from src/ by tools/build.js. Do not edit. */
+/* ESG Competency Hub 0.8.0 – built from src/ by tools/build.js. Do not edit. */
 window.ESGCompetencyHub = function (ctx) {
   'use strict';
   var CH = {};
   /* src/core/config.js */
   // Fixed names and limits. Lists are addressed by display title; folders by list URL name.
   CH.config = {
-    VERSION: '0.7.0',
+    VERSION: '0.8.0',
     ENVIRONMENT: 'TEST',
     lists: {
       competencies: { title: 'Competencies', url: 'Competencies' },
@@ -329,6 +329,8 @@ window.ESGCompetencyHub = function (ctx) {
     var ADMIN_TYPES = ['RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting'];
     // Notices, comments and the register (4 Records): confirmed by their History event, which is written before Completed.
     var RECORD_TYPES = ['EditNotice', 'ArchiveNotice', 'PinNotice', 'HideComment', 'RaiseRegisterEntry', 'UpdateRegisterEntry', 'LinkActionToEntry', 'UnlinkActionFromEntry'];
+    // Meetings (5 Meetings): also confirmed by their History event.
+    var MEETING_TYPES = ['ScheduleMeeting', 'UpdateMeeting', 'CancelMeeting', 'StartMeeting'];
 
     // Thrown instead of sending while automatic processing is down (limited mode).
     function LimitedError(message) { this.name = 'LimitedError'; this.message = message; this.friendly = message; }
@@ -375,7 +377,9 @@ window.ESGCompetencyHub = function (ctx) {
 
       // spec: { type, targetId, expectedRevision, payload, label, key? }. Resolves to the tracked entry.
       async function submit(spec) {
-        var blocked = RECORD_TYPES.indexOf(spec.type) >= 0 ? app.recordsBlocked && app.recordsBlocked() : ADMIN_TYPES.indexOf(spec.type) < 0 && app.queueBlocked && app.queueBlocked();
+        var blocked = RECORD_TYPES.indexOf(spec.type) >= 0 ? app.recordsBlocked && app.recordsBlocked()
+          : MEETING_TYPES.indexOf(spec.type) >= 0 ? app.meetingsBlocked && app.meetingsBlocked()
+          : ADMIN_TYPES.indexOf(spec.type) < 0 && app.queueBlocked && app.queueBlocked();
         if (blocked) {
           throw new LimitedError('Changes cannot be processed at the moment, so nothing was sent. You can still read everything and add updates. Please try again later.');
         }
@@ -476,7 +480,7 @@ window.ESGCompetencyHub = function (ctx) {
       // The action itself must show this change, with no lock left on it.
       async function confirmed(entry, row) {
         if (ADMIN_TYPES.indexOf(entry.type) >= 0) return true;
-        if (RECORD_TYPES.indexOf(entry.type) >= 0) {
+        if (RECORD_TYPES.indexOf(entry.type) >= 0 || MEETING_TYPES.indexOf(entry.type) >= 0) {
           try {
             var evr = await app.sp.items(CH.config.lists.history.title, "$select=Id&$filter=RequestKey eq '" + q(entry.key + '|1') + "'", 1);
             return evr.rows.length > 0;
@@ -550,7 +554,7 @@ window.ESGCompetencyHub = function (ctx) {
 
     var RETRYING = 'Not recorded yet – retrying automatically.';
 
-    return { tracker: tracker, newKey: newKey, SCHEDULE: SCHEDULE, GIVE_UP_MINUTES: GIVE_UP_MINUTES, ADMIN_TYPES: ADMIN_TYPES, RECORD_TYPES: RECORD_TYPES,
+    return { tracker: tracker, newKey: newKey, SCHEDULE: SCHEDULE, GIVE_UP_MINUTES: GIVE_UP_MINUTES, ADMIN_TYPES: ADMIN_TYPES, RECORD_TYPES: RECORD_TYPES, MEETING_TYPES: MEETING_TYPES,
       LimitedError: LimitedError, RETRYING: RETRYING };
   })();
 
@@ -879,6 +883,56 @@ window.ESGCompetencyHub = function (ctx) {
       return {};
     }
 
+    // ---- monthly meetings (spec MTG-1): the same checks as the Meetings flow
+    // v: { areaKey, dateIso, start, end, location, onlineLink, chairId, attendeeIds }
+    // ctx: { today, runsMeetings(areaKey), chairAllowed(areaKey, id), attendeeAllowed(areaKey, id) }
+    function validateMeeting(v, ctx) {
+      var e = {};
+      if (!v.areaKey || !ctx.runsMeetings(v.areaKey)) e.areaKey = 'Only the people who run meetings in this area, and management, can do this.';
+      var hhmm = /^([01]\d|2[0-3]):[0-5]\d$/;
+      if (!D.isIso(v.dateIso || '') || isNaN(Date.parse(v.dateIso + 'T00:00:00Z')) || D.addDays(v.dateIso, 0) !== v.dateIso) e.dateIso = 'Choose a date, and a start and end time.';
+      else if (v.dateIso < ctx.today) e.dateIso = 'Choose a date from today onwards.';
+      else if (v.dateIso > D.addDays(ctx.today, 730)) e.dateIso = 'Choose a date within two years.';
+      if (!hhmm.test(v.start || '') || !hhmm.test(v.end || '')) e.start = 'Choose a date, and a start and end time.';
+      else if (v.end <= v.start) e.end = 'The meeting must end after it starts.';
+      if (String(v.location || '').trim().length > 255) e.location = 'Keep the place to 255 characters or fewer.';
+      var link = String(v.onlineLink || '').trim();
+      if (link && (!/^https:\/\//i.test(link) || link.length > 1000)) e.onlineLink = 'Give a secure online link: it starts with https.';
+      if (!e.areaKey && !ctx.chairAllowed(v.areaKey, Number(v.chairId))) e.chairId = 'Choose a chair who runs meetings in this area, or a Team Leader.';
+      var ids = (v.attendeeIds || []).map(Number);
+      if (!e.areaKey && (!ids.length || ids.length > 60 || ids.some(function (id) { return !ctx.attendeeAllowed(v.areaKey, id); }))) {
+        e.attendeeIds = 'Choose the attendees from the members of the area and management (up to 60).';
+      }
+      return e;
+    }
+
+    function validateCancelMeeting(v) {
+      var r = String(v.reason || '').trim();
+      if (r.length < 10) return { reason: 'Give a reason of at least 10 characters.' };
+      if (r.length > 1000) return { reason: 'Keep the reason to 1,000 characters or fewer.' };
+      return {};
+    }
+
+    // The same date in the following months, on the same weekday of the month (the second Wednesday stays the second
+    // Wednesday); a fifth weekday that a month does not have becomes the last one.
+    function nextMonths(iso, count) {
+      var y = +iso.slice(0, 4), m = +iso.slice(5, 7), d = +iso.slice(8, 10);
+      var dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+      var nth = Math.ceil(d / 7);
+      var out = [];
+      for (var i = 1; i <= count; i++) {
+        var mm = m - 1 + i;
+        var yy = y + Math.floor(mm / 12);
+        mm = mm % 12;
+        var first = new Date(Date.UTC(yy, mm, 1)).getUTCDay();
+        var day = 1 + ((dow - first + 7) % 7) + (nth - 1) * 7;
+        var last = new Date(Date.UTC(yy, mm + 1, 0)).getUTCDate();
+        while (day > last) day -= 7;
+        out.push(yy + '-' + ('0' + (mm + 1)).slice(-2) + '-' + ('0' + day).slice(-2));
+      }
+      return out;
+    }
+
     // Mark complete closes the action unless a close-out check is required (D-07).
     function completionStatus(requiresCloseOut) { return requiresCloseOut ? 'Completed' : 'Closed'; }
 
@@ -889,7 +943,7 @@ window.ESGCompetencyHub = function (ctx) {
       roles: roles, completionStatus: completionStatus,
       validateEntry: validateEntry, validateEntryUpdate: validateEntryUpdate, managesEntry: managesEntry, noticeRoles: noticeRoles,
       validateNoticeEdit: validateNoticeEdit, validateComment: validateComment, ENTRY_TYPES: ENTRY_TYPES, IMPACTS: IMPACTS, ENTRY_STATUSES: ENTRY_STATUSES,
-      NOTICE_CATEGORIES: NOTICE_CATEGORIES, SELF_ONLY: SELF_ONLY, PRIORITIES: PRIORITIES, OPEN_STATUSES: OPEN_STATUSES, OUTCOMES: OUTCOMES
+      NOTICE_CATEGORIES: NOTICE_CATEGORIES, validateMeeting: validateMeeting, validateCancelMeeting: validateCancelMeeting, nextMonths: nextMonths, SELF_ONLY: SELF_ONLY, PRIORITIES: PRIORITIES, OPEN_STATUSES: OPEN_STATUSES, OUTCOMES: OUTCOMES
     };
   })();
 
@@ -910,7 +964,8 @@ window.ESGCompetencyHub = function (ctx) {
       register: '$select=Id,Title,Description,EntryType,Impact,Status,Outcome,RaisedById,ResponsiblePersonId,DateRaised,DateResolved,Revision,' +
         'LastRequestKey,CompetencyId,FileDirRef,Created&$filter=FSObjType eq 0',
       updates: '$select=Id,EntryType,ParentType,ParentId,AuthorId,Created,FileDirRef,IsHidden&$filter=IsFlagEvent eq 1 and FSObjType eq 0',
-      meetings: '$select=Id,CompetencyId,MeetingDate,Status,ChairId&$filter=FSObjType eq 0',
+      meetings: '$select=Id,Title,CompetencyId,MeetingDate,EndTime,Status,ChairId,Location,OnlineLink,Attendees,InviteState,InviteToken,OutlookEventId,' +
+        'InviteError,Revision,LastRequestKey,CreatedRequestKey,FileDirRef,CancellationReason,CutoffTime,IntervalStart,PreviousMeetingId,StartedById&$filter=FSObjType eq 0',
       calendar: "$select=Id,Title,StartTime,AllDay,IsImportant,Status,FileDirRef&$filter=Status eq 'Scheduled' and FSObjType eq 0",
       settings: '$select=Id,Title,Value'
     };
@@ -1066,6 +1121,27 @@ window.ESGCompetencyHub = function (ctx) {
       notices.forEach(function (n) { n.flagged = !!(flags['Notice:' + n.id] || {}).flagged; });
       entries.forEach(function (e) { e.flagged = !!(flags['Register Entry:' + e.id] || {}).flagged; });
 
+      // Meetings (spec MTG-1): in the area's folder; times shown in UK time.
+      function meetingFrom(m) {
+        var area = areaById[m.CompetencyId];
+        var attendees = [];
+        try { attendees = JSON.parse(m.Attendees || '[]') || []; } catch (_) { attendees = []; }
+        var start = m.MeetingDate ? new Date(m.MeetingDate) : null;
+        return {
+          id: m.Id, ref: 'MTG-' + ('0000' + m.Id).slice(-5), areaKey: area ? area.key : '', areaName: area ? area.name : '', status: m.Status,
+          dateIso: start ? D.localDate(start) : '', start: start ? D.ukTime(start) : '', end: m.EndTime ? D.ukTime(m.EndTime) : '',
+          startUtc: m.MeetingDate || '', endUtc: m.EndTime || '', location: m.Location || '', onlineLink: m.OnlineLink || '',
+          chairId: m.ChairId, chairName: m.ChairId ? nameOf(m.ChairId) : '', attendeeIds: attendees.map(Number),
+          inviteState: m.InviteState || 'None', inviteToken: m.InviteToken || '', inviteError: m.InviteError || '', revision: Number(m.Revision) || 1,
+          cancellationReason: m.CancellationReason || '', cutoff: m.CutoffTime || '', intervalStart: m.IntervalStart || '',
+          previousId: m.PreviousMeetingId ? Number(m.PreviousMeetingId) : null, locked: isUncommitted(m)
+        };
+      }
+      var meetings = (raw.meetings.rows || []).filter(function (m) { return !isUncommitted(m); }).map(meetingFrom)
+        .filter(function (m) { return !!m.areaKey; }).sort(function (a, b) { return String(a.startUtc).localeCompare(String(b.startUtc)); });
+      var meetingById = {};
+      meetings.forEach(function (m) { meetingById[m.id] = m; });
+
       var meetingsByArea = {};
       (raw.meetings.rows || []).forEach(function (m) {
         var area = areaById[m.CompetencyId];
@@ -1113,8 +1189,8 @@ window.ESGCompetencyHub = function (ctx) {
 
       return {
         today: today, areas: areas, areaByKey: areaByKey, stats: stats, actions: actions, notices: notices, calendar: calendar,
-        entries: entries, entryById: entryById, noticeById: noticeById, flags: flags, people: people,
-        inArea: inArea, nameOf: nameOf, ownersFor: ownersFor, actionById: actionById, actionFrom: actionFrom, membersByArea: membersByArea,
+        entries: entries, entryById: entryById, noticeById: noticeById, flags: flags, people: people, meetings: meetings, meetingById: meetingById,
+        inArea: inArea, nameOf: nameOf, ownersFor: ownersFor, actionById: actionById, actionFrom: actionFrom, membersByArea: membersByArea, chairsByArea: meetingAdmins,
         sections: {
           actions: section(raw.actions), notices: section(raw.notices), meetings: section(raw.meetings),
           calendar: section(raw.calendar), flags: section(raw.updates), members: section(raw.members), register: section(raw.register)
@@ -1195,7 +1271,7 @@ window.ESGCompetencyHub = function (ctx) {
       // The tighter limit starts only once the first working-hours check has had time to report: until then the
       // latest report may be the last one from outside working hours.
       var working = weekday && clock.minutes >= h.start + WORKING_SLACK_MINUTES && clock.minutes <= h.end;
-      var out = { processing: 'unknown', reminders: 'unknown', administration: 'ok', adminReason: '', records: 'ok', recordsReason: '', reason: '', checkedAt: null, lastDailyRun: null,
+      var out = { processing: 'unknown', reminders: 'unknown', administration: 'ok', adminReason: '', records: 'ok', recordsReason: '', meetings: 'ok', meetingsReason: '', reason: '', checkedAt: null, lastDailyRun: null,
         attention: 0, maxDeadlineYears: years(value(rows, 'MaxDeadlineYears')) };
       if (report && report.checkedAt) {
         out.checkedAt = new Date(report.checkedAt);
@@ -1209,8 +1285,13 @@ window.ESGCompetencyHub = function (ctx) {
         if (report.admin === 'Down') { out.administration = 'down'; out.adminReason = report.adminReason || 'Administration changes are not being picked up.'; }
         // Notices and the register also have their own flow (4 Records).
         if (report.records === 'Down') { out.records = 'down'; out.recordsReason = report.recordsReason || 'Changes to notices and the register are not being picked up.'; }
+        // and meetings (5 Meetings)
+        if (report.meetings === 'Down') { out.meetings = 'down'; out.meetingsReason = report.meetingsReason || 'Meeting bookings and changes are not being picked up.'; }
       }
       var daily = value(rows, 'LastDailyRun');
+      // the switches that fall back when Outlook invitations or PDF conversion cannot be used (Setup 1.3); Yes unless set to No
+      out.invitesEnabled = value(rows, 'InvitesEnabled') !== 'No';
+      out.pdfEnabled = value(rows, 'PdfEnabled') !== 'No';
       if (daily) {
         out.lastDailyRun = new Date(daily);
         out.reminders = (now.getTime() - out.lastDailyRun.getTime()) / 3600000 > DAILY_LIMIT_HOURS ? 'stale' : 'ok';
@@ -1219,6 +1300,116 @@ window.ESGCompetencyHub = function (ctx) {
     }
 
     return { judge: judge, hours: hours };
+  })();
+
+  /* src/domain/agenda.js */
+  // The monthly meeting agenda (spec MTG-2, plan F.7.3). The same rules as the Meetings flow, which writes the agenda
+  // when the meeting starts; before that the app shows this as a preview. It works on list rows exactly as SharePoint
+  // returns them, so the app and the flow read the same things (test_meetings.py checks that the two agree).
+  CH.agenda = (function () {
+    var SECTIONS = ['Open actions', 'Closed since last meeting', 'Carried forward', 'Noticeboard', 'New improvements and degradations',
+      'Unresolved degradations', 'Important dates'];
+
+    function id(v) { return v === null || v === undefined || v === '' ? '' : String(Math.trunc(Number(v))); }
+    function ms(v) { return v ? new Date(v).getTime() : new Date('2000-01-01T00:00:00Z').getTime(); }
+    function folder(row) { var p = String(row.FileDirRef || '').split('/'); return p[p.length - 1]; }
+    function uncommitted(r) { return !!r.PendingRequestKey && r.CreatedRequestKey === 'F|' + r.PendingRequestKey; }
+
+    // Which notices and entries are flagged at the cut-off (plan F.5): events in the area's folder up to the cut-off,
+    // oldest first. A member or management raises a flag; the flagger, management, a meeting runner of the area or the
+    // source's author or raiser withdraws it.
+    function flagged(input) {
+      var sources = {};
+      var authors = {};
+      input.notices.filter(function (n) { return folder(n) === input.areaKey; }).forEach(function (n) {
+        sources['Notice:' + id(n.Id)] = true; authors['Notice:' + id(n.Id)] = id(n.AuthorId);
+      });
+      input.entries.filter(function (e) { return folder(e) === input.areaKey; }).forEach(function (e) {
+        sources['Register Entry:' + id(e.Id)] = true; authors['Register Entry:' + id(e.Id)] = id(e.RaisedById);
+      });
+      var on = {};
+      input.flags.filter(function (f) { return folder(f) === input.areaKey && f.IsHidden !== true && Number(f.Id) <= Number(input.cutUpdatesId); })
+        .sort(function (a, b) { return a.Id - b.Id; })
+        .forEach(function (f) {
+          var key = f.ParentType + ':' + id(f.ParentId);
+          var who = id(f.AuthorId);
+          if (f.EntryType === 'Flagged' && sources[key] && (input.memberIds.indexOf(who) >= 0 || input.mgmtIds.indexOf(who) >= 0)) on[key] = who;
+          else if (f.EntryType === 'Flag Withdrawn' && on[key] !== undefined &&
+            (on[key] === who || input.mgmtIds.indexOf(who) >= 0 || input.chairIds.indexOf(who) >= 0 || authors[key] === who)) delete on[key];
+        });
+      return on;
+    }
+
+    // input: { areaId, areaKey, sinceIso, cutIso, cutUpdatesId, actionsOpen, actionsClosed, notices, entries, flags,
+    //          memberIds, chairIds, mgmtIds, carried, dates, lookaheadDays } – ids as text.
+    // Returns [{ section, order, sourceType, sourceId, marker, row }], in section order.
+    function build(input) {
+      var since = ms(input.sinceIso);
+      var cut = ms(input.cutIso);
+      var area = id(input.areaId);
+      function inArea(a) { return id(a.CompetencyId) === area || (a.LinkedCompetenciesId || []).map(id).indexOf(area) >= 0; }
+      var on = flagged(input);
+      var out = [];
+      function add(section, type, row, marker, sourceId) {
+        out.push({ section: section, order: SECTIONS.indexOf(section) + 1, sourceType: type, sourceId: id(sourceId !== undefined ? sourceId : row.Id), marker: marker || '', row: row });
+      }
+      input.actionsOpen.filter(function (a) { return inArea(a) && !uncommitted(a) && ms(a.DateRaised) <= cut; })
+        .forEach(function (a) { add('Open actions', 'Action', a, ms(a.DateRaised) > since ? 'Raised since last meeting' : 'Still open'); });
+      input.actionsClosed.filter(function (a) { return inArea(a) && !uncommitted(a) && a.DateClosed && ms(a.DateClosed) > since && ms(a.DateClosed) <= cut; })
+        .forEach(function (a) { add('Closed since last meeting', 'Action', a); });
+      var carried = input.carried.filter(function (c) {
+        return ['Deferred', 'Not reached'].indexOf(c.Outcome) >= 0 && ['Notice', 'Register Entry', 'New Business'].indexOf(c.SourceType) >= 0;
+      });
+      var carriedKeys = carried.map(function (c) { return c.SourceType + ':' + id(c.SourceId); });
+      carried.forEach(function (c) { add('Carried forward', c.SourceType, c, 'Carried forward', c.SourceId); });
+      input.notices.filter(function (n) { var k = 'Notice:' + id(n.Id); return folder(n) === input.areaKey && on[k] !== undefined && carriedKeys.indexOf(k) < 0; })
+        .forEach(function (n) { add('Noticeboard', 'Notice', n); });
+      var entries = input.entries.filter(function (e) { return folder(e) === input.areaKey; });
+      var newer = entries.filter(function (e) {
+        var k = 'Register Entry:' + id(e.Id);
+        return carriedKeys.indexOf(k) < 0 && (on[k] !== undefined || (ms(e.DateRaised) > since && ms(e.DateRaised) <= cut));
+      });
+      newer.forEach(function (e) { add('New improvements and degradations', 'Register Entry', e); });
+      entries.filter(function (e) {
+        return e.EntryType === 'Degradation' && (e.Status === 'Open' || e.Status === 'Under Review') && newer.indexOf(e) < 0 &&
+          carriedKeys.indexOf('Register Entry:' + id(e.Id)) < 0;
+      }).forEach(function (e) { add('Unresolved degradations', 'Register Entry', e); });
+      var first = CH.dates.localDate(new Date(cut));
+      var last = CH.dates.addDays(first, Number(input.lookaheadDays) || 60);
+      input.dates.filter(function (d) { var day = CH.dates.localDate(d.StartTime || '2000-01-01T00:00:00Z'); return folder(d) === input.areaKey && day >= first && day <= last; })
+        .forEach(function (d) { add('Important dates', 'Date', d); });
+      return out;
+    }
+
+    // Reads what build() needs, the same way the flow does, for a meeting that has not started (the cut-off is now).
+    async function preview(sp, model, meeting, settings) {
+      var L = CH.config.lists;
+      var area = model.areaByKey[meeting.areaKey];
+      var act = 'Id,Title,AssignedToId,Status,DueDay,OriginalDueDate,ExtensionCount,Blocker,DateRaised,DateClosed,CloseOutcome,CompetencyId,' +
+        'LinkedCompetenciesId,PendingRequestKey,CreatedRequestKey';
+      var since = meeting.intervalStart || (meeting.previous && meeting.previous.cutoff) || (area.trackingStart ? area.trackingStart + 'T00:00:00Z' : '2000-01-01T00:00:00Z');
+      var res = await Promise.all([
+        sp.items(L.actions.title, '$select=' + act + '&$filter=IsOpen eq 1'),
+        sp.items(L.actions.title, '$select=' + act + "&$filter=IsOpen eq 0 and DateClosed ge datetime'" + new Date(since).toISOString().slice(0, 19) + "Z'"),
+        sp.items(L.notices.title, "$select=Id,Title,AuthorId,FileDirRef&$filter=Status eq 'Active'"),
+        sp.items(L.register.title, '$select=Id,Title,EntryType,Impact,Status,RaisedById,DateRaised,FileDirRef&$filter=CompetencyId eq ' + area.id),
+        sp.items(L.updates.title, '$select=Id,EntryType,ParentType,ParentId,AuthorId,FileDirRef,IsHidden&$filter=IsFlagEvent eq 1'),
+        sp.items(L.calendar.title, "$select=Id,Title,StartTime,FileDirRef&$filter=IsImportant eq 1 and Status eq 'Scheduled'"),
+        meeting.previousId ? sp.items(L.meetingItems.title, '$select=Title,SourceType,SourceId,Outcome&$filter=MeetingId eq ' + meeting.previousId + " and RowType eq 'Outcome'")
+          : Promise.resolve({ rows: [] })
+      ]);
+      var members = model.membersByArea[meeting.areaKey] || {};
+      var look = (settings || []).filter(function (r) { return r.Title === 'AgendaLookaheadDays'; })[0];
+      return build({
+        areaId: area.id, areaKey: area.key, sinceIso: since, cutIso: new Date().toISOString(), cutUpdatesId: Number.MAX_SAFE_INTEGER,
+        actionsOpen: res[0].rows, actionsClosed: res[1].rows, notices: res[2].rows, entries: res[3].rows, flags: res[4].rows, dates: res[5].rows, carried: res[6].rows,
+        memberIds: Object.keys(members).map(id), chairIds: Object.keys(model.chairsByArea[meeting.areaKey] || {}).map(id),
+        mgmtIds: model.people.filter(function (p) { return CH.config.managementRoles.indexOf(p.Role) >= 0; }).map(function (p) { return id(p.SiteUserId); }),
+        lookaheadDays: look ? look.Value : 60
+      });
+    }
+
+    return { build: build, preview: preview, flagged: flagged, SECTIONS: SECTIONS };
   })();
 
   /* src/ui/components.js */
@@ -1574,7 +1765,10 @@ window.ESGCompetencyHub = function (ctx) {
         var evs = mine.filter(function (a) { return !a.waitingCloseOut && (a.dueIso === iso || (i === 0 && a.group === 'late')); }).sort(byDue).map(function (a) {
           return h('button', { type: 'button', class: 'hm-ev ' + (a.group === 'late' ? 'late' : 'soon'), title: a.title + ' – ' + a.dueText, onclick: function () { app.openAction(a); }, text: a.title });
         }).concat(keys.filter(function (k) { return m.stats[k].nextMeeting === iso; }).map(function (k) {
-          return h('span', { class: 'hm-ev mtg', title: m.areaByKey[k].name + ' meeting', text: m.areaByKey[k].name + ' meeting' });
+          var mt = m.meetings.filter(function (x) { return x.areaKey === k && x.dateIso === iso && x.status !== 'Cancelled'; })[0];
+          return mt ? h('button', { type: 'button', class: 'hm-ev mtg', title: m.areaByKey[k].name + ' meeting at ' + mt.start, onclick: function () { app.openMeeting(mt); },
+            text: m.areaByKey[k].name + ' meeting ' + mt.start })
+            : h('span', { class: 'hm-ev mtg', title: m.areaByKey[k].name + ' meeting', text: m.areaByKey[k].name + ' meeting' });
         }));
         var weekend = dow === 'Saturday' || dow === 'Sunday';
         days.push(h('div', { class: 'hm-day' + (i === 0 ? ' today' : '') + (weekend ? ' weekend' : '') },
@@ -1637,11 +1831,19 @@ window.ESGCompetencyHub = function (ctx) {
             h('small', { text: (n.pinned ? 'Pinned · ' : n.important ? 'Important · ' : '') + (n.fromOutside ? 'From ' + n.authorName + ', outside ' + area.name : n.authorName) +
               ' · ' + D.short(n.createdIso) + (n.flagged ? ' · flagged' : '') + (nnote ? ' · ' + nnote : '') })));
       });
+      // meetings: those to come (and one in progress), then the last one held
       var diary = [];
-      if (s.nextMeeting) diary.push(h('div', { class: 'hm-rw' }, h('span', { class: 'when w-ok', text: D.weekdayShort(s.nextMeeting) }),
-        h('span', { class: 'hm-tx' }, h('b', { text: 'Next meeting' }), h('small', { text: s.flagged ? s.flagged + (s.flagged === 1 ? ' item' : ' items') + ' flagged for discussion' : 'Nothing flagged yet' }))));
-      else diary.push(h('div', { class: 'hm-rw' }, h('span', { class: 'when w-soon', text: 'Not booked' }),
-        h('span', { class: 'hm-tx' }, h('b', { text: 'No meeting booked' }), h('small', { text: 'Someone who runs meetings here can book one' }))));
+      var coming = m.meetings.filter(function (x) { return x.areaKey === key && (x.status === 'In Progress' || (x.status === 'Scheduled' && x.dateIso >= m.today)); });
+      coming.forEach(function (x, i) {
+        var note = app.tracker && app.tracker.forTarget(x.id, 'Meeting');
+        var waiting = note && (note.state === 'submitted' || note.state === 'slow');
+        diary.push(h('button', { type: 'button', class: 'hm-rw item-open', onclick: function () { app.openMeeting(x); } },
+          h('span', { class: 'when ' + (x.status === 'In Progress' ? 'w-soon' : 'w-ok'), text: x.status === 'In Progress' ? 'Now' : D.weekdayShort(x.dateIso) }),
+          h('span', { class: 'hm-tx' }, h('b', { text: (i === 0 ? 'Next meeting' : 'Meeting') + ', ' + x.start + (x.location ? ' · ' + x.location : '') }),
+            h('small', { text: waiting ? 'change being recorded' : i === 0 && s.flagged ? s.flagged + (s.flagged === 1 ? ' item' : ' items') + ' flagged for discussion' : x.chairName ? x.chairName + ' chairs' : '' }))));
+      });
+      if (!coming.length) diary.push(h('div', { class: 'hm-rw' }, h('span', { class: 'when w-soon', text: 'Not booked' }),
+        h('span', { class: 'hm-tx' }, h('b', { text: 'No meeting booked' }), h('small', { text: acc.runsMeetings(key) ? 'Use Book a meeting above' : 'Someone who runs meetings here can book one' }))));
       diary.push(h('div', { class: 'hm-rw' }, h('span', { class: 'when w-later', text: 'Last met' }),
         h('span', { class: 'hm-tx' }, h('b', { text: s.lastMeeting ? D.long(s.lastMeeting) : 'None on record' }), h('small', { text: s.meetingStale ? 'A meeting is overdue' : 'Minutes are kept with the meeting' }))));
       m.calendar.filter(function (e) { return e.areaKey === key; }).forEach(function (e) {
@@ -1663,6 +1865,7 @@ window.ESGCompetencyHub = function (ctx) {
             acc.canWrite(key) && area.status === 'Active' ? ui.button('Raise an action here', function () { app.raiseAction(key); }) : null,
             acc.canPostNotice(key) ? ui.button('Post a notice here', function () { app.postNotice(key); }) : null,
             acc.canWrite(key) && area.status === 'Active' ? ui.button('Raise an issue', function () { app.raiseEntry(key); }) : null,
+            acc.runsMeetings(key) ? ui.button('Book a meeting', function () { app.bookMeeting(key); }) : null,
             ui.linkButton('Full page', full(0)),
             h('button', { type: 'button', class: 'hm-x-btn', 'aria-label': 'Close ' + area.name, text: '✕', onclick: function () { app.openAreaHere(null); } }))),
         h('div', { class: 'hm-pb' }, h('div', { class: 'hm-cols' },
@@ -1670,7 +1873,7 @@ window.ESGCompetencyHub = function (ctx) {
             : acts.length ? ui.fitList(acts, 'all ' + area.name + ' actions', full(0), 'items') : h('p', { class: 'hm-empty', text: 'There are no open actions in ' + area.name + '.' })),
           col('Notices & issues', news.length, [ui.sectionNote(m.sections.notices, 'notices'), ui.sectionNote(m.sections.register, 'improvements and degradations'),
             news.length ? ui.fitList(news, 'all notices and issues', full(1)) : h('p', { class: 'hm-empty', text: 'No notices, and no open improvements or degradations, in ' + area.name + '.' })]),
-          col('Meetings & dates', null, ui.fitList(diary, 'calendar', full(2))))));
+          col('Meetings & dates', null, ui.fitList(diary, 'all meetings', full(3))))));
     }
 
     function render(app) {
@@ -1829,14 +2032,27 @@ window.ESGCompetencyHub = function (ctx) {
         rows.length ? h('ul', { class: 'plain' }, rows) : h('p', { class: 'muted', text: 'Nothing in the calendar for the next 60 days.' })];
     }
 
+    // Meetings to come, and those held or cancelled, newest first (spec MTG-1).
     function meetingsTab(app, area) {
-      var s = app.model.stats[area.key];
-      return [ui.sectionNote(app.model.sections.meetings, 'meetings'), h('ul', { class: 'plain' },
-        h('li', null, h('span', null, h('b', { text: 'Next meeting' }), h('br'),
-          h('span', { class: 'muted small', text: (s.nextMeeting ? D.weekday(s.nextMeeting) + ' ' + D.long(s.nextMeeting) : 'Not booked') + (s.flagged ? ' · ' + s.flagged + ' items to discuss' : '') }))),
-        h('li', null, h('span', null, h('b', { text: 'Last meeting' }), h('br'),
-          h('span', { class: 'muted small', text: s.lastMeeting ? D.long(s.lastMeeting) : 'None on record' })))),
-        h('p', { class: 'muted small', text: 'Running meetings, agendas and minutes arrive in a later version.' })];
+      var m = app.model;
+      var list = m.meetings.filter(function (x) { return x.areaKey === area.key; });
+      var coming = list.filter(function (x) { return x.status === 'In Progress' || (x.status === 'Scheduled' && x.dateIso >= m.today); });
+      var past = list.filter(function (x) { return coming.indexOf(x) < 0; }).reverse();
+      var item = function (x) {
+        var st = { 'Scheduled': ['later', 'Booked'], 'In Progress': ['soon', 'In progress'], 'Finalised': ['done', 'Minutes'], 'Cancelled': ['late', 'Cancelled'] }[x.status] || ['later', x.status];
+        return h('li', null, h('button', { type: 'button', class: 'item-open', onclick: function () { app.openMeeting(x); } },
+          h('span', null, h('span', { class: 't', text: D.weekday(x.dateIso) + ' ' + D.long(x.dateIso) + ', ' + x.start }),
+            h('span', { class: 's', text: [x.location || (x.onlineLink ? 'Online' : ''), x.chairName ? x.chairName + ' chairs' : '', x.attendeeIds.length + ' invited'].filter(Boolean).join(' · ') })),
+          ui.chip(st[0], st[1])));
+      };
+      return [
+        h('div', { class: 'row tab-actions' }, app.access.runsMeetings(area.key) ? ui.button('Book a meeting', function () { app.bookMeeting(area.key); }) : null),
+        ui.sectionNote(m.sections.meetings, 'meetings'),
+        h('h2', { class: 'group-title', text: 'Coming up' }),
+        coming.length ? h('ul', { class: 'items' }, coming.map(item)) : h('p', { class: 'muted', text: 'No meeting is booked.' }),
+        h('h2', { class: 'group-title', text: 'Earlier' }),
+        past.length ? h('ul', { class: 'items' }, past.map(item)) : h('p', { class: 'muted', text: 'No earlier meetings in the Hub.' })
+      ];
     }
 
     function render(app, key, tabIndex) {
@@ -1867,7 +2083,7 @@ window.ESGCompetencyHub = function (ctx) {
         out.push(h('div', { class: 'row actions-row' },
           ui.button('Raise an action', function () { app.raiseAction(key); }, 'main'),
           acc.canPostNotice(key) ? ui.button('Post a notice', function () { app.postNotice(key); }) : null,
-          acc.runsMeetings(key) ? ui.button(s.nextMeeting ? 'Start meeting' : 'Book a meeting', function () { app.comingSoon('Meetings'); }) : null));
+          acc.runsMeetings(key) ? ui.button('Book a meeting', function () { app.bookMeeting(key); }) : null));
       }
 
       var tabs = h('div', { class: 'subtabs', role: 'tablist', 'aria-label': area.name + ' sections' });
@@ -3436,7 +3652,11 @@ window.ESGCompetencyHub = function (ctx) {
       { name: 'MaxDeadlineYears', label: 'Furthest deadline', unit: 'years ahead', min: 1, max: 5, fallback: '2',
         hint: 'The latest target date anyone can choose.' },
       { name: 'MonitorHours', label: 'Queue monitor hours', hours: true, fallback: '07:00|19:45|60',
-        hint: 'Every 15 minutes in working hours on weekdays; outside them, every so many minutes.' }
+        hint: 'Every 15 minutes in working hours on weekdays; outside them, every so many minutes.' },
+      { name: 'InvitesEnabled', label: 'Outlook invitations', yesNo: true, fallback: 'Yes',
+        hint: 'Yes: meetings send Outlook invitations, updates and cancellations. No: people add meetings to their calendar from the Hub.' },
+      { name: 'PdfEnabled', label: 'PDF minutes', yesNo: true, fallback: 'Yes',
+        hint: 'Yes: finalised minutes are saved as a PDF. No: the Hub offers a print-ready page instead.' }
     ];
 
     function current(app, name) {
@@ -3446,6 +3666,7 @@ window.ESGCompetencyHub = function (ctx) {
 
     // Returns an error message, or '' when the value is acceptable (the same checks as the flow).
     function check(item, value) {
+      if (item.yesNo) return value === 'Yes' || value === 'No' ? '' : 'Choose Yes or No.';
       if (item.hours) {
         var p = String(value).split('|');
         var t = function (x) { var m = /^(\d{2}):(\d{2})$/.exec(x || ''); return m && +m[1] < 24 && +m[2] < 60 ? +m[1] * 60 + +m[2] : -1; };
@@ -3461,6 +3682,7 @@ window.ESGCompetencyHub = function (ctx) {
     }
 
     function words(item, value) {
+      if (item.yesNo) return (value || item.fallback) === 'No' ? 'Off' : 'On';
       if (!value) return 'Not set (' + (item.hours ? item.fallback.replace(/\|/g, ' – ').replace(/ – (\d+)$/, ', then every $1 minutes') : item.fallback + ' ' + item.unit) + ' is used)';
       if (item.hours) {
         var p = value.split('|');
@@ -3473,7 +3695,11 @@ window.ESGCompetencyHub = function (ctx) {
       var err = h('span', { class: 'field-error', id: 'ch-set-' + item.name + '-err' });
       var value = current(app, item.name) || item.fallback;
       var inputs;
-      if (item.hours) {
+      if (item.yesNo) {
+        inputs = [h('select', { id: 'ch-set-' + item.name, 'aria-label': item.label }, [['Yes', 'On'], ['No', 'Off']].map(function (o) {
+          return h('option', { value: o[0], selected: o[0] === value ? true : null, text: o[1] });
+        }))];
+      } else if (item.hours) {
         var p = value.split('|');
         inputs = [h('input', { type: 'time', id: 'ch-set-' + item.name, 'aria-label': 'Start', value: p[0] }), ' to ',
           h('input', { type: 'time', 'aria-label': 'End', value: p[1] }), ', then every ',
@@ -3486,7 +3712,7 @@ window.ESGCompetencyHub = function (ctx) {
         h('button', { type: 'button', class: 'btn', text: 'Cancel', onclick: function () { onDone(); } }), err);
       form.addEventListener('submit', async function (e) {
         e.preventDefault();
-        var fields = form.querySelectorAll('input');
+        var fields = form.querySelectorAll('input, select');
         var v = item.hours ? [fields[0].value, fields[1].value, fields[2].value].join('|') : String(fields[0].value).trim();
         var problem = check(item, v);
         err.textContent = problem;
@@ -3495,7 +3721,7 @@ window.ESGCompetencyHub = function (ctx) {
         save.disabled = true;
         save.textContent = 'Sending…';
         try {
-          await app.tracker.submit({ type: 'UpdateSetting', payload: { name: item.name, value: v }, label: 'Change ' + item.label.toLowerCase() + ' to ' + words(item, v) });
+          await app.tracker.submit({ type: 'UpdateSetting', payload: { name: item.name, value: v }, label: item.yesNo ? 'Turn ' + item.label + ' ' + words(item, v).toLowerCase() : 'Change ' + item.label.toLowerCase() + ' to ' + words(item, v) });
           onDone();
         } catch (error) {
           save.disabled = false;
@@ -3503,7 +3729,7 @@ window.ESGCompetencyHub = function (ctx) {
           err.textContent = error.friendly || 'This could not be sent just now. Try again in a moment.';
         }
       });
-      setTimeout(function () { var first = form.querySelector('input'); if (first) first.focus(); }, 0);
+      setTimeout(function () { var first = form.querySelector('input, select'); if (first) first.focus(); }, 0);
       return form;
     }
 
@@ -3513,7 +3739,7 @@ window.ESGCompetencyHub = function (ctx) {
       return [
         h('p', { class: 'muted small', text: 'Each change is checked, recorded with its previous value, and takes effect within a few minutes.' }),
         h('ul', { class: 'plain settings' }, ITEMS.map(function (item) {
-          var waiting = sent.filter(function (e) { return e.label.indexOf(item.label.toLowerCase()) >= 0 && (e.state === 'submitted' || e.state === 'slow'); })[0];
+          var waiting = sent.filter(function (e) { return (e.label.indexOf(item.label.toLowerCase()) >= 0 || e.label.indexOf(item.label) >= 0) && (e.state === 'submitted' || e.state === 'slow'); })[0];
           return h('li', null, h('div', { class: 'setting' },
             h('b', { text: item.label }), h('br'),
             h('span', { text: words(item, current(app, item.name)) }), h('br'),
@@ -3653,6 +3879,384 @@ window.ESGCompetencyHub = function (ctx) {
     return { render: render, refresh: refresh, measures: measures, PERIODS: PERIODS };
   })();
 
+  /* src/views/meeting-form.js */
+  // "Book a meeting" and "Change the meeting" (spec MTG-1): one form, sent as a queued request to the Meetings flow,
+  // which sends the Outlook invitation (or its update) once the meeting is recorded. Booking can also make the same
+  // meeting in each of the next few months, as separate meetings.
+  CH.views = CH.views || {};
+  CH.views.meetingForm = (function () {
+    var h = CH.dom.h;
+    var D = CH.dates;
+    var R = CH.rules;
+
+    // Who may chair: management, or a member of the area who runs its meetings. Who may attend: members and management.
+    function people(app, key) {
+      var m = app.model;
+      var chairs = m.chairsByArea[key] || {};
+      var all = m.ownersFor(key);
+      return {
+        all: all,
+        chairs: all.filter(function (p) { return CH.config.managementRoles.indexOf(p.role) >= 0 || chairs[p.id]; }),
+        members: all.filter(function (p) { return (m.membersByArea[key] || {})[p.id]; })
+      };
+    }
+
+    function ctxFor(app) {
+      return {
+        today: app.model.today,
+        runsMeetings: app.access.runsMeetings,
+        chairAllowed: function (k, id) { return people(app, k).chairs.some(function (p) { return Number(p.id) === id; }); },
+        attendeeAllowed: function (k, id) { return people(app, k).all.some(function (p) { return Number(p.id) === id; }); }
+      };
+    }
+
+    // meeting: the meeting being changed, or none to book a new one in areaKey.
+    function open(app, areaKey, meeting) {
+      if (app.meetingsBlocked()) { CH.ui.toast(app.root, 'Booking and changing meetings is paused for the moment. Please try again later.', 'info'); return; }
+      var m = app.model;
+      var key = meeting ? meeting.areaKey : areaKey;
+      var mine = m.areas.filter(function (a) { return app.access.runsMeetings(a.key); });
+      if (!meeting && !mine.length) { CH.ui.toast(app.root, 'Only the people who run meetings in an area, and management, can book meetings.', 'info'); return; }
+      if (!meeting && !app.access.runsMeetings(key)) key = mine[0].key;
+      var field = CH.ui.dialog.field;
+      var area = h('select', { id: 'ch-m-areaKey', disabled: meeting ? true : null }, (meeting ? [m.areaByKey[key]] : mine).map(function (a) {
+        return h('option', { value: a.key, selected: a.key === key ? true : null, text: a.name });
+      }));
+      var stats = m.stats[key] || {};
+      var date = h('input', { id: 'ch-m-dateIso', type: 'date', min: m.today, max: D.addDays(m.today, 730), value: meeting ? meeting.dateIso : '' });
+      var start = h('input', { id: 'ch-m-start', type: 'time', value: meeting ? meeting.start : '10:00' });
+      var end = h('input', { id: 'ch-m-end', type: 'time', value: meeting ? meeting.end : '11:00' });
+      var place = h('input', { id: 'ch-m-location', type: 'text', maxlength: '255', value: meeting ? meeting.location : '' });
+      var link = h('input', { id: 'ch-m-onlineLink', type: 'url', maxlength: '1000', value: meeting ? meeting.onlineLink : ''});
+      var chair = h('select', { id: 'ch-m-chairId' });
+      var attendees = h('div', { class: 'checks', id: 'ch-m-attendeeIds', role: 'group', 'aria-label': 'Attendees' });
+      var repeat = h('select', { id: 'ch-m-repeat' }, [['0', 'Just this meeting'], ['2', 'This and the next 2 months'], ['5', 'This and the next 5 months']].map(function (o) {
+        return h('option', { value: o[0], text: o[1] });
+      }));
+
+      function fillPeople() {
+        var p = people(app, area.value);
+        var chosenChair = chair.value || String(meeting ? meeting.chairId : app.person.SiteUserId);
+        CH.dom.clear(chair);
+        p.chairs.forEach(function (x) { chair.appendChild(h('option', { value: String(x.id), selected: String(x.id) === chosenChair ? true : null, text: x.name })); });
+        var ticked = meeting ? meeting.attendeeIds.map(String) : p.members.map(function (x) { return String(x.id); }).concat(String(app.person.SiteUserId));
+        CH.dom.clear(attendees);
+        p.all.forEach(function (x) {
+          attendees.appendChild(h('label', { class: 'check' }, h('input', { type: 'checkbox', value: String(x.id), checked: ticked.indexOf(String(x.id)) >= 0 ? true : null }),
+            ' ' + x.name + ((m.membersByArea[area.value] || {})[x.id] ? '' : ' – ' + x.role)));
+        });
+      }
+      area.addEventListener('change', fillPeople);
+      fillPeople();
+
+      var errorBox = h('p', { class: 'form-error', role: 'alert' });
+      var submit = h('button', { type: 'submit', class: 'btn btn-main', text: meeting ? 'Save changes' : 'Book meeting' });
+      var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-m', title: meeting ? 'Change the meeting' : 'Book a meeting', wide: true });
+      var invites = app.health ? app.health.invitesEnabled !== false : true;
+      var form = h('form', { class: 'dialog-body', novalidate: true },
+        field('Area', area),
+        !meeting && stats.lastMeeting ? h('p', { class: 'muted small', text: 'The last ' + m.areaByKey[key].name + ' meeting was on ' + D.long(stats.lastMeeting) + '.' }) : null,
+        h('div', { class: 'row three' }, field('Date', date), field('Starts', start), field('Ends', end)),
+        field('Place', place, 'A room, or leave empty for an online meeting.'),
+        field('Online link', link, 'Optional, for example a Teams meeting link.'),
+        field('Chair', chair),
+        h('div', { class: 'field' }, h('span', { class: 'label', text: 'Attendees' }), h('span', { class: 'hint', text: 'The members of the area are ticked. Management can be added.' }),
+          attendees, h('span', { class: 'field-error', id: 'ch-m-attendeeIds-err' })),
+        meeting ? null : field('Repeat', repeat, 'Each month is its own meeting, on the same weekday of the month, and can be changed or cancelled on its own.'),
+        h('p', { class: 'explain', text: invites
+          ? (meeting ? 'An Outlook update goes to the attendees once the change is recorded.' : 'An Outlook invitation goes to the attendees from the Hub\'s calendar once the meeting is recorded.')
+          : 'Outlook invitations are switched off: attendees can add the meeting to their calendar from the Hub.' }),
+        errorBox,
+        h('div', { class: 'row' }, submit, h('button', { type: 'button', class: 'btn', text: 'Cancel', onclick: dlg.close })));
+      dlg.body.appendChild(form);
+
+      function values() {
+        return { areaKey: area.value, dateIso: date.value, start: start.value, end: end.value, location: place.value.trim(), onlineLink: link.value.trim(),
+          chairId: Number(chair.value), attendeeIds: Array.prototype.filter.call(attendees.querySelectorAll('input'), function (i) { return i.checked; }).map(function (i) { return Number(i.value); }) };
+      }
+
+      form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        errorBox.textContent = '';
+        var v = values();
+        var errors = R.validateMeeting(v, ctxFor(app));
+        if (CH.ui.dialog.showErrors(form, 'ch-m-', errors, ['areaKey', 'dateIso', 'start', 'end', 'location', 'onlineLink', 'chairId', 'attendeeIds'])) return;
+        if (errors.areaKey) { errorBox.textContent = errors.areaKey; return; }
+        submit.disabled = true;
+        submit.textContent = 'Sending…';
+        var when = function (iso) { return D.weekday(iso) + ' ' + D.long(iso) + ' at ' + v.start; };
+        try {
+          if (meeting) {
+            var changed = {};
+            ['dateIso', 'start', 'end', 'location', 'onlineLink', 'chairId'].forEach(function (k) {
+              var before = { dateIso: meeting.dateIso, start: meeting.start, end: meeting.end, location: meeting.location, onlineLink: meeting.onlineLink, chairId: Number(meeting.chairId) }[k];
+              if (v[k] !== before) changed[k] = v[k];
+            });
+            if (v.attendeeIds.slice().sort().join() !== meeting.attendeeIds.slice().sort().join()) changed.attendeeIds = v.attendeeIds;
+            if (!Object.keys(changed).length) { errorBox.textContent = 'Nothing has changed.'; submit.disabled = false; submit.textContent = 'Save changes'; return; }
+            await app.tracker.submit({ type: 'UpdateMeeting', targetId: meeting.id, targetType: 'Meeting', expectedRevision: meeting.revision, payload: changed,
+              label: 'Change the ' + meeting.areaName + ' meeting to ' + when(v.dateIso) });
+          } else {
+            var dates = [v.dateIso].concat(R.nextMonths(v.dateIso, Number(repeat.value)));
+            for (var i = 0; i < dates.length; i++) {
+              await app.tracker.submit({ type: 'ScheduleMeeting', payload: Object.assign({}, v, { dateIso: dates[i] }),
+                label: 'Book the ' + m.areaByKey[v.areaKey].name + ' meeting on ' + when(dates[i]) });
+            }
+          }
+          dlg.close();
+          CH.ui.toast(app.root, meeting ? 'Your change has been sent.' : 'Sent. The meeting appears in a few minutes, and the invitation goes out then.', 'ok');
+        } catch (error) {
+          submit.disabled = false;
+          submit.textContent = 'Try again';
+          errorBox.textContent = error.friendly || 'This could not be sent just now. Nothing has been lost – try again in a moment.';
+        }
+      });
+      date.focus();
+    }
+
+    return { open: open, people: people };
+  })();
+
+  /* src/views/meeting-panel.js */
+  // One monthly meeting (spec MTG-1, MTG-2): when and where, who chairs and attends, whether the Outlook invitation
+  // has gone, and the agenda – a preview built by the same rules as the flow until the meeting starts, then the agenda
+  // the flow fixed. Those who run the area's meetings change, cancel or start it (queued) and add agenda items by hand
+  // (an instant write to the meeting's record folder, which only they and management may write to).
+  CH.views = CH.views || {};
+  CH.views.meetingPanel = (function () {
+    var h = CH.dom.h;
+    var D = CH.dates;
+    var R = CH.rules;
+    var ui = CH.ui;
+    var field = function (l, i, hint) { return CH.ui.dialog.field(l, i, hint); };
+    var STATUS = { 'Scheduled': ['later', 'Booked'], 'In Progress': ['soon', 'In progress'], 'Finalising': ['soon', 'Being finalised'],
+      'Finalised': ['done', 'Minutes finalised'], 'Cancelled': ['late', 'Cancelled'] };
+
+    function inviteWords(app, mt) {
+      var on = !app.health || app.health.invitesEnabled !== false;
+      var s = mt.inviteState;
+      if (mt.status === 'Cancelled') return s === 'Cancelled' ? 'The cancellation has gone to the attendees.' : s === 'None' ? '' : 'The cancellation is being sent.';
+      if (s === 'Sent') return 'The Outlook invitation has gone to the attendees.';
+      if (s === 'Creating' || s === 'Updating') return 'The Outlook invitation is being sent.';
+      if (s === 'Unknown') return 'The Outlook invitation is being checked and tried again automatically.';
+      if (s === 'Failed') return 'The Outlook invitation could not be sent; it is tried again automatically, and the administrators are told if it keeps failing.';
+      return on ? '' : 'Outlook invitations are switched off. Add the meeting to your calendar with the download below.';
+    }
+
+    // A calendar file for this meeting (used when invitations are off, or for anyone who wants it in their own calendar).
+    function ics(mt, areaName) {
+      var stamp = function (iso) { return String(iso).replace(/[-:]/g, '').replace(/\.\d+/, '').slice(0, 15) + 'Z'; };
+      var escape = function (t) { return String(t || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n'); };
+      return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//ESG Competency Hub//Meetings//EN', 'METHOD:PUBLISH', 'BEGIN:VEVENT',
+        'UID:' + (mt.inviteToken || mt.ref) + '@esg-competency-hub', 'DTSTAMP:' + stamp(new Date().toISOString()),
+        'DTSTART:' + stamp(mt.startUtc), 'DTEND:' + stamp(mt.endUtc || mt.startUtc), 'SUMMARY:' + escape(areaName + ' monthly meeting'),
+        'LOCATION:' + escape(mt.location || mt.onlineLink), 'DESCRIPTION:' + escape('ESG Competency Hub ' + mt.ref + (mt.onlineLink ? '. Online: ' + mt.onlineLink : '')),
+        mt.status === 'Cancelled' ? 'STATUS:CANCELLED' : 'STATUS:CONFIRMED', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+    }
+
+    function download(name, text) {
+      var url = URL.createObjectURL(new Blob([text], { type: 'text/calendar' }));
+      var a = h('a', { download: name });
+      a.href = url;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    }
+
+    // The fixed agenda and the record rows (items added by hand), read for one meeting. MeetingId is indexed.
+    async function loadItems(app, mt) {
+      var res = await app.sp.items(CH.config.lists.meetingItems.title,
+        '$select=Id,Title,RowType,Section,SourceType,SourceId,SortOrder,AgendaMarker,SnapshotOwner,SnapshotStatus,SnapshotDueDate,SnapshotDetails,Notes,RecordKey,FileDirRef,AuthorId,Created' +
+        '&$filter=MeetingId eq ' + Number(mt.id), 2000);
+      var record = '/' + mt.areaKey + '/MTG-' + mt.id;
+      return res.rows.filter(function (r) {
+        var dir = String(r.FileDirRef || '');
+        // agenda rows in the meeting's folder (written by the flow); items added by hand in its Record folder
+        return r.RowType === 'Agenda Item' ? dir.slice(-record.length) === record
+          : dir.slice(-(record.length + 7)) === record + '/Record' && String(r.RecordKey || '').indexOf(mt.id + '|') === 0;
+      });
+    }
+
+    function agendaList(items) {
+      var groups = CH.agenda.SECTIONS.concat(['New business']).map(function (title) { return { title: title, rows: [] }; });
+      items.forEach(function (it) {
+        var g = groups.filter(function (x) { return x.title === it.section; })[0];
+        if (g) g.rows.push(it);
+      });
+      return groups.filter(function (g) { return g.rows.length; }).map(function (g) {
+        return [h('h4', { class: 'agenda-title', text: g.title + ' (' + g.rows.length + ')' }), h('ul', { class: 'plain agenda' }, g.rows.map(function (it) {
+          return h('li', null, h('span', null, h('b', { text: it.title }), it.detail ? [h('br'), h('span', { class: 'muted small', text: it.detail })] : null),
+            it.open ? ui.linkButton('Open', it.open) : null);
+        }))];
+      });
+    }
+
+    // Agenda rows as the panel shows them: from the flow's rows, or from the preview.
+    function fromRows(app, rows) {
+      var m = app.model;
+      return rows.filter(function (r) { return r.RowType === 'Agenda Item'; }).sort(function (a, b) { return (a.SortOrder || 0) - (b.SortOrder || 0) || String(a.Title).localeCompare(String(b.Title)); })
+        .map(function (r) { return describe(app, r.Section, r.SourceType || 'Date', r.SourceId, r.Title, r.AgendaMarker, r.SnapshotOwner, r.SnapshotDetails, r.SnapshotDueDate); })
+        .concat(rows.filter(function (r) { return r.RowType === 'New Business'; }).map(function (r) {
+          return { section: 'New business', title: r.Title, detail: (r.Notes ? r.Notes + ' · ' : '') + 'added by ' + m.nameOf(r.AuthorId) };
+        }));
+    }
+    function fromPreview(app, list) {
+      return list.map(function (x) {
+        var r = x.row;
+        return describe(app, x.section, x.sourceType, x.sourceId, r.Title, x.marker, r.AssignedToId,
+          x.sourceType === 'Register Entry' ? r.EntryType + ' · ' + r.Impact + ' impact' : x.sourceType === 'Date' ? (r.StartTime ? D.long(D.localDate(r.StartTime)) : '') : '',
+          r.DueDay ? D.fromDueDay(r.DueDay) : '');
+      });
+    }
+    function describe(app, section, type, sourceId, title, marker, ownerId, details, due) {
+      var m = app.model;
+      var id = Number(sourceId);
+      var open = type === 'Action' ? function () { app.openAction({ id: id }); } : type === 'Notice' && m.noticeById[id] ? function () { app.openNotice({ id: id }); }
+        : type === 'Register Entry' && m.entryById[id] ? function () { app.openEntry({ id: id }); } : null;
+      var bits = [];
+      if (type === 'Action' && ownerId) bits.push(m.nameOf(Number(ownerId)));
+      if (type === 'Action' && due) bits.push('due ' + D.short(String(due).slice(0, 10)));
+      if (details) bits.push(details);
+      if (marker) bits.push(marker.toLowerCase());
+      return { section: section, title: title || '', detail: bits.join(' · '), open: open };
+    }
+
+    function open(app, id) {
+      var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-mt', title: 'Meeting', wide: true, onClose: function () { app.panel = null; } });
+      var view = 'main';
+      var agenda = null;      // { kind: 'preview' | 'fixed', items } or 'error'
+
+      function mt() { return app.model.meetingById[id]; }
+
+      async function loadAgenda() {
+        var x = mt();
+        if (!x) return;
+        try {
+          if (x.status === 'Scheduled') {
+            var both = await Promise.all([CH.agenda.preview(app.sp, app.model, x, app.settings), loadItems(app, x)]);
+            agenda = { kind: 'preview', items: fromPreview(app, both[0]).concat(fromRows(app, both[1])) };
+          } else {
+            agenda = { kind: 'fixed', items: fromRows(app, await loadItems(app, x)) };
+          }
+        } catch (_) { agenda = 'error'; }
+        if (view === 'main' && dlg.isOpen()) fill();
+      }
+
+      function pending(x) {
+        var e = app.tracker.forTarget(x.id, 'Meeting');
+        if (e && (e.state === 'submitted' || e.state === 'slow')) {
+          return h('p', { class: 'pending', role: 'status' }, h('b', { text: e.label }), ' – submitted ' + D.ukTime(e.submittedAt) + ', being recorded (usually under 5 minutes).');
+        }
+        var heading = { rejected: 'Not accepted: ', attention: 'Not recorded: ', cancelled: 'Cancelled: ' }[e && e.state];
+        return heading ? h('div', { class: 'section-note', role: 'alert' }, h('b', { text: heading }), e.message + ' ', ui.linkButton('Dismiss', function () { app.tracker.dismiss(e); })) : null;
+      }
+
+      function fill() {
+        CH.dom.clear(dlg.body);
+        var x = mt();
+        if (!x) { dlg.setTitle('Meeting not available'); CH.dom.append(dlg.body, h('p', { text: 'This meeting could not be found. It may have been cancelled.' })); return; }
+        dlg.setTitle(x.areaName + ' meeting, ' + D.weekday(x.dateIso) + ' ' + D.long(x.dateIso));
+        if (view !== 'main') { CH.dom.append(dlg.body, form(view, x)); return; }
+        var runs = app.access.runsMeetings(x.areaKey);
+        var e = app.tracker.forTarget(x.id, 'Meeting');
+        var busy = (e && (e.state === 'submitted' || e.state === 'slow')) || app.meetingsBlocked();
+        var st = STATUS[x.status] || ['later', x.status];
+        var words = inviteWords(app, x);
+        var people = x.attendeeIds.map(function (pid) { return app.model.nameOf(pid); }).sort();
+        CH.dom.append(dlg.body, [
+          h('p', { class: 'muted small' }, x.ref + ' · ' + x.areaName + ' ', ui.chip(st[0], st[1])),
+          pending(x),
+          h('dl', { class: 'facts' },
+            h('dt', { text: 'When' }), h('dd', { text: D.weekday(x.dateIso) + ' ' + D.long(x.dateIso) + ', ' + x.start + (x.end ? ' to ' + x.end : '') }),
+            h('dt', { text: 'Where' }), h('dd', null, x.location || (x.onlineLink ? 'Online' : 'Not given'),
+              x.onlineLink ? [' · ', h('span', { class: 'muted small', text: x.onlineLink })] : null),
+            h('dt', { text: 'Who' }), h('dd', { text: (x.chairName ? x.chairName + ' chairs. ' : '') + (people.length ? people.length + ' invited: ' + people.join(', ') + '.' : '') }),
+            x.status === 'Cancelled' ? [h('dt', { text: 'Cancelled' }), h('dd', { class: 'notice-body', text: x.cancellationReason })] : null),
+          words ? h('p', { class: x.inviteState === 'Failed' ? 'section-note' : 'muted small', text: words }) : null,
+          h('div', { class: 'row actions-row' },
+            runs && !busy && x.status === 'Scheduled' ? ui.button('Start meeting', function () { show('start'); }, 'main') : null,
+            runs && !busy && x.status === 'Scheduled' ? ui.button('Change', function () { dlg.close(); CH.views.meetingForm.open(app, x.areaKey, x); }) : null,
+            runs && !busy && (x.status === 'Scheduled' || x.status === 'In Progress') ? ui.button('Cancel meeting', function () { show('cancel'); }) : null,
+            x.status !== 'Cancelled' ? ui.button('Add to my calendar', function () { download(x.ref + '.ics', ics(x, x.areaName)); }) : null),
+          h('h3', { class: 'group-title', text: x.status === 'Scheduled' ? 'Agenda – preview' : 'Agenda' }),
+          x.status === 'Scheduled' ? h('p', { class: 'muted small', text: 'Built from today\'s records by the same rules as the meeting. It is fixed when the meeting starts.' }) : null,
+          agenda === null ? h('p', { class: 'muted', text: 'Building the agenda…' }) : agenda === 'error' ? h('p', { class: 'section-note', text: 'The agenda could not be read just now.' })
+            : agenda.items.length ? agendaList(agenda.items) : h('p', { class: 'muted', text: 'Nothing on the agenda yet.' }),
+          runs && (x.status === 'Scheduled' || x.status === 'In Progress') ? addItemForm(x) : null
+        ]);
+      }
+
+      // An agenda item added by hand: straight into the meeting's record folder.
+      function addItemForm(x) {
+        var title = h('input', { id: 'ch-mt-title', type: 'text', maxlength: '255' });
+        var notes = h('textarea', { id: 'ch-mt-notes', rows: '2', maxlength: '2000' });
+        var err = h('p', { class: 'form-error', role: 'alert' });
+        var btn = h('button', { type: 'submit', class: 'btn', text: 'Add to the agenda' });
+        var f = h('form', { class: 'comment-form', novalidate: true }, h('h4', { text: 'Add an item' }), field('Item', title), field('Details', notes, 'Optional.'), err, btn);
+        f.addEventListener('submit', async function (e) {
+          e.preventDefault();
+          var t = title.value.trim();
+          if (!t) { CH.ui.dialog.showErrors(f, 'ch-mt-', { title: 'Say what the item is.' }, ['title']); return; }
+          btn.disabled = true; btn.textContent = 'Saving…';
+          var clientKey = CH.requests.newKey();
+          try {
+            await app.sp.addToFolder('meetingItems', x.areaKey + '/MTG-' + x.id + '/Record', { Title: t, RowKey: 'U|' + clientKey, RecordKey: x.id + '|N|' + clientKey,
+              MeetingId: x.id, RowType: 'New Business', SourceType: 'New Business', Section: 'New business', Notes: notes.value.trim() });
+            agenda = null;
+            fill();
+            loadAgenda();
+            CH.ui.toast(app.root, 'Added to the agenda.', 'ok');
+          } catch (error) {
+            btn.disabled = false; btn.textContent = 'Try again';
+            err.textContent = error.status === 403 ? 'Only the people who run this area\'s meetings, and management, can add items.' : 'The item could not be added just now. Your text has been kept.';
+          }
+        });
+        return f;
+      }
+
+      function form(kind, x) {
+        var errorBox = h('p', { class: 'form-error', role: 'alert' });
+        var fields = [];
+        var reason = h('textarea', { id: 'ch-mt-reason', rows: '3', maxlength: '1000' });
+        if (kind === 'cancel') fields.push(field('Why is it cancelled?', reason, 'The attendees get an Outlook cancellation.'));
+        else fields.push(h('p', { class: 'explain', text: 'Starting fixes the agenda from the records as they are now. It cannot be undone.' }));
+        var submit = h('button', { type: 'submit', class: 'btn btn-main', text: kind === 'cancel' ? 'Cancel the meeting' : 'Start the meeting' });
+        var f = h('form', { class: 'dialog-body', novalidate: true }, h('h3', { text: kind === 'cancel' ? 'Cancel this meeting?' : 'Start this meeting?' }), fields, errorBox,
+          h('div', { class: 'row' }, submit, h('button', { type: 'button', class: 'btn', text: 'Back', onclick: function () { show('main'); } })));
+        f.addEventListener('submit', async function (e) {
+          e.preventDefault();
+          var payload = {};
+          if (kind === 'cancel') {
+            var errs = R.validateCancelMeeting({ reason: reason.value });
+            if (CH.ui.dialog.showErrors(f, 'ch-mt-', errs, ['reason'])) return;
+            payload.reason = reason.value.trim();
+          }
+          submit.disabled = true; submit.textContent = 'Sending…';
+          try {
+            await app.tracker.submit({ type: kind === 'cancel' ? 'CancelMeeting' : 'StartMeeting', targetId: x.id, targetType: 'Meeting', expectedRevision: x.revision,
+              payload: payload, label: (kind === 'cancel' ? 'Cancel' : 'Start') + ' the ' + x.areaName + ' meeting' });
+            view = 'main';
+            fill();
+          } catch (error) {
+            submit.disabled = false; submit.textContent = 'Try again';
+            errorBox.textContent = error.friendly || 'This could not be sent just now. Try again in a moment.';
+          }
+        });
+        return f;
+      }
+
+      function show(next) { view = next; fill(); var first = dlg.body.querySelector('textarea, input'); if (first) first.focus(); }
+
+      app.panel = { refresh: function () { if (dlg.isOpen() && view === 'main') { agenda = null; fill(); loadAgenda(); } } };
+      fill();
+      loadAgenda();
+      dlg.focusFirst();
+    }
+
+    return { open: open, ics: ics, inviteWords: inviteWords };
+  })();
+
   /* src/views/admin.js */
   // Administration (spec REL-3): whether automatic processing is working, and the changes that need an
   // administrator. Each change shows what was asked, by whom and when, how far it got and the last error, with the
@@ -3673,11 +4277,13 @@ window.ESGCompetencyHub = function (ctx) {
       UpdateSetting: 'Change a setting', RetryTransaction: 'Try a change again', CancelTransaction: 'Cancel a change', RevertTransaction: 'Revert a change',
       EditNotice: 'Edit a notice', ArchiveNotice: 'Archive a notice', PinNotice: 'Pin or unpin a notice', HideComment: 'Hide a comment',
       RaiseRegisterEntry: 'Raise an improvement or degradation', UpdateRegisterEntry: 'Change an improvement or degradation',
-      LinkActionToEntry: 'Link an action to an entry', UnlinkActionFromEntry: 'Unlink an action from an entry'
+      LinkActionToEntry: 'Link an action to an entry', UnlinkActionFromEntry: 'Unlink an action from an entry',
+      ScheduleMeeting: 'Book a meeting', UpdateMeeting: 'Change a meeting', CancelMeeting: 'Cancel a meeting', StartMeeting: 'Start a meeting'
     };
     var SETTING_WORDS = {
       OverdueReminderIntervalDays: 'days between late reminders', ReminderDaysBefore: 'days before the deadline for the first reminder',
-      MaxDeadlineYears: 'furthest deadline in years', MonitorHours: 'queue monitor hours', DueSoonDays: 'days counted as due soon'
+      MaxDeadlineYears: 'furthest deadline in years', MonitorHours: 'queue monitor hours', DueSoonDays: 'days counted as due soon',
+      InvitesEnabled: 'Outlook invitations', PdfEnabled: 'PDF minutes'
     };
 
     function parse(text) { try { return JSON.parse(text || '{}') || {}; } catch (_) { return {}; } }
@@ -3751,6 +4357,8 @@ window.ESGCompetencyHub = function (ctx) {
         'Check that the flow ESG Competency Hub | 3 Queue monitor is turned on.'), ui.chip('soon', 'Unknown')));
       if (hl.records === 'down') lines.push(h('li', null, h('span', null, h('b', { text: 'Changes to notices and the register are not being processed. ' }), hl.recordsReason,
         ' Actions carry on as normal. In Power Automate, check that ESG Competency Hub | 4 Records is turned on.'), ui.chip('late', 'Not working')));
+      if (hl.meetings === 'down') lines.push(h('li', null, h('span', null, h('b', { text: 'Meeting bookings and changes are not being processed. ' }), hl.meetingsReason,
+        ' Everything else carries on. In Power Automate, check that ESG Competency Hub | 5 Meetings is turned on.'), ui.chip('late', 'Not working')));
       if (hl.administration === 'down') lines.push(h('li', null, h('span', null, h('b', { text: 'Administration changes are not being processed. ' }), hl.adminReason,
         ' Staff can carry on as normal. In Power Automate, check that ESG Competency Hub | 6 Administration is turned on.'), ui.chip('late', 'Not working')));
       if (hl.reminders === 'ok') lines.push(h('li', null, h('span', null, h('b', { text: 'Reminders ran ' }), D.short(D.localDate(hl.lastDailyRun)) + ' at ' + D.ukTime(hl.lastDailyRun) + '.'), ui.chip('done', 'Working')));
@@ -4010,7 +4618,7 @@ window.ESGCompetencyHub = function (ctx) {
         var items = app.tracker.entries().filter(function (e) {
           if (e.dismissed) return false;
           if (CH.requests.ADMIN_TYPES.indexOf(e.type) >= 0) return false;   // shown on the Administration page
-          if (e.type === 'RaiseAction' || e.type === 'RaiseRegisterEntry') return e.state !== 'done';
+          if (e.type === 'RaiseAction' || e.type === 'RaiseRegisterEntry' || e.type === 'ScheduleMeeting') return e.state !== 'done';
           return ['rejected', 'attention', 'cancelled', 'reverted'].indexOf(e.state) >= 0;
         }).map(function (e) {
           var waiting = e.state === 'submitted' || e.state === 'slow';
@@ -4083,6 +4691,10 @@ window.ESGCompetencyHub = function (ctx) {
       app.queueBlocked = function () { return !!app.health && app.health.processing === 'down'; };
       // Notices and the register have their own flow (4 Records); it pauses with the queue, or on its own.
       app.recordsBlocked = function () { return app.queueBlocked() || (!!app.health && app.health.records === 'down'); };
+      // Meetings have their own flow too (5 Meetings).
+      app.meetingsBlocked = function () { return app.queueBlocked() || (!!app.health && app.health.meetings === 'down'); };
+      app.openMeeting = function (mt) { CH.views.meetingPanel.open(app, mt.id); };
+      app.bookMeeting = function (key) { CH.views.meetingForm.open(app, key); };
       app.openArea = function (key) { app.state = { view: 'area', area: key, tab: 0 }; render(true); };
       app.showMine = function (tab, areaKey, keepFocus) {
         app.state = { view: 'mine', area: null, tab: tab || 0, areaFilter: areaKey || '' };
@@ -4220,6 +4832,7 @@ window.ESGCompetencyHub = function (ctx) {
         if (actionParam) CH.views.actionPanel.open(app, actionParam);
         else if (Number(params.get('notice'))) CH.views.recordPanel.openNotice(app, Number(params.get('notice')));
         else if (Number(params.get('entry'))) CH.views.recordPanel.openEntry(app, Number(params.get('entry')));
+        else if (Number(params.get('meeting'))) CH.views.meetingPanel.open(app, Number(params.get('meeting')));
       }
 
       return {

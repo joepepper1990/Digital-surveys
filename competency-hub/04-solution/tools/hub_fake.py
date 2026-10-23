@@ -44,6 +44,9 @@ class HubFake:
         self.return_new_id = True         # AddValidateUpdateItemUsingPath lists the new item's Id among its results
         self.sent = []                    # emails the Outlook connector sent: {'to', 'subject', 'body'}
         self.mail_fail = []               # outcomes for the next sends, in order: 400 (refused), 500 or 'timeout' (unclear)
+        self.events = {}                  # the flow account's Outlook calendar: id -> event
+        self.cal_fail = []                # outcomes for the next calendar calls, in order: 400, 500, 'timeout' (made, then times out)
+        self.invites = []                 # every invitation, update and cancellation sent: (kind, subject, attendees)
         self.clock = datetime(2026, 10, 21, 9, 30, tzinfo=timezone.utc)
         self.groups = {}                  # id -> {'Title', 'users': set of user ids}
         self.tenant = {}                  # email -> display name: people in Microsoft 365 who may not be site users yet
@@ -176,7 +179,7 @@ class HubFake:
     # ------------------------------------------------------------------ connector
     def __call__(self, api, op, p):
         if api == 'shared_office365':
-            return self.send_email(op, p)
+            return self.calendar(op, p) if op != 'SendEmailV2' else self.send_email(op, p)
         assert api == 'shared_sharepointonline', api
         if p.get('dataset') != SITE:
             fail(400, 'wrong site ' + str(p.get('dataset')))
@@ -198,6 +201,54 @@ class HubFake:
             fail(outcome, 'The request was refused.')
         self.sent.append({'to': p['emailMessage/To'], 'subject': p['emailMessage/Subject'], 'body': p['emailMessage/Body']})
         return {}
+
+    def calendar(self, op, p):
+        """Office 365 Outlook calendar actions on the flow account's calendar. Creating, updating and deleting an
+        event sends the invitation, update or cancellation to its attendees."""
+        if op == 'GetEventsCalendarViewV3':
+            for k in ('calendarId', 'startDateTimeUtc', 'endDateTimeUtc'):
+                if not p.get(k):
+                    fail(400, 'Missing ' + k)
+            if self.cal_fail and self.cal_fail[0] == 'searchfail':
+                self.cal_fail.pop(0)
+                fail(500, 'Search failed.')
+            words = (p.get('search') or '').lower()
+            return {'value': [dict(e) for e in self.events.values() if not words or words in (e['body'] + e['subject']).lower()]}
+        outcome = self.cal_fail.pop(0) if self.cal_fail else None
+        if outcome in (400, 403):
+            fail(outcome, 'The request was refused.')
+        if op == 'V4CalendarPostItem':
+            for k in ('table', 'item/subject', 'item/start', 'item/end', 'item/timeZone'):
+                if not p.get(k):
+                    fail(400, 'Missing ' + k)
+            eid = 'AAMk' + str(len(self.events) + 1)
+            self.events[eid] = {'id': eid, 'subject': p['item/subject'], 'start': p['item/start'], 'end': p['item/end'], 'body': p.get('item/body', ''),
+                                'requiredAttendees': p.get('item/requiredAttendees', ''), 'location': p.get('item/location', '')}
+            self.invites.append(('invite', p['item/subject'], p.get('item/requiredAttendees', '')))
+            if outcome == 'timeout':
+                raise ActionFailed('The operation timed out.')   # made and sent, but the flow cannot tell
+            if outcome == 500:
+                fail(500, 'Internal server error after the event was made.')
+            return dict(self.events[eid])
+        if op == 'V4CalendarPatchItem':
+            e = self.events.get(p.get('id'))
+            if not e:
+                fail(404, 'The specified object was not found in the store.')
+            e.update({'subject': p['item/subject'], 'start': p['item/start'], 'end': p['item/end'], 'body': p.get('item/body', e['body']),
+                      'requiredAttendees': p.get('item/requiredAttendees', ''), 'location': p.get('item/location', '')})
+            self.invites.append(('update', p['item/subject'], p.get('item/requiredAttendees', '')))
+            if outcome == 'timeout':
+                raise ActionFailed('The operation timed out.')
+            return dict(e)
+        if op == 'CalendarDeleteItem_V2':
+            e = self.events.pop(p.get('event'), None)
+            if not e:
+                fail(404, 'The specified object was not found in the store.')
+            self.invites.append(('cancel', e['subject'], e['requiredAttendees']))
+            if outcome == 'timeout':
+                raise ActionFailed('The operation timed out.')
+            return {}
+        fail(400, 'not simulated: ' + op)
 
     def _write(self, method, path, where=''):
         self.writes.append((method, path))
@@ -235,7 +286,7 @@ class HubFake:
                     d, _, leaf = url[len(lst['root']) + 1:].rpartition('/')
                     fold = self._find_folder(lst, d, leaf)
                     if fold and m.group(2):
-                        return {'Id': fold['id'], 'AuthorId': fold['author'], 'FileSystemObjectType': 1}
+                        return {'Id': fold['id'], 'AuthorId': fold['author'], 'FileSystemObjectType': 1, 'HasUniqueRoleAssignments': bool(fold.get('unique'))}
                     if fold:
                         return {'Exists': True}
             fail(404, 'File Not Found.')
@@ -280,7 +331,7 @@ class HubFake:
             return {'Id': u['Id'], 'Title': u['Title'], 'LoginName': u['LoginName'], 'Email': u['Email']}
         if method == 'GET' and path == '_api/web/roledefinitions':
             return {'value': [{'Id': rid, 'Name': n} for rid, n in sorted(self.roledefs.items())]}
-        m = re.match(r"^_api/web/GetFolderByServerRelativePath\(decodedurl='((?:[^']|'')*)'\)/ListItemAllFields/(breakroleinheritance|roleassignments)(.*)$", path)
+        m = re.match(r"^_api/web/GetFolderByServerRelativePath\(decodedurl='((?:[^']|'')*)'\)/ListItemAllFields/(breakroleinheritance|roleassignments|resetroleinheritance)(.*)$", path)
         if m:
             url = m.group(1).replace("''", "'")
             lst = next((l for l in self.lists.values() if url.startswith(l['root'] + '/')), None)
@@ -289,6 +340,11 @@ class HubFake:
             if not fold:
                 fail(404, 'File Not Found.')
             ra = fold.setdefault('ra', {})
+            if m.group(2) == 'resetroleinheritance':
+                self._write('RESET', url)
+                fold['unique'] = False
+                ra.clear()
+                return {}
             if m.group(2) == 'breakroleinheritance':
                 self._write('BREAK', url)
                 if not fold.get('unique'):
@@ -332,8 +388,17 @@ class HubFake:
             if '/' in c and c.split('/')[0] not in params.get('$expand', '').split(','):
                 fail(400, 'The query to field \'{0}\' is not valid. The $select query string must specify the target fields and the $expand query string must contains {1}.'.format(c, c.split('/')[0]))
         if method == 'GET' and rest == '/items':
-            rows = [it for it in lst['items'].values() if self._matches(lst, it, params.get('$filter'))]
-            return {'value': [self._out(lst, it, select, meta) for it in sorted(rows, key=lambda x: x['id'])]}
+            rows = sorted([it for it in lst['items'].values() if self._matches(lst, it, params.get('$filter'))], key=lambda x: x['id'])
+            order = params.get('$orderby')
+            if order:
+                col, _, way = order.partition(' ')
+                if col not in ('Id', 'ID') and col not in lst['fields']:
+                    fail(400, 'Column in $orderby does not exist: ' + col)
+                val = (lambda x: x['id']) if col in ('Id', 'ID') else (lambda x: str(x['f'].get(col) or ''))
+                rows = sorted(rows, key=val, reverse=way.strip() == 'desc')
+            if params.get('$top'):
+                rows = rows[:int(params['$top'])]
+            return {'value': [self._out(lst, it, select, meta) for it in rows]}
         m = re.match(r'^/items\((\d+)\)$', rest)
         if m:
             it = lst['items'].get(int(m.group(1)))
@@ -376,7 +441,21 @@ class HubFake:
                 if str(it['f'].get(col) or '').startswith(pre.replace("''", "'")):
                     return True
             return False
+        # Column eq 'a' or Column eq 'b' ...: any one of them
+        if ' or ' in flt and ' and ' not in flt:
+            return any(self._matches(lst, it, part.strip()) for part in flt.split(' or '))
         for clause in re.split(r'\s+and\s+', flt):
+            dm = re.match(r"^(\w+) (eq|le|ge|lt|gt) datetime'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)'$", clause.strip())
+            if dm:
+                have = it['f'].get(dm.group(1))
+                if dm.group(1) not in lst['fields']:
+                    fail(400, 'Column in filter does not exist: ' + dm.group(1))
+                if have is None:
+                    return False
+                a, b = str(have)[:19], dm.group(3)[:19]
+                if not {'eq': a == b, 'le': a <= b, 'ge': a >= b, 'lt': a < b, 'gt': a > b}[dm.group(2)]:
+                    return False
+                continue
             m = re.match(r"^(\w+) (eq|le|ge|lt|gt) (?:'((?:[^']|'')*)'|(-?\d+(?:\.\d+)?))$", clause.strip())
             if not m:
                 fail(400, 'filter not simulated: ' + clause)

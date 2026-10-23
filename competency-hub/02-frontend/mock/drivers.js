@@ -713,6 +713,89 @@ window.MockDrivers = (function () {
       var allCount = all('.panel ul.items')[1].querySelectorAll('li').length;
       return { notices: notices, entries: entries, all: allCount, raise: !!byText('.tab-actions button', 'Raise an improvement or degradation') };
     },
+    // ---- Release 4: meetings
+    bookMeeting: async function () {
+      (await until(function () { return byText('.hm-area .btn', 'Book a meeting'); })).click();
+      var form = await until(function () { return q('#ch-m form'); });
+      var ticked = all('#ch-m-attendeeIds input').filter(function (i) { return i.checked; }).length;
+      var chairs = all('#ch-m-chairId option').map(function (o) { return o.textContent; });
+      q('#ch-m-dateIso').value = '';
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await wait(50);
+      var dateError = q('#ch-m-dateIso-err').textContent;
+      q('#ch-m-dateIso').value = MockSharePoint.data.today || q('#ch-m-dateIso').min;
+      q('#ch-m-start').value = '14:00';
+      q('#ch-m-end').value = '13:00';
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await wait(50);
+      var endError = q('#ch-m-end-err').textContent;
+      q('#ch-m-end').value = '15:00';
+      type(q('#ch-m-location'), 'Flask office');
+      q('#ch-m-repeat').value = '2';
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return !q('#ch-m'); });
+      await until(function () { return MockSharePoint.data.Requests.length === 3 && MockSharePoint.data.Requests.every(function (r) { return r.Status === 'Completed'; }); }, 120000);
+      var booked = MockSharePoint.data.Meetings.filter(function (m) { return m.Location === 'Flask office'; });
+      await until(function () { return all('.hm-area .hm-rw').some(function (b) { return b.textContent.indexOf('14:00 · Flask office') >= 0; }); }, 120000);
+      return { ticked: ticked, chairs: chairs, dateError: dateError, endError: endError, booked: booked.length,
+        dates: booked.map(function (m) { return m.MeetingDate.slice(0, 10); }), types: MockSharePoint.data.Requests.map(function (r) { return r.RequestType; }),
+        writes: MockSharePoint.writes.map(function (w) { return w.list + '/' + w.folder; }) };
+    },
+    meetingChangeStart: async function () {
+      await until(function () { return q('#ch-mt .facts'); });
+      await until(function () { return /Open actions/.test(q('#ch-mt').textContent); });
+      var preview = q('#ch-mt').textContent;
+      // an item added by hand, straight into the meeting's record folder
+      type(q('#ch-mt-title'), 'Spare cable order');
+      q('#ch-mt .comment-form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-mt').textContent.indexOf('Spare cable order') >= 0; });
+      byText('#ch-mt .btn', 'Change').click();
+      var form = await until(function () { return q('#ch-m form'); });
+      q('#ch-m-start').value = '11:00';
+      q('#ch-m-end').value = '12:00';
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return MockSharePoint.data.Requests.some(function (r) { return r.RequestType === 'UpdateMeeting' && r.Status === 'Completed'; }); }, 120000);
+      await wait(2000);
+      var reopen = await until(function () { return all('.hm-area .hm-rw').filter(function (b) { return b.textContent.indexOf('11:00') >= 0; })[0]; }, 120000)
+        .catch(function () { throw new Error('rows: ' + all('.hm-area .hm-rw').map(function (b) { return b.textContent; }).join(' | ')); });
+      reopen.click();
+      await until(function () { return q('#ch-mt .facts') && byText('#ch-mt .btn', 'Start meeting'); });
+      byText('#ch-mt .btn', 'Start meeting').click();
+      (await until(function () { return q('#ch-mt form.dialog-body'); })).dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return MockSharePoint.data.Requests.some(function (r) { return r.RequestType === 'StartMeeting' && r.Status === 'Completed'; }); }, 120000);
+      await until(function () { return q('#ch-mt') && /In progress/.test(q('#ch-mt').textContent) && /Agenda/.test(q('#ch-mt').textContent) && !/preview/.test(q('#ch-mt h3').textContent); }, 120000);
+      await until(function () { return /Open actions \(/.test(q('#ch-mt').textContent); }, 20000);
+      var fixed = q('#ch-mt').textContent;
+      var mt = MockSharePoint.data.Meetings.filter(function (m) { return m.Id === 2; })[0];
+      return { preview: /Open actions \(\d+\)/.test(preview) && /Replace FH40 probe/.test(preview), added: MockSharePoint.data['Meeting Items'].filter(function (x) { return x.RowType === 'New Business'; }).map(function (x) {
+        return x.FileDirRef.split('/Lists/')[1]; }), status: mt.Status, start: mt.MeetingDate.slice(11, 16), agendaRows: MockSharePoint.data['Meeting Items'].filter(function (x) { return x.RowType === 'Agenda Item'; }).length,
+        fixed: /Open actions \(\d+\)/.test(fixed) && /New business \(1\)/.test(fixed) && fixed.indexOf('Spare cable order') >= 0, noStart: !byText('#ch-mt .btn', 'Start meeting') };
+    },
+    meetingCancel: async function () {
+      await until(function () { return q('#ch-mt .facts'); });
+      byText('#ch-mt .btn', 'Cancel meeting').click();
+      var form = await until(function () { return q('#ch-mt form.dialog-body'); });
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await wait(50);
+      var reasonError = q('#ch-mt-reason-err').textContent;
+      type(q('#ch-mt-reason'), 'Most of the area is on the outage.');
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return MockSharePoint.data.Meetings.filter(function (m) { return m.Id === 2; })[0].Status === 'Cancelled'; }, 120000);
+      await until(function () { return q('#ch-mt') && /Cancelled/.test(q('#ch-mt .muted.small').textContent); }, 120000);
+      return { reasonError: reasonError, text: q('#ch-mt').textContent };
+    },
+    meetingAsTechnician: async function () {
+      await until(function () { return q('#ch-mt .facts'); });
+      await until(function () { return /Open actions/.test(q('#ch-mt').textContent); });
+      var buttons = all('#ch-mt .actions-row .btn').map(function (b) { return b.textContent; });
+      var calls = [];
+      var original = URL.createObjectURL;
+      URL.createObjectURL = function (blob) { calls.push(blob); return 'blob:test'; };
+      byText('#ch-mt .btn', 'Add to my calendar').click();
+      URL.createObjectURL = original;
+      var ics = calls.length ? await calls[0].text() : '';
+      return { buttons: buttons, canAdd: !!q('#ch-mt-title'), ics: ics, bookButton: !!byText('.hm-area .btn', 'Book a meeting') };
+    },
     // Open every area and every tab: the shell must make no writes at all.
     readOnlyAudit: async function () {
       await until(function () { return q('.tile'); });

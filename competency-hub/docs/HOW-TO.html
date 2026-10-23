@@ -19,25 +19,26 @@
 </style>
 </head>
 <body>
-<h1>ESG Competency Hub – Releases 1 to 3</h1>
-<p>This package brings the Hub from app 0.3.0 and solution 1.2.0.0 (what you have now) to <strong>app 0.7.0</strong>, <strong>solution 1.5.0.0</strong> and <strong>Setup 1.2</strong>. Each release includes the ones before it, so you can install this package directly. Updated 23 October 2026.</p>
+<h1>ESG Competency Hub – Releases 1 to 4</h1>
+<p>This package brings the Hub from app 0.3.0 and solution 1.2.0.0 (what you have now) to <strong>app 0.8.0</strong>, <strong>solution 1.6.0.0</strong> and <strong>Setup 1.3</strong>. Each release includes the ones before it, so you can install this package directly. Updated 23 October 2026.</p>
 <ul>
   <li><strong>Release 1, safety net:</strong> a queue monitor that recovers stalled changes and retries emails; clear messages while a change is waiting, being recorded, being retried or needs an administrator; an <em>Administration</em> page; and a reduced mode in which the buttons that send changes are paused while changes can't be processed.</li>
   <li><strong>Release 2, administration and permissions:</strong> add people, choose their areas, meeting rights, access end dates and notice posting from the app; the corrected technician and meeting rights; Feedback list and Meeting Minutes library ready for later releases.</li>
   <li><strong>Release 3, noticeboard, register, feedback, settings and dashboard:</strong> read a notice in full, comment, flag it for the next meeting; edit, pin and archive notices; improvements and degradations with linked actions; a <em>Feedback</em> button on every page with a review tab for administrators; a <em>Settings</em> tab; and a <em>Management</em> page for Team Leaders and the Group Head.</li>
+  <li><strong>Release 4, meetings I:</strong> book monthly meetings, with an Outlook invitation from your calendar, an update when the meeting changes and a cancellation when it is cancelled; <em>Add to my calendar</em> for everyone; the agenda, previewed before the meeting and fixed when it starts; items added by hand; and a probe flow to prove the invitations first.</li>
 </ul>
 <p class="note">Everything here was built and tested on a simulated SharePoint site only. Each part below changes your Competency Hub site or your Power Automate environment, so do it only when you are ready. Nobody else gets access until you add them.</p>
 
 <table>
   <tr><th>Folder</th><th>Files</th><th>When</th></tr>
   <tr><td><code>1-Setup</code></td><td><code>CH_Setup.html</code>, <code>CH_Setup.js</code></td><td>Part A</td></tr>
-  <tr><td><code>2-Power-Automate</code></td><td><code>ESGCompetencyHub_1_5_0_0_unmanaged.zip</code></td><td>Part B – import as it is. <strong>Don't unzip it.</strong></td></tr>
+  <tr><td><code>2-Power-Automate</code></td><td><code>ESGCompetencyHub_1_6_0_0_unmanaged.zip</code></td><td>Part B – import as it is. <strong>Don't unzip it.</strong></td></tr>
   <tr><td><code>3-App</code></td><td><code>competency-hub.html</code>, <code>competency-hub.js</code></td><td>Part C</td></tr>
   <tr><td><code>4-Permission-probe</code></td><td><code>CH_Probe_P2.html</code>, <code>CH_Probe_P2.js</code></td><td>Part E, with the test account</td></tr>
 </table>
 
-<h2>Part A – Setup 1.2 (about 15 minutes)</h2>
-<p>Setup only adds things; it removes no data. It adds the <em>Feedback</em> list, the <em>Meeting Minutes</em> library, a few new columns and settings, and the group <em>Competency Hub – Notice Posters</em>. It makes <strong>one permission change</strong>: the Noticeboard goes from "All Users can add" to "All Users can read, Notice Posters can add", so an administrator can stop one person posting. You are the only user, so nobody else is affected.</p>
+<h2>Part A – Setup 1.3 (about 15 minutes)</h2>
+<p>Setup only adds things; it removes no data. It adds the <em>Feedback</em> list, the <em>Meeting Minutes</em> library, a few new columns and settings, the group <em>Competency Hub – Notice Posters</em>, the meetings' end time, and two switches under Settings (<em>Outlook invitations</em> and <em>PDF minutes</em>, both on). It makes <strong>one permission change</strong>: the Noticeboard goes from "All Users can add" to "All Users can read, Notice Posters can add", so an administrator can stop one person posting. You are the only user, so nobody else is affected.</p>
 <ol>
   <li>Upload both files from <code>1-Setup</code> to <em>Welcome Web Part - Custom Layouts</em> (<em>Replace</em>).</li>
   <li>Create the <code>HubSetup</code> page again with a Welcome web part, choose the layout <em>Competency Hub Setup</em>, and publish it.</li>
@@ -46,21 +47,22 @@
   <li>Delete the two Setup files and the HubSetup page again.</li>
 </ol>
 
-<h2>Part B – solution 1.5.0.0 (about 10 minutes)</h2>
+<h2>Part B – solution 1.6.0.0 (about 10 minutes)</h2>
 <ol>
-  <li>In Power Automate, same environment: <strong>Solutions → Import solution → Browse</strong>, choose <code>ESGCompetencyHub_1_5_0_0_unmanaged.zip</code>, <em>Next</em>. It should say <strong>upgrade</strong>.</li>
+  <li>In Power Automate, same environment: <strong>Solutions → Import solution → Browse</strong>, choose <code>ESGCompetencyHub_1_6_0_0_unmanaged.zip</code>, <em>Next</em>. It should say <strong>upgrade</strong>.</li>
   <li>Keep the SharePoint and Outlook connections and the site address, then <em>Import</em>.</li>
-  <li>Open the solution. There are now <strong>five</strong> flows. Make sure all five are <strong>On</strong>:
+  <li>Open the solution. There are now <strong>seven</strong> flows. Make sure these five are <strong>On</strong>:
     <ul class="sub">
       <li><em>ESG Competency Hub | 1 Daily tasks</em> and <em>2 Request queue</em> (already on);</li>
       <li><em>ESG Competency Hub | 3 Queue monitor</em>, <em>4 Records</em> and <em>6 Administration</em> (new: turn them on).</li>
-    </ul></li>
+    </ul>
+    Leave <em>5 Meetings</em> and <em>P-INV Invitations probe</em> <strong>Off</strong> for now: Part G turns them on in the right order.</li>
 </ol>
 
-<h2>Part C – app 0.7.0</h2>
+<h2>Part C – app 0.8.0</h2>
 <ol>
   <li>Upload both files from <code>3-App</code> to <em>Welcome Web Part - Custom Layouts</em> (<em>Replace</em>).</li>
-  <li>On the Hub page, edit the web part, <strong>Reset layout cache</strong>, <em>Republish</em>, and reload with <strong>Ctrl+F5</strong>. The footer should say <strong>0.7.0</strong>.</li>
+  <li>On the Hub page, edit the web part, <strong>Reset layout cache</strong>, <em>Republish</em>, and reload with <strong>Ctrl+F5</strong>. The footer should say <strong>0.8.0</strong>.</li>
   <li>The home page is the new <em>My week</em> design. Open it with your WebView link (ending <code>?env=WebView</code>) and check that it fits the window with no scrolling.</li>
   <li>Click the arrow on a section header: it folds to one line and stays folded after a reload. Click an area tile: it opens in place; <strong>✕</strong> or <strong>Esc</strong> closes it.</li>
   <li>Your name at the top should read <em>Joseph Pepper</em>, first name first.</li>
@@ -124,6 +126,29 @@
   <li>Send me screenshots of the notice, the entry and the Management page.</li>
 </ol>
 <p class="note">If <em>4 Records</em> is off, actions carry on as normal; changes to notices and the register are paused and the Administration page says so. Comments and flags still work, because they don't go through a flow.</p>
+
+<h2>Part G – meetings, invitations and the agenda (Release 4)</h2>
+<p>Invitations come from <strong>your calendar</strong>, with you as the organiser, so replies and acceptances come to you. You need the test colleague from Part E (or any colleague willing to receive three TEST emails).</p>
+<h3>First: the invitations probe</h3>
+<ol>
+  <li>In the solution, turn <em>ESG Competency Hub | P-INV Invitations probe</em> <strong>On</strong>, open it and click <strong>Run</strong>. Enter the colleague's email address and run it.</li>
+  <li>It makes a TEST event for tomorrow at 12:00 with the two of you, moves it to 13:00, finds it again by its hidden reference, and cancels it. Your colleague should get the invitation, the update and the cancellation, a few seconds apart.</li>
+  <li>Open the run and the last step, <em>Probe results</em>. Send me what it shows (it has no addresses in it), and ask your colleague what arrived.</li>
+  <li>Turn the probe <strong>Off</strong> again.</li>
+</ol>
+<p class="note">If the probe fails, go to <strong>Administration → Settings</strong> and set <em>Outlook invitations</em> to <strong>No</strong>. Meetings are still booked and shown; everyone adds them to their calendar with <em>Add to my calendar</em>. Nothing needs rebuilding.</p>
+<h3>Then: book, change, start and cancel</h3>
+<ol>
+  <li>Turn <em>ESG Competency Hub | 5 Meetings</em> <strong>On</strong>.</li>
+  <li>On the home page, open <strong>Flask</strong> and click <strong>Book a meeting</strong>. Choose a date this week, a TEST place, yourself as chair, and untick everyone except you and the test colleague (the attendees are Flask's members, so add your colleague to Flask first in People if they aren't). Click <strong>Book meeting</strong>. Within about two minutes it appears in the Flask panel and the week strip, and the invitation arrives.</li>
+  <li>Click the meeting. It shows <em>The Outlook invitation has gone to the attendees</em> and an agenda <strong>preview</strong>. Under the agenda, add a TEST item: it appears under <em>New business</em> at once.</li>
+  <li>Click <strong>Change</strong> and move it an hour. The update arrives in Outlook.</li>
+  <li>Click <strong>Start meeting</strong>. Within about two minutes the meeting shows <em>In progress</em> and the agenda is fixed: it no longer says <em>preview</em>.</li>
+  <li>Book a second TEST meeting and click <strong>Cancel meeting</strong>, giving a reason. The cancellation arrives.</li>
+  <li>On the first meeting, click <strong>Add to my calendar</strong>: a calendar file downloads and opens in Outlook.</li>
+  <li>Send me screenshots of the meeting before and after starting it.</li>
+</ol>
+<p class="note">The meeting started here stays <em>In progress</em> until Release 5, which adds the live meeting screen and finalising. That is expected. If <em>5 Meetings</em> is off, booking pauses and the Administration page says so; everything else carries on.</p>
 
 <h2>Already done</h2>
 <div class="done">

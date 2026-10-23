@@ -62,6 +62,13 @@ window.MockSharePoint = (function () {
   function matches(row, filter) {
     if (!filter) return true;
     return filter.split(/\s+and\s+/).every(function (clause) {
+      // DateColumn ge datetime'2026-10-01T00:00:00Z'
+      var dt = /^(\w+)\s+(ge|le|gt|lt)\s+datetime'([^']+)'$/.exec(clause.trim());
+      if (dt) {
+        if (!row[dt[1]]) return false;
+        var a = new Date(row[dt[1]]).getTime(), b = new Date(dt[3]).getTime();
+        return { ge: a >= b, le: a <= b, gt: a > b, lt: a < b }[dt[2]];
+      }
       var m = /^(\w+)\s+eq\s+(.+)$/.exec(clause.trim());
       if (!m) throw new Error('Unsupported filter: ' + clause);
       if (m[1] === 'FSObjType') return true;
@@ -200,6 +207,23 @@ window.MockSharePoint = (function () {
       row: function (v, id, path) {
         return { Id: id, Title: v.Title, ClientKey: v.ClientKey, ParentType: v.ParentType, ParentId: Number(v.ParentId), EntryType: v.EntryType,
           IsFlagEvent: v.IsFlagEvent === '1', IsHidden: false, Body: v.Body, AuthorId: asId, Created: new Date().toISOString(), FileDirRef: path };
+      }
+    },
+    // A meeting's Record folder: the area's meeting runners and management, while the meeting is open (spec §4.3).
+    'Meeting Items': {
+      unique: 'RowKey',
+      allowed: function (folder, me) {
+        var m = /^([A-Z]+)\/MTG-(\d+)\/Record$/.exec(folder);
+        if (!m) return false;
+        var mt = data.Meetings.filter(function (x) { return x.Id === Number(m[2]); })[0];
+        var c = data.Competencies.filter(function (x) { return x.CompetencyKey === m[1]; })[0];
+        if (!mt || !c || mt.CompetencyId !== c.Id || ['Scheduled', 'In Progress'].indexOf(mt.Status) < 0) return false;
+        if (me.Role === 'Team Leader' || me.Role === 'Group Head') return true;
+        return data['Competency Members'].some(function (x) { return x.PersonId === me.SiteUserId && x.CompetencyId === c.Id && x.Status === 'Active' && x.CanManageMeetings; });
+      },
+      row: function (v, id, path) {
+        return { Id: id, Title: v.Title, RowKey: v.RowKey, RecordKey: v.RecordKey, MeetingId: Number(v.MeetingId), RowType: v.RowType, SourceType: v.SourceType,
+          Section: v.Section, Notes: v.Notes, AuthorId: asId, Created: new Date().toISOString(), FileDirRef: path };
       }
     },
     // Anyone active may add feedback, at the list's root only.

@@ -110,7 +110,10 @@ CH.views.home = (function () {
       var evs = mine.filter(function (a) { return !a.waitingCloseOut && (a.dueIso === iso || (i === 0 && a.group === 'late')); }).sort(byDue).map(function (a) {
         return h('button', { type: 'button', class: 'hm-ev ' + (a.group === 'late' ? 'late' : 'soon'), title: a.title + ' – ' + a.dueText, onclick: function () { app.openAction(a); }, text: a.title });
       }).concat(keys.filter(function (k) { return m.stats[k].nextMeeting === iso; }).map(function (k) {
-        return h('span', { class: 'hm-ev mtg', title: m.areaByKey[k].name + ' meeting', text: m.areaByKey[k].name + ' meeting' });
+        var mt = m.meetings.filter(function (x) { return x.areaKey === k && x.dateIso === iso && x.status !== 'Cancelled'; })[0];
+        return mt ? h('button', { type: 'button', class: 'hm-ev mtg', title: m.areaByKey[k].name + ' meeting at ' + mt.start, onclick: function () { app.openMeeting(mt); },
+          text: m.areaByKey[k].name + ' meeting ' + mt.start })
+          : h('span', { class: 'hm-ev mtg', title: m.areaByKey[k].name + ' meeting', text: m.areaByKey[k].name + ' meeting' });
       }));
       var weekend = dow === 'Saturday' || dow === 'Sunday';
       days.push(h('div', { class: 'hm-day' + (i === 0 ? ' today' : '') + (weekend ? ' weekend' : '') },
@@ -173,11 +176,19 @@ CH.views.home = (function () {
           h('small', { text: (n.pinned ? 'Pinned · ' : n.important ? 'Important · ' : '') + (n.fromOutside ? 'From ' + n.authorName + ', outside ' + area.name : n.authorName) +
             ' · ' + D.short(n.createdIso) + (n.flagged ? ' · flagged' : '') + (nnote ? ' · ' + nnote : '') })));
     });
+    // meetings: those to come (and one in progress), then the last one held
     var diary = [];
-    if (s.nextMeeting) diary.push(h('div', { class: 'hm-rw' }, h('span', { class: 'when w-ok', text: D.weekdayShort(s.nextMeeting) }),
-      h('span', { class: 'hm-tx' }, h('b', { text: 'Next meeting' }), h('small', { text: s.flagged ? s.flagged + (s.flagged === 1 ? ' item' : ' items') + ' flagged for discussion' : 'Nothing flagged yet' }))));
-    else diary.push(h('div', { class: 'hm-rw' }, h('span', { class: 'when w-soon', text: 'Not booked' }),
-      h('span', { class: 'hm-tx' }, h('b', { text: 'No meeting booked' }), h('small', { text: 'Someone who runs meetings here can book one' }))));
+    var coming = m.meetings.filter(function (x) { return x.areaKey === key && (x.status === 'In Progress' || (x.status === 'Scheduled' && x.dateIso >= m.today)); });
+    coming.forEach(function (x, i) {
+      var note = app.tracker && app.tracker.forTarget(x.id, 'Meeting');
+      var waiting = note && (note.state === 'submitted' || note.state === 'slow');
+      diary.push(h('button', { type: 'button', class: 'hm-rw item-open', onclick: function () { app.openMeeting(x); } },
+        h('span', { class: 'when ' + (x.status === 'In Progress' ? 'w-soon' : 'w-ok'), text: x.status === 'In Progress' ? 'Now' : D.weekdayShort(x.dateIso) }),
+        h('span', { class: 'hm-tx' }, h('b', { text: (i === 0 ? 'Next meeting' : 'Meeting') + ', ' + x.start + (x.location ? ' · ' + x.location : '') }),
+          h('small', { text: waiting ? 'change being recorded' : i === 0 && s.flagged ? s.flagged + (s.flagged === 1 ? ' item' : ' items') + ' flagged for discussion' : x.chairName ? x.chairName + ' chairs' : '' }))));
+    });
+    if (!coming.length) diary.push(h('div', { class: 'hm-rw' }, h('span', { class: 'when w-soon', text: 'Not booked' }),
+      h('span', { class: 'hm-tx' }, h('b', { text: 'No meeting booked' }), h('small', { text: acc.runsMeetings(key) ? 'Use Book a meeting above' : 'Someone who runs meetings here can book one' }))));
     diary.push(h('div', { class: 'hm-rw' }, h('span', { class: 'when w-later', text: 'Last met' }),
       h('span', { class: 'hm-tx' }, h('b', { text: s.lastMeeting ? D.long(s.lastMeeting) : 'None on record' }), h('small', { text: s.meetingStale ? 'A meeting is overdue' : 'Minutes are kept with the meeting' }))));
     m.calendar.filter(function (e) { return e.areaKey === key; }).forEach(function (e) {
@@ -199,6 +210,7 @@ CH.views.home = (function () {
           acc.canWrite(key) && area.status === 'Active' ? ui.button('Raise an action here', function () { app.raiseAction(key); }) : null,
           acc.canPostNotice(key) ? ui.button('Post a notice here', function () { app.postNotice(key); }) : null,
           acc.canWrite(key) && area.status === 'Active' ? ui.button('Raise an issue', function () { app.raiseEntry(key); }) : null,
+          acc.runsMeetings(key) ? ui.button('Book a meeting', function () { app.bookMeeting(key); }) : null,
           ui.linkButton('Full page', full(0)),
           h('button', { type: 'button', class: 'hm-x-btn', 'aria-label': 'Close ' + area.name, text: '✕', onclick: function () { app.openAreaHere(null); } }))),
       h('div', { class: 'hm-pb' }, h('div', { class: 'hm-cols' },
@@ -206,7 +218,7 @@ CH.views.home = (function () {
           : acts.length ? ui.fitList(acts, 'all ' + area.name + ' actions', full(0), 'items') : h('p', { class: 'hm-empty', text: 'There are no open actions in ' + area.name + '.' })),
         col('Notices & issues', news.length, [ui.sectionNote(m.sections.notices, 'notices'), ui.sectionNote(m.sections.register, 'improvements and degradations'),
           news.length ? ui.fitList(news, 'all notices and issues', full(1)) : h('p', { class: 'hm-empty', text: 'No notices, and no open improvements or degradations, in ' + area.name + '.' })]),
-        col('Meetings & dates', null, ui.fitList(diary, 'calendar', full(2))))));
+        col('Meetings & dates', null, ui.fitList(diary, 'all meetings', full(3))))));
   }
 
   function render(app) {

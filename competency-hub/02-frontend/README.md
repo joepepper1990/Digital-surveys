@@ -2,6 +2,25 @@
 
 Plain HTML, CSS and JavaScript, delivered as a Welcome by Accelerator 365 custom layout. Same-origin SharePoint REST runs as the signed-in user. There are no libraries and no external calls.
 
+## Version 0.8.0: Release 4 – booking meetings, invitations and the agenda
+
+- **Book a meeting** (`views/meeting-form.js`), for meeting runners and management, from the home area panel, the
+  area page's Meetings tab or the week strip: date, start and end, place or online link, chair (only people who run
+  the area's meetings, or management) and attendees (the area's members ticked). *This and the next 2 (or 5) months*
+  sends one booking per month, each its own meeting. Changing a meeting sends only what changed.
+- **The meeting** (`views/meeting-panel.js`, `?meeting=ID`): its details, whether the Outlook invitation has gone,
+  *Add to my calendar* (an `.ics` file made in the browser, for everyone), the agenda, and for meeting runners
+  *Change*, *Start meeting* and *Cancel meeting* (a reason is needed). Before it starts the agenda is a preview;
+  starting it has the *5 Meetings* flow fix it.
+- **The agenda** (`domain/agenda.js`): seven automatic sections – open actions, closed since the last meeting,
+  carried forward, flagged notices, new improvements and degradations, unresolved degradations, important dates –
+  plus *New business*, items added by hand. The same rules run in the flow; a test runs both on the same data and
+  compares them. Adding an item writes straight into the meeting's Record folder, which only meeting runners and
+  management can add to.
+- **Administration → Settings** gains *Outlook invitations* and *PDF minutes* (Yes or No). With invitations off,
+  meetings are still booked and everyone uses *Add to my calendar*.
+- Booking and changing meetings pause on their own if *5 Meetings* stops (`health.meetings`).
+
 ## Version 0.7.0: Release 3 – noticeboard, register, feedback, settings and the management page
 
 - **Notices** open in full from the home area panel and the area page (`views/record-panel.js`). Members and

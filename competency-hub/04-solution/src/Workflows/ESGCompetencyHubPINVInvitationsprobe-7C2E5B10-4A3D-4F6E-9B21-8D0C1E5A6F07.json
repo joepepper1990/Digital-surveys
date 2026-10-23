@@ -1,0 +1,337 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_sharepointonline": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "esghub_sharedsharepointonline_hub"
+        },
+        "api": {
+          "name": "shared_sharepointonline"
+        }
+      },
+      "shared_office365": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "esghub_sharedoffice365_hub"
+        },
+        "api": {
+          "name": "shared_office365"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "esghub_CompetencyHubSiteUrl",
+            "description": "Full address of the Competency Hub site, e.g. https://<tenant>.sharepoint.com/sites/ESGCompetencyHub (no trailing slash)."
+          }
+        }
+      },
+      "triggers": {
+        "manual": {
+          "type": "Request",
+          "kind": "Button",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "required": [
+                "text"
+              ],
+              "properties": {
+                "text": {
+                  "title": "Attendee email",
+                  "type": "string",
+                  "x-ms-dynamically-added": true,
+                  "description": "The test colleague who should receive the invitation, its update and its cancellation",
+                  "x-ms-content-hint": "TEXT"
+                }
+              }
+            }
+          }
+        }
+      },
+      "actions": {
+        "Site_path": {
+          "type": "Compose",
+          "inputs": "@if(endsWith(uriPath(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')), '/'), take(uriPath(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')), sub(length(uriPath(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)'))), 1)), uriPath(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')))",
+          "runAfter": {}
+        },
+        "Site_address": {
+          "type": "Compose",
+          "inputs": "@if(endsWith(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)'), '/'), take(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)'), sub(length(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')), 1)), parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)'))",
+          "runAfter": {
+            "Site_path": [
+              "Succeeded"
+            ]
+          }
+        },
+        "List_addresses": {
+          "type": "Compose",
+          "inputs": {
+            "req": "@{outputs('Site_path')}/Lists/Requests",
+            "act": "@{outputs('Site_path')}/Lists/Actions",
+            "hist": "@{outputs('Site_path')}/Lists/History",
+            "upd": "@{outputs('Site_path')}/Lists/Updates",
+            "people": "@{outputs('Site_path')}/Lists/People",
+            "members": "@{outputs('Site_path')}/Lists/CompetencyMembers",
+            "comps": "@{outputs('Site_path')}/Lists/Competencies",
+            "notif": "@{outputs('Site_path')}/Lists/NotificationLog",
+            "settings": "@{outputs('Site_path')}/Lists/Settings",
+            "notices": "@{outputs('Site_path')}/Lists/Noticeboard",
+            "reg": "@{outputs('Site_path')}/Lists/ImprovementRegister",
+            "mtg": "@{outputs('Site_path')}/Lists/Meetings",
+            "items": "@{outputs('Site_path')}/Lists/MeetingItems",
+            "cal": "@{outputs('Site_path')}/Lists/CalendarEvents",
+            "reqRoot": "@{outputs('Site_path')}/Lists/Requests",
+            "actRoot": "@{outputs('Site_path')}/Lists/Actions",
+            "histRoot": "@{outputs('Site_path')}/Lists/History",
+            "updRoot": "@{outputs('Site_path')}/Lists/Updates",
+            "notifRoot": "@{outputs('Site_path')}/Lists/NotificationLog",
+            "membersRoot": "@{outputs('Site_path')}/Lists/CompetencyMembers",
+            "peopleRoot": "@{outputs('Site_path')}/Lists/People",
+            "regRoot": "@{outputs('Site_path')}/Lists/ImprovementRegister",
+            "noticesRoot": "@{outputs('Site_path')}/Lists/Noticeboard",
+            "mtgRoot": "@{outputs('Site_path')}/Lists/Meetings",
+            "itemsRoot": "@{outputs('Site_path')}/Lists/MeetingItems"
+          },
+          "runAfter": {
+            "Site_address": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Probe_me": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+            },
+            "parameters": {
+              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+              "parameters/method": "GET",
+              "parameters/uri": "_api/web/currentuser?$select=Id,Email",
+              "parameters/headers": {
+                "Accept": "application/json;odata=nometadata"
+              }
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "List_addresses": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Probe_reference": {
+          "type": "Compose",
+          "inputs": "@concat('ESGPINV', take(replace(guid(), '-', ''), 10))",
+          "runAfter": {
+            "Probe_me": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Probe_create": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_office365",
+              "operationId": "V4CalendarPostItem",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+            },
+            "parameters": {
+              "table": "Calendar",
+              "item/subject": "TEST – ESG Competency Hub invitation probe",
+              "item/start": "@concat(formatDateTime(addDays(convertFromUtc(utcNow(), 'GMT Standard Time'), 1), 'yyyy-MM-dd'), 'T12:00:00')",
+              "item/end": "@concat(formatDateTime(addDays(convertFromUtc(utcNow(), 'GMT Standard Time'), 1), 'yyyy-MM-dd'), 'T12:15:00')",
+              "item/timeZone": "GMT Standard Time",
+              "item/requiredAttendees": "@concat(string(triggerBody()?['text']), ';', string(coalesce(body('Probe_me')?['Email'], '')))",
+              "item/body": "@concat('<p>A test of the ESG Competency Hub meeting invitations. Please ignore it; it is cancelled straight away.</p><p>Reference ', outputs('Probe_reference'), '</p>')",
+              "item/importance": "normal",
+              "item/showAs": "free",
+              "item/responseRequested": false
+            },
+            "authentication": "@parameters('$authentication')",
+            "retryPolicy": {
+              "type": "none"
+            }
+          },
+          "runtimeConfiguration": {
+            "secureData": {
+              "properties": [
+                "inputs",
+                "outputs"
+              ]
+            }
+          },
+          "runAfter": {
+            "Probe_reference": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Probe_update": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_office365",
+              "operationId": "V4CalendarPatchItem",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+            },
+            "parameters": {
+              "table": "Calendar",
+              "item/subject": "TEST – ESG Competency Hub invitation probe",
+              "item/start": "@concat(formatDateTime(addDays(convertFromUtc(utcNow(), 'GMT Standard Time'), 1), 'yyyy-MM-dd'), 'T13:00:00')",
+              "item/end": "@concat(formatDateTime(addDays(convertFromUtc(utcNow(), 'GMT Standard Time'), 1), 'yyyy-MM-dd'), 'T13:15:00')",
+              "item/timeZone": "GMT Standard Time",
+              "item/requiredAttendees": "@concat(string(triggerBody()?['text']), ';', string(coalesce(body('Probe_me')?['Email'], '')))",
+              "item/body": "@concat('<p>A test of the ESG Competency Hub meeting invitations. Please ignore it; it is cancelled straight away.</p><p>Reference ', outputs('Probe_reference'), '</p>')",
+              "item/importance": "normal",
+              "item/showAs": "free",
+              "item/responseRequested": false,
+              "id": "@{body('Probe_create')?['id']}"
+            },
+            "authentication": "@parameters('$authentication')",
+            "retryPolicy": {
+              "type": "none"
+            }
+          },
+          "runtimeConfiguration": {
+            "secureData": {
+              "properties": [
+                "inputs",
+                "outputs"
+              ]
+            }
+          },
+          "runAfter": {
+            "Probe_create": [
+              "Succeeded",
+              "Failed",
+              "TimedOut"
+            ]
+          }
+        },
+        "Probe_search": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_office365",
+              "operationId": "GetEventsCalendarViewV3",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+            },
+            "parameters": {
+              "calendarId": "Calendar",
+              "search": "@outputs('Probe_reference')",
+              "startDateTimeUtc": "@formatDateTime(utcNow(), 'yyyy-MM-ddTHH:mm:ss')",
+              "endDateTimeUtc": "@formatDateTime(addDays(utcNow(), 3), 'yyyy-MM-ddTHH:mm:ss')"
+            },
+            "authentication": "@parameters('$authentication')",
+            "retryPolicy": {
+              "type": "none"
+            }
+          },
+          "runtimeConfiguration": {
+            "secureData": {
+              "properties": [
+                "inputs",
+                "outputs"
+              ]
+            }
+          },
+          "runAfter": {
+            "Probe_update": [
+              "Succeeded",
+              "Failed",
+              "TimedOut"
+            ]
+          }
+        },
+        "Probe_found": {
+          "type": "Query",
+          "inputs": {
+            "from": "@if(equals(actions('Probe_search')?['status'], 'Succeeded'), coalesce(body('Probe_search')?['value'], createArray()), createArray())",
+            "where": "@contains(string(coalesce(item()?['body'], '')), outputs('Probe_reference'))"
+          },
+          "runAfter": {
+            "Probe_search": [
+              "Succeeded",
+              "Failed",
+              "TimedOut"
+            ]
+          }
+        },
+        "Probe_cancel": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_office365",
+              "operationId": "CalendarDeleteItem_V2",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+            },
+            "parameters": {
+              "calendar": "Calendar",
+              "event": "@{body('Probe_create')?['id']}"
+            },
+            "authentication": "@parameters('$authentication')",
+            "retryPolicy": {
+              "type": "none"
+            }
+          },
+          "runtimeConfiguration": {
+            "secureData": {
+              "properties": [
+                "inputs",
+                "outputs"
+              ]
+            }
+          },
+          "runAfter": {
+            "Probe_found": [
+              "Succeeded",
+              "Failed",
+              "TimedOut"
+            ]
+          }
+        },
+        "Probe_results": {
+          "type": "Compose",
+          "inputs": {
+            "reference": "@{outputs('Probe_reference')}",
+            "create": "@{actions('Probe_create')?['status']}",
+            "update": "@{actions('Probe_update')?['status']}",
+            "search": "@{actions('Probe_search')?['status']}",
+            "foundByReference": "@equals(length(body('Probe_found')), 1)",
+            "organiser": "@{body('Probe_create')?['organizer']}",
+            "cancel": "@{actions('Probe_cancel')?['status']}",
+            "next": "Check that the attendee received the invitation, the update and the cancellation, and that you are the organiser. Send these results."
+          },
+          "runAfter": {
+            "Probe_cancel": [
+              "Succeeded",
+              "Failed",
+              "TimedOut"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "schemaVersion": "1.0.0.0"
+}

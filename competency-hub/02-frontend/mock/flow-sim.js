@@ -145,6 +145,91 @@ window.MockFlow = (function () {
       return finish(req, 'Completed', req.RequestType === 'LinkActionToEntry' ? 'Action linked.' : 'Action unlinked.', rec.Id);
     }
 
+    // ---- meetings (5 Meetings): the same checks; the invitation is taken as sent; starting writes the agenda
+    var MEETINGS = ['ScheduleMeeting', 'UpdateMeeting', 'CancelMeeting', 'StartMeeting'];
+    var A = window.MockRules.agenda;
+    function meetings(req, payload, requester, access) {
+      var me = requester.SiteUserId;
+      var runs = function (key) { return access.isManagement || access.chairs(key); };
+      var invites = (data['Competency Hub Settings'].filter(function (r) { return r.Title === 'InvitesEnabled'; })[0] || {}).Value !== 'No';
+      function ctx() {
+        return { today: today, runsMeetings: runs,
+          chairAllowed: function (k, id) { var p = person(id); var m = membership(id, k); return !!p && p.Status === 'Active' && (management(p) || (!!m && !!m.CanManageMeetings)); },
+          attendeeAllowed: function (k, id) { var p = person(id); return !!p && p.Status === 'Active' && (management(p) || !!membership(id, k)); } };
+      }
+      function utc(iso, hhmm) { return new Date(new Date(iso + 'T' + hhmm + ':00Z').getTime() - (D.ukTime(new Date(iso + 'T12:00:00Z')) === '13:00' ? 3600000 : 0)).toISOString(); }
+      function mEvent(mt, key, type) {
+        data.History.push({ Id: nextId(data.History), RowKind: 'Event', RequestKey: req.RequestKey + '|1', RecordType: 'Meeting', RecordId: mt.Id, MeetingId: mt.Id,
+          EventType: type, ActorId: req.AuthorId, EventTime: new Date().toISOString(), CompetencyId: areaId(key), FileDirRef: ROOT + 'History/' + key });
+      }
+      var err;
+      if (req.RequestType === 'ScheduleMeeting') {
+        if ((err = Object.keys(R.validateMeeting(payload, ctx())).map(function (k) { return R.validateMeeting(payload, ctx())[k]; })[0])) return finish(req, 'Rejected', err);
+        var id = nextId(data.Meetings);
+        var mt = { Id: id, Title: payload.areaKey + ' meeting', CompetencyId: areaId(payload.areaKey), MeetingDate: utc(payload.dateIso, payload.start), EndTime: utc(payload.dateIso, payload.end),
+          Location: payload.location || '', OnlineLink: payload.onlineLink || '', ChairId: Number(payload.chairId), Attendees: JSON.stringify(payload.attendeeIds), Status: 'Scheduled',
+          InviteState: invites ? 'Sent' : 'None', InviteToken: 'ESGM' + req.RequestKey.replace(/-/g, '').slice(0, 10), Revision: 1, LastRequestKey: req.RequestKey,
+          CreatedRequestKey: 'F|' + req.RequestKey, FileDirRef: ROOT + 'Meetings/' + payload.areaKey };
+        data.Meetings.push(mt);
+        mEvent(mt, payload.areaKey, 'Meeting Booked');
+        return finish(req, 'Completed', 'Meeting booked for ' + D.weekday(payload.dateIso) + ' ' + D.long(payload.dateIso) + ' at ' + payload.start + '.', id);
+      }
+      var mt2 = data.Meetings.filter(function (x) { return x.Id === Number(req.TargetId); })[0];
+      if (!mt2) return finish(req, 'Rejected', 'That meeting could not be found.');
+      var key = areaKeyOf(mt2.CompetencyId);
+      if (!runs(key)) return finish(req, 'Rejected', 'Only the people who run meetings in this area, and management, can do this.');
+      if (Number(req.ExpectedRevision) > 0 && Number(req.ExpectedRevision) !== Number(mt2.Revision)) return finish(req, 'Rejected', 'This meeting was changed by someone else. Review the latest details and try again.');
+      var bump = function () { mt2.Revision = (mt2.Revision || 1) + 1; mt2.LastRequestKey = req.RequestKey; };
+      if (req.RequestType === 'UpdateMeeting') {
+        if (mt2.Status !== 'Scheduled') return finish(req, 'Rejected', 'Only a meeting that has not started can be changed.');
+        var cur = { areaKey: key, dateIso: D.localDate(mt2.MeetingDate), start: D.ukTime(mt2.MeetingDate), end: D.ukTime(mt2.EndTime), location: mt2.Location, onlineLink: mt2.OnlineLink,
+          chairId: mt2.ChairId, attendeeIds: JSON.parse(mt2.Attendees || '[]') };
+        var v = Object.assign(cur, payload);
+        var errs = R.validateMeeting(v, ctx());
+        if ((err = errs[Object.keys(errs)[0]])) return finish(req, 'Rejected', err);
+        Object.assign(mt2, { MeetingDate: utc(v.dateIso, v.start), EndTime: utc(v.dateIso, v.end), Location: v.location, OnlineLink: v.onlineLink, ChairId: Number(v.chairId),
+          Attendees: JSON.stringify(v.attendeeIds), InviteState: invites ? 'Sent' : 'None' });
+        bump();
+        mEvent(mt2, key, 'Meeting Changed');
+        return finish(req, 'Completed', 'Meeting changed to ' + D.weekday(v.dateIso) + ' ' + D.long(v.dateIso) + ' at ' + v.start + '.', mt2.Id);
+      }
+      if (req.RequestType === 'CancelMeeting') {
+        if (['Scheduled', 'In Progress'].indexOf(mt2.Status) < 0) return finish(req, 'Rejected', 'This meeting is already finished or cancelled.');
+        var ce = R.validateCancelMeeting(payload);
+        if (ce.reason) return finish(req, 'Rejected', ce.reason);
+        Object.assign(mt2, { Status: 'Cancelled', CancellationReason: payload.reason, InviteState: mt2.InviteState === 'None' ? 'None' : 'Cancelled' });
+        bump();
+        mEvent(mt2, key, 'Meeting Cancelled');
+        return finish(req, 'Completed', 'Meeting cancelled.', mt2.Id);
+      }
+      if (mt2.Status !== 'Scheduled') return finish(req, 'Rejected', 'This meeting has already started, or is finished or cancelled.');
+      var prev = data.Meetings.filter(function (x) { return x.CompetencyId === mt2.CompetencyId && x.Status === 'Finalised'; })
+        .sort(function (a, b) { return String(b.MeetingDate).localeCompare(String(a.MeetingDate)); })[0];
+      var comp = data.Competencies.filter(function (c) { return c.Id === mt2.CompetencyId; })[0];
+      Object.assign(mt2, { Status: 'In Progress', CutoffTime: new Date().toISOString(), CutoffUpdatesId: data.Updates.reduce(function (m, u) { return Math.max(m, u.Id); }, 0),
+        IntervalStart: prev ? prev.CutoffTime : (comp.TrackingStart || '2000-01-01T00:00:00Z'), PreviousMeetingId: prev ? prev.Id : null, StartedById: me });
+      bump();
+      var ids = function (rows) { return rows.map(function (x) { return String(x); }); };
+      var members = data['Competency Members'].filter(function (x) { return x.CompetencyId === mt2.CompetencyId && x.Status === 'Active'; });
+      var list = A.build({ areaId: mt2.CompetencyId, areaKey: key, sinceIso: mt2.IntervalStart, cutIso: mt2.CutoffTime, cutUpdatesId: mt2.CutoffUpdatesId,
+        actionsOpen: data.Actions.filter(function (a) { return a.IsOpen; }), actionsClosed: data.Actions.filter(function (a) { return !a.IsOpen; }),
+        notices: data.Noticeboard.filter(function (n) { return n.Status === 'Active'; }), entries: data['Improvements and Degradations'].filter(function (e) { return e.CompetencyId === mt2.CompetencyId; }),
+        flags: data.Updates.filter(function (u) { return u.IsFlagEvent; }), dates: data['Calendar Events'].filter(function (c) { return c.IsImportant && c.Status === 'Scheduled'; }),
+        carried: data['Meeting Items'].filter(function (x) { return x.MeetingId === (prev && prev.Id) && x.RowType === 'Outcome'; }),
+        memberIds: ids(members.map(function (x) { return x.PersonId; })), chairIds: ids(members.filter(function (x) { return x.CanManageMeetings; }).map(function (x) { return x.PersonId; })),
+        mgmtIds: ids(data.People.filter(management).map(function (p) { return p.SiteUserId; })), lookaheadDays: 60 });
+      list.forEach(function (x) {
+        var r = x.row;
+        data['Meeting Items'].push({ Id: nextId(data['Meeting Items']), Title: r.Title, RowKey: 'F|' + mt2.Id + '|A|' + x.sourceType + '|' + x.sourceId, MeetingId: mt2.Id,
+          RowType: 'Agenda Item', Section: x.section, SourceType: x.sourceType === 'Date' ? '' : x.sourceType, SourceId: Number(x.sourceId), SortOrder: x.order,
+          AgendaMarker: x.marker, SnapshotOwner: r.AssignedToId ? String(r.AssignedToId) : '', SnapshotStatus: r.Status || '', SnapshotDueDate: r.DueDay ? D.fromDueDay(r.DueDay) + 'T00:00:00Z' : '',
+          SnapshotDetails: r.EntryType ? r.EntryType + ' · ' + r.Impact + ' impact' : r.StartTime ? D.long(D.localDate(r.StartTime)) : '',
+          FileDirRef: ROOT + 'MeetingItems/' + key + '/MTG-' + mt2.Id });
+      });
+      mEvent(mt2, key, 'Meeting Started');
+      return finish(req, 'Completed', 'Meeting started. The agenda is fixed with ' + list.length + ' items.', mt2.Id);
+    }
+
     function process(req) {
       // The requester is whoever owns the folder the request sits in, never a typed value.
       var m = /\/Lists\/Requests\/u(\d+)$/.exec(req.FileDirRef);
@@ -252,6 +337,7 @@ window.MockFlow = (function () {
         return finish(req, 'Completed', 'Setting saved.');
       }
       if (RECORDS.indexOf(req.RequestType) >= 0) return records(req, payload, requester, access);
+      if (MEETINGS.indexOf(req.RequestType) >= 0) return meetings(req, payload, requester, access);
 
       var target = data.Actions.filter(function (a) { return a.Id === Number(req.TargetId); })[0];
       if (!target) return finish(req, 'Rejected', 'That action could not be found.');

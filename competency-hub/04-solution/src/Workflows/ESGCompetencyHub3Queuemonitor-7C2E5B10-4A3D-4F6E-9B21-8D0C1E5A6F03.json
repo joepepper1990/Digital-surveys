@@ -139,6 +139,23 @@
             ]
           }
         },
+        "Initialise_meetings_down": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varMeetingsDown",
+                "type": "boolean",
+                "value": false
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_records_down": [
+              "Succeeded"
+            ]
+          }
+        },
         "Initialise_partly_made": {
           "type": "InitializeVariable",
           "inputs": {
@@ -151,7 +168,58 @@
             ]
           },
           "runAfter": {
-            "Initialise_records_down": [
+            "Initialise_meetings_down": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_inv_result": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varInvResult",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_partly_made": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_inv_event": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varInvEvent",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_inv_result": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_inv_look": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varInvLook",
+                "type": "string",
+                "value": "ok"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_inv_event": [
               "Succeeded"
             ]
           }
@@ -187,6 +255,9 @@
                 "settings": "@{outputs('Site_path')}/Lists/Settings",
                 "notices": "@{outputs('Site_path')}/Lists/Noticeboard",
                 "reg": "@{outputs('Site_path')}/Lists/ImprovementRegister",
+                "mtg": "@{outputs('Site_path')}/Lists/Meetings",
+                "items": "@{outputs('Site_path')}/Lists/MeetingItems",
+                "cal": "@{outputs('Site_path')}/Lists/CalendarEvents",
                 "reqRoot": "@{outputs('Site_path')}/Lists/Requests",
                 "actRoot": "@{outputs('Site_path')}/Lists/Actions",
                 "histRoot": "@{outputs('Site_path')}/Lists/History",
@@ -195,7 +266,9 @@
                 "membersRoot": "@{outputs('Site_path')}/Lists/CompetencyMembers",
                 "peopleRoot": "@{outputs('Site_path')}/Lists/People",
                 "regRoot": "@{outputs('Site_path')}/Lists/ImprovementRegister",
-                "noticesRoot": "@{outputs('Site_path')}/Lists/Noticeboard"
+                "noticesRoot": "@{outputs('Site_path')}/Lists/Noticeboard",
+                "mtgRoot": "@{outputs('Site_path')}/Lists/Meetings",
+                "itemsRoot": "@{outputs('Site_path')}/Lists/MeetingItems"
               },
               "runAfter": {
                 "Site_address": [
@@ -491,11 +564,30 @@
                             },
                             "else": {
                               "actions": {
-                                "Request_queue_has_stopped": {
-                                  "type": "SetVariable",
-                                  "inputs": {
-                                    "name": "varDown",
-                                    "value": true
+                                "Meetings_or_actions": {
+                                  "type": "If",
+                                  "expression": "@contains(createArray('ScheduleMeeting', 'UpdateMeeting', 'CancelMeeting', 'StartMeeting'), string(items('Each_stalled_change')?['RequestType']))",
+                                  "actions": {
+                                    "Mark_the_request_meetings_down": {
+                                      "type": "SetVariable",
+                                      "inputs": {
+                                        "name": "varMeetingsDown",
+                                        "value": true
+                                      },
+                                      "runAfter": {}
+                                    }
+                                  },
+                                  "else": {
+                                    "actions": {
+                                      "Request_queue_has_stopped": {
+                                        "type": "SetVariable",
+                                        "inputs": {
+                                          "name": "varDown",
+                                          "value": true
+                                        },
+                                        "runAfter": {}
+                                      }
+                                    }
                                   },
                                   "runAfter": {}
                                 }
@@ -537,7 +629,7 @@
                         "actions": {
                           "By_kind_of_change": {
                             "type": "If",
-                            "expression": "@contains(createArray('RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting', 'EditNotice', 'ArchiveNotice', 'PinNotice', 'HideComment', 'RaiseRegisterEntry', 'UpdateRegisterEntry', 'LinkActionToEntry', 'UnlinkActionFromEntry'), string(items('Each_stalled_change')?['RequestType']))",
+                            "expression": "@contains(createArray('RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting', 'EditNotice', 'ArchiveNotice', 'PinNotice', 'HideComment', 'RaiseRegisterEntry', 'UpdateRegisterEntry', 'LinkActionToEntry', 'UnlinkActionFromEntry', 'ScheduleMeeting', 'UpdateMeeting', 'CancelMeeting', 'StartMeeting'), string(items('Each_stalled_change')?['RequestType']))",
                             "actions": {
                               "Decided_means_partly_made": {
                                 "type": "SetVariable",
@@ -692,7 +784,7 @@
                       "type": "Compose",
                       "inputs": {
                         "Status": "Needs attention",
-                        "ResultMessage": "@{if(variables('varPart'), if(contains(createArray('RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting', 'EditNotice', 'ArchiveNotice', 'PinNotice', 'HideComment', 'RaiseRegisterEntry', 'UpdateRegisterEntry', 'LinkActionToEntry', 'UnlinkActionFromEntry'), string(items('Each_stalled_change')?['RequestType'])), 'Not fully recorded – an administrator has been told and will finish it.', 'Not fully recorded – an administrator has been told. The record is locked until it is resolved.'), 'Not recorded – an administrator has been told. Nothing was changed.')}"
+                        "ResultMessage": "@{if(variables('varPart'), if(contains(createArray('RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting', 'EditNotice', 'ArchiveNotice', 'PinNotice', 'HideComment', 'RaiseRegisterEntry', 'UpdateRegisterEntry', 'LinkActionToEntry', 'UnlinkActionFromEntry', 'ScheduleMeeting', 'UpdateMeeting', 'CancelMeeting', 'StartMeeting'), string(items('Each_stalled_change')?['RequestType'])), 'Not fully recorded – an administrator has been told and will finish it.', 'Not fully recorded – an administrator has been told. The record is locked until it is resolved.'), 'Not recorded – an administrator has been told. Nothing was changed.')}"
                       },
                       "runAfter": {
                         "Is_there_a_change_record": [
@@ -751,7 +843,7 @@
                               "originalIso": "@{outputs('Today_in_the_UK')}",
                               "previousIso": "@{''}",
                               "extCount": "@int(0)",
-                              "note": "@{concat('It was sent by ', string(coalesce(first(body('Person_who_sent_it'))?['Title'], 'someone')), ' on ', if(empty(string(coalesce(items('Each_stalled_change')?['Created'], ''))), 'an unknown time', concat(formatDateTime(convertFromUtc(if(empty(string(coalesce(items('Each_stalled_change')?['Created'], ''))), '2000-01-01T00:00:00Z', string(coalesce(items('Each_stalled_change')?['Created'], ''))), 'GMT Standard Time'), 'd MMMM yyyy'), ' at ', formatDateTime(convertFromUtc(if(empty(string(coalesce(items('Each_stalled_change')?['Created'], ''))), '2000-01-01T00:00:00Z', string(coalesce(items('Each_stalled_change')?['Created'], ''))), 'GMT Standard Time'), 'HH:mm'))), ' and tried 3 times. ', if(variables('varPart'), if(contains(createArray('RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting', 'EditNotice', 'ArchiveNotice', 'PinNotice', 'HideComment', 'RaiseRegisterEntry', 'UpdateRegisterEntry', 'LinkActionToEntry', 'UnlinkActionFromEntry'), string(items('Each_stalled_change')?['RequestType'])), 'Part of it was made, so it cannot be cancelled: choose Finish to complete it.', 'Part of it was made, so the record stays locked until you choose Finish or Revert.'), 'Nothing was changed. You can try it again or cancel it.'), ' Last error: ', string(coalesce(first(body('Find_the_change_record')?['value'])?['LastError'], 'none recorded')))}"
+                              "note": "@{concat('It was sent by ', string(coalesce(first(body('Person_who_sent_it'))?['Title'], 'someone')), ' on ', if(empty(string(coalesce(items('Each_stalled_change')?['Created'], ''))), 'an unknown time', concat(formatDateTime(convertFromUtc(if(empty(string(coalesce(items('Each_stalled_change')?['Created'], ''))), '2000-01-01T00:00:00Z', string(coalesce(items('Each_stalled_change')?['Created'], ''))), 'GMT Standard Time'), 'd MMMM yyyy'), ' at ', formatDateTime(convertFromUtc(if(empty(string(coalesce(items('Each_stalled_change')?['Created'], ''))), '2000-01-01T00:00:00Z', string(coalesce(items('Each_stalled_change')?['Created'], ''))), 'GMT Standard Time'), 'HH:mm'))), ' and tried 3 times. ', if(variables('varPart'), if(contains(createArray('RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting', 'EditNotice', 'ArchiveNotice', 'PinNotice', 'HideComment', 'RaiseRegisterEntry', 'UpdateRegisterEntry', 'LinkActionToEntry', 'UnlinkActionFromEntry', 'ScheduleMeeting', 'UpdateMeeting', 'CancelMeeting', 'StartMeeting'), string(items('Each_stalled_change')?['RequestType'])), 'Part of it was made, so it cannot be cancelled: choose Finish to complete it.', 'Part of it was made, so the record stays locked until you choose Finish or Revert.'), 'Nothing was changed. You can try it again or cancel it.'), ' Last error: ', string(coalesce(first(body('Find_the_change_record')?['value'])?['LastError'], 'none recorded')))}"
                             }
                           },
                           "runAfter": {}
@@ -881,6 +973,738 @@
                 ]
               }
             },
+            "Get_inv": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['mtg']}')/items?$select=Id,Title,InviteState,InviteAttempts,InviteError,Modified,MeetingDate&$filter=InviteState eq 'Creating' or InviteState eq 'Updating' or InviteState eq 'Cancelling' or InviteState eq 'Unknown' or InviteState eq 'Failed'&$top=5000",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Each_stalled_change": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Inv_all": {
+              "type": "Compose",
+              "inputs": "@body('Get_inv')?['value']",
+              "runAfter": {
+                "Get_inv": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Inv_retry": {
+              "type": "Query",
+              "inputs": {
+                "from": "@outputs('Inv_all')",
+                "where": "@and(less(int(if(empty(first(split(string(coalesce(item()?['InviteAttempts'], '')), '.'))), '0', first(split(string(coalesce(item()?['InviteAttempts'], '')), '.')))), 3), less(ticks(string(coalesce(item()?['Modified'], '2000-01-01T00:00:00Z'))), ticks(addMinutes(utcNow(), -10))))"
+              },
+              "runAfter": {
+                "Inv_all": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Each_invite": {
+              "type": "Foreach",
+              "foreach": "@body('Inv_retry')",
+              "runtimeConfiguration": {
+                "concurrency": {
+                  "repetitions": 1
+                }
+              },
+              "actions": {
+                "Inv_get_(invitation)": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                      "parameters/method": "GET",
+                      "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['mtg']}')/items(@{items('Each_invite')?['Id']})?$select=Id,Title,Status,MeetingDate,EndTime,Location,OnlineLink,Attendees,OutlookEventId,InviteState,InviteToken,InviteAttempts,CompetencyId",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=minimalmetadata"
+                      }
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {}
+                },
+                "Inv_due_(invitation)": {
+                  "type": "If",
+                  "expression": "@and(contains(createArray('Creating', 'Updating', 'Cancelling', 'Unknown', 'Failed'), string(coalesce(body('Inv_get_(invitation)')?['InviteState'], 'None'))), less(int(if(empty(first(split(string(coalesce(body('Inv_get_(invitation)')?['InviteAttempts'], '')), '.'))), '0', first(split(string(coalesce(body('Inv_get_(invitation)')?['InviteAttempts'], '')), '.')))), 3))",
+                  "actions": {
+                    "Inv_settings_(invitation)": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                          "parameters/method": "GET",
+                          "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['settings']}')/items?$select=Title,Value&$top=500",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata"
+                          }
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {}
+                    },
+                    "Inv_switch_(invitation)": {
+                      "type": "Query",
+                      "inputs": {
+                        "from": "@body('Inv_settings_(invitation)')?['value']",
+                        "where": "@equals(item()?['Title'], 'InvitesEnabled')"
+                      },
+                      "runAfter": {
+                        "Inv_settings_(invitation)": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Inv_op_(invitation)": {
+                      "type": "Compose",
+                      "inputs": "@if(equals(string(body('Inv_get_(invitation)')?['Status']), 'Cancelled'), 'cancel', if(empty(string(coalesce(body('Inv_get_(invitation)')?['OutlookEventId'], ''))), 'create', 'update'))",
+                      "runAfter": {
+                        "Inv_switch_(invitation)": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Inv_off_(invitation)": {
+                      "type": "If",
+                      "expression": "@and(not(not(equals(string(coalesce(first(body('Inv_switch_(invitation)'))?['Value'], 'Yes')), 'No'))), not(equals(outputs('Inv_op_(invitation)'), 'cancel')))",
+                      "actions": {
+                        "Inv_none_(invitation)": {
+                          "type": "Compose",
+                          "inputs": {
+                            "InviteState": "None",
+                            "InviteError": ""
+                          },
+                          "runAfter": {}
+                        },
+                        "Save_inv_none_(invitation)": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                              "parameters/method": "POST",
+                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['mtg']}')/items(@{items('Each_invite')?['Id']})",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata",
+                                "Content-Type": "application/json;odata=nometadata",
+                                "X-HTTP-Method": "MERGE",
+                                "IF-MATCH": "@{body('Inv_get_(invitation)')?['odata.etag']}"
+                              },
+                              "parameters/body": "@{string(outputs('Inv_none_(invitation)'))}"
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runAfter": {
+                            "Inv_none_(invitation)": [
+                              "Succeeded"
+                            ]
+                          }
+                        }
+                      },
+                      "else": {
+                        "actions": {
+                          "Inv_areas_(invitation)": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "host": {
+                                "connectionName": "shared_sharepointonline",
+                                "operationId": "HttpRequest",
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                              },
+                              "parameters": {
+                                "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                                "parameters/method": "GET",
+                                "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['comps']}')/items?$select=Id,Title&$top=500",
+                                "parameters/headers": {
+                                  "Accept": "application/json;odata=nometadata"
+                                }
+                              },
+                              "authentication": "@parameters('$authentication')"
+                            },
+                            "runAfter": {}
+                          },
+                          "Inv_area_(invitation)": {
+                            "type": "Query",
+                            "inputs": {
+                              "from": "@body('Inv_areas_(invitation)')?['value']",
+                              "where": "@equals(first(split(string(coalesce(item()?['Id'], '')), '.')), first(split(string(coalesce(body('Inv_get_(invitation)')?['CompetencyId'], '')), '.')))"
+                            },
+                            "runAfter": {
+                              "Inv_areas_(invitation)": [
+                                "Succeeded"
+                              ]
+                            }
+                          },
+                          "Inv_people_(invitation)": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "host": {
+                                "connectionName": "shared_sharepointonline",
+                                "operationId": "HttpRequest",
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                              },
+                              "parameters": {
+                                "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                                "parameters/method": "GET",
+                                "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['people']}')/items?$select=SiteUserId,Status,Person/EMail&$expand=Person&$top=5000",
+                                "parameters/headers": {
+                                  "Accept": "application/json;odata=nometadata"
+                                }
+                              },
+                              "authentication": "@parameters('$authentication')"
+                            },
+                            "runAfter": {
+                              "Inv_area_(invitation)": [
+                                "Succeeded"
+                              ]
+                            }
+                          },
+                          "Inv_attending_(invitation)": {
+                            "type": "Query",
+                            "inputs": {
+                              "from": "@body('Inv_people_(invitation)')?['value']",
+                              "where": "@and(equals(item()?['Status'], 'Active'), contains(json(if(empty(string(coalesce(body('Inv_get_(invitation)')?['Attendees'], ''))), '[]', string(body('Inv_get_(invitation)')?['Attendees']))), int(if(empty(first(split(string(coalesce(item()?['SiteUserId'], '')), '.'))), '0', first(split(string(coalesce(item()?['SiteUserId'], '')), '.'))))))"
+                            },
+                            "runAfter": {
+                              "Inv_people_(invitation)": [
+                                "Succeeded"
+                              ]
+                            }
+                          },
+                          "Inv_emails_(invitation)": {
+                            "type": "Select",
+                            "inputs": {
+                              "from": "@body('Inv_attending_(invitation)')",
+                              "select": "@item()?['Person']?['EMail']"
+                            },
+                            "runAfter": {
+                              "Inv_attending_(invitation)": [
+                                "Succeeded"
+                              ]
+                            }
+                          },
+                          "Inv_start_ID_(invitation)": {
+                            "type": "SetVariable",
+                            "inputs": {
+                              "name": "varInvEvent",
+                              "value": "@string(coalesce(body('Inv_get_(invitation)')?['OutlookEventId'], ''))"
+                            },
+                            "runAfter": {
+                              "Inv_emails_(invitation)": [
+                                "Succeeded"
+                              ]
+                            }
+                          },
+                          "Inv_look_(invitation)": {
+                            "type": "If",
+                            "expression": "@and(empty(string(coalesce(body('Inv_get_(invitation)')?['OutlookEventId'], ''))), or(greater(int(if(empty(first(split(string(coalesce(body('Inv_get_(invitation)')?['InviteAttempts'], '')), '.'))), '0', first(split(string(coalesce(body('Inv_get_(invitation)')?['InviteAttempts'], '')), '.')))), 0), not(equals(string(coalesce(body('Inv_get_(invitation)')?['InviteState'], 'None')), 'Creating'))), not(empty(string(coalesce(body('Inv_get_(invitation)')?['InviteToken'], '')))))",
+                            "actions": {
+                              "Inv_search_(invitation)": {
+                                "type": "OpenApiConnection",
+                                "inputs": {
+                                  "host": {
+                                    "connectionName": "shared_office365",
+                                    "operationId": "GetEventsCalendarViewV3",
+                                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                                  },
+                                  "parameters": {
+                                    "calendarId": "Calendar",
+                                    "search": "@string(coalesce(body('Inv_get_(invitation)')?['InviteToken'], ''))",
+                                    "startDateTimeUtc": "@formatDateTime(addDays(string(coalesce(body('Inv_get_(invitation)')?['MeetingDate'], utcNow())), -1), 'yyyy-MM-ddTHH:mm:ss')",
+                                    "endDateTimeUtc": "@formatDateTime(addDays(string(coalesce(body('Inv_get_(invitation)')?['MeetingDate'], utcNow())), 2), 'yyyy-MM-ddTHH:mm:ss')"
+                                  },
+                                  "authentication": "@parameters('$authentication')",
+                                  "retryPolicy": {
+                                    "type": "none"
+                                  }
+                                },
+                                "runtimeConfiguration": {
+                                  "secureData": {
+                                    "properties": [
+                                      "inputs",
+                                      "outputs"
+                                    ]
+                                  }
+                                },
+                                "runAfter": {}
+                              },
+                              "Inv_match_(invitation)": {
+                                "type": "Query",
+                                "inputs": {
+                                  "from": "@if(equals(actions('Inv_search_(invitation)')?['status'], 'Succeeded'), coalesce(body('Inv_search_(invitation)')?['value'], createArray()), createArray())",
+                                  "where": "@contains(string(coalesce(item()?['body'], '')), string(coalesce(body('Inv_get_(invitation)')?['InviteToken'], '')))"
+                                },
+                                "runAfter": {
+                                  "Inv_search_(invitation)": [
+                                    "Succeeded",
+                                    "Failed",
+                                    "TimedOut"
+                                  ]
+                                }
+                              },
+                              "Inv_looked_(invitation)": {
+                                "type": "SetVariable",
+                                "inputs": {
+                                  "name": "varInvLook",
+                                  "value": "@if(equals(actions('Inv_search_(invitation)')?['status'], 'Succeeded'), 'ok', 'unclear')"
+                                },
+                                "runAfter": {
+                                  "Inv_match_(invitation)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "Inv_take_(invitation)": {
+                                "type": "SetVariable",
+                                "inputs": {
+                                  "name": "varInvEvent",
+                                  "value": "@string(coalesce(first(body('Inv_match_(invitation)'))?['id'], ''))"
+                                },
+                                "runAfter": {
+                                  "Inv_looked_(invitation)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              }
+                            },
+                            "else": {
+                              "actions": {
+                                "Inv_no_look_(invitation)": {
+                                  "type": "SetVariable",
+                                  "inputs": {
+                                    "name": "varInvLook",
+                                    "value": "ok"
+                                  },
+                                  "runAfter": {}
+                                }
+                              }
+                            },
+                            "runAfter": {
+                              "Inv_start_ID_(invitation)": [
+                                "Succeeded"
+                              ]
+                            }
+                          },
+                          "Inv_do_(invitation)": {
+                            "type": "If",
+                            "expression": "@equals(variables('varInvLook'), 'ok')",
+                            "actions": {
+                              "Inv_kind_(invitation)": {
+                                "type": "Switch",
+                                "expression": "@outputs('Inv_op_(invitation)')",
+                                "cases": {
+                                  "create": {
+                                    "case": "create",
+                                    "actions": {
+                                      "Inv_need_create_(invitation)": {
+                                        "type": "If",
+                                        "expression": "@empty(variables('varInvEvent'))",
+                                        "actions": {
+                                          "Inv_create_(invitation)": {
+                                            "type": "OpenApiConnection",
+                                            "inputs": {
+                                              "host": {
+                                                "connectionName": "shared_office365",
+                                                "operationId": "V4CalendarPostItem",
+                                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                                              },
+                                              "parameters": {
+                                                "table": "Calendar",
+                                                "item/subject": "@concat('[ESG Competency Hub] ', string(coalesce(first(body('Inv_area_(invitation)'))?['Title'], 'Competency')), ' monthly meeting')",
+                                                "item/start": "@formatDateTime(convertFromUtc(string(coalesce(body('Inv_get_(invitation)')?['MeetingDate'], '2000-01-01T00:00:00Z')), 'GMT Standard Time'), 'yyyy-MM-ddTHH:mm:ss')",
+                                                "item/end": "@formatDateTime(convertFromUtc(string(coalesce(body('Inv_get_(invitation)')?['EndTime'], addHours(string(coalesce(body('Inv_get_(invitation)')?['MeetingDate'], '2000-01-01T00:00:00Z')), 1))), 'GMT Standard Time'), 'yyyy-MM-ddTHH:mm:ss')",
+                                                "item/timeZone": "GMT Standard Time",
+                                                "item/requiredAttendees": "@join(body('Inv_emails_(invitation)'), ';')",
+                                                "item/body": "@concat('<p>The ', replace(replace(replace(replace(replace(string(coalesce(string(coalesce(first(body('Inv_area_(invitation)'))?['Title'], 'Competency')), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' monthly meeting.</p>', if(empty(string(coalesce(body('Inv_get_(invitation)')?['Location'], ''))), '', concat('<p>Where: ', replace(replace(replace(replace(replace(string(coalesce(body('Inv_get_(invitation)')?['Location'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</p>')), if(empty(string(coalesce(body('Inv_get_(invitation)')?['OnlineLink'], ''))), '', concat('<p>Online: ', replace(replace(replace(replace(replace(string(coalesce(body('Inv_get_(invitation)')?['OnlineLink'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</p>')), '<p>The agenda is in the Competency Hub: <a href=\"', replace(replace(replace(replace(replace(string(coalesce(concat(outputs('Site_address'), '/SitePages/Hub.aspx?meeting=', string(body('Inv_get_(invitation)')?['Id'])), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '\">open the meeting</a>.</p>', '<p style=\"color:#5b6774;font-size:12px\">Sent by the ESG Competency Hub. Reference ', string(coalesce(body('Inv_get_(invitation)')?['InviteToken'], '')), '</p>')",
+                                                "item/location": "@{coalesce(body('Inv_get_(invitation)')?['Location'], '')}",
+                                                "item/importance": "normal",
+                                                "item/showAs": "busy",
+                                                "item/responseRequested": true
+                                              },
+                                              "authentication": "@parameters('$authentication')",
+                                              "retryPolicy": {
+                                                "type": "none"
+                                              }
+                                            },
+                                            "runtimeConfiguration": {
+                                              "secureData": {
+                                                "properties": [
+                                                  "inputs",
+                                                  "outputs"
+                                                ]
+                                              }
+                                            },
+                                            "runAfter": {}
+                                          },
+                                          "Check_inv_was_created_(invitation)": {
+                                            "type": "SetVariable",
+                                            "inputs": {
+                                              "name": "varInvResult",
+                                              "value": "@if(equals(actions('Inv_create_(invitation)')?['status'], 'Succeeded'), 'ok', if(and(greaterOrEquals(int(coalesce(outputs('Inv_create_(invitation)')?['statusCode'], 0)), 400), less(int(coalesce(outputs('Inv_create_(invitation)')?['statusCode'], 0)), 500)), 'refused', 'unclear'))"
+                                            },
+                                            "runAfter": {
+                                              "Inv_create_(invitation)": [
+                                                "Succeeded",
+                                                "Failed",
+                                                "TimedOut"
+                                              ]
+                                            }
+                                          },
+                                          "Inv_new_ID_(invitation)": {
+                                            "type": "SetVariable",
+                                            "inputs": {
+                                              "name": "varInvEvent",
+                                              "value": "@if(equals(actions('Inv_create_(invitation)')?['status'], 'Succeeded'), string(coalesce(body('Inv_create_(invitation)')?['id'], '')), '')"
+                                            },
+                                            "runAfter": {
+                                              "Check_inv_was_created_(invitation)": [
+                                                "Succeeded"
+                                              ]
+                                            }
+                                          }
+                                        },
+                                        "else": {
+                                          "actions": {
+                                            "Inv_adopted_(invitation)": {
+                                              "type": "SetVariable",
+                                              "inputs": {
+                                                "name": "varInvResult",
+                                                "value": "ok"
+                                              },
+                                              "runAfter": {}
+                                            }
+                                          }
+                                        },
+                                        "runAfter": {}
+                                      }
+                                    }
+                                  },
+                                  "update": {
+                                    "case": "update",
+                                    "actions": {
+                                      "Inv_update_(invitation)": {
+                                        "type": "OpenApiConnection",
+                                        "inputs": {
+                                          "host": {
+                                            "connectionName": "shared_office365",
+                                            "operationId": "V4CalendarPatchItem",
+                                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                                          },
+                                          "parameters": {
+                                            "table": "Calendar",
+                                            "item/subject": "@concat('[ESG Competency Hub] ', string(coalesce(first(body('Inv_area_(invitation)'))?['Title'], 'Competency')), ' monthly meeting')",
+                                            "item/start": "@formatDateTime(convertFromUtc(string(coalesce(body('Inv_get_(invitation)')?['MeetingDate'], '2000-01-01T00:00:00Z')), 'GMT Standard Time'), 'yyyy-MM-ddTHH:mm:ss')",
+                                            "item/end": "@formatDateTime(convertFromUtc(string(coalesce(body('Inv_get_(invitation)')?['EndTime'], addHours(string(coalesce(body('Inv_get_(invitation)')?['MeetingDate'], '2000-01-01T00:00:00Z')), 1))), 'GMT Standard Time'), 'yyyy-MM-ddTHH:mm:ss')",
+                                            "item/timeZone": "GMT Standard Time",
+                                            "item/requiredAttendees": "@join(body('Inv_emails_(invitation)'), ';')",
+                                            "item/body": "@concat('<p>The ', replace(replace(replace(replace(replace(string(coalesce(string(coalesce(first(body('Inv_area_(invitation)'))?['Title'], 'Competency')), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' monthly meeting.</p>', if(empty(string(coalesce(body('Inv_get_(invitation)')?['Location'], ''))), '', concat('<p>Where: ', replace(replace(replace(replace(replace(string(coalesce(body('Inv_get_(invitation)')?['Location'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</p>')), if(empty(string(coalesce(body('Inv_get_(invitation)')?['OnlineLink'], ''))), '', concat('<p>Online: ', replace(replace(replace(replace(replace(string(coalesce(body('Inv_get_(invitation)')?['OnlineLink'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</p>')), '<p>The agenda is in the Competency Hub: <a href=\"', replace(replace(replace(replace(replace(string(coalesce(concat(outputs('Site_address'), '/SitePages/Hub.aspx?meeting=', string(body('Inv_get_(invitation)')?['Id'])), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '\">open the meeting</a>.</p>', '<p style=\"color:#5b6774;font-size:12px\">Sent by the ESG Competency Hub. Reference ', string(coalesce(body('Inv_get_(invitation)')?['InviteToken'], '')), '</p>')",
+                                            "item/location": "@{coalesce(body('Inv_get_(invitation)')?['Location'], '')}",
+                                            "item/importance": "normal",
+                                            "item/showAs": "busy",
+                                            "item/responseRequested": true,
+                                            "id": "@variables('varInvEvent')"
+                                          },
+                                          "authentication": "@parameters('$authentication')",
+                                          "retryPolicy": {
+                                            "type": "none"
+                                          }
+                                        },
+                                        "runtimeConfiguration": {
+                                          "secureData": {
+                                            "properties": [
+                                              "inputs",
+                                              "outputs"
+                                            ]
+                                          }
+                                        },
+                                        "runAfter": {}
+                                      },
+                                      "Inv_updated_(invitation)": {
+                                        "type": "SetVariable",
+                                        "inputs": {
+                                          "name": "varInvResult",
+                                          "value": "@if(equals(actions('Inv_update_(invitation)')?['status'], 'Succeeded'), 'ok', if(and(greaterOrEquals(int(coalesce(outputs('Inv_update_(invitation)')?['statusCode'], 0)), 400), less(int(coalesce(outputs('Inv_update_(invitation)')?['statusCode'], 0)), 500)), 'refused', 'unclear'))"
+                                        },
+                                        "runAfter": {
+                                          "Inv_update_(invitation)": [
+                                            "Succeeded",
+                                            "Failed",
+                                            "TimedOut"
+                                          ]
+                                        }
+                                      }
+                                    }
+                                  }
+                                },
+                                "default": {
+                                  "actions": {
+                                    "Inv_has_event_(invitation)": {
+                                      "type": "If",
+                                      "expression": "@empty(variables('varInvEvent'))",
+                                      "actions": {
+                                        "Inv_nothing_(invitation)": {
+                                          "type": "SetVariable",
+                                          "inputs": {
+                                            "name": "varInvResult",
+                                            "value": "ok"
+                                          },
+                                          "runAfter": {}
+                                        }
+                                      },
+                                      "else": {
+                                        "actions": {
+                                          "Inv_delete_(invitation)": {
+                                            "type": "OpenApiConnection",
+                                            "inputs": {
+                                              "host": {
+                                                "connectionName": "shared_office365",
+                                                "operationId": "CalendarDeleteItem_V2",
+                                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                                              },
+                                              "parameters": {
+                                                "calendar": "Calendar",
+                                                "event": "@variables('varInvEvent')"
+                                              },
+                                              "authentication": "@parameters('$authentication')",
+                                              "retryPolicy": {
+                                                "type": "none"
+                                              }
+                                            },
+                                            "runtimeConfiguration": {
+                                              "secureData": {
+                                                "properties": [
+                                                  "inputs",
+                                                  "outputs"
+                                                ]
+                                              }
+                                            },
+                                            "runAfter": {}
+                                          },
+                                          "Inv_deleted_(invitation)": {
+                                            "type": "SetVariable",
+                                            "inputs": {
+                                              "name": "varInvResult",
+                                              "value": "@if(equals(outputs('Inv_delete_(invitation)')?['statusCode'], 404), 'ok', if(equals(actions('Inv_delete_(invitation)')?['status'], 'Succeeded'), 'ok', if(and(greaterOrEquals(int(coalesce(outputs('Inv_delete_(invitation)')?['statusCode'], 0)), 400), less(int(coalesce(outputs('Inv_delete_(invitation)')?['statusCode'], 0)), 500)), 'refused', 'unclear')))"
+                                            },
+                                            "runAfter": {
+                                              "Inv_delete_(invitation)": [
+                                                "Succeeded",
+                                                "Failed",
+                                                "TimedOut"
+                                              ]
+                                            }
+                                          }
+                                        }
+                                      },
+                                      "runAfter": {}
+                                    }
+                                  }
+                                },
+                                "runAfter": {}
+                              }
+                            },
+                            "else": {
+                              "actions": {
+                                "Inv_unclear_(invitation)": {
+                                  "type": "SetVariable",
+                                  "inputs": {
+                                    "name": "varInvResult",
+                                    "value": "unclear"
+                                  },
+                                  "runAfter": {}
+                                }
+                              }
+                            },
+                            "runAfter": {
+                              "Inv_look_(invitation)": [
+                                "Succeeded"
+                              ]
+                            }
+                          },
+                          "Inv_outcome_(invitation)": {
+                            "type": "Compose",
+                            "inputs": {
+                              "InviteState": "@{if(equals(variables('varInvResult'), 'ok'), if(equals(outputs('Inv_op_(invitation)'), 'cancel'), 'Cancelled', 'Sent'), if(equals(variables('varInvResult'), 'refused'), 'Failed', 'Unknown'))}",
+                              "OutlookEventId": "@{if(equals(outputs('Inv_op_(invitation)'), 'cancel'), '', variables('varInvEvent'))}",
+                              "InviteAttempts": "@if(equals(variables('varInvResult'), 'ok'), 0, add(int(if(empty(first(split(string(coalesce(body('Inv_get_(invitation)')?['InviteAttempts'], '')), '.'))), '0', first(split(string(coalesce(body('Inv_get_(invitation)')?['InviteAttempts'], '')), '.')))), 1))",
+                              "InviteError": "@{if(equals(variables('varInvResult'), 'ok'), '', concat('Run ', workflow()?['run']?['name'], ': the ', outputs('Inv_op_(invitation)'), ' call was ', variables('varInvResult'), '.'))}"
+                            },
+                            "runAfter": {
+                              "Inv_do_(invitation)": [
+                                "Succeeded"
+                              ]
+                            }
+                          },
+                          "Save_inv_(invitation)": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "host": {
+                                "connectionName": "shared_sharepointonline",
+                                "operationId": "HttpRequest",
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                              },
+                              "parameters": {
+                                "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                                "parameters/method": "POST",
+                                "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['mtg']}')/items(@{items('Each_invite')?['Id']})",
+                                "parameters/headers": {
+                                  "Accept": "application/json;odata=nometadata",
+                                  "Content-Type": "application/json;odata=nometadata",
+                                  "X-HTTP-Method": "MERGE",
+                                  "IF-MATCH": "@{body('Inv_get_(invitation)')?['odata.etag']}"
+                                },
+                                "parameters/body": "@{string(outputs('Inv_outcome_(invitation)'))}"
+                              },
+                              "authentication": "@parameters('$authentication')"
+                            },
+                            "runAfter": {
+                              "Inv_outcome_(invitation)": [
+                                "Succeeded"
+                              ]
+                            }
+                          },
+                          "Inv_saved_(invitation)": {
+                            "type": "Compose",
+                            "inputs": "done",
+                            "runAfter": {
+                              "Save_inv_(invitation)": [
+                                "Succeeded",
+                                "Failed",
+                                "TimedOut"
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      "runAfter": {
+                        "Inv_op_(invitation)": [
+                          "Succeeded"
+                        ]
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {}
+                  },
+                  "runAfter": {
+                    "Inv_get_(invitation)": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "runAfter": {
+                "Inv_retry": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Inv_given_up": {
+              "type": "Query",
+              "inputs": {
+                "from": "@outputs('Inv_all')",
+                "where": "@greaterOrEquals(int(if(empty(first(split(string(coalesce(item()?['InviteAttempts'], '')), '.'))), '0', first(split(string(coalesce(item()?['InviteAttempts'], '')), '.')))), 3)"
+              },
+              "runAfter": {
+                "Each_invite": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Each_invite_failed": {
+              "type": "Foreach",
+              "foreach": "@body('Inv_given_up')",
+              "runtimeConfiguration": {
+                "concurrency": {
+                  "repetitions": 1
+                }
+              },
+              "actions": {
+                "Invite_alert": {
+                  "type": "If",
+                  "expression": "@true",
+                  "actions": {
+                    "Invite_alert_to": {
+                      "type": "Select",
+                      "inputs": {
+                        "from": "@body('Active_administrators')",
+                        "select": {
+                          "send": "@and(true, equals(string(item()?['Status']), 'Active'))",
+                          "type": "ALR",
+                          "key": "@{concat('ALR|', concat('invite|', string(items('Each_invite_failed')?['Id'])), '|', outputs('Today_in_the_UK'), '|', first(split(string(coalesce(item()?['SiteUserId'], '')), '.')))}",
+                          "recipientId": "@{first(split(string(coalesce(item()?['SiteUserId'], '')), '.'))}",
+                          "login": "@{item()?['Person']?['Name']}",
+                          "email": "@{coalesce(item()?['Person']?['EMail'], item()?['Email'])}",
+                          "actor": "@{''}",
+                          "actionId": "@{'0'}",
+                          "title": "@{concat('A meeting invitation could not be sent: ', string(items('Each_invite_failed')?['Title']))}",
+                          "area": "@{''}",
+                          "dueIso": "@{outputs('Today_in_the_UK')}",
+                          "originalIso": "@{outputs('Today_in_the_UK')}",
+                          "previousIso": "@{''}",
+                          "extCount": "@int(0)",
+                          "note": "@{concat('The Outlook invitation for this meeting failed 3 times. The meeting itself stands, and people can add it to their calendar from the Hub. ', 'Last error: ', string(coalesce(items('Each_invite_failed')?['InviteError'], 'none recorded')), ' In Power Automate, check the Outlook connection of the ESG Competency Hub flows. ', 'To try again, change the meeting in the Hub.')}"
+                        }
+                      },
+                      "runAfter": {}
+                    },
+                    "Invite_alert_add": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "varAlerts",
+                        "value": "@union(variables('varAlerts'), body('Invite_alert_to'))"
+                      },
+                      "runAfter": {
+                        "Invite_alert_to": [
+                          "Succeeded"
+                        ]
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {}
+                  },
+                  "runAfter": {}
+                }
+              },
+              "runAfter": {
+                "Inv_given_up": [
+                  "Succeeded"
+                ]
+              }
+            },
             "Read_changes_needing_attention": {
               "type": "OpenApiConnection",
               "inputs": {
@@ -900,7 +1724,7 @@
                 "authentication": "@parameters('$authentication')"
               },
               "runAfter": {
-                "Each_stalled_change": [
+                "Each_invite_failed": [
                   "Succeeded"
                 ]
               }
@@ -1705,6 +2529,8 @@
                 "adminReason": "@{if(variables('varAdminDown'), 'Administration changes are not being picked up by ESG Competency Hub | 6 Administration.', '')}",
                 "records": "@{if(variables('varRecordsDown'), 'Down', 'Healthy')}",
                 "recordsReason": "@{if(variables('varRecordsDown'), 'Changes to notices and the register are not being picked up by ESG Competency Hub | 4 Records.', '')}",
+                "meetings": "@{if(variables('varMeetingsDown'), 'Down', 'Healthy')}",
+                "meetingsReason": "@{if(variables('varMeetingsDown'), 'Meeting bookings and changes are not being picked up by ESG Competency Hub | 5 Meetings.', '')}",
                 "checkedAt": "@{utcNow()}",
                 "attention": "@length(body('Read_changes_needing_attention')?['value'])"
               },
@@ -1765,7 +2591,7 @@
             }
           },
           "runAfter": {
-            "Initialise_partly_made": [
+            "Initialise_inv_look": [
               "Succeeded"
             ]
           }

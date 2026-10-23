@@ -50,7 +50,7 @@ CH.health = (function () {
     // The tighter limit starts only once the first working-hours check has had time to report: until then the
     // latest report may be the last one from outside working hours.
     var working = weekday && clock.minutes >= h.start + WORKING_SLACK_MINUTES && clock.minutes <= h.end;
-    var out = { processing: 'unknown', reminders: 'unknown', administration: 'ok', adminReason: '', records: 'ok', recordsReason: '', reason: '', checkedAt: null, lastDailyRun: null,
+    var out = { processing: 'unknown', reminders: 'unknown', administration: 'ok', adminReason: '', records: 'ok', recordsReason: '', meetings: 'ok', meetingsReason: '', reason: '', checkedAt: null, lastDailyRun: null,
       attention: 0, maxDeadlineYears: years(value(rows, 'MaxDeadlineYears')) };
     if (report && report.checkedAt) {
       out.checkedAt = new Date(report.checkedAt);
@@ -64,8 +64,13 @@ CH.health = (function () {
       if (report.admin === 'Down') { out.administration = 'down'; out.adminReason = report.adminReason || 'Administration changes are not being picked up.'; }
       // Notices and the register also have their own flow (4 Records).
       if (report.records === 'Down') { out.records = 'down'; out.recordsReason = report.recordsReason || 'Changes to notices and the register are not being picked up.'; }
+      // and meetings (5 Meetings)
+      if (report.meetings === 'Down') { out.meetings = 'down'; out.meetingsReason = report.meetingsReason || 'Meeting bookings and changes are not being picked up.'; }
     }
     var daily = value(rows, 'LastDailyRun');
+    // the switches that fall back when Outlook invitations or PDF conversion cannot be used (Setup 1.3); Yes unless set to No
+    out.invitesEnabled = value(rows, 'InvitesEnabled') !== 'No';
+    out.pdfEnabled = value(rows, 'PdfEnabled') !== 'No';
     if (daily) {
       out.lastDailyRun = new Date(daily);
       out.reminders = (now.getTime() - out.lastDailyRun.getTime()) / 3600000 > DAILY_LIMIT_HOURS ? 'stale' : 'ok';

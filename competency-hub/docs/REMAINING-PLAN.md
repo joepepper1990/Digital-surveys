@@ -7,13 +7,13 @@ specification (`PLAN.md`, Revision 5) and the decisions made since. Where the tw
 
 | Part | Built and tested here | On the site |
 |---|---|---|
-| Site, lists, groups, Setup | Setup 1.2 | Setup 1.1 |
-| App | 0.7.0: actions, safety net, Administration (People, Settings, Feedback), the *My week* home page, notices, register, Management page | 0.3.0 |
-| Flows | 1.5.0.0: 1 Daily tasks, 2 Request queue, 3 Queue monitor, 4 Records, 6 Administration | 1.2.0.0 |
+| Site, lists, groups, Setup | Setup 1.3 | Setup 1.1 |
+| App | 0.8.0: actions, safety net, Administration (People, Settings, Feedback), the *My week* home page, notices, register, Management page, meetings and the agenda | 0.3.0 |
+| Flows | 1.6.0.0: 1 Daily tasks, 2 Request queue, 3 Queue monitor, 4 Records, 5 Meetings, 6 Administration, and the P-INV probe | 1.2.0.0 |
 | Permission probe | Built | Not run |
 
-**Built so far:** Releases 1, 2 and 3, and the home-page design. That is about 105 of the ~194 Phase 1 hours.
-**Left to build:** about 89 hours, in three releases (4, 5 and 6).
+**Built so far:** Releases 1 to 4, and the home-page design. That is about 132 of the ~194 Phase 1 hours.
+**Left to build:** about 62 hours, in two releases (5 and 6).
 
 **Decisions settled since Revision 5:**
 - Everything runs on your account, and no service account is used. That covers:
@@ -168,7 +168,15 @@ calendar from a download link (.ics). The result is recorded before anything dep
 3. Look at the agenda preview, then start the meeting: the agenda is fixed.
 4. Book another and cancel it: the cancellation arrives.
 
-**Delivered:** solution 1.6.0.0 and app 0.8.0.
+**Delivered:** solution 1.6.0.0 and app 0.8.0 (built and tested locally, 23 October 2026).
+
+**As built, compared with the above:**
+- The agenda has seven automatic sections plus *New business* (items added by hand). *Decisions* are recorded on the
+  live screen, so they arrive with Release 5.
+- "Book the next 3 months" is offered as *This and the next 2 months* (three meetings) or *the next 5 months* (six).
+- The P-INV probe asks for one attendee's email when you run it, and its last step lists every result.
+- Two settings, *Outlook invitations* and *PDF minutes*, switch to the fallbacks without a rebuild.
+- Setup 1.3 adds one column (the meeting's end time) and those two settings.
 
 ---
 

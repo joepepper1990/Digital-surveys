@@ -13,6 +13,8 @@ CH.requests = (function () {
   var ADMIN_TYPES = ['RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting'];
   // Notices, comments and the register (4 Records): confirmed by their History event, which is written before Completed.
   var RECORD_TYPES = ['EditNotice', 'ArchiveNotice', 'PinNotice', 'HideComment', 'RaiseRegisterEntry', 'UpdateRegisterEntry', 'LinkActionToEntry', 'UnlinkActionFromEntry'];
+  // Meetings (5 Meetings): also confirmed by their History event.
+  var MEETING_TYPES = ['ScheduleMeeting', 'UpdateMeeting', 'CancelMeeting', 'StartMeeting'];
 
   // Thrown instead of sending while automatic processing is down (limited mode).
   function LimitedError(message) { this.name = 'LimitedError'; this.message = message; this.friendly = message; }
@@ -59,7 +61,9 @@ CH.requests = (function () {
 
     // spec: { type, targetId, expectedRevision, payload, label, key? }. Resolves to the tracked entry.
     async function submit(spec) {
-      var blocked = RECORD_TYPES.indexOf(spec.type) >= 0 ? app.recordsBlocked && app.recordsBlocked() : ADMIN_TYPES.indexOf(spec.type) < 0 && app.queueBlocked && app.queueBlocked();
+      var blocked = RECORD_TYPES.indexOf(spec.type) >= 0 ? app.recordsBlocked && app.recordsBlocked()
+        : MEETING_TYPES.indexOf(spec.type) >= 0 ? app.meetingsBlocked && app.meetingsBlocked()
+        : ADMIN_TYPES.indexOf(spec.type) < 0 && app.queueBlocked && app.queueBlocked();
       if (blocked) {
         throw new LimitedError('Changes cannot be processed at the moment, so nothing was sent. You can still read everything and add updates. Please try again later.');
       }
@@ -160,7 +164,7 @@ CH.requests = (function () {
     // The action itself must show this change, with no lock left on it.
     async function confirmed(entry, row) {
       if (ADMIN_TYPES.indexOf(entry.type) >= 0) return true;
-      if (RECORD_TYPES.indexOf(entry.type) >= 0) {
+      if (RECORD_TYPES.indexOf(entry.type) >= 0 || MEETING_TYPES.indexOf(entry.type) >= 0) {
         try {
           var evr = await app.sp.items(CH.config.lists.history.title, "$select=Id&$filter=RequestKey eq '" + q(entry.key + '|1') + "'", 1);
           return evr.rows.length > 0;
@@ -234,6 +238,6 @@ CH.requests = (function () {
 
   var RETRYING = 'Not recorded yet – retrying automatically.';
 
-  return { tracker: tracker, newKey: newKey, SCHEDULE: SCHEDULE, GIVE_UP_MINUTES: GIVE_UP_MINUTES, ADMIN_TYPES: ADMIN_TYPES, RECORD_TYPES: RECORD_TYPES,
+  return { tracker: tracker, newKey: newKey, SCHEDULE: SCHEDULE, GIVE_UP_MINUTES: GIVE_UP_MINUTES, ADMIN_TYPES: ADMIN_TYPES, RECORD_TYPES: RECORD_TYPES, MEETING_TYPES: MEETING_TYPES,
     LimitedError: LimitedError, RETRYING: RETRYING };
 })();

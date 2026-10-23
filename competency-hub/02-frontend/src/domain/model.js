@@ -14,7 +14,8 @@ CH.model = (function () {
     register: '$select=Id,Title,Description,EntryType,Impact,Status,Outcome,RaisedById,ResponsiblePersonId,DateRaised,DateResolved,Revision,' +
       'LastRequestKey,CompetencyId,FileDirRef,Created&$filter=FSObjType eq 0',
     updates: '$select=Id,EntryType,ParentType,ParentId,AuthorId,Created,FileDirRef,IsHidden&$filter=IsFlagEvent eq 1 and FSObjType eq 0',
-    meetings: '$select=Id,CompetencyId,MeetingDate,Status,ChairId&$filter=FSObjType eq 0',
+    meetings: '$select=Id,Title,CompetencyId,MeetingDate,EndTime,Status,ChairId,Location,OnlineLink,Attendees,InviteState,InviteToken,OutlookEventId,' +
+      'InviteError,Revision,LastRequestKey,CreatedRequestKey,FileDirRef,CancellationReason,CutoffTime,IntervalStart,PreviousMeetingId,StartedById&$filter=FSObjType eq 0',
     calendar: "$select=Id,Title,StartTime,AllDay,IsImportant,Status,FileDirRef&$filter=Status eq 'Scheduled' and FSObjType eq 0",
     settings: '$select=Id,Title,Value'
   };
@@ -170,6 +171,27 @@ CH.model = (function () {
     notices.forEach(function (n) { n.flagged = !!(flags['Notice:' + n.id] || {}).flagged; });
     entries.forEach(function (e) { e.flagged = !!(flags['Register Entry:' + e.id] || {}).flagged; });
 
+    // Meetings (spec MTG-1): in the area's folder; times shown in UK time.
+    function meetingFrom(m) {
+      var area = areaById[m.CompetencyId];
+      var attendees = [];
+      try { attendees = JSON.parse(m.Attendees || '[]') || []; } catch (_) { attendees = []; }
+      var start = m.MeetingDate ? new Date(m.MeetingDate) : null;
+      return {
+        id: m.Id, ref: 'MTG-' + ('0000' + m.Id).slice(-5), areaKey: area ? area.key : '', areaName: area ? area.name : '', status: m.Status,
+        dateIso: start ? D.localDate(start) : '', start: start ? D.ukTime(start) : '', end: m.EndTime ? D.ukTime(m.EndTime) : '',
+        startUtc: m.MeetingDate || '', endUtc: m.EndTime || '', location: m.Location || '', onlineLink: m.OnlineLink || '',
+        chairId: m.ChairId, chairName: m.ChairId ? nameOf(m.ChairId) : '', attendeeIds: attendees.map(Number),
+        inviteState: m.InviteState || 'None', inviteToken: m.InviteToken || '', inviteError: m.InviteError || '', revision: Number(m.Revision) || 1,
+        cancellationReason: m.CancellationReason || '', cutoff: m.CutoffTime || '', intervalStart: m.IntervalStart || '',
+        previousId: m.PreviousMeetingId ? Number(m.PreviousMeetingId) : null, locked: isUncommitted(m)
+      };
+    }
+    var meetings = (raw.meetings.rows || []).filter(function (m) { return !isUncommitted(m); }).map(meetingFrom)
+      .filter(function (m) { return !!m.areaKey; }).sort(function (a, b) { return String(a.startUtc).localeCompare(String(b.startUtc)); });
+    var meetingById = {};
+    meetings.forEach(function (m) { meetingById[m.id] = m; });
+
     var meetingsByArea = {};
     (raw.meetings.rows || []).forEach(function (m) {
       var area = areaById[m.CompetencyId];
@@ -217,8 +239,8 @@ CH.model = (function () {
 
     return {
       today: today, areas: areas, areaByKey: areaByKey, stats: stats, actions: actions, notices: notices, calendar: calendar,
-      entries: entries, entryById: entryById, noticeById: noticeById, flags: flags, people: people,
-      inArea: inArea, nameOf: nameOf, ownersFor: ownersFor, actionById: actionById, actionFrom: actionFrom, membersByArea: membersByArea,
+      entries: entries, entryById: entryById, noticeById: noticeById, flags: flags, people: people, meetings: meetings, meetingById: meetingById,
+      inArea: inArea, nameOf: nameOf, ownersFor: ownersFor, actionById: actionById, actionFrom: actionFrom, membersByArea: membersByArea, chairsByArea: meetingAdmins,
       sections: {
         actions: section(raw.actions), notices: section(raw.notices), meetings: section(raw.meetings),
         calendar: section(raw.calendar), flags: section(raw.updates), members: section(raw.members), register: section(raw.register)

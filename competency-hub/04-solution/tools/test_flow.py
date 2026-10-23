@@ -913,8 +913,8 @@ class Monitor(unittest.TestCase):
         s = site()
         status, eng = run_monitor(s, WEEKDAY)
         self.assertEqual(status, 'Succeeded', eng.log)
-        # settings, people, 3 request states, needs attention, 3 email states, the health row
-        self.assertLessEqual(len(s.calls), 10, s.calls)
+        # settings, people, 3 request states, invitations to retry, needs attention, 3 email states, the health row
+        self.assertLessEqual(len(s.calls), 11, s.calls)
         self.assertEqual(s.sent, [])
         self.assertEqual((health(s)['state'], health(s)['attention']), ('Healthy', 0))
 

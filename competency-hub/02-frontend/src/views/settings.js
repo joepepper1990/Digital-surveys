@@ -15,7 +15,11 @@ CH.views.settings = (function () {
     { name: 'MaxDeadlineYears', label: 'Furthest deadline', unit: 'years ahead', min: 1, max: 5, fallback: '2',
       hint: 'The latest target date anyone can choose.' },
     { name: 'MonitorHours', label: 'Queue monitor hours', hours: true, fallback: '07:00|19:45|60',
-      hint: 'Every 15 minutes in working hours on weekdays; outside them, every so many minutes.' }
+      hint: 'Every 15 minutes in working hours on weekdays; outside them, every so many minutes.' },
+    { name: 'InvitesEnabled', label: 'Outlook invitations', yesNo: true, fallback: 'Yes',
+      hint: 'Yes: meetings send Outlook invitations, updates and cancellations. No: people add meetings to their calendar from the Hub.' },
+    { name: 'PdfEnabled', label: 'PDF minutes', yesNo: true, fallback: 'Yes',
+      hint: 'Yes: finalised minutes are saved as a PDF. No: the Hub offers a print-ready page instead.' }
   ];
 
   function current(app, name) {
@@ -25,6 +29,7 @@ CH.views.settings = (function () {
 
   // Returns an error message, or '' when the value is acceptable (the same checks as the flow).
   function check(item, value) {
+    if (item.yesNo) return value === 'Yes' || value === 'No' ? '' : 'Choose Yes or No.';
     if (item.hours) {
       var p = String(value).split('|');
       var t = function (x) { var m = /^(\d{2}):(\d{2})$/.exec(x || ''); return m && +m[1] < 24 && +m[2] < 60 ? +m[1] * 60 + +m[2] : -1; };
@@ -40,6 +45,7 @@ CH.views.settings = (function () {
   }
 
   function words(item, value) {
+    if (item.yesNo) return (value || item.fallback) === 'No' ? 'Off' : 'On';
     if (!value) return 'Not set (' + (item.hours ? item.fallback.replace(/\|/g, ' – ').replace(/ – (\d+)$/, ', then every $1 minutes') : item.fallback + ' ' + item.unit) + ' is used)';
     if (item.hours) {
       var p = value.split('|');
@@ -52,7 +58,11 @@ CH.views.settings = (function () {
     var err = h('span', { class: 'field-error', id: 'ch-set-' + item.name + '-err' });
     var value = current(app, item.name) || item.fallback;
     var inputs;
-    if (item.hours) {
+    if (item.yesNo) {
+      inputs = [h('select', { id: 'ch-set-' + item.name, 'aria-label': item.label }, [['Yes', 'On'], ['No', 'Off']].map(function (o) {
+        return h('option', { value: o[0], selected: o[0] === value ? true : null, text: o[1] });
+      }))];
+    } else if (item.hours) {
       var p = value.split('|');
       inputs = [h('input', { type: 'time', id: 'ch-set-' + item.name, 'aria-label': 'Start', value: p[0] }), ' to ',
         h('input', { type: 'time', 'aria-label': 'End', value: p[1] }), ', then every ',
@@ -65,7 +75,7 @@ CH.views.settings = (function () {
       h('button', { type: 'button', class: 'btn', text: 'Cancel', onclick: function () { onDone(); } }), err);
     form.addEventListener('submit', async function (e) {
       e.preventDefault();
-      var fields = form.querySelectorAll('input');
+      var fields = form.querySelectorAll('input, select');
       var v = item.hours ? [fields[0].value, fields[1].value, fields[2].value].join('|') : String(fields[0].value).trim();
       var problem = check(item, v);
       err.textContent = problem;
@@ -74,7 +84,7 @@ CH.views.settings = (function () {
       save.disabled = true;
       save.textContent = 'Sending…';
       try {
-        await app.tracker.submit({ type: 'UpdateSetting', payload: { name: item.name, value: v }, label: 'Change ' + item.label.toLowerCase() + ' to ' + words(item, v) });
+        await app.tracker.submit({ type: 'UpdateSetting', payload: { name: item.name, value: v }, label: item.yesNo ? 'Turn ' + item.label + ' ' + words(item, v).toLowerCase() : 'Change ' + item.label.toLowerCase() + ' to ' + words(item, v) });
         onDone();
       } catch (error) {
         save.disabled = false;
@@ -82,7 +92,7 @@ CH.views.settings = (function () {
         err.textContent = error.friendly || 'This could not be sent just now. Try again in a moment.';
       }
     });
-    setTimeout(function () { var first = form.querySelector('input'); if (first) first.focus(); }, 0);
+    setTimeout(function () { var first = form.querySelector('input, select'); if (first) first.focus(); }, 0);
     return form;
   }
 
@@ -92,7 +102,7 @@ CH.views.settings = (function () {
     return [
       h('p', { class: 'muted small', text: 'Each change is checked, recorded with its previous value, and takes effect within a few minutes.' }),
       h('ul', { class: 'plain settings' }, ITEMS.map(function (item) {
-        var waiting = sent.filter(function (e) { return e.label.indexOf(item.label.toLowerCase()) >= 0 && (e.state === 'submitted' || e.state === 'slow'); })[0];
+        var waiting = sent.filter(function (e) { return (e.label.indexOf(item.label.toLowerCase()) >= 0 || e.label.indexOf(item.label) >= 0) && (e.state === 'submitted' || e.state === 'slow'); })[0];
         return h('li', null, h('div', { class: 'setting' },
           h('b', { text: item.label }), h('br'),
           h('span', { text: words(item, current(app, item.name)) }), h('br'),

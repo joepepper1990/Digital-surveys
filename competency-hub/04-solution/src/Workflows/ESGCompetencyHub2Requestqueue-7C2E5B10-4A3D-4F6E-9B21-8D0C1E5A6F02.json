@@ -57,7 +57,7 @@
               "expression": "@not(equals(triggerBody()?['{IsFolder}'], true))"
             },
             {
-              "expression": "@not(contains(createArray('RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting', 'EditNotice', 'ArchiveNotice', 'PinNotice', 'HideComment', 'RaiseRegisterEntry', 'UpdateRegisterEntry', 'LinkActionToEntry', 'UnlinkActionFromEntry'), string(triggerBody()?['RequestType'])))"
+              "expression": "@not(contains(createArray('RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting', 'EditNotice', 'ArchiveNotice', 'PinNotice', 'HideComment', 'RaiseRegisterEntry', 'UpdateRegisterEntry', 'LinkActionToEntry', 'UnlinkActionFromEntry', 'ScheduleMeeting', 'UpdateMeeting', 'CancelMeeting', 'StartMeeting'), string(triggerBody()?['RequestType'])))"
             }
           ],
           "runtimeConfiguration": {
@@ -538,6 +538,9 @@
                 "settings": "@{outputs('Site_path')}/Lists/Settings",
                 "notices": "@{outputs('Site_path')}/Lists/Noticeboard",
                 "reg": "@{outputs('Site_path')}/Lists/ImprovementRegister",
+                "mtg": "@{outputs('Site_path')}/Lists/Meetings",
+                "items": "@{outputs('Site_path')}/Lists/MeetingItems",
+                "cal": "@{outputs('Site_path')}/Lists/CalendarEvents",
                 "reqRoot": "@{outputs('Site_path')}/Lists/Requests",
                 "actRoot": "@{outputs('Site_path')}/Lists/Actions",
                 "histRoot": "@{outputs('Site_path')}/Lists/History",
@@ -546,7 +549,9 @@
                 "membersRoot": "@{outputs('Site_path')}/Lists/CompetencyMembers",
                 "peopleRoot": "@{outputs('Site_path')}/Lists/People",
                 "regRoot": "@{outputs('Site_path')}/Lists/ImprovementRegister",
-                "noticesRoot": "@{outputs('Site_path')}/Lists/Noticeboard"
+                "noticesRoot": "@{outputs('Site_path')}/Lists/Noticeboard",
+                "mtgRoot": "@{outputs('Site_path')}/Lists/Meetings",
+                "itemsRoot": "@{outputs('Site_path')}/Lists/MeetingItems"
               },
               "runAfter": {
                 "Site_address": [

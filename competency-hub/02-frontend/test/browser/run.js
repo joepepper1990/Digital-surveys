@@ -92,7 +92,7 @@ check('member area: raise and post available, no meeting control for a technicia
 t = text(dump('as=' + RACHEL + '&view=area&area=RP').dom);
 check('a shared action appears in the linked area, labelled with its home area', t.includes('Contamination monitor checks') && t.includes('shared from Flask'));
 r = dump('as=' + RICHARD + '&view=area&area=RW');
-check('engineer in own area: meeting control offered', text(r.dom).includes('Start meeting'));
+check('engineer in own area: meeting control offered', text(r.dom).includes('Book a meeting'));
 r = dump('as=' + ROBERT + '&view=area&area=DSL');
 check('group head: writes in every area', text(r.dom).includes('Raise an action') && !text(r.dom).includes('View only.'));
 
@@ -298,7 +298,7 @@ check('feedback review: administrators see the list, respond and set the status'
   res.result.status === 'Answered' && /fixed in the next version/.test(res.result.response) && res.result.by === JOE && res.result.on, JSON.stringify(res));
 check('feedback review: filters narrow the list', res.ok && res.result.doneFilter, JSON.stringify(res));
 res = drive('as=' + JOE + '&drive=settings', SLOW);
-check('settings: the five values are shown', res.ok && JSON.stringify(res.result.shown) === '["First reminder","Due soon","Late reminders","Furthest deadline","Queue monitor hours"]', JSON.stringify(res));
+check('settings: the seven values are shown', res.ok && JSON.stringify(res.result.shown) === '["First reminder","Due soon","Late reminders","Furthest deadline","Queue monitor hours","Outlook invitations","PDF minutes"]', JSON.stringify(res));
 check('settings: out-of-range values are refused; a good one is sent and recorded', res.ok && /from 1 to 30/.test(res.result.rangeError) &&
   res.result.request.type === 'UpdateSetting' && res.result.request.payload.name === 'DueSoonDays' && res.result.request.payload.value === '10' && res.result.value === '10', JSON.stringify(res));
 res = drive('as=' + ROBERT + '&drive=dashboard', SLOW);
@@ -311,5 +311,23 @@ res = drive('as=' + RACHEL + '&view=area&area=FLK&drive=areaRegister');
 check('area page: Notices & issues lists the noticeboard (pinned first) and the open register entries, with a filter', res.ok &&
   res.result.notices[0] === 'Calibration rig out of service' && JSON.stringify(res.result.entries) === '["REG-00002 Shared probe sign-out sheet","REG-00001 Calibration rig drift"]' &&
   res.result.all === 3 && res.result.raise, JSON.stringify(res));
+
+// Release 4: meetings
+res = drive('as=' + KELLY + '&area=FLK&drive=bookMeeting', SLOW);
+check('book: the area\'s members are ticked and only people who run meetings can chair', res.ok && res.result.ticked >= 13 && res.result.chairs.indexOf('Rachel Boulden') < 0 &&
+  res.result.chairs.indexOf('Kelly Bates') >= 0, JSON.stringify(res));
+check('book: a missing date and an end before the start are refused before sending', res.ok && /Choose a date/.test(res.result.dateError) && /end after it starts/.test(res.result.endError), JSON.stringify(res));
+check('book: "this and the next 2 months" sends three bookings from your own folder, and they appear', res.ok && res.result.booked === 3 &&
+  JSON.stringify(res.result.types) === '["ScheduleMeeting","ScheduleMeeting","ScheduleMeeting"]' && res.result.writes.every((w) => w === 'Requests/u' + KELLY), JSON.stringify(res));
+res = drive('as=' + KELLY + '&area=FLK&meeting=2&drive=meetingChangeStart', SLOW);
+check('meeting: the agenda preview is shown before it starts', res.ok && res.result.preview, JSON.stringify(res));
+check('meeting: an item added by hand goes into the meeting\'s record folder', res.ok && JSON.stringify(res.result.added) === '["MeetingItems/FLK/MTG-2/Record"]', JSON.stringify(res));
+check('meeting: a change is recorded, and starting fixes the agenda', res.ok && res.result.start === '11:00' && res.result.status === 'In Progress' && res.result.agendaRows > 0 &&
+  res.result.fixed && res.result.noStart, JSON.stringify(res));
+res = drive('as=' + KELLY + '&area=FLK&meeting=2&drive=meetingCancel', SLOW);
+check('meeting: cancelling needs a reason, then shows as cancelled', res.ok && /at least 10 characters/.test(res.result.reasonError) && /Most of the area is on the outage/.test(res.result.text), JSON.stringify(res));
+res = drive('as=' + RACHEL + '&area=FLK&meeting=2&drive=meetingAsTechnician', SLOW);
+check('meeting: someone who does not run meetings can read it and add it to their calendar, nothing else', res.ok && JSON.stringify(res.result.buttons) === '["Add to my calendar"]' &&
+  !res.result.canAdd && !res.result.bookButton && /BEGIN:VCALENDAR/.test(res.result.ics) && /SUMMARY:Flask monthly meeting/.test(res.result.ics), JSON.stringify(res));
 console.log(failures ? failures + ' browser check(s) failed' : 'All browser checks passed');
 process.exit(failures ? 1 : 0);
