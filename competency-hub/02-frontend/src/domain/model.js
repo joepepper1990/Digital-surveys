@@ -186,7 +186,7 @@ CH.model = (function () {
 
     return {
       today: today, areas: areas, areaByKey: areaByKey, stats: stats, actions: actions, notices: notices, calendar: calendar,
-      inArea: inArea, nameOf: nameOf, ownersFor: ownersFor, actionById: actionById, actionFrom: actionFrom,
+      inArea: inArea, nameOf: nameOf, ownersFor: ownersFor, actionById: actionById, actionFrom: actionFrom, membersByArea: membersByArea,
       sections: {
         actions: section(raw.actions), notices: section(raw.notices), meetings: section(raw.meetings),
         calendar: section(raw.calendar), flags: section(raw.updates), members: section(raw.members)

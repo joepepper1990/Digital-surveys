@@ -374,6 +374,67 @@ window.MockDrivers = (function () {
       return { line: line, page: page, items: items, confirmText: confirmText, partlyFound: !!partly, tx: tx,
         unlocked: !MockSharePoint.data.Actions[1].PendingRequestKey, writes: MockSharePoint.writes.slice() };
     },
+    // People administration (plan REV5 ADM-1 to ADM-3): add one person, change someone's areas, and never your own.
+    peoplePage: async function () {
+      byText('button', 'Open Administration').click();
+      (await until(function () { return byText('.subtabs button', 'People'); })).click();
+      await until(function () { return q('#ch-p-search'); });
+      var names = all('.people-list .item-open .t').map(function (n) { return n.textContent; });
+      type(q('#ch-p-search'), 'boul');
+      await wait(100);
+      var found = all('.people-list .item-open .t').map(function (n) { return n.textContent; });
+      byText('button', 'Add people').click();
+      await until(function () { return q('#ch-pa-email'); });
+      byText('#ch-pa button', 'Add this person').click();
+      await wait(50);
+      var emptyError = q('#ch-pa .result .field-error') ? q('#ch-pa .result .field-error').textContent : '';
+      q('#ch-pa-email').value = 'test.person@example.com';
+      q('#ch-pa-GRS-m').checked = true;
+      byText('#ch-pa button', 'Add this person').click();
+      await until(function () { return text().indexOf('Done and verified: Added Test Person.') >= 0; }, 120000);
+      type(q('#ch-pa-list'), 'second.person@example.com, Engineer, FLK RP\nnot-an-email, Technician, FLK\nthird.person@example.com, Technician, XYZ');
+      byText('#ch-pa button', 'Add everyone in the list').click();
+      await until(function () { return text().indexOf('Done and verified: Added Second Person.') >= 0; }, 120000);
+      var pasted = q('#ch-pa ul.result').textContent;
+      q('#ch-pa .dialog-x').click();
+      await wait(100);
+      var added = MockSharePoint.data.People.filter(function (p) { return /example\.com$/.test(p.Email); }).map(function (p) { return p.Title; });
+      var secondRows = MockSharePoint.data['Competency Members'].filter(function (m) {
+        return m.PersonId === MockSharePoint.data.People.filter(function (p) { return p.Email === 'second.person@example.com'; })[0].SiteUserId; });
+      // Rachel: give her meeting rights in Green Stream.
+      type(q('#ch-p-search'), 'Rachel');
+      await wait(100);
+      byText('.people-list .item-open .t', 'Rachel Boulden').closest('button').click();
+      await until(function () { return q('#ch-pp-GRS-c'); });
+      q('#ch-pp-GRS-c').checked = true;
+      byText('#ch-pp button', 'Save changes').click();
+      await until(function () { return text().indexOf('Done and verified: Saved the changes for Rachel Boulden.') >= 0; }, 120000);
+      var grs = MockSharePoint.data.Competencies.filter(function (c) { return c.CompetencyKey === 'GRS'; })[0].Id;
+      var chair = MockSharePoint.data['Competency Members'].filter(function (m) { return m.PersonId === 112 && m.CompetencyId === grs; })[0].CanManageMeetings;
+      q('#ch-pp .dialog-x').click();
+      await wait(100);
+      type(q('#ch-p-search'), 'Joe');
+      await wait(100);
+      byText('.people-list .item-open .t', 'Joe Pepper').closest('button').click();
+      await until(function () { return q('#ch-pp .section-note'); });
+      var selfNote = q('#ch-pp .section-note').textContent;
+      var selfButtons = all('#ch-pp .actions-row .btn').map(function (b) { return b.disabled; });
+      return { names: names.length, found: found, emptyError: emptyError, added: added, pasted: pasted, secondRows: secondRows.map(function (m) { return [m.CompetencyId, !!m.CanManageMeetings]; }),
+        chair: !!chair, selfNote: selfNote, selfButtons: selfButtons,
+        writes: MockSharePoint.writes.map(function (w) { return w.list + '/' + w.folder; }) };
+    },
+    // A technician without meeting rights raises only for themselves (plan REV5 §4.2).
+    technicianRaise: async function () {
+      (await until(function () { return byText('button', 'Raise an action'); })).click();
+      await until(function () { return q('#ch-r-title'); });
+      type(q('#ch-r-title'), 'Check the spare probe');
+      type(q('#ch-r-description'), 'Before the next survey.');
+      q('#ch-r form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-r-ownerId'); });
+      var owners = all('#ch-r-ownerId option').map(function (o) { return o.textContent; });
+      var note = q('#ch-r-self-only');
+      return { owners: owners, note: note.textContent, shown: note.style.display !== 'none' };
+    },
     // Open every area and every tab: the shell must make no writes at all.
     readOnlyAudit: async function () {
       await until(function () { return q('.tile'); });

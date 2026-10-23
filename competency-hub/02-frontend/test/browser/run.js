@@ -116,16 +116,16 @@ check('every area and tab opened: no writes, no POSTs', res.ok && res.result.are
 
 // Actions (plan K7): raise, update, extend, mark as done, stale changes, view only, keyboard
 const SLOW = 200000;
-res = drive('as=' + RACHEL + '&drive=raiseAction', SLOW);
+res = drive('as=' + RICHARD + '&drive=raiseAction', SLOW);
 check('raise: empty title and a past date are refused, in plain words', res.ok && /Enter what needs doing/.test(res.result.emptyError) && /past/.test(res.result.pastError), JSON.stringify(res));
-check('raise: the owner list holds area members and management, with "(you)"', res.ok && res.result.owners.some((o) => /Rachel Boulden \(you\)/.test(o)) &&
-  res.result.owners.some((o) => /Robert Starbuck – Group Head/.test(o)) && !res.result.owners.some((o) => /Kai Todd/.test(o)), JSON.stringify(res && res.result && res.result.owners));
+check('raise: an engineer\'s owner list holds area members and management, with "(you)"', res.ok && res.result.owners.some((o) => /Richard Harrisson \(you\)/.test(o)) &&
+  res.result.owners.some((o) => /Robert Starbuck – Group Head/.test(o)) && res.result.owners.length > 5, JSON.stringify(res && res.result && res.result.owners));
 check('raise: summary shown, then "being recorded" until the flow confirms it', res.ok && /Order replacement smear papers/.test(res.result.summary) &&
   /being recorded/.test(res.result.stripText), JSON.stringify(res));
 check('raise: the new action appears once confirmed, and the note goes', res.ok && res.result.listed && res.result.stripGone && res.result.request.status === 'Completed', JSON.stringify(res));
 check('raise: once confirmed, the new action opens on click without a reload', res.ok && res.result.reachable && res.result.opens, JSON.stringify(res));
 check('raise: the only write is a request in the user\'s own folder', res.ok && res.result.writes.length === 1 && res.result.writes[0].list === 'Requests' &&
-  res.result.writes[0].folder === 'u' + RACHEL && res.result.request.type === 'RaiseAction', JSON.stringify(res && res.result && res.result.writes));
+  res.result.writes[0].folder === 'u' + RICHARD && res.result.request.type === 'RaiseAction', JSON.stringify(res && res.result && res.result.writes));
 res = drive('as=' + RACHEL + '&action=40&drive=updateAndExtend', SLOW);
 check('action panel: what, who and when in plain words, with the original deadline', res.ok && /2 days late/.test(res.result.before) && /Was due/.test(res.result.before) &&
   /Rachel Boulden is doing it/.test(res.result.before) && /Deadline moved once \(was/.test(res.result.before), JSON.stringify(res && res.result && res.result.before));
@@ -216,6 +216,20 @@ t = text(dump('as=' + RACHEL + '&mode=attention').dom);
 check('staff see no administration line', !t.includes('Open Administration') && !t.includes('need your attention'));
 t = text(dump('as=' + RACHEL + '&view=admin').dom);
 check('the admin page refuses anyone who is not an administrator', t.includes('Only Competency Hub administrators can use this page.') && !t.includes('Automatic processing'));
+
+// People administration and the technician restriction (plan REV5 §3.2, §4.2)
+res = drive('as=' + JOE + '&drive=peoplePage', SLOW);
+check('people: everyone is listed and the search narrows the list', res.ok && res.result.names >= 28 && JSON.stringify(res.result.found) === '["Rachel Boulden"]', JSON.stringify(res));
+check('people: an empty email is refused before anything is sent', res.ok && /Enter their email address/.test(res.result.emptyError), JSON.stringify(res));
+check('people: one person and a pasted list are added and verified; bad lines are refused with a reason', res.ok &&
+  JSON.stringify(res.result.added) === '["Test Person","Second Person"]' && /Not an email address/.test(res.result.pasted) && /Unknown area: XYZ/.test(res.result.pasted) &&
+  res.result.secondRows.length === 2 && res.result.secondRows.every((r) => r[1]), JSON.stringify(res));
+check('people: meeting rights are saved for an area', res.ok && res.result.chair, JSON.stringify(res));
+check('people: you cannot change your own access', res.ok && /can't change your own access/.test(res.result.selfNote), JSON.stringify(res));
+check('people: every change is a request from your own folder', res.ok && res.result.writes.length && res.result.writes.every((w) => w === 'Requests/u' + JOE), JSON.stringify(res));
+res = drive('as=' + RACHEL + '&drive=technicianRaise');
+check('a technician without meeting rights can only choose themselves as owner, and is told why', res.ok &&
+  JSON.stringify(res.result.owners) === '["Rachel Boulden (you)"]' && res.result.shown && /for yourself in this area/.test(res.result.note), JSON.stringify(res));
 
 console.log(failures ? failures + ' browser check(s) failed' : 'All browser checks passed');
 process.exit(failures ? 1 : 0);

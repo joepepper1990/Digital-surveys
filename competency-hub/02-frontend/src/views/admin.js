@@ -147,19 +147,36 @@ CH.views.admin = (function () {
     app.refreshView();
   }
 
+  var TABS = ['Changes needing attention', 'People'];
+
   function render(app) {
     if (!app.access.isAdministrator) {
       return [h('h1', { text: 'Administration' }), h('p', { text: 'Only Competency Hub administrators can use this page.' })];
     }
-    if (!app.admin) setTimeout(function () { refresh(app); }, 0);
-    return [
-      h('div', { class: 'row' }, ui.linkButton('‹ Overview', app.goHome)),
-      h('h1', { text: 'Administration' }),
+    var tab = app.adminTab || 0;
+    if (tab === 0 && !app.admin) setTimeout(function () { refresh(app); }, 0);
+    var bar = h('div', { class: 'subtabs', role: 'tablist', 'aria-label': 'Administration' }, TABS.map(function (t, i) {
+      return h('button', { type: 'button', role: 'tab', 'aria-selected': String(i === tab), tabindex: i === tab ? '0' : '-1', text: t,
+        onclick: function () { app.adminTab = i; app.refreshView(); },
+        onkeydown: function (e) {
+          if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+          app.adminTab = (i + (e.key === 'ArrowRight' ? 1 : TABS.length - 1)) % TABS.length;
+          app.refreshView();
+          var sel = app.root.querySelector('.subtabs [aria-selected="true"]');
+          if (sel) sel.focus();
+        } });
+    }));
+    var panel = tab === 1 ? CH.views.people.list(app) : [
       healthCard(app),
       ui.card('Changes needing attention', [
         h('p', { class: 'muted small', text: 'Changes that failed three times, and runs that stopped more than ' + QUIET_MINUTES + ' minutes ago. The queue monitor retries the rest by itself.' }),
         h('div', { class: 'row' }, ui.linkButton('Check again', function () { refresh(app); })),
-        changeList(app)])
+        changeList(app)])];
+    return [
+      h('div', { class: 'row' }, ui.linkButton('‹ Overview', app.goHome)),
+      h('h1', { text: 'Administration' }),
+      bar,
+      h('div', { class: 'panel', role: 'tabpanel' }, panel)
     ];
   }
 

@@ -230,7 +230,7 @@ CH.app = (function () {
       var user, people;
       try {
         user = await app.sp.currentUser();
-        people = (await app.sp.items(CH.config.lists.people.title, '$select=Id,Title,SiteUserId,Email,Role,IsAdministrator,Status')).rows;
+        people = (await app.sp.items(CH.config.lists.people.title, '$select=Id,Title,SiteUserId,Email,Role,IsAdministrator,CanPostNotices,Status')).rows;
       } catch (error) {
         stateScreen('We could not confirm your access', CH.access.MESSAGES.UNAVAILABLE + ' Please reload the page. If this keeps happening, contact a Competency Hub administrator.',
           'Details for the administrator: ' + (error.status ? 'HTTP ' + error.status : error.message));

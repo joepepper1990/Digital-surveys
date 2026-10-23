@@ -10,7 +10,7 @@ CH.requests = (function () {
   // Still on its way: waiting, being processed, or failed and being retried by the queue monitor (plan REV5 REL-2).
   var OPEN_STATUSES = ['Submitted', 'Processing', 'Failed'];
   // An administrator's decision about another change: it is confirmed by its own request alone.
-  var ADMIN_TYPES = ['RetryTransaction', 'CancelTransaction', 'RevertTransaction'];
+  var ADMIN_TYPES = ['RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting'];
 
   // Thrown instead of sending while automatic processing is down (limited mode).
   function LimitedError(message) { this.name = 'LimitedError'; this.message = message; this.friendly = message; }

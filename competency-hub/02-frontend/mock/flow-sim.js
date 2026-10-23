@@ -78,6 +78,45 @@ window.MockFlow = (function () {
         return finish(req, 'Completed', 'ACT-' + ('0000' + id).slice(-5) + ' raised.', id);
       }
 
+      // People administration (plan REV5 §3.2), much simplified: the same refusals, and the records as the flow leaves them.
+      if (['AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson'].indexOf(req.RequestType) >= 0) {
+        if (!requester.IsAdministrator) return finish(req, 'Rejected', 'Only a Competency Hub administrator can do this.');
+        var target = req.RequestType === 'AddPerson' ? null : person(Number(payload.personId));
+        if (target && target.SiteUserId === requester.SiteUserId) return finish(req, 'Rejected', "You can't change your own access. Ask another administrator.");
+        if (req.RequestType === 'AddPerson') {
+          if (data.People.some(function (x) { return String(x.Email).toLowerCase() === String(payload.email).toLowerCase(); })) return finish(req, 'Rejected', 'That person is already in the Hub.');
+          var newId = data.People.reduce(function (m, x) { return Math.max(m, x.SiteUserId); }, 0) + 1;
+          var name = payload.email.split('@')[0].split('.').map(function (s) { return s.charAt(0).toUpperCase() + s.slice(1); }).join(' ');
+          target = { Id: nextId(data.People), Title: name, SiteUserId: newId, Role: payload.role, Status: 'Active', IsAdministrator: false, Email: payload.email,
+            CanPostNotices: payload.canPostNotices !== false };
+          data.People.push(target);
+        }
+        var uid = target.SiteUserId;
+        var mine = data['Competency Members'].filter(function (m) { return m.PersonId === uid; });
+        var openOwned = data.Actions.filter(function (x) { return x.AssignedToId === uid && x.IsOpen; });
+        if (req.RequestType === 'PersonLeft') {
+          if (openOwned.length) return finish(req, 'Rejected', target.Title + ' still has ' + openOwned.length + ' open action' + (openOwned.length === 1 ? '' : 's') + '. Reassign them first.');
+          mine.forEach(function (m) { m.Status = 'Removed'; });
+          Object.assign(target, { Status: 'Left', IsAdministrator: false });
+          return finish(req, 'Completed', 'Marked as left: ' + target.Title + '.', uid);
+        }
+        if (req.RequestType === 'ReactivatePerson') { target.Status = 'Active'; return finish(req, 'Completed', 'Reactivated ' + target.Title + '.', uid); }
+        var wanted = (payload.areas || []).map(function (w) { return w.key; });
+        var management2 = C.managementRoles.indexOf(payload.role || target.Role) >= 0;
+        var blocked = mine.filter(function (m) { return m.Status === 'Active' && wanted.indexOf(areaKeyOf(m.CompetencyId)) < 0 && !management2 &&
+          openOwned.some(function (x) { return x.CompetencyId === m.CompetencyId; }); });
+        if (blocked.length) return finish(req, 'Rejected', 'Not removed from ' + blocked.map(function (m) { return areaKeyOf(m.CompetencyId); }).join(', ') + ': open actions there are still theirs. Reassign them first.');
+        mine.forEach(function (m) { if (wanted.indexOf(areaKeyOf(m.CompetencyId)) < 0) m.Status = 'Removed'; });
+        (payload.areas || []).forEach(function (w) {
+          var row = mine.filter(function (m) { return m.CompetencyId === areaId(w.key); })[0];
+          if (!row) { row = { Id: nextId(data['Competency Members']), CompetencyId: areaId(w.key), PersonId: uid }; data['Competency Members'].push(row); }
+          Object.assign(row, { Status: 'Active', CanManageMeetings: !!w.chair, AccessExpires: w.expires ? w.expires + 'T00:00:00Z' : null });
+        });
+        if (payload.role) target.Role = payload.role;
+        if ('canPostNotices' in payload) target.CanPostNotices = !!payload.canPostNotices;
+        if ('administrator' in payload) target.IsAdministrator = !!payload.administrator;
+        return finish(req, 'Completed', (req.RequestType === 'AddPerson' ? 'Added ' : 'Saved the changes for ') + target.Title + '.', uid);
+      }
       // An administrator's decision about a change needing attention (plan REV5 REL-3), much simplified.
       if (['RetryTransaction', 'CancelTransaction', 'RevertTransaction'].indexOf(req.RequestType) >= 0) {
         if (!requester.IsAdministrator) return finish(req, 'Rejected', 'Only a Competency Hub administrator can do this.');

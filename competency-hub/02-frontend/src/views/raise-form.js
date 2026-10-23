@@ -46,7 +46,7 @@ CH.views.raiseForm = (function () {
       });
       var selfOnly = !app.access.canRaiseFor(area.value, -1, app.person.SiteUserId) && app.access.canWrite(area.value);
       selfNote.style.display = selfOnly ? '' : 'none';
-      if (selfOnly) owner.value = String(app.person.SiteUserId);
+      if (selfOnly) { owner.removeChild(owner.firstChild); owner.value = String(app.person.SiteUserId); }
     }
     area.addEventListener('change', fillOwners);
     fillOwners();

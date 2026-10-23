@@ -147,3 +147,16 @@ footer { text-align: center; color: var(--muted); font-size: calc(12 * var(--u))
   .bar-in { padding: calc(8 * var(--u)) calc(16 * var(--u)); }
 }
 @media (pointer: coarse) { .btn, .areastrip button, .subtabs button { min-height: 44px; } }
+
+/* Administration (plan REV5 §3.2): results of a change, the areas table, the changes needing attention */
+.ok-note { background: #e6f3eb; color: #1b5e37; border-radius: calc(8 * var(--u)); padding: calc(8 * var(--u)) calc(12 * var(--u)); }
+.limited { background: #fde8e9; color: #7a1d22; }
+.admin-change { display: block; border-bottom: 1px solid var(--line); padding: calc(12 * var(--u)) 0; }
+.admin-change p { margin: calc(6 * var(--u)) 0; }
+.area-table { border-collapse: collapse; width: 100%; margin: calc(8 * var(--u)) 0 calc(16 * var(--u)); }
+.area-table th, .area-table td { text-align: left; padding: calc(6 * var(--u)) calc(10 * var(--u)); border-bottom: 1px solid var(--line); }
+.area-table thead th { font-size: calc(13 * var(--u)); color: var(--muted); font-weight: 600; }
+.area-table input[type="checkbox"] { width: calc(20 * var(--u)); height: calc(20 * var(--u)); }
+.people-list .item-open { width: 100%; }
+#ch-p-search { min-width: calc(260 * var(--u)); padding: calc(6 * var(--u)) calc(10 * var(--u)); border: 1px solid var(--line); border-radius: calc(6 * var(--u)); }
+.result { margin: calc(8 * var(--u)) 0; }
