@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ESG Competency Hub – My week</title>
+<style>
+.pv-switch { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; gap: 10px; padding: 6px 14px; background: #1f1f1f; color: #eee; font: 12px/1.4 "Segoe UI", Arial, sans-serif; white-space: nowrap; overflow-x: auto; }
+.pv-switch a { color: #fff; text-decoration: none; border: 1px solid #555; border-radius: 4px; padding: 2px 8px; }
+.pv-switch .pv-sep { margin-left: auto; opacity: .7; }
+.pv-switch button { font: inherit; color: #fff; background: #333; border: 1px solid #555; border-radius: 4px; padding: 2px 9px; cursor: pointer; }
+.pv-switch button[aria-pressed="true"] { background: #fff; color: #111; border-color: #fff; }
+</style>
+<script>
+// Sample data shared by the five design previews. Nothing here connects to SharePoint.
+(function () {
+  'use strict';
+  var TODAY = new Date(Date.UTC(2026, 9, 23)); // Friday 23 October 2026
+  var DAY = 86400000;
+  function d(offset) { return new Date(TODAY.getTime() + offset * DAY); }
+  var WD = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  var MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function short(dt) { return dt.getUTCDate() + ' ' + MO[dt.getUTCMonth()]; }
+  function wdShort(dt) { return WD[dt.getUTCDay()].slice(0, 3) + ' ' + short(dt); }
+
+  var AREAS = [
+    { key: 'FLK', name: 'Flask', open: 12, late: 1, soon: 2, moved: 2, next: 19, last: -9, flagged: 3, issues: 1 },
+    { key: 'INS', name: 'Instruments', open: 8, late: 0, soon: 1, moved: 1, next: 20, last: -8, flagged: 1, issues: 0 },
+    { key: 'GRS', name: 'Green Stream', open: 18, late: 3, soon: 4, moved: 3, next: null, last: -51, flagged: 0, issues: 2 },
+    { key: 'RPE', name: 'RPE', open: 6, late: 0, soon: 0, moved: 0, next: 26, last: -3, flagged: 0, issues: 0 },
+    { key: 'BA', name: 'BA', open: 4, late: 0, soon: 1, moved: 0, next: 21, last: -14, flagged: 1, issues: 0 },
+    { key: 'DOS', name: 'Dosimetry', open: 7, late: 0, soon: 2, moved: 1, next: 27, last: -2, flagged: 2, issues: 0 },
+    { key: 'RP', name: 'Radiological Protection', open: 21, late: 2, soon: 3, moved: 2, next: 4, last: -10, flagged: 1, issues: 1 },
+    { key: 'DSL', name: 'DSL', open: 5, late: 0, soon: 0, moved: 0, next: 28, last: -7, flagged: 0, issues: 0 },
+    { key: 'ALS', name: 'Active Lab & Sampling', open: 9, late: 0, soon: 1, moved: 1, next: 32, last: -1, flagged: 0, issues: 1 },
+    { key: 'RW', name: 'Radwaste', open: 6, late: 3, soon: 1, moved: 1, next: 20, last: -15, flagged: 3, issues: 0 }
+  ];
+  var BY = {};
+  AREAS.forEach(function (a) { BY[a.key] = a; });
+
+  var PEOPLE = {
+    tech: { first: 'Rachel', full: 'Rachel Boulden', initials: 'RB', role: 'Technician', areas: ['FLK', 'INS', 'GRS', 'DOS', 'RP', 'ALS'] },
+    eng: { first: 'Kelly', full: 'Kelly Bates', initials: 'KB', role: 'Engineer', areas: ['FLK', 'GRS', 'RP', 'DSL', 'RW'] },
+    mgmt: { first: 'Joseph', full: 'Joseph Pepper', initials: 'JP', role: 'Team Leader', areas: AREAS.map(function (a) { return a.key; }) }
+  };
+
+  // [reference, title, area, due offset in days, extra]
+  var MINE = {
+    tech: [
+      ['ACT-00042', 'Replace FH40 probe', 'FLK', -2, { moved: 1 }],
+      ['ACT-00057', 'Update dosimetry issue log', 'DOS', 0, {}],
+      ['ACT-00061', 'Review RP survey frequencies', 'RP', 2, {}],
+      ['ACT-00064', 'Calibrate sampling line flow meter', 'ALS', 5, { waiting: 'Spare parts on order' }],
+      ['ACT-00070', 'Green Stream handover notes', 'GRS', 17, {}],
+      ['ACT-00071', 'Instrument loan register tidy-up', 'INS', 28, {}]
+    ],
+    eng: [
+      ['ACT-00038', 'Approve revised drum store labels', 'RW', -4, { moved: 2 }],
+      ['ACT-00055', 'Review Green Stream sample results', 'GRS', 1, {}],
+      ['ACT-00066', 'Update DSL operating instruction', 'DSL', 6, {}],
+      ['ACT-00073', 'Flask procedure FLK-03 rewrite', 'FLK', 24, {}]
+    ],
+    mgmt: [
+      ['ACT-00049', 'Agree Q4 training priorities', 'RP', 3, {}],
+      ['ACT-00068', 'Sign off Radwaste audit response', 'RW', 35, {}]
+    ]
+  };
+
+  var MANAGE = {
+    eng: [
+      { kind: 'Close-out check', text: 'Leak-test kit replacement is done – check and close it', area: 'FLK', ref: 'ACT-00031' },
+      { kind: 'Late', text: 'Green Stream sampling backlog is 9 days late (Luke Cain)', area: 'GRS', ref: 'ACT-00022' },
+      { kind: 'Late', text: 'Drum inventory reconciliation is 2 days late (Adam Washford)', area: 'RW', ref: 'ACT-00040' },
+      { kind: 'For the meeting', text: '3 items flagged for the Radwaste meeting', area: 'RW' },
+      { kind: 'Meeting', text: 'No Green Stream meeting since 2 September', area: 'GRS' }
+    ],
+    mgmt: [
+      { kind: 'Late', text: '9 actions are late across 4 areas', area: null },
+      { kind: 'Meeting', text: 'Green Stream has not met since 2 September', area: 'GRS' },
+      { kind: 'Deadlines', text: '6 actions have had their deadline moved twice or more', area: null },
+      { kind: 'Issue', text: '2 degradations are unresolved in Green Stream', area: 'GRS' },
+      { kind: 'Late', text: 'Radwaste has 3 late actions out of 6 open', area: 'RW' }
+    ]
+  };
+
+  var NOTICES = [
+    { area: 'RP', title: 'New contamination survey forms from Monday', by: 'Andrea Medlicott', age: 0, important: true },
+    { area: 'FLK', title: 'FH40 spares now in the stores cage', by: 'Nick Pearce', age: 1, important: false },
+    { area: 'GRS', title: 'Sampling point SP-4 out of use until further notice', by: 'Kai Todd', age: 2, important: true },
+    { area: 'DOS', title: 'Dosimeter issue times change in November', by: 'Doti Cange-Ainsworth', age: 3, important: false },
+    { area: 'ALS', title: 'Fume cupboard 2 back in service', by: 'Trevor Baldwin', age: 4, important: false }
+  ];
+
+  var DATES = [
+    { area: 'RP', title: 'Instrument calibration day', day: 6 },
+    { area: 'GRS', title: 'Station outage planning review', day: 11 },
+    { area: 'FLK', title: 'External audit visit', day: 14 }
+  ];
+
+  function dueText(off) {
+    if (off < -1) return (-off) + ' days late';
+    if (off === -1) return '1 day late';
+    if (off === 0) return 'Due today';
+    if (off === 1) return 'Due tomorrow';
+    if (off < 7) return 'Due ' + WD[d(off).getUTCDay()];
+    return 'Due ' + short(d(off));
+  }
+  function band(off) { return off < 0 ? 'late' : off < 7 ? 'soon' : 'later'; }
+
+  window.CHDATA = function (role) {
+    var p = PEOPLE[role];
+    var mine = MINE[role].map(function (r) {
+      return { ref: r[0], title: r[1], area: BY[r[2]], off: r[3], due: dueText(r[3]), band: band(r[3]), date: d(r[3]), moved: r[4].moved || 0, waiting: r[4].waiting || '' };
+    });
+    var areas = p.areas.map(function (k) {
+      var a = BY[k];
+      return {
+        key: a.key, name: a.name, open: a.open, late: a.late, soon: a.soon, moved: a.moved, flagged: a.flagged, issues: a.issues,
+        next: a.next === null ? null : d(a.next), nextText: a.next === null ? 'No meeting booked' : 'Meeting ' + wdShort(d(a.next)),
+        lastText: 'Last met ' + short(d(a.last)), stale: a.last < -35, nextIn: a.next
+      };
+    });
+    var meetings = areas.filter(function (a) { return a.next; }).sort(function (x, y) { return x.next - y.next; }).slice(0, 4)
+      .map(function (a) { return { area: a, date: a.next, when: wdShort(a.next), time: '10:00', place: 'Admin building, room 2', items: a.flagged + a.late + 4 }; });
+    var group = AREAS.reduce(function (t, a) { t.open += a.open; t.late += a.late; t.soon += a.soon; t.moved += a.moved; t.issues += a.issues; return t; }, { open: 0, late: 0, soon: 0, moved: 0, issues: 0, done30: 23 });
+    var hour = 9;
+    return {
+      role: role, isMgmt: role === 'mgmt', canManage: role !== 'tech', person: p,
+      greeting: (hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening') + ', ' + p.first,
+      todayLong: 'Friday 23 October 2026',
+      mine: mine,
+      late: mine.filter(function (a) { return a.band === 'late'; }),
+      soon: mine.filter(function (a) { return a.band === 'soon'; }),
+      later: mine.filter(function (a) { return a.band === 'later'; }),
+      areas: areas, allAreas: AREAS,
+      manage: MANAGE[role] || [],
+      meetings: meetings,
+      notices: NOTICES.filter(function (n) { return p.areas.indexOf(n.area) >= 0; }).map(function (n) {
+        return { area: BY[n.area], title: n.title, by: n.by, when: n.age === 0 ? 'Today' : n.age === 1 ? 'Yesterday' : n.age + ' days ago', important: n.important };
+      }),
+      dates: DATES.filter(function (x) { return p.areas.indexOf(x.area) >= 0; }).map(function (x) { return { area: BY[x.area], title: x.title, when: wdShort(d(x.day)), date: d(x.day) }; }),
+      group: group,
+      week: [0, 1, 2, 3, 4, 5, 6].map(function (i) {
+        var dt = d(i);
+        return {
+          date: dt, label: WD[dt.getUTCDay()].slice(0, 3), num: dt.getUTCDate(), today: i === 0, weekend: dt.getUTCDay() === 0 || dt.getUTCDay() === 6,
+          actions: mine.filter(function (a) { return a.off === i || (i === 0 && a.off < 0); }),
+          meetings: meetings.filter(function (m) { return Math.round((m.date - TODAY) / DAY) === i; })
+        };
+      }),
+      helpers: { short: short, wdShort: wdShort }
+    };
+  };
+
+  // Tiny element helper: h('div', {class: 'x', text: 'y'}, child, ...)
+  window.h = function (tag, attrs) {
+    var el = document.createElement(tag);
+    if (attrs) Object.keys(attrs).forEach(function (k) {
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) return;
+      if (k === 'text') el.textContent = v;
+      else if (k === 'class') el.className = v;
+      else if (k === 'style') el.setAttribute('style', v);
+      else if (k.slice(0, 2) === 'on') el.addEventListener(k.slice(2), v);
+      else el.setAttribute(k, v === true ? '' : v);
+    });
+    for (var i = 2; i < arguments.length; i++) {
+      var c = arguments[i];
+      if (c === null || c === undefined || c === false) continue;
+      if (Array.isArray(c)) c.forEach(function (x) { if (x) el.appendChild(typeof x === 'string' ? document.createTextNode(x) : x); });
+      else el.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+    }
+    return el;
+  };
+})();
+</script>
+<script>window.DESIGN = {n: 4, name: document.title.split(" – ").pop(), files: ["design-1-control.html", "design-2-editorial.html", "design-3-operations.html", "design-4-week.html", "design-5-bento.html"]};</script>
+
+<style>
+  :root {
+    --bg: #f5f4fb; --card: #fff; --ink: #1d1a33; --muted: #625e7c; --line: #e6e3f2;
+    --brand: #4b3fb5; --brand-2: #6d5fe0; --brand-soft: #ecebfb;
+    --late: #c2273a; --late-bg: #fdecef; --soon: #9a5b00; --soon-bg: #fff3dc; --later: #4b5a6d; --later-bg: #eef1f5; --ok: #1e7d55; --mtg: #0d6e8c; --mtg-bg: #e3f4f8;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14.5px/1.5 "Segoe UI", system-ui, Arial, sans-serif; }
+  button { font: inherit; cursor: pointer; }
+  .bar { display: flex; align-items: center; gap: 18px; padding: 14px 36px; }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px; }
+  .logo .dot { width: 30px; height: 30px; border-radius: 50%; background: conic-gradient(from 200deg, var(--brand), #9b8cff, var(--brand)); }
+  .pills { display: flex; gap: 4px; background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 4px; margin: 0 auto; }
+  .pills a { text-decoration: none; color: var(--muted); padding: 6px 16px; border-radius: 999px; font-weight: 600; font-size: 13.5px; }
+  .pills a[aria-current] { background: var(--brand); color: #fff; }
+  .me { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+  .me b { color: var(--ink); display: block; font-size: 13.5px; line-height: 1.2; }
+  .av { width: 36px; height: 36px; border-radius: 50%; background: var(--brand-soft); color: var(--brand); display: grid; place-items: center; font-weight: 700; }
+  .env { font-size: 11.5px; font-weight: 700; color: var(--soon); background: var(--soon-bg); border-radius: 999px; padding: 2px 10px; }
+
+  .page { padding: 8px 36px 44px; display: flex; flex-direction: column; gap: 26px; }
+  .hero { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+  .hero h1 { margin: 0; font-size: 30px; font-weight: 700; letter-spacing: -.4px; }
+  .hero p { margin: 2px 0 0; color: var(--muted); font-size: 15.5px; }
+  .hero .go { margin-left: auto; display: flex; gap: 10px; }
+  .btn { border-radius: 999px; padding: 10px 20px; font-weight: 700; border: 1.5px solid var(--line); background: #fff; color: var(--ink); }
+  .btn.main { background: var(--brand); border-color: var(--brand); color: #fff; box-shadow: 0 6px 16px rgba(75,63,181,.25); }
+  .btn:focus-visible, a:focus-visible, .card:focus-visible { outline: 3px solid var(--brand-2); outline-offset: 2px; }
+
+  .week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; }
+  .day { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 12px 12px 14px; min-height: 168px; display: flex; flex-direction: column; gap: 7px; }
+  .day.today { border: 2px solid var(--brand); box-shadow: 0 8px 22px rgba(75,63,181,.12); }
+  .day.weekend { background: #faf9fd; }
+  .day .dh { display: flex; align-items: baseline; gap: 8px; }
+  .day .dh b { font-size: 24px; font-weight: 700; line-height: 1; }
+  .day .dh span { color: var(--muted); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; }
+  .day .dh em { margin-left: auto; font-style: normal; font-size: 11px; font-weight: 700; color: #fff; background: var(--brand); border-radius: 999px; padding: 1px 8px; }
+  .ev { border-radius: 9px; padding: 6px 9px; font-size: 12.5px; line-height: 1.3; }
+  .ev b { display: block; font-weight: 600; }
+  .ev.late { background: var(--late-bg); color: var(--late); } .ev.soon { background: var(--soon-bg); color: #6b4000; } .ev.mtg { background: var(--mtg-bg); color: var(--mtg); }
+  .day .none { color: #a19dbb; font-size: 12.5px; margin-top: auto; }
+
+  .lanes { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 18px; align-items: start; }
+  .lane { background: #ecebf6; border-radius: 18px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .lane h2 { margin: 0 4px 2px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  .lane h2 i { width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
+  .lane h2 span { margin-left: auto; background: #fff; color: var(--muted); border-radius: 999px; padding: 0 9px; font-size: 12px; }
+  .card { background: #fff; border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 1px 2px rgba(29,26,51,.06); border: 1px solid transparent; cursor: pointer; }
+  .card:hover { border-color: #cfcaf1; }
+  .card .t { font-weight: 600; line-height: 1.35; }
+  .card .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .tag { font-size: 11.5px; font-weight: 600; border-radius: 6px; padding: 1px 8px; background: var(--brand-soft); color: var(--brand); }
+  .due { font-size: 11.5px; font-weight: 700; border-radius: 6px; padding: 1px 8px; margin-left: auto; }
+  .due.late { background: var(--late-bg); color: var(--late); } .due.soon { background: var(--soon-bg); color: var(--soon); } .due.later { background: var(--later-bg); color: var(--later); }
+  .card .s { font-size: 12.5px; color: var(--muted); }
+  .empty { background: rgba(255,255,255,.6); border: 1.5px dashed #d4d0ea; border-radius: 12px; padding: 16px; color: var(--muted); text-align: center; font-size: 13px; }
+
+  .h2 { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; } .h2 h2 { margin: 0; font-size: 17px; } .h2 a { margin-left: auto; color: var(--brand); font-weight: 700; text-decoration: none; font-size: 13.5px; }
+  .areas { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+  .area { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; }
+  .area .ring { width: 42px; height: 42px; border-radius: 50%; flex: none; display: grid; place-items: center; font-weight: 700; font-size: 13px; background: conic-gradient(var(--late) calc(var(--p) * 1%), #2f9d6c 0); }
+  .area .ring span { width: 32px; height: 32px; border-radius: 50%; background: #fff; display: grid; place-items: center; }
+  .area b { display: block; font-size: 14px; line-height: 1.25; } .area small { color: var(--muted); font-size: 12.5px; }
+  .bottom { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 26px; }
+  .news { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 4px 18px; }
+  .news div { padding: 12px 0; border-bottom: 1px solid var(--line); display: flex; gap: 12px; align-items: baseline; }
+  .news div:last-child { border-bottom: 0; }
+  .news b { font-weight: 600; } .news small { color: var(--muted); display: block; font-size: 12.5px; }
+  .imp { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #c9c5e0; transform: translateY(-1px); } .imp.on { background: #e8642c; }
+  @media (max-width: 1350px) { .week { grid-template-columns: repeat(4, 1fr); } .lanes { grid-template-columns: 1fr 1fr; } .bottom { grid-template-columns: 1fr; } }
+  @media (max-width: 800px) { .week, .lanes { grid-template-columns: 1fr; } .pills { display: none; } .page, .bar { padding-left: 16px; padding-right: 16px; } }
+</style>
+</head>
+<body>
+<div id="pv"></div>
+<script>
+window.renderDesign = function (root, D) {
+  var bar = h('header', { class: 'bar' },
+    h('div', { class: 'logo' }, h('span', { class: 'dot' }), 'Competency Hub'),
+    h('span', { class: 'env', text: 'TEST' }),
+    h('nav', { class: 'pills', 'aria-label': 'Main' }, ['My week', 'Actions', 'Areas', 'Notices', 'Meetings'].concat(D.isMgmt ? ['Management'] : []).map(function (x, i) { return h('a', { href: '#', 'aria-current': i === 0 ? 'page' : null, text: x }); })),
+    h('div', { class: 'me' }, h('div', null, h('b', { text: D.person.full }), D.person.role), h('div', { class: 'av', text: D.person.initials })));
+
+  var hero = h('section', { class: 'hero' },
+    h('div', null, h('h1', { text: D.greeting }),
+      h('p', { text: D.late.length ? 'Start with the ' + (D.late.length === 1 ? 'late action' : D.late.length + ' late actions') + ', then the rest of your week is below.' : 'Here is your week at a glance.' })),
+    h('div', { class: 'go' }, h('button', { class: 'btn', type: 'button', text: 'Post a notice' }), h('button', { class: 'btn main', type: 'button', text: '+ Raise an action' })));
+
+  var week = h('section', { 'aria-label': 'This week' },
+    h('div', { class: 'h2' }, h('h2', { text: 'This week' }), h('a', { href: '#', text: 'Open calendar →' })),
+    h('div', { class: 'week' }, D.week.map(function (d) {
+      var evs = d.actions.map(function (a) { return h('div', { class: 'ev ' + (a.off < 0 ? 'late' : 'soon') }, h('b', { text: a.title }), a.off < 0 ? a.due : a.area.name); })
+        .concat(d.meetings.map(function (m) { return h('div', { class: 'ev mtg' }, h('b', { text: m.area.name + ' meeting' }), m.time); }));
+      return h('div', { class: 'day' + (d.today ? ' today' : '') + (d.weekend ? ' weekend' : '') },
+        h('div', { class: 'dh' }, h('b', { text: String(d.num) }), h('span', { text: d.label }), d.today ? h('em', { text: 'Today' }) : null),
+        evs.length ? evs : h('div', { class: 'none', text: d.weekend ? 'Weekend' : 'Nothing due' }));
+    })));
+
+  function card(a) {
+    return h('div', { class: 'card', tabindex: '0' }, h('div', { class: 't', text: a.title }),
+      h('div', { class: 'row' }, h('span', { class: 'tag', text: a.area.name }), h('span', { class: 'due ' + a.band, text: a.due })),
+      a.waiting || a.moved ? h('div', { class: 's', text: a.waiting ? 'Waiting on: ' + a.waiting : 'Deadline moved ' + (a.moved === 1 ? 'once' : a.moved + ' times') }) : null);
+  }
+  function lane(title, c, items, emptyText) {
+    return h('div', { class: 'lane' }, h('h2', { style: '--c:' + c }, h('i'), title, h('span', { text: String(items.length) })),
+      items.length ? items : h('div', { class: 'empty', text: emptyText }));
+  }
+  var lanesList = [];
+  if (D.canManage) lanesList.push(lane(D.isMgmt ? 'Needs your attention' : 'For you to manage', '#4b3fb5', D.manage.map(function (m) {
+    return h('div', { class: 'card', tabindex: '0' }, h('div', { class: 't', text: m.text }), h('div', { class: 'row' }, h('span', { class: 'tag', style: 'background:#eef1f5;color:#4b5a6d', text: m.kind })));
+  }), 'Nothing needs you right now.'));
+  lanesList.push(lane('Late', '#c2273a', D.late.map(card), 'Nothing late. Nice work.'));
+  lanesList.push(lane('Due this week', '#d08a12', D.soon.map(card), 'Nothing due this week.'));
+  lanesList.push(lane('Coming up', '#8a95a5', D.later.map(card), 'Nothing further ahead.'));
+  var lanes = h('section', null, h('div', { class: 'h2' }, h('h2', { text: D.isMgmt ? 'Your work' : 'Your actions' }), h('a', { href: '#', text: 'See all, including finished →' })),
+    h('div', { class: 'lanes', style: '--n:' + lanesList.length }, lanesList));
+
+  var areas = h('section', null, h('div', { class: 'h2' }, h('h2', { text: D.isMgmt ? 'All areas' : 'Your areas' }), h('a', { href: '#', text: 'Browse every area →' })),
+    h('div', { class: 'areas' }, D.areas.map(function (a) {
+      var p = a.open ? Math.round(a.late / a.open * 100) : 0;
+      return h('a', { href: '#', class: 'area' }, h('span', { class: 'ring', style: '--p:' + p, 'aria-hidden': 'true' }, h('span', { text: String(a.open) })),
+        h('span', null, h('b', { text: a.name }), h('small', { style: a.late ? 'color:var(--late);font-weight:600' : '', text: a.late ? a.late + ' late of ' + a.open + ' open' : a.open + ' open, none late' })));
+    })));
+
+  var bottom = h('div', { class: 'bottom' },
+    h('section', null, h('div', { class: 'h2' }, h('h2', { text: 'From the noticeboards' }), h('a', { href: '#', text: 'All notices →' })),
+      h('div', { class: 'news' }, D.notices.slice(0, 4).map(function (n) { return h('div', null, h('span', { class: 'imp' + (n.important ? ' on' : ''), title: n.important ? 'Important' : '' }), h('span', null, h('b', { text: n.title }), h('small', { text: (n.important ? 'Important · ' : '') + n.area.name + ' · ' + n.by + ' · ' + n.when }))); }))),
+    h('section', null, h('div', { class: 'h2' }, h('h2', { text: 'Next meetings' })),
+      h('div', { class: 'news' }, D.meetings.map(function (m) { return h('div', null, h('span', { class: 'imp', style: 'background:var(--mtg)' }), h('span', null, h('b', { text: m.area.name }), h('small', { text: m.when + ' · ' + m.time + ' · ' + m.items + ' agenda items' }))); }))));
+
+  root.appendChild(bar);
+  root.appendChild(h('main', { class: 'page' }, hero, week, lanes, areas, bottom));
+};
+</script>
+<script>
+// Preview controls: design name, previous/next design and "Preview as". Stands in for SharePoint's own bar.
+(function () {
+  'use strict';
+  var D = window.DESIGN;
+  var ROLES = [['tech', 'Technician'], ['eng', 'Engineer'], ['mgmt', 'Team Leader']];
+  var params = new URLSearchParams(location.search);
+  var role = params.get('role') || 'tech';
+  if (!ROLES.some(function (r) { return r[0] === role; })) role = 'tech';
+
+  function bar() {
+    var b = h('div', { class: 'pv-switch', role: 'navigation', 'aria-label': 'Preview controls' },
+      h('span', { class: 'pv-name' }, h('b', { text: 'Design ' + D.n + ' of 5' }), ' · ' + D.name),
+      D.n > 1 ? h('a', { href: D.files[D.n - 2] + '?role=' + role, text: '‹ Previous' }) : null,
+      D.n < 5 ? h('a', { href: D.files[D.n] + '?role=' + role, text: 'Next ›' }) : null,
+      h('span', { class: 'pv-sep', text: 'Preview as' }),
+      ROLES.map(function (r) {
+        return h('button', { type: 'button', 'aria-pressed': String(r[0] === role), text: r[1], onclick: function () { role = r[0]; history.replaceState(null, '', '?role=' + role); draw(); } });
+      }));
+    return b;
+  }
+  function draw() {
+    var root = document.getElementById('pv');
+    root.textContent = '';
+    root.appendChild(bar());
+    var app = h('div', { class: 'pv-app' });
+    root.appendChild(app);
+    window.renderDesign(app, window.CHDATA(role));
+  }
+  document.addEventListener('DOMContentLoaded', draw);
+})();
+</script>
+</body>
+</html>

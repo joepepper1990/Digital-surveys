@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ESG Competency Hub – Bento</title>
+<!--@SHARED-->
+<style>
+  :root {
+    --bg: #eceef1; --tile: #fff; --ink: #14171c; --muted: #5f6673; --line: #e3e6ea; --dark: #15191f; --dark-2: #222831;
+    --coral: #e8553b; --coral-soft: #fde9e4; --mint: #13996f; --mint-soft: #e2f5ee; --amber: #b7791f; --amber-soft: #fdf1dc; --sky: #2563c9; --sky-soft: #e5eefc;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 "Segoe UI", system-ui, Arial, sans-serif; }
+  button { font: inherit; cursor: pointer; }
+  .shell { padding: 20px 28px 36px; display: flex; flex-direction: column; gap: 18px; }
+  .top { display: flex; align-items: center; gap: 16px; }
+  .wordmark { font-size: 18px; font-weight: 800; letter-spacing: -.3px; }
+  .wordmark span { color: var(--coral); }
+  .seg { display: flex; gap: 2px; background: #dfe2e7; border-radius: 10px; padding: 3px; margin-left: 18px; }
+  .seg a { text-decoration: none; color: #3d4450; padding: 6px 14px; border-radius: 8px; font-weight: 600; font-size: 13px; }
+  .seg a[aria-current] { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .user { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+  .user b { color: var(--ink); }
+  .av { width: 34px; height: 34px; border-radius: 10px; background: var(--dark); color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 12px; }
+  .env { font-size: 11px; font-weight: 700; background: var(--amber-soft); color: var(--amber); border-radius: 6px; padding: 2px 8px; }
+
+  .bento { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px;
+    grid-template-areas: "hero hero hero hero hero hero s1 s1 s2 s2 s3 s3" "hero hero hero hero hero hero at at at at at at" "do do do li li li li li mt mt mt mt" "do do do li li li li li no no no no" "ar ar ar ar ar ar ar ar ar ar ar ar"; }
+  .t { background: var(--tile); border-radius: 20px; padding: 20px 22px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .t h2 { margin: 0; font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; display: flex; align-items: center; gap: 8px; }
+  .t h2 a { margin-left: auto; color: var(--sky); text-transform: none; letter-spacing: 0; text-decoration: none; font-size: 13px; }
+
+  .hero { grid-area: hero; background: var(--dark); color: #fff; position: relative; overflow: hidden; }
+  .hero::after { content: ""; position: absolute; right: -80px; top: -80px; width: 280px; height: 280px; border-radius: 50%; background: radial-gradient(circle, rgba(232,85,59,.55), rgba(232,85,59,0) 70%); }
+  .hero .hi { font-size: 15px; color: #b8c0cc; }
+  .hero h1 { margin: 0; font-size: 34px; line-height: 1.1; letter-spacing: -.6px; font-weight: 700; max-width: 16ch; position: relative; z-index: 1; }
+  .hero .up { margin-top: auto; background: var(--dark-2); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; position: relative; z-index: 1; }
+  .hero .up small { color: #ff9b86; font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+  .hero .up b { font-size: 17px; } .hero .up span { color: #b8c0cc; font-size: 13px; }
+  .hero .row { display: flex; gap: 10px; position: relative; z-index: 1; }
+  .btn { border: 0; border-radius: 12px; padding: 11px 18px; font-weight: 700; }
+  .btn.coral { background: var(--coral); color: #fff; } .btn.ghost { background: rgba(255,255,255,.1); color: #fff; }
+  .btn:focus-visible, a:focus-visible { outline: 3px solid var(--sky); outline-offset: 2px; }
+
+  .stat { justify-content: space-between; min-height: 150px; } .stat.late { grid-area: s1; } .stat.soon { grid-area: s2; } .stat.ok { grid-area: s3; }
+  .stat .big { font-size: 48px; font-weight: 800; line-height: 1; letter-spacing: -1.5px; }
+  .stat .cap { color: var(--muted); font-size: 13px; }
+  .stat.late { background: var(--coral-soft); } .stat.late .big { color: var(--coral); }
+  .stat.soon { background: var(--amber-soft); } .stat.soon .big { color: var(--amber); }
+  .stat.ok { background: var(--mint-soft); } .stat.ok .big { color: var(--mint); }
+
+  .donut { grid-area: do; align-items: center; }
+  .ring { width: 170px; height: 170px; border-radius: 50%; display: grid; place-items: center; margin: 6px auto 4px; }
+  .ring div { width: 118px; height: 118px; background: #fff; border-radius: 50%; display: grid; place-items: center; text-align: center; }
+  .ring b { font-size: 36px; font-weight: 800; display: block; line-height: 1; } .ring small { color: var(--muted); font-size: 12px; }
+  .legend { display: flex; flex-direction: column; gap: 6px; width: 100%; font-size: 13px; }
+  .legend span { display: flex; align-items: center; gap: 8px; } .legend i { width: 10px; height: 10px; border-radius: 3px; background: var(--c); } .legend em { margin-left: auto; font-style: normal; font-weight: 700; }
+
+  .list { grid-area: li; }
+  .items { display: flex; flex-direction: column; gap: 8px; }
+  .it { display: grid; grid-template-columns: 4px 1fr auto; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .it:last-child { border-bottom: 0; }
+  .it i { align-self: stretch; border-radius: 2px; background: var(--c); }
+  .it b { display: block; font-weight: 600; } .it small { color: var(--muted); font-size: 12.5px; }
+  .it em { font-style: normal; font-size: 12px; font-weight: 700; color: var(--c); white-space: nowrap; }
+
+  .areas { grid-area: ar; }
+  .agrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 10px; }
+  .ac { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; text-decoration: none; color: inherit; }
+  .ac:hover { border-color: #c4cad3; background: #fafbfc; }
+  .ac b { font-size: 14.5px; } .ac small { color: var(--muted); font-size: 12.5px; }
+  .meter { height: 6px; background: #edf0f3; border-radius: 3px; overflow: hidden; display: flex; }
+  .meter span { height: 100%; }
+  .badge { align-self: flex-start; font-size: 11.5px; font-weight: 700; border-radius: 6px; padding: 1px 8px; }
+  .badge.late { background: var(--coral-soft); color: var(--coral); } .badge.ok { background: var(--mint-soft); color: var(--mint); }
+
+  .mtg { grid-area: mt; }
+  .mrow { display: flex; gap: 12px; align-items: center; padding: 6px 0; }
+  .cal { width: 46px; flex: none; border-radius: 10px; overflow: hidden; text-align: center; border: 1px solid var(--line); }
+  .cal small { display: block; background: var(--sky); color: #fff; font-size: 10.5px; font-weight: 700; text-transform: uppercase; padding: 1px 0; }
+  .cal b { display: block; font-size: 18px; padding: 2px 0 3px; }
+  .mrow span b { display: block; font-weight: 600; } .mrow span small { color: var(--muted); font-size: 12.5px; }
+  .notes { grid-area: no; }
+  .note { padding: 7px 0; border-bottom: 1px solid var(--line); } .note:last-child { border-bottom: 0; }
+  .note b { display: block; font-weight: 600; } .note small { color: var(--muted); font-size: 12.5px; }
+  .pin { color: var(--coral); font-weight: 700; }
+  .attn { grid-area: at; background: var(--sky-soft); }
+  .attn ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+  .attn li { background: #fff; border-radius: 12px; padding: 9px 12px; } .attn li small { display: block; color: var(--sky); font-weight: 700; font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; }
+  @media (max-width: 1400px) { .bento { grid-template-areas: "hero hero hero hero hero hero hero hero hero hero hero hero" "s1 s1 s1 s1 s2 s2 s2 s2 s3 s3 s3 s3" "at at at at at at at at at at at at" "do do do do li li li li li li li li" "mt mt mt mt mt mt no no no no no no" "ar ar ar ar ar ar ar ar ar ar ar ar"; } }
+  @media (max-width: 800px) { .bento { grid-template-areas: none; grid-template-columns: 1fr; } .bento > * { grid-area: auto !important; } .seg { display: none; } .shell { padding: 14px 16px 28px; } }
+</style>
+</head>
+<body>
+<div id="pv"></div>
+<script>
+window.renderDesign = function (root, D) {
+  var M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var top = h('header', { class: 'top' },
+    h('div', { class: 'wordmark' }, 'Competency', h('span', { text: 'Hub' })),
+    h('span', { class: 'env', text: 'TEST DATA' }),
+    h('nav', { class: 'seg', 'aria-label': 'Main' }, ['Home', 'My actions', 'Areas', 'Notices', 'Meetings'].concat(D.isMgmt ? ['Management'] : []).map(function (x, i) { return h('a', { href: '#', 'aria-current': i === 0 ? 'page' : null, text: x }); })),
+    h('div', { class: 'user' }, h('span', null, h('b', { text: D.person.full }), ' · ' + D.person.role), h('div', { class: 'av', text: D.person.initials })));
+
+  var first = D.late[0] || D.soon[0] || D.later[0];
+  var hero = h('section', { class: 't hero' },
+    h('div', { class: 'hi', text: D.todayLong }),
+    h('h1', { text: D.greeting + '.' }),
+    first ? h('div', { class: 'up' }, h('small', { text: first.band === 'late' ? 'Do this first' : 'Next up' }), h('b', { text: first.title }), h('span', { text: first.area.name + ' · ' + first.due })) : null,
+    h('div', { class: 'row' }, h('button', { class: 'btn coral', type: 'button', text: 'Raise an action' }), h('button', { class: 'btn ghost', type: 'button', text: 'Post a notice' })));
+
+  var src = D.isMgmt ? { late: D.group.late, soon: D.group.soon, open: D.group.open } : { late: D.late.length, soon: D.soon.length, open: D.mine.length };
+  var stats = [
+    h('section', { class: 't stat late' }, h('h2', { text: 'Late' }), h('div', null, h('div', { class: 'big', text: String(src.late) }), h('div', { class: 'cap', text: D.isMgmt ? 'across the group' : src.late ? 'start with these' : 'nothing late' }))),
+    h('section', { class: 't stat soon' }, h('h2', { text: 'Next 7 days' }), h('div', null, h('div', { class: 'big', text: String(src.soon) }), h('div', { class: 'cap', text: 'due soon' }))),
+    h('section', { class: 't stat ok' }, h('h2', { text: D.isMgmt ? 'Done in 30 days' : 'Areas' }), h('div', null, h('div', { class: 'big', text: String(D.isMgmt ? D.group.done30 : D.areas.length) }), h('div', { class: 'cap', text: D.isMgmt ? 'actions completed' : 'you belong to' })))
+  ];
+
+  var other = Math.max(src.open - src.late - src.soon, 0);
+  var pl = src.open ? src.late / src.open * 100 : 0, ps = src.open ? src.soon / src.open * 100 : 0;
+  var donut = h('section', { class: 't donut' }, h('h2', { style: 'align-self:stretch', text: D.isMgmt ? 'Group actions' : 'Your actions' }),
+    h('div', { class: 'ring', style: 'background:conic-gradient(var(--coral) 0 ' + pl + '%, #e8a73c ' + pl + '% ' + (pl + ps) + '%, #9fb4cc ' + (pl + ps) + '% 100%)' },
+      h('div', null, h('span', null, h('b', { text: String(src.open) }), h('small', { text: 'open' })))),
+    h('div', { class: 'legend' },
+      h('span', { style: '--c:var(--coral)' }, h('i'), 'Late', h('em', { text: String(src.late) })),
+      h('span', { style: '--c:#e8a73c' }, h('i'), 'Due in 7 days', h('em', { text: String(src.soon) })),
+      h('span', { style: '--c:#9fb4cc' }, h('i'), 'Later', h('em', { text: String(other) }))));
+
+  var colour = { late: 'var(--coral)', soon: 'var(--amber)', later: '#8b95a3' };
+  var list = h('section', { class: 't list' }, h('h2', null, D.isMgmt ? 'Your own actions' : 'Your actions', h('a', { href: '#', text: 'See all' })),
+    h('div', { class: 'items' }, D.mine.slice(0, 6).map(function (a) {
+      return h('div', { class: 'it', style: '--c:' + colour[a.band] }, h('i'), h('span', null, h('b', { text: a.title }), h('small', { text: a.area.name + (a.waiting ? ' · Waiting on: ' + a.waiting : '') })), h('em', { text: a.due }));
+    })));
+
+  var areas = h('section', { class: 't areas' }, h('h2', null, D.isMgmt ? 'All ten areas' : 'Your areas', h('a', { href: '#', text: 'Browse areas' })),
+    h('div', { class: 'agrid' }, D.areas.map(function (a) {
+      var max = 22;
+      return h('a', { href: '#', class: 'ac' }, h('b', { text: a.name }),
+        h('span', { class: 'badge ' + (a.late ? 'late' : 'ok'), text: a.late ? a.late + ' late' : 'On track' }),
+        h('div', { class: 'meter', 'aria-hidden': 'true' }, h('span', { style: 'width:' + a.late / max * 100 + '%;background:var(--coral)' }), h('span', { style: 'width:' + a.soon / max * 100 + '%;background:#e8a73c' }), h('span', { style: 'width:' + (a.open - a.late - a.soon) / max * 100 + '%;background:#9fb4cc' })),
+        h('small', { text: a.open + ' open · ' + (a.stale ? 'no meeting since 2 Sep' : a.next ? 'meets ' + D.helpers.short(a.next) : 'no meeting booked') }));
+    })));
+
+  var mtg = h('section', { class: 't mtg' }, h('h2', null, 'Meetings', h('a', { href: '#', text: 'All' })),
+    D.meetings.slice(0, 3).map(function (m) { return h('div', { class: 'mrow' }, h('div', { class: 'cal' }, h('small', { text: M[m.date.getUTCMonth()] }), h('b', { text: String(m.date.getUTCDate()) })), h('span', null, h('b', { text: m.area.name }), h('small', { text: m.time + ' · ' + m.items + ' agenda items' }))); }));
+
+  var notes = h('section', { class: 't notes' }, h('h2', null, 'Notices', h('a', { href: '#', text: 'All' })),
+    D.notices.slice(0, 3).map(function (n) { return h('div', { class: 'note' }, h('b', null, n.important ? h('span', { class: 'pin', text: '● ' }) : null, n.title), h('small', { text: n.area.name + ' · ' + n.when })); }));
+
+  var attn = D.manage.length ? h('section', { class: 't attn' }, h('h2', { text: D.isMgmt ? 'Needs your attention' : 'For you to manage' }),
+    h('ul', null, D.manage.slice(0, 4).map(function (m) { return h('li', null, h('small', { text: m.kind }), m.text); }))) : null;
+
+  var grid = h('div', { class: 'bento' }, hero, stats, donut, list, areas, attn || h('section', { class: 't attn' }, h('h2', { text: 'Coming up' }), h('ul', null, D.dates.map(function (x) { return h('li', null, h('small', { text: x.when }), x.title + ' · ' + x.area.name); }))), mtg, notes);
+  root.appendChild(h('div', { class: 'shell' }, top, grid));
+};
+</script>
+<!--@SWITCH-->
+</body>
+</html>

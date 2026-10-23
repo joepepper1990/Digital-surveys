@@ -1,0 +1,5 @@
+.pv-switch { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; gap: 10px; padding: 6px 14px; background: #1f1f1f; color: #eee; font: 12px/1.4 "Segoe UI", Arial, sans-serif; white-space: nowrap; overflow-x: auto; }
+.pv-switch a { color: #fff; text-decoration: none; border: 1px solid #555; border-radius: 4px; padding: 2px 8px; }
+.pv-switch .pv-sep { margin-left: auto; opacity: .7; }
+.pv-switch button { font: inherit; color: #fff; background: #333; border: 1px solid #555; border-radius: 4px; padding: 2px 9px; cursor: pointer; }
+.pv-switch button[aria-pressed="true"] { background: #fff; color: #111; border-color: #fff; }
