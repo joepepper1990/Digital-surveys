@@ -16,6 +16,8 @@ This project is separate from the other applications in this repository.
 | Flows (`04-solution/`) | 1.2.0.0 running on the site. **1.4.1.0** (four flows: Daily tasks, Request queue, Queue monitor, Administration) built and tested locally |
 | Permission probe (`probe/CH_Probe_P2.*`) | Built and tested locally; to be run on the site with an ordinary test account |
 
+The plan for everything left to go-live is in `docs/REMAINING-PLAN.md`.
+
 Phase 1 is delivered in six releases; Releases 1 (safety net) and 2 (administration and permissions) are built.
 Release 3 (noticeboard, register, feedback, settings, dashboard), Releases 4 and 5 (meetings) and Release 6 (go-live
 checks) follow.
