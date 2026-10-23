@@ -179,136 +179,257 @@
 <style>
   :root {
     --bg: #f5f4fb; --card: #fff; --ink: #1d1a33; --muted: #625e7c; --line: #e6e3f2;
-    --brand: #4b3fb5; --brand-2: #6d5fe0; --brand-soft: #ecebfb;
-    --late: #c2273a; --late-bg: #fdecef; --soon: #9a5b00; --soon-bg: #fff3dc; --later: #4b5a6d; --later-bg: #eef1f5; --ok: #1e7d55; --mtg: #0d6e8c; --mtg-bg: #e3f4f8;
+    --brand: #4b3fb5; --brand-2: #6d5fe0; --brand-soft: #ecebfb; --well: #efedf8;
+    --late: #c2273a; --late-bg: #fdecef; --soon: #9a5b00; --soon-bg: #fff3dc; --later: #4b5a6d; --later-bg: #eef1f5;
+    --ok: #1e7d55; --ok-bg: #e4f4ec; --mtg: #0d6e8c; --mtg-bg: #e3f4f8;
+    --gap: 14px; --r: 14px; --head: 44px; --cardh: 56px;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 14.5px/1.5 "Segoe UI", system-ui, Arial, sans-serif; }
-  button { font: inherit; cursor: pointer; }
-  .bar { display: flex; align-items: center; gap: 18px; padding: 14px 36px; }
-  .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px; }
-  .logo .dot { width: 30px; height: 30px; border-radius: 50%; background: conic-gradient(from 200deg, var(--brand), #9b8cff, var(--brand)); }
-  .pills { display: flex; gap: 4px; background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 4px; margin: 0 auto; }
-  .pills a { text-decoration: none; color: var(--muted); padding: 6px 16px; border-radius: 999px; font-weight: 600; font-size: 13.5px; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--ink); font: 14px/1.45 "Segoe UI", system-ui, Arial, sans-serif; }
+  button { font: inherit; cursor: pointer; color: inherit; }
+  a { color: var(--brand); }
+  :focus-visible { outline: 3px solid var(--brand-2); outline-offset: 2px; }
+
+  /* The page fills the window exactly and never scrolls. */
+  #pv { height: 100vh; display: flex; flex-direction: column; }
+  .pv-app { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .bar { flex: none; display: flex; align-items: center; gap: 16px; height: 56px; padding: 0 24px; background: #fff; border-bottom: 1px solid var(--line); }
+  .logo { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 15.5px; white-space: nowrap; }
+  .logo .dot { width: 26px; height: 26px; border-radius: 50%; background: conic-gradient(from 200deg, var(--brand), #9b8cff, var(--brand)); }
+  .env { font-size: 11px; font-weight: 700; color: var(--soon); background: var(--soon-bg); border-radius: 999px; padding: 1px 9px; }
+  .pills { display: flex; gap: 2px; background: var(--well); border-radius: 999px; padding: 3px; margin-left: 10px; }
+  .pills a { text-decoration: none; color: var(--muted); padding: 5px 14px; border-radius: 999px; font-weight: 600; font-size: 13px; white-space: nowrap; }
   .pills a[aria-current] { background: var(--brand); color: #fff; }
-  .me { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
-  .me b { color: var(--ink); display: block; font-size: 13.5px; line-height: 1.2; }
-  .av { width: 36px; height: 36px; border-radius: 50%; background: var(--brand-soft); color: var(--brand); display: grid; place-items: center; font-weight: 700; }
-  .env { font-size: 11.5px; font-weight: 700; color: var(--soon); background: var(--soon-bg); border-radius: 999px; padding: 2px 10px; }
+  .bar .btns { margin-left: auto; display: flex; gap: 8px; }
+  .btn { border-radius: 999px; padding: 7px 16px; font-weight: 700; border: 1.5px solid var(--line); background: #fff; white-space: nowrap; }
+  .btn.main { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .me { display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+  .me b { color: var(--ink); display: block; font-size: 13px; line-height: 1.2; }
+  .av { width: 32px; height: 32px; border-radius: 50%; background: var(--brand-soft); color: var(--brand); display: grid; place-items: center; font-weight: 700; font-size: 12px; }
 
-  .page { padding: 8px 36px 44px; display: flex; flex-direction: column; gap: 26px; }
-  .hero { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
-  .hero h1 { margin: 0; font-size: 30px; font-weight: 700; letter-spacing: -.4px; }
-  .hero p { margin: 2px 0 0; color: var(--muted); font-size: 15.5px; }
-  .hero .go { margin-left: auto; display: flex; gap: 10px; }
-  .btn { border-radius: 999px; padding: 10px 20px; font-weight: 700; border: 1.5px solid var(--line); background: #fff; color: var(--ink); }
-  .btn.main { background: var(--brand); border-color: var(--brand); color: #fff; box-shadow: 0 6px 16px rgba(75,63,181,.25); }
-  .btn:focus-visible, a:focus-visible, .card:focus-visible { outline: 3px solid var(--brand-2); outline-offset: 2px; }
+  .hello { flex: none; display: flex; align-items: baseline; gap: 14px; padding: 14px 24px 10px; flex-wrap: wrap; }
+  .hello h1 { margin: 0; font-size: 22px; letter-spacing: -.3px; }
+  .hello p { margin: 0; color: var(--muted); font-size: 14.5px; }
+  .hello p b { color: var(--late); }
 
-  .week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; }
-  .day { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 12px 12px 14px; min-height: 168px; display: flex; flex-direction: column; gap: 7px; }
-  .day.today { border: 2px solid var(--brand); box-shadow: 0 8px 22px rgba(75,63,181,.12); }
-  .day.weekend { background: #faf9fd; }
-  .day .dh { display: flex; align-items: baseline; gap: 8px; }
-  .day .dh b { font-size: 24px; font-weight: 700; line-height: 1; }
-  .day .dh span { color: var(--muted); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; }
-  .day .dh em { margin-left: auto; font-style: normal; font-size: 11px; font-weight: 700; color: #fff; background: var(--brand); border-radius: 999px; padding: 1px 8px; }
-  .ev { border-radius: 9px; padding: 6px 9px; font-size: 12.5px; line-height: 1.3; }
-  .ev b { display: block; font-weight: 600; }
-  .ev.late { background: var(--late-bg); color: var(--late); } .ev.soon { background: var(--soon-bg); color: #6b4000; } .ev.mtg { background: var(--mtg-bg); color: var(--mtg); }
-  .day .none { color: #a19dbb; font-size: 12.5px; margin-top: auto; }
+  .stack { flex: 1; min-height: 0; display: grid; gap: var(--gap); padding: 0 24px 18px; }
+  .row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gap); min-height: 0; align-items: stretch; }
 
-  .lanes { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 18px; align-items: start; }
-  .lane { background: #ecebf6; border-radius: 18px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
-  .lane h2 { margin: 0 4px 2px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
-  .lane h2 i { width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
-  .lane h2 span { margin-left: auto; background: #fff; color: var(--muted); border-radius: 999px; padding: 0 9px; font-size: 12px; }
-  .card { background: #fff; border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 1px 2px rgba(29,26,51,.06); border: 1px solid transparent; cursor: pointer; }
+  /* One panel component for every section. */
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+  .panel.closed { align-self: start; }
+  .ph { flex: none; height: var(--head); display: flex; align-items: center; gap: 10px; padding: 0 8px 0 16px; border-bottom: 1px solid var(--line); }
+  .panel.closed .ph { border-bottom: 0; }
+  .ph button.tg { all: unset; display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; height: 100%; cursor: pointer; border-radius: 8px; }
+  .ph button.tg:focus-visible { outline: 3px solid var(--brand-2); outline-offset: -3px; }
+  .ph h2 { margin: 0; font-size: 14.5px; font-weight: 700; white-space: nowrap; }
+  .ph .sum { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ph .chev { margin-left: auto; width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: var(--muted); flex: none; transition: transform .15s; }
+  .panel.closed .chev { transform: rotate(-90deg); }
+  .ph a.all { font-size: 12.5px; font-weight: 700; text-decoration: none; white-space: nowrap; padding: 0 8px; }
+  .pb { flex: 1; min-height: 0; padding: 12px 14px 12px; display: flex; flex-direction: column; overflow: hidden; }
+  .panel.closed .pb { display: none; }
+
+  /* Lists that only show what fits, then "+ n more". */
+  .fitlist { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 8px; }
+  .more { flex: none; margin-top: 6px; font-size: 12.5px; font-weight: 700; text-decoration: none; display: none; }
+  .more.on { display: block; }
+
+  /* Uniform card */
+  .card { flex: none; height: var(--cardh); background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 7px 11px; display: flex; flex-direction: column; justify-content: center; gap: 3px; cursor: pointer; }
   .card:hover { border-color: #cfcaf1; }
-  .card .t { font-weight: 600; line-height: 1.35; }
-  .card .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .tag { font-size: 11.5px; font-weight: 600; border-radius: 6px; padding: 1px 8px; background: var(--brand-soft); color: var(--brand); }
-  .due { font-size: 11.5px; font-weight: 700; border-radius: 6px; padding: 1px 8px; margin-left: auto; }
-  .due.late { background: var(--late-bg); color: var(--late); } .due.soon { background: var(--soon-bg); color: var(--soon); } .due.later { background: var(--later-bg); color: var(--later); }
-  .card .s { font-size: 12.5px; color: var(--muted); }
-  .empty { background: rgba(255,255,255,.6); border: 1.5px dashed #d4d0ea; border-radius: 12px; padding: 16px; color: var(--muted); text-align: center; font-size: 13px; }
+  .card .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .m { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12px; color: var(--muted); }
+  .card .m .x { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chip { flex: none; font-size: 11.5px; font-weight: 700; border-radius: 6px; padding: 0 7px; line-height: 19px; white-space: nowrap; }
+  .chip.area { background: var(--brand-soft); color: var(--brand); font-weight: 600; max-width: 55%; overflow: hidden; text-overflow: ellipsis; }
+  .chip.late { background: var(--late-bg); color: var(--late); } .chip.soon { background: var(--soon-bg); color: var(--soon); } .chip.later { background: var(--later-bg); color: var(--later); }
+  .chip.ok { background: var(--ok-bg); color: var(--ok); } .chip.mtg { background: var(--mtg-bg); color: var(--mtg); } .chip.kind { background: var(--later-bg); color: var(--later); }
+  .chip.r { margin-left: auto; }
 
-  .h2 { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; } .h2 h2 { margin: 0; font-size: 17px; } .h2 a { margin-left: auto; color: var(--brand); font-weight: 700; text-decoration: none; font-size: 13.5px; }
-  .areas { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
-  .area { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; }
-  .area .ring { width: 42px; height: 42px; border-radius: 50%; flex: none; display: grid; place-items: center; font-weight: 700; font-size: 13px; background: conic-gradient(var(--late) calc(var(--p) * 1%), #2f9d6c 0); }
-  .area .ring span { width: 32px; height: 32px; border-radius: 50%; background: #fff; display: grid; place-items: center; }
-  .area b { display: block; font-size: 14px; line-height: 1.25; } .area small { color: var(--muted); font-size: 12.5px; }
-  .bottom { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 26px; }
-  .news { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 4px 18px; }
-  .news div { padding: 12px 0; border-bottom: 1px solid var(--line); display: flex; gap: 12px; align-items: baseline; }
-  .news div:last-child { border-bottom: 0; }
-  .news b { font-weight: 600; } .news small { color: var(--muted); display: block; font-size: 12.5px; }
-  .imp { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #c9c5e0; transform: translateY(-1px); } .imp.on { background: #e8642c; }
-  @media (max-width: 1350px) { .week { grid-template-columns: repeat(4, 1fr); } .lanes { grid-template-columns: 1fr 1fr; } .bottom { grid-template-columns: 1fr; } }
-  @media (max-width: 800px) { .week, .lanes { grid-template-columns: 1fr; } .pills { display: none; } .page, .bar { padding-left: 16px; padding-right: 16px; } }
+  /* This week */
+  .week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; height: 100%; }
+  .day { border: 1px solid var(--line); border-radius: 10px; padding: 8px 9px; display: flex; flex-direction: column; gap: 5px; min-width: 0; background: #fff; }
+  .day.today { border: 2px solid var(--brand); padding: 7px 8px; }
+  .day.weekend { background: #faf9fd; }
+  .dh { display: flex; align-items: baseline; gap: 6px; }
+  .dh b { font-size: 18px; line-height: 1; } .dh span { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
+  .dh em { margin-left: auto; font-style: normal; font-size: 10.5px; font-weight: 700; color: #fff; background: var(--brand); border-radius: 999px; padding: 0 7px; }
+  .ev { border-radius: 7px; padding: 3px 7px; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ev.late { background: var(--late-bg); color: var(--late); } .ev.soon { background: var(--soon-bg); color: #6b4000; } .ev.mtg { background: var(--mtg-bg); color: var(--mtg); }
+  .day .none { color: #9b97b6; font-size: 12px; margin-top: auto; }
+  .day .plus { font-size: 11.5px; color: var(--muted); font-weight: 600; }
+
+  /* Your actions: equal columns */
+  .lanes { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 12px; height: 100%; min-height: 0; }
+  .lane { background: var(--well); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; min-height: 0; }
+  .lane h3 { flex: none; margin: 0 2px 8px; font-size: 13px; display: flex; align-items: center; gap: 7px; }
+  .lane h3 i { width: 9px; height: 9px; border-radius: 50%; background: var(--c); }
+  .lane h3 span { margin-left: auto; background: #fff; color: var(--muted); border-radius: 999px; padding: 0 8px; font-size: 11.5px; }
+  .empty { flex: none; border: 1.5px dashed #d4d0ea; border-radius: 10px; padding: 12px; color: var(--muted); text-align: center; font-size: 12.5px; background: rgba(255,255,255,.6); }
+
+  /* Compact rows for areas, notices and meetings */
+  .rows { gap: 0; }
+  .rw { flex: none; height: 46px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--line); min-width: 0; }
+  .rw:last-child { border-bottom: 0; }
+  .rw .tx { min-width: 0; flex: 1; }
+  .rw .tx b { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rw .tx small { display: block; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rw .dot { width: 8px; height: 8px; border-radius: 50%; background: #c9c5e0; flex: none; } .rw .dot.on { background: #e8642c; }
+  .cal { width: 38px; flex: none; border-radius: 8px; overflow: hidden; text-align: center; border: 1px solid var(--line); line-height: 1.1; }
+  .cal small { display: block; background: var(--mtg); color: #fff; font-size: 9.5px; font-weight: 700; text-transform: uppercase; padding: 1px 0; }
+  .cal b { display: block; font-size: 14px; padding: 2px 0; }
+  .areas2 { display: grid; grid-template-columns: 1fr 1fr; column-gap: 18px; align-content: start; }
+  .areas2 .rw { border-bottom: 1px solid var(--line); }
+
+  /* Small or narrow windows: fall back to ordinary scrolling */
+  @media (max-width: 900px), (max-height: 560px) {
+    #pv { height: auto; } .pv-app { overflow: visible; }
+    .stack { display: flex; flex-direction: column; }
+    .row3 { grid-template-columns: 1fr; }
+    .week { grid-template-columns: repeat(2, 1fr); } .lanes { grid-template-columns: 1fr; }
+    .fitlist { overflow: visible; } .pills, .me div { display: none; } .bar { flex-wrap: wrap; height: auto; padding: 8px 16px; }
+    .stack, .hello { padding-left: 16px; padding-right: 16px; }
+  }
 </style>
 </head>
 <body>
 <div id="pv"></div>
 <script>
-window.renderDesign = function (root, D) {
-  var bar = h('header', { class: 'bar' },
-    h('div', { class: 'logo' }, h('span', { class: 'dot' }), 'Competency Hub'),
-    h('span', { class: 'env', text: 'TEST' }),
-    h('nav', { class: 'pills', 'aria-label': 'Main' }, ['My week', 'Actions', 'Areas', 'Notices', 'Meetings'].concat(D.isMgmt ? ['Management'] : []).map(function (x, i) { return h('a', { href: '#', 'aria-current': i === 0 ? 'page' : null, text: x }); })),
-    h('div', { class: 'me' }, h('div', null, h('b', { text: D.person.full }), D.person.role), h('div', { class: 'av', text: D.person.initials })));
+(function () {
+  var KEY = 'ch-home-collapsed';
+  function loadState() { try { return JSON.parse(localStorage.getItem(KEY)) || null; } catch (e) { return null; } }
+  function saveState(s) { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) { /* not available */ } }
+  var state = loadState() || { areas: innerHeight < 900, notices: innerHeight < 900, meetings: innerHeight < 900 };
+  var fitters = [];
 
-  var hero = h('section', { class: 'hero' },
-    h('div', null, h('h1', { text: D.greeting }),
-      h('p', { text: D.late.length ? 'Start with the ' + (D.late.length === 1 ? 'late action' : D.late.length + ' late actions') + ', then the rest of your week is below.' : 'Here is your week at a glance.' })),
-    h('div', { class: 'go' }, h('button', { class: 'btn', type: 'button', text: 'Post a notice' }), h('button', { class: 'btn main', type: 'button', text: '+ Raise an action' })));
+  function chevron() { var s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('width', '18'); s.setAttribute('height', '18'); s.setAttribute('fill', 'none'); s.setAttribute('stroke', 'currentColor'); s.setAttribute('stroke-width', '2.2'); s.setAttribute('aria-hidden', 'true'); var p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', 'm6 9 6 6 6-6'); s.appendChild(p); return s; }
 
-  var week = h('section', { 'aria-label': 'This week' },
-    h('div', { class: 'h2' }, h('h2', { text: 'This week' }), h('a', { href: '#', text: 'Open calendar →' })),
-    h('div', { class: 'week' }, D.week.map(function (d) {
-      var evs = d.actions.map(function (a) { return h('div', { class: 'ev ' + (a.off < 0 ? 'late' : 'soon') }, h('b', { text: a.title }), a.off < 0 ? a.due : a.area.name); })
-        .concat(d.meetings.map(function (m) { return h('div', { class: 'ev mtg' }, h('b', { text: m.area.name + ' meeting' }), m.time); }));
+  // A panel: header button (title, summary, chevron), optional "See all" link, and a body.
+  function panel(id, title, summary, body, link, onToggle) {
+    var bodyId = 'pb-' + id;
+    var p = h('section', { class: 'panel' + (state[id] ? ' closed' : ''), 'data-id': id, 'aria-label': title });
+    var tg = h('button', { class: 'tg', type: 'button', 'aria-expanded': String(!state[id]), 'aria-controls': bodyId },
+      h('h2', { text: title }), h('span', { class: 'sum', text: summary }), h('span', { class: 'chev' }, chevron()));
+    tg.addEventListener('click', function () {
+      state[id] = !state[id]; saveState(state);
+      p.classList.toggle('closed', state[id]); tg.setAttribute('aria-expanded', String(!state[id]));
+      onToggle(); refit();
+    });
+    p.appendChild(h('div', { class: 'ph' }, tg, link ? h('a', { class: 'all', href: '#', text: link }) : null));
+    p.appendChild(h('div', { class: 'pb', id: bodyId }, body));
+    return p;
+  }
+
+  // Show only the items that fit; the rest are counted in "+ n more".
+  function fitList(items, moreText, cls) {
+    var list = h('div', { class: 'fitlist ' + (cls || '') }, items);
+    var more = h('a', { class: 'more', href: '#' });
+    var fit = function () {
+      items.forEach(function (x) { x.hidden = false; });
+      more.classList.remove('on');
+      if (getComputedStyle(list).overflow === 'visible') return;
+      var shown = items.length;
+      function over() { return list.scrollHeight > list.clientHeight + 1 || (list.classList.contains('areas2') && list.scrollHeight > list.clientHeight + 1); }
+      if (!over()) return;
+      more.classList.add('on');
+      while (shown > 0 && over()) { shown--; items[shown].hidden = true; }
+      if (shown < items.length) more.textContent = shown ? '+ ' + (items.length - shown) + ' more – ' + moreText : items.length + ' items – ' + moreText;
+      else more.classList.remove('on');
+    };
+    fitters.push(fit);
+    // Re-fit whenever the space for this list changes (panels opening or closing, window resizing).
+    if (window.ResizeObserver) { var last = -1; new ResizeObserver(function () { if (list.clientHeight !== last) { last = list.clientHeight; fit(); } }).observe(list); }
+    return [list, more];
+  }
+  function refit() { requestAnimationFrame(function () { fitters.forEach(function (f) { f(); }); }); }
+  window.addEventListener('resize', refit);
+
+  window.renderDesign = function (root, D) {
+    fitters = [];
+    var bar = h('header', { class: 'bar' },
+      h('div', { class: 'logo' }, h('span', { class: 'dot' }), 'Competency Hub'),
+      h('span', { class: 'env', text: 'TEST' }),
+      h('nav', { class: 'pills', 'aria-label': 'Main' }, ['My week', 'Actions', 'Areas', 'Notices', 'Meetings'].concat(D.isMgmt ? ['Management'] : []).map(function (x, i) { return h('a', { href: '#', 'aria-current': i === 0 ? 'page' : null, text: x }); })),
+      h('div', { class: 'btns' }, h('button', { class: 'btn', type: 'button', text: 'Post a notice' }), h('button', { class: 'btn main', type: 'button', text: '+ Raise an action' })),
+      h('div', { class: 'me' }, h('div', null, h('b', { text: D.person.full }), D.person.role), h('div', { class: 'av', text: D.person.initials })));
+
+    var lateN = D.isMgmt ? D.group.late : D.late.length;
+    var hello = h('div', { class: 'hello' }, h('h1', { text: D.greeting }),
+      h('p', null, lateN ? h('b', { text: lateN + ' late' + (D.isMgmt ? ' across the group' : '') }) : 'Nothing late',
+        ' · ' + D.soon.length + ' due this week' + (D.meetings[0] ? ' · next meeting ' + D.meetings[0].area.name + ', ' + D.meetings[0].when : '')));
+
+    // This week
+    var dueCount = D.week.reduce(function (t, d) { return t + d.actions.length; }, 0);
+    var mtgCount = D.week.reduce(function (t, d) { return t + d.meetings.length; }, 0);
+    var week = h('div', { class: 'week' }, D.week.map(function (d) {
+      var evs = d.actions.map(function (a) { return h('div', { class: 'ev ' + (a.off < 0 ? 'late' : 'soon'), title: a.title, text: a.title }); })
+        .concat(d.meetings.map(function (m) { return h('div', { class: 'ev mtg', title: m.area.name + ' meeting', text: m.time + ' ' + m.area.name }); }));
       return h('div', { class: 'day' + (d.today ? ' today' : '') + (d.weekend ? ' weekend' : '') },
         h('div', { class: 'dh' }, h('b', { text: String(d.num) }), h('span', { text: d.label }), d.today ? h('em', { text: 'Today' }) : null),
-        evs.length ? evs : h('div', { class: 'none', text: d.weekend ? 'Weekend' : 'Nothing due' }));
-    })));
+        evs.slice(0, 2), evs.length > 2 ? h('div', { class: 'plus', text: '+ ' + (evs.length - 2) + ' more' }) : null,
+        evs.length ? null : h('div', { class: 'none', text: d.weekend ? 'Weekend' : 'Nothing due' }));
+    }));
 
-  function card(a) {
-    return h('div', { class: 'card', tabindex: '0' }, h('div', { class: 't', text: a.title }),
-      h('div', { class: 'row' }, h('span', { class: 'tag', text: a.area.name }), h('span', { class: 'due ' + a.band, text: a.due })),
-      a.waiting || a.moved ? h('div', { class: 's', text: a.waiting ? 'Waiting on: ' + a.waiting : 'Deadline moved ' + (a.moved === 1 ? 'once' : a.moved + ' times') }) : null);
-  }
-  function lane(title, c, items, emptyText) {
-    return h('div', { class: 'lane' }, h('h2', { style: '--c:' + c }, h('i'), title, h('span', { text: String(items.length) })),
-      items.length ? items : h('div', { class: 'empty', text: emptyText }));
-  }
-  var lanesList = [];
-  if (D.canManage) lanesList.push(lane(D.isMgmt ? 'Needs your attention' : 'For you to manage', '#4b3fb5', D.manage.map(function (m) {
-    return h('div', { class: 'card', tabindex: '0' }, h('div', { class: 't', text: m.text }), h('div', { class: 'row' }, h('span', { class: 'tag', style: 'background:#eef1f5;color:#4b5a6d', text: m.kind })));
-  }), 'Nothing needs you right now.'));
-  lanesList.push(lane('Late', '#c2273a', D.late.map(card), 'Nothing late. Nice work.'));
-  lanesList.push(lane('Due this week', '#d08a12', D.soon.map(card), 'Nothing due this week.'));
-  lanesList.push(lane('Coming up', '#8a95a5', D.later.map(card), 'Nothing further ahead.'));
-  var lanes = h('section', null, h('div', { class: 'h2' }, h('h2', { text: D.isMgmt ? 'Your work' : 'Your actions' }), h('a', { href: '#', text: 'See all, including finished →' })),
-    h('div', { class: 'lanes', style: '--n:' + lanesList.length }, lanesList));
+    // Your actions
+    function card(a) {
+      return h('div', { class: 'card', tabindex: '0', title: a.title }, h('div', { class: 't', text: a.title }),
+        h('div', { class: 'm' }, h('span', { class: 'chip area', text: a.area.name }),
+          a.waiting ? h('span', { class: 'x', text: 'Waiting on: ' + a.waiting }) : a.moved ? h('span', { class: 'x', text: 'Moved ' + (a.moved === 1 ? 'once' : a.moved + '×') }) : null,
+          h('span', { class: 'chip r ' + a.band, text: a.due })));
+    }
+    function lane(title, c, items, empty, moreText) {
+      var f = items.length ? fitList(items, moreText) : [h('div', { class: 'empty', text: empty })];
+      return h('div', { class: 'lane' }, h('h3', { style: '--c:' + c }, h('i'), title, h('span', { text: String(items.length) })), f);
+    }
+    var lanes = [];
+    if (D.canManage) lanes.push(lane(D.isMgmt ? 'Needs your attention' : 'For you to manage', '#4b3fb5', D.manage.map(function (m) {
+      return h('div', { class: 'card', tabindex: '0', title: m.text }, h('div', { class: 't', text: m.text }), h('div', { class: 'm' }, h('span', { class: 'chip kind', text: m.kind })));
+    }), 'Nothing needs you right now.', 'see all'));
+    lanes.push(lane('Late', '#c2273a', D.late.map(card), 'Nothing late. Nice work.', 'see all late'));
+    lanes.push(lane('Due this week', '#d08a12', D.soon.map(card), 'Nothing due this week.', 'see all'));
+    lanes.push(lane('Coming up', '#8a95a5', D.later.map(card), 'Nothing further ahead.', 'see all'));
+    var lanesEl = h('div', { class: 'lanes', style: '--n:' + lanes.length }, lanes);
 
-  var areas = h('section', null, h('div', { class: 'h2' }, h('h2', { text: D.isMgmt ? 'All areas' : 'Your areas' }), h('a', { href: '#', text: 'Browse every area →' })),
-    h('div', { class: 'areas' }, D.areas.map(function (a) {
-      var p = a.open ? Math.round(a.late / a.open * 100) : 0;
-      return h('a', { href: '#', class: 'area' }, h('span', { class: 'ring', style: '--p:' + p, 'aria-hidden': 'true' }, h('span', { text: String(a.open) })),
-        h('span', null, h('b', { text: a.name }), h('small', { style: a.late ? 'color:var(--late);font-weight:600' : '', text: a.late ? a.late + ' late of ' + a.open + ' open' : a.open + ' open, none late' })));
-    })));
+    // Bottom row
+    var areaRows = D.areas.map(function (a) {
+      return h('div', { class: 'rw' }, h('span', { class: 'tx' }, h('b', { text: a.name }), h('small', { text: a.stale ? 'No meeting since 2 Sep' : a.nextText })),
+        h('span', { class: 'chip ' + (a.late ? 'late' : 'ok'), text: a.late ? a.late + ' late' : a.open + ' open' }));
+    });
+    var noticeRows = D.notices.map(function (n) {
+      return h('div', { class: 'rw' }, h('span', { class: 'dot' + (n.important ? ' on' : ''), title: n.important ? 'Important' : '' }),
+        h('span', { class: 'tx' }, h('b', { text: n.title }), h('small', { text: (n.important ? 'Important · ' : '') + n.area.name + ' · ' + n.when })));
+    });
+    var M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var meetingRows = D.meetings.map(function (m) {
+      return h('div', { class: 'rw' }, h('div', { class: 'cal' }, h('small', { text: M[m.date.getUTCMonth()] }), h('b', { text: String(m.date.getUTCDate()) })),
+        h('span', { class: 'tx' }, h('b', { text: m.area.name }), h('small', { text: m.when + ' · ' + m.time + ' · ' + m.items + ' agenda items' })));
+    });
+    var lateAreas = D.areas.filter(function (a) { return a.late; }).length;
+    var important = D.notices.filter(function (n) { return n.important; }).length;
 
-  var bottom = h('div', { class: 'bottom' },
-    h('section', null, h('div', { class: 'h2' }, h('h2', { text: 'From the noticeboards' }), h('a', { href: '#', text: 'All notices →' })),
-      h('div', { class: 'news' }, D.notices.slice(0, 4).map(function (n) { return h('div', null, h('span', { class: 'imp' + (n.important ? ' on' : ''), title: n.important ? 'Important' : '' }), h('span', null, h('b', { text: n.title }), h('small', { text: (n.important ? 'Important · ' : '') + n.area.name + ' · ' + n.by + ' · ' + n.when }))); }))),
-    h('section', null, h('div', { class: 'h2' }, h('h2', { text: 'Next meetings' })),
-      h('div', { class: 'news' }, D.meetings.map(function (m) { return h('div', null, h('span', { class: 'imp', style: 'background:var(--mtg)' }), h('span', null, h('b', { text: m.area.name }), h('small', { text: m.when + ' · ' + m.time + ' · ' + m.items + ' agenda items' }))); }))));
+    var stack = h('div', { class: 'stack' });
+    function layout() {
+      var bottomOpen = !(state.areas && state.notices && state.meetings);
+      var rows = [state.week ? 'auto' : 'clamp(112px, 17vh, 150px)', state.actions ? 'auto' : 'minmax(0, 1.55fr)', bottomOpen ? 'minmax(0, 1fr)' : 'auto'];
+      if (state.actions && bottomOpen) rows[2] = 'minmax(0, 1fr)';
+      if (state.actions && !bottomOpen) rows.push('1fr');
+      stack.style.gridTemplateRows = rows.join(' ');
+    }
+    stack.appendChild(panel('week', 'This week', dueCount + ' due · ' + mtgCount + ' meeting' + (mtgCount === 1 ? '' : 's'), week, 'Open calendar', layout));
+    stack.appendChild(panel('actions', D.isMgmt ? 'Your work' : 'Your actions', D.late.length + ' late · ' + D.soon.length + ' this week · ' + D.later.length + ' later' + (D.canManage ? ' · ' + D.manage.length + ' to manage' : ''), lanesEl, 'All actions', layout));
+    stack.appendChild(h('div', { class: 'row3' },
+      panel('areas', D.isMgmt ? 'All areas' : 'Your areas', D.areas.length + ' areas · ' + (lateAreas ? lateAreas + ' with late actions' : 'none late'), fitList(areaRows, 'all areas', 'rows areas2'), 'Browse', layout),
+      panel('notices', 'Notices', important ? important + ' important' : D.notices.length + ' recent', fitList(noticeRows, 'all notices', 'rows'), 'All', layout),
+      panel('meetings', 'Meetings', D.meetings[0] ? 'Next ' + D.meetings[0].when : 'None booked', fitList(meetingRows, 'all meetings', 'rows'), 'All', layout)));
+    layout();
 
-  root.appendChild(bar);
-  root.appendChild(h('main', { class: 'page' }, hero, week, lanes, areas, bottom));
-};
+    root.appendChild(bar); root.appendChild(hello); root.appendChild(stack);
+    refit();
+  };
+})();
 </script>
 <script>
 // Preview controls: design name, previous/next design and "Preview as". Stands in for SharePoint's own bar.

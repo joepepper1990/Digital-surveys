@@ -4,7 +4,8 @@ here = pathlib.Path(__file__).parent
 out = here.parent
 files = ["design-1-control.html", "design-2-editorial.html", "design-3-operations.html", "design-4-week.html", "design-5-bento.html"]
 shared = "<style>\n" + (here / "switcher.css").read_text() + "</style>\n<script>\n" + (here / "data.js").read_text() + "</script>\n"
-for i, name in enumerate(files, 1):
+extra = [(4, "design-4-week-original.html")]
+for i, name in list(enumerate(files, 1)) + extra:
     if not (here / name).exists():
         continue
     src = (here / name).read_text()

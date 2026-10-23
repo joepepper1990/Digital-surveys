@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ESG Competency Hub – My week (first version)</title>
+<!--@SHARED-->
+<style>
+  :root {
+    --bg: #f5f4fb; --card: #fff; --ink: #1d1a33; --muted: #625e7c; --line: #e6e3f2;
+    --brand: #4b3fb5; --brand-2: #6d5fe0; --brand-soft: #ecebfb;
+    --late: #c2273a; --late-bg: #fdecef; --soon: #9a5b00; --soon-bg: #fff3dc; --later: #4b5a6d; --later-bg: #eef1f5; --ok: #1e7d55; --mtg: #0d6e8c; --mtg-bg: #e3f4f8;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14.5px/1.5 "Segoe UI", system-ui, Arial, sans-serif; }
+  button { font: inherit; cursor: pointer; }
+  .bar { display: flex; align-items: center; gap: 18px; padding: 14px 36px; }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px; }
+  .logo .dot { width: 30px; height: 30px; border-radius: 50%; background: conic-gradient(from 200deg, var(--brand), #9b8cff, var(--brand)); }
+  .pills { display: flex; gap: 4px; background: #fff; border: 1px solid var(--line); border-radius: 999px; padding: 4px; margin: 0 auto; }
+  .pills a { text-decoration: none; color: var(--muted); padding: 6px 16px; border-radius: 999px; font-weight: 600; font-size: 13.5px; }
+  .pills a[aria-current] { background: var(--brand); color: #fff; }
+  .me { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
+  .me b { color: var(--ink); display: block; font-size: 13.5px; line-height: 1.2; }
+  .av { width: 36px; height: 36px; border-radius: 50%; background: var(--brand-soft); color: var(--brand); display: grid; place-items: center; font-weight: 700; }
+  .env { font-size: 11.5px; font-weight: 700; color: var(--soon); background: var(--soon-bg); border-radius: 999px; padding: 2px 10px; }
+
+  .page { padding: 8px 36px 44px; display: flex; flex-direction: column; gap: 26px; }
+  .hero { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+  .hero h1 { margin: 0; font-size: 30px; font-weight: 700; letter-spacing: -.4px; }
+  .hero p { margin: 2px 0 0; color: var(--muted); font-size: 15.5px; }
+  .hero .go { margin-left: auto; display: flex; gap: 10px; }
+  .btn { border-radius: 999px; padding: 10px 20px; font-weight: 700; border: 1.5px solid var(--line); background: #fff; color: var(--ink); }
+  .btn.main { background: var(--brand); border-color: var(--brand); color: #fff; box-shadow: 0 6px 16px rgba(75,63,181,.25); }
+  .btn:focus-visible, a:focus-visible, .card:focus-visible { outline: 3px solid var(--brand-2); outline-offset: 2px; }
+
+  .week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; }
+  .day { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 12px 12px 14px; min-height: 168px; display: flex; flex-direction: column; gap: 7px; }
+  .day.today { border: 2px solid var(--brand); box-shadow: 0 8px 22px rgba(75,63,181,.12); }
+  .day.weekend { background: #faf9fd; }
+  .day .dh { display: flex; align-items: baseline; gap: 8px; }
+  .day .dh b { font-size: 24px; font-weight: 700; line-height: 1; }
+  .day .dh span { color: var(--muted); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; }
+  .day .dh em { margin-left: auto; font-style: normal; font-size: 11px; font-weight: 700; color: #fff; background: var(--brand); border-radius: 999px; padding: 1px 8px; }
+  .ev { border-radius: 9px; padding: 6px 9px; font-size: 12.5px; line-height: 1.3; }
+  .ev b { display: block; font-weight: 600; }
+  .ev.late { background: var(--late-bg); color: var(--late); } .ev.soon { background: var(--soon-bg); color: #6b4000; } .ev.mtg { background: var(--mtg-bg); color: var(--mtg); }
+  .day .none { color: #a19dbb; font-size: 12.5px; margin-top: auto; }
+
+  .lanes { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 18px; align-items: start; }
+  .lane { background: #ecebf6; border-radius: 18px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .lane h2 { margin: 0 4px 2px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  .lane h2 i { width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
+  .lane h2 span { margin-left: auto; background: #fff; color: var(--muted); border-radius: 999px; padding: 0 9px; font-size: 12px; }
+  .card { background: #fff; border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 1px 2px rgba(29,26,51,.06); border: 1px solid transparent; cursor: pointer; }
+  .card:hover { border-color: #cfcaf1; }
+  .card .t { font-weight: 600; line-height: 1.35; }
+  .card .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .tag { font-size: 11.5px; font-weight: 600; border-radius: 6px; padding: 1px 8px; background: var(--brand-soft); color: var(--brand); }
+  .due { font-size: 11.5px; font-weight: 700; border-radius: 6px; padding: 1px 8px; margin-left: auto; }
+  .due.late { background: var(--late-bg); color: var(--late); } .due.soon { background: var(--soon-bg); color: var(--soon); } .due.later { background: var(--later-bg); color: var(--later); }
+  .card .s { font-size: 12.5px; color: var(--muted); }
+  .empty { background: rgba(255,255,255,.6); border: 1.5px dashed #d4d0ea; border-radius: 12px; padding: 16px; color: var(--muted); text-align: center; font-size: 13px; }
+
+  .h2 { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; } .h2 h2 { margin: 0; font-size: 17px; } .h2 a { margin-left: auto; color: var(--brand); font-weight: 700; text-decoration: none; font-size: 13.5px; }
+  .areas { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+  .area { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit; }
+  .area .ring { width: 42px; height: 42px; border-radius: 50%; flex: none; display: grid; place-items: center; font-weight: 700; font-size: 13px; background: conic-gradient(var(--late) calc(var(--p) * 1%), #2f9d6c 0); }
+  .area .ring span { width: 32px; height: 32px; border-radius: 50%; background: #fff; display: grid; place-items: center; }
+  .area b { display: block; font-size: 14px; line-height: 1.25; } .area small { color: var(--muted); font-size: 12.5px; }
+  .bottom { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 26px; }
+  .news { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 4px 18px; }
+  .news div { padding: 12px 0; border-bottom: 1px solid var(--line); display: flex; gap: 12px; align-items: baseline; }
+  .news div:last-child { border-bottom: 0; }
+  .news b { font-weight: 600; } .news small { color: var(--muted); display: block; font-size: 12.5px; }
+  .imp { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #c9c5e0; transform: translateY(-1px); } .imp.on { background: #e8642c; }
+  @media (max-width: 1350px) { .week { grid-template-columns: repeat(4, 1fr); } .lanes { grid-template-columns: 1fr 1fr; } .bottom { grid-template-columns: 1fr; } }
+  @media (max-width: 800px) { .week, .lanes { grid-template-columns: 1fr; } .pills { display: none; } .page, .bar { padding-left: 16px; padding-right: 16px; } }
+</style>
+</head>
+<body>
+<div id="pv"></div>
+<script>
+window.renderDesign = function (root, D) {
+  var bar = h('header', { class: 'bar' },
+    h('div', { class: 'logo' }, h('span', { class: 'dot' }), 'Competency Hub'),
+    h('span', { class: 'env', text: 'TEST' }),
+    h('nav', { class: 'pills', 'aria-label': 'Main' }, ['My week', 'Actions', 'Areas', 'Notices', 'Meetings'].concat(D.isMgmt ? ['Management'] : []).map(function (x, i) { return h('a', { href: '#', 'aria-current': i === 0 ? 'page' : null, text: x }); })),
+    h('div', { class: 'me' }, h('div', null, h('b', { text: D.person.full }), D.person.role), h('div', { class: 'av', text: D.person.initials })));
+
+  var hero = h('section', { class: 'hero' },
+    h('div', null, h('h1', { text: D.greeting }),
+      h('p', { text: D.late.length ? 'Start with the ' + (D.late.length === 1 ? 'late action' : D.late.length + ' late actions') + ', then the rest of your week is below.' : 'Here is your week at a glance.' })),
+    h('div', { class: 'go' }, h('button', { class: 'btn', type: 'button', text: 'Post a notice' }), h('button', { class: 'btn main', type: 'button', text: '+ Raise an action' })));
+
+  var week = h('section', { 'aria-label': 'This week' },
+    h('div', { class: 'h2' }, h('h2', { text: 'This week' }), h('a', { href: '#', text: 'Open calendar →' })),
+    h('div', { class: 'week' }, D.week.map(function (d) {
+      var evs = d.actions.map(function (a) { return h('div', { class: 'ev ' + (a.off < 0 ? 'late' : 'soon') }, h('b', { text: a.title }), a.off < 0 ? a.due : a.area.name); })
+        .concat(d.meetings.map(function (m) { return h('div', { class: 'ev mtg' }, h('b', { text: m.area.name + ' meeting' }), m.time); }));
+      return h('div', { class: 'day' + (d.today ? ' today' : '') + (d.weekend ? ' weekend' : '') },
+        h('div', { class: 'dh' }, h('b', { text: String(d.num) }), h('span', { text: d.label }), d.today ? h('em', { text: 'Today' }) : null),
+        evs.length ? evs : h('div', { class: 'none', text: d.weekend ? 'Weekend' : 'Nothing due' }));
+    })));
+
+  function card(a) {
+    return h('div', { class: 'card', tabindex: '0' }, h('div', { class: 't', text: a.title }),
+      h('div', { class: 'row' }, h('span', { class: 'tag', text: a.area.name }), h('span', { class: 'due ' + a.band, text: a.due })),
+      a.waiting || a.moved ? h('div', { class: 's', text: a.waiting ? 'Waiting on: ' + a.waiting : 'Deadline moved ' + (a.moved === 1 ? 'once' : a.moved + ' times') }) : null);
+  }
+  function lane(title, c, items, emptyText) {
+    return h('div', { class: 'lane' }, h('h2', { style: '--c:' + c }, h('i'), title, h('span', { text: String(items.length) })),
+      items.length ? items : h('div', { class: 'empty', text: emptyText }));
+  }
+  var lanesList = [];
+  if (D.canManage) lanesList.push(lane(D.isMgmt ? 'Needs your attention' : 'For you to manage', '#4b3fb5', D.manage.map(function (m) {
+    return h('div', { class: 'card', tabindex: '0' }, h('div', { class: 't', text: m.text }), h('div', { class: 'row' }, h('span', { class: 'tag', style: 'background:#eef1f5;color:#4b5a6d', text: m.kind })));
+  }), 'Nothing needs you right now.'));
+  lanesList.push(lane('Late', '#c2273a', D.late.map(card), 'Nothing late. Nice work.'));
+  lanesList.push(lane('Due this week', '#d08a12', D.soon.map(card), 'Nothing due this week.'));
+  lanesList.push(lane('Coming up', '#8a95a5', D.later.map(card), 'Nothing further ahead.'));
+  var lanes = h('section', null, h('div', { class: 'h2' }, h('h2', { text: D.isMgmt ? 'Your work' : 'Your actions' }), h('a', { href: '#', text: 'See all, including finished →' })),
+    h('div', { class: 'lanes', style: '--n:' + lanesList.length }, lanesList));
+
+  var areas = h('section', null, h('div', { class: 'h2' }, h('h2', { text: D.isMgmt ? 'All areas' : 'Your areas' }), h('a', { href: '#', text: 'Browse every area →' })),
+    h('div', { class: 'areas' }, D.areas.map(function (a) {
+      var p = a.open ? Math.round(a.late / a.open * 100) : 0;
+      return h('a', { href: '#', class: 'area' }, h('span', { class: 'ring', style: '--p:' + p, 'aria-hidden': 'true' }, h('span', { text: String(a.open) })),
+        h('span', null, h('b', { text: a.name }), h('small', { style: a.late ? 'color:var(--late);font-weight:600' : '', text: a.late ? a.late + ' late of ' + a.open + ' open' : a.open + ' open, none late' })));
+    })));
+
+  var bottom = h('div', { class: 'bottom' },
+    h('section', null, h('div', { class: 'h2' }, h('h2', { text: 'From the noticeboards' }), h('a', { href: '#', text: 'All notices →' })),
+      h('div', { class: 'news' }, D.notices.slice(0, 4).map(function (n) { return h('div', null, h('span', { class: 'imp' + (n.important ? ' on' : ''), title: n.important ? 'Important' : '' }), h('span', null, h('b', { text: n.title }), h('small', { text: (n.important ? 'Important · ' : '') + n.area.name + ' · ' + n.by + ' · ' + n.when }))); }))),
+    h('section', null, h('div', { class: 'h2' }, h('h2', { text: 'Next meetings' })),
+      h('div', { class: 'news' }, D.meetings.map(function (m) { return h('div', null, h('span', { class: 'imp', style: 'background:var(--mtg)' }), h('span', null, h('b', { text: m.area.name }), h('small', { text: m.when + ' · ' + m.time + ' · ' + m.items + ' agenda items' }))); }))));
+
+  root.appendChild(bar);
+  root.appendChild(h('main', { class: 'page' }, hero, week, lanes, areas, bottom));
+};
+</script>
+<!--@SWITCH-->
+</body>
+</html>
