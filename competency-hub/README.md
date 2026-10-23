@@ -20,6 +20,9 @@ Phase 1 is delivered in six releases; Releases 1 (safety net) and 2 (administrat
 Release 3 (noticeboard, register, feedback, settings, dashboard), Releases 4 and 5 (meetings) and Release 6 (go-live
 checks) follow.
 
+**Site layout (23 October 2026):** site navigation is turned off (Change the look → Navigation), and staff are to be
+given the Hub page address ending `?env=WebView`, which hides SharePoint's own bars so the Hub fills the window.
+
 **Not built yet, by design:** the meeting-rights grants on an open meeting's Record folder (plan §4.3) come with
 meetings in Release 4. Until then "Can run meetings" is recorded and used by every rule; there are no meeting folders
 to grant on.
