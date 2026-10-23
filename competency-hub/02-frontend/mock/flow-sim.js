@@ -23,10 +23,14 @@ window.MockFlow = (function () {
     // The same authorisation the flow applies (E.3), built from the lists rather than from the request.
     function accessFor(p) {
       return {
+        isManagement: management(p),
+        isTechnician: p.Role === 'Technician',
         canWrite: function (key) { return areaKeys.indexOf(key) >= 0 && (management(p) || !!membership(p.SiteUserId, key)); },
-        canManage: function (key) {
+        isEngineerIn: function (key) { return p.Role === 'Engineer' && !!membership(p.SiteUserId, key); },
+        chairs: function (key) { var m = membership(p.SiteUserId, key); return !!m && !!m.CanManageMeetings; },
+        canRaiseFor: function (key, ownerId) {
           var m = membership(p.SiteUserId, key);
-          return management(p) || (!!m && (p.Role === 'Engineer' || !!m.CanManageMeetings));
+          return p.Role !== 'Technician' || (!!m && !!m.CanManageMeetings) || Number(ownerId) === p.SiteUserId;
         }
       };
     }
@@ -58,7 +62,7 @@ window.MockFlow = (function () {
       var access = accessFor(requester);
 
       if (req.RequestType === 'RaiseAction') {
-        var errors = R.validateRaise(payload, { today: today, maxYears: C.maxDeadlineYears, canWrite: access.canWrite,
+        var errors = R.validateRaise(payload, { today: today, maxYears: C.maxDeadlineYears, canWrite: access.canWrite, canRaiseFor: access.canRaiseFor,
           ownerAllowed: function (key, id) { var o = person(id); return !!o && o.Status === 'Active' && (management(o) || !!membership(id, key)); } });
         var keys = Object.keys(errors);
         if (keys.length) return finish(req, 'Rejected', errors[keys[0]]);

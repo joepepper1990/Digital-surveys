@@ -43,11 +43,23 @@ CH.access = (function () {
       canWrite: function (key) { return active(key) && (management || !!member[key]); },
       // Every active user may post a notice on any active area's noticeboard (K4.1, A-1).
       canPostNotice: function (key) { return active(key); },
-      // Engineers of the area, its meeting administrators, and management manage actions and meetings.
+      isTechnician: role === 'Technician',
+      // An engineer who is a member of the area.
+      isEngineerIn: function (key) { return active(key) && role === 'Engineer' && !!member[key]; },
+      // "Can run meetings" in this area, set for each person and area by an administrator (plan REV5 §4).
+      chairs: function (key) { return active(key) && !!member[key] && !!meetingAdmin[key]; },
+      // Areas whose actions this person looks after (for the lists that gather them): management, engineers, meeting runners.
       canManage: function (key) {
         return active(key) && (management || (!!member[key] && (role === 'Engineer' || !!meetingAdmin[key])));
       },
-      runsMeetings: function (key) { return active(key) && (management || !!meetingAdmin[key]); }
+      runsMeetings: function (key) { return active(key) && (management || (!!member[key] && !!meetingAdmin[key])); },
+      // Moderating others' notices and comments: engineers of the area and management – never meeting rights alone.
+      canModerate: function (key) { return active(key) && (management || (role === 'Engineer' && !!member[key])); },
+      // A technician without meeting rights in the area may raise actions only for themselves (plan REV5 §4.4).
+      canRaiseFor: function (key, ownerId, selfId) {
+        if (!active(key) || !(management || !!member[key])) return false;
+        return role !== 'Technician' || !!meetingAdmin[key] || Number(ownerId) === Number(selfId);
+      }
     };
   }
 

@@ -49,18 +49,63 @@ test('extend: the new date must be after the current deadline and not in the pas
   assert.match(R.validateExtend({ status: 'Completed', dueIso: '2026-10-28' }, { newDueIso: '2026-11-04', reason: 'Parts delayed by supplier' }, { today: TODAY }).action, /no longer open/);
 });
 
+// An access stub: role, the areas the person belongs to, and the areas where they can run meetings.
+function who(role, areas, chairs) {
+  const management = ['Team Leader', 'Group Head'].includes(role);
+  return {
+    isManagement: management, isTechnician: role === 'Technician',
+    canWrite: (k) => management || areas.includes(k),
+    isEngineerIn: (k) => role === 'Engineer' && areas.includes(k),
+    chairs: (k) => areas.includes(k) && (chairs || []).includes(k)
+  };
+}
+
 test('who may do what: owner and managers extend and complete; members add updates; others only read', () => {
-  const access = (writes, manages) => ({ canWrite: () => writes, canManage: () => manages });
   const a = { ownerId: 112, raisedById: 103, areaKey: 'FLK', status: 'Open' };
   const base = (r) => { const p = plain(r); return { owner: p.owner, manager: p.manager, canUpdate: p.canUpdate, canExtend: p.canExtend, canComplete: p.canComplete }; };
-  assert.deepEqual(base(R.roles(a, 112, access(true, false))), { owner: true, manager: false, canUpdate: true, canExtend: true, canComplete: true });
-  assert.deepEqual(base(R.roles(a, 103, access(true, false))), { owner: false, manager: true, canUpdate: true, canExtend: true, canComplete: true }, 'the raiser');
-  assert.deepEqual(base(R.roles(a, 120, access(true, false))), { owner: false, manager: false, canUpdate: true, canExtend: false, canComplete: false }, 'a technician member');
-  assert.deepEqual(base(R.roles(a, 107, access(true, true))), { owner: false, manager: true, canUpdate: true, canExtend: true, canComplete: true }, 'an engineer of the area');
-  assert.deepEqual(base(R.roles(a, 130, access(false, false))), { owner: false, manager: false, canUpdate: false, canExtend: false, canComplete: false }, 'a visitor');
+  assert.deepEqual(base(R.roles(a, 112, who('Technician', ['FLK']))), { owner: true, manager: false, canUpdate: true, canExtend: true, canComplete: true });
+  assert.deepEqual(base(R.roles(a, 103, who('Engineer', ['FLK']))), { owner: false, manager: true, canUpdate: true, canExtend: true, canComplete: true }, 'the raiser');
+  assert.deepEqual(base(R.roles(a, 120, who('Technician', ['FLK']))), { owner: false, manager: false, canUpdate: true, canExtend: false, canComplete: false }, 'a technician member');
+  assert.deepEqual(base(R.roles(a, 107, who('Engineer', ['FLK']))), { owner: false, manager: true, canUpdate: true, canExtend: true, canComplete: true }, 'an engineer of the area');
+  assert.deepEqual(base(R.roles(a, 130, who('Technician', ['RW']))), { owner: false, manager: false, canUpdate: false, canExtend: false, canComplete: false }, 'a visitor');
   const done = Object.assign({}, a, { status: 'Completed' });
-  assert.equal(R.roles(done, 112, access(true, false)).canExtend, false);
-  assert.equal(R.roles(done, 112, access(true, false)).canComplete, false);
+  assert.equal(R.roles(done, 112, who('Technician', ['FLK'])).canExtend, false);
+  assert.equal(R.roles(done, 112, who('Technician', ['FLK'])).canComplete, false);
+});
+
+test('meeting rights: edit, reassign and close the area\'s actions – never reopen, and never in another area (plan REV5 §4.2)', () => {
+  const open = { ownerId: 112, raisedById: 103, areaKey: 'FLK', status: 'Open' };
+  const closed = Object.assign({}, open, { status: 'Closed' });
+  const ops = (r) => [r.canEdit, r.canReassign, r.canClose, r.canStatus, r.canExtend, r.canComplete];
+  const chair = who('Technician', ['FLK', 'GRS'], ['FLK']);
+  assert.deepEqual(ops(R.roles(open, 120, chair)), [true, true, true, true, true, true]);
+  assert.equal(R.roles(closed, 120, chair).canReopen, false, 'meeting rights alone never reopen');
+  assert.deepEqual(ops(R.roles(Object.assign({}, open, { areaKey: 'GRS' }), 120, chair)), [false, false, false, false, false, false], 'not in another area');
+  const noRights = who('Technician', ['FLK']);
+  assert.deepEqual(ops(R.roles(open, 120, noRights)), [false, false, false, false, false, false], 'withdrawn: the extra authority goes');
+  // engineers keep their rights by role, with or without the meeting switch
+  const engineer = who('Engineer', ['FLK']);
+  assert.deepEqual(ops(R.roles(open, 107, engineer)).concat(R.roles(closed, 107, engineer).canReopen), [true, true, true, true, true, true, true]);
+  const lead = who('Team Leader', []);
+  assert.equal(R.roles(closed, 126, lead).canReopen, true);
+});
+
+test('a technician who raised an action cannot pass it to someone else without meeting rights', () => {
+  const mine = { ownerId: 120, raisedById: 120, areaKey: 'FLK', status: 'Open' };
+  const r = R.roles(mine, 120, who('Technician', ['FLK']));
+  assert.deepEqual([r.canEdit, r.canReassign, r.canClose, r.canReopen], [true, false, true, false]);
+  assert.equal(R.roles(Object.assign({}, mine, { status: 'Closed' }), 120, who('Technician', ['FLK'])).canReopen, true, 'the raiser still reopens');
+  assert.equal(R.roles(mine, 120, who('Technician', ['FLK'], ['FLK'])).canReassign, true, 'with meeting rights they may');
+  assert.equal(R.roles(Object.assign({}, mine, { raisedById: 107 }), 107, who('Engineer', ['FLK'])).canReassign, true, 'an engineer raiser may');
+});
+
+test('raise: a technician without meeting rights may raise only for themselves, in plain words', () => {
+  const self = 120;
+  const tech = Object.assign({}, ctx, { canWrite: (k) => k === 'FLK', ownerAllowed: () => true,
+    canRaiseFor: (k, id) => id === self });
+  const v = Object.assign({}, good, { ownerId: String(self) });
+  assert.deepEqual(plain(R.validateRaise(v, tech)), {});
+  assert.equal(R.validateRaise(Object.assign({}, v, { ownerId: '112' }), tech).ownerId, R.SELF_ONLY);
 });
 
 test('mark as done closes the action unless a close-out check is required', () => {
@@ -111,14 +156,14 @@ test('edit: only the fields given are checked, and something must change', () =>
 });
 
 test('roles: managers reassign, close, reopen and edit; owners change status; nobody else', () => {
-  const access = { canWrite: (k) => k === 'FLK', canManage: () => false };
+  const access = who('Technician', ['FLK']);
   const owner = R.roles(open, 112, access);
   assert.deepEqual([owner.canStatus, owner.canReassign, owner.canClose, owner.canEdit], [true, false, false, false]);
-  const raiser = R.roles(open, 103, access);
+  const raiser = R.roles(open, 103, who('Engineer', ['RW']));
   assert.deepEqual([raiser.canStatus, raiser.canReassign, raiser.canClose, raiser.canEdit, raiser.canReopen], [true, true, true, true, false]);
-  const closed = R.roles(Object.assign({}, open, { status: 'Closed' }), 103, access);
+  const closed = R.roles(Object.assign({}, open, { status: 'Closed' }), 103, who('Engineer', ['RW']));
   assert.deepEqual([closed.canReopen, closed.canClose, closed.canStatus], [true, false, false]);
-  const waiting = R.roles(Object.assign({}, open, { status: 'Completed' }), 103, access);
+  const waiting = R.roles(Object.assign({}, open, { status: 'Completed' }), 103, who('Engineer', ['RW']));
   assert.deepEqual([waiting.canClose, waiting.canReopen], [true, true]);
   const other = R.roles(open, 999, access);
   assert.equal([other.canStatus, other.canReassign, other.canClose, other.canReopen, other.canEdit].some(Boolean), false);

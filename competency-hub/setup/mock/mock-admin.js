@@ -36,7 +36,7 @@ window.MockAdmin = (function () {
     function guid() { var n = String(nextGuid++); return '00000000-0000-4000-8000-' + ('000000000000' + n).slice(-12); }
     function newList(title, template, url) {
       var l = { Id: guid(), Title: title, BaseTemplate: template, url: url, items: [], nextItem: 1, unique: false, ra: [],
-        settings: { EnableVersioning: false, MajorVersionLimit: 0, NoCrawl: false, EnableFolderCreation: template === 101, EnableAttachments: template === 100, WriteSecurity: 1 },
+        settings: { EnableVersioning: false, MajorVersionLimit: 0, NoCrawl: false, EnableFolderCreation: template === 101, EnableAttachments: template === 100, WriteSecurity: 1, ReadSecurity: 1 },
         fields: template === 101 ? [{ InternalName: 'Title', Title: 'Title', TypeAsString: 'Text', Required: false, Indexed: false, EnforceUniqueValues: false }]
           : [{ InternalName: 'Title', Title: 'Title', TypeAsString: 'Text', Required: true, Indexed: false, EnforceUniqueValues: false }] };
       lists.push(l);
@@ -200,6 +200,11 @@ window.MockAdmin = (function () {
       var p = path.split('?')[0];
       var m;
       if (p === '/_api/web/currentuser') return respond(200, me);
+      var gu = /^\/_api\/web\/getuserbyid\((\d+)\)$/.exec(p);
+      if (gu) {
+        var found = users.filter(function (x) { return x.Id === Number(gu[1]); })[0] || (me.Id === Number(gu[1]) ? me : null);
+        return found ? respond(200, found) : fail(404, 'User cannot be found.');
+      }
       if (p === '/_api/web/effectiveBasePermissions') return respond(200, { High: '432', Low: scenario === 'notOwner' ? '1011028719' : '4294967295' });
       if (p === '/_api/web/regionalsettings') return respond(200, { LocaleId: web.LocaleId });
       if (p === '/_api/web/regionalsettings/timezone') return respond(200, { Id: web.TimeZoneId, Description: web.TimeZoneId === 2 ? '(UTC) Dublin, Edinburgh, Lisbon, London' : 'Other' });
@@ -358,6 +363,16 @@ window.MockAdmin = (function () {
         if (!roleDefs.some(function (d) { return d.Id === rid; })) return fail(400, 'Permission level not found');
         var entry = ao.ra.filter(function (a) { return a.p === pid; })[0];
         if (entry) { if (entry.r.indexOf(rid) < 0) entry.r.push(rid); } else ao.ra.push({ p: pid, r: [rid] });
+        return respond(200, {});
+      }
+      if ((m = /^(.*)\/roleassignments\/removeroleassignment\(principalid=(\d+),roledefid=(\d+)\)$/.exec(path))) {
+        var rs = securable(m[1]);
+        if (!rs) return fail(404, 'Not found');
+        var ro = secObj(rs);
+        if (!ro.unique) return fail(400, 'This operation is not allowed on an object that inherits permissions.');
+        var re = ro.ra.filter(function (a) { return a.p === Number(m[2]); })[0];
+        if (re) re.r = re.r.filter(function (r) { return r !== Number(m[3]); });
+        ro.ra = ro.ra.filter(function (a) { return a.r.length; });
         return respond(200, {});
       }
       return fail(400, 'Mock does not support POST ' + path);

@@ -34,14 +34,19 @@ CH.views.raiseForm = (function () {
     closeOut.addEventListener('change', function () { closeOutTouched = true; });
     priority.addEventListener('change', function () { if (!closeOutTouched) closeOut.checked = priority.value === 'High'; });
 
+    var selfNote = h('p', { class: 'explain', id: 'ch-r-self-only', text: 'As a technician you can raise actions for yourself in this area. An engineer or meeting lead can raise them for someone else.' });
     function fillOwners() {
       var current = owner.value || String(app.person.SiteUserId);
       CH.dom.clear(owner);
       owner.appendChild(h('option', { value: '', text: 'Choose a person' }));
-      m.ownersFor(area.value).forEach(function (p) {
+      // a technician without meeting rights in this area is offered only themselves (plan REV5 §4.4)
+      m.ownersFor(area.value).filter(function (p) { return app.access.canRaiseFor(area.value, p.id, app.person.SiteUserId); }).forEach(function (p) {
         owner.appendChild(h('option', { value: String(p.id), selected: String(p.id) === current ? true : null,
           text: p.name + (Number(p.id) === Number(app.person.SiteUserId) ? ' (you)' : '') + (CH.config.managementRoles.indexOf(p.role) >= 0 ? ' – ' + p.role : '') }));
       });
+      var selfOnly = !app.access.canRaiseFor(area.value, -1, app.person.SiteUserId) && app.access.canWrite(area.value);
+      selfNote.style.display = selfOnly ? '' : 'none';
+      if (selfOnly) owner.value = String(app.person.SiteUserId);
     }
     area.addEventListener('change', fillOwners);
     fillOwners();
@@ -53,6 +58,7 @@ CH.views.raiseForm = (function () {
     function errorsFor(keys) {
       var all = R.validateRaise(values(), {
         today: today, maxYears: CH.config.maxDeadlineYears, canWrite: app.access.canWrite,
+        canRaiseFor: function (k, id) { return app.access.canRaiseFor(k, id, app.person.SiteUserId); },
         ownerAllowed: function (k, id) { return m.ownersFor(k).some(function (p) { return Number(p.id) === id; }); }
       });
       var out = {};
@@ -71,7 +77,7 @@ CH.views.raiseForm = (function () {
 
     var panes = [
       [field('Title', title, 'A short summary, for example "Replace FH40 probe".'), field('Description', description, 'What needs doing and anything the owner should know.')],
-      [field('Area', area), field('Who will do it?', owner, 'Members of the area, and Team Leaders and the Group Head.')],
+      [field('Area', area), field('Who will do it?', owner, 'Members of the area, and Team Leaders and the Group Head.'), selfNote],
       [field('Target date', due, 'From today up to ' + CH.config.maxDeadlineYears + ' years ahead.'),
         h('details', { class: 'more' }, h('summary', { text: 'More options' }),
           field('Priority', priority), h('label', { class: 'check' }, closeOut, ' Needs a close-out check before it is closed'))],

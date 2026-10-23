@@ -118,6 +118,8 @@ CHS.engine = (function () {
       S.roles.FullControl = full.Id;
       var limited = defs.filter(function (d) { return Number(d.RoleTypeKind) === 1; })[0];
       S.roles.LimitedAccess = limited ? limited.Id : -1;
+      var edit = defs.filter(function (d) { return Number(d.RoleTypeKind) === 6; })[0];
+      if (edit) S.roles.Edit = edit.Id;
       for (var i = 0; i < schema.permissionLevels.length; i++) {
         var p = schema.permissionLevels[i];
         var shortName = p.name.replace('Competency Hub ', '');
@@ -209,9 +211,10 @@ CHS.engine = (function () {
         Title: l.title, EnableVersioning: true, MajorVersionLimit: 100, NoCrawl: !!l.noCrawl,
         EnableFolderCreation: l.template === 100 ? true : undefined,
         EnableAttachments: l.template === 100 ? !!l.attachments : undefined,
-        WriteSecurity: l.template === 100 ? (l.writeSecurity || 1) : undefined
+        WriteSecurity: l.template === 100 ? (l.writeSecurity || 1) : undefined,
+        ReadSecurity: l.template === 100 ? (l.readSecurity || 1) : undefined
       };
-      var have = await rest.get(listPath(l.key) + '?$select=Title,EnableVersioning,MajorVersionLimit,NoCrawl,EnableFolderCreation,EnableAttachments,WriteSecurity');
+      var have = await rest.get(listPath(l.key) + '?$select=Title,EnableVersioning,MajorVersionLimit,NoCrawl,EnableFolderCreation,EnableAttachments,WriteSecurity,ReadSecurity');
       var change = { __metadata: { type: 'SP.List' } };
       var diffs = [];
       Object.keys(want).forEach(function (k) {
@@ -409,7 +412,24 @@ CHS.engine = (function () {
     }
 
     // Makes the securable at `path` unique (if needed) and ensures each [principal, level] grant.
-    async function secure(path, label, grants, copy, step) {
+    // For an "exact" securable: the Competency Hub levels a listed group holds beyond what the schema gives it.
+    function surplus(have, expected) {
+      var ours = [S.roles.Read, S.roles.Add, S.roles.Contribute].filter(Boolean);
+      var out = [];
+      expected.forEach(function (g) {
+        var pid = principal(g[0]);
+        have.filter(function (a) { return a.id === pid; }).forEach(function (a) {
+          a.roles.forEach(function (r) {
+            var wanted = expected.some(function (e) { return principal(e[0]) === pid && S.roles[e[1]] === r; });
+            if (!wanted && ours.indexOf(r) >= 0 && !out.some(function (o) { return o.pid === pid && o.rid === r; })) out.push({ pid: pid, rid: r, who: g[0] });
+          });
+        });
+      });
+      return out;
+    }
+    function levelName(rid) { return Object.keys(S.roles).filter(function (k) { return S.roles[k] === rid; })[0] || String(rid); }
+
+    async function secure(path, label, grants, copy, step, exact) {
       var expected = (copy ? [] : [['Owners', 'FullControl']]).concat(grants);
       var allowed;
       if (!applying()) {
@@ -422,8 +442,10 @@ CHS.engine = (function () {
         }
         if (!state.own) { note('create', step, 'Would give "' + label + '" its own permissions: ' + describe(expected) + '.'); return; }
         var missing = expected.filter(function (g) { return !has(state.have, principal(g[0]), S.roles[g[1]]); });
+        var extraLevels = exact ? surplus(state.have, expected) : [];
         if (missing.length) note('create', step, 'Would add to "' + label + '": ' + describe(missing) + '.');
-        else note('ok', step, '"' + label + '" permissions already in place.');
+        if (extraLevels.length) note('create', step, 'Would remove from "' + label + '": ' + extraLevels.map(function (x) { return x.who + ' ' + levelName(x.rid); }).join(', ') + '.');
+        if (!missing.length && !extraLevels.length) note('ok', step, '"' + label + '" permissions already in place.');
         return;
       }
       var cur = await ownPermissions(path, expected, copy);
@@ -443,6 +465,17 @@ CHS.engine = (function () {
         }
       }
       var after = await assignments(path);
+      // the new grants are in place first, so nobody loses access between the two steps
+      var drop = exact ? surplus(after, expected) : [];
+      for (var d = 0; d < drop.length; d++) {
+        await write(path + '/roleassignments/removeroleassignment(principalid=' + drop[d].pid + ',roledefid=' + drop[d].rid + ')');
+        changed = true;
+      }
+      if (drop.length) {
+        after = await assignments(path);
+        if (surplus(after, expected).length) { note('stop', step, '"' + label + '" still grants a level it should not after removing it.'); return; }
+        note('create', step, 'Removed from "' + label + '": ' + drop.map(function (x) { return x.who + ' ' + levelName(x.rid); }).join(', ') + '.');
+      }
       var missingAfter = expected.filter(function (g) { return !has(after, principal(g[0]), S.roles[g[1]]); });
       if (missingAfter.length) { note('stop', step, '"' + label + '" is missing ' + describe(missingAfter) + ' after setting it.'); return; }
       allowed = expected.map(function (g) { return principal(g[0]); }).concat([S.me.Id]);
@@ -463,7 +496,7 @@ CHS.engine = (function () {
         if (!S.lists[l.key] || S.lists[l.key].broken) continue;
         var p = l.permissions || {};
         var listSec = S.lists[l.key].planned ? null : listPath(l.key);
-        if (listSec) await secure(listSec, l.title, p.list || [], false, step);
+        if (listSec) await secure(listSec, l.title, p.list || [], false, step, !!p.exact);
         else note('create', step, 'Would give "' + l.title + '" its own permissions: ' + describe([['Owners', 'FullControl']].concat(p.list || [])) + '.');
         if (p.areaFolders) {
           for (var a = 0; a < areas.length; a++) {
@@ -565,7 +598,7 @@ CHS.engine = (function () {
         S.groups['Person:' + person.siteUserId] = person.siteUserId;
         await secure(folderItemPath(rootUrl(listSchema('requests')) + '/' + folder), 'Requests/' + folder + ' (' + person.title + ')', [['Person:' + person.siteUserId, 'Contribute']], false, step);
       }
-      var groupKeys = ['AllUsers'];
+      var groupKeys = ['AllUsers', 'NoticePosters'];
       if (MANAGEMENT_ROLES.indexOf(person.role) >= 0) groupKeys.push('Management');
       (person.areas || []).forEach(function (a) { groupKeys.push('Members:' + a.key); });
       if (person.admin) groupKeys.push('Administrators');
@@ -722,7 +755,23 @@ CHS.engine = (function () {
       await secure("/_api/web/lists(guid'" + pages.Id + "')/items(" + hub[0].Id + ')', 'Hub.aspx page', [['AllUsers', 'Read']], true, step);
     }
 
-    var STEPS = [prechecks, permissionLevels, groups, lists, folders, permissions, data, bootstrap, importPeople, pageAccess];
+    // Plan REV5 §4.4: the active people allowed to post notices are members of Notice posters.
+    async function noticePosters() {
+      var step = 'Notice posters';
+      if (S.lists.people.planned) { note('create', step, 'Would add everyone allowed to post notices to Notice posters.'); return; }
+      var people = await rest.getRows(listPath('people') + "/items?$select=Id,Title,SiteUserId,CanPostNotices,Status&$filter=Status eq 'Active'");
+      var gid = S.groups.NoticePosters;
+      var inGroup = gid ? (await rest.getRows('/_api/web/sitegroups(' + gid + ')/users?$select=Id,LoginName')) : [];
+      var missing = people.filter(function (p) { return p.CanPostNotices !== false && !inGroup.some(function (u) { return Number(u.Id) === Number(p.SiteUserId); }); });
+      if (!missing.length) { note('ok', step, 'Everyone allowed to post notices is in Notice posters.'); return; }
+      if (!applying()) { note('create', step, 'Would add ' + missing.map(function (p) { return p.Title; }).join(', ') + ' to Notice posters.'); return; }
+      for (var i = 0; i < missing.length; i++) {
+        var user = await rest.get('/_api/web/getuserbyid(' + Number(missing[i].SiteUserId) + ')?$select=Id,LoginName');
+        await addToGroup('NoticePosters', { title: missing[i].Title, loginName: user.LoginName, siteUserId: Number(missing[i].SiteUserId) }, step);
+      }
+    }
+
+    var STEPS = [prechecks, permissionLevels, groups, lists, folders, permissions, data, bootstrap, importPeople, noticePosters, pageAccess];
 
     async function run(runMode) {
       mode = runMode === 'apply' ? 'apply' : 'check';

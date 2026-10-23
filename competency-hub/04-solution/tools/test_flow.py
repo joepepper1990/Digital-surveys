@@ -123,7 +123,7 @@ class RaiseAction(unittest.TestCase):
         cases = [({'areaKey': 'RW'}, 'Choose one of your areas.'),
                  ({'areaKey': 'XX'}, 'Choose one of your areas.'),
                  ({'ownerId': KAI}, 'Choose a member of this area or a Team Leader.'),
-                 ({'ownerId': JOE}, None),
+                 ({'ownerId': JOE}, flows.SELF_ONLY),
                  ({'title': '  '}, 'Enter what needs doing.'),
                  ({'title': 'x' * 256}, 'Keep the title to 255 characters or fewer.'),
                  ({'description': ''}, 'Add a short description.'),
@@ -419,28 +419,28 @@ class Emails(unittest.TestCase):
 
     def test_raising_for_someone_else_tells_them_and_covers_the_7_day_reminder(self):
         s = site()
-        r = submit(s, RACHEL, 'RaiseAction', dict(RaiseAction.good, ownerId=KELLY, dueIso='2026-10-25'))
+        r = submit(s, KELLY, 'RaiseAction', dict(RaiseAction.good, ownerId=RACHEL, dueIso='2026-10-25'))
         run(s, r)
         self.assertEqual(request(s, r)['Status'], 'Completed')
-        self.assertEqual([(m['to'], m['subject']) for m in s.sent], [('kelly.bates@example.test', 'Action assigned to you: Order replacement smear papers')])
+        self.assertEqual([(m['to'], m['subject']) for m in s.sent], [('rachel.boulden@example.test', 'Action assigned to you: Order replacement smear papers')])
         body = s.sent[0]['body']
-        for text in ('Boulden Rachel has given you an action', '25 October 2026', 'Hub.aspx?action=', 'Reference ESGN'):
+        for text in ('Bates Kelly has given you an action', '25 October 2026', 'Hub.aspx?action=', 'Reference ESGN'):
             self.assertIn(text, body)
         aid = s.rows('actions', CreatedRequestKey='F|' + KEY)[0]['id']
         n = self.notices(s)
-        self.assertEqual(n['ASG|{0}|{1}'.format(KEY, KELLY)]['State'], 'Sent')
-        self.assertIn(n['ASG|{0}|{1}'.format(KEY, KELLY)]['Token'], body)
-        self.assertEqual(n['R7|{0}|20261025|{1}'.format(aid, KELLY)]['State'], 'Skipped')
+        self.assertEqual(n['ASG|{0}|{1}'.format(KEY, RACHEL)]['State'], 'Sent')
+        self.assertIn(n['ASG|{0}|{1}'.format(KEY, RACHEL)]['Token'], body)
+        self.assertEqual(n['R7|{0}|20261025|{1}'.format(aid, RACHEL)]['State'], 'Skipped')
 
     def test_a_deadline_far_away_leaves_the_reminder_to_the_daily_run(self):
         s = site()
-        r = submit(s, RACHEL, 'RaiseAction', dict(RaiseAction.good, ownerId=KELLY, dueIso='2026-11-30'))
+        r = submit(s, KELLY, 'RaiseAction', dict(RaiseAction.good, ownerId=RACHEL, dueIso='2026-11-30'))
         run(s, r)
         self.assertEqual(sorted(k.split('|')[0] for k in self.notices(s)), ['ASG'])
 
     def test_text_people_typed_is_escaped(self):
         s = site()
-        r = submit(s, RACHEL, 'RaiseAction', dict(RaiseAction.good, ownerId=KELLY, title='<img src=x onerror=alert(1)> & "it\'s"'))
+        r = submit(s, KELLY, 'RaiseAction', dict(RaiseAction.good, ownerId=RACHEL, title='<img src=x onerror=alert(1)> & "it\'s"'))
         run(s, r)
         body = s.sent[0]['body']
         self.assertNotIn('<img', body)
@@ -567,7 +567,7 @@ class Daily(unittest.TestCase):
     def test_an_assignment_within_7_days_covers_the_reminder(self):
         s = site()
         s.item('actions', s.action)['f'].update({'IsOpen': False, 'Status': 'Closed'})
-        r = submit(s, RACHEL, 'RaiseAction', dict(RaiseAction.good, ownerId=KELLY, dueIso='2026-10-26'))
+        r = submit(s, KELLY, 'RaiseAction', dict(RaiseAction.good, ownerId=RACHEL, dueIso='2026-10-26'))
         run(s, r)
         got = self.emails_by_day(s, '2026-10-22', '2026-10-25')
         self.assertEqual(got, [])
@@ -1221,6 +1221,80 @@ class HistoryForReports(unittest.TestCase):
                 run(s, submit(s, sender, rtype, payload, target=s.action, revision=2))
                 e = self.event(s)
                 self.assertEqual((e['CompletionKind'], e['OwnerId'], e['DueDayAtEvent']), (kind, float(RACHEL), 20261019.0))
+
+
+class Permissions(unittest.TestCase):
+    """Plan REV5 §4: meeting rights and the technician restriction, enforced by the flow whatever the page sends."""
+    def chair(self, s, uid, key, on=True):
+        row = next(r for r in s.rows('members', PersonId=uid) if r['f']['MembershipKey'] == '{0}|{1}'.format(key, uid))
+        row['f']['CanManageMeetings'] = on
+
+    def test_a_technician_without_meeting_rights_raises_only_for_themselves(self):
+        s = site()
+        r = submit(s, RACHEL, 'RaiseAction', dict(RaiseAction.good, ownerId=KELLY))
+        run(s, r)
+        self.assertEqual((request(s, r)['Status'], request(s, r)['ResultMessage']), ('Rejected', flows.SELF_ONLY))
+        r = submit(s, RACHEL, 'RaiseAction', dict(RaiseAction.good, ownerId=RACHEL), key=KEY2)
+        run(s, r)
+        self.assertEqual(request(s, r)['Status'], 'Completed')
+
+    def test_meeting_rights_in_the_area_let_a_technician_raise_for_others(self):
+        s = site()
+        self.chair(s, RACHEL, 'FLK')
+        r = submit(s, RACHEL, 'RaiseAction', dict(RaiseAction.good, ownerId=KELLY))
+        run(s, r)
+        self.assertEqual(request(s, r)['Status'], 'Completed')
+
+    def test_meeting_rights_in_another_area_do_not_count(self):
+        s = site()
+        self.chair(s, RACHEL, 'GRS')
+        r = submit(s, RACHEL, 'RaiseAction', dict(RaiseAction.good, ownerId=KELLY))
+        run(s, r)
+        self.assertEqual(request(s, r)['ResultMessage'], flows.SELF_ONLY)
+
+    def change(self, s, sender, rtype, payload, key=KEY):
+        r = submit(s, sender, rtype, payload, target=s.action, revision=2, key=key)
+        run(s, r)
+        return request(s, r)
+
+    def test_meeting_rights_edit_reassign_and_close_but_never_reopen(self):
+        # Rachel owns the Flask action that Kelly raised; Doti (a technician) gets meeting rights in Flask
+        for rtype, payload in (('EditActionDetails', {'title': 'Replace FH40 probe and test it'}),
+                               ('ReassignAction', {'ownerId': KELLY, 'reason': 'Kelly has the new probe ready.'}),
+                               ('CloseAction', {'outcome': 'No longer required', 'note': 'The probe type is withdrawn.'})):
+            with self.subTest(rtype=rtype):
+                s = site()
+                s.add('members', 'FLK', {'Title': 'FLK', 'CompetencyId': 1, 'PersonId': KAI, 'MembershipKey': 'FLK|{0}'.format(KAI),
+                                         'CanManageMeetings': False, 'Status': 'Active'})
+                s.rows('people', SiteUserId=float(KAI))[0]['f']['Role'] = 'Technician'
+                self.assertEqual(self.change(s, KAI, rtype, payload)['Status'], 'Rejected', 'no rights without the switch')
+                self.chair(s, KAI, 'FLK')
+                self.assertEqual(self.change(s, KAI, rtype, payload, key=KEY2)['Status'], 'Completed', 'the switch gives the right')
+        s = site()
+        s.item('actions', s.action)['f'].update({'Status': 'Closed', 'IsOpen': False})
+        s.add('members', 'FLK', {'Title': 'FLK', 'CompetencyId': 1, 'PersonId': KAI, 'MembershipKey': 'FLK|{0}'.format(KAI),
+                                 'CanManageMeetings': True, 'Status': 'Active'})
+        s.rows('people', SiteUserId=float(KAI))[0]['f']['Role'] = 'Technician'
+        res = self.change(s, KAI, 'ReopenAction', {'reason': 'The probe failed again this week.'})
+        self.assertEqual((res['Status'], res['ResultMessage']), ('Rejected', 'Only the people who manage this action can reopen it.'))
+
+    def test_a_technician_raiser_cannot_pass_their_action_on(self):
+        s = site()
+        s.item('actions', s.action)['f']['RaisedById'] = RACHEL
+        res = self.change(s, RACHEL, 'ReassignAction', {'ownerId': KELLY, 'reason': 'I am away for two weeks.'})
+        self.assertEqual((res['Status'], res['ResultMessage']), ('Rejected', 'Only the people who manage this action can reassign it.'))
+
+    def test_editing_details_never_changes_the_owner(self):
+        s = site()
+        res = self.change(s, KELLY, 'EditActionDetails', {'title': 'New title', 'ownerId': KELLY})
+        self.assertEqual((res['Status'], res['ResultMessage']), ('Rejected', 'The owner is changed with Reassign.'))
+        self.assertEqual(s.item('actions', s.action)['f']['AssignedToId'], RACHEL)
+
+    def test_an_engineer_keeps_their_rights_without_the_meeting_switch(self):
+        s = site()
+        self.chair(s, KELLY, 'FLK', on=False)
+        s.item('actions', s.action)['f']['RaisedById'] = KAI
+        self.assertEqual(self.change(s, KELLY, 'CloseAction', {'outcome': 'Completed', 'note': ''})['Status'], 'Completed')
 
 
 if __name__ == '__main__':

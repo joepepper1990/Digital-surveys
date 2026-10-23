@@ -54,7 +54,7 @@ function expectedGrants(site, grants, area) {
     const key = area ? p.replace('{Key}', area.key) : p;
     const g = schema.groups.map((x) => x.perArea ? schema.areas.map((a) => ({ key: x.key.replace('{Key}', a.key), title: x.title.replace('{Title}', a.title) })) : [x]).flat()
       .filter((x) => x.key === key)[0];
-    out.push(groupId(site, g.title) + ':' + roleId(site, 'Competency Hub ' + level));
+    out.push(groupId(site, g.title) + ':' + roleId(site, level === 'Edit' ? 'Edit' : 'Competency Hub ' + level));
   });
   return out.sort();
 }
@@ -103,14 +103,14 @@ test('Apply creates exactly what the schema lists, with the expected permissions
     assert.equal(Number(d.BasePermissions.Low), Number(p.low));
     assert.equal(Number(d.BasePermissions.High), Number(p.high));
   });
-  assert.equal(site.groups.filter((g) => g.Title.indexOf('Competency Hub – ') === 0).length, 13);
+  assert.equal(site.groups.filter((g) => g.Title.indexOf('Competency Hub – ') === 0).length, 14);
   site.groups.filter((g) => g.Title.indexOf('Competency Hub – ') === 0).forEach((g) => {
     assert.equal(g.OnlyAllowMembersViewMembership, true);
     assert.equal(g.AllowRequestToJoinLeave, false);
   });
 
   // Lists, settings and columns.
-  assert.equal(schema.lists.length, 15);
+  assert.equal(schema.lists.length, 17);
   schema.lists.forEach((l) => {
     const list = listByUrl(site, l.url);
     assert.ok(list, l.url);
@@ -120,6 +120,7 @@ test('Apply creates exactly what the schema lists, with the expected permissions
     assert.equal(list.settings.MajorVersionLimit, 100);
     assert.equal(list.settings.NoCrawl, !!l.noCrawl);
     if (l.template === 100) assert.equal(list.settings.WriteSecurity, l.writeSecurity || 1, l.url);
+    if (l.template === 100) assert.equal(list.settings.ReadSecurity, l.readSecurity || 1, l.url);
     const fields = (l.standard ? schema.standardColumns : []).concat(l.fields);
     fields.forEach((f) => {
       const have = list.fields.filter((x) => x.InternalName === f.name)[0];
@@ -462,4 +463,44 @@ test('An upgrade on a site made by an earlier schema adds the new columns and ch
   const again = await run('check');
   assert.equal(again.result.created, 0, again.entries.filter((e) => e.level === 'create').map((e) => e.text).join(' | '));
   deq(site.writes, []);
+});
+
+
+test('The Noticeboard regrant: All Users keep Read, only Notice posters may add, and the people on the site are Notice posters', async () => {
+  const { site, run, ctx } = newSite();
+  // The site as release 1 left it: All Users could add notices; there was no Notice posters group.
+  const old = plain(schema);
+  old.groups = old.groups.filter((g) => g.key !== 'NoticePosters');
+  old.lists.filter((l) => l.key === 'notices')[0].permissions = { list: [['AllUsers', 'Add']] };
+  old.lists = old.lists.filter((l) => l.key !== 'feedback' && l.key !== 'minutes');
+  old.lists.filter((l) => l.key === 'people')[0].fields = old.lists.filter((l) => l.key === 'people')[0].fields.filter((f) => f.name !== 'CanPostNotices');
+  const rest = ctx.CHS.rest.create(site.ctx.getWebPart());
+  assert.equal((await ctx.CHS.engine.create(rest, old, { log: () => {}, confirmGroupOwnersOnly: true, today: TODAY }).run('apply')).ok, true);
+  const notices = listByUrl(site, 'Noticeboard');
+  const allUsers = groupId(site, 'Competency Hub – All Users');
+  const add = roleId(site, 'Competency Hub Add');
+  const read = roleId(site, 'Competency Hub Read');
+  assert.ok(notices.ra.some((a) => a.p === allUsers && a.r.includes(add)), 'before: All Users add');
+
+  const check = await run('check');
+  const planned = check.entries.filter((e) => e.level === 'create').map((e) => e.text).join(' | ');
+  assert.match(planned, /Would give "Noticeboard" its own permissions: Owners FullControl, AllUsers Read, NoticePosters Add/);
+  assert.ok(notices.ra.some((a) => a.p === allUsers && a.r.includes(add)), 'Check changes nothing');
+
+  const apply = await run('apply');
+  assert.equal(apply.result.ok, true, apply.stops.join(' | '));
+  const posters = groupId(site, 'Competency Hub – Notice Posters');
+  deq(notices.ra.filter((a) => a.p === allUsers).map((a) => a.r), [[read]], 'All Users: read only');
+  deq(notices.ra.filter((a) => a.p === posters).map((a) => a.r), [[add]], 'Notice posters: add');
+  // the area folders still inherit from the list, so the one change covers them all
+  schema.areas.forEach((a) => assert.equal(!!folder(site, notices, a.key).unique, false, a.key));
+  // the first administrator, already on the site, is a Notice poster
+  assert.ok(site.groups.filter((g) => g.Id === posters)[0].users.includes(site.me().Id));
+  // the order was safe: Notice posters got Add before All Users lost it
+  const addAt = site.writes.findIndex((w) => /addroleassignment\(principalid=\d+,roledefid=/.test(w) && w.includes('principalid=' + posters + ','));
+  const removeAt = site.writes.findIndex((w) => /removeroleassignment/.test(w));
+  assert.ok(addAt >= 0 && removeAt > addAt, 'grant before removal');
+  site.writes.length = 0;
+  const again = await run('check');
+  assert.equal(again.result.created, 0, again.entries.filter((e) => e.level === 'create').map((e) => e.text).join(' | '));
 });

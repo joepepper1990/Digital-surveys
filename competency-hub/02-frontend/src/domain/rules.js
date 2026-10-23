@@ -18,7 +18,9 @@ CH.rules = (function () {
 
   function isOpen(status) { return OPEN_STATUSES.indexOf(status) >= 0; }
 
-  // ctx: { today, maxYears, canWrite(areaKey), ownerAllowed(areaKey, ownerId) }
+  var SELF_ONLY = 'As a technician you can raise actions for yourself in this area. Ask an engineer or meeting lead to raise it for someone else.';
+
+  // ctx: { today, maxYears, canWrite(areaKey), ownerAllowed(areaKey, ownerId), canRaiseFor(areaKey, ownerId) }
   function validateRaise(v, ctx) {
     var e = {};
     var title = String(v.title || '').trim();
@@ -30,6 +32,7 @@ CH.rules = (function () {
     if (!v.areaKey || !ctx.canWrite(v.areaKey)) e.areaKey = 'Choose one of your areas.';
     if (!v.ownerId) e.ownerId = 'Choose who will do it.';
     else if (!e.areaKey && !ctx.ownerAllowed(v.areaKey, Number(v.ownerId))) e.ownerId = 'Choose a member of this area or a Team Leader.';
+    else if (!e.areaKey && ctx.canRaiseFor && !ctx.canRaiseFor(v.areaKey, Number(v.ownerId))) e.ownerId = SELF_ONLY;
     if (!D.isIso(v.dueIso || '')) e.dueIso = 'Choose a target date.';
     else if (v.dueIso < ctx.today) e.dueIso = 'The target date cannot be in the past.';
     else if (v.dueIso > addYears(ctx.today, ctx.maxYears)) e.dueIso = 'Choose a date within ' + ctx.maxYears + ' years.';
@@ -140,23 +143,32 @@ CH.rules = (function () {
     return {};
   }
 
-  // Who may do what with an action (E.3). personId: SiteUserId. access: CH.access result.
+  // Who may do what with an action (plan REV5 §4.2), judged against its primary area. Each operation has its own
+  // rule; the request flow applies the same ones. personId: SiteUserId. access: CH.access result.
+  //   management, or an engineer of the area:       edit, reassign, close, reopen
+  //   "Can run meetings" in the area:                 edit, reassign, close – never reopen
+  //   the raiser:                                     edit, close, reopen; reassign unless a technician without meeting rights
+  //   the owner:                                      status, extend, mark as done
   function roles(action, personId, access) {
+    var k = action.areaKey;
     var owner = Number(action.ownerId) === Number(personId);
-    var manager = Number(action.raisedById) === Number(personId) || access.canManage(action.areaKey);
+    var raiser = Number(action.raisedById) === Number(personId);
+    var lead = access.isManagement ? access.canWrite(k) : access.isEngineerIn(k);
+    var chair = access.chairs(k);
     var open = isOpen(action.status);
     var finished = action.status === 'Closed' || action.status === 'Completed';
+    var edits = lead || chair || raiser;
     return {
       owner: owner,
-      manager: manager,
-      canUpdate: access.canWrite(action.areaKey) || owner,
-      canExtend: open && (owner || manager),
-      canComplete: open && (owner || manager),
-      canStatus: open && (owner || manager),
-      canReassign: open && manager,
-      canClose: (open || action.status === 'Completed') && manager,
-      canReopen: finished && manager,
-      canEdit: open && manager
+      manager: edits,
+      canUpdate: access.canWrite(k) || owner,
+      canExtend: open && (owner || edits),
+      canComplete: open && (owner || edits),
+      canStatus: open && (owner || edits),
+      canReassign: open && (lead || chair || (raiser && !(access.isTechnician && !chair))),
+      canClose: (open || action.status === 'Completed') && edits,
+      canReopen: finished && (lead || raiser),
+      canEdit: open && edits
     };
   }
 
@@ -167,6 +179,6 @@ CH.rules = (function () {
     addYears: addYears, isOpen: isOpen, validateRaise: validateRaise, validateExtend: validateExtend,
     validateComplete: validateComplete, validateUpdate: validateUpdate, validateStatus: validateStatus,
     validateReassign: validateReassign, validateClose: validateClose, validateReopen: validateReopen, validateEdit: validateEdit,
-    roles: roles, completionStatus: completionStatus, PRIORITIES: PRIORITIES, OPEN_STATUSES: OPEN_STATUSES, OUTCOMES: OUTCOMES
+    roles: roles, completionStatus: completionStatus, SELF_ONLY: SELF_ONLY, PRIORITIES: PRIORITIES, OPEN_STATUSES: OPEN_STATUSES, OUTCOMES: OUTCOMES
   };
 })();

@@ -35,6 +35,7 @@ REQUEST_LIST = BY_KEY['requests']['title']
 MANAGEMENT = "createArray('Team Leader', 'Group Head')"
 OPEN = "createArray('Open', 'In Progress', 'Awaiting Input')"
 STALE = 'This action was updated by someone else. Review the latest details and try again.'
+SELF_ONLY = 'As a technician you can raise actions for yourself in this area. Ask an engineer or meeting lead to raise it for someone else.'
 # the action values a queued change may write, kept in its plan so that an administrator can write them back
 REVERTABLE = ['Status', 'IsOpen', 'Blocker', 'AssignedToId', 'DueDay', 'CurrentDueDate', 'ExtensionCount', 'LastExtendedOn', 'DateCompleted',
               'DateClosed', 'ClosedById', 'CloseOutcome', 'ClosureNote', 'Title', 'Description', 'Priority', 'RequiresCloseOut', 'Revision']
@@ -617,6 +618,9 @@ def flow_request_queue(domain='actions'):
                  "if(or(empty(" + OWNER_R + "), not(equals(string(" + OWNER_R + "?['Status']), 'Active')), "
                  "not(or(contains(" + MANAGEMENT + ", string(" + OWNER_R + "?['Role'])), not(empty(body('Owner_member_R')?['value']))))), "
                  "'Choose a member of this area or a Team Leader.', "
+                 # plan REV5 §4.4: a technician without meeting rights in the area raises only for themselves
+                 "if(and(equals(string(" + ME + "?['Role']), 'Technician'), not(equals(first(body('My_member_R'))?['CanManageMeetings'], true)), "
+                 "not(equals(" + idstr(OWNER_R + "?['SiteUserId']") + ", " + SENDER + "))), " + q(SELF_ONLY) + ", "
                  "if(empty(" + TITLE + "), 'Enter what needs doing.', "
                  "if(greater(length(" + TITLE + "), 255), 'Keep the title to 255 characters or fewer.', "
                  "if(empty(" + DESC + "), 'Add a short description.', "
@@ -624,7 +628,7 @@ def flow_request_queue(domain='actions'):
                  "if(not(" + DUE_OK + "), 'Choose a target date.', "
                  "if(less(" + day_num(DUE_SAFE) + ", " + day_num(TODAY) + "), 'The target date cannot be in the past.', "
                  "if(greater(" + day_num(DUE_SAFE) + ", " + day_num(MAX_DAY) + "), 'Choose a date within 2 years.', "
-                 "if(not(contains(createArray('Low', 'Normal', 'High'), " + PRIO + ")), 'Choose a priority.', '')))))))))))")
+                 "if(not(contains(createArray('Low', 'Normal', 'High'), " + PRIO + ")), 'Choose a priority.', ''))))))))))))")
     action_path = "@{outputs('Ids')?['actRoot']}/@{" + AREA_R + "?['CompetencyKey']}"
     act_values, act_call = create_in_folder('act', action_path, 'Action_values_R', 'Action_body_R')
     claims = lambda person: "@{concat('[{\"Key\":\"', " + person + "?['Person']?['Name'], '\"}]')}"
@@ -699,9 +703,16 @@ def flow_request_queue(domain='actions'):
         OWNER = "equals(" + idstr(A + "?['AssignedToId']") + ", " + SENDER + ")"
         RAISER = "equals(" + idstr(A + "?['RaisedById']") + ", " + SENDER + ")"
         MEMBER = "first(body('My_member" + sfx + "'))"
-        MANAGE = ("or(" + IS_MGMT + ", and(not(empty(" + MEMBER + ")), or(equals(string(" + ME + "?['Role']), 'Engineer'), "
-                  "equals(" + MEMBER + "?['CanManageMeetings'], true))))")
-        ctx = {'A': A, 'OWNER': OWNER, 'ALLOWED': "or(" + OWNER + ", " + RAISER + ", " + MANAGE + ")", 'MANAGER': "or(" + RAISER + ", " + MANAGE + ")",
+        # plan REV5 §4.2, judged against the action's primary area: management and the area's engineers ('lead');
+        # "Can run meetings" in the area ('chair') – edit, reassign and close, never reopen; the raiser – edit, close,
+        # reopen, and reassign unless a technician without meeting rights
+        LEAD = "or(" + IS_MGMT + ", and(not(empty(" + MEMBER + ")), equals(string(" + ME + "?['Role']), 'Engineer')))"
+        CHAIR = "and(not(empty(" + MEMBER + ")), equals(" + MEMBER + "?['CanManageMeetings'], true))"
+        TECH_ONLY = "and(equals(string(" + ME + "?['Role']), 'Technician'), not(" + CHAIR + "))"
+        EDITS = "or(" + LEAD + ", " + CHAIR + ", " + RAISER + ")"
+        ctx = {'A': A, 'OWNER': OWNER, 'ALLOWED': "or(" + OWNER + ", " + EDITS + ")", 'EDIT': EDITS, 'CLOSE': EDITS,
+               'REASSIGN': "or(" + LEAD + ", " + CHAIR + ", and(" + RAISER + ", not(" + TECH_ONLY + ")))",
+               'REOPEN': "or(" + LEAD + ", " + RAISER + ")",
                'OPEN': "contains(" + OPEN + ", string(" + A + "?['Status']))", 'DUE': due_iso(A + "?['DueDay']"),
                'PLAN': "json(string(coalesce(variables('varTxPlan'), '{}')))",
                'OWNER_P': "first(body('Owner_p" + sfx + "'))", 'RAISER_P': "first(body('Raiser_p" + sfx + "'))",
@@ -890,7 +901,7 @@ def flow_request_queue(domain='actions'):
     PREV_OWNER_ID = "string(" + "json(string(coalesce(variables('varTxPlan'), '{}')))?['owner'])"
     reassign_case = change_case(
         '_A',
-        lambda c: chain(*guard(c, c['OPEN'], 'This action is no longer open, so it cannot be reassigned.', c['MANAGER'],
+        lambda c: chain(*guard(c, c['OPEN'], 'This action is no longer open, so it cannot be reassigned.', c['REASSIGN'],
                                'Only the people who manage this action can reassign it.'),
                         ("equals(" + NEW_OWNER_ID + ", '0')", 'Choose who will do it.'),
                         ("equals(" + NEW_OWNER_ID + ", " + c['OWNER_ID'] + ")", 'Choose someone other than the current owner.'),
@@ -921,7 +932,7 @@ def flow_request_queue(domain='actions'):
     close_case = change_case(
         '_L',
         lambda c: chain(*guard(c, "or(" + c['OPEN'] + ", equals(string(" + c['A'] + "?['Status']), 'Completed'))", 'This action is already closed.',
-                               c['MANAGER'], 'Only the people who manage this action can close it.'),
+                               c['CLOSE'], 'Only the people who manage this action can close it.'),
                         ("not(contains(createArray('Completed', 'No longer required', 'Superseded', 'Other'), " + OUTCOME + "))", 'Choose an outcome.'),
                         ("and(not(equals(" + OUTCOME + ", 'Completed')), less(" + NOTE_LEN + ", 10))", 'Explain the outcome in at least 10 characters.'),
                         ("greater(" + NOTE_LEN + ", 1000)", 'Keep the note to 1,000 characters or fewer.')),
@@ -940,7 +951,7 @@ def flow_request_queue(domain='actions'):
     reopen_case = change_case(
         '_O',
         lambda c: chain(*guard(c, "contains(createArray('Closed', 'Completed'), string(" + c['A'] + "?['Status']))", 'This action is already open.',
-                               c['MANAGER'], 'Only the people who manage this action can reopen it.'),
+                               c['REOPEN'], 'Only the people who manage this action can reopen it.'),
                         *REASON_RULES),
         lambda c: {'status': '@string(' + c['A'] + "?['Status'])", 'outcome': "@{" + c['A'] + "?['CloseOutcome']}"},
         lambda c: {'Status': 'In Progress', 'IsOpen': True, 'DateClosed': None, 'DateCompleted': None, 'ClosedById': None, 'CloseOutcome': None,
@@ -954,7 +965,9 @@ def flow_request_queue(domain='actions'):
     EDIT = {'title': 'Title', 'description': 'Description', 'priority': 'Priority'}
     edit_case = change_case(
         '_E',
-        lambda c: chain(*guard(c, c['OPEN'], 'This action is no longer open.', c['MANAGER'], 'Only the people who manage this action can change its details.'),
+        lambda c: chain(*guard(c, c['OPEN'], 'This action is no longer open.', c['EDIT'], 'Only the people who manage this action can change its details.'),
+                        # the owner changes only by Reassign, which has its own rule (plan REV5 §4.4)
+                        ("or(" + HAS('ownerId') + ", " + HAS('AssignedTo') + ", " + HAS('AssignedToId') + ")", 'The owner is changed with Reassign.'),
                         ("not(or(" + ", ".join(HAS(f) for f in ('title', 'description', 'priority', 'requiresCloseOut')) + "))", 'Nothing has changed.'),
                         ("and(" + HAS('title') + ", equals(" + text_len('title') + ", 0))", 'Enter what needs doing.'),
                         ("and(" + HAS('title') + ", greater(" + text_len('title') + ", 255))", 'Keep the title to 255 characters or fewer.'),

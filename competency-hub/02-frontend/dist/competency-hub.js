@@ -518,11 +518,23 @@ window.ESGCompetencyHub = function (ctx) {
         canWrite: function (key) { return active(key) && (management || !!member[key]); },
         // Every active user may post a notice on any active area's noticeboard (K4.1, A-1).
         canPostNotice: function (key) { return active(key); },
-        // Engineers of the area, its meeting administrators, and management manage actions and meetings.
+        isTechnician: role === 'Technician',
+        // An engineer who is a member of the area.
+        isEngineerIn: function (key) { return active(key) && role === 'Engineer' && !!member[key]; },
+        // "Can run meetings" in this area, set for each person and area by an administrator (plan REV5 §4).
+        chairs: function (key) { return active(key) && !!member[key] && !!meetingAdmin[key]; },
+        // Areas whose actions this person looks after (for the lists that gather them): management, engineers, meeting runners.
         canManage: function (key) {
           return active(key) && (management || (!!member[key] && (role === 'Engineer' || !!meetingAdmin[key])));
         },
-        runsMeetings: function (key) { return active(key) && (management || !!meetingAdmin[key]); }
+        runsMeetings: function (key) { return active(key) && (management || (!!member[key] && !!meetingAdmin[key])); },
+        // Moderating others' notices and comments: engineers of the area and management – never meeting rights alone.
+        canModerate: function (key) { return active(key) && (management || (role === 'Engineer' && !!member[key])); },
+        // A technician without meeting rights in the area may raise actions only for themselves (plan REV5 §4.4).
+        canRaiseFor: function (key, ownerId, selfId) {
+          if (!active(key) || !(management || !!member[key])) return false;
+          return role !== 'Technician' || !!meetingAdmin[key] || Number(ownerId) === Number(selfId);
+        }
       };
     }
 
@@ -550,7 +562,9 @@ window.ESGCompetencyHub = function (ctx) {
 
     function isOpen(status) { return OPEN_STATUSES.indexOf(status) >= 0; }
 
-    // ctx: { today, maxYears, canWrite(areaKey), ownerAllowed(areaKey, ownerId) }
+    var SELF_ONLY = 'As a technician you can raise actions for yourself in this area. Ask an engineer or meeting lead to raise it for someone else.';
+
+    // ctx: { today, maxYears, canWrite(areaKey), ownerAllowed(areaKey, ownerId), canRaiseFor(areaKey, ownerId) }
     function validateRaise(v, ctx) {
       var e = {};
       var title = String(v.title || '').trim();
@@ -562,6 +576,7 @@ window.ESGCompetencyHub = function (ctx) {
       if (!v.areaKey || !ctx.canWrite(v.areaKey)) e.areaKey = 'Choose one of your areas.';
       if (!v.ownerId) e.ownerId = 'Choose who will do it.';
       else if (!e.areaKey && !ctx.ownerAllowed(v.areaKey, Number(v.ownerId))) e.ownerId = 'Choose a member of this area or a Team Leader.';
+      else if (!e.areaKey && ctx.canRaiseFor && !ctx.canRaiseFor(v.areaKey, Number(v.ownerId))) e.ownerId = SELF_ONLY;
       if (!D.isIso(v.dueIso || '')) e.dueIso = 'Choose a target date.';
       else if (v.dueIso < ctx.today) e.dueIso = 'The target date cannot be in the past.';
       else if (v.dueIso > addYears(ctx.today, ctx.maxYears)) e.dueIso = 'Choose a date within ' + ctx.maxYears + ' years.';
@@ -672,23 +687,32 @@ window.ESGCompetencyHub = function (ctx) {
       return {};
     }
 
-    // Who may do what with an action (E.3). personId: SiteUserId. access: CH.access result.
+    // Who may do what with an action (plan REV5 §4.2), judged against its primary area. Each operation has its own
+    // rule; the request flow applies the same ones. personId: SiteUserId. access: CH.access result.
+    //   management, or an engineer of the area:       edit, reassign, close, reopen
+    //   "Can run meetings" in the area:                 edit, reassign, close – never reopen
+    //   the raiser:                                     edit, close, reopen; reassign unless a technician without meeting rights
+    //   the owner:                                      status, extend, mark as done
     function roles(action, personId, access) {
+      var k = action.areaKey;
       var owner = Number(action.ownerId) === Number(personId);
-      var manager = Number(action.raisedById) === Number(personId) || access.canManage(action.areaKey);
+      var raiser = Number(action.raisedById) === Number(personId);
+      var lead = access.isManagement ? access.canWrite(k) : access.isEngineerIn(k);
+      var chair = access.chairs(k);
       var open = isOpen(action.status);
       var finished = action.status === 'Closed' || action.status === 'Completed';
+      var edits = lead || chair || raiser;
       return {
         owner: owner,
-        manager: manager,
-        canUpdate: access.canWrite(action.areaKey) || owner,
-        canExtend: open && (owner || manager),
-        canComplete: open && (owner || manager),
-        canStatus: open && (owner || manager),
-        canReassign: open && manager,
-        canClose: (open || action.status === 'Completed') && manager,
-        canReopen: finished && manager,
-        canEdit: open && manager
+        manager: edits,
+        canUpdate: access.canWrite(k) || owner,
+        canExtend: open && (owner || edits),
+        canComplete: open && (owner || edits),
+        canStatus: open && (owner || edits),
+        canReassign: open && (lead || chair || (raiser && !(access.isTechnician && !chair))),
+        canClose: (open || action.status === 'Completed') && edits,
+        canReopen: finished && (lead || raiser),
+        canEdit: open && edits
       };
     }
 
@@ -699,7 +723,7 @@ window.ESGCompetencyHub = function (ctx) {
       addYears: addYears, isOpen: isOpen, validateRaise: validateRaise, validateExtend: validateExtend,
       validateComplete: validateComplete, validateUpdate: validateUpdate, validateStatus: validateStatus,
       validateReassign: validateReassign, validateClose: validateClose, validateReopen: validateReopen, validateEdit: validateEdit,
-      roles: roles, completionStatus: completionStatus, PRIORITIES: PRIORITIES, OPEN_STATUSES: OPEN_STATUSES, OUTCOMES: OUTCOMES
+      roles: roles, completionStatus: completionStatus, SELF_ONLY: SELF_ONLY, PRIORITIES: PRIORITIES, OPEN_STATUSES: OPEN_STATUSES, OUTCOMES: OUTCOMES
     };
   })();
 
@@ -1604,14 +1628,19 @@ window.ESGCompetencyHub = function (ctx) {
       closeOut.addEventListener('change', function () { closeOutTouched = true; });
       priority.addEventListener('change', function () { if (!closeOutTouched) closeOut.checked = priority.value === 'High'; });
 
+      var selfNote = h('p', { class: 'explain', id: 'ch-r-self-only', text: 'As a technician you can raise actions for yourself in this area. An engineer or meeting lead can raise them for someone else.' });
       function fillOwners() {
         var current = owner.value || String(app.person.SiteUserId);
         CH.dom.clear(owner);
         owner.appendChild(h('option', { value: '', text: 'Choose a person' }));
-        m.ownersFor(area.value).forEach(function (p) {
+        // a technician without meeting rights in this area is offered only themselves (plan REV5 §4.4)
+        m.ownersFor(area.value).filter(function (p) { return app.access.canRaiseFor(area.value, p.id, app.person.SiteUserId); }).forEach(function (p) {
           owner.appendChild(h('option', { value: String(p.id), selected: String(p.id) === current ? true : null,
             text: p.name + (Number(p.id) === Number(app.person.SiteUserId) ? ' (you)' : '') + (CH.config.managementRoles.indexOf(p.role) >= 0 ? ' – ' + p.role : '') }));
         });
+        var selfOnly = !app.access.canRaiseFor(area.value, -1, app.person.SiteUserId) && app.access.canWrite(area.value);
+        selfNote.style.display = selfOnly ? '' : 'none';
+        if (selfOnly) owner.value = String(app.person.SiteUserId);
       }
       area.addEventListener('change', fillOwners);
       fillOwners();
@@ -1623,6 +1652,7 @@ window.ESGCompetencyHub = function (ctx) {
       function errorsFor(keys) {
         var all = R.validateRaise(values(), {
           today: today, maxYears: CH.config.maxDeadlineYears, canWrite: app.access.canWrite,
+          canRaiseFor: function (k, id) { return app.access.canRaiseFor(k, id, app.person.SiteUserId); },
           ownerAllowed: function (k, id) { return m.ownersFor(k).some(function (p) { return Number(p.id) === id; }); }
         });
         var out = {};
@@ -1641,7 +1671,7 @@ window.ESGCompetencyHub = function (ctx) {
 
       var panes = [
         [field('Title', title, 'A short summary, for example "Replace FH40 probe".'), field('Description', description, 'What needs doing and anything the owner should know.')],
-        [field('Area', area), field('Who will do it?', owner, 'Members of the area, and Team Leaders and the Group Head.')],
+        [field('Area', area), field('Who will do it?', owner, 'Members of the area, and Team Leaders and the Group Head.'), selfNote],
         [field('Target date', due, 'From today up to ' + CH.config.maxDeadlineYears + ' years ahead.'),
           h('details', { class: 'more' }, h('summary', { text: 'More options' }),
             field('Priority', priority), h('label', { class: 'check' }, closeOut, ' Needs a close-out check before it is closed'))],

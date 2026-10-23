@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.1.0",
+  "schemaVersion": "1.2.0",
   "areas": [
     { "key": "FLK", "title": "Flask", "sort": 10 },
     { "key": "INS", "title": "Instruments", "sort": 20 },
@@ -21,7 +21,8 @@
     { "key": "AllUsers", "title": "Competency Hub – All Users", "description": "Everyone who uses the ESG Competency Hub." },
     { "key": "Management", "title": "Competency Hub – Management", "description": "Team Leaders and the Group Head." },
     { "key": "Administrators", "title": "Competency Hub – Administrators", "description": "Competency Hub system administrators." },
-    { "key": "Members:{Key}", "title": "Competency Hub – {Title} Members", "description": "Members of the {Title} competency area.", "perArea": true }
+    { "key": "Members:{Key}", "title": "Competency Hub – {Title} Members", "description": "Members of the {Title} competency area.", "perArea": true },
+    { "key": "NoticePosters", "title": "Competency Hub – Notice Posters", "description": "Everyone who may post notices. An administrator can take a person out." }
   ],
   "standardColumns": [
     { "name": "Revision", "title": "Revision", "type": "Number", "default": "1" },
@@ -56,7 +57,8 @@
         { "name": "IsAdministrator", "title": "System Administrator", "type": "Boolean", "default": "0", "indexed": true },
         { "name": "Status", "title": "Status", "type": "Choice", "choices": ["Active", "Left"], "required": true, "default": "Active", "indexed": true },
         { "name": "DateLeft", "title": "Date Left", "type": "DateOnly" },
-        { "name": "AccessVerifiedOn", "title": "Access Verified", "type": "DateTime" }
+        { "name": "AccessVerifiedOn", "title": "Access Verified", "type": "DateTime" },
+        { "name": "CanPostNotices", "title": "Can Post Notices", "type": "Boolean", "default": "1" }
       ]
     },
     {
@@ -103,14 +105,15 @@
         { "name": "ExtensionCount", "title": "Extension Count", "type": "Number", "default": "0", "indexed": true },
         { "name": "LastExtendedOn", "title": "Last Extended", "type": "DateTime" },
         { "name": "Blocker", "title": "Blocker", "type": "Note" },
-        { "name": "DateCompleted", "title": "Date Completed", "type": "DateTime" },
+        { "name": "DateCompleted", "title": "Date Completed", "type": "DateTime", "indexed": true },
         { "name": "DateClosed", "title": "Date Closed", "type": "DateTime", "indexed": true },
         { "name": "ClosedBy", "title": "Closed By", "type": "User" },
         { "name": "CloseOutcome", "title": "Close Outcome", "type": "Choice", "choices": ["Completed", "No longer required", "Superseded", "Other", "Withdrawn"] },
         { "name": "ClosureNote", "title": "Closure Note", "type": "Note" },
         { "name": "SourceType", "title": "Source Type", "type": "Choice", "choices": ["None", "Meeting", "Noticeboard", "Register"], "default": "None" },
         { "name": "SourceId", "title": "Source ID", "type": "Number", "indexed": true },
-        { "name": "RelatedLinks", "title": "Links", "type": "Note" }
+        { "name": "RelatedLinks", "title": "Links", "type": "Note" },
+        { "name": "IsTestRecord", "title": "Test Record", "type": "Boolean", "default": "0", "indexed": true }
       ]
     },
     {
@@ -173,12 +176,13 @@
         { "name": "ResponsiblePerson", "title": "Responsible Person", "type": "User", "indexed": true },
         { "name": "Status", "title": "Status", "type": "Choice", "choices": ["Open", "Under Review", "Resolved", "Closed"], "required": true, "default": "Open", "indexed": true },
         { "name": "Outcome", "title": "Outcome", "type": "Note" },
-        { "name": "DateResolved", "title": "Date Resolved", "type": "DateTime" }
+        { "name": "DateResolved", "title": "Date Resolved", "type": "DateTime" },
+        { "name": "IsTestRecord", "title": "Test Record", "type": "Boolean", "default": "0", "indexed": true }
       ]
     },
     {
       "key": "notices", "url": "Noticeboard", "title": "Noticeboard", "template": 100, "standard": true, "attachments": true, "folders": "areas",
-      "permissions": { "list": [["AllUsers", "Add"]] },
+      "permissions": { "list": [["AllUsers", "Read"], ["NoticePosters", "Add"]], "exact": true },
       "fields": [
         { "name": "Body", "title": "Body", "type": "Note" },
         { "name": "Competency", "title": "Competency", "type": "Lookup", "lookup": "competencies", "indexed": true },
@@ -186,7 +190,8 @@
         { "name": "IsImportant", "title": "Important", "type": "Boolean", "default": "0", "indexed": true },
         { "name": "ImportantUntil", "title": "Important Until", "type": "DateOnly" },
         { "name": "Status", "title": "Status", "type": "Choice", "choices": ["Active", "Archived"], "required": true, "default": "Active", "indexed": true },
-        { "name": "ClientKey", "title": "Client Key", "type": "Text", "max": 36, "required": true, "indexed": true, "unique": true }
+        { "name": "ClientKey", "title": "Client Key", "type": "Text", "max": 36, "required": true, "indexed": true, "unique": true },
+        { "name": "IsTestRecord", "title": "Test Record", "type": "Boolean", "default": "0", "indexed": true }
       ]
     },
     {
@@ -199,7 +204,8 @@
         { "name": "EntryType", "title": "Entry Type", "type": "Choice", "choices": ["Progress", "Blocker", "Comment", "Flagged", "Flag Withdrawn"], "required": true, "indexed": true },
         { "name": "IsFlagEvent", "title": "Flag Event", "type": "Boolean", "default": "0", "indexed": true },
         { "name": "Body", "title": "Body", "type": "Note" },
-        { "name": "IsHidden", "title": "Hidden", "type": "Boolean", "default": "0" }
+        { "name": "IsHidden", "title": "Hidden", "type": "Boolean", "default": "0" },
+        { "name": "IsTestRecord", "title": "Test Record", "type": "Boolean", "default": "0", "indexed": true }
       ]
     },
     {
@@ -241,7 +247,17 @@
         { "name": "NextMeetingDate", "title": "Next Meeting Date", "type": "DateOnly" },
         { "name": "CancellationReason", "title": "Cancellation Reason", "type": "Note" },
         { "name": "AmendmentCount", "title": "Amendment Count", "type": "Number", "default": "0" },
-        { "name": "PendingChanges", "title": "Pending Changes", "type": "Number", "default": "0" }
+        { "name": "PendingChanges", "title": "Pending Changes", "type": "Number", "default": "0" },
+        { "name": "Attendees", "title": "Attendees", "type": "Note" },
+        { "name": "OutlookEventId", "title": "Outlook Event ID", "type": "Note" },
+        { "name": "InviteState", "title": "Invite State", "type": "Choice", "choices": ["None", "Creating", "Sent", "Updating", "Cancelling", "Cancelled", "Unknown", "Failed"], "default": "None", "indexed": true },
+        { "name": "InviteToken", "title": "Invite Token", "type": "Text", "max": 60 },
+        { "name": "InviteAttempts", "title": "Invite Attempts", "type": "Number", "default": "0" },
+        { "name": "InviteError", "title": "Invite Error", "type": "Note" },
+        { "name": "PdfState", "title": "PDF State", "type": "Choice", "choices": ["None", "Pending", "Ready", "Failed"], "default": "None", "indexed": true },
+        { "name": "PdfVersion", "title": "PDF Version", "type": "Number", "default": "0" },
+        { "name": "PdfAttempts", "title": "PDF Attempts", "type": "Number", "default": "0" },
+        { "name": "IsTestRecord", "title": "Test Record", "type": "Boolean", "default": "0", "indexed": true }
       ]
     },
     {
@@ -273,6 +289,29 @@
         { "name": "Notes", "title": "Notes", "type": "Note" },
         { "name": "AmendmentReason", "title": "Amendment Reason", "type": "Note" },
         { "name": "AmendedBy", "title": "Amended By", "type": "User" }
+      ]
+    },
+    {
+      "key": "feedback", "url": "Feedback", "title": "Feedback", "template": 100, "readSecurity": 2, "writeSecurity": 2, "noCrawl": true,
+      "permissions": { "list": [["AllUsers", "Add"], ["Administrators", "Edit"]] },
+      "fields": [
+        { "name": "FeedbackType", "title": "Feedback Type", "type": "Choice", "choices": ["Suggest an improvement", "Report a bug", "Ask a question", "Other feedback"], "required": true, "indexed": true },
+        { "name": "Description", "title": "Description", "type": "Note", "required": true },
+        { "name": "Status", "title": "Status", "type": "Choice", "choices": ["New", "In review", "Answered", "Done"], "required": true, "default": "New", "indexed": true },
+        { "name": "Response", "title": "Response", "type": "Note" },
+        { "name": "RespondedBy", "title": "Responded By", "type": "User" },
+        { "name": "RespondedOn", "title": "Responded On", "type": "DateTime" },
+        { "name": "PageView", "title": "Page", "type": "Text", "max": 100 },
+        { "name": "ClientKey", "title": "Client Key", "type": "Text", "max": 36, "required": true, "indexed": true, "unique": true },
+        { "name": "IsTestRecord", "title": "Test Record", "type": "Boolean", "default": "0", "indexed": true }
+      ]
+    },
+    {
+      "key": "minutes", "url": "MeetingMinutes", "title": "Meeting Minutes", "template": 101, "folders": "areas",
+      "permissions": { "list": [["AllUsers", "Read"]] },
+      "fields": [
+        { "name": "MeetingId", "title": "Meeting ID", "type": "Number", "indexed": true },
+        { "name": "MinutesVersion", "title": "Minutes Version", "type": "Number" }
       ]
     },
     {
@@ -349,6 +388,7 @@
     ["TestFailAfterStep", "", "Test environments only"],
     ["TestFailSend", "", "Test environments only"],
     ["QueueHealth", "", "Written by the queue monitor: processing health and its last check"],
-    ["MonitorHours", "07:00|19:45|60", "Queue monitor: working hours start|end, and minutes between checks outside them"]
+    ["MonitorHours", "07:00|19:45|60", "Queue monitor: working hours start|end, and minutes between checks outside them"],
+    ["PreGoLiveTesting", "Yes", "While Yes, everything created is marked as a test record, to be removed before go-live"]
   ]
 }
