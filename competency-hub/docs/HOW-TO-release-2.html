@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ESG Competency Hub – setup steps</title>
+<style>
+  body { font-family: Segoe UI, Arial, sans-serif; font-size: 16px; line-height: 1.5; color: #16222c; background: #fff; max-width: 860px; margin: 0 auto; padding: 24px 16px; }
+  h1 { color: #13516b; font-size: 26px; margin-bottom: 4px; }
+  h2 { color: #13516b; font-size: 20px; margin-top: 32px; border-bottom: 2px solid #ef7d3a; padding-bottom: 4px; }
+  h3 { color: #13516b; font-size: 17px; margin-top: 22px; }
+  ol > li { margin-bottom: 12px; }
+  ul.sub { margin-top: 6px; }
+  code { background: #eef2f5; padding: 1px 5px; border-radius: 4px; font-size: 15px; }
+  .note { background: #fff3d6; color: #6b4a00; padding: 10px 14px; border-radius: 6px; }
+  .done { background: #e6f3eb; color: #1b5e37; padding: 10px 14px; border-radius: 6px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border-bottom: 1px solid #d9dfe5; padding: 6px 8px; text-align: left; vertical-align: top; }
+</style>
+</head>
+<body>
+<h1>ESG Competency Hub – Releases 1 and 2</h1>
+<p>This package brings the Hub from app 0.3.0 and solution 1.2.0.0 (what you have now) to <strong>app 0.5.0</strong>, <strong>solution 1.4.0.0</strong> and <strong>Setup 1.2</strong>. Updated 23 October 2026.</p>
+<ul>
+  <li><strong>Release 1, safety net:</strong> a queue monitor that recovers stuck changes and retries emails; honest "being recorded / retrying / needs attention" messages; an <em>Administration</em> page; and a limited mode when processing is down.</li>
+  <li><strong>Release 2, administration and permissions:</strong> add people, choose their areas, meeting rights, access end dates and notice posting from the app; the corrected technician and meeting rights; Feedback list and Meeting Minutes library ready for later releases.</li>
+</ul>
+<p class="note">Everything here was built and tested on a simulated SharePoint site only. Each part below changes your Competency Hub site or your Power Automate environment, so do it only when you are ready. Nobody else gets access until you add them.</p>
+
+<table>
+  <tr><th>Folder</th><th>Files</th><th>When</th></tr>
+  <tr><td><code>1-Setup</code></td><td><code>CH_Setup.html</code>, <code>CH_Setup.js</code></td><td>Part A</td></tr>
+  <tr><td><code>2-Power-Automate</code></td><td><code>ESGCompetencyHub_1_4_0_0_unmanaged.zip</code></td><td>Part B – import as it is. <strong>Don't unzip it.</strong></td></tr>
+  <tr><td><code>3-App</code></td><td><code>competency-hub.html</code>, <code>competency-hub.js</code></td><td>Part C</td></tr>
+  <tr><td><code>4-Permission-probe</code></td><td><code>CH_Probe_P2.html</code>, <code>CH_Probe_P2.js</code></td><td>Part E, with the test account</td></tr>
+</table>
+
+<h2>Part A – Setup 1.2 (about 15 minutes)</h2>
+<p>Setup only adds things; it removes no data. It adds the <em>Feedback</em> list, the <em>Meeting Minutes</em> library, a few new columns and settings, and the group <em>Competency Hub – Notice Posters</em>. It makes <strong>one permission change</strong>: the Noticeboard goes from "All Users can add" to "All Users can read, Notice Posters can add", so an administrator can stop one person posting. You are the only user, so nobody else is affected.</p>
+<ol>
+  <li>Upload both files from <code>1-Setup</code> to <em>Welcome Web Part - Custom Layouts</em> (<em>Replace</em>).</li>
+  <li>Create the <code>HubSetup</code> page again with a Welcome web part, choose the layout <em>Competency Hub Setup</em>, and publish it.</li>
+  <li>Click <strong>Check</strong>. It writes nothing. Send me the log.</li>
+  <li>When I have looked at it, click <strong>Apply</strong>, type <code>SETUP</code> and wait for it to finish. Send me the log.</li>
+  <li>Delete the two Setup files and the HubSetup page again.</li>
+</ol>
+
+<h2>Part B – solution 1.4.0.0 (about 10 minutes)</h2>
+<ol>
+  <li>In Power Automate, same environment: <strong>Solutions → Import solution → Browse</strong>, choose <code>ESGCompetencyHub_1_4_0_0_unmanaged.zip</code>, <em>Next</em>. It should say <strong>upgrade</strong>.</li>
+  <li>Keep the SharePoint and Outlook connections and the site address, then <em>Import</em>.</li>
+  <li>Open the solution. There are now <strong>four</strong> flows. Make sure all four are <strong>On</strong>:
+    <ul class="sub">
+      <li><em>ESG Competency Hub | 1 Daily tasks</em> and <em>2 Request queue</em> (already on);</li>
+      <li><em>ESG Competency Hub | 3 Queue monitor</em> and <em>6 Administration</em> (new: turn them on).</li>
+    </ul></li>
+</ol>
+
+<h2>Part C – app 0.5.0</h2>
+<ol>
+  <li>Upload both files from <code>3-App</code> to <em>Welcome Web Part - Custom Layouts</em> (<em>Replace</em>).</li>
+  <li>On the Hub page, edit the web part, <strong>Reset layout cache</strong>, <em>Republish</em>, and reload with <strong>Ctrl+F5</strong>. The footer should say <strong>0.5.0</strong>.</li>
+</ol>
+
+<h2>Part D – try the safety net (Release 1)</h2>
+<ol>
+  <li>On the home page, click <strong>Open Administration</strong>. The first card should say <em>Automatic processing is working</em> once the queue monitor has run (within 15 minutes in working hours).</li>
+  <li>Turn <em>2 Request queue</em> <strong>Off</strong>. Raise a <strong>TEST</strong> action. It shows <em>being recorded</em>.</li>
+  <li>After about 20 minutes, turn <em>2 Request queue</em> back <strong>On</strong>. Within 15 minutes the monitor sends the request again and the action appears, without you doing anything else.</li>
+  <li>Send me a screenshot of the Administration page and the run history of <em>3 Queue monitor</em>.</li>
+</ol>
+<p class="note">If the monitor ever stops, the app shows a banner to say changes can't be processed and pauses the buttons that send changes. Reading and adding updates keep working.</p>
+
+<h2>Part E – administration and the permission probe (Release 2)</h2>
+<p>This needs <strong>one ordinary account</strong> that is not a site owner, for example a test account from IT or a colleague for one session. A site owner can't be used: owners bypass permissions, so every check would pass without proving anything.</p>
+<h3>Add the test account</h3>
+<ol>
+  <li><strong>Administration → People → Add people.</strong> Enter the test account's email, role <strong>Technician</strong>.</li>
+  <li>Tick <strong>Flask</strong> as a member (leave <em>Can run meetings</em> off), and tick <strong>Green Stream</strong> with <em>Can run meetings</em> <strong>on</strong>. Leave <em>Can post notices</em> on. Click <strong>Add this person</strong>; it shows <em>Done and verified</em> after a minute or two.</li>
+  <li>Open your own name in the list: it should say you can't change your own access.</li>
+</ol>
+<h3>Run the probe as the test account</h3>
+<ol>
+  <li>As yourself: upload both files from <code>4-Permission-probe</code> to <em>Welcome Web Part - Custom Layouts</em>, create a page <code>HubProbe2</code> with a Welcome web part, choose the layout <em>Competency Hub probe P2</em>, and publish it.</li>
+  <li>Sign in as the <strong>test account</strong> (a private browser window is easiest) and open the <code>HubProbe2</code> page.</li>
+  <li>Click <strong>Run read checks</strong>, then <strong>Run write checks</strong>. The write checks wait for the flow, so allow up to 10 minutes. They add one TEST notice and up to two TEST requests, all marked as test records. The second request raises a TEST action for a Team Leader, so that person (you, if you're the first one listed) gets an "assigned to you" email.</li>
+  <li>Copy everything in the results box and send it to me. The box hides names, email addresses and the site address.</li>
+  <li><strong>Then, as yourself:</strong> in People, open the test account and turn <em>Can post notices</em> <strong>off</strong>, <em>Save changes</em>. Run the write checks again as the test account and send the results; the notice check should now show it is refused.</li>
+</ol>
+<h3>Tidy up</h3>
+<ol>
+  <li>Delete the probe files and the <code>HubProbe2</code> page.</li>
+  <li>Keep the test account until we've read the results. Then, in People, open it and choose <strong>Mark as left</strong>.</li>
+</ol>
+
+<h2>Already done</h2>
+<div class="done">
+  <ul>
+    <li>Site, Setup and the app shell; raising and updating actions, extensions, done, status, edit, close and reopen; My actions; emails and 06:00 reminders.</li>
+  </ul>
+</div>
+</body>
+</html>
