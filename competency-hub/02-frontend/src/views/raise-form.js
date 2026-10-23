@@ -13,9 +13,11 @@ CH.views.raiseForm = (function () {
     { title: 'Check and raise', keys: [] }
   ];
 
-  function open(app, areaKey) {
+  // opts: { entry } raises an action linked to an improvement or degradation, in that entry's area (spec REG-3).
+  function open(app, areaKey, opts) {
     var m = app.model;
-    var mine = m.areas.filter(function (a) { return app.access.canWrite(a.key); });
+    var entry = opts && opts.entry;
+    var mine = m.areas.filter(function (a) { return app.access.canWrite(a.key) && (!entry || a.key === entry.areaKey); });
     if (!mine.length) { CH.ui.toast(app.root, 'You are not a member of any area yet, so you cannot raise actions.', 'info'); return; }
     var today = m.today;
     // the limit an administrator sets (MaxDeadlineYears), the same one the flow checks
@@ -68,7 +70,7 @@ CH.views.raiseForm = (function () {
       return out;
     }
 
-    var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-r', title: 'Raise an action' });
+    var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-r', title: entry ? 'Raise an action for ' + entry.ref : 'Raise an action' });
     var progress = h('p', { class: 'muted small', 'aria-live': 'polite' });
     var errorBox = h('p', { class: 'form-error', role: 'alert' });
     var stepBox = h('div');
@@ -93,7 +95,8 @@ CH.views.raiseForm = (function () {
         h('dt', { text: 'What' }), h('dd', null, h('b', { text: v.title.trim() }), h('br'), h('span', { class: 'notice-body', text: v.description.trim() })),
         h('dt', { text: 'Who' }), h('dd', { text: ownerName + ', in ' + m.areaByKey[v.areaKey].name }),
         h('dt', { text: 'When' }), h('dd', { text: 'By ' + D.weekday(v.dueIso) + ' ' + D.long(v.dueIso) }),
-        h('dt', { text: 'Also' }), h('dd', { text: v.priority + ' priority' + (v.requiresCloseOut ? ', with a close-out check' : '') }));
+        h('dt', { text: 'Also' }), h('dd', { text: v.priority + ' priority' + (v.requiresCloseOut ? ', with a close-out check' : '') }),
+        entry ? [h('dt', { text: 'For' }), h('dd', { text: entry.ref + ' ' + entry.title })] : null);
     }
 
     function go(n) {
@@ -126,7 +129,7 @@ CH.views.raiseForm = (function () {
       try {
         await app.tracker.submit({ key: key, type: 'RaiseAction', label: 'Raise “' + v.title.trim() + '”', payload: {
           areaKey: v.areaKey, title: v.title.trim(), description: v.description.trim(), ownerId: Number(v.ownerId),
-          dueIso: v.dueIso, priority: v.priority, requiresCloseOut: v.requiresCloseOut } });
+          dueIso: v.dueIso, priority: v.priority, requiresCloseOut: v.requiresCloseOut, sourceEntryId: entry ? entry.id : undefined } });
         dlg.close();
         CH.ui.toast(app.root, 'Your action has been sent. It will appear in a few minutes.', 'ok');
       } catch (error) {

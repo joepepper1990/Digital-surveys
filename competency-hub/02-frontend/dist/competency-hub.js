@@ -1,11 +1,11 @@
-/* ESG Competency Hub 0.6.0 – built from src/ by tools/build.js. Do not edit. */
+/* ESG Competency Hub 0.7.0 – built from src/ by tools/build.js. Do not edit. */
 window.ESGCompetencyHub = function (ctx) {
   'use strict';
   var CH = {};
   /* src/core/config.js */
   // Fixed names and limits. Lists are addressed by display title; folders by list URL name.
   CH.config = {
-    VERSION: '0.6.0',
+    VERSION: '0.7.0',
     ENVIRONMENT: 'TEST',
     lists: {
       competencies: { title: 'Competencies', url: 'Competencies' },
@@ -18,7 +18,11 @@ window.ESGCompetencyHub = function (ctx) {
       meetings: { title: 'Meetings', url: 'Meetings' },
       requests: { title: 'Requests', url: 'Requests' },
       history: { title: 'History', url: 'History' },
-      settings: { title: 'Competency Hub Settings', url: 'Settings' }
+      settings: { title: 'Competency Hub Settings', url: 'Settings' },
+      register: { title: 'Improvements and Degradations', url: 'ImprovementRegister' },
+      feedback: { title: 'Feedback', url: 'Feedback' },
+      meetingItems: { title: 'Meeting Items', url: 'MeetingItems' },
+      minutes: { title: 'Meeting Minutes', url: 'MeetingMinutes' }
     },
     pageSize: 500,
     maxRows: 5000,
@@ -149,21 +153,27 @@ window.ESGCompetencyHub = function (ctx) {
     function weekday(iso) { return DAYS[dayOfWeek(iso)]; }
     function weekdayShort(iso) { return weekday(iso).slice(0, 3) + ' ' + short(iso); }
 
-    // Plain-English wording for a deadline relative to today (plan C.9).
+    // Plain-English wording for a deadline relative to today (plan C.9). "Due soon" covers the days an administrator
+    // sets (DueSoonDays, 7 unless changed).
     function dueWords(dueIso, todayIso) {
+      var soonDays = (CH.config && CH.config.dueSoonDays) || 7;
       var d = daysBetween(todayIso, dueIso);
       if (d < 0) return { group: 'late', text: (-d) + (d === -1 ? ' day late' : ' days late') };
       if (d === 0) return { group: 'soon', text: 'Due today' };
-      if (d === 1) return { group: 'soon', text: 'Due tomorrow' };
-      if (d < 7) return { group: 'soon', text: 'Due ' + weekday(dueIso) };
-      if (d === 7) return { group: 'soon', text: 'Due ' + short(dueIso) };
-      return { group: 'later', text: 'Due ' + short(dueIso) };
+      if (d === 1) return { group: d <= soonDays ? 'soon' : 'later', text: 'Due tomorrow' };
+      return { group: d <= soonDays ? 'soon' : 'later', text: 'Due ' + (d < 7 ? weekday(dueIso) : short(dueIso)) };
+    }
+
+    // A moment as SharePoint's form fields take it on a UK site: dd/MM/yyyy HH:mm, UK time.
+    function ukFormDateTime(instant) {
+      var p = parts(instant instanceof Date ? instant : new Date(instant));
+      return p.day + '/' + p.month + '/' + p.year + ' ' + p.hour + ':' + p.minute;
     }
 
     return {
       localDate: localDate, ukTime: ukTime, addDays: addDays, daysBetween: daysBetween, dayOfWeek: dayOfWeek,
       mondayOf: mondayOf, toDueDay: toDueDay, fromDueDay: fromDueDay, isIso: isIso,
-      short: short, shortYear: shortYear, long: long, weekday: weekday, weekdayShort: weekdayShort, dueWords: dueWords
+      short: short, shortYear: shortYear, long: long, weekday: weekday, weekdayShort: weekdayShort, dueWords: dueWords, ukFormDateTime: ukFormDateTime
     };
   })();
 
@@ -245,7 +255,7 @@ window.ESGCompetencyHub = function (ctx) {
         return { rows: rows.slice(0, limit), complete: complete };
       }
 
-      function currentUser() { return req('GET', siteUrl + '/_api/web/currentuser?$select=Id,Title,Email'); }
+      function currentUser() { return req('GET', siteUrl + '/_api/web/currentuser?$select=Id,Title,Email,LoginName'); }
 
       // The signed-in user's first name from their Microsoft 365 profile, or '' if it cannot be read.
       async function myFirstName() {
@@ -265,7 +275,7 @@ window.ESGCompetencyHub = function (ctx) {
         var list = CH.config.lists[listKey];
         var body = {
           listItemCreateInfo: {
-            FolderPath: { DecodedUrl: siteRelative + '/Lists/' + list.url + '/' + folder },
+            FolderPath: { DecodedUrl: siteRelative + '/Lists/' + list.url + (folder ? '/' + folder : '') },
             UnderlyingObjectType: 0
           },
           formValues: Object.keys(values).map(function (k) { return { FieldName: k, FieldValue: String(values[k]) }; }),
@@ -279,7 +289,19 @@ window.ESGCompetencyHub = function (ctx) {
         return idField ? Number(idField.FieldValue) : null;
       }
 
-      return { siteUrl: siteUrl, origin: origin, siteRelative: siteRelative, items: items, currentUser: currentUser, myFirstName: myFirstName, addToFolder: addToFolder };
+      // Changes fields on an item the user may edit (administrators answering feedback). Every HasException is checked.
+      async function update(listKey, id, values) {
+        var list = CH.config.lists[listKey];
+        var body = { formValues: Object.keys(values).map(function (k) { return { FieldName: k, FieldValue: String(values[k]) }; }), bNewDocumentUpdate: false };
+        var verb = 'ValidateUpdateListItem';
+        var json = await req('POST', listPath(list.title) + '/items(' + Number(id) + ')/' + verb, body);
+        var results = (json && (json.value || (json.d && json.d[verb] && json.d[verb].results))) || [];
+        var failed = results.filter(function (r) { return r.HasException; });
+        if (failed.length) throw new SpError(400, failed.map(function (r) { return r.FieldName + ': ' + r.ErrorMessage; }).join('; '));
+      }
+
+      return { siteUrl: siteUrl, origin: origin, siteRelative: siteRelative, items: items, currentUser: currentUser, myFirstName: myFirstName, addToFolder: addToFolder,
+        update: update };
     }
 
     // The last folder segment of an item's FileDirRef (e.g. '.../Lists/Noticeboard/FLK' -> 'FLK').
@@ -305,6 +327,8 @@ window.ESGCompetencyHub = function (ctx) {
     var OPEN_STATUSES = ['Submitted', 'Processing', 'Failed'];
     // An administrator's decision about another change: it is confirmed by its own request alone.
     var ADMIN_TYPES = ['RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting'];
+    // Notices, comments and the register (4 Records): confirmed by their History event, which is written before Completed.
+    var RECORD_TYPES = ['EditNotice', 'ArchiveNotice', 'PinNotice', 'HideComment', 'RaiseRegisterEntry', 'UpdateRegisterEntry', 'LinkActionToEntry', 'UnlinkActionFromEntry'];
 
     // Thrown instead of sending while automatic processing is down (limited mode).
     function LimitedError(message) { this.name = 'LimitedError'; this.message = message; this.friendly = message; }
@@ -338,7 +362,7 @@ window.ESGCompetencyHub = function (ctx) {
       function values(spec) {
         return {
           Title: String(spec.label).slice(0, 255), RequestKey: spec.key, RequestType: spec.type,
-          TargetType: spec.targetId ? 'Action' : '', TargetId: spec.targetId || '', ExpectedRevision: spec.expectedRevision || '',
+          TargetType: spec.targetId ? spec.targetType || 'Action' : '', TargetId: spec.targetId || '', ExpectedRevision: spec.expectedRevision || '',
           Payload: JSON.stringify(spec.payload), Status: 'Submitted'
         };
       }
@@ -351,7 +375,8 @@ window.ESGCompetencyHub = function (ctx) {
 
       // spec: { type, targetId, expectedRevision, payload, label, key? }. Resolves to the tracked entry.
       async function submit(spec) {
-        if (ADMIN_TYPES.indexOf(spec.type) < 0 && app.queueBlocked && app.queueBlocked()) {
+        var blocked = RECORD_TYPES.indexOf(spec.type) >= 0 ? app.recordsBlocked && app.recordsBlocked() : ADMIN_TYPES.indexOf(spec.type) < 0 && app.queueBlocked && app.queueBlocked();
+        if (blocked) {
           throw new LimitedError('Changes cannot be processed at the moment, so nothing was sent. You can still read everything and add updates. Please try again later.');
         }
         spec.key = spec.key || newKey();
@@ -369,7 +394,7 @@ window.ESGCompetencyHub = function (ctx) {
           }
         }
         writeUnsent(readUnsent().filter(function (u) { return u.key !== spec.key; }));
-        var entry = { key: spec.key, type: spec.type, targetId: spec.targetId || null, label: spec.label, submittedAt: new Date(),
+        var entry = { key: spec.key, type: spec.type, targetId: spec.targetId || null, targetType: spec.targetId ? spec.targetType || 'Action' : '', label: spec.label, submittedAt: new Date(),
           state: 'submitted', message: '', resultId: null, polls: 0 };
         entries.push(entry);
         schedule(entry);
@@ -386,13 +411,13 @@ window.ESGCompetencyHub = function (ctx) {
         var since = new Date(Date.now() - 24 * 3600000).toISOString();
         for (var i = 0; i < statuses.length; i++) {
           var recent = statuses[i] === 'Cancelled' || statuses[i] === 'Reverted' ? " and Modified ge datetime'" + since + "'" : '';
-          var res = await app.sp.items(CH.config.lists.requests.title, '$select=Id,Title,RequestKey,RequestType,TargetId,Created' +
+          var res = await app.sp.items(CH.config.lists.requests.title, '$select=Id,Title,RequestKey,RequestType,TargetType,TargetId,Created' +
             "&$filter=Status eq '" + statuses[i] + "' and AuthorId eq " + Number(app.person.SiteUserId) + recent, 100);
           found = found.concat(res.rows);
         }
         found.sort(function (a, b) { return a.Id - b.Id; }).forEach(function (row) {
           if (!row.RequestKey || entries.some(function (e) { return e.key === row.RequestKey; })) return;
-          var entry = { key: row.RequestKey, type: row.RequestType, targetId: row.TargetId || null, label: row.Title || 'Your change',
+          var entry = { key: row.RequestKey, type: row.RequestType, targetId: row.TargetId || null, targetType: row.TargetType || (row.TargetId ? 'Action' : ''), label: row.Title || 'Your change',
             submittedAt: row.Created ? new Date(row.Created) : new Date(), state: 'submitted', message: '', resultId: null, polls: 0 };
           entries.push(entry);
           schedule(entry);
@@ -451,6 +476,12 @@ window.ESGCompetencyHub = function (ctx) {
       // The action itself must show this change, with no lock left on it.
       async function confirmed(entry, row) {
         if (ADMIN_TYPES.indexOf(entry.type) >= 0) return true;
+        if (RECORD_TYPES.indexOf(entry.type) >= 0) {
+          try {
+            var evr = await app.sp.items(CH.config.lists.history.title, "$select=Id&$filter=RequestKey eq '" + q(entry.key + '|1') + "'", 1);
+            return evr.rows.length > 0;
+          } catch (_) { return false; }
+        }
         var id = Number(row.ResultId || entry.targetId);
         if (!id) return false;
         try {
@@ -500,9 +531,10 @@ window.ESGCompetencyHub = function (ctx) {
         submit: submit,
         resume: resume,
         entries: function () { return entries.slice(); },
-        // The newest unfinished or unread request for an action.
-        forTarget: function (id) {
-          return entries.filter(function (e) { return Number(e.targetId) === Number(id) && !e.dismissed; }).slice(-1)[0] || null;
+        // The newest unfinished or unread request for a record (an action unless another kind is named).
+        forTarget: function (id, targetType) {
+          var kind = targetType || 'Action';
+          return entries.filter(function (e) { return Number(e.targetId) === Number(id) && (e.targetType || 'Action') === kind && !e.dismissed; }).slice(-1)[0] || null;
         },
         dismiss: function (entry) { entry.dismissed = true; onChange(entry); },
         unsent: readUnsent,
@@ -518,7 +550,7 @@ window.ESGCompetencyHub = function (ctx) {
 
     var RETRYING = 'Not recorded yet – retrying automatically.';
 
-    return { tracker: tracker, newKey: newKey, SCHEDULE: SCHEDULE, GIVE_UP_MINUTES: GIVE_UP_MINUTES, ADMIN_TYPES: ADMIN_TYPES,
+    return { tracker: tracker, newKey: newKey, SCHEDULE: SCHEDULE, GIVE_UP_MINUTES: GIVE_UP_MINUTES, ADMIN_TYPES: ADMIN_TYPES, RECORD_TYPES: RECORD_TYPES,
       LimitedError: LimitedError, RETRYING: RETRYING };
   })();
 
@@ -767,6 +799,86 @@ window.ESGCompetencyHub = function (ctx) {
       };
     }
 
+    // ---- notices, comments and the improvements and degradations register (spec NB-1 to NB-5, REG-1 to REG-5)
+    var ENTRY_TYPES = ['Improvement', 'Degradation', 'Concern', 'Opportunity', 'Positive Observation'];
+    var IMPACTS = ['Low', 'Medium', 'High'];
+    var ENTRY_STATUSES = ['Open', 'Under Review', 'Resolved', 'Closed'];
+    var NOTICE_CATEGORIES = ['General', 'Request', 'Improvement idea', 'Safety', 'Equipment', 'Other'];
+
+    // ctx: { canWrite(areaKey), ownerAllowed(areaKey, personId) }
+    function validateEntry(v, ctx) {
+      var e = {};
+      if (!v.areaKey || !ctx.canWrite(v.areaKey)) e.areaKey = 'Choose one of your areas.';
+      if (ENTRY_TYPES.indexOf(v.entryType) < 0) e.entryType = 'Choose the type of entry.';
+      if (IMPACTS.indexOf(v.impact) < 0) e.impact = 'Choose the impact.';
+      var t = String(v.title || '').trim();
+      if (!t) e.title = 'Give the entry a title.';
+      else if (t.length > 255) e.title = 'Keep the title to 255 characters or fewer.';
+      var d = String(v.description || '').trim();
+      if (!d) e.description = 'Describe it.';
+      else if (d.length > 5000) e.description = 'Keep the description to 5,000 characters or fewer.';
+      if (!v.responsibleId) e.responsibleId = 'Choose who is responsible.';
+      else if (!e.areaKey && !ctx.ownerAllowed(v.areaKey, Number(v.responsibleId))) e.responsibleId = 'Choose a member of this area or a Team Leader.';
+      return e;
+    }
+
+    // v: the fields being changed (title, description, impact, status, outcome, responsibleId). An outcome is needed to
+    // resolve or close an entry. ctx: { ownerAllowed(areaKey, personId) }
+    function validateEntryUpdate(entry, v, ctx) {
+      var e = {};
+      if ('title' in v) {
+        var t = String(v.title || '').trim();
+        if (!t) e.title = 'Give the entry a title.';
+        else if (t.length > 255) e.title = 'Keep the title to 255 characters or fewer.';
+      }
+      if ('description' in v && String(v.description || '').trim().length > 5000) e.description = 'Keep the description to 5,000 characters or fewer.';
+      if ('impact' in v && IMPACTS.indexOf(v.impact) < 0) e.impact = 'Choose the impact.';
+      if ('status' in v && ENTRY_STATUSES.indexOf(v.status) < 0) e.status = 'Choose a status.';
+      var outcome = String(v.outcome || '').trim();
+      if ('status' in v && (v.status === 'Resolved' || v.status === 'Closed') && outcome.length < 10) e.outcome = 'Record the outcome (at least 10 characters).';
+      else if (outcome.length > 2000) e.outcome = 'Keep the outcome to 2,000 characters or fewer.';
+      if ('responsibleId' in v && !ctx.ownerAllowed(entry.areaKey, Number(v.responsibleId))) e.responsibleId = 'Choose a member of this area or a Team Leader.';
+      if (!['title', 'description', 'impact', 'status', 'outcome', 'responsibleId'].some(function (k) { return k in v; })) e.entry = 'Nothing has changed.';
+      return e;
+    }
+
+    // REG-2: the raiser, the person responsible, the area's engineers and meeting runners, and management.
+    function managesEntry(entry, personId, access) {
+      var k = entry.areaKey;
+      return access.canModerate(k) || access.chairs(k) || Number(entry.raisedById) === Number(personId) || Number(entry.responsibleId) === Number(personId);
+    }
+
+    // Edit a notice: its author or a moderator (spec §4.2 canModerate). Pin: moderators only.
+    function noticeRoles(notice, personId, access) {
+      var author = Number(notice.authorId) === Number(personId);
+      var mod = access.canModerate(notice.areaKey);
+      return { author: author, moderator: mod, canEdit: author || mod, canArchive: author || mod, canPin: mod, canMarkImportant: author || mod };
+    }
+
+    function validateNoticeEdit(v) {
+      var e = {};
+      if ('title' in v) {
+        var t = String(v.title || '').trim();
+        if (!t) e.title = 'Give the notice a title.';
+        else if (t.length > 255) e.title = 'Keep the title to 255 characters or fewer.';
+      }
+      if ('body' in v) {
+        var b = String(v.body || '').trim();
+        if (!b) e.body = 'Write the notice.';
+        else if (b.length > 5000) e.body = 'Keep the notice to 5,000 characters or fewer.';
+      }
+      if ('category' in v && NOTICE_CATEGORIES.indexOf(v.category) < 0) e.category = 'Choose a category.';
+      if (!['title', 'body', 'category', 'important'].some(function (k) { return k in v; })) e.notice = 'Nothing has changed.';
+      return e;
+    }
+
+    function validateComment(v) {
+      var body = String(v.body || '').trim();
+      if (!body) return { body: 'Write your comment.' };
+      if (body.length > 2000) return { body: 'Keep the comment to 2,000 characters or fewer.' };
+      return {};
+    }
+
     // Mark complete closes the action unless a close-out check is required (D-07).
     function completionStatus(requiresCloseOut) { return requiresCloseOut ? 'Completed' : 'Closed'; }
 
@@ -774,7 +886,10 @@ window.ESGCompetencyHub = function (ctx) {
       addYears: addYears, isOpen: isOpen, validateRaise: validateRaise, validateExtend: validateExtend,
       validateComplete: validateComplete, validateUpdate: validateUpdate, validateStatus: validateStatus,
       validateReassign: validateReassign, validateClose: validateClose, validateReopen: validateReopen, validateEdit: validateEdit,
-      roles: roles, completionStatus: completionStatus, SELF_ONLY: SELF_ONLY, PRIORITIES: PRIORITIES, OPEN_STATUSES: OPEN_STATUSES, OUTCOMES: OUTCOMES
+      roles: roles, completionStatus: completionStatus,
+      validateEntry: validateEntry, validateEntryUpdate: validateEntryUpdate, managesEntry: managesEntry, noticeRoles: noticeRoles,
+      validateNoticeEdit: validateNoticeEdit, validateComment: validateComment, ENTRY_TYPES: ENTRY_TYPES, IMPACTS: IMPACTS, ENTRY_STATUSES: ENTRY_STATUSES,
+      NOTICE_CATEGORIES: NOTICE_CATEGORIES, SELF_ONLY: SELF_ONLY, PRIORITIES: PRIORITIES, OPEN_STATUSES: OPEN_STATUSES, OUTCOMES: OUTCOMES
     };
   })();
 
@@ -790,8 +905,10 @@ window.ESGCompetencyHub = function (ctx) {
       members: "$select=Id,CompetencyId,PersonId,CanManageMeetings,Status&$filter=Status eq 'Active'",
       actions: '$select=Id,Title,Description,CompetencyId,LinkedCompetenciesId,AssignedToId,RaisedById,DateRaised,DueDay,OriginalDueDate,' +
         'Status,IsOpen,Priority,ExtensionCount,RequiresCloseOut,Revision,PendingRequestKey,LastRequestKey,CreatedRequestKey,FileDirRef,' +
-        'Blocker,CloseOutcome,ClosureNote,DateClosed&$filter=IsOpen eq 1 and FSObjType eq 0',
-      notices: "$select=Id,Title,Body,Category,IsImportant,ImportantUntil,Status,AuthorId,Created,FileDirRef&$filter=Status eq 'Active' and FSObjType eq 0",
+        'Blocker,CloseOutcome,ClosureNote,DateClosed,SourceType,SourceId&$filter=IsOpen eq 1 and FSObjType eq 0',
+      notices: "$select=Id,Title,Body,Category,IsImportant,ImportantUntil,Status,AuthorId,Created,FileDirRef,Revision,LastRequestKey&$filter=Status eq 'Active' and FSObjType eq 0",
+      register: '$select=Id,Title,Description,EntryType,Impact,Status,Outcome,RaisedById,ResponsiblePersonId,DateRaised,DateResolved,Revision,' +
+        'LastRequestKey,CompetencyId,FileDirRef,Created&$filter=FSObjType eq 0',
       updates: '$select=Id,EntryType,ParentType,ParentId,AuthorId,Created,FileDirRef,IsHidden&$filter=IsFlagEvent eq 1 and FSObjType eq 0',
       meetings: '$select=Id,CompetencyId,MeetingDate,Status,ChairId&$filter=FSObjType eq 0',
       calendar: "$select=Id,Title,StartTime,AllDay,IsImportant,Status,FileDirRef&$filter=Status eq 'Scheduled' and FSObjType eq 0",
@@ -872,7 +989,8 @@ window.ESGCompetencyHub = function (ctx) {
           waitingCloseOut: waitingCloseOut, group: r.Status === 'Closed' ? 'done' : words.group,
           dueText: r.Status === 'Closed' ? 'Closed' : words.text,
           blocker: r.Status === 'Awaiting Input' ? (r.Blocker || '') : '', closeOutcome: r.CloseOutcome || '', closureNote: r.ClosureNote || '',
-          closedIso: r.DateClosed ? D.localDate(r.DateClosed) : ''
+          closedIso: r.DateClosed ? D.localDate(r.DateClosed) : '',
+          sourceType: r.SourceType || 'None', sourceId: r.SourceId ? Number(r.SourceId) : null
         };
       }
       var actions = (raw.actions.rows || []).filter(function (r) { return !isUncommitted(r) && r.Status !== 'Closed'; }).map(actionFrom);
@@ -888,12 +1006,30 @@ window.ESGCompetencyHub = function (ctx) {
         return {
           id: n.Id, areaKey: key, title: n.Title, body: n.Body || '', category: n.Category || 'General',
           authorId: n.AuthorId, authorName: nameOf(n.AuthorId), fromOutside: !(membersByArea[key] || {})[n.AuthorId] && !isManagementPerson(n.AuthorId),
-          createdIso: createdIso, created: n.Created, important: important
+          createdIso: createdIso, created: n.Created, important: important, pinned: !!n.IsImportant && !n.ImportantUntil,
+          // notices posted before the Revision column existed have none: they are then sent without a stale check
+          revision: Number(n.Revision) || 0, lastRequestKey: n.LastRequestKey || ''
         };
       }).filter(function (n) { return !!areaByKey[n.areaKey]; })
         .sort(function (a, b) { return String(b.created).localeCompare(String(a.created)); });
       var noticeById = {};
       notices.forEach(function (n) { noticeById[n.id] = n; });
+
+      // Improvements and degradations (spec REG-1): the area is the folder the entry sits in, as the flow made it.
+      var entries = (raw.register ? raw.register.rows || [] : []).map(function (e) {
+        var key = CH.sp.folderOf(e.FileDirRef);
+        return {
+          id: e.Id, ref: 'REG-' + ('0000' + e.Id).slice(-5), areaKey: key, title: e.Title, description: e.Description || '', entryType: e.EntryType,
+          impact: e.Impact || '', status: e.Status, outcome: e.Outcome || '', raisedById: e.RaisedById, raisedByName: nameOf(e.RaisedById),
+          responsibleId: e.ResponsiblePersonId, responsibleName: e.ResponsiblePersonId ? nameOf(e.ResponsiblePersonId) : '',
+          raisedIso: e.DateRaised ? D.localDate(e.DateRaised) : (e.Created ? D.localDate(e.Created) : ''),
+          resolvedIso: e.DateResolved ? D.localDate(e.DateResolved) : '', revision: Number(e.Revision) || 1,
+          open: e.Status === 'Open' || e.Status === 'Under Review'
+        };
+      }).filter(function (e) { return !!areaByKey[e.areaKey]; })
+        .sort(function (a, b) { return b.id - a.id; });
+      var entryById = {};
+      entries.forEach(function (e) { entryById[e.id] = e; });
 
       // Flags (plan F.5): counted only in the source's own area folder, ordered by server item ID.
       // Clearing by a finalised meeting's outcome comes with the meetings increment.
@@ -907,20 +1043,28 @@ window.ESGCompetencyHub = function (ctx) {
         if (!areaByKey[key]) return;
         var source = u.ParentType + ':' + u.ParentId;
         if (u.ParentType === 'Notice' && (!noticeById[u.ParentId] || noticeById[u.ParentId].areaKey !== key)) return;
-        var slot = latest[key + '|' + source] = latest[key + '|' + source] || { key: key, flaggedBy: null, flagged: false };
+        if (u.ParentType === 'Register Entry' && (!entryById[u.ParentId] || entryById[u.ParentId].areaKey !== key)) return;
+        if (u.ParentType !== 'Notice' && u.ParentType !== 'Register Entry') return;
+        var slot = latest[key + '|' + source] = latest[key + '|' + source] || { key: key, source: source, flaggedBy: null, flagged: false, history: [] };
         if (u.EntryType === 'Flagged') {
           if (!(membersByArea[key] || {})[u.AuthorId] && !isManagementPerson(u.AuthorId)) return;
           slot.flagged = true; slot.flaggedBy = u.AuthorId;
+          slot.history.push({ kind: 'Flagged for the next meeting', by: nameOf(u.AuthorId), iso: D.localDate(u.Created) });
         } else if (u.EntryType === 'Flag Withdrawn' && slot.flagged) {
           var notice = u.ParentType === 'Notice' ? noticeById[u.ParentId] : null;
+          var entry = u.ParentType === 'Register Entry' ? entryById[u.ParentId] : null;
           var allowed = u.AuthorId === slot.flaggedBy || isManagementPerson(u.AuthorId) ||
-            (meetingAdmins[key] || {})[u.AuthorId] || (notice && notice.authorId === u.AuthorId);
-          if (allowed) slot.flagged = false;
+            (meetingAdmins[key] || {})[u.AuthorId] || (notice && notice.authorId === u.AuthorId) || (entry && entry.raisedById === u.AuthorId);
+          if (allowed) { slot.flagged = false; slot.history.push({ kind: 'Flag withdrawn', by: nameOf(u.AuthorId), iso: D.localDate(u.Created) }); }
         }
       });
+      var flags = {};
       Object.keys(latest).forEach(function (k) {
+        flags[latest[k].source] = latest[k];
         if (latest[k].flagged) flagged[latest[k].key] = (flagged[latest[k].key] || 0) + 1;
       });
+      notices.forEach(function (n) { n.flagged = !!(flags['Notice:' + n.id] || {}).flagged; });
+      entries.forEach(function (e) { e.flagged = !!(flags['Register Entry:' + e.id] || {}).flagged; });
 
       var meetingsByArea = {};
       (raw.meetings.rows || []).forEach(function (m) {
@@ -951,6 +1095,8 @@ window.ESGCompetencyHub = function (ctx) {
           movedTwice: list.filter(function (x) { return x.extensions >= 2; }).length,
           closeOut: list.filter(function (x) { return x.waitingCloseOut; }).length,
           flagged: flagged[a.key] || 0,
+          openEntries: entries.filter(function (e) { return e.areaKey === a.key && e.open; }).length,
+          degradations: entries.filter(function (e) { return e.areaKey === a.key && e.open && e.entryType === 'Degradation'; }).length,
           nextMeeting: m.next, lastMeeting: m.last, meetingStale: stale
         };
       });
@@ -967,10 +1113,11 @@ window.ESGCompetencyHub = function (ctx) {
 
       return {
         today: today, areas: areas, areaByKey: areaByKey, stats: stats, actions: actions, notices: notices, calendar: calendar,
+        entries: entries, entryById: entryById, noticeById: noticeById, flags: flags, people: people,
         inArea: inArea, nameOf: nameOf, ownersFor: ownersFor, actionById: actionById, actionFrom: actionFrom, membersByArea: membersByArea,
         sections: {
           actions: section(raw.actions), notices: section(raw.notices), meetings: section(raw.meetings),
-          calendar: section(raw.calendar), flags: section(raw.updates), members: section(raw.members)
+          calendar: section(raw.calendar), flags: section(raw.updates), members: section(raw.members), register: section(raw.register)
         }
       };
     }
@@ -1048,7 +1195,7 @@ window.ESGCompetencyHub = function (ctx) {
       // The tighter limit starts only once the first working-hours check has had time to report: until then the
       // latest report may be the last one from outside working hours.
       var working = weekday && clock.minutes >= h.start + WORKING_SLACK_MINUTES && clock.minutes <= h.end;
-      var out = { processing: 'unknown', reminders: 'unknown', administration: 'ok', adminReason: '', reason: '', checkedAt: null, lastDailyRun: null,
+      var out = { processing: 'unknown', reminders: 'unknown', administration: 'ok', adminReason: '', records: 'ok', recordsReason: '', reason: '', checkedAt: null, lastDailyRun: null,
         attention: 0, maxDeadlineYears: years(value(rows, 'MaxDeadlineYears')) };
       if (report && report.checkedAt) {
         out.checkedAt = new Date(report.checkedAt);
@@ -1060,6 +1207,8 @@ window.ESGCompetencyHub = function (ctx) {
         else out.processing = 'ok';
         // Administration changes go through their own flow: when only that one is behind, staff can carry on.
         if (report.admin === 'Down') { out.administration = 'down'; out.adminReason = report.adminReason || 'Administration changes are not being picked up.'; }
+        // Notices and the register also have their own flow (4 Records).
+        if (report.records === 'Down') { out.records = 'down'; out.recordsReason = report.recordsReason || 'Changes to notices and the register are not being picked up.'; }
       }
       var daily = value(rows, 'LastDailyRun');
       if (daily) {
@@ -1464,12 +1613,29 @@ window.ESGCompetencyHub = function (ctx) {
       var acts = m.actions.filter(function (a) { return m.inArea(a, key); })
         .sort(function (a, b) { return (order[a.group] - order[b.group]) || byDue(a, b); })
         .map(function (a) { return actionCard(app, a, h('span', { class: 'hm-x', text: a.ownerName + (a.areaKey !== key ? ' · shared from ' + a.areaName : '') })); });
+      // Pinned and important notices first; then the other notices and the open register entries, newest first.
       var notices = m.notices.filter(function (n) { return n.areaKey === key; });
-      notices = notices.filter(function (n) { return n.important; }).concat(notices.filter(function (n) { return !n.important; }));
-      var news = notices.map(function (n) {
-        return h('div', { class: 'hm-rw' }, h('span', { class: 'hm-dot' + (n.important ? ' on' : ''), title: n.important ? 'Important' : null }),
+      var entries = m.entries.filter(function (e) { return e.areaKey === key && e.open; });
+      var rest = notices.filter(function (n) { return !n.important; }).map(function (n) { return { n: n, at: n.createdIso }; })
+        .concat(entries.map(function (e) { return { e: e, at: e.raisedIso }; }))
+        .sort(function (a, b) { return String(b.at).localeCompare(String(a.at)); });
+      var news = notices.filter(function (n) { return n.important; }).map(function (n) { return { n: n }; }).concat(rest).map(function (x) {
+        if (x.e) {
+          var en = x.e;
+          var note = app.recordNote('Register Entry', en.id);
+          return h('button', { type: 'button', class: 'hm-rw item-open', title: en.title, onclick: function () { app.openEntry(en); } },
+            h('span', { class: 'hm-dot' + (en.entryType === 'Degradation' ? ' bad' : ''), title: en.entryType }),
+            h('span', { class: 'hm-tx' }, h('b', { text: en.title }),
+              h('small', { text: en.entryType + ' · ' + en.impact + ' impact · ' + en.raisedByName + (en.raisedIso ? ' · ' + D.short(en.raisedIso) : '') +
+                (en.flagged ? ' · flagged' : '') + (note ? ' · ' + note : '') })));
+        }
+        var n = x.n;
+        var nnote = app.recordNote('Notice', n.id);
+        return h('button', { type: 'button', class: 'hm-rw item-open', title: n.title, onclick: function () { app.openNotice(n); } },
+          h('span', { class: 'hm-dot' + (n.important ? ' on' : ''), title: n.important ? 'Important' : null }),
           h('span', { class: 'hm-tx' }, h('b', { text: n.title }),
-            h('small', { text: (n.important ? 'Important · ' : '') + (n.fromOutside ? 'From ' + n.authorName + ', outside ' + area.name : n.authorName) + ' · ' + D.short(n.createdIso) })));
+            h('small', { text: (n.pinned ? 'Pinned · ' : n.important ? 'Important · ' : '') + (n.fromOutside ? 'From ' + n.authorName + ', outside ' + area.name : n.authorName) +
+              ' · ' + D.short(n.createdIso) + (n.flagged ? ' · flagged' : '') + (nnote ? ' · ' + nnote : '') })));
       });
       var diary = [];
       if (s.nextMeeting) diary.push(h('div', { class: 'hm-rw' }, h('span', { class: 'when w-ok', text: D.weekdayShort(s.nextMeeting) }),
@@ -1496,14 +1662,14 @@ window.ESGCompetencyHub = function (ctx) {
           h('span', { class: 'hm-acts' },
             acc.canWrite(key) && area.status === 'Active' ? ui.button('Raise an action here', function () { app.raiseAction(key); }) : null,
             acc.canPostNotice(key) ? ui.button('Post a notice here', function () { app.postNotice(key); }) : null,
+            acc.canWrite(key) && area.status === 'Active' ? ui.button('Raise an issue', function () { app.raiseEntry(key); }) : null,
             ui.linkButton('Full page', full(0)),
             h('button', { type: 'button', class: 'hm-x-btn', 'aria-label': 'Close ' + area.name, text: '✕', onclick: function () { app.openAreaHere(null); } }))),
         h('div', { class: 'hm-pb' }, h('div', { class: 'hm-cols' },
           col('Actions', unavailable ? null : acts.length, unavailable ? ui.sectionNote('unavailable', 'actions')
             : acts.length ? ui.fitList(acts, 'all ' + area.name + ' actions', full(0), 'items') : h('p', { class: 'hm-empty', text: 'There are no open actions in ' + area.name + '.' })),
-          col('Notices & issues', notices.length, [ui.sectionNote(m.sections.notices, 'notices'),
-            news.length ? ui.fitList(news, 'all notices', full(1)) : h('p', { class: 'hm-empty', text: 'Nothing has been posted on the ' + area.name + ' noticeboard yet.' }),
-            h('p', { class: 'muted small hm-later', text: 'The improvements and degradations register joins this list in the next version.' })]),
+          col('Notices & issues', news.length, [ui.sectionNote(m.sections.notices, 'notices'), ui.sectionNote(m.sections.register, 'improvements and degradations'),
+            news.length ? ui.fitList(news, 'all notices and issues', full(1)) : h('p', { class: 'hm-empty', text: 'No notices, and no open improvements or degradations, in ' + area.name + '.' })]),
           col('Meetings & dates', null, ui.fitList(diary, 'calendar', full(2))))));
     }
 
@@ -1608,18 +1774,46 @@ window.ESGCompetencyHub = function (ctx) {
       ];
     }
 
+    // Notices first (pinned and important at the top), then the improvements and degradations register (spec NB-1, REG-4).
     function noticesTab(app, area) {
-      var list = app.model.notices.filter(function (n) { return n.areaKey === area.key; });
+      var m = app.model;
+      var list = m.notices.filter(function (n) { return n.areaKey === area.key; });
+      list = list.filter(function (n) { return n.important; }).concat(list.filter(function (n) { return !n.important; }));
+      var filter = app.state.entryFilter || 'open';
+      var entries = m.entries.filter(function (e) {
+        return e.areaKey === area.key && (filter === 'all' || (filter === 'open' ? e.open : e.entryType === filter));
+      });
+      var typeSel = h('select', { 'aria-label': 'Show', onchange: function (e) { app.state.entryFilter = e.target.value; app.refreshView(); } },
+        [['open', 'Open entries'], ['all', 'All entries']].concat(CH.rules.ENTRY_TYPES.map(function (t) { return [t, t + 's']; })).map(function (o) {
+          return h('option', { value: o[0], selected: o[0] === filter ? true : null, text: o[1] });
+        }));
       return [
-        h('div', { class: 'row tab-actions' }, app.access.canPostNotice(area.key) ? ui.button('Post a notice', function () { app.postNotice(area.key); }) : null),
-        ui.sectionNote(app.model.sections.notices, 'notices'),
-        list.length ? h('ul', { class: 'plain' }, list.map(function (n) {
-          return h('li', null, h('span', null,
-            h('b', { text: n.title }), n.important ? ui.chip('soon', 'Important') : null, h('br'),
-            h('span', { class: 'notice-body', text: n.body.length > 240 ? n.body.slice(0, 240) + '…' : n.body }), h('br'),
-            h('span', { class: 'muted small', text: n.category + ' · ' + (n.fromOutside ? 'From ' + n.authorName + ', outside ' + area.name : n.authorName) + ' · ' + D.short(n.createdIso) })));
+        h('div', { class: 'row tab-actions' },
+          app.access.canPostNotice(area.key) ? ui.button('Post a notice', function () { app.postNotice(area.key); }) : null,
+          app.access.canWrite(area.key) && area.status === 'Active' ? ui.button('Raise an improvement or degradation', function () { app.raiseEntry(area.key); }) : null),
+        h('h2', { class: 'group-title', text: 'Noticeboard' }),
+        ui.sectionNote(m.sections.notices, 'notices'),
+        list.length ? h('ul', { class: 'items' }, list.map(function (n) {
+          var note = app.recordNote('Notice', n.id);
+          return h('li', null, h('button', { type: 'button', class: 'item-open', onclick: function () { app.openNotice(n); } },
+            h('span', null, h('span', { class: 't', text: n.title }),
+              h('span', { class: 's notice-body', text: n.body.length > 240 ? n.body.slice(0, 240) + '…' : n.body }),
+              h('span', { class: 's', text: n.category + ' · ' + (n.fromOutside ? 'From ' + n.authorName + ', outside ' + area.name : n.authorName) + ' · ' + D.short(n.createdIso) +
+                (n.flagged ? ' · flagged for the meeting' : '') + (note ? ' · ' + note : '') })),
+            n.pinned ? ui.chip('soon', 'Pinned') : n.important ? ui.chip('soon', 'Important') : null));
         })) : h('p', { class: 'muted', text: 'Nothing has been posted on the ' + area.name + ' noticeboard yet.' }),
-        h('p', { class: 'muted small', text: 'The improvements and degradations register appears here in the next version.' })
+        h('h2', { class: 'group-title' }, 'Improvements and degradations ', h('label', { class: 'inline-filter' }, typeSel)),
+        ui.sectionNote(m.sections.register, 'improvements and degradations'),
+        entries.length ? h('ul', { class: 'items' }, entries.map(function (e) {
+          var note = app.recordNote('Register Entry', e.id);
+          var linked = m.actions.filter(function (a) { return a.sourceType === 'Register' && Number(a.sourceId) === e.id; }).length;
+          return h('li', null, h('button', { type: 'button', class: 'item-open', onclick: function () { app.openEntry(e); } },
+            h('span', null, h('span', { class: 't', text: e.ref + ' ' + e.title }),
+              h('span', { class: 's', text: e.entryType + ' · ' + e.impact + ' impact · ' + (e.responsibleName ? e.responsibleName + ' responsible · ' : '') +
+                (e.raisedIso ? D.short(e.raisedIso) : '') + (linked ? ' · ' + linked + (linked === 1 ? ' linked action' : ' linked actions') : '') +
+                (e.flagged ? ' · flagged for the meeting' : '') + (note ? ' · ' + note : '') })),
+            CH.views.recordPanel.entryChip(e)));
+        })) : h('p', { class: 'muted', text: filter === 'open' ? 'No open improvements or degradations in ' + area.name + '.' : 'No entries to show.' })
       ];
     }
 
@@ -1822,9 +2016,11 @@ window.ESGCompetencyHub = function (ctx) {
       { title: 'Check and raise', keys: [] }
     ];
 
-    function open(app, areaKey) {
+    // opts: { entry } raises an action linked to an improvement or degradation, in that entry's area (spec REG-3).
+    function open(app, areaKey, opts) {
       var m = app.model;
-      var mine = m.areas.filter(function (a) { return app.access.canWrite(a.key); });
+      var entry = opts && opts.entry;
+      var mine = m.areas.filter(function (a) { return app.access.canWrite(a.key) && (!entry || a.key === entry.areaKey); });
       if (!mine.length) { CH.ui.toast(app.root, 'You are not a member of any area yet, so you cannot raise actions.', 'info'); return; }
       var today = m.today;
       // the limit an administrator sets (MaxDeadlineYears), the same one the flow checks
@@ -1877,7 +2073,7 @@ window.ESGCompetencyHub = function (ctx) {
         return out;
       }
 
-      var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-r', title: 'Raise an action' });
+      var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-r', title: entry ? 'Raise an action for ' + entry.ref : 'Raise an action' });
       var progress = h('p', { class: 'muted small', 'aria-live': 'polite' });
       var errorBox = h('p', { class: 'form-error', role: 'alert' });
       var stepBox = h('div');
@@ -1902,7 +2098,8 @@ window.ESGCompetencyHub = function (ctx) {
           h('dt', { text: 'What' }), h('dd', null, h('b', { text: v.title.trim() }), h('br'), h('span', { class: 'notice-body', text: v.description.trim() })),
           h('dt', { text: 'Who' }), h('dd', { text: ownerName + ', in ' + m.areaByKey[v.areaKey].name }),
           h('dt', { text: 'When' }), h('dd', { text: 'By ' + D.weekday(v.dueIso) + ' ' + D.long(v.dueIso) }),
-          h('dt', { text: 'Also' }), h('dd', { text: v.priority + ' priority' + (v.requiresCloseOut ? ', with a close-out check' : '') }));
+          h('dt', { text: 'Also' }), h('dd', { text: v.priority + ' priority' + (v.requiresCloseOut ? ', with a close-out check' : '') }),
+          entry ? [h('dt', { text: 'For' }), h('dd', { text: entry.ref + ' ' + entry.title })] : null);
       }
 
       function go(n) {
@@ -1935,7 +2132,7 @@ window.ESGCompetencyHub = function (ctx) {
         try {
           await app.tracker.submit({ key: key, type: 'RaiseAction', label: 'Raise “' + v.title.trim() + '”', payload: {
             areaKey: v.areaKey, title: v.title.trim(), description: v.description.trim(), ownerId: Number(v.ownerId),
-            dueIso: v.dueIso, priority: v.priority, requiresCloseOut: v.requiresCloseOut } });
+            dueIso: v.dueIso, priority: v.priority, requiresCloseOut: v.requiresCloseOut, sourceEntryId: entry ? entry.id : undefined } });
           dlg.close();
           CH.ui.toast(app.root, 'Your action has been sent. It will appear in a few minutes.', 'ok');
         } catch (error) {
@@ -2610,6 +2807,852 @@ window.ESGCompetencyHub = function (ctx) {
     return { list: list, parseList: parseList, personDialog: personDialog };
   })();
 
+  /* src/views/record-panel.js */
+  // One notice, or one improvement or degradation, read in full (spec NB-1 to NB-6, REG-1 to REG-5).
+  // Comments and flags are instant writes to Updates/{area}; everything else is a queued request checked again by
+  // the Records flow. Only the choices this person may make are offered.
+  CH.views = CH.views || {};
+  CH.views.recordPanel = (function () {
+    var h = CH.dom.h;
+    var D = CH.dates;
+    var R = CH.rules;
+    var ui = CH.ui;
+    var field = function (l, i, hint) { return CH.ui.dialog.field(l, i, hint); };
+    var STATUS_WORDS = { 'Open': 'Open', 'Under Review': 'Under review', 'Resolved': 'Resolved', 'Closed': 'Closed' };
+
+    // Comments in the record's own area folder only, oldest first; hidden ones are left out.
+    async function loadComments(app, parentType, rec) {
+      var res = await app.sp.items(CH.config.lists.updates.title,
+        "$select=Id,EntryType,Body,AuthorId,Created,FileDirRef,IsHidden&$filter=ParentId eq " + rec.id + " and ParentType eq '" + parentType + "'", 500);
+      return res.rows.filter(function (u) {
+        return u.EntryType === 'Comment' && !u.IsHidden && CH.sp.folderOf(u.FileDirRef) === rec.areaKey;
+      }).sort(function (a, b) { return a.Id - b.Id; });
+    }
+
+    function pendingLine(app, id, kind, locked) {
+      var entry = app.tracker.forTarget(id, kind);
+      if (entry && (entry.state === 'submitted' || entry.state === 'slow')) {
+        return h('p', { class: 'pending', role: 'status' }, h('b', { text: entry.label }), ' – submitted ' + D.ukTime(entry.submittedAt) +
+          (entry.retrying ? '. ' + entry.message : ', being recorded (usually under 5 minutes).'));
+      }
+      var heading = { rejected: 'Not accepted: ', attention: 'Not recorded: ', cancelled: 'Cancelled: ', reverted: 'Reverted: ' }[entry && entry.state];
+      if (heading) {
+        return h('div', { class: 'section-note', role: 'alert' }, h('b', { text: heading }), entry.message + ' ', ui.linkButton('Dismiss', function () { app.tracker.dismiss(entry); }));
+      }
+      return locked ? h('p', { class: 'pending', role: 'status', text: 'Being updated… Try again in a minute.' }) : null;
+    }
+
+    function busy(app, id, kind) {
+      var e = app.tracker.forTarget(id, kind);
+      return !!e && (e.state === 'submitted' || e.state === 'slow');
+    }
+
+    // The panel shared by notices and entries: a main view and one form at a time.
+    function panel(app, cfg) {
+      var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-rec', title: cfg.title, wide: true, onClose: function () { app.panel = null; } });
+      var view = 'main';
+      var comments = null;
+      var sending = false;
+
+      function rec() { return cfg.get(); }
+
+      async function loadExtras() {
+        var r = rec();
+        if (!r) return;
+        try { comments = await loadComments(app, cfg.parentType, r); } catch (_) { comments = 'error'; }
+        if (view === 'main' && dlg.isOpen()) fill();
+      }
+
+      // Instant writes: a comment, a flag or a flag withdrawn, in the record's area folder (plan F.5).
+      async function writeUpdate(entryType, body) {
+        var r = rec();
+        var clientKey = CH.requests.newKey();
+        var values = { Title: (body || entryType + ': ' + r.title).slice(0, 80), ClientKey: clientKey, ParentType: cfg.parentType, ParentId: r.id,
+          EntryType: entryType, IsFlagEvent: entryType === 'Comment' ? '0' : '1', Body: body || '' };
+        try {
+          await app.sp.addToFolder('updates', r.areaKey, values);
+        } catch (error) {
+          // an unclear failure may still have saved it: look for it by its key before reporting a failure
+          var found = await app.sp.items(CH.config.lists.updates.title, "$select=Id&$filter=ClientKey eq '" + CH.sp.escapeOData(clientKey) + "'", 1).catch(function () { return { rows: [] }; });
+          if (!found.rows.length) throw error;
+        }
+      }
+
+      function commentBox(r) {
+        if (!app.access.canWrite(r.areaKey)) return h('p', { class: 'muted small', text: 'Members of ' + app.model.areaByKey[r.areaKey].name + ' and management can comment here.' });
+        var box = h('textarea', { id: 'ch-rec-body', rows: '3', maxlength: '2000' });
+        var err = h('p', { class: 'form-error', role: 'alert' });
+        var btn = h('button', { type: 'submit', class: 'btn', text: 'Add comment' });
+        var form = h('form', { class: 'comment-form', novalidate: true }, field('Add a comment', box), err, btn);
+        form.addEventListener('submit', async function (e) {
+          e.preventDefault();
+          var errors = R.validateComment({ body: box.value });
+          if (CH.ui.dialog.showErrors(form, 'ch-rec-', errors, ['body'])) return;
+          btn.disabled = true; btn.textContent = 'Saving…';
+          try {
+            await writeUpdate('Comment', box.value.trim());
+            box.value = '';
+            comments = null;
+            fill();
+            await loadExtras();
+            CH.ui.toast(app.root, 'Comment added.', 'ok');
+          } catch (error) {
+            btn.disabled = false; btn.textContent = 'Try again';
+            err.textContent = 'Your comment could not be saved just now. Your text has been kept.';
+          }
+        });
+        return form;
+      }
+
+      function commentList(r) {
+        var mod = app.access.canModerate(r.areaKey);
+        if (comments === null) return h('p', { class: 'muted', text: 'Loading comments…' });
+        if (comments === 'error') return h('p', { class: 'section-note', text: 'Could not load the comments just now.' });
+        if (!comments.length) return h('p', { class: 'muted', text: 'No comments yet.' });
+        return h('ul', { class: 'plain comments' }, comments.map(function (c) {
+          var hiding = app.tracker.forTarget(c.Id, 'Comment');
+          var waiting = hiding && (hiding.state === 'submitted' || hiding.state === 'slow');
+          return h('li', null, h('span', null, h('span', { class: 'notice-body', text: c.Body || '' }), h('br'),
+            h('span', { class: 'muted small', text: app.model.nameOf(c.AuthorId) + ' · ' + D.short(D.localDate(c.Created)) + ' ' + D.ukTime(c.Created) +
+              (waiting ? ' · being hidden' : '') })),
+            mod && !waiting && !app.recordsBlocked() ? ui.linkButton('Hide', async function (e) {
+              e.target.disabled = true;
+              try {
+                await app.tracker.submit({ type: 'HideComment', targetId: c.Id, targetType: 'Comment', payload: {}, label: 'Hide a comment on “' + r.title + '”' });
+                fill();
+              } catch (_) { e.target.disabled = false; CH.ui.toast(app.root, 'Could not send that just now. Try again in a moment.', 'info'); }
+            }) : null);
+        }));
+      }
+
+      function flagRow(r) {
+        var slot = app.model.flags[cfg.parentType + ':' + r.id] || { flagged: false, history: [] };
+        var area = app.model.areaByKey[r.areaKey];
+        var me = app.person.SiteUserId;
+        var canFlag = app.access.canWrite(r.areaKey) && !slot.flagged;
+        var canWithdraw = slot.flagged && (Number(slot.flaggedBy) === Number(me) || app.access.isManagement || app.access.chairs(r.areaKey) ||
+          Number(cfg.ownerOf(r)) === Number(me));
+        async function act(kind, done) {
+          if (sending) return;
+          sending = true;
+          try {
+            await writeUpdate(kind, '');
+            await app.recordChanged();
+            CH.ui.toast(app.root, done, 'ok');
+          } catch (_) {
+            CH.ui.toast(app.root, 'That could not be saved just now. Try again in a moment.', 'info');
+          }
+          sending = false;
+          fill();
+        }
+        return [
+          h('p', null, slot.flagged ? ui.chip('soon', 'Flagged for the next ' + area.name + ' meeting') : h('span', { class: 'muted small', text: 'Not flagged for a meeting.' }), ' ',
+            canFlag ? ui.button('Flag for the next meeting', function () { act('Flagged', 'Flagged for the next ' + area.name + ' meeting.'); }) : null,
+            canWithdraw ? ui.button('Withdraw the flag', function () { act('Flag Withdrawn', 'Flag withdrawn.'); }) : null),
+          slot.history.length ? h('details', { class: 'ext-list' }, h('summary', { text: 'Discussion history (' + slot.history.length + ')' }),
+            h('ul', { class: 'plain' }, slot.history.map(function (x) {
+              return h('li', null, h('span', { text: x.kind + ' by ' + x.by + ' · ' + D.short(x.iso) }));
+            }))) : null
+        ];
+      }
+
+      function fill() {
+        CH.dom.clear(dlg.body);
+        var r = rec();
+        if (!r) {
+          dlg.setTitle(cfg.missingTitle);
+          CH.dom.append(dlg.body, h('p', { text: cfg.missingText }));
+          return;
+        }
+        dlg.setTitle(r.title);
+        if (view !== 'main') { CH.dom.append(dlg.body, cfg.form(view, r, ctl)); return; }
+        CH.dom.append(dlg.body, [
+          cfg.header(r),
+          pendingLine(app, r.id, cfg.parentType, false),
+          cfg.facts(r),
+          cfg.buttons(r, ctl),
+          h('h3', { class: 'group-title', text: 'For the meeting' }),
+          flagRow(r),
+          cfg.extra ? cfg.extra(r, ctl) : null,
+          h('h3', { class: 'group-title', text: 'Comments' }),
+          commentList(r),
+          commentBox(r)
+        ]);
+      }
+
+      function show(next) { view = next; fill(); var f = dlg.body.querySelector('input, select, textarea'); if (f) f.focus(); }
+
+      // Sends a queued change from one of the forms; errors are shown on the form, which stays open.
+      async function send(form, spec, errorBox) {
+        var btn = form.querySelector('button[type=submit]');
+        btn.disabled = true; btn.textContent = 'Sending…';
+        try {
+          await app.tracker.submit(spec);
+          view = 'main';
+          fill();
+        } catch (error) {
+          btn.disabled = false; btn.textContent = 'Try again';
+          errorBox.textContent = error.friendly || 'This could not be sent just now. Nothing has been lost – try again in a moment.';
+        }
+      }
+
+      var ctl = { show: show, send: send, busy: function (r) { return busy(app, r.id, cfg.parentType) || app.recordsBlocked(); }, dlg: dlg };
+      app.panel = { refresh: function () { if (dlg.isOpen()) { if (view === 'main') { comments = null; fill(); loadExtras(); } } } };
+      fill();
+      loadExtras();
+      dlg.focusFirst();
+      return dlg;
+    }
+
+    function formShell(title, fields, submitLabel, onSubmit, ctl) {
+      var errorBox = h('p', { class: 'form-error', role: 'alert' });
+      var form = h('form', { class: 'dialog-body', novalidate: true }, h('h3', { text: title }), fields, errorBox,
+        h('div', { class: 'row' }, h('button', { type: 'submit', class: 'btn btn-main', text: submitLabel }),
+          h('button', { type: 'button', class: 'btn', text: 'Back', onclick: function () { ctl.show('main'); } })));
+      form.addEventListener('submit', function (e) { e.preventDefault(); errorBox.textContent = ''; onSubmit(form, errorBox); });
+      return form;
+    }
+
+    // ---- notices
+    function openNotice(app, id) {
+      var m = function () { return app.model; };
+      return panel(app, {
+        parentType: 'Notice', title: 'Notice', missingTitle: 'Notice not available',
+        missingText: 'This notice is not available. It may have been archived.',
+        get: function () { return m().noticeById[id]; },
+        ownerOf: function (n) { return n.authorId; },
+        header: function (n) {
+          var area = m().areaByKey[n.areaKey];
+          return h('p', { class: 'muted small', text: area.name + ' noticeboard · ' + n.category + ' · ' +
+            (n.fromOutside ? 'from ' + n.authorName + ', outside ' + area.name : n.authorName) + ' · ' + D.long(n.createdIso) +
+            (n.pinned ? ' · Pinned' : n.important ? ' · Important' : '') });
+        },
+        facts: function (n) { return h('p', { class: 'notice-body notice-full', text: n.body }); },
+        buttons: function (n, ctl) {
+          var r = R.noticeRoles(n, app.person.SiteUserId, app.access);
+          if (!r.canEdit && !r.canPin) return null;
+          if (ctl.busy(n)) return h('p', { class: 'muted small', text: app.recordsBlocked() ? 'Changes to notices are paused for the moment.' : '' });
+          return h('div', { class: 'row actions-row' },
+            r.canEdit ? ui.button('Edit', function () { ctl.show('edit'); }) : null,
+            r.canPin ? ui.button(n.pinned ? 'Unpin' : 'Pin', function () { ctl.show('pin'); }) : null,
+            r.canArchive ? ui.button('Archive', function () { ctl.show('archive'); }) : null);
+        },
+        form: function (view, n, ctl) {
+          var label = function (what) { return what + ' “' + n.title + '”'; };
+          if (view === 'edit') {
+            var r = R.noticeRoles(n, app.person.SiteUserId, app.access);
+            var title = h('input', { id: 'ch-ne-title', type: 'text', maxlength: '255', value: n.title });
+            var body = h('textarea', { id: 'ch-ne-body', rows: '8', maxlength: '5000' });
+            body.value = n.body;
+            var cat = h('select', { id: 'ch-ne-category' }, R.NOTICE_CATEGORIES.map(function (c) { return h('option', { value: c, selected: c === n.category ? true : null, text: c }); }));
+            var imp = h('input', { id: 'ch-ne-important', type: 'checkbox' });
+            imp.checked = n.important && !n.pinned;
+            return formShell('Edit the notice', [field('Title', title), field('Message', body), field('Category', cat),
+              r.canMarkImportant && !n.pinned ? h('label', { class: 'check' }, imp, ' Important for 30 days from today') : null],
+            'Save changes', function (form, errorBox) {
+              var v = {};
+              if (title.value.trim() !== n.title) v.title = title.value;
+              if (body.value.trim() !== n.body.trim()) v.body = body.value;
+              if (cat.value !== n.category) v.category = cat.value;
+              if (!n.pinned && imp.checked !== (n.important && !n.pinned)) v.important = imp.checked;
+              var errors = R.validateNoticeEdit(v);
+              if (CH.ui.dialog.showErrors(form, 'ch-ne-', errors, ['title', 'body', 'category'])) return;
+              if (errors.notice) { errorBox.textContent = errors.notice; return; }
+              if ('title' in v) v.title = v.title.trim();
+              if ('body' in v) v.body = v.body.trim();
+              ctl.send(form, { type: 'EditNotice', targetId: n.id, targetType: 'Notice', expectedRevision: n.revision, payload: v, label: label('Edit') }, errorBox);
+            }, ctl);
+          }
+          if (view === 'pin') {
+            return formShell(n.pinned ? 'Unpin this notice?' : 'Pin this notice?',
+              h('p', { class: 'explain', text: n.pinned ? 'It stops being shown first on the noticeboard.' : 'It is shown first, as important, until someone unpins it.' }),
+              n.pinned ? 'Unpin' : 'Pin', function (form, errorBox) {
+                ctl.send(form, { type: 'PinNotice', targetId: n.id, targetType: 'Notice', expectedRevision: n.revision, payload: { pinned: !n.pinned },
+                  label: label(n.pinned ? 'Unpin' : 'Pin') }, errorBox);
+              }, ctl);
+          }
+          return formShell('Archive this notice?',
+            h('p', { class: 'explain', text: 'It leaves the noticeboard. It is kept, with its comments, in the history of the area.' }),
+            'Archive', function (form, errorBox) {
+              ctl.send(form, { type: 'ArchiveNotice', targetId: n.id, targetType: 'Notice', expectedRevision: n.revision, payload: {}, label: label('Archive') }, errorBox);
+            }, ctl);
+        }
+      });
+    }
+
+    // ---- improvements and degradations
+    function entryChip(e) {
+      var kind = e.status === 'Resolved' || e.status === 'Closed' ? 'done' : e.entryType === 'Degradation' ? 'late' : 'later';
+      return ui.chip(kind, STATUS_WORDS[e.status] || e.status);
+    }
+
+    function openEntry(app, id) {
+      var m = function () { return app.model; };
+      function ownersFor(key) { return m().ownersFor(key); }
+      function allowed(key, pid) { return ownersFor(key).some(function (p) { return Number(p.id) === Number(pid); }); }
+      function linkedActions(e) { return m().actions.filter(function (a) { return a.sourceType === 'Register' && Number(a.sourceId) === Number(e.id); }); }
+      return panel(app, {
+        parentType: 'Register Entry', title: 'Improvement or degradation', missingTitle: 'Entry not available',
+        missingText: 'This entry is not available. It may have been removed.',
+        get: function () { return m().entryById[id]; },
+        ownerOf: function (e) { return e.raisedById; },
+        header: function (e) {
+          return h('p', { class: 'muted small' }, e.ref + ' · ' + m().areaByKey[e.areaKey].name + ' · ' + e.entryType + ' · ' + e.impact + ' impact ', entryChip(e));
+        },
+        facts: function (e) {
+          return h('dl', { class: 'facts' },
+            h('dt', { text: 'What' }), h('dd', { class: 'notice-body', text: e.description || 'No description.' }),
+            h('dt', { text: 'Who' }), h('dd', { text: (e.responsibleName ? e.responsibleName + ' is responsible. ' : '') + 'Raised by ' + e.raisedByName + (e.raisedIso ? ' on ' + D.long(e.raisedIso) : '') + '.' }),
+            e.outcome ? [h('dt', { text: 'Outcome' }), h('dd', { class: 'notice-body', text: e.outcome + (e.resolvedIso ? ' (' + D.long(e.resolvedIso) + ')' : '') })] : null);
+        },
+        buttons: function (e, ctl) {
+          var can = R.managesEntry(e, app.person.SiteUserId, app.access);
+          if (!can) return h('p', { class: 'muted small', text: 'The person who raised it, the person responsible, the area\'s engineers and meeting runners, and management can change this entry.' });
+          if (ctl.busy(e)) return h('p', { class: 'muted small', text: app.recordsBlocked() ? 'Changes to the register are paused for the moment.' : '' });
+          return h('div', { class: 'row actions-row' },
+            ui.button('Change status', function () { ctl.show('status'); }, 'main'),
+            ui.button('Edit details', function () { ctl.show('edit'); }));
+        },
+        extra: function (e, ctl) {
+          var list = linkedActions(e);
+          var can = R.managesEntry(e, app.person.SiteUserId, app.access) && !ctl.busy(e);
+          return [h('h3', { class: 'group-title', text: 'Linked actions' }),
+            list.length ? h('ul', { class: 'items linked' }, list.map(function (a) {
+              return h('li', null, h('button', { type: 'button', class: 'item-open', onclick: function () { ctl.dlg.close(); app.openAction(a); } },
+                h('span', null, h('span', { class: 't', text: a.ref + ' ' + a.title }), h('span', { class: 's', text: a.ownerName })), ui.chip(a.group, a.dueText)),
+                can ? ui.linkButton('Unlink', function () { ctl.show('unlink:' + a.id); }) : null);
+            })) : h('p', { class: 'muted', text: 'No actions are linked to this entry yet.' }),
+            can && e.open ? h('div', { class: 'row' },
+              app.access.canWrite(e.areaKey) ? ui.button('Raise a linked action', function () { ctl.dlg.close(); if (!app.queueBlocked()) CH.views.raiseForm.open(app, e.areaKey, { entry: e }); }) : null,
+              ui.button('Link an existing action', function () { ctl.show('link'); })) : null];
+        },
+        form: function (view, e, ctl) {
+          var label = function (what) { return what + ' ' + e.ref; };
+          if (view === 'status') {
+            var status = h('select', { id: 'ch-re-status' }, R.ENTRY_STATUSES.map(function (s) { return h('option', { value: s, selected: s === e.status ? true : null, text: STATUS_WORDS[s] }); }));
+            var outcome = h('textarea', { id: 'ch-re-outcome', rows: '4', maxlength: '2000' });
+            outcome.value = e.outcome;
+            return formShell('Change the status', [field('Status', status), field('Outcome', outcome, 'Needed to resolve or close it: what was done or decided.')],
+              'Save', function (form, errorBox) {
+                var v = { status: status.value, outcome: outcome.value };
+                var errors = R.validateEntryUpdate(e, v, { ownerAllowed: allowed });
+                if (CH.ui.dialog.showErrors(form, 'ch-re-', errors, ['status', 'outcome'])) return;
+                v.outcome = v.outcome.trim();
+                ctl.send(form, { type: 'UpdateRegisterEntry', targetId: e.id, targetType: 'Register Entry', expectedRevision: e.revision, payload: v,
+                  label: label('Status of') + ' to ' + STATUS_WORDS[v.status].toLowerCase() }, errorBox);
+              }, ctl);
+          }
+          if (view === 'edit') {
+            var title = h('input', { id: 'ch-re-title', type: 'text', maxlength: '255', value: e.title });
+            var desc = h('textarea', { id: 'ch-re-description', rows: '5', maxlength: '5000' });
+            desc.value = e.description;
+            var impact = h('select', { id: 'ch-re-impact' }, R.IMPACTS.map(function (x) { return h('option', { value: x, selected: x === e.impact ? true : null, text: x }); }));
+            var resp = h('select', { id: 'ch-re-responsibleId' }, ownersFor(e.areaKey).map(function (p) {
+              return h('option', { value: String(p.id), selected: Number(p.id) === Number(e.responsibleId) ? true : null, text: p.name });
+            }));
+            return formShell('Edit the details', [field('Title', title), field('Description', desc), field('Impact', impact), field('Who is responsible?', resp)],
+              'Save changes', function (form, errorBox) {
+                var v = {};
+                if (title.value.trim() !== e.title) v.title = title.value.trim();
+                if (desc.value.trim() !== e.description.trim()) v.description = desc.value.trim();
+                if (impact.value !== e.impact) v.impact = impact.value;
+                if (Number(resp.value) !== Number(e.responsibleId)) v.responsibleId = Number(resp.value);
+                var errors = R.validateEntryUpdate(e, v, { ownerAllowed: allowed });
+                if (CH.ui.dialog.showErrors(form, 'ch-re-', errors, ['title', 'description', 'impact', 'responsibleId'])) return;
+                if (errors.entry) { errorBox.textContent = errors.entry; return; }
+                ctl.send(form, { type: 'UpdateRegisterEntry', targetId: e.id, targetType: 'Register Entry', expectedRevision: e.revision, payload: v, label: label('Edit') }, errorBox);
+              }, ctl);
+          }
+          if (view === 'link') {
+            var choices = m().actions.filter(function (a) { return a.areaKey === e.areaKey && a.sourceType !== 'Register' && !a.locked; });
+            if (!choices.length) {
+              return formShell('Link an existing action', h('p', { class: 'muted', text: 'There are no open ' + m().areaByKey[e.areaKey].name + ' actions that can be linked.' }), 'Link', function () {}, ctl);
+            }
+            var pick = h('select', { id: 'ch-re-actionId' }, choices.map(function (a) { return h('option', { value: String(a.id), text: a.ref + ' ' + a.title + ' (' + a.ownerName + ')' }); }));
+            return formShell('Link an existing action', [field('Which action?', pick, 'Open actions in the same area. The action itself is linked; nothing is copied.')],
+              'Link', function (form, errorBox) {
+                ctl.send(form, { type: 'LinkActionToEntry', targetId: e.id, targetType: 'Register Entry', expectedRevision: e.revision, payload: { actionId: Number(pick.value) },
+                  label: 'Link ' + pick.options[pick.selectedIndex].text.split(' (')[0] + ' to ' + e.ref }, errorBox);
+              }, ctl);
+          }
+          var actionId = Number(String(view).split(':')[1]);
+          var a = m().actionById[actionId];
+          return formShell('Unlink this action?', h('p', { class: 'explain', text: (a ? a.ref + ' ' + a.title : 'The action') + ' stays as it is; it is just no longer linked to ' + e.ref + '.' }),
+            'Unlink', function (form, errorBox) {
+              ctl.send(form, { type: 'UnlinkActionFromEntry', targetId: e.id, targetType: 'Register Entry', expectedRevision: e.revision, payload: { actionId: actionId },
+                label: 'Unlink ' + (a ? a.ref : 'an action') + ' from ' + e.ref }, errorBox);
+            }, ctl);
+        }
+      });
+    }
+
+    return { openNotice: openNotice, openEntry: openEntry, entryChip: entryChip, loadComments: loadComments, STATUS_WORDS: STATUS_WORDS };
+  })();
+
+  /* src/views/entry-form.js */
+  // "Raise an improvement or degradation" (spec REG-1): one form, sent as a queued request. The Records flow
+  // creates the entry in the area's folder; until then it shows as being recorded.
+  CH.views = CH.views || {};
+  CH.views.entryForm = (function () {
+    var h = CH.dom.h;
+    var R = CH.rules;
+    var HINTS = {
+      'Improvement': 'Something that would make the work better or safer.',
+      'Degradation': 'Something that has got worse and needs watching or fixing.',
+      'Concern': 'Something that worries you but is not yet a degradation.',
+      'Opportunity': 'A chance to do something better.',
+      'Positive Observation': 'Something going well that others should know about.'
+    };
+
+    function open(app, areaKey) {
+      var m = app.model;
+      var mine = m.areas.filter(function (a) { return app.access.canWrite(a.key); });
+      if (!mine.length) { CH.ui.toast(app.root, 'You are not a member of any area yet, so you cannot raise entries.', 'info'); return; }
+      if (app.recordsBlocked()) { CH.ui.toast(app.root, 'Raising entries is paused while changes can\'t be processed. Please try again later.', 'info'); return; }
+      var field = CH.ui.dialog.field;
+      var key = CH.requests.newKey();
+
+      var area = h('select', { id: 'ch-e-areaKey' }, mine.map(function (a) { return h('option', { value: a.key, selected: a.key === areaKey ? true : null, text: a.name }); }));
+      var type = h('select', { id: 'ch-e-entryType' }, R.ENTRY_TYPES.map(function (t) { return h('option', { value: t, text: t }); }));
+      var typeHint = h('p', { class: 'explain' });
+      var impact = h('select', { id: 'ch-e-impact' }, R.IMPACTS.map(function (x) { return h('option', { value: x, selected: x === 'Medium' ? true : null, text: x }); }));
+      var title = h('input', { id: 'ch-e-title', type: 'text', maxlength: '255', autocomplete: 'off' });
+      var description = h('textarea', { id: 'ch-e-description', rows: '5', maxlength: '5000' });
+      var resp = h('select', { id: 'ch-e-responsibleId' });
+      function fillPeople() {
+        var current = resp.value || String(app.person.SiteUserId);
+        CH.dom.clear(resp);
+        m.ownersFor(area.value).forEach(function (p) {
+          resp.appendChild(h('option', { value: String(p.id), selected: String(p.id) === current ? true : null,
+            text: p.name + (Number(p.id) === Number(app.person.SiteUserId) ? ' (you)' : '') }));
+        });
+      }
+      function showHint() { typeHint.textContent = HINTS[type.value] || ''; }
+      area.addEventListener('change', fillPeople);
+      type.addEventListener('change', showHint);
+      fillPeople();
+      showHint();
+
+      var errorBox = h('p', { class: 'form-error', role: 'alert' });
+      var submit = h('button', { type: 'submit', class: 'btn btn-main', text: 'Raise entry' });
+      var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-e', title: 'Raise an improvement or degradation' });
+      var form = h('form', { class: 'dialog-body', novalidate: true },
+        field('Area', area), field('Type', type), typeHint, field('Impact', impact),
+        field('Title', title, 'A short summary people will recognise.'), field('Description', description),
+        field('Who is responsible?', resp, 'Members of the area, and Team Leaders and the Group Head.'),
+        errorBox, h('div', { class: 'row' }, submit, h('button', { type: 'button', class: 'btn', text: 'Cancel', onclick: dlg.close })));
+      dlg.body.appendChild(form);
+
+      form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        errorBox.textContent = '';
+        var v = { areaKey: area.value, entryType: type.value, impact: impact.value, title: title.value, description: description.value, responsibleId: Number(resp.value) };
+        var errors = R.validateEntry(v, { canWrite: app.access.canWrite,
+          ownerAllowed: function (k, id) { return m.ownersFor(k).some(function (p) { return Number(p.id) === id; }); } });
+        if (CH.ui.dialog.showErrors(form, 'ch-e-', errors, ['areaKey', 'entryType', 'impact', 'title', 'description', 'responsibleId'])) return;
+        submit.disabled = true;
+        submit.textContent = 'Sending…';
+        try {
+          await app.tracker.submit({ key: key, type: 'RaiseRegisterEntry', label: 'Raise “' + v.title.trim() + '”', payload: {
+            areaKey: v.areaKey, entryType: v.entryType, impact: v.impact, title: v.title.trim(), description: v.description.trim(), responsibleId: v.responsibleId } });
+          dlg.close();
+          CH.ui.toast(app.root, 'Your entry has been sent. It will appear in a few minutes.', 'ok');
+        } catch (error) {
+          submit.disabled = false;
+          submit.textContent = 'Try again';
+          errorBox.textContent = error.friendly || 'Your entry could not be sent just now. Nothing has been lost – try again in a moment.';
+        }
+      });
+      title.focus();
+    }
+
+    return { open: open };
+  })();
+
+  /* src/views/feedback.js */
+  // The feedback bubble (spec FB-1 to FB-3) and the administrators' review of it (ADM-5). Sending is an instant
+  // write to the Feedback list, where everyone may add but only administrators may read; "Thanks" is shown only once
+  // SharePoint has confirmed the save. Who sent it and when come from SharePoint's own Created By and Created.
+  CH.views = CH.views || {};
+  CH.views.feedback = (function () {
+    var h = CH.dom.h;
+    var D = CH.dates;
+    var ui = CH.ui;
+    var TYPES = ['Suggest an improvement', 'Report a bug', 'Ask a question', 'Other feedback'];
+    var STATUSES = ['New', 'In review', 'Answered', 'Done'];
+
+    function validate(v) {
+      var e = {};
+      if (TYPES.indexOf(v.type) < 0) e.type = 'Choose what kind of feedback this is.';
+      var d = String(v.description || '').trim();
+      if (!d) e.description = 'Tell us a little more.';
+      else if (d.length > 4000) e.description = 'Keep it to 4,000 characters or fewer.';
+      return e;
+    }
+
+    function bubble(app) {
+      return h('button', { type: 'button', class: 'fb-bubble', 'aria-label': 'Send feedback about the Competency Hub', title: 'Send feedback',
+        onclick: function () { openForm(app); } }, h('span', { 'aria-hidden': 'true', text: '?' }), h('span', { class: 'fb-label', text: 'Feedback' }));
+    }
+
+    function openForm(app) {
+      var field = CH.ui.dialog.field;
+      var clientKey = CH.requests.newKey();
+      var type = h('select', { id: 'ch-fb-type' }, TYPES.map(function (t) { return h('option', { value: t, text: t }); }));
+      var description = h('textarea', { id: 'ch-fb-description', rows: '6', maxlength: '4000' });
+      var errorBox = h('p', { class: 'form-error', role: 'alert' });
+      var submit = h('button', { type: 'submit', class: 'btn btn-main', text: 'Send feedback' });
+      var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-fb', title: 'Send feedback' });
+      var form = h('form', { class: 'dialog-body', novalidate: true },
+        h('p', { class: 'explain', text: 'Your feedback goes to the Competency Hub administrators. Only they can read it.' }),
+        field('What kind of feedback?', type), field('Your feedback', description, 'What happened, or what you would like. Include the page you were on if it helps.'),
+        errorBox, h('div', { class: 'row' }, submit, h('button', { type: 'button', class: 'btn', text: 'Cancel', onclick: dlg.close })));
+      dlg.body.appendChild(form);
+      form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        errorBox.textContent = '';
+        var v = { type: type.value, description: description.value };
+        if (CH.ui.dialog.showErrors(form, 'ch-fb-', validate(v), ['type', 'description'])) return;
+        submit.disabled = true;
+        submit.textContent = 'Sending…';
+        var values = { Title: (v.type + ': ' + v.description.trim()).slice(0, 255), FeedbackType: v.type, Description: v.description.trim(), Status: 'New',
+          PageView: String(app.state.view || 'home').slice(0, 100), ClientKey: clientKey };
+        try {
+          await app.sp.addToFolder('feedback', '', values);
+        } catch (error) {
+          // An unclear failure may still have saved it. The sender can read their own item, so look for it first.
+          var found = await app.sp.items(CH.config.lists.feedback.title, "$select=Id&$filter=ClientKey eq '" + CH.sp.escapeOData(clientKey) + "'", 1).catch(function () { return { rows: [] }; });
+          if (!found.rows.length) {
+            submit.disabled = false;
+            submit.textContent = 'Try again';
+            errorBox.textContent = 'Your feedback could not be sent just now. Your text has been kept – try again in a moment.';
+            return;
+          }
+        }
+        dlg.close();
+        CH.ui.toast(app.root, 'Thanks – your feedback has been sent.', 'ok');
+      });
+      description.focus();
+    }
+
+    // ---- review (administrators): a list with filters; open an item, respond and set its status
+    async function load(app) {
+      var res = await app.sp.items(CH.config.lists.feedback.title,
+        '$select=Id,Title,FeedbackType,Description,Status,Response,RespondedById,RespondedOn,PageView,AuthorId,Created&$filter=FSObjType eq 0', 2000);
+      return res.rows.sort(function (a, b) { return b.Id - a.Id; });
+    }
+
+    async function refresh(app) {
+      var showing = function () { return app.state.view === 'admin' && app.adminTab === 3; };
+      app.feedback = { loading: true, rows: [], filter: (app.feedback && app.feedback.filter) || { type: '', status: 'open' } };
+      if (showing()) app.refreshView();
+      try { app.feedback.rows = await load(app); } catch (_) { app.feedback.error = true; }
+      app.feedback.loading = false;
+      if (showing()) app.refreshView();
+    }
+
+    function respond(app, row) {
+      var field = CH.ui.dialog.field;
+      var status = h('select', { id: 'ch-fr-status' }, STATUSES.map(function (s) { return h('option', { value: s, selected: s === row.Status ? true : null, text: s }); }));
+      var response = h('textarea', { id: 'ch-fr-response', rows: '5', maxlength: '4000' });
+      response.value = row.Response || '';
+      var errorBox = h('p', { class: 'form-error', role: 'alert' });
+      var submit = h('button', { type: 'submit', class: 'btn btn-main', text: 'Save' });
+      var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-fr', title: row.FeedbackType, wide: true });
+      var form = h('form', { class: 'dialog-body', novalidate: true },
+        h('p', { class: 'muted small', text: 'From ' + app.model.nameOf(row.AuthorId) + ' · ' + D.long(D.localDate(row.Created)) + ' ' + D.ukTime(row.Created) +
+          (row.PageView ? ' · on the ' + row.PageView + ' page' : '') }),
+        h('p', { class: 'notice-body notice-full', text: row.Description || '' }),
+        field('Status', status), field('Response', response, 'Kept with the feedback for other administrators. The sender is not emailed.'),
+        errorBox, h('div', { class: 'row' }, submit, h('button', { type: 'button', class: 'btn', text: 'Cancel', onclick: dlg.close })));
+      dlg.body.appendChild(form);
+      form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        if (response.value.length > 4000) { errorBox.textContent = 'Keep the response to 4,000 characters or fewer.'; return; }
+        submit.disabled = true;
+        submit.textContent = 'Saving…';
+        var values = { Status: status.value, Response: response.value.trim() };
+        if (response.value.trim() !== (row.Response || '').trim()) {
+          values.RespondedOn = D.ukFormDateTime(new Date());
+          if (app.loginName) values.RespondedBy = JSON.stringify([{ Key: app.loginName }]);
+        }
+        try {
+          await app.sp.update('feedback', row.Id, values);
+          dlg.close();
+          CH.ui.toast(app.root, 'Saved.', 'ok');
+          refresh(app);
+        } catch (error) {
+          submit.disabled = false;
+          submit.textContent = 'Try again';
+          errorBox.textContent = 'This could not be saved just now. Your text has been kept.';
+        }
+      });
+      status.focus();
+    }
+
+    function review(app) {
+      var st = app.feedback;
+      if (!st) { setTimeout(function () { refresh(app); }, 0); return h('p', { class: 'muted', text: 'Loading feedback…' }); }
+      if (st.loading) return h('p', { class: 'muted', text: 'Loading feedback…' });
+      if (st.error) return h('p', { class: 'section-note', text: 'The feedback could not be read just now. Reload the page to try again.' });
+      var f = st.filter;
+      var rows = st.rows.filter(function (r) {
+        return (!f.type || r.FeedbackType === f.type) && (f.status === '' || (f.status === 'open' ? r.Status !== 'Done' : r.Status === f.status));
+      });
+      function setFilter(k) { return function (e) { st.filter[k] = e.target.value; app.refreshView(); }; }
+      var typeSel = h('select', { 'aria-label': 'Type', onchange: setFilter('type') }, [h('option', { value: '', text: 'All types' })].concat(TYPES.map(function (t) {
+        return h('option', { value: t, selected: t === f.type ? true : null, text: t }); })));
+      var statusSel = h('select', { 'aria-label': 'Status', onchange: setFilter('status') }, [['open', 'Not done'], ['', 'Any status']].concat(STATUSES.map(function (s) { return [s, s]; })).map(function (s) {
+        return h('option', { value: s[0], selected: s[0] === f.status ? true : null, text: s[1] }); }));
+      return [
+        h('div', { class: 'row filters' }, h('label', null, 'Type ', typeSel), h('label', null, 'Status ', statusSel), ui.linkButton('Check again', function () { refresh(app); })),
+        rows.length ? h('ul', { class: 'items' }, rows.map(function (r) {
+          return h('li', null, h('button', { type: 'button', class: 'item-open', onclick: function () { respond(app, r); } },
+            h('span', null, h('span', { class: 't', text: r.Description ? (r.Description.length > 140 ? r.Description.slice(0, 140) + '…' : r.Description) : r.Title }),
+              h('span', { class: 's', text: r.FeedbackType + ' · ' + app.model.nameOf(r.AuthorId) + ' · ' + D.short(D.localDate(r.Created)) + (r.Response ? ' · answered' : '') })),
+            ui.chip(r.Status === 'Done' ? 'done' : r.Status === 'New' ? 'soon' : 'later', r.Status)));
+        })) : h('p', { class: 'muted', text: st.rows.length ? 'No feedback matches these filters.' : 'No feedback has been sent yet.' })
+      ];
+    }
+
+    return { bubble: bubble, openForm: openForm, review: review, refresh: refresh, validate: validate, TYPES: TYPES, STATUSES: STATUSES };
+  })();
+
+  /* src/views/settings.js */
+  // Administration → Settings (spec ADM-4): the five safe values, each checked here and again by the
+  // Administration flow, which records the previous and the new value. One change is sent at a time.
+  CH.views = CH.views || {};
+  CH.views.settings = (function () {
+    var h = CH.dom.h;
+    var ui = CH.ui;
+    var D = CH.dates;
+    var ITEMS = [
+      { name: 'ReminderDaysBefore', label: 'First reminder', unit: 'days before the deadline', min: 1, max: 30, fallback: '7',
+        hint: 'When the owner gets the first reminder email.' },
+      { name: 'DueSoonDays', label: 'Due soon', unit: 'days', min: 1, max: 30, fallback: '7',
+        hint: 'How far ahead an action counts as due soon on the screens.' },
+      { name: 'OverdueReminderIntervalDays', label: 'Late reminders', unit: 'days between them', min: 1, max: 30, fallback: '7',
+        hint: 'How often the owner of a late action is reminded.' },
+      { name: 'MaxDeadlineYears', label: 'Furthest deadline', unit: 'years ahead', min: 1, max: 5, fallback: '2',
+        hint: 'The latest target date anyone can choose.' },
+      { name: 'MonitorHours', label: 'Queue monitor hours', hours: true, fallback: '07:00|19:45|60',
+        hint: 'Every 15 minutes in working hours on weekdays; outside them, every so many minutes.' }
+    ];
+
+    function current(app, name) {
+      var row = (app.settings || []).filter(function (r) { return r.Title === name; })[0];
+      return row && row.Value !== undefined && row.Value !== null ? String(row.Value) : '';
+    }
+
+    // Returns an error message, or '' when the value is acceptable (the same checks as the flow).
+    function check(item, value) {
+      if (item.hours) {
+        var p = String(value).split('|');
+        var t = function (x) { var m = /^(\d{2}):(\d{2})$/.exec(x || ''); return m && +m[1] < 24 && +m[2] < 60 ? +m[1] * 60 + +m[2] : -1; };
+        if (p.length !== 3 || t(p[0]) < 0 || t(p[1]) < 0 || t(p[0]) >= t(p[1]) || !/^\d{1,2}$/.test(p[2]) || Number(p[2]) < 15) {
+          return 'Give the start and end of working hours (start before end), and at least 15 minutes between checks outside them.';
+        }
+        return '';
+      }
+      if (!/^\d{1,2}$/.test(String(value)) || Number(value) < item.min || Number(value) > item.max) {
+        return 'Enter a whole number from ' + item.min + ' to ' + item.max + '.';
+      }
+      return '';
+    }
+
+    function words(item, value) {
+      if (!value) return 'Not set (' + (item.hours ? item.fallback.replace(/\|/g, ' – ').replace(/ – (\d+)$/, ', then every $1 minutes') : item.fallback + ' ' + item.unit) + ' is used)';
+      if (item.hours) {
+        var p = value.split('|');
+        return p[0] + ' to ' + p[1] + ' on weekdays; every ' + p[2] + ' minutes outside those hours';
+      }
+      return value + ' ' + item.unit;
+    }
+
+    function editor(app, item, onDone) {
+      var err = h('span', { class: 'field-error', id: 'ch-set-' + item.name + '-err' });
+      var value = current(app, item.name) || item.fallback;
+      var inputs;
+      if (item.hours) {
+        var p = value.split('|');
+        inputs = [h('input', { type: 'time', id: 'ch-set-' + item.name, 'aria-label': 'Start', value: p[0] }), ' to ',
+          h('input', { type: 'time', 'aria-label': 'End', value: p[1] }), ', then every ',
+          h('input', { type: 'number', min: '15', max: '99', 'aria-label': 'Minutes between checks outside working hours', value: p[2], class: 'num' }), ' minutes'];
+      } else {
+        inputs = [h('input', { type: 'number', id: 'ch-set-' + item.name, min: String(item.min), max: String(item.max), value: value, class: 'num' }), ' ' + item.unit];
+      }
+      var save = h('button', { type: 'submit', class: 'btn btn-main', text: 'Save' });
+      var form = h('form', { class: 'setting-edit', novalidate: true }, h('span', { class: 'inline-fields' }, inputs), save,
+        h('button', { type: 'button', class: 'btn', text: 'Cancel', onclick: function () { onDone(); } }), err);
+      form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        var fields = form.querySelectorAll('input');
+        var v = item.hours ? [fields[0].value, fields[1].value, fields[2].value].join('|') : String(fields[0].value).trim();
+        var problem = check(item, v);
+        err.textContent = problem;
+        if (problem) { fields[0].focus(); return; }
+        if (v === current(app, item.name)) { onDone(); return; }
+        save.disabled = true;
+        save.textContent = 'Sending…';
+        try {
+          await app.tracker.submit({ type: 'UpdateSetting', payload: { name: item.name, value: v }, label: 'Change ' + item.label.toLowerCase() + ' to ' + words(item, v) });
+          onDone();
+        } catch (error) {
+          save.disabled = false;
+          save.textContent = 'Try again';
+          err.textContent = error.friendly || 'This could not be sent just now. Try again in a moment.';
+        }
+      });
+      setTimeout(function () { var first = form.querySelector('input'); if (first) first.focus(); }, 0);
+      return form;
+    }
+
+    function render(app) {
+      var editing = app.settingEdit || '';
+      var sent = (app.tracker ? app.tracker.entries() : []).filter(function (e) { return e.type === 'UpdateSetting' && !e.dismissed; });
+      return [
+        h('p', { class: 'muted small', text: 'Each change is checked, recorded with its previous value, and takes effect within a few minutes.' }),
+        h('ul', { class: 'plain settings' }, ITEMS.map(function (item) {
+          var waiting = sent.filter(function (e) { return e.label.indexOf(item.label.toLowerCase()) >= 0 && (e.state === 'submitted' || e.state === 'slow'); })[0];
+          return h('li', null, h('div', { class: 'setting' },
+            h('b', { text: item.label }), h('br'),
+            h('span', { text: words(item, current(app, item.name)) }), h('br'),
+            h('span', { class: 'muted small', text: item.hint }),
+            waiting ? h('p', { class: 'pending', role: 'status', text: waiting.label + ' – sent at ' + D.ukTime(waiting.submittedAt) + ', waiting to be recorded.' }) : null,
+            editing === item.name ? editor(app, item, function () { app.settingEdit = ''; app.refreshView(); }) : null),
+            editing || waiting ? null : ui.button('Change', function () { app.settingEdit = item.name; app.refreshView(); }));
+        })),
+        sent.filter(function (e) { return e.state !== 'submitted' && e.state !== 'slow'; }).map(function (e) {
+          return h('p', { class: e.state === 'done' ? 'ok-note' : 'section-note', role: 'status' },
+            (e.state === 'done' ? 'Done: ' : 'Not done: ') + e.label + '. ' + (e.state === 'done' ? '' : e.message + ' '), ui.linkButton('Dismiss', function () { app.tracker.dismiss(e); }));
+        })
+      ];
+    }
+
+    return { render: render, check: check, ITEMS: ITEMS };
+  })();
+
+  /* src/views/dashboard.js */
+  // Management overview (spec MGT-1 to MGT-3): figures for the whole group and each area, and every figure opens
+  // exactly the actions it counts, by the same rule. Everyone can read every area's actions (E.0), so this page
+  // gathers them for management; it hides nothing that needs protecting. Closed actions are read on demand.
+  CH.views = CH.views || {};
+  CH.views.dashboard = (function () {
+    var h = CH.dom.h;
+    var D = CH.dates;
+    var ui = CH.ui;
+    var PERIODS = [['30', 'Last 30 days'], ['90', 'Last 3 months'], ['365', 'Last 12 months']];
+
+    // Closed actions in the period, newest first. IsOpen is indexed, so it leads the filter.
+    async function loadClosed(app, days) {
+      var since = D.addDays(app.model.today, -Number(days));
+      var res = await app.sp.items(CH.config.lists.actions.title, CH.model.QUERIES.actions.replace('&$filter=IsOpen eq 1 and FSObjType eq 0',
+        '&$filter=IsOpen eq 0 and FSObjType eq 0'), 5000);
+      var rows = res.rows.filter(function (r) { return !CH.model.isUncommitted(r) && r.DateClosed && D.localDate(r.DateClosed) >= since; });
+      app.finished = app.finished || {};
+      var list = rows.map(function (r) { var a = app.model.actionFrom(r); app.finished[a.id] = a; return a; })
+        .sort(function (a, b) { return String(b.closedIso).localeCompare(String(a.closedIso)); });
+      return { list: list, complete: res.complete };
+    }
+
+    async function refresh(app) {
+      var st = app.dash = app.dash || { days: '90', pick: null };
+      var showing = function () { return app.state.view === 'manage'; };
+      st.loading = true; st.error = false;
+      if (showing()) app.refreshView();
+      try { var got = await loadClosed(app, st.days); st.closed = got.list; st.closedComplete = got.complete; } catch (_) { st.error = true; st.closed = []; }
+      st.loading = false;
+      if (showing()) app.refreshView();
+    }
+
+    // The figures, each with the rule that picks its actions; the drill-down uses the same rule.
+    function measures(app, key) {
+      var m = app.model;
+      var st = app.dash;
+      var open = m.actions.filter(function (a) { return !key || m.inArea(a, key); });
+      var closed = (st.closed || []).filter(function (a) { return !key || m.inArea(a, key); });
+      var completed = closed.filter(function (a) { return a.closeOutcome === 'Completed'; });
+      return {
+        open: { label: 'Open', list: open },
+        late: { label: 'Late', list: open.filter(function (a) { return a.group === 'late'; }), kind: 'late' },
+        soon: { label: 'Due soon', list: open.filter(function (a) { return a.group === 'soon' && !a.waitingCloseOut; }), kind: 'soon' },
+        closeOut: { label: 'Waiting for close-out', list: open.filter(function (a) { return a.waitingCloseOut; }) },
+        completed: { label: 'Completed', list: completed, kind: 'done', closed: true },
+        closed: { label: 'All closed', list: closed, closed: true }
+      };
+    }
+
+    function figure(app, key, name, x) {
+      var st = app.dash;
+      var picked = st.pick && st.pick.key === (key || '') && st.pick.name === name;
+      var pending = x.closed && (st.loading || !st.closed);
+      return h('button', { type: 'button', class: 'dash-fig' + (picked ? ' on' : '') + (x.kind ? ' k-' + x.kind : ''), 'aria-pressed': String(picked),
+        disabled: pending ? true : null,
+        onclick: function () { st.pick = picked ? null : { key: key || '', name: name }; app.refreshView(); } },
+        h('b', { text: pending ? '…' : String(x.list.length) }), h('span', { text: x.label }));
+    }
+
+    function drill(app) {
+      var st = app.dash;
+      if (!st.pick) return null;
+      var m = app.model;
+      var x = measures(app, st.pick.key)[st.pick.name];
+      var where = st.pick.key ? m.areaByKey[st.pick.key].name : 'All areas';
+      var rows = x.list.slice().sort(function (a, b) { return x.closed ? String(b.closedIso).localeCompare(String(a.closedIso)) : a.dueIso.localeCompare(b.dueIso); });
+      return ui.card(where + ' – ' + x.label.toLowerCase() + ' (' + rows.length + ')', [
+        rows.length ? h('ul', { class: 'items' }, rows.map(function (a) {
+          return h('li', null, h('button', { type: 'button', class: 'item-open', onclick: function () { app.openAction(a); } },
+            h('span', null, h('span', { class: 't', text: a.ref + ' ' + a.title }), h('span', { class: 's', text: a.areaName + ' · ' + a.ownerName +
+              (x.closed ? ' · ' + (a.closeOutcome || 'Closed') : a.extensions ? ' · deadline moved ' + (a.extensions === 1 ? 'once' : a.extensions + ' times') : '') })),
+            ui.chip(x.closed ? 'done' : a.waitingCloseOut ? 'later' : a.group, x.closed ? 'Closed ' + (a.closedIso ? D.short(a.closedIso) : '') : a.dueText)));
+        })) : h('p', { class: 'muted', text: 'No actions.' }),
+        h('div', { class: 'row' }, ui.linkButton('Close this list', function () { st.pick = null; app.refreshView(); }))], 'dash-drill');
+    }
+
+    function render(app) {
+      if (!app.access.isManagement) {
+        return [h('h1', { text: 'Management' }), h('p', { text: 'This page is for Team Leaders and the Group Head.' })];
+      }
+      var m = app.model;
+      var st = app.dash;
+      if (!st) { app.dash = { days: '90', pick: null }; setTimeout(function () { refresh(app); }, 0); st = app.dash; }
+      var period = h('select', { 'aria-label': 'Closed in', onchange: function (e) { st.days = e.target.value; st.pick = null; refresh(app); } },
+        PERIODS.map(function (p) { return h('option', { value: p[0], selected: p[0] === st.days ? true : null, text: p[1] }); }));
+      var all = measures(app, '');
+      var names = ['open', 'late', 'soon', 'closeOut', 'completed', 'closed'];
+      var active = m.areas.filter(function (a) { return a.status === 'Active'; });
+      var degr = active.reduce(function (n, a) { return n + m.stats[a.key].degradations; }, 0);
+      var table = h('table', { class: 'dash-table' },
+        h('thead', null, h('tr', null, h('th', { scope: 'col', text: 'Area' }), ['Open', 'Late', 'Due soon', 'Completed'].map(function (t) { return h('th', { scope: 'col', text: t }); }),
+          h('th', { scope: 'col', text: 'Open issues' }), h('th', { scope: 'col', text: 'Next meeting' }))),
+        h('tbody', null, active.map(function (a) {
+          var x = measures(app, a.key);
+          var s = m.stats[a.key];
+          return h('tr', null, h('th', { scope: 'row' }, ui.linkButton(a.name, function () { app.openArea(a.key); })),
+            ['open', 'late', 'soon', 'completed'].map(function (n) { return h('td', null, figure(app, a.key, n, x[n])); }),
+            h('td', { text: s.openEntries ? s.openEntries + (s.degradations ? ' (' + s.degradations + ' degradation' + (s.degradations === 1 ? '' : 's') + ')' : '') : '–' }),
+            h('td', { class: s.meetingStale ? 'txt-soon' : '', text: s.nextMeeting ? D.weekdayShort(s.nextMeeting) : s.lastMeeting ? 'None since ' + D.short(s.lastMeeting) : 'None booked' }));
+        })));
+      return [
+        h('div', { class: 'row' }, ui.linkButton('‹ Overview', app.goHome)),
+        h('h1', { text: 'Management' }),
+        h('p', { class: 'sentence' }, 'Across the group: ' + all.open.list.length + ' open actions, ',
+          all.late.list.length ? h('b', { class: 'txt-late', text: all.late.list.length + ' late' }) : 'none late',
+          degr ? ', and ' + degr + ' unresolved degradation' + (degr === 1 ? '' : 's') + '.' : '.'),
+        ui.sectionNote(m.sections.actions, 'actions'),
+        st.error ? h('p', { class: 'section-note', text: 'Closed actions could not be read just now, so the completed figures are missing. ' }, ui.linkButton('Try again', function () { refresh(app); })) : null,
+        st.closedComplete === false ? h('p', { class: 'section-note', text: 'Only the first 5,000 closed actions were read; the completed figures may be low.' }) : null,
+        h('div', { class: 'row filters' }, h('label', null, 'Completed and closed in ', period)),
+        h('div', { class: 'dash-figs' }, names.map(function (n) { return figure(app, '', n, all[n]); })),
+        drill(app),
+        ui.card('By area', [h('p', { class: 'muted small', text: 'Choose any number to see the actions it counts. An action shared with another area counts in both areas, and once in the group figures.' }), table]),
+        h('p', { class: 'muted small', text: 'Everyone in the Hub can read every area\'s actions; this page gathers them in one place.' })
+      ];
+    }
+
+    return { render: render, refresh: refresh, measures: measures, PERIODS: PERIODS };
+  })();
+
   /* src/views/admin.js */
   // Administration (spec REL-3): whether automatic processing is working, and the changes that need an
   // administrator. Each change shows what was asked, by whom and when, how far it got and the last error, with the
@@ -2627,11 +3670,14 @@ window.ESGCompetencyHub = function (ctx) {
       RaiseAction: 'Raise an action', ExtendDeadline: 'Move a deadline', MarkComplete: 'Mark an action as done', ChangeStatus: 'Change the status of an action',
       ReassignAction: 'Reassign an action', CloseAction: 'Close an action', ReopenAction: 'Reopen an action', EditActionDetails: 'Edit the details of an action',
       AddPerson: 'Add a person', UpdatePerson: 'Change a person\'s access', PersonLeft: 'Mark a person as left', ReactivatePerson: 'Reactivate a person',
-      UpdateSetting: 'Change a setting', RetryTransaction: 'Try a change again', CancelTransaction: 'Cancel a change', RevertTransaction: 'Revert a change'
+      UpdateSetting: 'Change a setting', RetryTransaction: 'Try a change again', CancelTransaction: 'Cancel a change', RevertTransaction: 'Revert a change',
+      EditNotice: 'Edit a notice', ArchiveNotice: 'Archive a notice', PinNotice: 'Pin or unpin a notice', HideComment: 'Hide a comment',
+      RaiseRegisterEntry: 'Raise an improvement or degradation', UpdateRegisterEntry: 'Change an improvement or degradation',
+      LinkActionToEntry: 'Link an action to an entry', UnlinkActionFromEntry: 'Unlink an action from an entry'
     };
     var SETTING_WORDS = {
       OverdueReminderIntervalDays: 'days between late reminders', ReminderDaysBefore: 'days before the deadline for the first reminder',
-      MaxDeadlineYears: 'furthest deadline in years', MonitorHours: 'queue monitor hours'
+      MaxDeadlineYears: 'furthest deadline in years', MonitorHours: 'queue monitor hours', DueSoonDays: 'days counted as due soon'
     };
 
     function parse(text) { try { return JSON.parse(text || '{}') || {}; } catch (_) { return {}; } }
@@ -2681,6 +3727,7 @@ window.ESGCompetencyHub = function (ctx) {
       else if (r.RequestType === 'AddPerson' && p.email) what += ': ' + p.email;
       else if (p.personId) what += ': ' + app.model.nameOf(p.personId);
       else if (r.RequestType === 'UpdateSetting' && p.name) what += ': ' + (SETTING_WORDS[p.name] || p.name);
+      else if (p.title) what += ': ' + p.title;
       return what;
     }
 
@@ -2700,10 +3747,12 @@ window.ESGCompetencyHub = function (ctx) {
         'Last checked at ' + D.ukTime(hl.checkedAt) + '.'), ui.chip('done', 'Working')));
       else if (hl.processing === 'down') lines.push(h('li', null, h('span', null, h('b', { text: 'Automatic processing is not working. ' }), hl.reason,
         ' Staff cannot send changes until it recovers. In Power Automate, check the flows ESG Competency Hub | 2 Request queue and 3 Queue monitor.'), ui.chip('late', 'Not working')));
-      if (hl.administration === 'down') lines.push(h('li', null, h('span', null, h('b', { text: 'Administration changes are not being processed. ' }), hl.adminReason,
-        ' Staff can carry on as normal. In Power Automate, check that ESG Competency Hub | 6 Administration is turned on.'), ui.chip('late', 'Not working')));
       else lines.push(h('li', null, h('span', null, h('b', { text: 'The queue monitor has not reported yet. ' }),
         'Check that the flow ESG Competency Hub | 3 Queue monitor is turned on.'), ui.chip('soon', 'Unknown')));
+      if (hl.records === 'down') lines.push(h('li', null, h('span', null, h('b', { text: 'Changes to notices and the register are not being processed. ' }), hl.recordsReason,
+        ' Actions carry on as normal. In Power Automate, check that ESG Competency Hub | 4 Records is turned on.'), ui.chip('late', 'Not working')));
+      if (hl.administration === 'down') lines.push(h('li', null, h('span', null, h('b', { text: 'Administration changes are not being processed. ' }), hl.adminReason,
+        ' Staff can carry on as normal. In Power Automate, check that ESG Competency Hub | 6 Administration is turned on.'), ui.chip('late', 'Not working')));
       if (hl.reminders === 'ok') lines.push(h('li', null, h('span', null, h('b', { text: 'Reminders ran ' }), D.short(D.localDate(hl.lastDailyRun)) + ' at ' + D.ukTime(hl.lastDailyRun) + '.'), ui.chip('done', 'Working')));
       else lines.push(h('li', null, h('span', null, h('b', { text: hl.reminders === 'stale' ? 'Reminders have not run for more than a day. ' : 'Reminders have not run yet. ' }),
         'Check that the flow ESG Competency Hub | 1 Daily tasks is turned on.'), ui.chip('soon', 'Check')));
@@ -2770,18 +3819,20 @@ window.ESGCompetencyHub = function (ctx) {
       }));
     }
 
+    // Repaints only while the changes tab is showing, so a form being filled in on another tab is never wiped.
     async function refresh(app) {
+      var showing = function () { return app.state.view === 'admin' && (app.adminTab || 0) === 0; };
       app.admin = { loading: true, items: [] };
-      app.refreshView();
+      if (showing()) app.refreshView();
       try {
         app.admin = { loading: false, items: await load(app) };
       } catch (_) {
         app.admin = { loading: false, error: true, items: [] };
       }
-      app.refreshView();
+      if (showing()) app.refreshView();
     }
 
-    var TABS = ['Changes needing attention', 'People'];
+    var TABS = ['Changes needing attention', 'People', 'Settings', 'Feedback'];
 
     function render(app) {
       if (!app.access.isAdministrator) {
@@ -2800,7 +3851,7 @@ window.ESGCompetencyHub = function (ctx) {
             if (sel) sel.focus();
           } });
       }));
-      var panel = tab === 1 ? CH.views.people.list(app) : [
+      var panel = tab === 1 ? CH.views.people.list(app) : tab === 2 ? CH.views.settings.render(app) : tab === 3 ? CH.views.feedback.review(app) : [
         healthCard(app),
         ui.card('Changes needing attention', [
           h('p', { class: 'muted small', text: 'Changes that failed three times, and runs that stopped more than ' + QUIET_MINUTES + ' minutes ago. The queue monitor retries the rest by itself.' }),
@@ -2868,7 +3919,9 @@ window.ESGCompetencyHub = function (ctx) {
             textSizeControl())),
           h('main', { id: 'ch-main', tabindex: '-1' }, content),
           h('p', { class: 'toast', 'data-ch-live': true, role: 'status', 'aria-live': 'polite' }),
-          h('footer', { text: 'ESG Competency Hub · version ' + C.VERSION })
+          // the feedback button sits in its own place in the footer, so it never covers anything (spec FB-1)
+          h('footer', null, h('span'), h('span', { text: 'ESG Competency Hub · version ' + C.VERSION }),
+            h('span', { class: 'fb-slot' }, app.person && app.model ? CH.views.feedback.bubble(app) : null))
         ];
       }
 
@@ -2876,6 +3929,7 @@ window.ESGCompetencyHub = function (ctx) {
       function nav() {
         var v = app.state.view;
         var items = [['My week', v === 'home', app.goHome], ['My actions', v === 'mine', function () { app.showMine(0); }]];
+        if (app.access && app.access.isManagement) items.push(['Management', v === 'manage', app.showDashboard]);
         if (app.access && app.access.isAdministrator) items.push(['Administration', v === 'admin', app.showAdmin]);
         return h('nav', { class: 'pills', 'aria-label': 'Main' }, items.map(function (x) {
           return h('button', { type: 'button', 'aria-current': x[1] ? 'page' : null, onclick: x[2], text: x[0] });
@@ -2956,7 +4010,7 @@ window.ESGCompetencyHub = function (ctx) {
         var items = app.tracker.entries().filter(function (e) {
           if (e.dismissed) return false;
           if (CH.requests.ADMIN_TYPES.indexOf(e.type) >= 0) return false;   // shown on the Administration page
-          if (e.type === 'RaiseAction') return e.state !== 'done';
+          if (e.type === 'RaiseAction' || e.type === 'RaiseRegisterEntry') return e.state !== 'done';
           return ['rejected', 'attention', 'cancelled', 'reverted'].indexOf(e.state) >= 0;
         }).map(function (e) {
           var waiting = e.state === 'submitted' || e.state === 'slow';
@@ -2991,6 +4045,8 @@ window.ESGCompetencyHub = function (ctx) {
 
       function onRequestChange(entry) {
         if (CH.requests.ADMIN_TYPES.indexOf(entry.type) >= 0) {
+          // a saved setting is read again, so the page shows the new value and uses it (DueSoonDays, MaxDeadlineYears)
+          if (entry.type === 'UpdateSetting' && entry.state === 'done') { reload().then(function () { render(false); }).catch(function () { render(false); }); return; }
           render(false);
           if (entry.state === 'done' && app.state.view === 'admin') setTimeout(function () { CH.views.admin.refresh(app); }, 1500);
           return;
@@ -3000,7 +4056,9 @@ window.ESGCompetencyHub = function (ctx) {
           render(false);
           if (app.panel) app.panel.refresh();
           var a = app.model.actionById[entry.resultId];
-          CH.ui.toast(app.root, entry.type === 'RaiseAction' && a ? a.ref + ' raised: ' + a.title + '.' : entry.message, 'ok');
+          var e = app.model.entryById[entry.resultId];
+          CH.ui.toast(app.root, entry.type === 'RaiseAction' && a ? a.ref + ' raised: ' + a.title + '.'
+            : entry.type === 'RaiseRegisterEntry' && e ? e.ref + ' raised: ' + e.title + '.' : entry.message, 'ok');
         }).catch(function () { CH.ui.toast(app.root, entry.message + ' Reload the page to see it.', 'ok'); });
       }
 
@@ -3010,7 +4068,8 @@ window.ESGCompetencyHub = function (ctx) {
       }
 
       app.goHome = function () { app.state = { view: 'home', area: null, tab: 0 }; render(true); };
-      app.showAdmin = function () { app.admin = null; app.state = { view: 'admin', area: null, tab: 0 }; render(true); };
+      app.showAdmin = function () { app.admin = null; app.feedback = null; app.state = { view: 'admin', area: null, tab: 0 }; render(true); };
+      app.showDashboard = function () { app.dash = null; app.state = { view: 'manage', area: null, tab: 0 }; render(true); };
       app.refreshView = function (moveFocus) { render(!!moveFocus); };
       // Opens an area in place on the home page (key), or closes it (null). Focus stays with the area's tile.
       app.openAreaHere = function (key) {
@@ -3022,6 +4081,8 @@ window.ESGCompetencyHub = function (ctx) {
       };
       // True while automatic processing is down: queued changes are not offered and not sent.
       app.queueBlocked = function () { return !!app.health && app.health.processing === 'down'; };
+      // Notices and the register have their own flow (4 Records); it pauses with the queue, or on its own.
+      app.recordsBlocked = function () { return app.queueBlocked() || (!!app.health && app.health.records === 'down'); };
       app.openArea = function (key) { app.state = { view: 'area', area: key, tab: 0 }; render(true); };
       app.showMine = function (tab, areaKey, keepFocus) {
         app.state = { view: 'mine', area: null, tab: tab || 0, areaFilter: areaKey || '' };
@@ -3035,6 +4096,23 @@ window.ESGCompetencyHub = function (ctx) {
         CH.views.raiseForm.open(app, key);
       };
       app.openAction = function (a) { CH.views.actionPanel.open(app, a.id); };
+      app.openNotice = function (n) { CH.views.recordPanel.openNotice(app, n.id); };
+      app.openEntry = function (e) { CH.views.recordPanel.openEntry(app, e.id); };
+      app.raiseEntry = function (key) { CH.views.entryForm.open(app, key); };
+      // "being recorded" and the like for a notice or entry in a list (kind: 'Notice' or 'Register Entry')
+      app.recordNote = function (kind, id) {
+        var e = app.tracker && app.tracker.forTarget(id, kind);
+        if (e && (e.state === 'submitted' || e.state === 'slow')) return 'change being recorded';
+        if (e && e.state === 'rejected') return 'change not accepted';
+        if (e && e.state === 'attention') return 'change not recorded';
+        return '';
+      };
+      // After an instant write (a flag, a comment): read the lists again and repaint, keeping any open panel.
+      app.recordChanged = async function () {
+        await reload();
+        render(false);
+        if (app.panel) app.panel.refresh();
+      };
       app.pendingNote = function (a) {
         var e = app.tracker && app.tracker.forTarget(a.id);
         if (e && (e.state === 'submitted' || e.state === 'slow')) return 'change being recorded';
@@ -3054,6 +4132,7 @@ window.ESGCompetencyHub = function (ctx) {
         var content = [requestStrip(), app.state.view === 'area' && app.model.areaByKey[app.state.area]
           ? CH.views.area.render(app, app.state.area, app.state.tab)
           : app.state.view === 'mine' ? CH.views.myActions.render(app)
+          : app.state.view === 'manage' ? CH.views.dashboard.render(app)
           : app.state.view === 'admin' ? CH.views.admin.render(app) : CH.views.home.render(app)];
         paint(content);
         if (moveFocus) {
@@ -3079,6 +4158,10 @@ window.ESGCompetencyHub = function (ctx) {
         if (raw.members.error !== undefined) throw new CH.sp.SpError(raw.members.error, 'Area memberships could not be loaded.');
         app.access = CH.access.build(app.person, memberships, areasByKey);
         app.health = CH.health.judge(raw.settings.rows, now);
+        app.settings = raw.settings.rows || [];
+        // the "due soon" window an administrator sets (DueSoonDays, 1 to 30 days)
+        var soon = (app.settings.filter(function (r) { return r.Title === 'DueSoonDays'; })[0] || {}).Value;
+        CH.config.dueSoonDays = /^\d{1,2}$/.test(String(soon || '')) && Number(soon) >= 1 && Number(soon) <= 30 ? Number(soon) : 7;
         app.model = CH.model.build(raw, app.people, app.access, today, now);
       }
 
@@ -3111,6 +4194,7 @@ window.ESGCompetencyHub = function (ctx) {
           return;
         }
         app.person = identity.person;
+        app.loginName = user.LoginName || '';
         app.people = people;
         app.firstName = await app.sp.myFirstName();
         app.tracker = CH.requests.tracker(app, onRequestChange);
@@ -3127,12 +4211,15 @@ window.ESGCompetencyHub = function (ctx) {
         if (app.model.areaByKey[areaParam]) app.state = params.get('view') === 'area' ? { view: 'area', area: areaParam, tab: 0 } : { view: 'home', area: null, tab: 0, homeArea: areaParam };
         if (params.get('view') === 'mine') app.state = { view: 'mine', area: null, tab: 0, areaFilter: '' };
         if (params.get('view') === 'admin') app.state = { view: 'admin', area: null, tab: 0 };
+        if (params.get('view') === 'manage' && app.access.isManagement) app.state = { view: 'manage', area: null, tab: 0 };
         healthTimer = setInterval(checkHealth, HEALTH_EVERY_MS);
         window.addEventListener('resize', fitToWindow);
         document.addEventListener('keydown', onKey);
         render(false);
         var actionParam = Number(params.get('action'));
         if (actionParam) CH.views.actionPanel.open(app, actionParam);
+        else if (Number(params.get('notice'))) CH.views.recordPanel.openNotice(app, Number(params.get('notice')));
+        else if (Number(params.get('entry'))) CH.views.recordPanel.openEntry(app, Number(params.get('entry')));
       }
 
       return {

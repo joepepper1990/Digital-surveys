@@ -14,11 +14,14 @@ CH.views.admin = (function () {
     RaiseAction: 'Raise an action', ExtendDeadline: 'Move a deadline', MarkComplete: 'Mark an action as done', ChangeStatus: 'Change the status of an action',
     ReassignAction: 'Reassign an action', CloseAction: 'Close an action', ReopenAction: 'Reopen an action', EditActionDetails: 'Edit the details of an action',
     AddPerson: 'Add a person', UpdatePerson: 'Change a person\'s access', PersonLeft: 'Mark a person as left', ReactivatePerson: 'Reactivate a person',
-    UpdateSetting: 'Change a setting', RetryTransaction: 'Try a change again', CancelTransaction: 'Cancel a change', RevertTransaction: 'Revert a change'
+    UpdateSetting: 'Change a setting', RetryTransaction: 'Try a change again', CancelTransaction: 'Cancel a change', RevertTransaction: 'Revert a change',
+    EditNotice: 'Edit a notice', ArchiveNotice: 'Archive a notice', PinNotice: 'Pin or unpin a notice', HideComment: 'Hide a comment',
+    RaiseRegisterEntry: 'Raise an improvement or degradation', UpdateRegisterEntry: 'Change an improvement or degradation',
+    LinkActionToEntry: 'Link an action to an entry', UnlinkActionFromEntry: 'Unlink an action from an entry'
   };
   var SETTING_WORDS = {
     OverdueReminderIntervalDays: 'days between late reminders', ReminderDaysBefore: 'days before the deadline for the first reminder',
-    MaxDeadlineYears: 'furthest deadline in years', MonitorHours: 'queue monitor hours'
+    MaxDeadlineYears: 'furthest deadline in years', MonitorHours: 'queue monitor hours', DueSoonDays: 'days counted as due soon'
   };
 
   function parse(text) { try { return JSON.parse(text || '{}') || {}; } catch (_) { return {}; } }
@@ -68,6 +71,7 @@ CH.views.admin = (function () {
     else if (r.RequestType === 'AddPerson' && p.email) what += ': ' + p.email;
     else if (p.personId) what += ': ' + app.model.nameOf(p.personId);
     else if (r.RequestType === 'UpdateSetting' && p.name) what += ': ' + (SETTING_WORDS[p.name] || p.name);
+    else if (p.title) what += ': ' + p.title;
     return what;
   }
 
@@ -87,10 +91,12 @@ CH.views.admin = (function () {
       'Last checked at ' + D.ukTime(hl.checkedAt) + '.'), ui.chip('done', 'Working')));
     else if (hl.processing === 'down') lines.push(h('li', null, h('span', null, h('b', { text: 'Automatic processing is not working. ' }), hl.reason,
       ' Staff cannot send changes until it recovers. In Power Automate, check the flows ESG Competency Hub | 2 Request queue and 3 Queue monitor.'), ui.chip('late', 'Not working')));
-    if (hl.administration === 'down') lines.push(h('li', null, h('span', null, h('b', { text: 'Administration changes are not being processed. ' }), hl.adminReason,
-      ' Staff can carry on as normal. In Power Automate, check that ESG Competency Hub | 6 Administration is turned on.'), ui.chip('late', 'Not working')));
     else lines.push(h('li', null, h('span', null, h('b', { text: 'The queue monitor has not reported yet. ' }),
       'Check that the flow ESG Competency Hub | 3 Queue monitor is turned on.'), ui.chip('soon', 'Unknown')));
+    if (hl.records === 'down') lines.push(h('li', null, h('span', null, h('b', { text: 'Changes to notices and the register are not being processed. ' }), hl.recordsReason,
+      ' Actions carry on as normal. In Power Automate, check that ESG Competency Hub | 4 Records is turned on.'), ui.chip('late', 'Not working')));
+    if (hl.administration === 'down') lines.push(h('li', null, h('span', null, h('b', { text: 'Administration changes are not being processed. ' }), hl.adminReason,
+      ' Staff can carry on as normal. In Power Automate, check that ESG Competency Hub | 6 Administration is turned on.'), ui.chip('late', 'Not working')));
     if (hl.reminders === 'ok') lines.push(h('li', null, h('span', null, h('b', { text: 'Reminders ran ' }), D.short(D.localDate(hl.lastDailyRun)) + ' at ' + D.ukTime(hl.lastDailyRun) + '.'), ui.chip('done', 'Working')));
     else lines.push(h('li', null, h('span', null, h('b', { text: hl.reminders === 'stale' ? 'Reminders have not run for more than a day. ' : 'Reminders have not run yet. ' }),
       'Check that the flow ESG Competency Hub | 1 Daily tasks is turned on.'), ui.chip('soon', 'Check')));
@@ -157,18 +163,20 @@ CH.views.admin = (function () {
     }));
   }
 
+  // Repaints only while the changes tab is showing, so a form being filled in on another tab is never wiped.
   async function refresh(app) {
+    var showing = function () { return app.state.view === 'admin' && (app.adminTab || 0) === 0; };
     app.admin = { loading: true, items: [] };
-    app.refreshView();
+    if (showing()) app.refreshView();
     try {
       app.admin = { loading: false, items: await load(app) };
     } catch (_) {
       app.admin = { loading: false, error: true, items: [] };
     }
-    app.refreshView();
+    if (showing()) app.refreshView();
   }
 
-  var TABS = ['Changes needing attention', 'People'];
+  var TABS = ['Changes needing attention', 'People', 'Settings', 'Feedback'];
 
   function render(app) {
     if (!app.access.isAdministrator) {
@@ -187,7 +195,7 @@ CH.views.admin = (function () {
           if (sel) sel.focus();
         } });
     }));
-    var panel = tab === 1 ? CH.views.people.list(app) : [
+    var panel = tab === 1 ? CH.views.people.list(app) : tab === 2 ? CH.views.settings.render(app) : tab === 3 ? CH.views.feedback.review(app) : [
       healthCard(app),
       ui.card('Changes needing attention', [
         h('p', { class: 'muted small', text: 'Changes that failed three times, and runs that stopped more than ' + QUIET_MINUTES + ' minutes ago. The queue monitor retries the rest by itself.' }),

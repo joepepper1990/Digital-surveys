@@ -55,7 +55,7 @@
 .SCOPE .ch .items {list-style: none; margin: 0; padding: 0;}
 .SCOPE .ch .items li {display: flex; justify-content: space-between; align-items: center; gap: calc(14 * var(--u)); padding: calc(11 * var(--u)) calc(14 * var(--u)); border: 1px solid var(--line); border-radius: calc(10 * var(--u)); margin-bottom: calc(8 * var(--u)); background: #fff;}
 .SCOPE .ch .items .t {font-weight: 600; display: block;}
-.SCOPE .ch .items .s {color: var(--muted); font-size: calc(14 * var(--u));}
+.SCOPE .ch .items .s {color: var(--muted); font-size: calc(14 * var(--u)); display: block;}
 .SCOPE .ch .plain {list-style: none; margin: 0; padding: 0;}
 .SCOPE .ch .plain li {padding: calc(10 * var(--u)) 0; border-bottom: 1px solid #edf0f3; display: flex; justify-content: space-between; gap: calc(12 * var(--u)); align-items: center;}
 .SCOPE .ch .plain li:last-child {border-bottom: 0;}
@@ -117,7 +117,8 @@
 .SCOPE .ch .toast {position: fixed; right: calc(24 * var(--u)); bottom: calc(24 * var(--u)); margin: 0; max-width: calc(420 * var(--u)); z-index: 1001;}
 .SCOPE .ch .toast:empty {display: none;}
 .SCOPE .ch .toast-ok, .SCOPE .ch .toast-info {background: var(--navy); color: #fff; border-radius: calc(8 * var(--u)); padding: calc(12 * var(--u)) calc(16 * var(--u)); box-shadow: 0 calc(6 * var(--u)) calc(20 * var(--u)) rgba(0, 0, 0, .2);}
-.SCOPE .ch footer {text-align: center; color: var(--muted); font-size: calc(12 * var(--u)); padding: calc(24 * var(--u));}
+.SCOPE .ch footer {display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; color: var(--muted); font-size: calc(12 * var(--u)); padding: calc(16 * var(--u)) calc(24 * var(--u));}
+.SCOPE .ch .fb-slot {justify-self: end;}
 @media (min-width: 1400px) {
 .SCOPE .ch .tiles {grid-template-columns: repeat(var(--cols), 1fr);}
 .SCOPE .ch .cols3 {grid-template-columns: 1.1fr 1fr 1fr;}
@@ -226,7 +227,7 @@
 .SCOPE .ch.ch-fit {min-height: 0; overflow: hidden;}
 .SCOPE .ch.ch-fit .shell {min-height: 0;}
 .SCOPE .ch.ch-fit main {min-height: 0; display: flex; flex-direction: column; overflow: hidden; padding: calc(14 * var(--u)) calc(24 * var(--u)) calc(10 * var(--u));}
-.SCOPE .ch.ch-fit footer {padding: calc(2 * var(--u));}
+.SCOPE .ch.ch-fit footer {padding: calc(4 * var(--u)) calc(24 * var(--u));}
 .SCOPE .ch.ch-fit .request-strip {flex: none; margin-bottom: calc(10 * var(--u));}
 .SCOPE .ch.ch-fit .hm-stack {flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto;}
 .SCOPE .ch.ch-fit .hm-stack.acts-closed {grid-template-rows: auto auto auto 1fr;}
@@ -244,9 +245,46 @@
 .SCOPE .ch .pills {order: 5;}
 .SCOPE .ch .bar-btns {margin-left: 0;}
 }
+.SCOPE .ch .hm-rw.item-open {justify-content: flex-start; gap: calc(10 * var(--u)); width: 100%; border-radius: 0;}
+.SCOPE .ch .hm-rw.item-open:hover .hm-tx b {color: var(--navy); text-decoration: underline;}
+.SCOPE .ch .hm-dot.bad {background: var(--late);}
+.SCOPE .ch .notice-full {white-space: pre-wrap; background: #f7f9fb; border: 1px solid var(--line); border-radius: calc(8 * var(--u)); padding: calc(12 * var(--u)) calc(14 * var(--u));}
+.SCOPE .ch .comments li {align-items: flex-start;}
+.SCOPE .ch .comment-form textarea {width: 100%;}
+.SCOPE .ch .inline-filter {font-size: calc(14 * var(--u)); font-weight: 400; margin-left: calc(10 * var(--u));}
+.SCOPE .ch .filters {gap: calc(16 * var(--u)); align-items: center;}
+.SCOPE .ch .settings .setting {flex: 1;}
+.SCOPE .ch .setting-edit {display: flex; flex-wrap: wrap; align-items: center; gap: calc(8 * var(--u)); margin-top: calc(8 * var(--u));}
+.SCOPE .ch .setting-edit .field-error {flex-basis: 100%;}
+.SCOPE .ch .inline-fields input.num {width: calc(80 * var(--u));}
+.SCOPE .ch .fb-bubble {display: flex; align-items: center; gap: calc(6 * var(--u)); background: var(--navy); color: #fff; border: 0; border-radius: 999px; padding: calc(4 * var(--u)) calc(12 * var(--u)) calc(4 * var(--u)) calc(4 * var(--u)); font-weight: 600; font-size: calc(13 * var(--u));}
+.SCOPE .ch .fb-bubble span[aria-hidden] {display: inline-flex; align-items: center; justify-content: center; width: calc(22 * var(--u)); height: calc(22 * var(--u)); border-radius: 50%; background: #fff; color: var(--navy);}
+.SCOPE .ch .fb-bubble:hover, .SCOPE .ch .fb-bubble:focus-visible {background: var(--accent-dark);}
+.SCOPE .ch .dash-figs {display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(150 * var(--u)), 1fr)); gap: calc(12 * var(--u)); margin: calc(12 * var(--u)) 0 calc(18 * var(--u));}
+.SCOPE .ch .dash-fig {display: flex; flex-direction: column; align-items: flex-start; gap: calc(2 * var(--u)); background: #fff; border: 1px solid var(--line); border-left: 5px solid var(--navy); border-radius: calc(10 * var(--u)); padding: calc(10 * var(--u)) calc(14 * var(--u)); text-align: left; color: var(--ink);}
+.SCOPE .ch .dash-fig b {font-size: calc(26 * var(--u)); line-height: 1.1;}
+.SCOPE .ch .dash-fig.k-late {border-left-color: var(--late);}
+.SCOPE .ch .dash-fig.k-soon {border-left-color: var(--soon);}
+.SCOPE .ch .dash-fig.k-done {border-left-color: var(--ok);}
+.SCOPE .ch .dash-fig.on, .SCOPE .ch .dash-fig:hover {border-color: var(--navy); background: var(--navy-soft);}
+.SCOPE .ch .dash-table {width: 100%; border-collapse: collapse;}
+.SCOPE .ch .dash-table th, .SCOPE .ch .dash-table td {text-align: left; padding: calc(6 * var(--u)) calc(8 * var(--u)); border-bottom: 1px solid var(--line); vertical-align: middle;}
+.SCOPE .ch .dash-table thead th {font-size: calc(13 * var(--u)); color: var(--muted); font-weight: 600;}
+.SCOPE .ch .dash-table .dash-fig {display: inline-block; border: 0; background: none; border-radius: calc(6 * var(--u)); padding: calc(2 * var(--u)) calc(10 * var(--u)); min-width: calc(44 * var(--u)); text-align: center; color: var(--navy); text-decoration: underline;}
+.SCOPE .ch .dash-table .dash-fig b {font-size: calc(17 * var(--u));}
+.SCOPE .ch .dash-table .dash-fig span {display: none;}
+.SCOPE .ch .dash-table .dash-fig.k-late b {color: var(--late);}
+.SCOPE .ch .dash-table .dash-fig.on, .SCOPE .ch .dash-table .dash-fig:hover {background: var(--navy-soft);}
+.SCOPE .ch .items.linked li {padding: calc(8 * var(--u)) calc(12 * var(--u));}
+.SCOPE .ch .items.linked .item-open {flex: 1;}
+@media (max-width: 900px) {
+.SCOPE .ch .dash-table {display: block; overflow-x: auto;}
+.SCOPE .ch .fb-bubble .fb-label {display: none;}
+.SCOPE .ch .fb-bubble {padding: calc(4 * var(--u));}
+}
 
         </style>
-        <div class="ch" data-ch-root data-ch-version="0.6.0"><p>Loading the ESG Competency Hub…</p></div>
+        <div class="ch" data-ch-root data-ch-version="0.7.0"><p>Loading the ESG Competency Hub…</p></div>
         <script
             src="competency-hub.js"
             data-layout

@@ -172,6 +172,86 @@ CH.rules = (function () {
     };
   }
 
+  // ---- notices, comments and the improvements and degradations register (spec NB-1 to NB-5, REG-1 to REG-5)
+  var ENTRY_TYPES = ['Improvement', 'Degradation', 'Concern', 'Opportunity', 'Positive Observation'];
+  var IMPACTS = ['Low', 'Medium', 'High'];
+  var ENTRY_STATUSES = ['Open', 'Under Review', 'Resolved', 'Closed'];
+  var NOTICE_CATEGORIES = ['General', 'Request', 'Improvement idea', 'Safety', 'Equipment', 'Other'];
+
+  // ctx: { canWrite(areaKey), ownerAllowed(areaKey, personId) }
+  function validateEntry(v, ctx) {
+    var e = {};
+    if (!v.areaKey || !ctx.canWrite(v.areaKey)) e.areaKey = 'Choose one of your areas.';
+    if (ENTRY_TYPES.indexOf(v.entryType) < 0) e.entryType = 'Choose the type of entry.';
+    if (IMPACTS.indexOf(v.impact) < 0) e.impact = 'Choose the impact.';
+    var t = String(v.title || '').trim();
+    if (!t) e.title = 'Give the entry a title.';
+    else if (t.length > 255) e.title = 'Keep the title to 255 characters or fewer.';
+    var d = String(v.description || '').trim();
+    if (!d) e.description = 'Describe it.';
+    else if (d.length > 5000) e.description = 'Keep the description to 5,000 characters or fewer.';
+    if (!v.responsibleId) e.responsibleId = 'Choose who is responsible.';
+    else if (!e.areaKey && !ctx.ownerAllowed(v.areaKey, Number(v.responsibleId))) e.responsibleId = 'Choose a member of this area or a Team Leader.';
+    return e;
+  }
+
+  // v: the fields being changed (title, description, impact, status, outcome, responsibleId). An outcome is needed to
+  // resolve or close an entry. ctx: { ownerAllowed(areaKey, personId) }
+  function validateEntryUpdate(entry, v, ctx) {
+    var e = {};
+    if ('title' in v) {
+      var t = String(v.title || '').trim();
+      if (!t) e.title = 'Give the entry a title.';
+      else if (t.length > 255) e.title = 'Keep the title to 255 characters or fewer.';
+    }
+    if ('description' in v && String(v.description || '').trim().length > 5000) e.description = 'Keep the description to 5,000 characters or fewer.';
+    if ('impact' in v && IMPACTS.indexOf(v.impact) < 0) e.impact = 'Choose the impact.';
+    if ('status' in v && ENTRY_STATUSES.indexOf(v.status) < 0) e.status = 'Choose a status.';
+    var outcome = String(v.outcome || '').trim();
+    if ('status' in v && (v.status === 'Resolved' || v.status === 'Closed') && outcome.length < 10) e.outcome = 'Record the outcome (at least 10 characters).';
+    else if (outcome.length > 2000) e.outcome = 'Keep the outcome to 2,000 characters or fewer.';
+    if ('responsibleId' in v && !ctx.ownerAllowed(entry.areaKey, Number(v.responsibleId))) e.responsibleId = 'Choose a member of this area or a Team Leader.';
+    if (!['title', 'description', 'impact', 'status', 'outcome', 'responsibleId'].some(function (k) { return k in v; })) e.entry = 'Nothing has changed.';
+    return e;
+  }
+
+  // REG-2: the raiser, the person responsible, the area's engineers and meeting runners, and management.
+  function managesEntry(entry, personId, access) {
+    var k = entry.areaKey;
+    return access.canModerate(k) || access.chairs(k) || Number(entry.raisedById) === Number(personId) || Number(entry.responsibleId) === Number(personId);
+  }
+
+  // Edit a notice: its author or a moderator (spec §4.2 canModerate). Pin: moderators only.
+  function noticeRoles(notice, personId, access) {
+    var author = Number(notice.authorId) === Number(personId);
+    var mod = access.canModerate(notice.areaKey);
+    return { author: author, moderator: mod, canEdit: author || mod, canArchive: author || mod, canPin: mod, canMarkImportant: author || mod };
+  }
+
+  function validateNoticeEdit(v) {
+    var e = {};
+    if ('title' in v) {
+      var t = String(v.title || '').trim();
+      if (!t) e.title = 'Give the notice a title.';
+      else if (t.length > 255) e.title = 'Keep the title to 255 characters or fewer.';
+    }
+    if ('body' in v) {
+      var b = String(v.body || '').trim();
+      if (!b) e.body = 'Write the notice.';
+      else if (b.length > 5000) e.body = 'Keep the notice to 5,000 characters or fewer.';
+    }
+    if ('category' in v && NOTICE_CATEGORIES.indexOf(v.category) < 0) e.category = 'Choose a category.';
+    if (!['title', 'body', 'category', 'important'].some(function (k) { return k in v; })) e.notice = 'Nothing has changed.';
+    return e;
+  }
+
+  function validateComment(v) {
+    var body = String(v.body || '').trim();
+    if (!body) return { body: 'Write your comment.' };
+    if (body.length > 2000) return { body: 'Keep the comment to 2,000 characters or fewer.' };
+    return {};
+  }
+
   // Mark complete closes the action unless a close-out check is required (D-07).
   function completionStatus(requiresCloseOut) { return requiresCloseOut ? 'Completed' : 'Closed'; }
 
@@ -179,6 +259,9 @@ CH.rules = (function () {
     addYears: addYears, isOpen: isOpen, validateRaise: validateRaise, validateExtend: validateExtend,
     validateComplete: validateComplete, validateUpdate: validateUpdate, validateStatus: validateStatus,
     validateReassign: validateReassign, validateClose: validateClose, validateReopen: validateReopen, validateEdit: validateEdit,
-    roles: roles, completionStatus: completionStatus, SELF_ONLY: SELF_ONLY, PRIORITIES: PRIORITIES, OPEN_STATUSES: OPEN_STATUSES, OUTCOMES: OUTCOMES
+    roles: roles, completionStatus: completionStatus,
+    validateEntry: validateEntry, validateEntryUpdate: validateEntryUpdate, managesEntry: managesEntry, noticeRoles: noticeRoles,
+    validateNoticeEdit: validateNoticeEdit, validateComment: validateComment, ENTRY_TYPES: ENTRY_TYPES, IMPACTS: IMPACTS, ENTRY_STATUSES: ENTRY_STATUSES,
+    NOTICE_CATEGORIES: NOTICE_CATEGORIES, SELF_ONLY: SELF_ONLY, PRIORITIES: PRIORITIES, OPEN_STATUSES: OPEN_STATUSES, OUTCOMES: OUTCOMES
   };
 })();

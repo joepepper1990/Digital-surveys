@@ -13,6 +13,16 @@ window.MockDrivers = (function () {
   function byText(sel, text) { return all(sel).filter(function (n) { return n.textContent.trim() === text; })[0]; }
   function text() { return document.querySelector('[data-ch-root]').textContent; }
   function type(el, value) { el.value = value; el.dispatchEvent(new Event('input', { bubbles: true })); }
+  // a row in the open area's "Notices & issues" column, by part of its title
+  async function openRow(part) {
+    var row = await until(function () { return all('.hm-area .hm-rw').filter(function (b) { return b.textContent.indexOf(part) >= 0; })[0]; });
+    row.click();
+  }
+  // a list read as the signed-in person, through the simulated site
+  async function readAs(list) {
+    var res = await MockSharePoint.ctx.getWebPart().spHttpClient.get("https://contoso.example/sites/ESGCompetencyHub/_api/web/lists/getbytitle('" + list + "')/items?$select=Id&$top=100");
+    return JSON.parse(await res.text()).value.length;
+  }
 
   function px(sel) { var n = q(sel); return n ? parseFloat(getComputedStyle(n).fontSize) : 0; }
 
@@ -469,6 +479,240 @@ window.MockDrivers = (function () {
       window.localStorage.removeItem('esg-competency-hub-home');
       return { home: home, name: name, opened: opened, closed: closed, remembered: remembered };
     },
+    // ---- Release 3: notices, comments, flags, the register, feedback, settings and the dashboard
+    // A technician reads a notice in full, comments on it, and sees no moderation; then edits their own notice elsewhere.
+    noticeRead: async function () {
+      var dlg = await until(function () { return q('#ch-rec .notice-full'); });
+      await until(function () { return q('#ch-rec .comments') || /No comments yet/.test(q('#ch-rec').textContent); });
+      var before = q('#ch-rec').textContent;
+      var buttons = all('#ch-rec .actions-row button').map(function (b) { return b.textContent; });
+      var withdraw = !!byText('#ch-rec button', 'Withdraw the flag');
+      type(q('#ch-rec-body'), 'Spare part arrives Thursday, I will fit it.');
+      q('#ch-rec .comment-form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-rec').textContent.indexOf('Spare part arrives Thursday') >= 0; });
+      var saved = q('#ch-rec').textContent;
+      q('#ch-rec .dialog-x').click();
+      // notice 7 is Rachel's own, on the DSL noticeboard, where she is not a member
+      var item = await until(function () { return q('.hm-tile[data-area="DSL"]'); });
+      item.click();
+      (await until(function () { return all('.hm-area .hm-rw').filter(function (b) { return b.textContent.indexOf('shared checklist') >= 0; })[0]; })).click();
+      await until(function () { return q('#ch-rec .notice-full'); });
+      var own = { buttons: all('#ch-rec .actions-row button').map(function (b) { return b.textContent; }), canComment: !!q('#ch-rec-body'),
+        note: q('#ch-rec').textContent };
+      return { body: before.indexOf('out of service until the replacement part arrives') >= 0, kellysComment: before.indexOf('The part is due on Thursday.') >= 0,
+        hiddenShown: before.indexOf('A comment a moderator has hidden.') >= 0, flagged: before.indexOf('Flagged for the next Flask meeting') >= 0,
+        buttons: buttons, withdraw: withdraw, saved: saved.indexOf('Rachel Boulden') >= 0, own: own, writes: MockSharePoint.writes.slice(),
+        update: MockSharePoint.data.Updates.filter(function (u) { return u.Body === 'Spare part arrives Thursday, I will fit it.'; }).map(function (u) {
+          return { folder: u.FileDirRef.split('/').pop(), type: u.EntryType, parent: u.ParentType + ':' + u.ParentId, flag: u.IsFlagEvent };
+        }) };
+    },
+    // An engineer moderates: pins a notice, edits it, hides a comment and flags it for the meeting.
+    noticeModerate: async function () {
+      await until(function () { return q('#ch-rec .notice-full'); });
+      byText('#ch-rec .actions-row button', 'Pin').click();
+      var pinForm = await until(function () { return q('#ch-rec form.dialog-body'); });
+      pinForm.dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-rec .pending'); });
+      var pending = q('#ch-rec .pending').textContent;
+      await until(function () { var hd = q('#ch-rec .muted.small'); return hd && !q('#ch-rec .pending') && /Pinned/.test(hd.textContent); }, 120000);
+      byText('#ch-rec .actions-row button', 'Edit').click();
+      var title = await until(function () { return q('#ch-ne-title'); });
+      type(title, 'Spare probes: two left in stores');
+      q('#ch-rec form.dialog-body').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return !q('#ch-rec .pending') && q('#ch-rec .dialog-head').textContent.indexOf('Spare probes: two left in stores') >= 0; }, 120000);
+      // already flagged by Matt; Kelly runs Flask meetings, so may withdraw it, and flag it again
+      byText('#ch-rec button', 'Withdraw the flag').click();
+      await until(function () { return byText('#ch-rec button', 'Flag for the next meeting'); });
+      byText('#ch-rec button', 'Flag for the next meeting').click();
+      await until(function () { return byText('#ch-rec button', 'Withdraw the flag'); });
+      var history = q('#ch-rec .ext-list') ? q('#ch-rec .ext-list').textContent : '';
+      q('#ch-rec .dialog-x').click();
+      await openRow('Calibration rig out of service');
+      await until(function () { return q('#ch-rec .comments'); });
+      byText('#ch-rec .comments button', 'Hide').click();
+      await until(function () { return q('#ch-rec').textContent.indexOf('The part is due on Thursday.') < 0; }, 120000);
+      var n2 = MockSharePoint.data.Noticeboard.filter(function (n) { return n.Id === 2; })[0];
+      return { pending: pending, pinned: n2.IsImportant && !n2.ImportantUntil, title: n2.Title, revision: n2.Revision, history: history,
+        hidden: MockSharePoint.data.Updates.filter(function (u) { return u.Id === 101; })[0].IsHidden,
+        requests: MockSharePoint.data.Requests.map(function (r) { return r.RequestType + ':' + r.Status + ':' + r.TargetType; }),
+        events: MockSharePoint.data.History.filter(function (h) { return /\|1$/.test(h.RequestKey) && h.RecordType !== 'Action'; }).map(function (h) { return h.EventType; }) };
+    },
+    // An engineer raises an entry, resolves another (an outcome is required) and links an existing action to it.
+    registerFlow: async function () {
+      (await until(function () { return byText('.hm-area .btn', 'Raise an issue'); })).click();
+      var form = await until(function () { return q('#ch-e form'); });
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await wait(50);
+      var emptyError = q('#ch-e-title-err').textContent;
+      q('#ch-e-entryType').value = 'Degradation';
+      q('#ch-e-impact').value = 'High';
+      type(q('#ch-e-title'), 'Probe holder cracked');
+      type(q('#ch-e-description'), 'The holder on rig 2 has a hairline crack.');
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return !q('#ch-e'); });
+      await until(function () { return all('.hm-area .hm-rw').some(function (b) { return b.textContent.indexOf('Probe holder cracked') >= 0; }); }, 120000);
+      all('.hm-area .hm-rw').filter(function (b) { return b.textContent.indexOf('Calibration rig drift') >= 0; })[0].click();
+      await until(function () { return q('#ch-rec .facts'); });
+      var linked = q('#ch-rec').textContent.indexOf('Replace FH40 probe') >= 0;
+      byText('#ch-rec .actions-row button', 'Change status').click();
+      await until(function () { return q('#ch-re-status'); });
+      q('#ch-re-status').value = 'Resolved';
+      q('#ch-rec form.dialog-body').dispatchEvent(new Event('submit', { cancelable: true }));
+      await wait(50);
+      var outcomeError = q('#ch-re-outcome-err').textContent;
+      type(q('#ch-re-outcome'), 'Rig recalibrated and drift checked over a week.');
+      q('#ch-rec form.dialog-body').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { var hd = q('#ch-rec .muted.small'); return hd && !q('#ch-rec .pending') && /Resolved/.test(hd.textContent); }, 120000);
+      var resolvedButtons = !!byText('#ch-rec button', 'Raise a linked action');
+      q('#ch-rec .dialog-x').click();
+      await openRow('Shared probe sign-out sheet');
+      await until(function () { return q('#ch-rec .facts'); });
+      byText('#ch-rec button', 'Link an existing action').click();
+      var pick = await until(function () { return q('#ch-re-actionId'); });
+      var choices = all('#ch-re-actionId option').map(function (o) { return o.textContent; });
+      pick.value = String(MockSharePoint.data.Actions.filter(function (a) { return a.Title === 'Update Flask procedure FLK-03'; })[0].Id);
+      q('#ch-rec form.dialog-body').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-rec .facts') && !q('#ch-rec .pending') && q('#ch-rec').textContent.indexOf('ACT-00041 Update Flask procedure FLK-03') >= 0; }, 120000);
+      var e1 = MockSharePoint.data['Improvements and Degradations'].filter(function (e) { return e.Id === 1; })[0];
+      var created = MockSharePoint.data['Improvements and Degradations'].filter(function (e) { return e.Title === 'Probe holder cracked'; })[0];
+      return { emptyError: emptyError, linked: linked, outcomeError: outcomeError, status: e1.Status, outcome: e1.Outcome, resolvedButtons: resolvedButtons,
+        choices: choices, link: MockSharePoint.data.Actions.filter(function (a) { return a.Title === 'Update Flask procedure FLK-03'; })[0].SourceId,
+        created: created && { folder: created.FileDirRef.split('/').pop(), type: created.EntryType, raisedBy: created.RaisedById },
+        writes: MockSharePoint.writes.map(function (w) { return w.list + '/' + w.folder; }) };
+    },
+    // An action raised from an entry carries the link (one action, never a copy).
+    raiseLinked: async function () {
+      await until(function () { return q('#ch-rec .facts'); });
+      byText('#ch-rec button', 'Raise a linked action').click();
+      var form = await until(function () { return q('#ch-r form'); });
+      var heading = q('#ch-r h2').textContent;
+      type(q('#ch-r-title'), 'Design a sign-out sheet');
+      type(q('#ch-r-description'), 'A one-page sheet for the probe store.');
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-r-ownerId'); });
+      var areas = all('#ch-r-areaKey option').map(function (o) { return o.value; });
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      var due = await until(function () { return q('#ch-r-dueIso'); });
+      due.value = q('#ch-r-dueIso').max.slice(0, 4) - 1 + q('#ch-r-dueIso').min.slice(4);
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return text().indexOf('Check and raise') >= 0; });
+      var summary = q('#ch-r .facts').textContent;
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return text().indexOf('raised: Design a sign-out sheet') >= 0; }, 120000);
+      var a = MockSharePoint.data.Actions.filter(function (x) { return x.Title === 'Design a sign-out sheet'; })[0];
+      var payload = JSON.parse(MockSharePoint.data.Requests[0].Payload);
+      return { heading: heading, areas: areas, summary: summary, source: a && [a.SourceType, a.SourceId], payloadEntry: payload.sourceEntryId };
+    },
+    // The feedback button: errors before sending, then a confirmed save; the sender reads only their own feedback.
+    feedback: async function () {
+      (await until(function () { return q('footer .fb-bubble'); })).click();
+      var form = await until(function () { return q('#ch-fb form'); });
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await wait(50);
+      var emptyError = q('#ch-fb-description-err').textContent;
+      q('#ch-fb-type').value = 'Ask a question';
+      type(q('#ch-fb-description'), 'How do I see actions I raised for others?');
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return !q('#ch-fb'); });
+      var toast = await until(function () { return q('.toast').textContent; });
+      var mine = await readAs('Feedback');
+      var row = MockSharePoint.data.Feedback.filter(function (f) { return f.Description === 'How do I see actions I raised for others?'; })[0];
+      return { emptyError: emptyError, toast: toast, row: row && { type: row.FeedbackType, status: row.Status, author: row.AuthorId, folder: row.FileDirRef.split('/Lists/')[1] },
+        visible: mine, writes: MockSharePoint.writes.map(function (w) { return w.list + '/' + w.folder; }) };
+    },
+    // The feedback button never covers another control, on the fitted home page and on a long page.
+    bubblePlace: async function () {
+      var b = await until(function () { return q('footer .fb-bubble'); });
+      await wait(300);
+      function overlaps() {
+        var r = b.getBoundingClientRect();
+        return all('button, a, select, input, textarea').filter(function (n) {
+          if (n === b || b.contains(n) || !n.offsetParent) return false;
+          var o = n.getBoundingClientRect();
+          return o.width && o.height && !(o.right <= r.left || o.left >= r.right || o.bottom <= r.top || o.top >= r.bottom);
+        }).map(function (n) { return n.textContent.trim().slice(0, 30); });
+      }
+      var home = { overlaps: overlaps(), inView: b.getBoundingClientRect().bottom <= window.innerHeight + 1 };
+      byText('.pills button', 'My actions').click();
+      await until(function () { return q('.subtabs'); });
+      await wait(200);
+      return { home: home, mine: overlaps() };
+    },
+    // Administrators review feedback: filter, open, respond and set the status.
+    feedbackReview: async function () {
+      (await until(function () { return byText('.pills button', 'Administration'); })).click();
+      (await until(function () { return byText('.subtabs button', 'Feedback'); })).click();
+      await until(function () { return q('.items .item-open'); });
+      var listed = all('.items .t').map(function (n) { return n.textContent; });
+      all('.items .item-open').filter(function (b) { return b.textContent.indexOf('calendar') >= 0; })[0].click();
+      await until(function () { return q('#ch-fr-status'); });
+      var from = q('#ch-fr .muted.small').textContent;
+      q('#ch-fr-status').value = 'Answered';
+      type(q('#ch-fr-response'), 'Thanks – this is fixed in the next version.');
+      q('#ch-fr form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return !q('#ch-fr') && /answered/.test(text()); });
+      var row = MockSharePoint.data.Feedback.filter(function (f) { return f.Id === 1; })[0];
+      var statusSel = all('.filters select')[1];
+      statusSel.value = 'Done';
+      statusSel.dispatchEvent(new Event('change', { bubbles: true }));
+      await wait(50);
+      return { listed: listed, from: from, status: row.Status, response: row.Response, by: row.RespondedById, on: !!row.RespondedOn,
+        doneFilter: /No feedback matches/.test(text()), writes: MockSharePoint.writes.slice() };
+    },
+    // Administrators change a setting: checked here, sent as a request, and shown once recorded.
+    settings: async function () {
+      (await until(function () { return byText('.pills button', 'Administration'); })).click();
+      (await until(function () { return byText('.subtabs button', 'Settings'); })).click();
+      await until(function () { return q('.settings'); });
+      var shown = all('.settings .setting').map(function (n) { return n.querySelector('b').textContent; });
+      all('.settings li').filter(function (li) { return li.textContent.indexOf('Due soon') >= 0; })[0].querySelector('button.btn').click();
+      var input = await until(function () { return q('#ch-set-DueSoonDays'); });
+      input.value = '40';
+      q('.setting-edit').dispatchEvent(new Event('submit', { cancelable: true }));
+      await wait(50);
+      var rangeError = q('#ch-set-DueSoonDays-err').textContent;
+      q('#ch-set-DueSoonDays').value = '10';
+      q('.setting-edit').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return /Done: Change due soon to 10 days/.test(text()); }, 120000);
+      var req = MockSharePoint.data.Requests[0];
+      await until(function () { return /10 days/.test(all('.settings li').filter(function (li) { return li.textContent.indexOf('Due soon') >= 0; })[0].textContent); });
+      return { shown: shown, rangeError: rangeError, request: { type: req.RequestType, payload: JSON.parse(req.Payload), status: req.Status },
+        value: MockSharePoint.data['Competency Hub Settings'].filter(function (r) { return r.Title === 'DueSoonDays'; })[0].Value };
+    },
+    // Management overview: every figure opens exactly the actions it counts.
+    dashboard: async function () {
+      (await until(function () { return byText('.pills button', 'Management'); })).click();
+      await until(function () { return q('.dash-figs .dash-fig:not([disabled])') && !all('.dash-figs .dash-fig').some(function (b) { return b.disabled; }); });
+      var figs = {};
+      all('.dash-figs .dash-fig').forEach(function (b) { figs[b.querySelector('span').textContent] = Number(b.querySelector('b').textContent); });
+      byText('.dash-figs .dash-fig span', 'Late').parentNode.click();
+      await until(function () { return q('.dash-drill'); });
+      var lateRows = all('.dash-drill .items li').length;
+      var lateTitle = q('.dash-drill h2').textContent;
+      byText('.dash-figs .dash-fig span', 'Completed').parentNode.click();
+      await until(function () { return /completed/.test(q('.dash-drill h2').textContent); });
+      var completedRows = all('.dash-drill .items li').length;
+      var rows = all('.dash-table tbody tr');
+      var rw = rows.filter(function (r) { return r.querySelector('th').textContent === 'Radwaste'; })[0];
+      var rwLate = Number(rw.querySelectorAll('td')[1].querySelector('b').textContent);
+      rw.querySelectorAll('td')[1].querySelector('button').click();
+      await until(function () { return /Radwaste – late/.test(q('.dash-drill h2').textContent); });
+      return { figs: figs, lateRows: lateRows, lateTitle: lateTitle, completedRows: completedRows, areaRows: rows.length, rwLate: rwLate,
+        rwDrill: all('.dash-drill .items li').length, posts: MockSharePoint.requests.filter(function (r) { return r.indexOf('POST') === 0; }).length };
+    },
+    areaRegister: async function () {
+      (await until(function () { return byText('.subtabs button', 'Notices & issues'); })).click();
+      await until(function () { return q('.inline-filter select'); });
+      var lists = all('.panel ul.items');
+      var notices = Array.prototype.map.call(lists[0].querySelectorAll('.t'), function (n) { return n.textContent; });
+      var entries = Array.prototype.map.call(lists[1].querySelectorAll('.t'), function (n) { return n.textContent; });
+      var sel = q('.inline-filter select');
+      sel.value = 'all';
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+      await wait(50);
+      var allCount = all('.panel ul.items')[1].querySelectorAll('li').length;
+      return { notices: notices, entries: entries, all: allCount, raise: !!byText('.tab-actions button', 'Raise an improvement or degradation') };
+    },
     // Open every area and every tab: the shell must make no writes at all.
     readOnlyAudit: async function () {
       await until(function () { return q('.tile'); });
@@ -493,7 +737,7 @@ window.MockDrivers = (function () {
     out.id = 'drive-result';
     (scenarios[name] ? scenarios[name]() : Promise.reject(new Error('No scenario ' + name)))
       .then(function (r) { out.textContent = JSON.stringify({ ok: true, result: r }); })
-      .catch(function (e) { out.textContent = JSON.stringify({ ok: false, error: String(e && e.message || e) }); })
+      .catch(function (e) { out.textContent = JSON.stringify({ ok: false, error: String(e && e.message || e), at: String(e && e.stack || '').split('\n').slice(0, 3).join(' | ') }); })
       .then(function () { document.body.appendChild(out); });
   }
 

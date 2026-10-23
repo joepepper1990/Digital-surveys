@@ -50,7 +50,7 @@ CH.health = (function () {
     // The tighter limit starts only once the first working-hours check has had time to report: until then the
     // latest report may be the last one from outside working hours.
     var working = weekday && clock.minutes >= h.start + WORKING_SLACK_MINUTES && clock.minutes <= h.end;
-    var out = { processing: 'unknown', reminders: 'unknown', administration: 'ok', adminReason: '', reason: '', checkedAt: null, lastDailyRun: null,
+    var out = { processing: 'unknown', reminders: 'unknown', administration: 'ok', adminReason: '', records: 'ok', recordsReason: '', reason: '', checkedAt: null, lastDailyRun: null,
       attention: 0, maxDeadlineYears: years(value(rows, 'MaxDeadlineYears')) };
     if (report && report.checkedAt) {
       out.checkedAt = new Date(report.checkedAt);
@@ -62,6 +62,8 @@ CH.health = (function () {
       else out.processing = 'ok';
       // Administration changes go through their own flow: when only that one is behind, staff can carry on.
       if (report.admin === 'Down') { out.administration = 'down'; out.adminReason = report.adminReason || 'Administration changes are not being picked up.'; }
+      // Notices and the register also have their own flow (4 Records).
+      if (report.records === 'Down') { out.records = 'down'; out.recordsReason = report.recordsReason || 'Changes to notices and the register are not being picked up.'; }
     }
     var daily = value(rows, 'LastDailyRun');
     if (daily) {

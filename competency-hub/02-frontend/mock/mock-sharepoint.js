@@ -91,7 +91,7 @@ window.MockSharePoint = (function () {
     if (url.indexOf('/_api/web/currentuser') >= 0) {
       if (mode === 'unknown') return respond(200, { Id: 999, Title: 'Someone New', Email: 'someone.new@example.test' });
       var me = data.People.filter(function (p) { return p.SiteUserId === asId; })[0];
-      return respond(200, { Id: asId, Title: me ? me.Title : 'Unknown', Email: me ? me.Email : '' });
+      return respond(200, { Id: asId, Title: me ? me.Title : 'Unknown', Email: me ? me.Email : '', LoginName: me ? 'i:0#.f|membership|' + me.Email : '' });
     }
     if (url.indexOf('/_api/SP.UserProfiles.PeopleManager/GetMyProperties') >= 0) {
       if (mode === 'noProfile') return respond(403, { error: 'Access denied' });
@@ -104,6 +104,11 @@ window.MockSharePoint = (function () {
     if (!data[title]) return respond(404, { error: 'List not found' });
     var q = query(url);
     var rows = data[title].filter(function (r) { return matches(r, q.$filter); });
+    // Feedback is add-only for everyone but administrators: each person reads only their own (spec ADM-5).
+    if (title === 'Feedback') {
+      var reader = data.People.filter(function (p) { return p.SiteUserId === asId; })[0];
+      if (!reader || !reader.IsAdministrator) rows = rows.filter(function (r) { return r.AuthorId === asId; });
+    }
     var top = Number(q.$top || 100);
     var skip = Number(q.$skiptoken || 0);
     var page = rows.slice(skip, skip + top);
@@ -118,6 +123,18 @@ window.MockSharePoint = (function () {
     requests.push('POST ' + url.replace(SITE, ''));
     if (url.indexOf('/_api/contextinfo') >= 0) return respond(200, { FormDigestValue: 'mock-digest' });
     var body = JSON.parse(options.body || '{}');
+    // Administrators answer feedback by editing the item; nobody else may change it (spec ADM-5).
+    var upd = /\/items\((\d+)\)\/ValidateUpdateListItem$/.exec(url);
+    if (upd) {
+      var editor = data.People.filter(function (p) { return p.SiteUserId === asId && p.Status === 'Active'; })[0];
+      var list = listTitle(url);
+      writes.push({ list: list, update: Number(upd[1]), by: asId });
+      if (list !== 'Feedback' || !editor || !editor.IsAdministrator) return respond(403, { error: 'Access denied' });
+      var item = data.Feedback.filter(function (f) { return f.Id === Number(upd[1]); })[0];
+      if (!item) return respond(404, { error: 'Item not found' });
+      body.formValues.forEach(function (f) { item[f.FieldName === 'RespondedBy' ? 'RespondedById' : f.FieldName] = f.FieldName === 'RespondedBy' ? asId : f.FieldValue; });
+      return respond(200, { value: body.formValues.map(function (f) { return { FieldName: f.FieldName, FieldValue: f.FieldValue, HasException: false }; }) });
+    }
     if (url.indexOf('/AddValidateUpdateItemUsingPath') < 0) return respond(400, { error: 'Not supported by the mock' });
     var title = listTitle(url);
     var path = body.listItemCreateInfo.FolderPath.DecodedUrl;
@@ -168,10 +185,12 @@ window.MockSharePoint = (function () {
           Payload: v.Payload, Status: 'Submitted', AuthorId: asId, Created: new Date().toISOString(), FileDirRef: path };
       }
     },
-    // Members and management add, in an action's own folder {area}/A{id}, which exists once the action is committed.
+    // Members and management add, in the area's folder (comments and flags on notices and entries) or in an action's
+    // own folder {area}/A{id}, which exists once the action is committed.
     Updates: {
       unique: 'ClientKey',
       allowed: function (folder, me) {
+        if (/^[A-Z]+$/.test(folder)) return writesArea(me, folder);
         var m = /^([A-Z]+)\/A(\d+)$/.exec(folder);
         if (!m || !writesArea(me, m[1])) return false;
         return data.Actions.some(function (a) {
@@ -181,6 +200,15 @@ window.MockSharePoint = (function () {
       row: function (v, id, path) {
         return { Id: id, Title: v.Title, ClientKey: v.ClientKey, ParentType: v.ParentType, ParentId: Number(v.ParentId), EntryType: v.EntryType,
           IsFlagEvent: v.IsFlagEvent === '1', IsHidden: false, Body: v.Body, AuthorId: asId, Created: new Date().toISOString(), FileDirRef: path };
+      }
+    },
+    // Anyone active may add feedback, at the list's root only.
+    Feedback: {
+      unique: 'ClientKey',
+      allowed: function (folder) { return folder === ''; },
+      row: function (v, id, path) {
+        return { Id: id, Title: v.Title, FeedbackType: v.FeedbackType, Description: v.Description, Status: 'New', PageView: v.PageView, ClientKey: v.ClientKey,
+          AuthorId: asId, Created: new Date().toISOString(), FileDirRef: path };
       }
     }
   };

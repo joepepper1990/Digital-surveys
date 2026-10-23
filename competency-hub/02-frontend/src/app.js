@@ -48,7 +48,9 @@ CH.app = (function () {
           textSizeControl())),
         h('main', { id: 'ch-main', tabindex: '-1' }, content),
         h('p', { class: 'toast', 'data-ch-live': true, role: 'status', 'aria-live': 'polite' }),
-        h('footer', { text: 'ESG Competency Hub · version ' + C.VERSION })
+        // the feedback button sits in its own place in the footer, so it never covers anything (spec FB-1)
+        h('footer', null, h('span'), h('span', { text: 'ESG Competency Hub · version ' + C.VERSION }),
+          h('span', { class: 'fb-slot' }, app.person && app.model ? CH.views.feedback.bubble(app) : null))
       ];
     }
 
@@ -56,6 +58,7 @@ CH.app = (function () {
     function nav() {
       var v = app.state.view;
       var items = [['My week', v === 'home', app.goHome], ['My actions', v === 'mine', function () { app.showMine(0); }]];
+      if (app.access && app.access.isManagement) items.push(['Management', v === 'manage', app.showDashboard]);
       if (app.access && app.access.isAdministrator) items.push(['Administration', v === 'admin', app.showAdmin]);
       return h('nav', { class: 'pills', 'aria-label': 'Main' }, items.map(function (x) {
         return h('button', { type: 'button', 'aria-current': x[1] ? 'page' : null, onclick: x[2], text: x[0] });
@@ -136,7 +139,7 @@ CH.app = (function () {
       var items = app.tracker.entries().filter(function (e) {
         if (e.dismissed) return false;
         if (CH.requests.ADMIN_TYPES.indexOf(e.type) >= 0) return false;   // shown on the Administration page
-        if (e.type === 'RaiseAction') return e.state !== 'done';
+        if (e.type === 'RaiseAction' || e.type === 'RaiseRegisterEntry') return e.state !== 'done';
         return ['rejected', 'attention', 'cancelled', 'reverted'].indexOf(e.state) >= 0;
       }).map(function (e) {
         var waiting = e.state === 'submitted' || e.state === 'slow';
@@ -171,6 +174,8 @@ CH.app = (function () {
 
     function onRequestChange(entry) {
       if (CH.requests.ADMIN_TYPES.indexOf(entry.type) >= 0) {
+        // a saved setting is read again, so the page shows the new value and uses it (DueSoonDays, MaxDeadlineYears)
+        if (entry.type === 'UpdateSetting' && entry.state === 'done') { reload().then(function () { render(false); }).catch(function () { render(false); }); return; }
         render(false);
         if (entry.state === 'done' && app.state.view === 'admin') setTimeout(function () { CH.views.admin.refresh(app); }, 1500);
         return;
@@ -180,7 +185,9 @@ CH.app = (function () {
         render(false);
         if (app.panel) app.panel.refresh();
         var a = app.model.actionById[entry.resultId];
-        CH.ui.toast(app.root, entry.type === 'RaiseAction' && a ? a.ref + ' raised: ' + a.title + '.' : entry.message, 'ok');
+        var e = app.model.entryById[entry.resultId];
+        CH.ui.toast(app.root, entry.type === 'RaiseAction' && a ? a.ref + ' raised: ' + a.title + '.'
+          : entry.type === 'RaiseRegisterEntry' && e ? e.ref + ' raised: ' + e.title + '.' : entry.message, 'ok');
       }).catch(function () { CH.ui.toast(app.root, entry.message + ' Reload the page to see it.', 'ok'); });
     }
 
@@ -190,7 +197,8 @@ CH.app = (function () {
     }
 
     app.goHome = function () { app.state = { view: 'home', area: null, tab: 0 }; render(true); };
-    app.showAdmin = function () { app.admin = null; app.state = { view: 'admin', area: null, tab: 0 }; render(true); };
+    app.showAdmin = function () { app.admin = null; app.feedback = null; app.state = { view: 'admin', area: null, tab: 0 }; render(true); };
+    app.showDashboard = function () { app.dash = null; app.state = { view: 'manage', area: null, tab: 0 }; render(true); };
     app.refreshView = function (moveFocus) { render(!!moveFocus); };
     // Opens an area in place on the home page (key), or closes it (null). Focus stays with the area's tile.
     app.openAreaHere = function (key) {
@@ -202,6 +210,8 @@ CH.app = (function () {
     };
     // True while automatic processing is down: queued changes are not offered and not sent.
     app.queueBlocked = function () { return !!app.health && app.health.processing === 'down'; };
+    // Notices and the register have their own flow (4 Records); it pauses with the queue, or on its own.
+    app.recordsBlocked = function () { return app.queueBlocked() || (!!app.health && app.health.records === 'down'); };
     app.openArea = function (key) { app.state = { view: 'area', area: key, tab: 0 }; render(true); };
     app.showMine = function (tab, areaKey, keepFocus) {
       app.state = { view: 'mine', area: null, tab: tab || 0, areaFilter: areaKey || '' };
@@ -215,6 +225,23 @@ CH.app = (function () {
       CH.views.raiseForm.open(app, key);
     };
     app.openAction = function (a) { CH.views.actionPanel.open(app, a.id); };
+    app.openNotice = function (n) { CH.views.recordPanel.openNotice(app, n.id); };
+    app.openEntry = function (e) { CH.views.recordPanel.openEntry(app, e.id); };
+    app.raiseEntry = function (key) { CH.views.entryForm.open(app, key); };
+    // "being recorded" and the like for a notice or entry in a list (kind: 'Notice' or 'Register Entry')
+    app.recordNote = function (kind, id) {
+      var e = app.tracker && app.tracker.forTarget(id, kind);
+      if (e && (e.state === 'submitted' || e.state === 'slow')) return 'change being recorded';
+      if (e && e.state === 'rejected') return 'change not accepted';
+      if (e && e.state === 'attention') return 'change not recorded';
+      return '';
+    };
+    // After an instant write (a flag, a comment): read the lists again and repaint, keeping any open panel.
+    app.recordChanged = async function () {
+      await reload();
+      render(false);
+      if (app.panel) app.panel.refresh();
+    };
     app.pendingNote = function (a) {
       var e = app.tracker && app.tracker.forTarget(a.id);
       if (e && (e.state === 'submitted' || e.state === 'slow')) return 'change being recorded';
@@ -234,6 +261,7 @@ CH.app = (function () {
       var content = [requestStrip(), app.state.view === 'area' && app.model.areaByKey[app.state.area]
         ? CH.views.area.render(app, app.state.area, app.state.tab)
         : app.state.view === 'mine' ? CH.views.myActions.render(app)
+        : app.state.view === 'manage' ? CH.views.dashboard.render(app)
         : app.state.view === 'admin' ? CH.views.admin.render(app) : CH.views.home.render(app)];
       paint(content);
       if (moveFocus) {
@@ -259,6 +287,10 @@ CH.app = (function () {
       if (raw.members.error !== undefined) throw new CH.sp.SpError(raw.members.error, 'Area memberships could not be loaded.');
       app.access = CH.access.build(app.person, memberships, areasByKey);
       app.health = CH.health.judge(raw.settings.rows, now);
+      app.settings = raw.settings.rows || [];
+      // the "due soon" window an administrator sets (DueSoonDays, 1 to 30 days)
+      var soon = (app.settings.filter(function (r) { return r.Title === 'DueSoonDays'; })[0] || {}).Value;
+      CH.config.dueSoonDays = /^\d{1,2}$/.test(String(soon || '')) && Number(soon) >= 1 && Number(soon) <= 30 ? Number(soon) : 7;
       app.model = CH.model.build(raw, app.people, app.access, today, now);
     }
 
@@ -291,6 +323,7 @@ CH.app = (function () {
         return;
       }
       app.person = identity.person;
+      app.loginName = user.LoginName || '';
       app.people = people;
       app.firstName = await app.sp.myFirstName();
       app.tracker = CH.requests.tracker(app, onRequestChange);
@@ -307,12 +340,15 @@ CH.app = (function () {
       if (app.model.areaByKey[areaParam]) app.state = params.get('view') === 'area' ? { view: 'area', area: areaParam, tab: 0 } : { view: 'home', area: null, tab: 0, homeArea: areaParam };
       if (params.get('view') === 'mine') app.state = { view: 'mine', area: null, tab: 0, areaFilter: '' };
       if (params.get('view') === 'admin') app.state = { view: 'admin', area: null, tab: 0 };
+      if (params.get('view') === 'manage' && app.access.isManagement) app.state = { view: 'manage', area: null, tab: 0 };
       healthTimer = setInterval(checkHealth, HEALTH_EVERY_MS);
       window.addEventListener('resize', fitToWindow);
       document.addEventListener('keydown', onKey);
       render(false);
       var actionParam = Number(params.get('action'));
       if (actionParam) CH.views.actionPanel.open(app, actionParam);
+      else if (Number(params.get('notice'))) CH.views.recordPanel.openNotice(app, Number(params.get('notice')));
+      else if (Number(params.get('entry'))) CH.views.recordPanel.openEntry(app, Number(params.get('entry')));
     }
 
     return {

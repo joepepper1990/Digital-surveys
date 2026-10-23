@@ -8,12 +8,12 @@ specification (`PLAN.md`, Revision 5) and the decisions made since. Where the tw
 | Part | Built and tested here | On the site |
 |---|---|---|
 | Site, lists, groups, Setup | Setup 1.2 | Setup 1.1 |
-| App | 0.6.0: actions, safety net, Administration (People), the *My week* home page | 0.3.0 |
-| Flows | 1.4.1.0: 1 Daily tasks, 2 Request queue, 3 Queue monitor, 6 Administration | 1.2.0.0 |
+| App | 0.7.0: actions, safety net, Administration (People, Settings, Feedback), the *My week* home page, notices, register, Management page | 0.3.0 |
+| Flows | 1.5.0.0: 1 Daily tasks, 2 Request queue, 3 Queue monitor, 4 Records, 6 Administration | 1.2.0.0 |
 | Permission probe | Built | Not run |
 
-**Built so far:** Releases 1 and 2, and the home-page design. That is about 70 of the ~194 Phase 1 hours.
-**Left to build:** about 124 hours, in four releases.
+**Built so far:** Releases 1, 2 and 3, and the home-page design. That is about 105 of the ~194 Phase 1 hours.
+**Left to build:** about 89 hours, in three releases (4, 5 and 6).
 
 **Decisions settled since Revision 5:**
 - Everything runs on your account, and no service account is used. That covers:

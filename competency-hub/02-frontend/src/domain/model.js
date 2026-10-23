@@ -9,8 +9,10 @@ CH.model = (function () {
     members: "$select=Id,CompetencyId,PersonId,CanManageMeetings,Status&$filter=Status eq 'Active'",
     actions: '$select=Id,Title,Description,CompetencyId,LinkedCompetenciesId,AssignedToId,RaisedById,DateRaised,DueDay,OriginalDueDate,' +
       'Status,IsOpen,Priority,ExtensionCount,RequiresCloseOut,Revision,PendingRequestKey,LastRequestKey,CreatedRequestKey,FileDirRef,' +
-      'Blocker,CloseOutcome,ClosureNote,DateClosed&$filter=IsOpen eq 1 and FSObjType eq 0',
-    notices: "$select=Id,Title,Body,Category,IsImportant,ImportantUntil,Status,AuthorId,Created,FileDirRef&$filter=Status eq 'Active' and FSObjType eq 0",
+      'Blocker,CloseOutcome,ClosureNote,DateClosed,SourceType,SourceId&$filter=IsOpen eq 1 and FSObjType eq 0',
+    notices: "$select=Id,Title,Body,Category,IsImportant,ImportantUntil,Status,AuthorId,Created,FileDirRef,Revision,LastRequestKey&$filter=Status eq 'Active' and FSObjType eq 0",
+    register: '$select=Id,Title,Description,EntryType,Impact,Status,Outcome,RaisedById,ResponsiblePersonId,DateRaised,DateResolved,Revision,' +
+      'LastRequestKey,CompetencyId,FileDirRef,Created&$filter=FSObjType eq 0',
     updates: '$select=Id,EntryType,ParentType,ParentId,AuthorId,Created,FileDirRef,IsHidden&$filter=IsFlagEvent eq 1 and FSObjType eq 0',
     meetings: '$select=Id,CompetencyId,MeetingDate,Status,ChairId&$filter=FSObjType eq 0',
     calendar: "$select=Id,Title,StartTime,AllDay,IsImportant,Status,FileDirRef&$filter=Status eq 'Scheduled' and FSObjType eq 0",
@@ -91,7 +93,8 @@ CH.model = (function () {
         waitingCloseOut: waitingCloseOut, group: r.Status === 'Closed' ? 'done' : words.group,
         dueText: r.Status === 'Closed' ? 'Closed' : words.text,
         blocker: r.Status === 'Awaiting Input' ? (r.Blocker || '') : '', closeOutcome: r.CloseOutcome || '', closureNote: r.ClosureNote || '',
-        closedIso: r.DateClosed ? D.localDate(r.DateClosed) : ''
+        closedIso: r.DateClosed ? D.localDate(r.DateClosed) : '',
+        sourceType: r.SourceType || 'None', sourceId: r.SourceId ? Number(r.SourceId) : null
       };
     }
     var actions = (raw.actions.rows || []).filter(function (r) { return !isUncommitted(r) && r.Status !== 'Closed'; }).map(actionFrom);
@@ -107,12 +110,30 @@ CH.model = (function () {
       return {
         id: n.Id, areaKey: key, title: n.Title, body: n.Body || '', category: n.Category || 'General',
         authorId: n.AuthorId, authorName: nameOf(n.AuthorId), fromOutside: !(membersByArea[key] || {})[n.AuthorId] && !isManagementPerson(n.AuthorId),
-        createdIso: createdIso, created: n.Created, important: important
+        createdIso: createdIso, created: n.Created, important: important, pinned: !!n.IsImportant && !n.ImportantUntil,
+        // notices posted before the Revision column existed have none: they are then sent without a stale check
+        revision: Number(n.Revision) || 0, lastRequestKey: n.LastRequestKey || ''
       };
     }).filter(function (n) { return !!areaByKey[n.areaKey]; })
       .sort(function (a, b) { return String(b.created).localeCompare(String(a.created)); });
     var noticeById = {};
     notices.forEach(function (n) { noticeById[n.id] = n; });
+
+    // Improvements and degradations (spec REG-1): the area is the folder the entry sits in, as the flow made it.
+    var entries = (raw.register ? raw.register.rows || [] : []).map(function (e) {
+      var key = CH.sp.folderOf(e.FileDirRef);
+      return {
+        id: e.Id, ref: 'REG-' + ('0000' + e.Id).slice(-5), areaKey: key, title: e.Title, description: e.Description || '', entryType: e.EntryType,
+        impact: e.Impact || '', status: e.Status, outcome: e.Outcome || '', raisedById: e.RaisedById, raisedByName: nameOf(e.RaisedById),
+        responsibleId: e.ResponsiblePersonId, responsibleName: e.ResponsiblePersonId ? nameOf(e.ResponsiblePersonId) : '',
+        raisedIso: e.DateRaised ? D.localDate(e.DateRaised) : (e.Created ? D.localDate(e.Created) : ''),
+        resolvedIso: e.DateResolved ? D.localDate(e.DateResolved) : '', revision: Number(e.Revision) || 1,
+        open: e.Status === 'Open' || e.Status === 'Under Review'
+      };
+    }).filter(function (e) { return !!areaByKey[e.areaKey]; })
+      .sort(function (a, b) { return b.id - a.id; });
+    var entryById = {};
+    entries.forEach(function (e) { entryById[e.id] = e; });
 
     // Flags (plan F.5): counted only in the source's own area folder, ordered by server item ID.
     // Clearing by a finalised meeting's outcome comes with the meetings increment.
@@ -126,20 +147,28 @@ CH.model = (function () {
       if (!areaByKey[key]) return;
       var source = u.ParentType + ':' + u.ParentId;
       if (u.ParentType === 'Notice' && (!noticeById[u.ParentId] || noticeById[u.ParentId].areaKey !== key)) return;
-      var slot = latest[key + '|' + source] = latest[key + '|' + source] || { key: key, flaggedBy: null, flagged: false };
+      if (u.ParentType === 'Register Entry' && (!entryById[u.ParentId] || entryById[u.ParentId].areaKey !== key)) return;
+      if (u.ParentType !== 'Notice' && u.ParentType !== 'Register Entry') return;
+      var slot = latest[key + '|' + source] = latest[key + '|' + source] || { key: key, source: source, flaggedBy: null, flagged: false, history: [] };
       if (u.EntryType === 'Flagged') {
         if (!(membersByArea[key] || {})[u.AuthorId] && !isManagementPerson(u.AuthorId)) return;
         slot.flagged = true; slot.flaggedBy = u.AuthorId;
+        slot.history.push({ kind: 'Flagged for the next meeting', by: nameOf(u.AuthorId), iso: D.localDate(u.Created) });
       } else if (u.EntryType === 'Flag Withdrawn' && slot.flagged) {
         var notice = u.ParentType === 'Notice' ? noticeById[u.ParentId] : null;
+        var entry = u.ParentType === 'Register Entry' ? entryById[u.ParentId] : null;
         var allowed = u.AuthorId === slot.flaggedBy || isManagementPerson(u.AuthorId) ||
-          (meetingAdmins[key] || {})[u.AuthorId] || (notice && notice.authorId === u.AuthorId);
-        if (allowed) slot.flagged = false;
+          (meetingAdmins[key] || {})[u.AuthorId] || (notice && notice.authorId === u.AuthorId) || (entry && entry.raisedById === u.AuthorId);
+        if (allowed) { slot.flagged = false; slot.history.push({ kind: 'Flag withdrawn', by: nameOf(u.AuthorId), iso: D.localDate(u.Created) }); }
       }
     });
+    var flags = {};
     Object.keys(latest).forEach(function (k) {
+      flags[latest[k].source] = latest[k];
       if (latest[k].flagged) flagged[latest[k].key] = (flagged[latest[k].key] || 0) + 1;
     });
+    notices.forEach(function (n) { n.flagged = !!(flags['Notice:' + n.id] || {}).flagged; });
+    entries.forEach(function (e) { e.flagged = !!(flags['Register Entry:' + e.id] || {}).flagged; });
 
     var meetingsByArea = {};
     (raw.meetings.rows || []).forEach(function (m) {
@@ -170,6 +199,8 @@ CH.model = (function () {
         movedTwice: list.filter(function (x) { return x.extensions >= 2; }).length,
         closeOut: list.filter(function (x) { return x.waitingCloseOut; }).length,
         flagged: flagged[a.key] || 0,
+        openEntries: entries.filter(function (e) { return e.areaKey === a.key && e.open; }).length,
+        degradations: entries.filter(function (e) { return e.areaKey === a.key && e.open && e.entryType === 'Degradation'; }).length,
         nextMeeting: m.next, lastMeeting: m.last, meetingStale: stale
       };
     });
@@ -186,10 +217,11 @@ CH.model = (function () {
 
     return {
       today: today, areas: areas, areaByKey: areaByKey, stats: stats, actions: actions, notices: notices, calendar: calendar,
+      entries: entries, entryById: entryById, noticeById: noticeById, flags: flags, people: people,
       inArea: inArea, nameOf: nameOf, ownersFor: ownersFor, actionById: actionById, actionFrom: actionFrom, membersByArea: membersByArea,
       sections: {
         actions: section(raw.actions), notices: section(raw.notices), meetings: section(raw.meetings),
-        calendar: section(raw.calendar), flags: section(raw.updates), members: section(raw.members)
+        calendar: section(raw.calendar), flags: section(raw.updates), members: section(raw.members), register: section(raw.register)
       }
     };
   }

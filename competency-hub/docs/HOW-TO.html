@@ -19,18 +19,19 @@
 </style>
 </head>
 <body>
-<h1>ESG Competency Hub – Releases 1 and 2</h1>
-<p>This package brings the Hub from app 0.3.0 and solution 1.2.0.0 (what you have now) to <strong>app 0.6.0</strong>, <strong>solution 1.4.1.0</strong> and <strong>Setup 1.2</strong>. Updated 23 October 2026, after a full review.</p>
+<h1>ESG Competency Hub – Releases 1 to 3</h1>
+<p>This package brings the Hub from app 0.3.0 and solution 1.2.0.0 (what you have now) to <strong>app 0.7.0</strong>, <strong>solution 1.5.0.0</strong> and <strong>Setup 1.2</strong>. Each release includes the ones before it, so you can install this package directly. Updated 23 October 2026.</p>
 <ul>
   <li><strong>Release 1, safety net:</strong> a queue monitor that recovers stalled changes and retries emails; clear messages while a change is waiting, being recorded, being retried or needs an administrator; an <em>Administration</em> page; and a reduced mode in which the buttons that send changes are paused while changes can't be processed.</li>
   <li><strong>Release 2, administration and permissions:</strong> add people, choose their areas, meeting rights, access end dates and notice posting from the app; the corrected technician and meeting rights; Feedback list and Meeting Minutes library ready for later releases.</li>
+  <li><strong>Release 3, noticeboard, register, feedback, settings and dashboard:</strong> read a notice in full, comment, flag it for the next meeting; edit, pin and archive notices; improvements and degradations with linked actions; a <em>Feedback</em> button on every page with a review tab for administrators; a <em>Settings</em> tab; and a <em>Management</em> page for Team Leaders and the Group Head.</li>
 </ul>
 <p class="note">Everything here was built and tested on a simulated SharePoint site only. Each part below changes your Competency Hub site or your Power Automate environment, so do it only when you are ready. Nobody else gets access until you add them.</p>
 
 <table>
   <tr><th>Folder</th><th>Files</th><th>When</th></tr>
   <tr><td><code>1-Setup</code></td><td><code>CH_Setup.html</code>, <code>CH_Setup.js</code></td><td>Part A</td></tr>
-  <tr><td><code>2-Power-Automate</code></td><td><code>ESGCompetencyHub_1_4_1_0_unmanaged.zip</code></td><td>Part B – import as it is. <strong>Don't unzip it.</strong></td></tr>
+  <tr><td><code>2-Power-Automate</code></td><td><code>ESGCompetencyHub_1_5_0_0_unmanaged.zip</code></td><td>Part B – import as it is. <strong>Don't unzip it.</strong></td></tr>
   <tr><td><code>3-App</code></td><td><code>competency-hub.html</code>, <code>competency-hub.js</code></td><td>Part C</td></tr>
   <tr><td><code>4-Permission-probe</code></td><td><code>CH_Probe_P2.html</code>, <code>CH_Probe_P2.js</code></td><td>Part E, with the test account</td></tr>
 </table>
@@ -45,21 +46,21 @@
   <li>Delete the two Setup files and the HubSetup page again.</li>
 </ol>
 
-<h2>Part B – solution 1.4.1.0 (about 10 minutes)</h2>
+<h2>Part B – solution 1.5.0.0 (about 10 minutes)</h2>
 <ol>
-  <li>In Power Automate, same environment: <strong>Solutions → Import solution → Browse</strong>, choose <code>ESGCompetencyHub_1_4_1_0_unmanaged.zip</code>, <em>Next</em>. It should say <strong>upgrade</strong>.</li>
+  <li>In Power Automate, same environment: <strong>Solutions → Import solution → Browse</strong>, choose <code>ESGCompetencyHub_1_5_0_0_unmanaged.zip</code>, <em>Next</em>. It should say <strong>upgrade</strong>.</li>
   <li>Keep the SharePoint and Outlook connections and the site address, then <em>Import</em>.</li>
-  <li>Open the solution. There are now <strong>four</strong> flows. Make sure all four are <strong>On</strong>:
+  <li>Open the solution. There are now <strong>five</strong> flows. Make sure all five are <strong>On</strong>:
     <ul class="sub">
       <li><em>ESG Competency Hub | 1 Daily tasks</em> and <em>2 Request queue</em> (already on);</li>
-      <li><em>ESG Competency Hub | 3 Queue monitor</em> and <em>6 Administration</em> (new: turn them on).</li>
+      <li><em>ESG Competency Hub | 3 Queue monitor</em>, <em>4 Records</em> and <em>6 Administration</em> (new: turn them on).</li>
     </ul></li>
 </ol>
 
-<h2>Part C – app 0.6.0</h2>
+<h2>Part C – app 0.7.0</h2>
 <ol>
   <li>Upload both files from <code>3-App</code> to <em>Welcome Web Part - Custom Layouts</em> (<em>Replace</em>).</li>
-  <li>On the Hub page, edit the web part, <strong>Reset layout cache</strong>, <em>Republish</em>, and reload with <strong>Ctrl+F5</strong>. The footer should say <strong>0.6.0</strong>.</li>
+  <li>On the Hub page, edit the web part, <strong>Reset layout cache</strong>, <em>Republish</em>, and reload with <strong>Ctrl+F5</strong>. The footer should say <strong>0.7.0</strong>.</li>
   <li>The home page is the new <em>My week</em> design. Open it with your WebView link (ending <code>?env=WebView</code>) and check that it fits the window with no scrolling.</li>
   <li>Click the arrow on a section header: it folds to one line and stays folded after a reload. Click an area tile: it opens in place; <strong>✕</strong> or <strong>Esc</strong> closes it.</li>
   <li>Your name at the top should read <em>Joseph Pepper</em>, first name first.</li>
@@ -96,6 +97,33 @@
   <li>Delete the probe files and the <code>HubProbe2</code> page.</li>
   <li>Keep the test account until we've read the results. Then, in People, open it and choose <strong>Mark as left</strong>.</li>
 </ol>
+
+<h2>Part F – notices, the register, feedback, settings and the dashboard (Release 3)</h2>
+<p>All of this can be tried as yourself. Use <strong>TEST</strong> in titles so the clean-up in Release 6 can find them.</p>
+<h3>Notices and comments</h3>
+<ol>
+  <li>On the home page, open <strong>Flask</strong>. The middle column, <em>Notices &amp; issues</em>, now lists notices and open improvements and degradations. Click a notice: it opens in full.</li>
+  <li>Add a comment. It appears at once.</li>
+  <li>Click <strong>Flag for the next meeting</strong>, then <strong>Withdraw the flag</strong>. Both are immediate; <em>Discussion history</em> lists them.</li>
+  <li>Click <strong>Pin</strong>, then <strong>Edit</strong> and change the title. Each shows <em>being recorded</em> and then the change, usually within two minutes.</li>
+  <li>On a comment, click <strong>Hide</strong>. It disappears once recorded.</li>
+</ol>
+<h3>Improvements and degradations</h3>
+<ol>
+  <li>In the Flask panel, click <strong>Raise an issue</strong>. Choose <em>Degradation</em>, give a TEST title and description, choose who is responsible, and send it. It appears in the list within two minutes as <em>REG-0000n</em>.</li>
+  <li>Open it. Click <strong>Raise a linked action</strong> and raise a TEST action: it is listed under <em>Linked actions</em>. Or click <strong>Link an existing action</strong>.</li>
+  <li>Click <strong>Change status</strong>, choose <em>Resolved</em>: it asks for an outcome. Enter one and save.</li>
+  <li>The full area page has the same lists under <em>Notices &amp; issues</em>, with a filter for the register.</li>
+</ol>
+<h3>Feedback, settings and the dashboard</h3>
+<ol>
+  <li>Click <strong>Feedback</strong> at the bottom right of any page, send a TEST question, and wait for <em>Thanks – your feedback has been sent</em>.</li>
+  <li><strong>Administration → Feedback</strong>: your item is listed. Open it, write a response, set it to <em>Answered</em>.</li>
+  <li><strong>Administration → Settings</strong>: change <em>Due soon</em> from 7 to 10 days and back. Each change is recorded within a few minutes; try 40 to see it refused.</li>
+  <li><strong>Management</strong> (in the top bar): click any number. The list underneath is exactly the actions that number counts.</li>
+  <li>Send me screenshots of the notice, the entry and the Management page.</li>
+</ol>
+<p class="note">If <em>4 Records</em> is off, actions carry on as normal; changes to notices and the register are paused and the Administration page says so. Comments and flags still work, because they don't go through a flow.</p>
 
 <h2>Already done</h2>
 <div class="done">

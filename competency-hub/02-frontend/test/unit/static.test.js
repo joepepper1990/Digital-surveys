@@ -21,11 +21,15 @@ test('S5: no external resources or absolute URLs', () => {
   for (const s of sources) assert.doesNotMatch(s.text, /https?:\/\//, s.name);
 });
 
-test('S6/S8: writes go only to notices, updates and the own request folder; no permission or sharing calls', () => {
+test('S6/S8: writes go only to notices, updates, feedback and the own request folder; no permission or sharing calls', () => {
   const all = sources.map((s) => s.text).join('\n');
-  assert.doesNotMatch(all, /breakroleinheritance|roleassignments|ensureuser|sitegroups|validateUpdateListItem|X-HTTP-Method|MERGE/i);
+  assert.doesNotMatch(all, /breakroleinheritance|roleassignments|ensureuser|sitegroups|X-HTTP-Method|MERGE/i);
   const writes = all.match(/addToFolder\('(\w+)'/g) || [];
-  assert.deepEqual([...new Set(writes)].sort(), ["addToFolder('notices'", "addToFolder('requests'", "addToFolder('updates'"]);
+  assert.deepEqual([...new Set(writes)].sort(), ["addToFolder('feedback'", "addToFolder('notices'", "addToFolder('requests'", "addToFolder('updates'"]);
+  // The one edit the app makes directly: administrators answering feedback (only they may edit that list).
+  assert.equal((all.match(/ValidateUpdateListItem/g) || []).length, 1, 'only sp.update edits an item');
+  const updates = all.match(/\.update\('(\w+)'/g) || [];
+  assert.deepEqual([...new Set(updates)], [".update('feedback'"]);
   // Every call names its list literally, so the allow-list above is complete.
   const calls = all.match(/\.addToFolder\([^)]{0,20}/g) || [];
   assert.ok(calls.length >= 3 && calls.every((c) => /\.addToFolder\('/.test(c)), calls.join(' | '));

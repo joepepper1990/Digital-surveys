@@ -28,6 +28,7 @@ window.MockFlow = (function () {
         canWrite: function (key) { return areaKeys.indexOf(key) >= 0 && (management(p) || !!membership(p.SiteUserId, key)); },
         isEngineerIn: function (key) { return p.Role === 'Engineer' && !!membership(p.SiteUserId, key); },
         chairs: function (key) { var m = membership(p.SiteUserId, key); return !!m && !!m.CanManageMeetings; },
+        canModerate: function (key) { return areaKeys.indexOf(key) >= 0 && (management(p) || (p.Role === 'Engineer' && !!membership(p.SiteUserId, key))); },
         canRaiseFor: function (key, ownerId) {
           var m = membership(p.SiteUserId, key);
           return p.Role !== 'Technician' || (!!m && !!m.CanManageMeetings) || Number(ownerId) === p.SiteUserId;
@@ -50,6 +51,100 @@ window.MockFlow = (function () {
       req.ProcessedAt = new Date().toISOString();
     }
 
+    // ---- notices, comments and the register (4 Records), with the same rules as the app
+    var RECORDS = ['EditNotice', 'ArchiveNotice', 'PinNotice', 'HideComment', 'RaiseRegisterEntry', 'UpdateRegisterEntry', 'LinkActionToEntry', 'UnlinkActionFromEntry'];
+    function folderKey(row) { return String(row.FileDirRef).split('/').pop(); }
+    function firstError(errors) { var k = Object.keys(errors); return k.length ? errors[k[0]] : ''; }
+    function ownerAllowed(key, id) { var o = person(id); return !!o && o.Status === 'Active' && (management(o) || !!membership(id, key)); }
+    function recordEvent(req, key, recordType, recordId, eventType, extra) {
+      data.History.push(Object.assign({ Id: nextId(data.History), RowKind: 'Event', RequestKey: req.RequestKey + '|1', RecordType: recordType, RecordId: recordId,
+        EventType: eventType, ActorId: req.AuthorId, EventTime: new Date().toISOString(), CompetencyId: areaId(key), FileDirRef: ROOT + 'History/' + key }, extra || {}));
+    }
+    function records(req, payload, requester, access) {
+      var me = requester.SiteUserId;
+      var reg = data['Improvements and Degradations'];
+      var err;
+      if (req.RequestType === 'RaiseRegisterEntry') {
+        if ((err = firstError(R.validateEntry(payload, { canWrite: access.canWrite, ownerAllowed: ownerAllowed })))) return finish(req, 'Rejected', err);
+        var id = nextId(reg);
+        reg.push({ Id: id, Title: payload.title, Description: payload.description, EntryType: payload.entryType, Impact: payload.impact, Status: 'Open', Outcome: '',
+          RaisedById: me, ResponsiblePersonId: Number(payload.responsibleId), DateRaised: new Date().toISOString(), Created: new Date().toISOString(),
+          Revision: 1, LastRequestKey: req.RequestKey, CreatedRequestKey: 'F|' + req.RequestKey, CompetencyId: areaId(payload.areaKey),
+          FileDirRef: ROOT + 'ImprovementRegister/' + payload.areaKey });
+        recordEvent(req, payload.areaKey, 'Register Entry', id, 'Entry Raised');
+        return finish(req, 'Completed', 'REG-' + ('0000' + id).slice(-5) + ' raised.', id);
+      }
+      var list = req.RequestType === 'HideComment' ? data.Updates : /Notice$/.test(req.RequestType) ? data.Noticeboard : reg;
+      var rec = list.filter(function (x) { return x.Id === Number(req.TargetId); })[0];
+      if (!rec) return finish(req, 'Rejected', 'That could not be found. It may have been removed.');
+      var key = folderKey(rec);
+      if (req.RequestType !== 'HideComment' && Number(req.ExpectedRevision) > 0 && Number(req.ExpectedRevision) !== Number(rec.Revision || 0)) {
+        return finish(req, 'Rejected', 'This was changed by someone else. Review the latest details and try again.');
+      }
+      var bump = function () { rec.Revision = (Number(rec.Revision) || 1) + 1; rec.LastRequestKey = req.RequestKey; };
+      var nshape = { authorId: rec.AuthorId, areaKey: key };
+      if (req.RequestType === 'EditNotice' || req.RequestType === 'ArchiveNotice' || req.RequestType === 'PinNotice') {
+        var nr = R.noticeRoles(nshape, me, access);
+        if (rec.Status !== 'Active') return finish(req, 'Rejected', 'This notice has been archived.');
+        if (req.RequestType === 'PinNotice') {
+          if (!nr.canPin) return finish(req, 'Rejected', 'Only the engineers of the area and management can pin notices.');
+          rec.IsImportant = !!payload.pinned; rec.ImportantUntil = null; bump();
+          recordEvent(req, key, 'Notice', rec.Id, payload.pinned ? 'Notice Pinned' : 'Notice Unpinned');
+          return finish(req, 'Completed', payload.pinned ? 'Notice pinned.' : 'Notice unpinned.', rec.Id);
+        }
+        if (!nr.canEdit) return finish(req, 'Rejected', 'Only the person who posted it, or the engineers of the area and management, can change this notice.');
+        if (req.RequestType === 'ArchiveNotice') {
+          rec.Status = 'Archived'; rec.IsImportant = false; bump();
+          recordEvent(req, key, 'Notice', rec.Id, 'Notice Archived');
+          return finish(req, 'Completed', 'Notice archived.', rec.Id);
+        }
+        if ((err = firstError(R.validateNoticeEdit(payload)))) return finish(req, 'Rejected', err);
+        if ('title' in payload) rec.Title = payload.title;
+        if ('body' in payload) rec.Body = payload.body;
+        if ('category' in payload) rec.Category = payload.category;
+        if ('important' in payload) { rec.IsImportant = !!payload.important; rec.ImportantUntil = payload.important ? D.addDays(today, 30) + 'T00:00:00Z' : null; }
+        bump();
+        recordEvent(req, key, 'Notice', rec.Id, 'Notice Edited');
+        return finish(req, 'Completed', 'Notice saved.', rec.Id);
+      }
+      if (req.RequestType === 'HideComment') {
+        if (rec.EntryType !== 'Comment') return finish(req, 'Rejected', 'Only comments can be hidden.');
+        if (!access.canModerate(key)) return finish(req, 'Rejected', 'Only the engineers of the area and management can hide comments.');
+        rec.IsHidden = true;
+        recordEvent(req, key, rec.ParentType === 'Register Entry' ? 'Register Entry' : 'Notice', rec.ParentId, 'Comment Hidden');
+        return finish(req, 'Completed', 'Comment hidden.', rec.Id);
+      }
+      var eshape = { areaKey: key, raisedById: rec.RaisedById, responsibleId: rec.ResponsiblePersonId };
+      if (!R.managesEntry(eshape, me, access)) return finish(req, 'Rejected', 'Only the person who raised it, the person responsible, the engineers and meeting runners of the area, and management can change this entry.');
+      if (req.RequestType === 'UpdateRegisterEntry') {
+        if ((err = firstError(R.validateEntryUpdate(eshape, payload, { ownerAllowed: ownerAllowed })))) return finish(req, 'Rejected', err);
+        if ('title' in payload) rec.Title = payload.title;
+        if ('description' in payload) rec.Description = payload.description;
+        if ('impact' in payload) rec.Impact = payload.impact;
+        if ('outcome' in payload) rec.Outcome = payload.outcome;
+        if ('responsibleId' in payload) rec.ResponsiblePersonId = Number(payload.responsibleId);
+        if ('status' in payload) { rec.Status = payload.status; rec.DateResolved = ['Resolved', 'Closed'].indexOf(payload.status) >= 0 ? new Date().toISOString() : null; }
+        bump();
+        recordEvent(req, key, 'Register Entry', rec.Id, 'status' in payload ? 'Entry Status Changed' : 'Entry Updated');
+        return finish(req, 'Completed', 'Entry saved.', rec.Id);
+      }
+      var action = data.Actions.filter(function (a) { return a.Id === Number(payload.actionId); })[0];
+      if (!action) return finish(req, 'Rejected', 'That action could not be found.');
+      var linkedHere = action.SourceType === 'Register' && Number(action.SourceId) === rec.Id;
+      if (req.RequestType === 'LinkActionToEntry') {
+        if (action.CompetencyId !== rec.CompetencyId) return finish(req, 'Rejected', 'Choose an action in the same area as this entry.');
+        if (!action.IsOpen) return finish(req, 'Rejected', 'Choose an open action.');
+        if (action.SourceType === 'Register' && !linkedHere) return finish(req, 'Rejected', 'That action is already linked to another entry.');
+        action.SourceType = 'Register'; action.SourceId = rec.Id;
+      } else {
+        if (!linkedHere) return finish(req, 'Rejected', 'That action is not linked to this entry.');
+        action.SourceType = 'None'; action.SourceId = null;
+      }
+      bump();
+      recordEvent(req, key, 'Register Entry', rec.Id, req.RequestType === 'LinkActionToEntry' ? 'Action Linked' : 'Action Unlinked');
+      return finish(req, 'Completed', req.RequestType === 'LinkActionToEntry' ? 'Action linked.' : 'Action unlinked.', rec.Id);
+    }
+
     function process(req) {
       // The requester is whoever owns the folder the request sits in, never a typed value.
       var m = /\/Lists\/Requests\/u(\d+)$/.exec(req.FileDirRef);
@@ -66,13 +161,20 @@ window.MockFlow = (function () {
           ownerAllowed: function (key, id) { var o = person(id); return !!o && o.Status === 'Active' && (management(o) || !!membership(id, key)); } });
         var keys = Object.keys(errors);
         if (keys.length) return finish(req, 'Rejected', errors[keys[0]]);
+        var source = null;
+        if (payload.sourceEntryId) {
+          source = data['Improvements and Degradations'].filter(function (x) { return x.Id === Number(payload.sourceEntryId); })[0];
+          if (!source || source.FileDirRef.split('/').pop() !== payload.areaKey || ['Open', 'Under Review'].indexOf(source.Status) < 0) {
+            return finish(req, 'Rejected', 'That improvement or degradation could not be found in this area, or it is closed.');
+          }
+        }
         var id = nextId(data.Actions);
         var action = { Id: id, Title: payload.title, Description: payload.description, CompetencyId: areaId(payload.areaKey), LinkedCompetenciesId: [],
           AssignedToId: payload.ownerId, RaisedById: requester.SiteUserId, DateRaised: new Date().toISOString(),
           DueDay: D.toDueDay(payload.dueIso), OriginalDueDate: ukMidnight(payload.dueIso), Status: 'Open', IsOpen: true,
           Priority: payload.priority || 'Normal', RequiresCloseOut: !!payload.requiresCloseOut, ExtensionCount: 0, Revision: 1,
           PendingRequestKey: '', LastRequestKey: req.RequestKey, CreatedRequestKey: 'F|' + req.RequestKey,
-          FileDirRef: ROOT + 'Actions/' + payload.areaKey };
+          FileDirRef: ROOT + 'Actions/' + payload.areaKey, SourceType: source ? 'Register' : 'None', SourceId: source ? source.Id : null };
         data.Actions.push(action);
         event(req, action, { EventType: 'Action Raised', NewDueDate: ukMidnight(payload.dueIso) });
         return finish(req, 'Completed', 'ACT-' + ('0000' + id).slice(-5) + ' raised.', id);
@@ -139,6 +241,17 @@ window.MockFlow = (function () {
         tx.State = 'Applied';   // the retried change goes through at once in the simulation
         return finish(req, 'Completed', 'Being tried again.', tx.Id);
       }
+
+      if (req.RequestType === 'UpdateSetting') {
+        if (!requester.IsAdministrator) return finish(req, 'Rejected', 'Only a Competency Hub administrator can do this.');
+        var row = data['Competency Hub Settings'].filter(function (x) { return x.Title === payload.name; })[0];
+        if (!row) return finish(req, 'Rejected', 'Choose a setting.');
+        row.Value = String(payload.value);
+        data.History.push({ Id: nextId(data.History), RowKind: 'Event', RequestKey: req.RequestKey + '|1', RecordType: 'Setting', EventType: 'Setting Changed',
+          ActorId: req.AuthorId, EventTime: new Date().toISOString(), FileDirRef: ROOT + 'History/Administration' });
+        return finish(req, 'Completed', 'Setting saved.');
+      }
+      if (RECORDS.indexOf(req.RequestType) >= 0) return records(req, payload, requester, access);
 
       var target = data.Actions.filter(function (a) { return a.Id === Number(req.TargetId); })[0];
       if (!target) return finish(req, 'Rejected', 'That action could not be found.');

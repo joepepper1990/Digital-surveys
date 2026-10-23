@@ -2,6 +2,29 @@
 
 Plain HTML, CSS and JavaScript, delivered as a Welcome by Accelerator 365 custom layout. Same-origin SharePoint REST runs as the signed-in user. There are no libraries and no external calls.
 
+## Version 0.7.0: Release 3 – noticeboard, register, feedback, settings and the management page
+
+- **Notices** open in full from the home area panel and the area page (`views/record-panel.js`). Members and
+  management comment (an instant write to `Updates/{area}`); members flag a notice for the next meeting and the flagger,
+  the author, meeting runners and management withdraw it; the discussion history lists both. The author, and the
+  area's engineers and management, edit and archive; only engineers and management pin and hide comments. Those are
+  requests to the *4 Records* flow, shown as being recorded until its History event exists.
+- **Improvements and degradations** (`views/entry-form.js`, `views/record-panel.js`): raise one; change its status
+  (an outcome is needed to resolve or close it) and details; raise a linked action or link an existing one – the
+  action itself carries the link (`SourceType` Register, `SourceId`), never a copy. They appear in the area panel's
+  *Notices & issues* column and on the area page, with a filter.
+- **Feedback** button in the footer of every page (`views/feedback.js`), so it never covers anything; it saves straight
+  to the Feedback list and says "Thanks" only once SharePoint confirms it. Administrators review it under
+  **Administration → Feedback** – the only direct edit the app makes (`sp.update`), on a list only they can edit.
+- **Administration → Settings** (`views/settings.js`): the five safe values, checked here and by the flow. *Due soon*
+  (`DueSoonDays`) now drives "due soon" on every screen.
+- **Management** page for Team Leaders and the Group Head (`views/dashboard.js`): group figures and an area table;
+  every number opens exactly the actions it counts. Closed actions are read on demand for the chosen period.
+- Changes to notices and the register pause on their own if *4 Records* stops (`health.records`); comments and flags
+  carry on. Links: `?notice=ID`, `?entry=ID`, `?view=manage`.
+- Fixed: the Administration health card said the queue monitor had not reported whenever administration was healthy;
+  background loads on the Administration page no longer repaint over a form being filled in on another tab.
+
 ## Version 0.6.0: the new home page ("My week")
 
 The home page approved on 23 October 2026 (preview: `preview/designs/design-4-week.html`):

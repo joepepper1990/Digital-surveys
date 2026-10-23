@@ -11,6 +11,8 @@ CH.requests = (function () {
   var OPEN_STATUSES = ['Submitted', 'Processing', 'Failed'];
   // An administrator's decision about another change: it is confirmed by its own request alone.
   var ADMIN_TYPES = ['RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting'];
+  // Notices, comments and the register (4 Records): confirmed by their History event, which is written before Completed.
+  var RECORD_TYPES = ['EditNotice', 'ArchiveNotice', 'PinNotice', 'HideComment', 'RaiseRegisterEntry', 'UpdateRegisterEntry', 'LinkActionToEntry', 'UnlinkActionFromEntry'];
 
   // Thrown instead of sending while automatic processing is down (limited mode).
   function LimitedError(message) { this.name = 'LimitedError'; this.message = message; this.friendly = message; }
@@ -44,7 +46,7 @@ CH.requests = (function () {
     function values(spec) {
       return {
         Title: String(spec.label).slice(0, 255), RequestKey: spec.key, RequestType: spec.type,
-        TargetType: spec.targetId ? 'Action' : '', TargetId: spec.targetId || '', ExpectedRevision: spec.expectedRevision || '',
+        TargetType: spec.targetId ? spec.targetType || 'Action' : '', TargetId: spec.targetId || '', ExpectedRevision: spec.expectedRevision || '',
         Payload: JSON.stringify(spec.payload), Status: 'Submitted'
       };
     }
@@ -57,7 +59,8 @@ CH.requests = (function () {
 
     // spec: { type, targetId, expectedRevision, payload, label, key? }. Resolves to the tracked entry.
     async function submit(spec) {
-      if (ADMIN_TYPES.indexOf(spec.type) < 0 && app.queueBlocked && app.queueBlocked()) {
+      var blocked = RECORD_TYPES.indexOf(spec.type) >= 0 ? app.recordsBlocked && app.recordsBlocked() : ADMIN_TYPES.indexOf(spec.type) < 0 && app.queueBlocked && app.queueBlocked();
+      if (blocked) {
         throw new LimitedError('Changes cannot be processed at the moment, so nothing was sent. You can still read everything and add updates. Please try again later.');
       }
       spec.key = spec.key || newKey();
@@ -75,7 +78,7 @@ CH.requests = (function () {
         }
       }
       writeUnsent(readUnsent().filter(function (u) { return u.key !== spec.key; }));
-      var entry = { key: spec.key, type: spec.type, targetId: spec.targetId || null, label: spec.label, submittedAt: new Date(),
+      var entry = { key: spec.key, type: spec.type, targetId: spec.targetId || null, targetType: spec.targetId ? spec.targetType || 'Action' : '', label: spec.label, submittedAt: new Date(),
         state: 'submitted', message: '', resultId: null, polls: 0 };
       entries.push(entry);
       schedule(entry);
@@ -92,13 +95,13 @@ CH.requests = (function () {
       var since = new Date(Date.now() - 24 * 3600000).toISOString();
       for (var i = 0; i < statuses.length; i++) {
         var recent = statuses[i] === 'Cancelled' || statuses[i] === 'Reverted' ? " and Modified ge datetime'" + since + "'" : '';
-        var res = await app.sp.items(CH.config.lists.requests.title, '$select=Id,Title,RequestKey,RequestType,TargetId,Created' +
+        var res = await app.sp.items(CH.config.lists.requests.title, '$select=Id,Title,RequestKey,RequestType,TargetType,TargetId,Created' +
           "&$filter=Status eq '" + statuses[i] + "' and AuthorId eq " + Number(app.person.SiteUserId) + recent, 100);
         found = found.concat(res.rows);
       }
       found.sort(function (a, b) { return a.Id - b.Id; }).forEach(function (row) {
         if (!row.RequestKey || entries.some(function (e) { return e.key === row.RequestKey; })) return;
-        var entry = { key: row.RequestKey, type: row.RequestType, targetId: row.TargetId || null, label: row.Title || 'Your change',
+        var entry = { key: row.RequestKey, type: row.RequestType, targetId: row.TargetId || null, targetType: row.TargetType || (row.TargetId ? 'Action' : ''), label: row.Title || 'Your change',
           submittedAt: row.Created ? new Date(row.Created) : new Date(), state: 'submitted', message: '', resultId: null, polls: 0 };
         entries.push(entry);
         schedule(entry);
@@ -157,6 +160,12 @@ CH.requests = (function () {
     // The action itself must show this change, with no lock left on it.
     async function confirmed(entry, row) {
       if (ADMIN_TYPES.indexOf(entry.type) >= 0) return true;
+      if (RECORD_TYPES.indexOf(entry.type) >= 0) {
+        try {
+          var evr = await app.sp.items(CH.config.lists.history.title, "$select=Id&$filter=RequestKey eq '" + q(entry.key + '|1') + "'", 1);
+          return evr.rows.length > 0;
+        } catch (_) { return false; }
+      }
       var id = Number(row.ResultId || entry.targetId);
       if (!id) return false;
       try {
@@ -206,9 +215,10 @@ CH.requests = (function () {
       submit: submit,
       resume: resume,
       entries: function () { return entries.slice(); },
-      // The newest unfinished or unread request for an action.
-      forTarget: function (id) {
-        return entries.filter(function (e) { return Number(e.targetId) === Number(id) && !e.dismissed; }).slice(-1)[0] || null;
+      // The newest unfinished or unread request for a record (an action unless another kind is named).
+      forTarget: function (id, targetType) {
+        var kind = targetType || 'Action';
+        return entries.filter(function (e) { return Number(e.targetId) === Number(id) && (e.targetType || 'Action') === kind && !e.dismissed; }).slice(-1)[0] || null;
       },
       dismiss: function (entry) { entry.dismissed = true; onChange(entry); },
       unsent: readUnsent,
@@ -224,6 +234,6 @@ CH.requests = (function () {
 
   var RETRYING = 'Not recorded yet – retrying automatically.';
 
-  return { tracker: tracker, newKey: newKey, SCHEDULE: SCHEDULE, GIVE_UP_MINUTES: GIVE_UP_MINUTES, ADMIN_TYPES: ADMIN_TYPES,
+  return { tracker: tracker, newKey: newKey, SCHEDULE: SCHEDULE, GIVE_UP_MINUTES: GIVE_UP_MINUTES, ADMIN_TYPES: ADMIN_TYPES, RECORD_TYPES: RECORD_TYPES,
     LimitedError: LimitedError, RETRYING: RETRYING };
 })();

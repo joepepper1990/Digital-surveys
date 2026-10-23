@@ -75,7 +75,7 @@ CH.sp = (function () {
       return { rows: rows.slice(0, limit), complete: complete };
     }
 
-    function currentUser() { return req('GET', siteUrl + '/_api/web/currentuser?$select=Id,Title,Email'); }
+    function currentUser() { return req('GET', siteUrl + '/_api/web/currentuser?$select=Id,Title,Email,LoginName'); }
 
     // The signed-in user's first name from their Microsoft 365 profile, or '' if it cannot be read.
     async function myFirstName() {
@@ -95,7 +95,7 @@ CH.sp = (function () {
       var list = CH.config.lists[listKey];
       var body = {
         listItemCreateInfo: {
-          FolderPath: { DecodedUrl: siteRelative + '/Lists/' + list.url + '/' + folder },
+          FolderPath: { DecodedUrl: siteRelative + '/Lists/' + list.url + (folder ? '/' + folder : '') },
           UnderlyingObjectType: 0
         },
         formValues: Object.keys(values).map(function (k) { return { FieldName: k, FieldValue: String(values[k]) }; }),
@@ -109,7 +109,19 @@ CH.sp = (function () {
       return idField ? Number(idField.FieldValue) : null;
     }
 
-    return { siteUrl: siteUrl, origin: origin, siteRelative: siteRelative, items: items, currentUser: currentUser, myFirstName: myFirstName, addToFolder: addToFolder };
+    // Changes fields on an item the user may edit (administrators answering feedback). Every HasException is checked.
+    async function update(listKey, id, values) {
+      var list = CH.config.lists[listKey];
+      var body = { formValues: Object.keys(values).map(function (k) { return { FieldName: k, FieldValue: String(values[k]) }; }), bNewDocumentUpdate: false };
+      var verb = 'ValidateUpdateListItem';
+      var json = await req('POST', listPath(list.title) + '/items(' + Number(id) + ')/' + verb, body);
+      var results = (json && (json.value || (json.d && json.d[verb] && json.d[verb].results))) || [];
+      var failed = results.filter(function (r) { return r.HasException; });
+      if (failed.length) throw new SpError(400, failed.map(function (r) { return r.FieldName + ': ' + r.ErrorMessage; }).join('; '));
+    }
+
+    return { siteUrl: siteUrl, origin: origin, siteRelative: siteRelative, items: items, currentUser: currentUser, myFirstName: myFirstName, addToFolder: addToFolder,
+      update: update };
   }
 
   // The last folder segment of an item's FileDirRef (e.g. '.../Lists/Noticeboard/FLK' -> 'FLK').

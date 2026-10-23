@@ -67,20 +67,26 @@ CH.dates = (function () {
   function weekday(iso) { return DAYS[dayOfWeek(iso)]; }
   function weekdayShort(iso) { return weekday(iso).slice(0, 3) + ' ' + short(iso); }
 
-  // Plain-English wording for a deadline relative to today (plan C.9).
+  // Plain-English wording for a deadline relative to today (plan C.9). "Due soon" covers the days an administrator
+  // sets (DueSoonDays, 7 unless changed).
   function dueWords(dueIso, todayIso) {
+    var soonDays = (CH.config && CH.config.dueSoonDays) || 7;
     var d = daysBetween(todayIso, dueIso);
     if (d < 0) return { group: 'late', text: (-d) + (d === -1 ? ' day late' : ' days late') };
     if (d === 0) return { group: 'soon', text: 'Due today' };
-    if (d === 1) return { group: 'soon', text: 'Due tomorrow' };
-    if (d < 7) return { group: 'soon', text: 'Due ' + weekday(dueIso) };
-    if (d === 7) return { group: 'soon', text: 'Due ' + short(dueIso) };
-    return { group: 'later', text: 'Due ' + short(dueIso) };
+    if (d === 1) return { group: d <= soonDays ? 'soon' : 'later', text: 'Due tomorrow' };
+    return { group: d <= soonDays ? 'soon' : 'later', text: 'Due ' + (d < 7 ? weekday(dueIso) : short(dueIso)) };
+  }
+
+  // A moment as SharePoint's form fields take it on a UK site: dd/MM/yyyy HH:mm, UK time.
+  function ukFormDateTime(instant) {
+    var p = parts(instant instanceof Date ? instant : new Date(instant));
+    return p.day + '/' + p.month + '/' + p.year + ' ' + p.hour + ':' + p.minute;
   }
 
   return {
     localDate: localDate, ukTime: ukTime, addDays: addDays, daysBetween: daysBetween, dayOfWeek: dayOfWeek,
     mondayOf: mondayOf, toDueDay: toDueDay, fromDueDay: fromDueDay, isIso: isIso,
-    short: short, shortYear: shortYear, long: long, weekday: weekday, weekdayShort: weekdayShort, dueWords: dueWords
+    short: short, shortYear: shortYear, long: long, weekday: weekday, weekdayShort: weekdayShort, dueWords: dueWords, ukFormDateTime: ukFormDateTime
   };
 })();

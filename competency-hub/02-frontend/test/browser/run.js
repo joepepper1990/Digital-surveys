@@ -253,5 +253,63 @@ res = drive('as=' + RACHEL + '&drive=technicianRaise');
 check('a technician without meeting rights can only choose themselves as owner, and is told why', res.ok &&
   JSON.stringify(res.result.owners) === '["Rachel Boulden (you)"]' && res.result.shown && /for yourself in this area/.test(res.result.note), JSON.stringify(res));
 
+
+// Release 3: notices, comments and flags; the register; feedback; settings; the management overview
+res = drive('as=' + RACHEL + '&area=FLK&notice=1&drive=noticeRead', SLOW);
+check('notice: read in full with its comments; hidden comments are not shown', res.ok && res.result.body && res.result.kellysComment && !res.result.hiddenShown && res.result.flagged, JSON.stringify(res));
+check('notice: a technician who did not post it gets no edit, pin or archive, and cannot withdraw another\'s flag', res.ok && res.result.buttons.length === 0 && !res.result.withdraw, JSON.stringify(res));
+check('notice: a comment is saved at once, in the area\'s Updates folder', res.ok && res.result.saved &&
+  JSON.stringify(res.result.update) === '[{"folder":"FLK","type":"Comment","parent":"Notice:1","flag":false}]', JSON.stringify(res));
+check('notice: the author may edit and archive their own notice in another area, but not comment there', res.ok &&
+  JSON.stringify(res.result.own.buttons) === '["Edit","Archive"]' && !res.result.own.canComment && /Members of DSL and management can comment/.test(res.result.own.note), JSON.stringify(res));
+res = drive('as=' + KELLY + '&area=FLK&notice=2&drive=noticeModerate', SLOW);
+check('notice: pinning is shown as being recorded, then confirmed', res.ok && /Pin “Spare probe stock levels”/.test(res.result.pending) && res.result.pinned, JSON.stringify(res));
+check('notice: an edit is checked against its revision and saved', res.ok && res.result.title === 'Spare probes: two left in stores' && res.result.revision === 3, JSON.stringify(res));
+check('notice: flags are withdrawn and raised again, with a discussion history', res.ok && /Flag withdrawn by Kelly Bates/.test(res.result.history), JSON.stringify(res));
+check('notice: a moderator hides a comment', res.ok && res.result.hidden === true, JSON.stringify(res));
+check('notice: each change is a request to the Records flow, confirmed by its History event', res.ok &&
+  JSON.stringify(res.result.requests) === '["PinNotice:Completed:Notice","EditNotice:Completed:Notice","HideComment:Completed:Comment"]' &&
+  JSON.stringify(res.result.events) === '["Notice Pinned","Notice Edited","Comment Hidden"]', JSON.stringify(res));
+res = drive('as=' + KELLY + '&area=FLK&drive=registerFlow', SLOW);
+check('register: an empty entry is refused before sending', res.ok && /Give the entry a title/.test(res.result.emptyError), JSON.stringify(res));
+check('register: a raised entry appears in the area, in its folder, raised by the sender', res.ok && res.result.created &&
+  res.result.created.folder === 'FLK' && res.result.created.type === 'Degradation' && res.result.created.raisedBy === KELLY, JSON.stringify(res));
+check('register: an entry lists its linked actions', res.ok && res.result.linked, JSON.stringify(res));
+check('register: resolving needs an outcome; with one it is saved', res.ok && /Record the outcome/.test(res.result.outcomeError) && res.result.status === 'Resolved' &&
+  /recalibrated/.test(res.result.outcome) && !res.result.resolvedButtons, JSON.stringify(res));
+check('register: an existing action is linked (only unlinked actions of the area are offered)', res.ok && res.result.link === 2 &&
+  !res.result.choices.some((c) => /Replace FH40 probe/.test(c)) && res.result.choices.every((c) => !/Instrument|Green Stream/.test(c)), JSON.stringify(res));
+check('register: every change was a request from the sender\'s own folder', res.ok && res.result.writes.every((w) => w === 'Requests/u' + KELLY), JSON.stringify(res));
+res = drive('as=' + KELLY + '&area=FLK&entry=2&drive=raiseLinked', SLOW);
+check('register: "Raise a linked action" raises one action carrying the entry, in the entry\'s area', res.ok && /REG-00002/.test(res.result.heading) &&
+  JSON.stringify(res.result.areas) === '["FLK"]' && /REG-00002/.test(res.result.summary) && JSON.stringify(res.result.source) === '["Register",2]' && res.result.payloadEntry === 2, JSON.stringify(res));
+res = drive('as=' + RACHEL + '&drive=feedback');
+check('feedback: errors before sending, then "Thanks" only once saved', res.ok && /Tell us a little more/.test(res.result.emptyError) && /Thanks – your feedback has been sent/.test(res.result.toast), JSON.stringify(res));
+check('feedback: saved at the Feedback list root, by the sender; they can read only their own', res.ok && res.result.row && res.result.row.folder === 'Feedback' &&
+  res.result.row.author === RACHEL && res.result.row.status === 'New' && res.result.visible === 2 && JSON.stringify(res.result.writes) === '["Feedback/"]', JSON.stringify(res));
+[['1920,990', 'fitted home page'], ['1366,768', 'laptop']].forEach(([size, label]) => {
+  const d = open('as=' + RACHEL + '&drive=bubblePlace', ['--window-size=' + size, '--dump-dom']);
+  const m = /<pre id="drive-result">([\s\S]*?)<\/pre>/.exec(d.dom);
+  const x = m ? JSON.parse(m[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&')) : { ok: false };
+  check('feedback button (' + label + '): in view, covering no other control, here and on My actions', x.ok && x.result.home.inView && !x.result.home.overlaps.length && !x.result.mine.length, JSON.stringify(x));
+});
+res = drive('as=' + JOE + '&drive=feedbackReview', SLOW);
+check('feedback review: administrators see the list, respond and set the status', res.ok && res.result.listed.length === 2 && /From Rachel Boulden/.test(res.result.from) &&
+  res.result.status === 'Answered' && /fixed in the next version/.test(res.result.response) && res.result.by === JOE && res.result.on, JSON.stringify(res));
+check('feedback review: filters narrow the list', res.ok && res.result.doneFilter, JSON.stringify(res));
+res = drive('as=' + JOE + '&drive=settings', SLOW);
+check('settings: the five values are shown', res.ok && JSON.stringify(res.result.shown) === '["First reminder","Due soon","Late reminders","Furthest deadline","Queue monitor hours"]', JSON.stringify(res));
+check('settings: out-of-range values are refused; a good one is sent and recorded', res.ok && /from 1 to 30/.test(res.result.rangeError) &&
+  res.result.request.type === 'UpdateSetting' && res.result.request.payload.name === 'DueSoonDays' && res.result.request.payload.value === '10' && res.result.value === '10', JSON.stringify(res));
+res = drive('as=' + ROBERT + '&drive=dashboard', SLOW);
+check('management: group figures, and each opens exactly the actions it counts', res.ok && res.result.figs.Open === 26 && res.result.lateRows === res.result.figs.Late &&
+  /All areas – late/.test(res.result.lateTitle) && res.result.completedRows === res.result.figs.Completed && res.result.figs.Completed === 1, JSON.stringify(res));
+check('management: the area table drills down by the same rule, and the page writes nothing', res.ok && res.result.areaRows === 10 && res.result.rwDrill === res.result.rwLate &&
+  res.result.posts === 0, JSON.stringify(res));
+check('staff see no Management page', !/<button[^>]*>Management<\/button>/.test(dump('as=' + RACHEL).dom) && /<button[^>]*>Management<\/button>/.test(dump('as=' + ROBERT).dom));
+res = drive('as=' + RACHEL + '&view=area&area=FLK&drive=areaRegister');
+check('area page: Notices & issues lists the noticeboard (pinned first) and the open register entries, with a filter', res.ok &&
+  res.result.notices[0] === 'Calibration rig out of service' && JSON.stringify(res.result.entries) === '["REG-00002 Shared probe sign-out sheet","REG-00001 Calibration rig drift"]' &&
+  res.result.all === 3 && res.result.raise, JSON.stringify(res));
 console.log(failures ? failures + ' browser check(s) failed' : 'All browser checks passed');
 process.exit(failures ? 1 : 0);

@@ -145,8 +145,34 @@ window.MockSeed = function (todayIso) {
     flag(4, 'RW', 5, 'Flagged', 'Adam Washford', -1),
     flag(5, 'FLK', 2, 'Flag Withdrawn', 'Rachel Boulden', -4),   // not entitled to withdraw: ignored
     flag(6, 'FLK', 3, 'Flagged', 'Rachel Boulden', -1),          // notice 3 belongs to RP: ignored
-    flag(7, 'RW', 5, 'Flagged', 'Rachel Boulden', -1)            // not a Radwaste member: ignored
+    flag(7, 'RW', 5, 'Flagged', 'Rachel Boulden', -1),           // not a Radwaste member: ignored
+    { Id: 8, EntryType: 'Flagged', ParentType: 'Register Entry', ParentId: 1, AuthorId: idOf['Kelly Bates'], Created: at(-2, '11:30:00'),
+      FileDirRef: '/sites/ESGCompetencyHub/Lists/Updates/FLK', IsHidden: false, IsFlagEvent: true },
+    { Id: 101, EntryType: 'Comment', ParentType: 'Notice', ParentId: 1, AuthorId: idOf['Kelly Bates'], Created: at(-1, '12:05:00'), ClientKey: 'seed-101',
+      FileDirRef: '/sites/ESGCompetencyHub/Lists/Updates/FLK', IsHidden: false, IsFlagEvent: false, Body: 'The part is due on Thursday.' },
+    { Id: 102, EntryType: 'Comment', ParentType: 'Notice', ParentId: 1, AuthorId: idOf['Matt Henley'], Created: at(-1, '13:40:00'), ClientKey: 'seed-102',
+      FileDirRef: '/sites/ESGCompetencyHub/Lists/Updates/FLK', IsHidden: true, IsFlagEvent: false, Body: 'A comment a moderator has hidden.' }
   ];
+
+  // Improvements and degradations, as the Records flow creates them (in the area's folder).
+  // [id, area, type, impact, title, raisedBy, responsible, dayOffset, status, outcome]
+  var REGISTER = [
+    [1, 'FLK', 'Degradation', 'High', 'Calibration rig drift', 'Kelly Bates', 'Nick Pearce', -5, 'Open', ''],
+    [2, 'FLK', 'Improvement', 'Medium', 'Shared probe sign-out sheet', 'Rachel Boulden', 'Rachel Boulden', -3, 'Under Review', ''],
+    [3, 'RP', 'Concern', 'Medium', 'Survey route takes too long', 'Jenn Tibbenham', 'Andrea Medlicott', -8, 'Open', ''],
+    [4, 'GRS', 'Degradation', 'High', 'Pump seal weep getting worse', 'Kevin Hewitt', 'Kai Todd', -4, 'Open', ''],
+    [5, 'FLK', 'Positive Observation', 'Low', 'Good housekeeping in the Flask store', 'Ben Beak', 'Kelly Bates', -20, 'Closed', 'Shared at the monthly meeting as an example.']
+  ];
+  var register = REGISTER.map(function (r) {
+    return { Id: r[0], Title: r[4], Description: 'Synthetic test entry: ' + r[4].toLowerCase() + '.', EntryType: r[2], Impact: r[3], Status: r[8], Outcome: r[9],
+      RaisedById: idOf[r[5]], ResponsiblePersonId: idOf[r[6]], DateRaised: at(r[7], '10:00:00'), Created: at(r[7], '10:00:00'),
+      DateResolved: r[8] === 'Closed' ? at(r[7] + 5, '12:00:00') : null, Revision: 1, LastRequestKey: '', CompetencyId: area(r[1]),
+      CreatedRequestKey: 'IMPORT-REG-' + r[0], FileDirRef: '/sites/ESGCompetencyHub/Lists/ImprovementRegister/' + r[1] };
+  });
+  // One action already linked to an entry (spec REG-3: the action itself, never a copy).
+  actions.filter(function (a) { return a.Title === 'Replace FH40 probe'; })[0].SourceType = 'Register';
+  actions.filter(function (a) { return a.Title === 'Replace FH40 probe'; })[0].SourceId = 1;
+  notices.forEach(function (n) { n.Revision = 1; });
 
   // [area, nextOffset or null, lastOffset]
   var MEETINGS = [['FLK', 21, -7], ['INS', 22, -6], ['GRS', null, -49], ['RPE', 28, -1], ['BA', 23, -12], ['DOS', 29, 0],
@@ -167,12 +193,22 @@ window.MockSeed = function (todayIso) {
   return {
     'Competencies': competencies, 'People': people, 'Competency Members': members, 'Actions': actions,
     'Noticeboard': notices, 'Updates': updates, 'Meetings': meetings, 'Calendar Events': calendar,
-    'Requests': [], 'History': history,
+    'Requests': [], 'History': history, 'Improvements and Degradations': register,
+    'Feedback': [
+      { Id: 1, Title: 'Report a bug: dates', FeedbackType: 'Report a bug', Description: 'The calendar shows the wrong day for all-day events.', Status: 'New',
+        AuthorId: idOf['Rachel Boulden'], Created: at(-2, '09:12:00'), ClientKey: 'seed-fb-1', PageView: 'area' },
+      { Id: 2, Title: 'Suggest an improvement: colours', FeedbackType: 'Suggest an improvement', Description: 'Could late actions be shown at the top of every list?',
+        Status: 'Answered', Response: 'They are now shown first.', AuthorId: idOf['Luke Cain'], Created: at(-9, '14:30:00'), ClientKey: 'seed-fb-2', PageView: 'home' }
+    ],
     // The queue monitor reported five minutes ago and reminders ran this morning (spec REL-5).
     'Competency Hub Settings': [
       { Id: 1, Title: 'QueueHealth', Value: JSON.stringify({ state: 'Healthy', reason: '', checkedAt: new Date(Date.now() - 5 * 60000).toISOString(), attention: 0 }) },
       { Id: 2, Title: 'LastDailyRun', Value: at(0, '05:00:00') },
-      { Id: 3, Title: 'MonitorHours', Value: '07:00|19:45|60' }
+      { Id: 3, Title: 'MonitorHours', Value: '07:00|19:45|60' },
+      { Id: 4, Title: 'ReminderDaysBefore', Value: '7' },
+      { Id: 5, Title: 'DueSoonDays', Value: '7' },
+      { Id: 6, Title: 'OverdueReminderIntervalDays', Value: '7' },
+      { Id: 7, Title: 'MaxDeadlineYears', Value: '2' }
     ]
   };
 };

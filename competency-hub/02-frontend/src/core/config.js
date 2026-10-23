@@ -1,6 +1,6 @@
 // Fixed names and limits. Lists are addressed by display title; folders by list URL name.
 CH.config = {
-  VERSION: '0.6.0',
+  VERSION: '0.7.0',
   ENVIRONMENT: 'TEST',
   lists: {
     competencies: { title: 'Competencies', url: 'Competencies' },
@@ -13,7 +13,11 @@ CH.config = {
     meetings: { title: 'Meetings', url: 'Meetings' },
     requests: { title: 'Requests', url: 'Requests' },
     history: { title: 'History', url: 'History' },
-    settings: { title: 'Competency Hub Settings', url: 'Settings' }
+    settings: { title: 'Competency Hub Settings', url: 'Settings' },
+    register: { title: 'Improvements and Degradations', url: 'ImprovementRegister' },
+    feedback: { title: 'Feedback', url: 'Feedback' },
+    meetingItems: { title: 'Meeting Items', url: 'MeetingItems' },
+    minutes: { title: 'Meeting Minutes', url: 'MeetingMinutes' }
   },
   pageSize: 500,
   maxRows: 5000,

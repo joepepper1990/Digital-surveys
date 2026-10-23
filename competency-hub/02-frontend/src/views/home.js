@@ -149,12 +149,29 @@ CH.views.home = (function () {
     var acts = m.actions.filter(function (a) { return m.inArea(a, key); })
       .sort(function (a, b) { return (order[a.group] - order[b.group]) || byDue(a, b); })
       .map(function (a) { return actionCard(app, a, h('span', { class: 'hm-x', text: a.ownerName + (a.areaKey !== key ? ' · shared from ' + a.areaName : '') })); });
+    // Pinned and important notices first; then the other notices and the open register entries, newest first.
     var notices = m.notices.filter(function (n) { return n.areaKey === key; });
-    notices = notices.filter(function (n) { return n.important; }).concat(notices.filter(function (n) { return !n.important; }));
-    var news = notices.map(function (n) {
-      return h('div', { class: 'hm-rw' }, h('span', { class: 'hm-dot' + (n.important ? ' on' : ''), title: n.important ? 'Important' : null }),
+    var entries = m.entries.filter(function (e) { return e.areaKey === key && e.open; });
+    var rest = notices.filter(function (n) { return !n.important; }).map(function (n) { return { n: n, at: n.createdIso }; })
+      .concat(entries.map(function (e) { return { e: e, at: e.raisedIso }; }))
+      .sort(function (a, b) { return String(b.at).localeCompare(String(a.at)); });
+    var news = notices.filter(function (n) { return n.important; }).map(function (n) { return { n: n }; }).concat(rest).map(function (x) {
+      if (x.e) {
+        var en = x.e;
+        var note = app.recordNote('Register Entry', en.id);
+        return h('button', { type: 'button', class: 'hm-rw item-open', title: en.title, onclick: function () { app.openEntry(en); } },
+          h('span', { class: 'hm-dot' + (en.entryType === 'Degradation' ? ' bad' : ''), title: en.entryType }),
+          h('span', { class: 'hm-tx' }, h('b', { text: en.title }),
+            h('small', { text: en.entryType + ' · ' + en.impact + ' impact · ' + en.raisedByName + (en.raisedIso ? ' · ' + D.short(en.raisedIso) : '') +
+              (en.flagged ? ' · flagged' : '') + (note ? ' · ' + note : '') })));
+      }
+      var n = x.n;
+      var nnote = app.recordNote('Notice', n.id);
+      return h('button', { type: 'button', class: 'hm-rw item-open', title: n.title, onclick: function () { app.openNotice(n); } },
+        h('span', { class: 'hm-dot' + (n.important ? ' on' : ''), title: n.important ? 'Important' : null }),
         h('span', { class: 'hm-tx' }, h('b', { text: n.title }),
-          h('small', { text: (n.important ? 'Important · ' : '') + (n.fromOutside ? 'From ' + n.authorName + ', outside ' + area.name : n.authorName) + ' · ' + D.short(n.createdIso) })));
+          h('small', { text: (n.pinned ? 'Pinned · ' : n.important ? 'Important · ' : '') + (n.fromOutside ? 'From ' + n.authorName + ', outside ' + area.name : n.authorName) +
+            ' · ' + D.short(n.createdIso) + (n.flagged ? ' · flagged' : '') + (nnote ? ' · ' + nnote : '') })));
     });
     var diary = [];
     if (s.nextMeeting) diary.push(h('div', { class: 'hm-rw' }, h('span', { class: 'when w-ok', text: D.weekdayShort(s.nextMeeting) }),
@@ -181,14 +198,14 @@ CH.views.home = (function () {
         h('span', { class: 'hm-acts' },
           acc.canWrite(key) && area.status === 'Active' ? ui.button('Raise an action here', function () { app.raiseAction(key); }) : null,
           acc.canPostNotice(key) ? ui.button('Post a notice here', function () { app.postNotice(key); }) : null,
+          acc.canWrite(key) && area.status === 'Active' ? ui.button('Raise an issue', function () { app.raiseEntry(key); }) : null,
           ui.linkButton('Full page', full(0)),
           h('button', { type: 'button', class: 'hm-x-btn', 'aria-label': 'Close ' + area.name, text: '✕', onclick: function () { app.openAreaHere(null); } }))),
       h('div', { class: 'hm-pb' }, h('div', { class: 'hm-cols' },
         col('Actions', unavailable ? null : acts.length, unavailable ? ui.sectionNote('unavailable', 'actions')
           : acts.length ? ui.fitList(acts, 'all ' + area.name + ' actions', full(0), 'items') : h('p', { class: 'hm-empty', text: 'There are no open actions in ' + area.name + '.' })),
-        col('Notices & issues', notices.length, [ui.sectionNote(m.sections.notices, 'notices'),
-          news.length ? ui.fitList(news, 'all notices', full(1)) : h('p', { class: 'hm-empty', text: 'Nothing has been posted on the ' + area.name + ' noticeboard yet.' }),
-          h('p', { class: 'muted small hm-later', text: 'The improvements and degradations register joins this list in the next version.' })]),
+        col('Notices & issues', news.length, [ui.sectionNote(m.sections.notices, 'notices'), ui.sectionNote(m.sections.register, 'improvements and degradations'),
+          news.length ? ui.fitList(news, 'all notices and issues', full(1)) : h('p', { class: 'hm-empty', text: 'No notices, and no open improvements or degradations, in ' + area.name + '.' })]),
         col('Meetings & dates', null, ui.fitList(diary, 'calendar', full(2))))));
   }
 

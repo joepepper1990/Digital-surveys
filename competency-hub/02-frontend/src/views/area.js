@@ -25,18 +25,46 @@ CH.views.area = (function () {
     ];
   }
 
+  // Notices first (pinned and important at the top), then the improvements and degradations register (spec NB-1, REG-4).
   function noticesTab(app, area) {
-    var list = app.model.notices.filter(function (n) { return n.areaKey === area.key; });
+    var m = app.model;
+    var list = m.notices.filter(function (n) { return n.areaKey === area.key; });
+    list = list.filter(function (n) { return n.important; }).concat(list.filter(function (n) { return !n.important; }));
+    var filter = app.state.entryFilter || 'open';
+    var entries = m.entries.filter(function (e) {
+      return e.areaKey === area.key && (filter === 'all' || (filter === 'open' ? e.open : e.entryType === filter));
+    });
+    var typeSel = h('select', { 'aria-label': 'Show', onchange: function (e) { app.state.entryFilter = e.target.value; app.refreshView(); } },
+      [['open', 'Open entries'], ['all', 'All entries']].concat(CH.rules.ENTRY_TYPES.map(function (t) { return [t, t + 's']; })).map(function (o) {
+        return h('option', { value: o[0], selected: o[0] === filter ? true : null, text: o[1] });
+      }));
     return [
-      h('div', { class: 'row tab-actions' }, app.access.canPostNotice(area.key) ? ui.button('Post a notice', function () { app.postNotice(area.key); }) : null),
-      ui.sectionNote(app.model.sections.notices, 'notices'),
-      list.length ? h('ul', { class: 'plain' }, list.map(function (n) {
-        return h('li', null, h('span', null,
-          h('b', { text: n.title }), n.important ? ui.chip('soon', 'Important') : null, h('br'),
-          h('span', { class: 'notice-body', text: n.body.length > 240 ? n.body.slice(0, 240) + '…' : n.body }), h('br'),
-          h('span', { class: 'muted small', text: n.category + ' · ' + (n.fromOutside ? 'From ' + n.authorName + ', outside ' + area.name : n.authorName) + ' · ' + D.short(n.createdIso) })));
+      h('div', { class: 'row tab-actions' },
+        app.access.canPostNotice(area.key) ? ui.button('Post a notice', function () { app.postNotice(area.key); }) : null,
+        app.access.canWrite(area.key) && area.status === 'Active' ? ui.button('Raise an improvement or degradation', function () { app.raiseEntry(area.key); }) : null),
+      h('h2', { class: 'group-title', text: 'Noticeboard' }),
+      ui.sectionNote(m.sections.notices, 'notices'),
+      list.length ? h('ul', { class: 'items' }, list.map(function (n) {
+        var note = app.recordNote('Notice', n.id);
+        return h('li', null, h('button', { type: 'button', class: 'item-open', onclick: function () { app.openNotice(n); } },
+          h('span', null, h('span', { class: 't', text: n.title }),
+            h('span', { class: 's notice-body', text: n.body.length > 240 ? n.body.slice(0, 240) + '…' : n.body }),
+            h('span', { class: 's', text: n.category + ' · ' + (n.fromOutside ? 'From ' + n.authorName + ', outside ' + area.name : n.authorName) + ' · ' + D.short(n.createdIso) +
+              (n.flagged ? ' · flagged for the meeting' : '') + (note ? ' · ' + note : '') })),
+          n.pinned ? ui.chip('soon', 'Pinned') : n.important ? ui.chip('soon', 'Important') : null));
       })) : h('p', { class: 'muted', text: 'Nothing has been posted on the ' + area.name + ' noticeboard yet.' }),
-      h('p', { class: 'muted small', text: 'The improvements and degradations register appears here in the next version.' })
+      h('h2', { class: 'group-title' }, 'Improvements and degradations ', h('label', { class: 'inline-filter' }, typeSel)),
+      ui.sectionNote(m.sections.register, 'improvements and degradations'),
+      entries.length ? h('ul', { class: 'items' }, entries.map(function (e) {
+        var note = app.recordNote('Register Entry', e.id);
+        var linked = m.actions.filter(function (a) { return a.sourceType === 'Register' && Number(a.sourceId) === e.id; }).length;
+        return h('li', null, h('button', { type: 'button', class: 'item-open', onclick: function () { app.openEntry(e); } },
+          h('span', null, h('span', { class: 't', text: e.ref + ' ' + e.title }),
+            h('span', { class: 's', text: e.entryType + ' · ' + e.impact + ' impact · ' + (e.responsibleName ? e.responsibleName + ' responsible · ' : '') +
+              (e.raisedIso ? D.short(e.raisedIso) : '') + (linked ? ' · ' + linked + (linked === 1 ? ' linked action' : ' linked actions') : '') +
+              (e.flagged ? ' · flagged for the meeting' : '') + (note ? ' · ' + note : '') })),
+          CH.views.recordPanel.entryChip(e)));
+      })) : h('p', { class: 'muted', text: filter === 'open' ? 'No open improvements or degradations in ' + area.name + '.' : 'No entries to show.' })
     ];
   }
 
