@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.1.0",
   "areas": [
     { "key": "FLK", "title": "Flask", "sort": 10 },
     { "key": "INS", "title": "Instruments", "sort": 20 },
@@ -146,14 +146,18 @@
         { "name": "Payload", "title": "Payload", "type": "Note" },
         { "name": "ExpectedRevision", "title": "Expected Revision", "type": "Number" },
         { "name": "FirstClaimedAt", "title": "First Claimed At", "type": "DateTime", "indexed": true },
-        { "name": "State", "title": "State", "type": "Choice", "choices": ["Received", "Planned", "Applying", "Failed", "Needs attention", "Applied", "Void", "Rolled Back"], "indexed": true },
+        { "name": "State", "title": "State", "type": "Choice", "choices": ["Received", "Planned", "Applying", "Failed", "Needs attention", "Applied", "Void", "Rolled Back", "Cancelled", "Reverted"], "indexed": true },
         { "name": "StepsDone", "title": "Steps Done", "type": "Text", "max": 255 },
         { "name": "GuardKeys", "title": "Guard Keys", "type": "Text", "max": 255 },
         { "name": "RunId", "title": "Run ID", "type": "Text", "max": 100 },
         { "name": "LeaseUntil", "title": "Lease Until", "type": "DateTime", "indexed": true },
         { "name": "Attempts", "title": "Attempts", "type": "Number" },
         { "name": "NextAttemptAfter", "title": "Next Attempt After", "type": "DateTime", "indexed": true },
-        { "name": "LastError", "title": "Last Error", "type": "Note" }
+        { "name": "LastError", "title": "Last Error", "type": "Note" },
+        { "name": "OwnerId", "title": "Owner ID", "type": "Number" },
+        { "name": "PreviousOwnerId", "title": "Previous Owner ID", "type": "Number" },
+        { "name": "DueDayAtEvent", "title": "Due Day At Event", "type": "Number" },
+        { "name": "CompletionKind", "title": "Completion Kind", "type": "Choice", "choices": ["MarkedDone", "CloseOutConfirmed", "ClosedByManager", "ClosedNotCompleted", "Withdrawn"] }
       ]
     },
     {
@@ -283,7 +287,7 @@
         { "name": "MeetingId", "title": "Meeting ID", "type": "Number", "indexed": true },
         { "name": "ExpectedRevision", "title": "Expected Revision", "type": "Number" },
         { "name": "Payload", "title": "Payload", "type": "Note", "required": true },
-        { "name": "Status", "title": "Status", "type": "Choice", "choices": ["Uploading", "Submitted", "Processing", "Completed", "Rejected", "Failed", "Needs attention", "Upload incomplete"], "required": true, "default": "Submitted", "indexed": true },
+        { "name": "Status", "title": "Status", "type": "Choice", "choices": ["Uploading", "Submitted", "Processing", "Completed", "Rejected", "Failed", "Needs attention", "Upload incomplete", "Cancelled", "Reverted"], "required": true, "default": "Submitted", "indexed": true },
         { "name": "ResultMessage", "title": "Result Message", "type": "Note" },
         { "name": "ResultId", "title": "Result ID", "type": "Number" },
         { "name": "Attempts", "title": "Attempts", "type": "Number" },
@@ -343,6 +347,8 @@
     ["BootstrapCompletedOn", "", "Written by Setup when the first administrator is in place"],
     ["TestToday", "", "Test environments only"],
     ["TestFailAfterStep", "", "Test environments only"],
-    ["TestFailSend", "", "Test environments only"]
+    ["TestFailSend", "", "Test environments only"],
+    ["QueueHealth", "", "Written by the queue monitor: processing health and its last check"],
+    ["MonitorHours", "07:00|19:45|60", "Queue monitor: working hours start|end, and minutes between checks outside them"]
   ]
 }

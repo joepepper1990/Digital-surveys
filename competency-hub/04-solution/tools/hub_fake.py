@@ -40,6 +40,7 @@ class HubFake:
         self.writes = []                  # every write, in order: (method, path)
         self.calls = []                   # every SharePoint call, in order: (method, uri)
         self.fail_at = None               # 1-based index of a write that fails once (simulated interruption)
+        self.fail_if = None               # (method, list title, path) -> True: that write fails every time (a lasting fault)
         self.return_new_id = True         # AddValidateUpdateItemUsingPath lists the new item's Id among its results
         self.sent = []                    # emails the Outlook connector sent: {'to', 'subject', 'body'}
         self.mail_fail = []               # outcomes for the next sends, in order: 400 (refused), 500 or 'timeout' (unclear)
@@ -94,7 +95,7 @@ class HubFake:
         iid = lst['next']
         lst['next'] += 1
         it = {'id': iid, 'dir': path, 'fsobj': fsobj, 'author': author, 'editor': author, 'created': utc_iso(self.clock),
-              'version': 1, 'f': fields}
+              'modified': utc_iso(self.clock), 'version': 1, 'f': fields}
         lst['items'][iid] = it
         return it
 
@@ -138,6 +139,8 @@ class HubFake:
                 o[name] = it['author']
             elif name == 'Created':
                 o[name] = it['created']
+            elif name == 'Modified':
+                o[name] = it.get('modified', it['created'])
             else:
                 base = name[:-2] if name.endswith('Id') and name[:-2] in lst['fields'] else name
                 f = lst['fields'].get(base)
@@ -177,8 +180,10 @@ class HubFake:
         self.sent.append({'to': p['emailMessage/To'], 'subject': p['emailMessage/Subject'], 'body': p['emailMessage/Body']})
         return {}
 
-    def _write(self, method, path):
+    def _write(self, method, path, where=''):
         self.writes.append((method, path))
+        if self.fail_if and self.fail_if(method, path, where):
+            fail(500, 'simulated lasting fault on {0} {1}'.format(method, path))
         if self.fail_at is not None and len(self.writes) == self.fail_at:
             fail(500, 'simulated interruption at write {0}'.format(self.fail_at))
 
@@ -253,10 +258,12 @@ class HubFake:
                     self._set_rest(lst, it, k, v)
                 it['version'] += 1
                 it['editor'] = self.me
+                it['modified'] = utc_iso(self.clock)
                 return {}
         if method == 'POST' and rest == '/AddValidateUpdateItemUsingPath':
-            self._write('ADD', lst['Title'])
-            return self._add_validate(lst, json.loads(body))
+            data = json.loads(body)
+            self._write('ADD', lst['Title'], data['listItemCreateInfo']['FolderPath']['DecodedUrl'])
+            return self._add_validate(lst, data)
         fail(400, 'not simulated: {0} {1}'.format(method, uri))
 
     # ------------------------------------------------------------------ filters

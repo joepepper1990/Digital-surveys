@@ -263,7 +263,10 @@ CHS.engine = (function () {
             parameters: { __metadata: { type: 'SP.XmlSchemaFieldCreationInformation' }, SchemaXml: fieldXml(f, lookupId), Options: 8 }
           }, { verbose: true });
           cur = { InternalName: f.name, Title: f.name, Indexed: false, EnforceUniqueValues: false, Required: !!f.required };
-        } else ok++;
+        } else {
+          ok++;
+          if (f.type === 'Choice') await fieldChoices(l, f);
+        }
         await fieldProperties(l, f, cur);
       }
       if (l.titleUnique) {
@@ -272,6 +275,23 @@ CHS.engine = (function () {
       }
       if (made) note('create', step, (applying() ? 'Added ' : 'Would add ') + made + ' column' + (made === 1 ? '' : 's') + ' to "' + l.title + '".');
       if (ok && !made) note('ok', step, 'All ' + ok + ' columns already on "' + l.title + '".');
+    }
+
+    // Choices are only ever added (a later version may need a new value); none is removed or reordered.
+    async function fieldChoices(l, f) {
+      var step = 'Columns';
+      var path = listPath(l.key) + "/fields/getbyinternalnameortitle('" + f.name + "')";
+      var cur = await rest.get(path + '?$select=Choices');
+      var have = cur && cur.Choices ? (cur.Choices.results || cur.Choices) : [];
+      var missing = f.choices.filter(function (c) { return have.indexOf(c) < 0; });
+      if (!missing.length) return;
+      if (!applying()) { note('create', step, 'Would add the choice' + (missing.length === 1 ? ' ' : 's ') + missing.join(', ') + ' to "' + l.title + '"/' + f.name + '.'); return; }
+      await write(path, { __metadata: { type: 'SP.FieldChoice' }, Choices: { __metadata: { type: 'Collection(Edm.String)' }, results: have.concat(missing) } },
+        { verbose: true, merge: true });
+      var back = await rest.get(path + '?$select=Choices');
+      var now = back && back.Choices ? (back.Choices.results || back.Choices) : [];
+      if (missing.some(function (c) { return now.indexOf(c) < 0; })) note('stop', step, 'Column "' + f.name + '" on "' + l.title + '" did not keep its new choices.');
+      else note('create', step, 'Added the choice' + (missing.length === 1 ? ' ' : 's ') + missing.join(', ') + ' to "' + l.title + '"/' + f.name + '.');
     }
 
     async function fieldProperties(l, f, cur) {

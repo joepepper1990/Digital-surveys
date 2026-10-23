@@ -432,3 +432,34 @@ test('Securing a list never clears permissions already set on its folders', asyn
   assert.ok(site.writes.some((w) => /breakroleinheritance\(copyRoleAssignments=false,clearSubscopes=false\)/.test(w)));
   assert.ok(!site.writes.some((w) => /clearSubscopes=true/.test(w)));
 });
+
+test('An upgrade on a site made by an earlier schema adds the new columns and choices, keeps the data, and then has nothing to do', async () => {
+  const { site, run, ctx } = newSite();
+  // The site as an earlier Setup left it: without the History statistics columns, the new choices and settings.
+  const old = plain(schema);
+  const history = old.lists.filter((l) => l.key === 'history')[0];
+  history.fields = history.fields.filter((f) => ['OwnerId', 'PreviousOwnerId', 'DueDayAtEvent', 'CompletionKind'].indexOf(f.name) < 0);
+  history.fields.filter((f) => f.name === 'State')[0].choices = history.fields.filter((f) => f.name === 'State')[0].choices.filter((c) => c !== 'Cancelled' && c !== 'Reverted');
+  old.settings = old.settings.filter((s) => s[0] !== 'QueueHealth' && s[0] !== 'MonitorHours');
+  const rest = ctx.CHS.rest.create(site.ctx.getWebPart());
+  const first = await ctx.CHS.engine.create(rest, old, { log: () => {}, confirmGroupOwnersOnly: true, today: TODAY }).run('apply');
+  assert.equal(first.ok, true);
+  const hist = listByUrl(site, 'History');
+  assert.ok(!hist.fields.some((f) => f.InternalName === 'OwnerId'));
+  const check = await run('check');
+  const planned = check.entries.filter((e) => e.level === 'create').map((e) => e.text).join(' | ');
+  assert.match(planned, /Would add 4 columns to "History"/);
+  assert.match(planned, /Would add the choices Cancelled, Reverted to "History"\/State/);
+  assert.match(planned, /Would add 2 settings/);
+  const settingsBefore = rows(listByUrl(site, 'Settings')).length;
+  const apply = await run('apply');
+  assert.equal(apply.result.ok, true, apply.stops.join(' | '));
+  deq(hist.fields.filter((f) => f.InternalName === 'State')[0].Choices,
+    ['Received', 'Planned', 'Applying', 'Failed', 'Needs attention', 'Applied', 'Void', 'Rolled Back', 'Cancelled', 'Reverted']);
+  assert.ok(['OwnerId', 'PreviousOwnerId', 'DueDayAtEvent', 'CompletionKind'].every((n) => hist.fields.some((f) => f.InternalName === n)));
+  assert.equal(rows(listByUrl(site, 'Settings')).length, settingsBefore + 2);
+  site.writes.length = 0;
+  const again = await run('check');
+  assert.equal(again.result.created, 0, again.entries.filter((e) => e.level === 'create').map((e) => e.text).join(' | '));
+  deq(site.writes, []);
+});

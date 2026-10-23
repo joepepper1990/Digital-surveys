@@ -96,6 +96,23 @@
             ]
           }
         },
+        "Initialize_varAlerts": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varAlerts",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_varNotices": [
+              "Succeeded"
+            ]
+          }
+        },
         "Try": {
           "type": "Scope",
           "actions": {
@@ -244,7 +261,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['people']}')/items?$select=Id,Title,SiteUserId,Status,Email,Person/Name,Person/EMail&$expand=Person&$top=5000",
+                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['people']}')/items?$select=Id,Title,SiteUserId,Status,IsAdministrator,Email,Person/Name,Person/EMail&$expand=Person&$top=5000",
                   "parameters/headers": {
                     "Accept": "application/json;odata=nometadata"
                   }
@@ -253,6 +270,89 @@
               },
               "runAfter": {
                 "Window_end": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Admins": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Get_people')?['value']",
+                "where": "@and(equals(item()?['IsAdministrator'], true), equals(item()?['Status'], 'Active'))"
+              },
+              "runAfter": {
+                "Get_people": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Health_row": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Get_settings')?['value']",
+                "where": "@equals(item()?['Title'], 'QueueHealth')"
+              },
+              "runAfter": {
+                "Admins": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Health": {
+              "type": "Compose",
+              "inputs": "@json(if(empty(string(coalesce(first(body('Health_row'))?['Value'], ''))), '{}', string(first(body('Health_row'))?['Value'])))",
+              "runAfter": {
+                "Health_row": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Monitor_stale": {
+              "type": "If",
+              "expression": "@less(ticks(if(empty(string(coalesce(outputs('Health')?['checkedAt'], ''))), '2000-01-01T00:00:00Z', string(outputs('Health')?['checkedAt']))), ticks(addHours(utcNow(), -2)))",
+              "actions": {
+                "Monitor_stale_to": {
+                  "type": "Select",
+                  "inputs": {
+                    "from": "@body('Admins')",
+                    "select": {
+                      "send": "@and(true, equals(string(item()?['Status']), 'Active'))",
+                      "type": "ALR",
+                      "key": "@{concat('ALR|', 'monitor', '|', outputs('Today'), '|', first(split(string(coalesce(item()?['SiteUserId'], '')), '.')))}",
+                      "recipientId": "@{first(split(string(coalesce(item()?['SiteUserId'], '')), '.'))}",
+                      "login": "@{item()?['Person']?['Name']}",
+                      "email": "@{coalesce(item()?['Person']?['EMail'], item()?['Email'])}",
+                      "actor": "@{''}",
+                      "actionId": "@{'0'}",
+                      "title": "@{'The queue monitor is not running'}",
+                      "area": "@{''}",
+                      "dueIso": "@{outputs('Today')}",
+                      "originalIso": "@{outputs('Today')}",
+                      "previousIso": "@{''}",
+                      "extCount": "@int(0)",
+                      "note": "@{concat('The queue monitor last reported at ', string(coalesce(outputs('Health')?['checkedAt'], 'an unknown time')), ' (UTC). Changes that fail are not being retried automatically. In Power Automate, check that ESG Competency Hub | 3 Queue monitor is turned on and look at its run history.')}"
+                    }
+                  },
+                  "runAfter": {}
+                },
+                "Monitor_stale_add": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varAlerts",
+                    "value": "@union(variables('varAlerts'), body('Monitor_stale_to'))"
+                  },
+                  "runAfter": {
+                    "Monitor_stale_to": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {
+                "Health": [
                   "Succeeded"
                 ]
               }
@@ -276,7 +376,7 @@
                 "authentication": "@parameters('$authentication')"
               },
               "runAfter": {
-                "Get_people": [
+                "Monitor_stale": [
                   "Succeeded"
                 ]
               }
@@ -523,18 +623,36 @@
                 },
                 "Subject_D": {
                   "type": "Compose",
-                  "inputs": "@if(equals(items('Each_new_notice_D')?['type'], 'ASG'), concat('Action assigned to you: ', items('Each_new_notice_D')?['title']), if(equals(items('Each_new_notice_D')?['type'], 'EXT'), concat('Deadline moved: ', items('Each_new_notice_D')?['title']), if(equals(items('Each_new_notice_D')?['type'], 'RDY'), concat('Ready for your close-out check: ', items('Each_new_notice_D')?['title']), if(equals(items('Each_new_notice_D')?['type'], 'CLS'), concat('Action closed: ', items('Each_new_notice_D')?['title']), if(equals(items('Each_new_notice_D')?['type'], 'RAW'), concat('Action reassigned: ', items('Each_new_notice_D')?['title']), if(equals(items('Each_new_notice_D')?['type'], 'R7'), concat('Reminder: ', items('Each_new_notice_D')?['title'], ' is due in ', string(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_D')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_D')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000)), if(equals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_D')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_D')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000), 1), ' day', ' days')), if(equals(items('Each_new_notice_D')?['type'], 'DUE'), concat('Due today: ', items('Each_new_notice_D')?['title']), concat(items('Each_new_notice_D')?['title'], ' is ', string(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_D')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_D')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000))), if(equals(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_D')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_D')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000)), 1), ' day late', ' days late')))))))))",
+                  "inputs": "@if(equals(items('Each_new_notice_D')?['type'], 'ASG'), concat('Action assigned to you: ', items('Each_new_notice_D')?['title']), if(equals(items('Each_new_notice_D')?['type'], 'EXT'), concat('Deadline moved: ', items('Each_new_notice_D')?['title']), if(equals(items('Each_new_notice_D')?['type'], 'RDY'), concat('Ready for your close-out check: ', items('Each_new_notice_D')?['title']), if(equals(items('Each_new_notice_D')?['type'], 'CLS'), concat('Action closed: ', items('Each_new_notice_D')?['title']), if(equals(items('Each_new_notice_D')?['type'], 'RAW'), concat('Action reassigned: ', items('Each_new_notice_D')?['title']), if(equals(items('Each_new_notice_D')?['type'], 'R7'), concat('Reminder: ', items('Each_new_notice_D')?['title'], ' is due in ', string(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_D')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_D')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000)), if(equals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_D')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_D')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000), 1), ' day', ' days')), if(equals(items('Each_new_notice_D')?['type'], 'DUE'), concat('Due today: ', items('Each_new_notice_D')?['title']), if(equals(items('Each_new_notice_D')?['type'], 'ALR'), concat('Competency Hub needs attention: ', items('Each_new_notice_D')?['title']), concat(items('Each_new_notice_D')?['title'], ' is ', string(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_D')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_D')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000))), if(equals(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_D')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_D')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000)), 1), ' day late', ' days late'))))))))))",
                   "runAfter": {
                     "Token_D": [
                       "Succeeded"
                     ]
                   }
                 },
-                "Html_D": {
+                "Html_action_D": {
                   "type": "Compose",
                   "inputs": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:15px;color:#16222c\"><p style=\"color:#13516b;font-size:18px;font-weight:600;margin:0 0 12px\">ESG Competency Hub</p><p>@{if(equals(items('Each_new_notice_D')?['type'], 'ASG'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_D')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has given you an action in the ESG Competency Hub.'), if(equals(items('Each_new_notice_D')?['type'], 'EXT'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_D')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has moved the deadline of your action.'), if(equals(items('Each_new_notice_D')?['type'], 'RDY'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_D')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has marked this action as done. It is waiting for your close-out check.'), if(equals(items('Each_new_notice_D')?['type'], 'CLS'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_D')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has closed this action.'), if(equals(items('Each_new_notice_D')?['type'], 'RAW'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_D')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has given this action to someone else. It is no longer yours to do.'), if(equals(items('Each_new_notice_D')?['type'], 'R7'), concat('Your action is due in ', string(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_D')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_D')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000)), if(equals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_D')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_D')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000), 1), ' day.', ' days.')), if(equals(items('Each_new_notice_D')?['type'], 'DUE'), 'Your action is due today.', concat('Your action is ', string(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_D')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_D')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000))), if(equals(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_D')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_D')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000)), 1), ' day late.', ' days late.')))))))))}</p><table style=\"border-collapse:collapse;font-size:15px\"><tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">Action</td><td style=\"padding:4px 0\">@{concat('ACT-', substring(concat('0000', items('Each_new_notice_D')?['actionId']), sub(length(concat('0000', items('Each_new_notice_D')?['actionId'])), 5), 5))} – @{replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_D')?['title'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;')}</td></tr><tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">Area</td><td style=\"padding:4px 0\">@{replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_D')?['area'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;')}</td></tr><tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">Deadline</td><td style=\"padding:4px 0\">@{if(empty(string(coalesce(items('Each_new_notice_D')?['dueIso'], ''))), '', formatDateTime(concat(if(empty(string(coalesce(items('Each_new_notice_D')?['dueIso'], ''))), '2000-01-01', string(items('Each_new_notice_D')?['dueIso'])), 'T00:00:00Z'), 'd MMMM yyyy'))}@{if(and(greater(items('Each_new_notice_D')?['extCount'], 0), not(equals(items('Each_new_notice_D')?['originalIso'], items('Each_new_notice_D')?['dueIso']))), concat(' (originally ', if(empty(string(coalesce(items('Each_new_notice_D')?['originalIso'], ''))), '', formatDateTime(concat(if(empty(string(coalesce(items('Each_new_notice_D')?['originalIso'], ''))), '2000-01-01', string(items('Each_new_notice_D')?['originalIso'])), 'T00:00:00Z'), 'd MMMM yyyy')), ')'), '')}</td></tr>@{if(equals(items('Each_new_notice_D')?['type'], 'EXT'), concat('<tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">Was due</td><td style=\"padding:4px 0\">', if(empty(string(coalesce(items('Each_new_notice_D')?['previousIso'], ''))), '', formatDateTime(concat(if(empty(string(coalesce(items('Each_new_notice_D')?['previousIso'], ''))), '2000-01-01', string(items('Each_new_notice_D')?['previousIso'])), 'T00:00:00Z'), 'd MMMM yyyy')), '</td></tr>'), '')}@{if(empty(items('Each_new_notice_D')?['note']), '', concat('<tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">', if(contains(createArray('EXT', 'RAW', 'ASG'), items('Each_new_notice_D')?['type']), 'Reason', 'Note'), '</td><td style=\"padding:4px 0\">', replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_D')?['note'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td></tr>'))}</table><p style=\"margin:20px 0\"><a href=\"@{outputs('Site_url')}/SitePages/Hub.aspx?action=@{items('Each_new_notice_D')?['actionId']}\" style=\"background:#13516b;color:#ffffff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600\">Open the action</a></p><p style=\"color:#5b6774;font-size:12px\">This is an automated message from the ESG Competency Hub. Reference @{outputs('Token_D')}.</p></div>",
                   "runAfter": {
                     "Subject_D": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Html_alert_D": {
+                  "type": "Compose",
+                  "inputs": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:15px;color:#16222c\"><p style=\"color:#13516b;font-size:18px;font-weight:600;margin:0 0 12px\">ESG Competency Hub</p><p><b>@{replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_D')?['title'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;')}</b></p><p>@{replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_D')?['note'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;')}</p><p style=\"margin:20px 0\"><a href=\"@{outputs('Site_url')}/SitePages/Hub.aspx?view=admin\" style=\"background:#13516b;color:#ffffff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600\">Open Changes needing attention</a></p><p style=\"color:#5b6774;font-size:12px\">This is an automated alert from the ESG Competency Hub, sent to its administrators. Reference @{outputs('Token_D')}.</p></div>",
+                  "runAfter": {
+                    "Html_action_D": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Html_D": {
+                  "type": "Compose",
+                  "inputs": "@if(equals(items('Each_new_notice_D')?['type'], 'ALR'), outputs('Html_alert_D'), outputs('Html_action_D'))",
+                  "runAfter": {
+                    "Html_alert_D": [
                       "Succeeded"
                     ]
                   }
@@ -586,7 +704,7 @@
                     },
                     {
                       "FieldName": "RecordType",
-                      "FieldValue": "Action"
+                      "FieldValue": "@{if(equals(items('Each_new_notice_D')?['type'], 'ALR'), 'System', 'Action')}"
                     },
                     {
                       "FieldName": "RecordId",
@@ -832,7 +950,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/items?$select=Id,NotificationKey,NotificationType,State,Attempts,DueDay,NextAttemptAfter,SendingSince,RenderData&$filter=State eq 'Failed'&$top=5000",
+                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/items?$select=Id,NotificationKey,NotificationType,State,Attempts,DueDay,NextAttemptAfter,SendingSince,RenderData,LastError&$filter=State eq 'Failed'&$top=5000",
                   "parameters/headers": {
                     "Accept": "application/json;odata=minimalmetadata"
                   }
@@ -856,7 +974,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/items?$select=Id,NotificationKey,NotificationType,State,Attempts,DueDay,NextAttemptAfter,SendingSince,RenderData&$filter=State eq 'Unknown'&$top=5000",
+                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/items?$select=Id,NotificationKey,NotificationType,State,Attempts,DueDay,NextAttemptAfter,SendingSince,RenderData,LastError&$filter=State eq 'Unknown'&$top=5000",
                   "parameters/headers": {
                     "Accept": "application/json;odata=minimalmetadata"
                   }
@@ -880,7 +998,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/items?$select=Id,NotificationKey,NotificationType,State,Attempts,DueDay,NextAttemptAfter,SendingSince,RenderData&$filter=State eq 'Sending'&$top=5000",
+                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/items?$select=Id,NotificationKey,NotificationType,State,Attempts,DueDay,NextAttemptAfter,SendingSince,RenderData,LastError&$filter=State eq 'Sending'&$top=5000",
                   "parameters/headers": {
                     "Accept": "application/json;odata=minimalmetadata"
                   }
@@ -958,6 +1076,46 @@
                           "Succeeded"
                         ]
                       }
+                    },
+                    "Abandon_alerts": {
+                      "type": "Select",
+                      "inputs": {
+                        "from": "@body('Admins')",
+                        "select": {
+                          "send": "@and(true, equals(string(item()?['Status']), 'Active'))",
+                          "type": "ALR",
+                          "key": "@{concat('ALR|', concat('email|', string(items('Each_retry')?['Id'])), '|', outputs('Today'), '|', first(split(string(coalesce(item()?['SiteUserId'], '')), '.')))}",
+                          "recipientId": "@{first(split(string(coalesce(item()?['SiteUserId'], '')), '.'))}",
+                          "login": "@{item()?['Person']?['Name']}",
+                          "email": "@{coalesce(item()?['Person']?['EMail'], item()?['Email'])}",
+                          "actor": "@{''}",
+                          "actionId": "@{'0'}",
+                          "title": "@{concat('An email could not be sent: ', string(outputs('Render_r')?['subject']))}",
+                          "area": "@{''}",
+                          "dueIso": "@{outputs('Today')}",
+                          "originalIso": "@{outputs('Today')}",
+                          "previousIso": "@{''}",
+                          "extCount": "@int(0)",
+                          "note": "@{concat('It was tried 3 times and has been given up. It was for ', string(outputs('Render_r')?['to']), '. ', string(coalesce(items('Each_retry')?['LastError'], '')))}"
+                        }
+                      },
+                      "runAfter": {
+                        "Abandon": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Add_abandon_alerts": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "varAlerts",
+                        "value": "@union(variables('varAlerts'), body('Abandon_alerts'))"
+                      },
+                      "runAfter": {
+                        "Abandon_alerts": [
+                          "Succeeded"
+                        ]
+                      }
                     }
                   },
                   "else": {
@@ -996,7 +1154,7 @@
                       },
                       "Still_wanted_r": {
                         "type": "If",
-                        "expression": "@and(not(empty(body('Person_r'))), equals(actions('Get_action_r')?['status'], 'Succeeded'), equals(body('Get_action_r')?['IsOpen'], true), or(not(contains(createArray('R7', 'DUE', 'OD'), string(items('Each_retry')?['NotificationType']))), and(equals(first(split(string(coalesce(body('Get_action_r')?['DueDay'], '')), '.')), first(split(string(coalesce(items('Each_retry')?['DueDay'], '')), '.'))), equals(first(split(string(coalesce(body('Get_action_r')?['AssignedToId'], '')), '.')), string(outputs('Render_r')?['recipientId'])))))",
+                        "expression": "@and(not(empty(body('Person_r'))), or(equals(string(items('Each_retry')?['NotificationType']), 'ALR'), and(equals(actions('Get_action_r')?['status'], 'Succeeded'), equals(body('Get_action_r')?['IsOpen'], true), or(not(contains(createArray('R7', 'DUE', 'OD'), string(items('Each_retry')?['NotificationType']))), and(equals(first(split(string(coalesce(body('Get_action_r')?['DueDay'], '')), '.')), first(split(string(coalesce(items('Each_retry')?['DueDay'], '')), '.'))), equals(first(split(string(coalesce(body('Get_action_r')?['AssignedToId'], '')), '.')), string(outputs('Render_r')?['recipientId'])))))))",
                         "actions": {
                           "Claim_body_r": {
                             "type": "Compose",
@@ -1121,13 +1279,345 @@
                 ]
               }
             },
+            "Each_new_notice_A": {
+              "type": "Foreach",
+              "foreach": "@variables('varAlerts')",
+              "runtimeConfiguration": {
+                "concurrency": {
+                  "repetitions": 1
+                }
+              },
+              "actions": {
+                "Token_A": {
+                  "type": "Compose",
+                  "inputs": "@concat('ESGN', toUpper(take(replace(guid(), '-', ''), 10)))",
+                  "runAfter": {}
+                },
+                "Subject_A": {
+                  "type": "Compose",
+                  "inputs": "@if(equals(items('Each_new_notice_A')?['type'], 'ASG'), concat('Action assigned to you: ', items('Each_new_notice_A')?['title']), if(equals(items('Each_new_notice_A')?['type'], 'EXT'), concat('Deadline moved: ', items('Each_new_notice_A')?['title']), if(equals(items('Each_new_notice_A')?['type'], 'RDY'), concat('Ready for your close-out check: ', items('Each_new_notice_A')?['title']), if(equals(items('Each_new_notice_A')?['type'], 'CLS'), concat('Action closed: ', items('Each_new_notice_A')?['title']), if(equals(items('Each_new_notice_A')?['type'], 'RAW'), concat('Action reassigned: ', items('Each_new_notice_A')?['title']), if(equals(items('Each_new_notice_A')?['type'], 'R7'), concat('Reminder: ', items('Each_new_notice_A')?['title'], ' is due in ', string(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_A')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000)), if(equals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_A')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000), 1), ' day', ' days')), if(equals(items('Each_new_notice_A')?['type'], 'DUE'), concat('Due today: ', items('Each_new_notice_A')?['title']), if(equals(items('Each_new_notice_A')?['type'], 'ALR'), concat('Competency Hub needs attention: ', items('Each_new_notice_A')?['title']), concat(items('Each_new_notice_A')?['title'], ' is ', string(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_A')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000))), if(equals(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_A')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000)), 1), ' day late', ' days late'))))))))))",
+                  "runAfter": {
+                    "Token_A": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Html_action_A": {
+                  "type": "Compose",
+                  "inputs": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:15px;color:#16222c\"><p style=\"color:#13516b;font-size:18px;font-weight:600;margin:0 0 12px\">ESG Competency Hub</p><p>@{if(equals(items('Each_new_notice_A')?['type'], 'ASG'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_A')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has given you an action in the ESG Competency Hub.'), if(equals(items('Each_new_notice_A')?['type'], 'EXT'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_A')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has moved the deadline of your action.'), if(equals(items('Each_new_notice_A')?['type'], 'RDY'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_A')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has marked this action as done. It is waiting for your close-out check.'), if(equals(items('Each_new_notice_A')?['type'], 'CLS'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_A')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has closed this action.'), if(equals(items('Each_new_notice_A')?['type'], 'RAW'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_A')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has given this action to someone else. It is no longer yours to do.'), if(equals(items('Each_new_notice_A')?['type'], 'R7'), concat('Your action is due in ', string(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_A')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000)), if(equals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_A')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000), 1), ' day.', ' days.')), if(equals(items('Each_new_notice_A')?['type'], 'DUE'), 'Your action is due today.', concat('Your action is ', string(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_A')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000))), if(equals(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_A')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000)), 1), ' day late.', ' days late.')))))))))}</p><table style=\"border-collapse:collapse;font-size:15px\"><tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">Action</td><td style=\"padding:4px 0\">@{concat('ACT-', substring(concat('0000', items('Each_new_notice_A')?['actionId']), sub(length(concat('0000', items('Each_new_notice_A')?['actionId'])), 5), 5))} – @{replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_A')?['title'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;')}</td></tr><tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">Area</td><td style=\"padding:4px 0\">@{replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_A')?['area'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;')}</td></tr><tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">Deadline</td><td style=\"padding:4px 0\">@{if(empty(string(coalesce(items('Each_new_notice_A')?['dueIso'], ''))), '', formatDateTime(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['dueIso'], ''))), '2000-01-01', string(items('Each_new_notice_A')?['dueIso'])), 'T00:00:00Z'), 'd MMMM yyyy'))}@{if(and(greater(items('Each_new_notice_A')?['extCount'], 0), not(equals(items('Each_new_notice_A')?['originalIso'], items('Each_new_notice_A')?['dueIso']))), concat(' (originally ', if(empty(string(coalesce(items('Each_new_notice_A')?['originalIso'], ''))), '', formatDateTime(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['originalIso'], ''))), '2000-01-01', string(items('Each_new_notice_A')?['originalIso'])), 'T00:00:00Z'), 'd MMMM yyyy')), ')'), '')}</td></tr>@{if(equals(items('Each_new_notice_A')?['type'], 'EXT'), concat('<tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">Was due</td><td style=\"padding:4px 0\">', if(empty(string(coalesce(items('Each_new_notice_A')?['previousIso'], ''))), '', formatDateTime(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['previousIso'], ''))), '2000-01-01', string(items('Each_new_notice_A')?['previousIso'])), 'T00:00:00Z'), 'd MMMM yyyy')), '</td></tr>'), '')}@{if(empty(items('Each_new_notice_A')?['note']), '', concat('<tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">', if(contains(createArray('EXT', 'RAW', 'ASG'), items('Each_new_notice_A')?['type']), 'Reason', 'Note'), '</td><td style=\"padding:4px 0\">', replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_A')?['note'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td></tr>'))}</table><p style=\"margin:20px 0\"><a href=\"@{outputs('Site_url')}/SitePages/Hub.aspx?action=@{items('Each_new_notice_A')?['actionId']}\" style=\"background:#13516b;color:#ffffff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600\">Open the action</a></p><p style=\"color:#5b6774;font-size:12px\">This is an automated message from the ESG Competency Hub. Reference @{outputs('Token_A')}.</p></div>",
+                  "runAfter": {
+                    "Subject_A": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Html_alert_A": {
+                  "type": "Compose",
+                  "inputs": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:15px;color:#16222c\"><p style=\"color:#13516b;font-size:18px;font-weight:600;margin:0 0 12px\">ESG Competency Hub</p><p><b>@{replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_A')?['title'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;')}</b></p><p>@{replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_A')?['note'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;')}</p><p style=\"margin:20px 0\"><a href=\"@{outputs('Site_url')}/SitePages/Hub.aspx?view=admin\" style=\"background:#13516b;color:#ffffff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600\">Open Changes needing attention</a></p><p style=\"color:#5b6774;font-size:12px\">This is an automated alert from the ESG Competency Hub, sent to its administrators. Reference @{outputs('Token_A')}.</p></div>",
+                  "runAfter": {
+                    "Html_action_A": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Html_A": {
+                  "type": "Compose",
+                  "inputs": "@if(equals(items('Each_new_notice_A')?['type'], 'ALR'), outputs('Html_alert_A'), outputs('Html_action_A'))",
+                  "runAfter": {
+                    "Html_alert_A": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Render_A": {
+                  "type": "Compose",
+                  "inputs": {
+                    "to": "@{items('Each_new_notice_A')?['email']}",
+                    "subject": "@{outputs('Subject_A')}",
+                    "html": "@{outputs('Html_A')}",
+                    "type": "@{items('Each_new_notice_A')?['type']}",
+                    "dueIso": "@{items('Each_new_notice_A')?['dueIso']}",
+                    "actionId": "@{items('Each_new_notice_A')?['actionId']}",
+                    "recipientId": "@{items('Each_new_notice_A')?['recipientId']}",
+                    "login": "@{items('Each_new_notice_A')?['login']}"
+                  },
+                  "runAfter": {
+                    "Html_A": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Notice_values_A": {
+                  "type": "Compose",
+                  "inputs": [
+                    {
+                      "FieldName": "Title",
+                      "FieldValue": "@{take(outputs('Subject_A'), 255)}"
+                    },
+                    {
+                      "FieldName": "NotificationKey",
+                      "FieldValue": "@{items('Each_new_notice_A')?['key']}"
+                    },
+                    {
+                      "FieldName": "Token",
+                      "FieldValue": "@{outputs('Token_A')}"
+                    },
+                    {
+                      "FieldName": "NotificationType",
+                      "FieldValue": "@{items('Each_new_notice_A')?['type']}"
+                    },
+                    {
+                      "FieldName": "Recipient",
+                      "FieldValue": "@{concat('[{\"Key\":\"', items('Each_new_notice_A')?['login'], '\"}]')}"
+                    },
+                    {
+                      "FieldName": "RecipientEmail",
+                      "FieldValue": "@{items('Each_new_notice_A')?['email']}"
+                    },
+                    {
+                      "FieldName": "RecordType",
+                      "FieldValue": "@{if(equals(items('Each_new_notice_A')?['type'], 'ALR'), 'System', 'Action')}"
+                    },
+                    {
+                      "FieldName": "RecordId",
+                      "FieldValue": "@{items('Each_new_notice_A')?['actionId']}"
+                    },
+                    {
+                      "FieldName": "State",
+                      "FieldValue": "Sending"
+                    },
+                    {
+                      "FieldName": "Attempts",
+                      "FieldValue": "1"
+                    },
+                    {
+                      "FieldName": "SendingSince",
+                      "FieldValue": "@{convertFromUtc(utcNow(), 'GMT Standard Time', 'dd/MM/yyyy HH:mm')}"
+                    },
+                    {
+                      "FieldName": "RenderData",
+                      "FieldValue": "@{string(outputs('Render_A'))}"
+                    },
+                    {
+                      "FieldName": "DueDay",
+                      "FieldValue": "@{int(replace(items('Each_new_notice_A')?['dueIso'], '-', ''))}"
+                    }
+                  ],
+                  "runAfter": {
+                    "Render_A": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Notice_body_A": {
+                  "type": "Compose",
+                  "inputs": {
+                    "listItemCreateInfo": {
+                      "FolderPath": {
+                        "DecodedUrl": "@{outputs('Ids')?['notifRoot']}"
+                      },
+                      "UnderlyingObjectType": 0
+                    },
+                    "formValues": "@outputs('Notice_values_A')",
+                    "bNewDocumentUpdate": false
+                  },
+                  "runAfter": {
+                    "Notice_values_A": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Create_notice_A": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/AddValidateUpdateItemUsingPath",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata",
+                        "Content-Type": "application/json;odata=nometadata"
+                      },
+                      "parameters/body": "@{string(outputs('Notice_body_A'))}"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "Notice_body_A": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Notice_refused_A": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@coalesce(body('Create_notice_A')?['value'], createArray())",
+                    "where": "@equals(item()?['HasException'], true)"
+                  },
+                  "runAfter": {
+                    "Create_notice_A": [
+                      "Succeeded",
+                      "Failed",
+                      "TimedOut"
+                    ]
+                  }
+                },
+                "Notice_made_A": {
+                  "type": "If",
+                  "expression": "@and(equals(actions('Create_notice_A')?['status'], 'Succeeded'), empty(body('Notice_refused_A')))",
+                  "actions": {
+                    "Notice_id_A": {
+                      "type": "Query",
+                      "inputs": {
+                        "from": "@body('Create_notice_A')?['value']",
+                        "where": "@equals(item()?['FieldName'], 'Id')"
+                      },
+                      "runAfter": {}
+                    },
+                    "Has_notice_id_A": {
+                      "type": "If",
+                      "expression": "@empty(body('Notice_id_A'))",
+                      "actions": {
+                        "Get_notice_A": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                              "parameters/method": "GET",
+                              "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/items?$select=Id&$filter=NotificationKey eq '@{replace(string(coalesce(items('Each_new_notice_A')?['key'], '')), '''', '''''')}'",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata"
+                              }
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runAfter": {}
+                        },
+                        "Queue_read_A": {
+                          "type": "AppendToArrayVariable",
+                          "inputs": {
+                            "name": "varOutbox",
+                            "value": {
+                              "to": "@{items('Each_new_notice_A')?['email']}",
+                              "subject": "@{outputs('Subject_A')}",
+                              "html": "@{outputs('Html_A')}",
+                              "type": "@{items('Each_new_notice_A')?['type']}",
+                              "dueIso": "@{items('Each_new_notice_A')?['dueIso']}",
+                              "actionId": "@{items('Each_new_notice_A')?['actionId']}",
+                              "recipientId": "@{items('Each_new_notice_A')?['recipientId']}",
+                              "login": "@{items('Each_new_notice_A')?['login']}",
+                              "id": "@first(body('Get_notice_A')?['value'])?['Id']"
+                            }
+                          },
+                          "runAfter": {
+                            "Get_notice_A": [
+                              "Succeeded"
+                            ]
+                          }
+                        }
+                      },
+                      "else": {
+                        "actions": {
+                          "Queue_new_A": {
+                            "type": "AppendToArrayVariable",
+                            "inputs": {
+                              "name": "varOutbox",
+                              "value": {
+                                "to": "@{items('Each_new_notice_A')?['email']}",
+                                "subject": "@{outputs('Subject_A')}",
+                                "html": "@{outputs('Html_A')}",
+                                "type": "@{items('Each_new_notice_A')?['type']}",
+                                "dueIso": "@{items('Each_new_notice_A')?['dueIso']}",
+                                "actionId": "@{items('Each_new_notice_A')?['actionId']}",
+                                "recipientId": "@{items('Each_new_notice_A')?['recipientId']}",
+                                "login": "@{items('Each_new_notice_A')?['login']}",
+                                "id": "@int(first(body('Notice_id_A'))?['FieldValue'])"
+                              }
+                            },
+                            "runAfter": {}
+                          }
+                        }
+                      },
+                      "runAfter": {
+                        "Notice_id_A": [
+                          "Succeeded"
+                        ]
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {
+                      "Find_notice_A": {
+                        "type": "OpenApiConnection",
+                        "inputs": {
+                          "host": {
+                            "connectionName": "shared_sharepointonline",
+                            "operationId": "HttpRequest",
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                          },
+                          "parameters": {
+                            "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                            "parameters/method": "GET",
+                            "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/items?$select=Id&$filter=NotificationKey eq '@{replace(string(coalesce(items('Each_new_notice_A')?['key'], '')), '''', '''''')}'",
+                            "parameters/headers": {
+                              "Accept": "application/json;odata=nometadata"
+                            }
+                          },
+                          "authentication": "@parameters('$authentication')"
+                        },
+                        "runAfter": {}
+                      },
+                      "Notice_exists_A": {
+                        "type": "If",
+                        "expression": "@empty(body('Find_notice_A')?['value'])",
+                        "actions": {
+                          "Notice_failed_A": {
+                            "type": "Compose",
+                            "inputs": "@int('An email could not be queued. See Create_notice_A.')",
+                            "runAfter": {}
+                          }
+                        },
+                        "else": {
+                          "actions": {}
+                        },
+                        "runAfter": {
+                          "Find_notice_A": [
+                            "Succeeded"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Notice_refused_A": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "runAfter": {
+                "Each_retry": [
+                  "Succeeded"
+                ]
+              }
+            },
             "Ran_body": {
               "type": "Compose",
               "inputs": {
                 "Value": "@{utcNow()}"
               },
               "runAfter": {
-                "Each_retry": [
+                "Each_new_notice_A": [
                   "Succeeded"
                 ]
               }
@@ -1172,7 +1662,7 @@
             }
           },
           "runAfter": {
-            "Initialize_varNotices": [
+            "Initialize_varAlerts": [
               "Succeeded"
             ]
           }

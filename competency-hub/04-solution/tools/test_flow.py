@@ -15,6 +15,8 @@ from wdl import Engine
 FLOWS = {f['name']: f['json']['properties']['definition'] for f in flows.build_all()}
 FLOW = FLOWS['ESG Competency Hub | 2 Request queue']
 DAILY = FLOWS['ESG Competency Hub | 1 Daily tasks']
+MONITOR = FLOWS['ESG Competency Hub | 3 Queue monitor']
+ADMIN = FLOWS['ESG Competency Hub | 6 Administration']
 UK = ZoneInfo('Europe/London')
 JOE, RACHEL, KELLY, KAI = 7, 112, 103, 110
 KEY = '3f2b1c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d'
@@ -51,9 +53,19 @@ def site():
         'ExtensionCount': 1.0, 'Revision': 2.0, 'PendingRequestKey': None, 'LastRequestKey': None, 'CreatedRequestKey': 'IMPORT-1'})
     s.folder('updates', 'FLK/A{0}'.format(s.action))
     s.folder('history', 'FLK/A{0}'.format(s.action))   # made when the action was raised
-    for title, value in (('OverdueReminderIntervalDays', '7'), ('ReminderDaysBefore', '7'), ('LastDailyRun', '')):
+    for title, value in (('OverdueReminderIntervalDays', '7'), ('ReminderDaysBefore', '7'), ('LastDailyRun', ''), ('QueueHealth', ''),
+                         ('MonitorHours', '07:00|19:45|60')):
         s.add('settings', '', {'Title': title, 'Value': value})
+    s.monitor_alive = True    # the queue monitor reported a moment ago (healthy_monitor)
+    s.daily_alive = True      # Daily tasks ran this morning (run_monitor)
     return s
+
+
+def healthy_monitor(s):
+    """The queue monitor's last report, a few minutes before the clock, unless a test has stopped it."""
+    if s.monitor_alive:
+        row = s.rows('settings', Title='QueueHealth')[0]
+        row['f']['Value'] = json.dumps({'state': 'Healthy', 'reason': '', 'checkedAt': (s.clock - timedelta(minutes=5)).strftime('%Y-%m-%dT%H:%M:%SZ')})
 
 
 def submit(s, sender, rtype, payload, target=None, revision=None, folder=None, key=KEY, created=None, author=None):
@@ -290,7 +302,7 @@ class Robustness(unittest.TestCase):
         for key in ('actions', 'history', 'updates', 'requests'):
             rows = []
             for it in s.by_key[key]['items'].values():
-                f = {k: v for k, v in it['f'].items() if k not in ('ProcessedAt', 'FirstClaimedAt', 'Attempts', 'LastError', 'StepsDone')}
+                f = {k: v for k, v in it['f'].items() if k not in ('ProcessedAt', 'FirstClaimedAt', 'Attempts', 'LastError', 'StepsDone', 'NextAttemptAfter')}
                 rows.append((it['dir'], it['fsobj'], json.dumps(f, sort_keys=True, default=str)))
             out[key] = sorted(rows)
         return out
@@ -450,17 +462,26 @@ class Emails(unittest.TestCase):
         run(s, r)
         self.assertEqual(s.sent, [])
 
-    def test_closing_tells_the_raiser_and_a_close_out_asks_the_raiser(self):
-        for close_out, kind, subject in ((False, 'CLS', 'Action closed: Replace FH40 probe'),
-                                         (True, 'RDY', 'Ready for your close-out check: Replace FH40 probe')):
-            with self.subTest(kind):
+    def test_the_owner_closing_tells_nobody_and_a_close_out_asks_the_raiser(self):
+        # plan REV5 D1: no closure email to the raiser (rejected); the close-out check is a request to act, so it stays
+        for close_out, expected in ((False, []), (True, [('kelly.bates@example.test', 'Ready for your close-out check: Replace FH40 probe')])):
+            with self.subTest(close_out=close_out):
                 s = site()
                 s.item('actions', s.action)['f']['RequiresCloseOut'] = close_out
                 r = submit(s, RACHEL, 'MarkComplete', {'note': 'Probe fitted & tested.'}, target=s.action, revision=2)
                 run(s, r)
-                self.assertEqual([(m['to'], m['subject']) for m in s.sent], [('kelly.bates@example.test', subject)])
-                self.assertIn('Probe fitted &amp; tested.', s.sent[0]['body'])
-                self.assertEqual(list(self.notices(s)), ['{0}|{1}|{2}'.format(kind, KEY, KELLY)])
+                self.assertEqual([(m['to'], m['subject']) for m in s.sent], expected)
+                if expected:
+                    self.assertIn('Probe fitted &amp; tested.', s.sent[0]['body'])
+                    self.assertEqual(list(self.notices(s)), ['RDY|{0}|{1}'.format(KEY, KELLY)])
+                else:
+                    self.assertEqual(list(self.notices(s)), [])
+
+    def test_a_manager_closing_tells_the_owner_only(self):
+        s = site()
+        r = submit(s, KELLY, 'CloseAction', {'outcome': 'No longer required', 'note': 'The probe type is withdrawn.'}, target=s.action, revision=2)
+        run(s, r)
+        self.assertEqual([(m['to'], m['subject']) for m in s.sent], [('rachel.boulden@example.test', 'Action closed: Replace FH40 probe')])
 
     def test_a_refused_send_is_failed_and_an_unclear_one_unknown(self):
         for outcome, state, sent in ((400, 'Failed', 0), (500, 'Unknown', 1), ('timeout', 'Unknown', 0)):
@@ -478,6 +499,7 @@ class Emails(unittest.TestCase):
 def run_daily(s, uk_day, hour=6):
     """The daily flow as it runs at 06:00 UK time on the given date."""
     s.clock = datetime(uk_day.year, uk_day.month, uk_day.day, hour, 0, tzinfo=UK).astimezone(timezone.utc)
+    healthy_monitor(s)
     eng = Engine(DAILY, s, {flows.ENV_SITE: SITE, '$authentication': {}}, s.clock)
     return eng.run(), eng
 
@@ -607,7 +629,14 @@ class Retries(unittest.TestCase):
         run_daily(s, date(2026, 10, 22))
         run_daily(s, date(2026, 10, 23))
         run_daily(s, date(2026, 10, 24))
-        self.assertEqual((row['State'], float(row['Attempts']), len(s.sent)), ('Abandoned', 3.0, 0))
+        self.assertEqual((row['State'], float(row['Attempts'])), ('Abandoned', 3.0))
+        # the email itself is not sent again; the administrators are told, once, with what was given up
+        self.assertEqual([(m['to'], m['subject']) for m in s.sent],
+                         [('joseph.pepper@example.test', 'Competency Hub needs attention: An email could not be sent: Deadline moved: Replace FH40 probe')])
+        self.assertIn('rachel.boulden@example.test', s.sent[0]['body'])
+        self.assertIn('Hub.aspx?view=admin', s.sent[0]['body'])
+        run_daily(s, date(2026, 10, 25))
+        self.assertEqual(len(s.sent), 1, 'an abandoned email is reported once')
 
     def test_an_email_that_no_longer_applies_is_skipped(self):
         s = site()
@@ -821,6 +850,377 @@ class Calls(unittest.TestCase):
         s, r, status, eng = self.first_run('ExtendDeadline', s)
         tx = s.rows('history', RowKind='Transaction')[0]['f']
         self.assertEqual(tx['FirstClaimedAt'], '2026-10-21T09:30:00Z')
+
+
+# --------------------------------------------------------------------------------------------- safety net (plan REV5 REL-1 to REL-4)
+WEEKDAY = datetime(2026, 10, 21, 10, 0, tzinfo=UK).astimezone(timezone.utc)      # Wednesday, working hours
+NIGHT = datetime(2026, 10, 24, 3, 5, tzinfo=UK).astimezone(timezone.utc)         # Saturday, first run of the hour
+
+
+def run_monitor(s, when):
+    s.clock = when
+    if s.daily_alive:
+        s.rows('settings', Title='LastDailyRun')[0]['f']['Value'] = (when - timedelta(hours=3)).strftime('%Y-%m-%dT%H:%M:%SZ')
+    eng = Engine(MONITOR, s, {flows.ENV_SITE: SITE, '$authentication': {}}, s.clock)
+    return eng.run(), eng
+
+
+def run_admin(s, req_id, now=None):
+    s.clock = now or s.clock
+    eng = Engine(ADMIN, s, {flows.ENV_SITE: SITE, '$authentication': {}}, s.clock, trigger_body=s.trigger_item('requests', req_id))
+    return eng.run(), eng
+
+
+def age(s, key, item_id, minutes):
+    """Makes an item look last changed `minutes` before the clock."""
+    s.item(key, item_id)['modified'] = (s.clock - timedelta(minutes=minutes)).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+def health(s):
+    return json.loads(s.rows('settings', Title='QueueHealth')[0]['f']['Value'])
+
+
+def tx_of(s, req_id):
+    return next(it for it in s.by_key['history']['items'].values() if it['f'].get('RowKind') == 'Transaction' and it['f'].get('RequestItemId') == float(req_id))
+
+
+class Monitor(unittest.TestCase):
+    def test_outside_working_hours_only_the_first_run_of_the_hour_works(self):
+        s = site()
+        status, _ = run_monitor(s, NIGHT + timedelta(minutes=20))
+        self.assertEqual(status, 'Succeeded')
+        self.assertEqual(len(s.calls), 1, 'a quiet night run reads the settings and stops')
+        s.calls.clear()
+        run_monitor(s, NIGHT)
+        self.assertGreater(len(s.calls), 1)
+        self.assertEqual(health(s)['state'], 'Healthy')
+
+    def test_a_quiet_working_hours_run_uses_few_calls(self):
+        s = site()
+        status, eng = run_monitor(s, WEEKDAY)
+        self.assertEqual(status, 'Succeeded', eng.log)
+        # settings, people, 3 request states, needs attention, 3 email states, the health row
+        self.assertLessEqual(len(s.calls), 10, s.calls)
+        self.assertEqual(s.sent, [])
+        self.assertEqual((health(s)['state'], health(s)['attention']), ('Healthy', 0))
+
+    def test_a_missed_trigger_is_put_back_and_then_recorded(self):
+        s = site()
+        s.clock = WEEKDAY
+        r = submit(s, RACHEL, 'ExtendDeadline', Extend().payload(), target=s.action, revision=2)
+        age(s, 'requests', r, 12)
+        run_monitor(s, WEEKDAY)
+        self.assertEqual((request(s, r)['Status'], request(s, r)['Attempts']), ('Submitted', 1.0))
+        status, eng = run(s, r, now=WEEKDAY + timedelta(minutes=2))
+        self.assertEqual(request(s, r)['Status'], 'Completed', eng.log)
+
+    def test_a_recent_request_is_left_alone(self):
+        s = site()
+        s.clock = WEEKDAY
+        r = submit(s, RACHEL, 'ExtendDeadline', Extend().payload(), target=s.action, revision=2)
+        age(s, 'requests', r, 5)
+        run_monitor(s, WEEKDAY)
+        self.assertNotIn('Attempts', {k: v for k, v in request(s, r).items() if v})
+        self.assertFalse(any(m == 'MERGE' and 'Requests' in p for m, p in s.writes))
+
+    def test_a_run_stopped_at_any_write_is_finished_by_the_monitor(self):
+        """No manual resubmit: the monitor puts the request back, the request flow resumes it, and the result is the
+        same as a run that was never interrupted – one event, one email row."""
+        ref = site()
+        ref.clock = WEEKDAY
+        r = submit(ref, KELLY, 'ExtendDeadline', Extend().payload(), target=ref.action, revision=2)
+        run(ref, r)
+        expected = Robustness().snapshot(ref)
+        for k in range(1, len(ref.writes) + 1):
+            for how in ('failed', 'stopped'):
+                with self.subTest(write=k, how=how):
+                    s = site()
+                    s.clock = WEEKDAY
+                    r = submit(s, KELLY, 'ExtendDeadline', Extend().payload(), target=s.action, revision=2)
+                    s.fail_at = k
+                    run(s, r)
+                    s.fail_at = None
+                    if request(s, r)['Status'] == 'Completed':
+                        continue
+                    if how == 'stopped':          # Power Automate stopped the run: no Catch, the request stays Processing
+                        request(s, r)['Status'] = 'Processing'
+                    age(s, 'requests', r, 16)
+                    run_monitor(s, WEEKDAY)
+                    self.assertEqual(request(s, r)['Status'], 'Submitted')
+                    run(s, r, now=WEEKDAY + timedelta(minutes=2))
+                    self.assertEqual(request(s, r)['Status'], 'Completed')
+                    # an email the stopped run had queued but not sent goes with the next check after 30 minutes
+                    run_monitor(s, WEEKDAY + timedelta(minutes=45))
+                    self.assertEqual(len(s.sent), len(ref.sent))
+                    got = Robustness().snapshot(s)
+                    for key in ('actions', 'updates'):
+                        self.assertEqual(got[key], expected[key], key)
+                    self.assertEqual(sorted(x[2] for x in got['history'] if 'Event' in x[2]), sorted(x[2] for x in expected['history'] if 'Event' in x[2]))
+                    self.assertEqual(sorted(s.by_key['notifications']['items'][i]['f']['NotificationKey'] for i in s.by_key['notifications']['items']),
+                                     sorted(ref.by_key['notifications']['items'][i]['f']['NotificationKey'] for i in ref.by_key['notifications']['items']))
+
+    def fail_three_times(self, s, r, fault):
+        s.fail_if = fault
+        run(s, r, now=WEEKDAY)
+        for n in range(3):
+            age(s, 'requests', r, 11)
+            run_monitor(s, s.clock)
+            if request(s, r)['Status'] == 'Submitted':
+                run(s, r, now=s.clock + timedelta(minutes=1))
+        return request(s, r)
+
+    def test_three_failed_attempts_with_nothing_changed_go_to_the_administrators(self):
+        s = site()
+        s.clock = WEEKDAY
+        r = submit(s, KELLY, 'ExtendDeadline', Extend().payload(), target=s.action, revision=2)
+        before = dict(s.item('actions', s.action)['f'])
+        req = self.fail_three_times(s, r, lambda m, path, where: m == 'MERGE' and path.startswith('Actions/'))
+        self.assertEqual((req['Status'], req['ResultMessage']), ('Needs attention', 'Not recorded – an administrator has been told. Nothing was changed.'))
+        self.assertEqual(tx_of(s, r)['f']['State'], 'Needs attention')
+        self.assertEqual(s.item('actions', s.action)['f'], before)
+        alerts = [m for m in s.sent if m['subject'].startswith('Competency Hub needs attention')]
+        self.assertEqual([(m['to'], m['subject']) for m in alerts],
+                         [('joseph.pepper@example.test', 'Competency Hub needs attention: A change could not be recorded: ExtendDeadline')])
+        self.assertIn('Nothing was changed', alerts[0]['body'])
+        run_monitor(s, s.clock + timedelta(minutes=15))
+        self.assertEqual(len([m for m in s.sent if m['subject'].startswith('Competency Hub needs attention')]), 1, 'one alert a day')
+        self.assertEqual(health(s)['attention'], 1)
+        self.assertEqual(health(s)['state'], 'Healthy', 'one change needing attention does not stop processing')
+
+    def test_a_part_made_change_says_so_and_keeps_its_lock(self):
+        s = site()
+        s.clock = WEEKDAY
+        r = submit(s, KELLY, 'ExtendDeadline', Extend().payload(), target=s.action, revision=2)
+        req = self.fail_three_times(s, r, lambda m, path, where: m == 'ADD' and path == 'History' and '/FLK/A' in where)
+        self.assertEqual((req['Status'], req['ResultMessage']),
+                         ('Needs attention', 'Not fully recorded – an administrator has been told. The record is locked until it is resolved.'))
+        a = s.item('actions', s.action)['f']
+        self.assertEqual((a['PendingRequestKey'], float(a['DueDay'])), (KEY, 20261028.0), 'the values are written and the lock is kept')
+        self.assertIn('Part of it was made', [m for m in s.sent if 'needs attention' in m['subject']][0]['body'])
+
+    def test_processing_is_down_when_changes_are_not_picked_up(self):
+        s = site()
+        s.clock = WEEKDAY
+        r = submit(s, RACHEL, 'ExtendDeadline', Extend().payload(), target=s.action, revision=2)
+        age(s, 'requests', r, 11)
+        run_monitor(s, WEEKDAY)
+        self.assertEqual(health(s)['state'], 'Healthy', 'one put-back is normal')
+        age(s, 'requests', r, 15)
+        run_monitor(s, WEEKDAY + timedelta(minutes=15))
+        self.assertEqual((health(s)['state'], health(s)['reason']), ('Down', 'Changes are not being picked up by the request flow.'))
+        run(s, r, now=WEEKDAY + timedelta(minutes=20))
+        run_monitor(s, WEEKDAY + timedelta(minutes=30))
+        self.assertEqual(health(s)['state'], 'Healthy', 'back to normal by itself')
+
+    def test_daily_tasks_and_the_monitor_watch_each_other(self):
+        s = site()
+        s.daily_alive = False
+        s.rows('settings', Title='LastDailyRun')[0]['f']['Value'] = '2026-10-20T05:00:00Z'
+        run_monitor(s, WEEKDAY)
+        self.assertEqual([m['subject'] for m in s.sent], ['Competency Hub needs attention: Daily reminders have not run'])
+        run_monitor(s, WEEKDAY + timedelta(minutes=15))
+        self.assertEqual(len(s.sent), 1, 'once a day')
+        t = site()
+        t.monitor_alive = False
+        run_daily(t, date(2026, 10, 22))
+        self.assertEqual([m['subject'] for m in t.sent if 'needs attention' in m['subject']], ['Competency Hub needs attention: The queue monitor is not running'])
+
+    def test_an_email_that_failed_is_retried_within_15_minutes(self):
+        s = site()
+        s.clock = WEEKDAY
+        s.mail_fail = [400]
+        r = submit(s, KELLY, 'ExtendDeadline', Extend().payload(), target=s.action, revision=2)
+        run(s, r)
+        self.assertEqual(s.sent, [])
+        run_monitor(s, WEEKDAY + timedelta(minutes=15))
+        self.assertEqual([m['subject'] for m in s.sent], ['Deadline moved: Replace FH40 probe'])
+
+
+class Administration(unittest.TestCase):
+    def stuck(self, fault, rtype='ExtendDeadline', payload=None):
+        s = site()
+        s.clock = WEEKDAY
+        target = None if rtype == 'RaiseAction' else s.action
+        r = submit(s, KELLY, rtype, payload or Extend().payload(), target=target, revision=None if rtype == 'RaiseAction' else 2)
+        Monitor.fail_three_times(self, s, r, fault)
+        self.assertEqual(request(s, r)['Status'], 'Needs attention')
+        s.fail_if = None
+        return s, r
+
+    def ask(self, s, rtype, r, sender=JOE, key=KEY2):
+        tx = tx_of(s, r)['id']
+        a = submit(s, sender, rtype, {'txId': tx, 'note': 'Checked the run history.'}, target=tx, key=key)
+        status, eng = run_admin(s, a, now=s.clock + timedelta(minutes=1))
+        self.assertEqual(status, 'Succeeded', eng.log)
+        return request(s, a)
+
+    nothing = staticmethod(lambda m, path, where: m == 'MERGE' and path.startswith('Actions/'))
+    partly = staticmethod(lambda m, path, where: m == 'ADD' and path == 'History' and '/FLK/A' in where)
+
+    def test_retry_puts_the_change_back_and_it_is_recorded(self):
+        s, r = self.stuck(self.nothing)
+        res = self.ask(s, 'RetryTransaction', r)
+        self.assertEqual((res['Status'], res['ResultMessage']), ('Completed', 'Being tried again.'))
+        self.assertEqual((request(s, r)['Status'], tx_of(s, r)['f']['State'], tx_of(s, r)['f']['Attempts']), ('Submitted', 'Failed', 0.0))
+        run(s, r, now=s.clock + timedelta(minutes=2))
+        self.assertEqual(request(s, r)['Status'], 'Completed')
+        ev = s.rows('history', RequestKey=KEY2 + '|1')[0]
+        self.assertEqual((ev['dir'], ev['f']['EventType'], ev['f']['ActorId'], ev['f']['Note']), ('Administration', 'Change Retried', JOE, 'Checked the run history.'))
+
+    def test_finish_rolls_a_part_made_change_forward(self):
+        s, r = self.stuck(self.partly)
+        self.assertEqual(self.ask(s, 'RetryTransaction', r)['Status'], 'Completed')
+        run(s, r, now=s.clock + timedelta(minutes=2))
+        a = s.item('actions', s.action)['f']
+        self.assertEqual((request(s, r)['Status'], a['PendingRequestKey'], a['LastRequestKey']), ('Completed', '', KEY))
+        self.assertEqual(len(s.rows('history', RequestKey=KEY + '|1')), 1)
+
+    def test_cancel_when_nothing_was_changed(self):
+        s, r = self.stuck(self.nothing)
+        before = dict(s.item('actions', s.action)['f'])
+        res = self.ask(s, 'CancelTransaction', r)
+        self.assertEqual((res['Status'], res['ResultMessage']), ('Completed', 'Cancelled. Nothing was changed.'))
+        self.assertEqual((request(s, r)['Status'], request(s, r)['ResultMessage']), ('Cancelled', 'Cancelled by an administrator. Nothing was changed.'))
+        self.assertEqual(tx_of(s, r)['f']['State'], 'Cancelled')
+        self.assertEqual(s.item('actions', s.action)['f'], before)
+        # a stray run of the request afterwards only mirrors the decision
+        request(s, r)['Status'] = 'Submitted'
+        run(s, r, now=s.clock + timedelta(minutes=5))
+        self.assertEqual(request(s, r)['Status'], 'Cancelled')
+        self.assertEqual(s.item('actions', s.action)['f'], before)
+
+    def test_cancel_is_refused_once_part_of_the_change_is_made(self):
+        s, r = self.stuck(self.partly)
+        res = self.ask(s, 'CancelTransaction', r)
+        self.assertEqual((res['Status'], res['ResultMessage']),
+                         ('Rejected', 'Part of this change has already been made, so it cannot be cancelled. Use Finish or Revert.'))
+        self.assertEqual(request(s, r)['Status'], 'Needs attention')
+
+    def test_revert_writes_the_previous_values_back_and_says_so(self):
+        s, r = self.stuck(self.partly)
+        res = self.ask(s, 'RevertTransaction', r)
+        self.assertEqual((res['Status'], res['ResultMessage']), ('Completed', 'Reverted.'))
+        a = s.item('actions', s.action)['f']
+        self.assertEqual((float(a['DueDay']), a['CurrentDueDate'], float(a['ExtensionCount']), a['PendingRequestKey'], a['LastRequestKey'], float(a['Revision'])),
+                         (20261019.0, '2026-10-18T23:00:00Z', 1.0, '', KEY2, 4.0))
+        self.assertEqual((request(s, r)['Status'], tx_of(s, r)['f']['State']), ('Reverted', 'Reverted'))
+        self.assertIn('Reverted by an administrator', request(s, r)['ResultMessage'])
+        ev = s.rows('history', RequestKey=KEY2 + '|2')[0]
+        self.assertEqual((ev['dir'], ev['f']['EventType']), ('FLK/A{0}'.format(s.action), 'Change Reverted'))
+        self.assertEqual(s.rows('history', RequestKey=KEY2 + '|1')[0]['f']['EventType'], 'Change Reverted')
+
+    def test_revert_withdraws_a_part_made_raise(self):
+        good = dict(RaiseAction.good, ownerId=RACHEL)
+        s, r = self.stuck(lambda m, path, where: m == 'ADD' and path == 'History' and '/A' in where, 'RaiseAction', good)
+        created = s.rows('actions', CreatedRequestKey='F|' + KEY)[0]
+        self.assertEqual(created['f']['PendingRequestKey'], KEY, 'uncommitted, so no one sees it yet')
+        self.ask(s, 'RevertTransaction', r)
+        f = created['f']
+        self.assertEqual((f['Status'], f['IsOpen'], f['CloseOutcome'], f['PendingRequestKey']), ('Closed', False, 'Withdrawn', ''))
+        ev = s.rows('history', RequestKey=KEY2 + '|2')[0]
+        self.assertEqual((ev['f']['EventType'], ev['f']['CompletionKind']), ('Withdrawn', 'Withdrawn'))
+        self.assertEqual(request(s, r)['Status'], 'Reverted')
+
+    def test_revert_is_refused_when_nothing_is_part_made(self):
+        s, r = self.stuck(self.nothing)
+        res = self.ask(s, 'RevertTransaction', r)
+        self.assertEqual(res['Status'], 'Rejected')
+        self.assertIn('nothing to revert', res['ResultMessage'])
+
+    def test_only_an_administrator_may_decide(self):
+        s, r = self.stuck(self.nothing)
+        res = self.ask(s, 'CancelTransaction', r, sender=KELLY)
+        self.assertEqual((res['Status'], res['ResultMessage']), ('Rejected', 'Only a Competency Hub administrator can do this.'))
+        self.assertEqual(request(s, r)['Status'], 'Needs attention')
+
+    def test_a_finished_change_cannot_be_touched(self):
+        s = site()
+        r = submit(s, KELLY, 'ExtendDeadline', Extend().payload(), target=s.action, revision=2)
+        run(s, r)
+        res = self.ask(s, 'CancelTransaction', r)
+        self.assertEqual((res['Status'], res['ResultMessage']), ('Rejected', 'This change is already finished.'))
+
+    def test_an_administrators_decision_survives_an_interruption_at_every_write(self):
+        for rtype, fault in (('CancelTransaction', self.nothing), ('RevertTransaction', self.partly), ('RetryTransaction', self.nothing)):
+            ref, r = self.stuck(fault)
+            ref.writes.clear()
+            self.ask(ref, rtype, r)
+            expected = Robustness().snapshot(ref)
+            total = len(ref.writes)
+            for k in range(1, total + 1):
+                with self.subTest(rtype=rtype, write=k, of=total):
+                    s, r2 = self.stuck(fault)
+                    tx = tx_of(s, r2)['id']
+                    a = submit(s, JOE, rtype, {'txId': tx, 'note': 'Checked the run history.'}, target=tx, key=KEY2)
+                    s.writes.clear()
+                    s.fail_at = k
+                    run_admin(s, a, now=s.clock + timedelta(minutes=1))
+                    s.fail_at = None
+                    if request(s, a)['Status'] != 'Completed':
+                        request(s, a)['Status'] = 'Submitted'
+                        status, eng = run_admin(s, a, now=s.clock + timedelta(minutes=10))
+                        self.assertEqual(request(s, a)['Status'], 'Completed', eng.log)
+                    got = Robustness().snapshot(s)
+                    for key in ('actions', 'history', 'updates', 'requests'):
+                        norm = lambda rows: sorted(x for x in rows if 'ProcessedAt' not in x[2] and 'Modified' not in x[2])
+                        self.assertEqual(len(got[key]), len(expected[key]), key)
+                    self.assertEqual(request(s, r2)['Status'], request(ref, r)['Status'])
+                    self.assertEqual(s.item('actions', s.action)['f'].get('LastRequestKey'), ref.item('actions', ref.action)['f'].get('LastRequestKey'))
+
+
+class Routing(unittest.TestCase):
+    def test_each_kind_of_request_goes_to_exactly_one_flow(self):
+        from wdl import Context, eval_expr
+        flows_by_name = {f['name']: f['json']['properties']['definition'] for f in flows.build_all()}
+        takers = {n: d for n, d in flows_by_name.items() if 'When_a_request_is_submitted' in d['triggers']}
+        s = site()
+        for rtype in flows.ACTION_TYPES + flows.DOMAIN_TYPES['admin'] + ['SomethingNew']:
+            r = submit(s, RACHEL, rtype, {}, key='k-' + rtype)
+            body = s.trigger_item('requests', r)
+            hits = []
+            for name, d in takers.items():
+                eng = Engine(d, s, {flows.ENV_SITE: SITE, '$authentication': {}}, s.clock, trigger_body=body)
+                if all(eval_expr(c['expression'][1:], Context(eng)) for c in d['triggers']['When_a_request_is_submitted']['conditions']):
+                    hits.append(name)
+            want = 'ESG Competency Hub | 6 Administration' if rtype in flows.DOMAIN_TYPES['admin'] else 'ESG Competency Hub | 2 Request queue'
+            self.assertEqual(hits, [want], rtype)
+
+
+class HistoryForReports(unittest.TestCase):
+    """Plan REV5 H-1: every action event says who owned the action and which deadline was in force, and a completion
+    or closure says what kind it was, so later statistics need nothing reconstructed."""
+    def event(self, s, key=KEY):
+        return s.rows('history', RequestKey=key + '|1')[0]['f']
+
+    def test_raise_records_the_owner_and_deadline(self):
+        s = site()
+        run(s, submit(s, KELLY, 'RaiseAction', dict(RaiseAction.good, ownerId=RACHEL)))
+        e = self.event(s)
+        self.assertEqual((e['OwnerId'], e['DueDayAtEvent']), (float(RACHEL), 20261028.0))
+
+    def test_reassign_records_both_owners(self):
+        s = site()
+        run(s, submit(s, KELLY, 'ReassignAction', {'ownerId': KELLY, 'reason': 'Rachel is on leave this month.'}, target=s.action, revision=2))
+        e = self.event(s)
+        self.assertEqual((e['PreviousOwnerId'], e['OwnerId'], e['DueDayAtEvent']), (float(RACHEL), float(KELLY), 20261019.0))
+
+    def test_an_extension_records_the_new_deadline(self):
+        s = site()
+        run(s, submit(s, RACHEL, 'ExtendDeadline', Extend().payload(), target=s.action, revision=2))
+        self.assertEqual((self.event(s)['OwnerId'], self.event(s)['DueDayAtEvent']), (float(RACHEL), 20261028.0))
+
+    def test_completion_kinds(self):
+        cases = [(RACHEL, 'MarkComplete', {'note': ''}, False, 'In Progress', 'MarkedDone'),
+                 (KELLY, 'CloseAction', {'outcome': 'Completed', 'note': ''}, False, 'In Progress', 'ClosedByManager'),
+                 (KELLY, 'CloseAction', {'outcome': 'Completed', 'note': ''}, True, 'Completed', 'CloseOutConfirmed'),
+                 (KELLY, 'CloseAction', {'outcome': 'Superseded', 'note': 'Replaced by ACT-00050.'}, False, 'In Progress', 'ClosedNotCompleted')]
+        for sender, rtype, payload, close_out, status, kind in cases:
+            with self.subTest(kind=kind):
+                s = site()
+                s.item('actions', s.action)['f'].update({'RequiresCloseOut': close_out, 'Status': status})
+                run(s, submit(s, sender, rtype, payload, target=s.action, revision=2))
+                e = self.event(s)
+                self.assertEqual((e['CompletionKind'], e['OwnerId'], e['DueDayAtEvent']), (kind, float(RACHEL), 20261019.0))
 
 
 if __name__ == '__main__':

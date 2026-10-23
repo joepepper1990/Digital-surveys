@@ -153,7 +153,7 @@ window.MockAdmin = (function () {
         var u = users.filter(function (x) { return x.LoginName === claims[0].Key; })[0];
         return u ? { key: name + 'Id', value: u.Id } : { error: name + ': user ' + claims[0].Key + ' not found.' };
       }
-      if (t === 'Choice' && f.choices && f.choices.indexOf(value) < 0) return { error: name + ': "' + value + '" is not an allowed choice.' };
+      if (t === 'Choice' && f.Choices && f.Choices.indexOf(value) < 0) return { error: name + ': "' + value + '" is not an allowed choice.' };
       return { key: name, value: String(value) };
     }
 
@@ -192,7 +192,7 @@ window.MockAdmin = (function () {
       var choices = [];
       xml.replace(/<CHOICE>([^<]*)<\/CHOICE>/g, function (_, c) { choices.push(c.replace(/&amp;/g, '&')); });
       return { InternalName: attr('Name'), Title: attr('DisplayName'), TypeAsString: attr('Type'), Required: attr('Required') === 'TRUE',
-        Indexed: false, EnforceUniqueValues: false, choices: choices.length ? choices : undefined, Format: attr('Format'), List: attr('List') };
+        Indexed: false, EnforceUniqueValues: false, Choices: choices.length ? choices : undefined, Format: attr('Format'), List: attr('List') };
     }
 
     function get(path) {
@@ -311,7 +311,7 @@ window.MockAdmin = (function () {
         var fdl = listByGuid(m[1]);
         var fd = fdl.fields.filter(function (x) { return x.InternalName === m[2]; })[0];
         if (body.EnforceUniqueValues && !fd.Indexed && !body.Indexed) return fail(400, 'The field must be indexed to enforce unique values.');
-        Object.keys(body).forEach(function (k) { if (k !== '__metadata') fd[k] = body[k]; });
+        Object.keys(body).forEach(function (k) { if (k !== '__metadata') fd[k] = k === 'Choices' ? body[k].results.slice() : body[k]; });
         return respond(204);
       }
       if ((m = /^\/_api\/web\/lists\(guid'([^']+)'\)\/AddValidateUpdateItemUsingPath$/.exec(path))) {

@@ -55,6 +55,9 @@
             },
             {
               "expression": "@not(equals(triggerBody()?['{IsFolder}'], true))"
+            },
+            {
+              "expression": "@not(contains(createArray('RetryTransaction', 'CancelTransaction', 'RevertTransaction'), string(triggerBody()?['RequestType'])))"
             }
           ],
           "runtimeConfiguration": {
@@ -249,6 +252,23 @@
             ]
           }
         },
+        "Initialize_varAct": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varAct",
+                "type": "object",
+                "value": {}
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_varLockedHere": [
+              "Succeeded"
+            ]
+          }
+        },
         "Initialize_varOutbox": {
           "type": "InitializeVariable",
           "inputs": {
@@ -261,7 +281,7 @@
             ]
           },
           "runAfter": {
-            "Initialize_varLockedHere": [
+            "Initialize_varAct": [
               "Succeeded"
             ]
           }
@@ -671,7 +691,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['people']}')/items?$select=Id,Title,SiteUserId,Role,Status,Email,Person/Name,Person/EMail&$expand=Person&$filter=SiteUserId eq @{replace(string(coalesce(outputs('Sender_id'), '')), '''', '''''')}",
+                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['people']}')/items?$select=Id,Title,SiteUserId,Role,Status,IsAdministrator,Email,Person/Name,Person/EMail&$expand=Person&$filter=SiteUserId eq @{replace(string(coalesce(outputs('Sender_id'), '')), '''', '''''')}",
                   "parameters/headers": {
                     "Accept": "application/json;odata=nometadata"
                   }
@@ -1164,11 +1184,11 @@
             },
             "Already_final": {
               "type": "If",
-              "expression": "@contains(createArray('Applied', 'Void', 'Rolled Back'), string(variables('varTx')?['State']))",
+              "expression": "@contains(createArray('Applied', 'Void', 'Rolled Back', 'Cancelled', 'Reverted', 'Needs attention'), string(variables('varTx')?['State']))",
               "actions": {
                 "Final_status": {
                   "type": "Compose",
-                  "inputs": "@if(equals(string(variables('varTx')?['State']), 'Applied'), 'Completed', 'Rejected')",
+                  "inputs": "@if(equals(string(variables('varTx')?['State']), 'Applied'), 'Completed', if(contains(createArray('Void', 'Rolled Back'), string(variables('varTx')?['State'])), 'Rejected', string(variables('varTx')?['State'])))",
                   "runAfter": {}
                 },
                 "Final_body": {
@@ -2335,7 +2355,9 @@
                             "ActorId": "@int(outputs('Sender_id'))",
                             "EventTime": "@{outputs('Event_time')}",
                             "ProcessedAt": "@{utcNow()}",
-                            "NewDueDate": "@{convertToUtc(concat(string(coalesce(outputs('Payload')?['dueIso'], '')), 'T00:00:00'), 'GMT Standard Time')}"
+                            "NewDueDate": "@{convertToUtc(concat(string(coalesce(outputs('Payload')?['dueIso'], '')), 'T00:00:00'), 'GMT Standard Time')}",
+                            "OwnerId": "@int(first(split(string(coalesce(first(body('Get_owner_R')?['value'])?['SiteUserId'], '')), '.')))",
+                            "DueDayAtEvent": "@int(replace(string(coalesce(outputs('Payload')?['dueIso'], '')), '-', ''))"
                           },
                           "runAfter": {
                             "Need_event_R": [
@@ -2426,18 +2448,36 @@
                             },
                             "Subject_R": {
                               "type": "Compose",
-                              "inputs": "@if(equals(items('Each_new_notice_R')?['type'], 'ASG'), concat('Action assigned to you: ', items('Each_new_notice_R')?['title']), if(equals(items('Each_new_notice_R')?['type'], 'EXT'), concat('Deadline moved: ', items('Each_new_notice_R')?['title']), if(equals(items('Each_new_notice_R')?['type'], 'RDY'), concat('Ready for your close-out check: ', items('Each_new_notice_R')?['title']), if(equals(items('Each_new_notice_R')?['type'], 'CLS'), concat('Action closed: ', items('Each_new_notice_R')?['title']), if(equals(items('Each_new_notice_R')?['type'], 'RAW'), concat('Action reassigned: ', items('Each_new_notice_R')?['title']), if(equals(items('Each_new_notice_R')?['type'], 'R7'), concat('Reminder: ', items('Each_new_notice_R')?['title'], ' is due in ', string(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_R')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_R')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000)), if(equals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_R')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_R')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000), 1), ' day', ' days')), if(equals(items('Each_new_notice_R')?['type'], 'DUE'), concat('Due today: ', items('Each_new_notice_R')?['title']), concat(items('Each_new_notice_R')?['title'], ' is ', string(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_R')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_R')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000))), if(equals(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_R')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_R')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000)), 1), ' day late', ' days late')))))))))",
+                              "inputs": "@if(equals(items('Each_new_notice_R')?['type'], 'ASG'), concat('Action assigned to you: ', items('Each_new_notice_R')?['title']), if(equals(items('Each_new_notice_R')?['type'], 'EXT'), concat('Deadline moved: ', items('Each_new_notice_R')?['title']), if(equals(items('Each_new_notice_R')?['type'], 'RDY'), concat('Ready for your close-out check: ', items('Each_new_notice_R')?['title']), if(equals(items('Each_new_notice_R')?['type'], 'CLS'), concat('Action closed: ', items('Each_new_notice_R')?['title']), if(equals(items('Each_new_notice_R')?['type'], 'RAW'), concat('Action reassigned: ', items('Each_new_notice_R')?['title']), if(equals(items('Each_new_notice_R')?['type'], 'R7'), concat('Reminder: ', items('Each_new_notice_R')?['title'], ' is due in ', string(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_R')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_R')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000)), if(equals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_R')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_R')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000), 1), ' day', ' days')), if(equals(items('Each_new_notice_R')?['type'], 'DUE'), concat('Due today: ', items('Each_new_notice_R')?['title']), if(equals(items('Each_new_notice_R')?['type'], 'ALR'), concat('Competency Hub needs attention: ', items('Each_new_notice_R')?['title']), concat(items('Each_new_notice_R')?['title'], ' is ', string(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_R')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_R')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000))), if(equals(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_R')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_R')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000)), 1), ' day late', ' days late'))))))))))",
                               "runAfter": {
                                 "Token_R": [
                                   "Succeeded"
                                 ]
                               }
                             },
-                            "Html_R": {
+                            "Html_action_R": {
                               "type": "Compose",
                               "inputs": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:15px;color:#16222c\"><p style=\"color:#13516b;font-size:18px;font-weight:600;margin:0 0 12px\">ESG Competency Hub</p><p>@{if(equals(items('Each_new_notice_R')?['type'], 'ASG'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_R')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has given you an action in the ESG Competency Hub.'), if(equals(items('Each_new_notice_R')?['type'], 'EXT'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_R')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has moved the deadline of your action.'), if(equals(items('Each_new_notice_R')?['type'], 'RDY'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_R')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has marked this action as done. It is waiting for your close-out check.'), if(equals(items('Each_new_notice_R')?['type'], 'CLS'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_R')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has closed this action.'), if(equals(items('Each_new_notice_R')?['type'], 'RAW'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_R')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has given this action to someone else. It is no longer yours to do.'), if(equals(items('Each_new_notice_R')?['type'], 'R7'), concat('Your action is due in ', string(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_R')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_R')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000)), if(equals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_R')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_R')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000), 1), ' day.', ' days.')), if(equals(items('Each_new_notice_R')?['type'], 'DUE'), 'Your action is due today.', concat('Your action is ', string(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_R')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_R')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000))), if(equals(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_R')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_R')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000)), 1), ' day late.', ' days late.')))))))))}</p><table style=\"border-collapse:collapse;font-size:15px\"><tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">Action</td><td style=\"padding:4px 0\">@{concat('ACT-', substring(concat('0000', items('Each_new_notice_R')?['actionId']), sub(length(concat('0000', items('Each_new_notice_R')?['actionId'])), 5), 5))} – @{replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_R')?['title'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;')}</td></tr><tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">Area</td><td style=\"padding:4px 0\">@{replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_R')?['area'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;')}</td></tr><tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">Deadline</td><td style=\"padding:4px 0\">@{if(empty(string(coalesce(items('Each_new_notice_R')?['dueIso'], ''))), '', formatDateTime(concat(if(empty(string(coalesce(items('Each_new_notice_R')?['dueIso'], ''))), '2000-01-01', string(items('Each_new_notice_R')?['dueIso'])), 'T00:00:00Z'), 'd MMMM yyyy'))}@{if(and(greater(items('Each_new_notice_R')?['extCount'], 0), not(equals(items('Each_new_notice_R')?['originalIso'], items('Each_new_notice_R')?['dueIso']))), concat(' (originally ', if(empty(string(coalesce(items('Each_new_notice_R')?['originalIso'], ''))), '', formatDateTime(concat(if(empty(string(coalesce(items('Each_new_notice_R')?['originalIso'], ''))), '2000-01-01', string(items('Each_new_notice_R')?['originalIso'])), 'T00:00:00Z'), 'd MMMM yyyy')), ')'), '')}</td></tr>@{if(equals(items('Each_new_notice_R')?['type'], 'EXT'), concat('<tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">Was due</td><td style=\"padding:4px 0\">', if(empty(string(coalesce(items('Each_new_notice_R')?['previousIso'], ''))), '', formatDateTime(concat(if(empty(string(coalesce(items('Each_new_notice_R')?['previousIso'], ''))), '2000-01-01', string(items('Each_new_notice_R')?['previousIso'])), 'T00:00:00Z'), 'd MMMM yyyy')), '</td></tr>'), '')}@{if(empty(items('Each_new_notice_R')?['note']), '', concat('<tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">', if(contains(createArray('EXT', 'RAW', 'ASG'), items('Each_new_notice_R')?['type']), 'Reason', 'Note'), '</td><td style=\"padding:4px 0\">', replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_R')?['note'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td></tr>'))}</table><p style=\"margin:20px 0\"><a href=\"@{outputs('Site_url')}/SitePages/Hub.aspx?action=@{items('Each_new_notice_R')?['actionId']}\" style=\"background:#13516b;color:#ffffff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600\">Open the action</a></p><p style=\"color:#5b6774;font-size:12px\">This is an automated message from the ESG Competency Hub. Reference @{outputs('Token_R')}.</p></div>",
                               "runAfter": {
                                 "Subject_R": [
+                                  "Succeeded"
+                                ]
+                              }
+                            },
+                            "Html_alert_R": {
+                              "type": "Compose",
+                              "inputs": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:15px;color:#16222c\"><p style=\"color:#13516b;font-size:18px;font-weight:600;margin:0 0 12px\">ESG Competency Hub</p><p><b>@{replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_R')?['title'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;')}</b></p><p>@{replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_R')?['note'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;')}</p><p style=\"margin:20px 0\"><a href=\"@{outputs('Site_url')}/SitePages/Hub.aspx?view=admin\" style=\"background:#13516b;color:#ffffff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600\">Open Changes needing attention</a></p><p style=\"color:#5b6774;font-size:12px\">This is an automated alert from the ESG Competency Hub, sent to its administrators. Reference @{outputs('Token_R')}.</p></div>",
+                              "runAfter": {
+                                "Html_action_R": [
+                                  "Succeeded"
+                                ]
+                              }
+                            },
+                            "Html_R": {
+                              "type": "Compose",
+                              "inputs": "@if(equals(items('Each_new_notice_R')?['type'], 'ALR'), outputs('Html_alert_R'), outputs('Html_action_R'))",
+                              "runAfter": {
+                                "Html_alert_R": [
                                   "Succeeded"
                                 ]
                               }
@@ -2489,7 +2529,7 @@
                                 },
                                 {
                                   "FieldName": "RecordType",
-                                  "FieldValue": "Action"
+                                  "FieldValue": "@{if(equals(items('Each_new_notice_R')?['type'], 'ALR'), 'System', 'Action')}"
                                 },
                                 {
                                   "FieldName": "RecordId",
@@ -2724,47 +2764,6 @@
                             ]
                           }
                         },
-                        "Tx_applied_R": {
-                          "type": "Compose",
-                          "inputs": {
-                            "State": "Applied",
-                            "StepsDone": "VALUES;EVENT",
-                            "ProcessedAt": "@{utcNow()}"
-                          },
-                          "runAfter": {
-                            "Each_new_notice_R": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Save_tx_applied_R": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "POST",
-                              "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['hist']}')/items(@{first(split(string(coalesce(variables('varTx')?['Id'], '')), '.'))})",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata",
-                                "Content-Type": "application/json;odata=nometadata",
-                                "X-HTTP-Method": "MERGE",
-                                "IF-MATCH": "*"
-                              },
-                              "parameters/body": "@{string(outputs('Tx_applied_R'))}"
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Tx_applied_R": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
                         "Release_how_R": {
                           "type": "If",
                           "expression": "@variables('varLockedHere')",
@@ -2881,7 +2880,48 @@
                             }
                           },
                           "runAfter": {
-                            "Save_tx_applied_R": [
+                            "Each_new_notice_R": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Tx_applied_R": {
+                          "type": "Compose",
+                          "inputs": {
+                            "State": "Applied",
+                            "StepsDone": "VALUES;EVENT;RELEASE",
+                            "ProcessedAt": "@{utcNow()}"
+                          },
+                          "runAfter": {
+                            "Release_how_R": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Save_tx_applied_R": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                              "parameters/method": "POST",
+                              "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['hist']}')/items(@{first(split(string(coalesce(variables('varTx')?['Id'], '')), '.'))})",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata",
+                                "Content-Type": "application/json;odata=nometadata",
+                                "X-HTTP-Method": "MERGE",
+                                "IF-MATCH": "*"
+                              },
+                              "parameters/body": "@{string(outputs('Tx_applied_R'))}"
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runAfter": {
+                            "Tx_applied_R": [
                               "Succeeded"
                             ]
                           }
@@ -2895,7 +2935,7 @@
                             "ResultId": "@int(string(variables('varActionId')))"
                           },
                           "runAfter": {
-                            "Release_how_R": [
+                            "Save_tx_applied_R": [
                               "Succeeded"
                             ]
                           }
@@ -3043,7 +3083,7 @@
                       "parameters": {
                         "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                         "parameters/method": "GET",
-                        "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['act']}')/items(@{first(split(string(coalesce(variables('varTx')?['RecordId'], '')), '.'))})?$select=Id,Title,CompetencyId,AssignedToId,RaisedById,Status,DueDay,OriginalDueDate,ExtensionCount,RequiresCloseOut,Revision,PendingRequestKey,LastRequestKey,CreatedRequestKey,Description,Priority,Blocker,CloseOutcome,Competency/CompetencyKey,Competency/Title&$expand=Competency",
+                        "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['act']}')/items(@{first(split(string(coalesce(variables('varTx')?['RecordId'], '')), '.'))})?$select=Id,Title,CompetencyId,AssignedToId,RaisedById,Status,IsOpen,DueDay,CurrentDueDate,OriginalDueDate,ExtensionCount,LastExtendedOn,RequiresCloseOut,Revision,PendingRequestKey,LastRequestKey,CreatedRequestKey,Description,Priority,Blocker,DateCompleted,DateClosed,ClosedById,CloseOutcome,ClosureNote,Competency/CompetencyKey,Competency/Title&$expand=Competency",
                         "parameters/headers": {
                           "Accept": "application/json;odata=minimalmetadata"
                         }
@@ -3488,7 +3528,27 @@
                                         "value": {
                                           "due": "@concat(substring(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.')), 0, 4), '-', substring(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.')), 4, 2), '-', substring(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.')), 6, 2))",
                                           "ext": "@int(first(split(string(coalesce(body('Get_action_U')?['ExtensionCount'], '')), '.')))",
-                                          "owner": "@equals(first(split(string(coalesce(body('Get_action_U')?['AssignedToId'], '')), '.')), outputs('Sender_id'))"
+                                          "owner": "@equals(first(split(string(coalesce(body('Get_action_U')?['AssignedToId'], '')), '.')), outputs('Sender_id'))",
+                                          "prev": {
+                                            "Status": "@body('Get_action_U')?['Status']",
+                                            "IsOpen": "@body('Get_action_U')?['IsOpen']",
+                                            "Blocker": "@body('Get_action_U')?['Blocker']",
+                                            "AssignedToId": "@body('Get_action_U')?['AssignedToId']",
+                                            "DueDay": "@body('Get_action_U')?['DueDay']",
+                                            "CurrentDueDate": "@body('Get_action_U')?['CurrentDueDate']",
+                                            "ExtensionCount": "@body('Get_action_U')?['ExtensionCount']",
+                                            "LastExtendedOn": "@body('Get_action_U')?['LastExtendedOn']",
+                                            "DateCompleted": "@body('Get_action_U')?['DateCompleted']",
+                                            "DateClosed": "@body('Get_action_U')?['DateClosed']",
+                                            "ClosedById": "@body('Get_action_U')?['ClosedById']",
+                                            "CloseOutcome": "@body('Get_action_U')?['CloseOutcome']",
+                                            "ClosureNote": "@body('Get_action_U')?['ClosureNote']",
+                                            "Title": "@body('Get_action_U')?['Title']",
+                                            "Description": "@body('Get_action_U')?['Description']",
+                                            "Priority": "@body('Get_action_U')?['Priority']",
+                                            "RequiresCloseOut": "@body('Get_action_U')?['RequiresCloseOut']",
+                                            "Revision": "@body('Get_action_U')?['Revision']"
+                                          }
                                         }
                                       },
                                       "runAfter": {}
@@ -3521,7 +3581,27 @@
                                         "name": "varPlanObj",
                                         "value": {
                                           "status": "@string(body('Get_action_U')?['Status'])",
-                                          "closeOut": "@equals(body('Get_action_U')?['RequiresCloseOut'], true)"
+                                          "closeOut": "@equals(body('Get_action_U')?['RequiresCloseOut'], true)",
+                                          "prev": {
+                                            "Status": "@body('Get_action_U')?['Status']",
+                                            "IsOpen": "@body('Get_action_U')?['IsOpen']",
+                                            "Blocker": "@body('Get_action_U')?['Blocker']",
+                                            "AssignedToId": "@body('Get_action_U')?['AssignedToId']",
+                                            "DueDay": "@body('Get_action_U')?['DueDay']",
+                                            "CurrentDueDate": "@body('Get_action_U')?['CurrentDueDate']",
+                                            "ExtensionCount": "@body('Get_action_U')?['ExtensionCount']",
+                                            "LastExtendedOn": "@body('Get_action_U')?['LastExtendedOn']",
+                                            "DateCompleted": "@body('Get_action_U')?['DateCompleted']",
+                                            "DateClosed": "@body('Get_action_U')?['DateClosed']",
+                                            "ClosedById": "@body('Get_action_U')?['ClosedById']",
+                                            "CloseOutcome": "@body('Get_action_U')?['CloseOutcome']",
+                                            "ClosureNote": "@body('Get_action_U')?['ClosureNote']",
+                                            "Title": "@body('Get_action_U')?['Title']",
+                                            "Description": "@body('Get_action_U')?['Description']",
+                                            "Priority": "@body('Get_action_U')?['Priority']",
+                                            "RequiresCloseOut": "@body('Get_action_U')?['RequiresCloseOut']",
+                                            "Revision": "@body('Get_action_U')?['Revision']"
+                                          }
                                         }
                                       },
                                       "runAfter": {}
@@ -3556,7 +3636,27 @@
                                         "name": "varPlanObj",
                                         "value": {
                                           "status": "@string(body('Get_action_U')?['Status'])",
-                                          "blocker": "@{body('Get_action_U')?['Blocker']}"
+                                          "blocker": "@{body('Get_action_U')?['Blocker']}",
+                                          "prev": {
+                                            "Status": "@body('Get_action_U')?['Status']",
+                                            "IsOpen": "@body('Get_action_U')?['IsOpen']",
+                                            "Blocker": "@body('Get_action_U')?['Blocker']",
+                                            "AssignedToId": "@body('Get_action_U')?['AssignedToId']",
+                                            "DueDay": "@body('Get_action_U')?['DueDay']",
+                                            "CurrentDueDate": "@body('Get_action_U')?['CurrentDueDate']",
+                                            "ExtensionCount": "@body('Get_action_U')?['ExtensionCount']",
+                                            "LastExtendedOn": "@body('Get_action_U')?['LastExtendedOn']",
+                                            "DateCompleted": "@body('Get_action_U')?['DateCompleted']",
+                                            "DateClosed": "@body('Get_action_U')?['DateClosed']",
+                                            "ClosedById": "@body('Get_action_U')?['ClosedById']",
+                                            "CloseOutcome": "@body('Get_action_U')?['CloseOutcome']",
+                                            "ClosureNote": "@body('Get_action_U')?['ClosureNote']",
+                                            "Title": "@body('Get_action_U')?['Title']",
+                                            "Description": "@body('Get_action_U')?['Description']",
+                                            "Priority": "@body('Get_action_U')?['Priority']",
+                                            "RequiresCloseOut": "@body('Get_action_U')?['RequiresCloseOut']",
+                                            "Revision": "@body('Get_action_U')?['Revision']"
+                                          }
                                         }
                                       },
                                       "runAfter": {}
@@ -3587,7 +3687,27 @@
                                         "name": "varPlanObj",
                                         "value": {
                                           "owner": "@{first(split(string(coalesce(body('Get_action_U')?['AssignedToId'], '')), '.'))}",
-                                          "ownerName": "@{first(body('Get_owner_now_A')?['value'])?['Title']}"
+                                          "ownerName": "@{first(body('Get_owner_now_A')?['value'])?['Title']}",
+                                          "prev": {
+                                            "Status": "@body('Get_action_U')?['Status']",
+                                            "IsOpen": "@body('Get_action_U')?['IsOpen']",
+                                            "Blocker": "@body('Get_action_U')?['Blocker']",
+                                            "AssignedToId": "@body('Get_action_U')?['AssignedToId']",
+                                            "DueDay": "@body('Get_action_U')?['DueDay']",
+                                            "CurrentDueDate": "@body('Get_action_U')?['CurrentDueDate']",
+                                            "ExtensionCount": "@body('Get_action_U')?['ExtensionCount']",
+                                            "LastExtendedOn": "@body('Get_action_U')?['LastExtendedOn']",
+                                            "DateCompleted": "@body('Get_action_U')?['DateCompleted']",
+                                            "DateClosed": "@body('Get_action_U')?['DateClosed']",
+                                            "ClosedById": "@body('Get_action_U')?['ClosedById']",
+                                            "CloseOutcome": "@body('Get_action_U')?['CloseOutcome']",
+                                            "ClosureNote": "@body('Get_action_U')?['ClosureNote']",
+                                            "Title": "@body('Get_action_U')?['Title']",
+                                            "Description": "@body('Get_action_U')?['Description']",
+                                            "Priority": "@body('Get_action_U')?['Priority']",
+                                            "RequiresCloseOut": "@body('Get_action_U')?['RequiresCloseOut']",
+                                            "Revision": "@body('Get_action_U')?['Revision']"
+                                          }
                                         }
                                       },
                                       "runAfter": {}
@@ -3616,7 +3736,27 @@
                                       "inputs": {
                                         "name": "varPlanObj",
                                         "value": {
-                                          "status": "@string(body('Get_action_U')?['Status'])"
+                                          "status": "@string(body('Get_action_U')?['Status'])",
+                                          "prev": {
+                                            "Status": "@body('Get_action_U')?['Status']",
+                                            "IsOpen": "@body('Get_action_U')?['IsOpen']",
+                                            "Blocker": "@body('Get_action_U')?['Blocker']",
+                                            "AssignedToId": "@body('Get_action_U')?['AssignedToId']",
+                                            "DueDay": "@body('Get_action_U')?['DueDay']",
+                                            "CurrentDueDate": "@body('Get_action_U')?['CurrentDueDate']",
+                                            "ExtensionCount": "@body('Get_action_U')?['ExtensionCount']",
+                                            "LastExtendedOn": "@body('Get_action_U')?['LastExtendedOn']",
+                                            "DateCompleted": "@body('Get_action_U')?['DateCompleted']",
+                                            "DateClosed": "@body('Get_action_U')?['DateClosed']",
+                                            "ClosedById": "@body('Get_action_U')?['ClosedById']",
+                                            "CloseOutcome": "@body('Get_action_U')?['CloseOutcome']",
+                                            "ClosureNote": "@body('Get_action_U')?['ClosureNote']",
+                                            "Title": "@body('Get_action_U')?['Title']",
+                                            "Description": "@body('Get_action_U')?['Description']",
+                                            "Priority": "@body('Get_action_U')?['Priority']",
+                                            "RequiresCloseOut": "@body('Get_action_U')?['RequiresCloseOut']",
+                                            "Revision": "@body('Get_action_U')?['Revision']"
+                                          }
                                         }
                                       },
                                       "runAfter": {}
@@ -3651,7 +3791,27 @@
                                         "name": "varPlanObj",
                                         "value": {
                                           "status": "@string(body('Get_action_U')?['Status'])",
-                                          "outcome": "@{body('Get_action_U')?['CloseOutcome']}"
+                                          "outcome": "@{body('Get_action_U')?['CloseOutcome']}",
+                                          "prev": {
+                                            "Status": "@body('Get_action_U')?['Status']",
+                                            "IsOpen": "@body('Get_action_U')?['IsOpen']",
+                                            "Blocker": "@body('Get_action_U')?['Blocker']",
+                                            "AssignedToId": "@body('Get_action_U')?['AssignedToId']",
+                                            "DueDay": "@body('Get_action_U')?['DueDay']",
+                                            "CurrentDueDate": "@body('Get_action_U')?['CurrentDueDate']",
+                                            "ExtensionCount": "@body('Get_action_U')?['ExtensionCount']",
+                                            "LastExtendedOn": "@body('Get_action_U')?['LastExtendedOn']",
+                                            "DateCompleted": "@body('Get_action_U')?['DateCompleted']",
+                                            "DateClosed": "@body('Get_action_U')?['DateClosed']",
+                                            "ClosedById": "@body('Get_action_U')?['ClosedById']",
+                                            "CloseOutcome": "@body('Get_action_U')?['CloseOutcome']",
+                                            "ClosureNote": "@body('Get_action_U')?['ClosureNote']",
+                                            "Title": "@body('Get_action_U')?['Title']",
+                                            "Description": "@body('Get_action_U')?['Description']",
+                                            "Priority": "@body('Get_action_U')?['Priority']",
+                                            "RequiresCloseOut": "@body('Get_action_U')?['RequiresCloseOut']",
+                                            "Revision": "@body('Get_action_U')?['Revision']"
+                                          }
                                         }
                                       },
                                       "runAfter": {}
@@ -3689,7 +3849,27 @@
                                           "title": "@{body('Get_action_U')?['Title']}",
                                           "description": "@{body('Get_action_U')?['Description']}",
                                           "priority": "@{body('Get_action_U')?['Priority']}",
-                                          "closeOut": "@equals(body('Get_action_U')?['RequiresCloseOut'], true)"
+                                          "closeOut": "@equals(body('Get_action_U')?['RequiresCloseOut'], true)",
+                                          "prev": {
+                                            "Status": "@body('Get_action_U')?['Status']",
+                                            "IsOpen": "@body('Get_action_U')?['IsOpen']",
+                                            "Blocker": "@body('Get_action_U')?['Blocker']",
+                                            "AssignedToId": "@body('Get_action_U')?['AssignedToId']",
+                                            "DueDay": "@body('Get_action_U')?['DueDay']",
+                                            "CurrentDueDate": "@body('Get_action_U')?['CurrentDueDate']",
+                                            "ExtensionCount": "@body('Get_action_U')?['ExtensionCount']",
+                                            "LastExtendedOn": "@body('Get_action_U')?['LastExtendedOn']",
+                                            "DateCompleted": "@body('Get_action_U')?['DateCompleted']",
+                                            "DateClosed": "@body('Get_action_U')?['DateClosed']",
+                                            "ClosedById": "@body('Get_action_U')?['ClosedById']",
+                                            "CloseOutcome": "@body('Get_action_U')?['CloseOutcome']",
+                                            "ClosureNote": "@body('Get_action_U')?['ClosureNote']",
+                                            "Title": "@body('Get_action_U')?['Title']",
+                                            "Description": "@body('Get_action_U')?['Description']",
+                                            "Priority": "@body('Get_action_U')?['Priority']",
+                                            "RequiresCloseOut": "@body('Get_action_U')?['RequiresCloseOut']",
+                                            "Revision": "@body('Get_action_U')?['Revision']"
+                                          }
                                         }
                                       },
                                       "runAfter": {}
@@ -4096,6 +4276,8 @@
                                 "inputs": {
                                   "name": "varEventJson",
                                   "value": {
+                                    "OwnerId": "@int(if(empty(first(split(string(coalesce(body('Get_action_U')?['AssignedToId'], '')), '.'))), '0', first(split(string(coalesce(body('Get_action_U')?['AssignedToId'], '')), '.'))))",
+                                    "DueDayAtEvent": "@int(replace(string(coalesce(outputs('Payload')?['newDueIso'], '')), '-', ''))",
                                     "OriginalDueDate": "@{body('Get_action_U')?['OriginalDueDate']}",
                                     "PreviousDueDate": "@{convertToUtc(concat(string(json(string(coalesce(variables('varTxPlan'), '{}')))?['due']), 'T00:00:00'), 'GMT Standard Time')}",
                                     "NewDueDate": "@{convertToUtc(concat(string(coalesce(outputs('Payload')?['newDueIso'], '')), 'T00:00:00'), 'GMT Standard Time')}",
@@ -4198,7 +4380,11 @@
                                 "type": "SetVariable",
                                 "inputs": {
                                   "name": "varEventJson",
-                                  "value": {}
+                                  "value": {
+                                    "OwnerId": "@int(if(empty(first(split(string(coalesce(body('Get_action_U')?['AssignedToId'], '')), '.'))), '0', first(split(string(coalesce(body('Get_action_U')?['AssignedToId'], '')), '.'))))",
+                                    "DueDayAtEvent": "@int(if(empty(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.'))), '0', first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.'))))",
+                                    "CompletionKind": "MarkedDone"
+                                  }
                                 },
                                 "runAfter": {
                                   "Event_form_C": [
@@ -4247,23 +4433,6 @@
                                       "recipientId": "@{first(split(string(coalesce(first(body('Owner_p_U'))?['SiteUserId'], '')), '.'))}",
                                       "login": "@{first(body('Owner_p_U'))?['Person']?['Name']}",
                                       "email": "@{coalesce(first(body('Owner_p_U'))?['Person']?['EMail'], first(body('Owner_p_U'))?['Email'])}",
-                                      "actor": "@{string(outputs('Requester')?['Title'])}",
-                                      "actionId": "@{first(split(string(coalesce(body('Get_action_U')?['Id'], '')), '.'))}",
-                                      "title": "@{string(body('Get_action_U')?['Title'])}",
-                                      "area": "@{string(body('Get_action_U')?['Competency']?['Title'])}",
-                                      "dueIso": "@{concat(substring(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.')), 0, 4), '-', substring(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.')), 4, 2), '-', substring(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.')), 6, 2))}",
-                                      "originalIso": "@{concat(substring(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.')), 0, 4), '-', substring(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.')), 4, 2), '-', substring(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.')), 6, 2))}",
-                                      "previousIso": "@{''}",
-                                      "extCount": "@int(0)",
-                                      "note": "@{trim(string(coalesce(outputs('Payload')?['note'], '')))}"
-                                    },
-                                    {
-                                      "send": "@and(and(not(equals(json(string(coalesce(variables('varTxPlan'), '{}')))?['closeOut'], true)), not(equals(first(split(string(coalesce(body('Get_action_U')?['RaisedById'], '')), '.')), outputs('Sender_id'))), not(equals(first(split(string(coalesce(body('Get_action_U')?['RaisedById'], '')), '.')), first(split(string(coalesce(body('Get_action_U')?['AssignedToId'], '')), '.'))))), equals(string(first(body('Raiser_p_U'))?['Status']), 'Active'))",
-                                      "type": "CLS",
-                                      "key": "@{concat('CLS|', string(variables('varTx')?['RequestKey']), '|', first(split(string(coalesce(body('Get_action_U')?['RaisedById'], '')), '.')))}",
-                                      "recipientId": "@{first(split(string(coalesce(first(body('Raiser_p_U'))?['SiteUserId'], '')), '.'))}",
-                                      "login": "@{first(body('Raiser_p_U'))?['Person']?['Name']}",
-                                      "email": "@{coalesce(first(body('Raiser_p_U'))?['Person']?['EMail'], first(body('Raiser_p_U'))?['Email'])}",
                                       "actor": "@{string(outputs('Requester')?['Title'])}",
                                       "actionId": "@{first(split(string(coalesce(body('Get_action_U')?['Id'], '')), '.'))}",
                                       "title": "@{string(body('Get_action_U')?['Title'])}",
@@ -4336,7 +4505,10 @@
                                 "type": "SetVariable",
                                 "inputs": {
                                   "name": "varEventJson",
-                                  "value": {}
+                                  "value": {
+                                    "OwnerId": "@int(if(empty(first(split(string(coalesce(body('Get_action_U')?['AssignedToId'], '')), '.'))), '0', first(split(string(coalesce(body('Get_action_U')?['AssignedToId'], '')), '.'))))",
+                                    "DueDayAtEvent": "@int(if(empty(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.'))), '0', first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.'))))"
+                                  }
                                 },
                                 "runAfter": {
                                   "Event_form_S": [
@@ -4422,7 +4594,11 @@
                                 "type": "SetVariable",
                                 "inputs": {
                                   "name": "varEventJson",
-                                  "value": {}
+                                  "value": {
+                                    "OwnerId": "@int(if(empty(first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.'))))",
+                                    "DueDayAtEvent": "@int(if(empty(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.'))), '0', first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.'))))",
+                                    "PreviousOwnerId": "@int(string(json(string(coalesce(variables('varTxPlan'), '{}')))?['owner']))"
+                                  }
                                 },
                                 "runAfter": {
                                   "Event_form_A": [
@@ -4539,7 +4715,11 @@
                                 "type": "SetVariable",
                                 "inputs": {
                                   "name": "varEventJson",
-                                  "value": {}
+                                  "value": {
+                                    "OwnerId": "@int(if(empty(first(split(string(coalesce(body('Get_action_U')?['AssignedToId'], '')), '.'))), '0', first(split(string(coalesce(body('Get_action_U')?['AssignedToId'], '')), '.'))))",
+                                    "DueDayAtEvent": "@int(if(empty(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.'))), '0', first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.'))))",
+                                    "CompletionKind": "@{if(not(equals(string(coalesce(outputs('Payload')?['outcome'], '')), 'Completed')), 'ClosedNotCompleted', if(equals(string(json(string(coalesce(variables('varTxPlan'), '{}')))?['status']), 'Completed'), 'CloseOutConfirmed', 'ClosedByManager'))}"
+                                  }
                                 },
                                 "runAfter": {
                                   "Event_form_L": [
@@ -4571,23 +4751,6 @@
                                       "recipientId": "@{first(split(string(coalesce(first(body('Owner_p_U'))?['SiteUserId'], '')), '.'))}",
                                       "login": "@{first(body('Owner_p_U'))?['Person']?['Name']}",
                                       "email": "@{coalesce(first(body('Owner_p_U'))?['Person']?['EMail'], first(body('Owner_p_U'))?['Email'])}",
-                                      "actor": "@{string(outputs('Requester')?['Title'])}",
-                                      "actionId": "@{first(split(string(coalesce(body('Get_action_U')?['Id'], '')), '.'))}",
-                                      "title": "@{string(body('Get_action_U')?['Title'])}",
-                                      "area": "@{string(body('Get_action_U')?['Competency']?['Title'])}",
-                                      "dueIso": "@{concat(substring(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.')), 0, 4), '-', substring(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.')), 4, 2), '-', substring(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.')), 6, 2))}",
-                                      "originalIso": "@{concat(substring(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.')), 0, 4), '-', substring(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.')), 4, 2), '-', substring(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.')), 6, 2))}",
-                                      "previousIso": "@{''}",
-                                      "extCount": "@int(0)",
-                                      "note": "@{trim(string(coalesce(outputs('Payload')?['note'], '')))}"
-                                    },
-                                    {
-                                      "send": "@and(and(not(equals(first(split(string(coalesce(body('Get_action_U')?['RaisedById'], '')), '.')), outputs('Sender_id'))), not(equals(first(split(string(coalesce(body('Get_action_U')?['RaisedById'], '')), '.')), first(split(string(coalesce(body('Get_action_U')?['AssignedToId'], '')), '.'))))), equals(string(first(body('Raiser_p_U'))?['Status']), 'Active'))",
-                                      "type": "CLS",
-                                      "key": "@{concat('CLS|', string(variables('varTx')?['RequestKey']), '|', first(split(string(coalesce(body('Get_action_U')?['RaisedById'], '')), '.')))}",
-                                      "recipientId": "@{first(split(string(coalesce(first(body('Raiser_p_U'))?['SiteUserId'], '')), '.'))}",
-                                      "login": "@{first(body('Raiser_p_U'))?['Person']?['Name']}",
-                                      "email": "@{coalesce(first(body('Raiser_p_U'))?['Person']?['EMail'], first(body('Raiser_p_U'))?['Email'])}",
                                       "actor": "@{string(outputs('Requester')?['Title'])}",
                                       "actionId": "@{first(split(string(coalesce(body('Get_action_U')?['Id'], '')), '.'))}",
                                       "title": "@{string(body('Get_action_U')?['Title'])}",
@@ -4660,7 +4823,10 @@
                                 "type": "SetVariable",
                                 "inputs": {
                                   "name": "varEventJson",
-                                  "value": {}
+                                  "value": {
+                                    "OwnerId": "@int(if(empty(first(split(string(coalesce(body('Get_action_U')?['AssignedToId'], '')), '.'))), '0', first(split(string(coalesce(body('Get_action_U')?['AssignedToId'], '')), '.'))))",
+                                    "DueDayAtEvent": "@int(if(empty(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.'))), '0', first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.'))))"
+                                  }
                                 },
                                 "runAfter": {
                                   "Event_form_O": [
@@ -4742,7 +4908,10 @@
                                 "type": "SetVariable",
                                 "inputs": {
                                   "name": "varEventJson",
-                                  "value": {}
+                                  "value": {
+                                    "OwnerId": "@int(if(empty(first(split(string(coalesce(body('Get_action_U')?['AssignedToId'], '')), '.'))), '0', first(split(string(coalesce(body('Get_action_U')?['AssignedToId'], '')), '.'))))",
+                                    "DueDayAtEvent": "@int(if(empty(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.'))), '0', first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.'))))"
+                                  }
                                 },
                                 "runAfter": {
                                   "Event_form_E": [
@@ -5297,18 +5466,36 @@
                           },
                           "Subject_U": {
                             "type": "Compose",
-                            "inputs": "@if(equals(items('Each_new_notice_U')?['type'], 'ASG'), concat('Action assigned to you: ', items('Each_new_notice_U')?['title']), if(equals(items('Each_new_notice_U')?['type'], 'EXT'), concat('Deadline moved: ', items('Each_new_notice_U')?['title']), if(equals(items('Each_new_notice_U')?['type'], 'RDY'), concat('Ready for your close-out check: ', items('Each_new_notice_U')?['title']), if(equals(items('Each_new_notice_U')?['type'], 'CLS'), concat('Action closed: ', items('Each_new_notice_U')?['title']), if(equals(items('Each_new_notice_U')?['type'], 'RAW'), concat('Action reassigned: ', items('Each_new_notice_U')?['title']), if(equals(items('Each_new_notice_U')?['type'], 'R7'), concat('Reminder: ', items('Each_new_notice_U')?['title'], ' is due in ', string(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_U')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_U')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000)), if(equals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_U')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_U')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000), 1), ' day', ' days')), if(equals(items('Each_new_notice_U')?['type'], 'DUE'), concat('Due today: ', items('Each_new_notice_U')?['title']), concat(items('Each_new_notice_U')?['title'], ' is ', string(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_U')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_U')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000))), if(equals(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_U')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_U')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000)), 1), ' day late', ' days late')))))))))",
+                            "inputs": "@if(equals(items('Each_new_notice_U')?['type'], 'ASG'), concat('Action assigned to you: ', items('Each_new_notice_U')?['title']), if(equals(items('Each_new_notice_U')?['type'], 'EXT'), concat('Deadline moved: ', items('Each_new_notice_U')?['title']), if(equals(items('Each_new_notice_U')?['type'], 'RDY'), concat('Ready for your close-out check: ', items('Each_new_notice_U')?['title']), if(equals(items('Each_new_notice_U')?['type'], 'CLS'), concat('Action closed: ', items('Each_new_notice_U')?['title']), if(equals(items('Each_new_notice_U')?['type'], 'RAW'), concat('Action reassigned: ', items('Each_new_notice_U')?['title']), if(equals(items('Each_new_notice_U')?['type'], 'R7'), concat('Reminder: ', items('Each_new_notice_U')?['title'], ' is due in ', string(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_U')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_U')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000)), if(equals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_U')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_U')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000), 1), ' day', ' days')), if(equals(items('Each_new_notice_U')?['type'], 'DUE'), concat('Due today: ', items('Each_new_notice_U')?['title']), if(equals(items('Each_new_notice_U')?['type'], 'ALR'), concat('Competency Hub needs attention: ', items('Each_new_notice_U')?['title']), concat(items('Each_new_notice_U')?['title'], ' is ', string(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_U')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_U')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000))), if(equals(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_U')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_U')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000)), 1), ' day late', ' days late'))))))))))",
                             "runAfter": {
                               "Token_U": [
                                 "Succeeded"
                               ]
                             }
                           },
-                          "Html_U": {
+                          "Html_action_U": {
                             "type": "Compose",
                             "inputs": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:15px;color:#16222c\"><p style=\"color:#13516b;font-size:18px;font-weight:600;margin:0 0 12px\">ESG Competency Hub</p><p>@{if(equals(items('Each_new_notice_U')?['type'], 'ASG'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_U')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has given you an action in the ESG Competency Hub.'), if(equals(items('Each_new_notice_U')?['type'], 'EXT'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_U')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has moved the deadline of your action.'), if(equals(items('Each_new_notice_U')?['type'], 'RDY'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_U')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has marked this action as done. It is waiting for your close-out check.'), if(equals(items('Each_new_notice_U')?['type'], 'CLS'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_U')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has closed this action.'), if(equals(items('Each_new_notice_U')?['type'], 'RAW'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_U')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has given this action to someone else. It is no longer yours to do.'), if(equals(items('Each_new_notice_U')?['type'], 'R7'), concat('Your action is due in ', string(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_U')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_U')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000)), if(equals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_U')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_U')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000), 1), ' day.', ' days.')), if(equals(items('Each_new_notice_U')?['type'], 'DUE'), 'Your action is due today.', concat('Your action is ', string(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_U')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_U')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000))), if(equals(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_U')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_U')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000)), 1), ' day late.', ' days late.')))))))))}</p><table style=\"border-collapse:collapse;font-size:15px\"><tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">Action</td><td style=\"padding:4px 0\">@{concat('ACT-', substring(concat('0000', items('Each_new_notice_U')?['actionId']), sub(length(concat('0000', items('Each_new_notice_U')?['actionId'])), 5), 5))} – @{replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_U')?['title'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;')}</td></tr><tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">Area</td><td style=\"padding:4px 0\">@{replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_U')?['area'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;')}</td></tr><tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">Deadline</td><td style=\"padding:4px 0\">@{if(empty(string(coalesce(items('Each_new_notice_U')?['dueIso'], ''))), '', formatDateTime(concat(if(empty(string(coalesce(items('Each_new_notice_U')?['dueIso'], ''))), '2000-01-01', string(items('Each_new_notice_U')?['dueIso'])), 'T00:00:00Z'), 'd MMMM yyyy'))}@{if(and(greater(items('Each_new_notice_U')?['extCount'], 0), not(equals(items('Each_new_notice_U')?['originalIso'], items('Each_new_notice_U')?['dueIso']))), concat(' (originally ', if(empty(string(coalesce(items('Each_new_notice_U')?['originalIso'], ''))), '', formatDateTime(concat(if(empty(string(coalesce(items('Each_new_notice_U')?['originalIso'], ''))), '2000-01-01', string(items('Each_new_notice_U')?['originalIso'])), 'T00:00:00Z'), 'd MMMM yyyy')), ')'), '')}</td></tr>@{if(equals(items('Each_new_notice_U')?['type'], 'EXT'), concat('<tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">Was due</td><td style=\"padding:4px 0\">', if(empty(string(coalesce(items('Each_new_notice_U')?['previousIso'], ''))), '', formatDateTime(concat(if(empty(string(coalesce(items('Each_new_notice_U')?['previousIso'], ''))), '2000-01-01', string(items('Each_new_notice_U')?['previousIso'])), 'T00:00:00Z'), 'd MMMM yyyy')), '</td></tr>'), '')}@{if(empty(items('Each_new_notice_U')?['note']), '', concat('<tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">', if(contains(createArray('EXT', 'RAW', 'ASG'), items('Each_new_notice_U')?['type']), 'Reason', 'Note'), '</td><td style=\"padding:4px 0\">', replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_U')?['note'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td></tr>'))}</table><p style=\"margin:20px 0\"><a href=\"@{outputs('Site_url')}/SitePages/Hub.aspx?action=@{items('Each_new_notice_U')?['actionId']}\" style=\"background:#13516b;color:#ffffff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600\">Open the action</a></p><p style=\"color:#5b6774;font-size:12px\">This is an automated message from the ESG Competency Hub. Reference @{outputs('Token_U')}.</p></div>",
                             "runAfter": {
                               "Subject_U": [
+                                "Succeeded"
+                              ]
+                            }
+                          },
+                          "Html_alert_U": {
+                            "type": "Compose",
+                            "inputs": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:15px;color:#16222c\"><p style=\"color:#13516b;font-size:18px;font-weight:600;margin:0 0 12px\">ESG Competency Hub</p><p><b>@{replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_U')?['title'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;')}</b></p><p>@{replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_U')?['note'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;')}</p><p style=\"margin:20px 0\"><a href=\"@{outputs('Site_url')}/SitePages/Hub.aspx?view=admin\" style=\"background:#13516b;color:#ffffff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600\">Open Changes needing attention</a></p><p style=\"color:#5b6774;font-size:12px\">This is an automated alert from the ESG Competency Hub, sent to its administrators. Reference @{outputs('Token_U')}.</p></div>",
+                            "runAfter": {
+                              "Html_action_U": [
+                                "Succeeded"
+                              ]
+                            }
+                          },
+                          "Html_U": {
+                            "type": "Compose",
+                            "inputs": "@if(equals(items('Each_new_notice_U')?['type'], 'ALR'), outputs('Html_alert_U'), outputs('Html_action_U'))",
+                            "runAfter": {
+                              "Html_alert_U": [
                                 "Succeeded"
                               ]
                             }
@@ -5360,7 +5547,7 @@
                               },
                               {
                                 "FieldName": "RecordType",
-                                "FieldValue": "Action"
+                                "FieldValue": "@{if(equals(items('Each_new_notice_U')?['type'], 'ALR'), 'System', 'Action')}"
                               },
                               {
                                 "FieldName": "RecordId",
@@ -5595,47 +5782,6 @@
                           ]
                         }
                       },
-                      "Tx_applied_U": {
-                        "type": "Compose",
-                        "inputs": {
-                          "State": "Applied",
-                          "StepsDone": "VALUES;EVENT",
-                          "ProcessedAt": "@{utcNow()}"
-                        },
-                        "runAfter": {
-                          "Each_new_notice_U": [
-                            "Succeeded"
-                          ]
-                        }
-                      },
-                      "Save_tx_applied_U": {
-                        "type": "OpenApiConnection",
-                        "inputs": {
-                          "host": {
-                            "connectionName": "shared_sharepointonline",
-                            "operationId": "HttpRequest",
-                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                          },
-                          "parameters": {
-                            "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                            "parameters/method": "POST",
-                            "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['hist']}')/items(@{first(split(string(coalesce(variables('varTx')?['Id'], '')), '.'))})",
-                            "parameters/headers": {
-                              "Accept": "application/json;odata=nometadata",
-                              "Content-Type": "application/json;odata=nometadata",
-                              "X-HTTP-Method": "MERGE",
-                              "IF-MATCH": "*"
-                            },
-                            "parameters/body": "@{string(outputs('Tx_applied_U'))}"
-                          },
-                          "authentication": "@parameters('$authentication')"
-                        },
-                        "runAfter": {
-                          "Tx_applied_U": [
-                            "Succeeded"
-                          ]
-                        }
-                      },
                       "Release_how_U": {
                         "type": "If",
                         "expression": "@variables('varLockedHere')",
@@ -5752,7 +5898,48 @@
                           }
                         },
                         "runAfter": {
-                          "Save_tx_applied_U": [
+                          "Each_new_notice_U": [
+                            "Succeeded"
+                          ]
+                        }
+                      },
+                      "Tx_applied_U": {
+                        "type": "Compose",
+                        "inputs": {
+                          "State": "Applied",
+                          "StepsDone": "VALUES;EVENT;RELEASE",
+                          "ProcessedAt": "@{utcNow()}"
+                        },
+                        "runAfter": {
+                          "Release_how_U": [
+                            "Succeeded"
+                          ]
+                        }
+                      },
+                      "Save_tx_applied_U": {
+                        "type": "OpenApiConnection",
+                        "inputs": {
+                          "host": {
+                            "connectionName": "shared_sharepointonline",
+                            "operationId": "HttpRequest",
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                          },
+                          "parameters": {
+                            "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                            "parameters/method": "POST",
+                            "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['hist']}')/items(@{first(split(string(coalesce(variables('varTx')?['Id'], '')), '.'))})",
+                            "parameters/headers": {
+                              "Accept": "application/json;odata=nometadata",
+                              "Content-Type": "application/json;odata=nometadata",
+                              "X-HTTP-Method": "MERGE",
+                              "IF-MATCH": "*"
+                            },
+                            "parameters/body": "@{string(outputs('Tx_applied_U'))}"
+                          },
+                          "authentication": "@parameters('$authentication')"
+                        },
+                        "runAfter": {
+                          "Tx_applied_U": [
                             "Succeeded"
                           ]
                         }
@@ -5766,7 +5953,7 @@
                           "ResultId": "@int(first(split(string(coalesce(body('Get_action_U')?['Id'], '')), '.')))"
                         },
                         "runAfter": {
-                          "Release_how_U": [
+                          "Save_tx_applied_U": [
                             "Succeeded"
                           ]
                         }
@@ -6189,7 +6376,7 @@
               "type": "Compose",
               "inputs": {
                 "Status": "Failed",
-                "ResultMessage": "This change has not been recorded yet. A Competency Hub administrator can see it in History."
+                "ResultMessage": "Not recorded yet – retrying automatically."
               },
               "runAfter": {}
             },
@@ -6229,7 +6416,8 @@
                   "type": "Compose",
                   "inputs": {
                     "State": "Failed",
-                    "LastError": "@{concat('Run ', workflow()?['run']?['name'], ' failed. See its run history.')}"
+                    "LastError": "@{concat('Run ', workflow()?['run']?['name'], ' failed. See its run history.')}",
+                    "NextAttemptAfter": "@{addMinutes(utcNow(), 10)}"
                   },
                   "runAfter": {}
                 },

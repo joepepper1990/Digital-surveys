@@ -1,0 +1,1890 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_sharepointonline": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "esghub_sharedsharepointonline_hub"
+        },
+        "api": {
+          "name": "shared_sharepointonline"
+        }
+      },
+      "shared_office365": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "esghub_sharedoffice365_hub"
+        },
+        "api": {
+          "name": "shared_office365"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "esghub_CompetencyHubSiteUrl",
+            "description": "Full address of the Competency Hub site, e.g. https://<tenant>.sharepoint.com/sites/ESGCompetencyHub (no trailing slash)."
+          }
+        }
+      },
+      "triggers": {
+        "Every_15_minutes": {
+          "type": "Recurrence",
+          "recurrence": {
+            "frequency": "Minute",
+            "interval": 15,
+            "startTime": "2026-10-01T00:00:00",
+            "timeZone": "GMT Standard Time"
+          },
+          "runtimeConfiguration": {
+            "concurrency": {
+              "runs": 1
+            }
+          }
+        }
+      },
+      "actions": {
+        "Initialize_varOutbox": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varOutbox",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {}
+        },
+        "Initialize_varAlerts": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varAlerts",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_varOutbox": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_varDown": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varDown",
+                "type": "boolean",
+                "value": false
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_varAlerts": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_varPart": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varPart",
+                "type": "boolean",
+                "value": false
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_varDown": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Try": {
+          "type": "Scope",
+          "actions": {
+            "Site_path": {
+              "type": "Compose",
+              "inputs": "@if(endsWith(uriPath(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')), '/'), take(uriPath(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')), sub(length(uriPath(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)'))), 1)), uriPath(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')))",
+              "runAfter": {}
+            },
+            "Site_url": {
+              "type": "Compose",
+              "inputs": "@if(endsWith(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)'), '/'), take(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)'), sub(length(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')), 1)), parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)'))",
+              "runAfter": {
+                "Site_path": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Ids": {
+              "type": "Compose",
+              "inputs": {
+                "req": "@{outputs('Site_path')}/Lists/Requests",
+                "act": "@{outputs('Site_path')}/Lists/Actions",
+                "hist": "@{outputs('Site_path')}/Lists/History",
+                "upd": "@{outputs('Site_path')}/Lists/Updates",
+                "people": "@{outputs('Site_path')}/Lists/People",
+                "members": "@{outputs('Site_path')}/Lists/CompetencyMembers",
+                "comps": "@{outputs('Site_path')}/Lists/Competencies",
+                "notif": "@{outputs('Site_path')}/Lists/NotificationLog",
+                "settings": "@{outputs('Site_path')}/Lists/Settings",
+                "reqRoot": "@{outputs('Site_path')}/Lists/Requests",
+                "actRoot": "@{outputs('Site_path')}/Lists/Actions",
+                "histRoot": "@{outputs('Site_path')}/Lists/History",
+                "updRoot": "@{outputs('Site_path')}/Lists/Updates",
+                "notifRoot": "@{outputs('Site_path')}/Lists/NotificationLog"
+              },
+              "runAfter": {
+                "Site_url": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Today": {
+              "type": "Compose",
+              "inputs": "@convertFromUtc(utcNow(), 'GMT Standard Time', 'yyyy-MM-dd')",
+              "runAfter": {
+                "Ids": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Now_uk": {
+              "type": "Compose",
+              "inputs": "@convertFromUtc(utcNow(), 'GMT Standard Time')",
+              "runAfter": {
+                "Today": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Get_settings": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['settings']}')/items?$select=Id,Title,Value&$top=500",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Now_uk": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Hours_row": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Get_settings')?['value']",
+                "where": "@equals(item()?['Title'], 'MonitorHours')"
+              },
+              "runAfter": {
+                "Get_settings": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Minute": {
+              "type": "Compose",
+              "inputs": "@add(mul(int(formatDateTime(outputs('Now_uk'), 'HH')), 60), int(formatDateTime(outputs('Now_uk'), 'mm')))",
+              "runAfter": {
+                "Hours_row": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Working": {
+              "type": "Compose",
+              "inputs": "@and(greaterOrEquals(dayOfWeek(outputs('Now_uk')), 1), lessOrEquals(dayOfWeek(outputs('Now_uk')), 5), greaterOrEquals(outputs('Minute'), add(mul(int(substring(split(string(coalesce(first(body('Hours_row'))?['Value'], '07:00|19:45|60')), '|')[0], 0, 2)), 60), int(substring(split(string(coalesce(first(body('Hours_row'))?['Value'], '07:00|19:45|60')), '|')[0], 3, 2)))), lessOrEquals(outputs('Minute'), add(mul(int(substring(split(string(coalesce(first(body('Hours_row'))?['Value'], '07:00|19:45|60')), '|')[1], 0, 2)), 60), int(substring(split(string(coalesce(first(body('Hours_row'))?['Value'], '07:00|19:45|60')), '|')[1], 3, 2)))))",
+              "runAfter": {
+                "Minute": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Due": {
+              "type": "If",
+              "expression": "@or(outputs('Working'), less(mod(outputs('Minute'), max(15, int(split(string(coalesce(first(body('Hours_row'))?['Value'], '07:00|19:45|60')), '|')[2]))), 15))",
+              "actions": {},
+              "else": {
+                "actions": {
+                  "Not_now": {
+                    "type": "Terminate",
+                    "inputs": {
+                      "runStatus": "Succeeded"
+                    },
+                    "runAfter": {}
+                  }
+                }
+              },
+              "runAfter": {
+                "Working": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Get_people": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['people']}')/items?$select=Id,Title,SiteUserId,Status,IsAdministrator,Email,Person/Name,Person/EMail&$expand=Person&$top=5000",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Due": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Admins": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Get_people')?['value']",
+                "where": "@and(equals(item()?['IsAdministrator'], true), equals(item()?['Status'], 'Active'))"
+              },
+              "runAfter": {
+                "Get_people": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Get_req_submitted": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['req']}')/items?$select=Id,Title,RequestKey,RequestType,TargetId,Status,Attempts,Created,Modified,AuthorId&$filter=Status eq 'Submitted'&$top=5000",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=minimalmetadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Admins": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Get_req_processing": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['req']}')/items?$select=Id,Title,RequestKey,RequestType,TargetId,Status,Attempts,Created,Modified,AuthorId&$filter=Status eq 'Processing'&$top=5000",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=minimalmetadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Get_req_submitted": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Get_req_failed": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['req']}')/items?$select=Id,Title,RequestKey,RequestType,TargetId,Status,Attempts,Created,Modified,AuthorId&$filter=Status eq 'Failed'&$top=5000",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=minimalmetadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Get_req_processing": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Stuck": {
+              "type": "Query",
+              "inputs": {
+                "from": "@union(body('Get_req_submitted')?['value'], body('Get_req_processing')?['value'], body('Get_req_failed')?['value'])",
+                "where": "@or(and(equals(item()?['Status'], 'Submitted'), less(ticks(string(coalesce(item()?['Modified'], '2000-01-01T00:00:00Z'))), ticks(addMinutes(utcNow(), -10)))), and(equals(item()?['Status'], 'Processing'), less(ticks(string(coalesce(item()?['Modified'], '2000-01-01T00:00:00Z'))), ticks(addMinutes(utcNow(), -15)))), and(equals(item()?['Status'], 'Failed'), less(ticks(string(coalesce(item()?['Modified'], '2000-01-01T00:00:00Z'))), ticks(addMinutes(utcNow(), -10)))))"
+              },
+              "runAfter": {
+                "Get_req_failed": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Each_stuck": {
+              "type": "Foreach",
+              "foreach": "@body('Stuck')",
+              "runtimeConfiguration": {
+                "concurrency": {
+                  "repetitions": 1
+                }
+              },
+              "actions": {
+                "Find_tx_m": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                      "parameters/method": "GET",
+                      "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['hist']}')/items?$select=Id,Title,RequestKey,RequestType,RecordId,State,Attempts,LastError&$filter=RequestItemId eq @{items('Each_stuck')?['Id']} and RowKind eq 'Transaction'",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata"
+                      }
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {}
+                },
+                "Not_picked_up": {
+                  "type": "If",
+                  "expression": "@and(equals(items('Each_stuck')?['Status'], 'Submitted'), empty(first(body('Find_tx_m')?['value'])), greater(int(if(empty(first(split(string(coalesce(items('Each_stuck')?['Attempts'], '')), '.'))), '0', first(split(string(coalesce(items('Each_stuck')?['Attempts'], '')), '.')))), 0))",
+                  "actions": {
+                    "Mark_down": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "varDown",
+                        "value": true
+                      },
+                      "runAfter": {}
+                    }
+                  },
+                  "else": {
+                    "actions": {}
+                  },
+                  "runAfter": {
+                    "Find_tx_m": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Give_up": {
+                  "type": "If",
+                  "expression": "@and(not(empty(first(body('Find_tx_m')?['value']))), not(and(not(empty(first(body('Find_tx_m')?['value']))), contains(createArray('Applied', 'Void', 'Cancelled', 'Reverted', 'Rolled Back'), string(first(body('Find_tx_m')?['value'])?['State'])))), greaterOrEquals(int(if(empty(first(body('Find_tx_m')?['value'])), '0', if(empty(first(split(string(coalesce(first(body('Find_tx_m')?['value'])?['Attempts'], '')), '.'))), '0', first(split(string(coalesce(first(body('Find_tx_m')?['value'])?['Attempts'], '')), '.'))))), 3))",
+                  "actions": {
+                    "Part_unknown": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "varPart",
+                        "value": false
+                      },
+                      "runAfter": {}
+                    },
+                    "Find_part": {
+                      "type": "If",
+                      "expression": "@equals(string(first(body('Find_tx_m')?['value'])?['RequestType']), 'RaiseAction')",
+                      "actions": {
+                        "Get_raised_m": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                              "parameters/method": "GET",
+                              "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['act']}')/items?$select=Id&$filter=CreatedRequestKey eq 'F%7C@{replace(string(coalesce(first(body('Find_tx_m')?['value'])?['RequestKey'], '')), '''', '''''')}'",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata"
+                              }
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runAfter": {}
+                        },
+                        "Set_part_raised": {
+                          "type": "SetVariable",
+                          "inputs": {
+                            "name": "varPart",
+                            "value": "@not(empty(body('Get_raised_m')?['value']))"
+                          },
+                          "runAfter": {
+                            "Get_raised_m": [
+                              "Succeeded"
+                            ]
+                          }
+                        }
+                      },
+                      "else": {
+                        "actions": {
+                          "Get_changed_m": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "host": {
+                                "connectionName": "shared_sharepointonline",
+                                "operationId": "HttpRequest",
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                              },
+                              "parameters": {
+                                "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                                "parameters/method": "GET",
+                                "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['act']}')/items(@{if(empty(first(split(string(coalesce(first(body('Find_tx_m')?['value'])?['RecordId'], '')), '.'))), '0', first(split(string(coalesce(first(body('Find_tx_m')?['value'])?['RecordId'], '')), '.')))})?$select=Id,PendingRequestKey",
+                                "parameters/headers": {
+                                  "Accept": "application/json;odata=nometadata"
+                                }
+                              },
+                              "authentication": "@parameters('$authentication')"
+                            },
+                            "runAfter": {}
+                          },
+                          "Set_part_changed": {
+                            "type": "SetVariable",
+                            "inputs": {
+                              "name": "varPart",
+                              "value": "@and(equals(actions('Get_changed_m')?['status'], 'Succeeded'), equals(string(coalesce(body('Get_changed_m')?['PendingRequestKey'], '')), string(first(body('Find_tx_m')?['value'])?['RequestKey'])))"
+                            },
+                            "runAfter": {
+                              "Get_changed_m": [
+                                "Succeeded",
+                                "Failed",
+                                "TimedOut"
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      "runAfter": {
+                        "Part_unknown": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Attention_tx": {
+                      "type": "Compose",
+                      "inputs": {
+                        "State": "Needs attention"
+                      },
+                      "runAfter": {
+                        "Find_part": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Save_attention_tx": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                          "parameters/method": "POST",
+                          "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['hist']}')/items(@{if(empty(first(split(string(coalesce(first(body('Find_tx_m')?['value'])?['Id'], '')), '.'))), '0', first(split(string(coalesce(first(body('Find_tx_m')?['value'])?['Id'], '')), '.')))})",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata",
+                            "Content-Type": "application/json;odata=nometadata",
+                            "X-HTTP-Method": "MERGE",
+                            "IF-MATCH": "*"
+                          },
+                          "parameters/body": "@{string(outputs('Attention_tx'))}"
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {
+                        "Attention_tx": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Attention_req": {
+                      "type": "Compose",
+                      "inputs": {
+                        "Status": "Needs attention",
+                        "ResultMessage": "@{if(variables('varPart'), 'Not fully recorded – an administrator has been told. The record is locked until it is resolved.', 'Not recorded – an administrator has been told. Nothing was changed.')}"
+                      },
+                      "runAfter": {
+                        "Save_attention_tx": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Save_attention_req": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                          "parameters/method": "POST",
+                          "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['req']}')/items(@{items('Each_stuck')?['Id']})",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata",
+                            "Content-Type": "application/json;odata=nometadata",
+                            "X-HTTP-Method": "MERGE",
+                            "IF-MATCH": "*"
+                          },
+                          "parameters/body": "@{string(outputs('Attention_req'))}"
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {
+                        "Attention_req": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Attention_alert": {
+                      "type": "If",
+                      "expression": "@true",
+                      "actions": {
+                        "Attention_alert_to": {
+                          "type": "Select",
+                          "inputs": {
+                            "from": "@body('Admins')",
+                            "select": {
+                              "send": "@and(true, equals(string(item()?['Status']), 'Active'))",
+                              "type": "ALR",
+                              "key": "@{concat('ALR|', concat('request|', string(items('Each_stuck')?['Id'])), '|', outputs('Today'), '|', first(split(string(coalesce(item()?['SiteUserId'], '')), '.')))}",
+                              "recipientId": "@{first(split(string(coalesce(item()?['SiteUserId'], '')), '.'))}",
+                              "login": "@{item()?['Person']?['Name']}",
+                              "email": "@{coalesce(item()?['Person']?['EMail'], item()?['Email'])}",
+                              "actor": "@{''}",
+                              "actionId": "@{'0'}",
+                              "title": "@{concat('A change could not be recorded: ', string(items('Each_stuck')?['Title']))}",
+                              "area": "@{''}",
+                              "dueIso": "@{outputs('Today')}",
+                              "originalIso": "@{outputs('Today')}",
+                              "previousIso": "@{''}",
+                              "extCount": "@int(0)",
+                              "note": "@{concat('It was submitted at ', string(items('Each_stuck')?['Created']), ' (UTC) and tried 3 times. ', if(variables('varPart'), 'Part of it was made, so the record stays locked until you choose Finish or Revert.', 'Nothing was changed. You can try it again or cancel it.'), ' Last error: ', string(coalesce(first(body('Find_tx_m')?['value'])?['LastError'], 'none recorded')))}"
+                            }
+                          },
+                          "runAfter": {}
+                        },
+                        "Attention_alert_add": {
+                          "type": "SetVariable",
+                          "inputs": {
+                            "name": "varAlerts",
+                            "value": "@union(variables('varAlerts'), body('Attention_alert_to'))"
+                          },
+                          "runAfter": {
+                            "Attention_alert_to": [
+                              "Succeeded"
+                            ]
+                          }
+                        }
+                      },
+                      "else": {
+                        "actions": {}
+                      },
+                      "runAfter": {
+                        "Save_attention_req": [
+                          "Succeeded"
+                        ]
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {
+                      "Refire_body": {
+                        "type": "Compose",
+                        "inputs": {
+                          "Status": "Submitted",
+                          "Attempts": "@add(int(if(empty(first(split(string(coalesce(items('Each_stuck')?['Attempts'], '')), '.'))), '0', first(split(string(coalesce(items('Each_stuck')?['Attempts'], '')), '.')))), 1)"
+                        },
+                        "runAfter": {}
+                      },
+                      "Refire": {
+                        "type": "OpenApiConnection",
+                        "inputs": {
+                          "host": {
+                            "connectionName": "shared_sharepointonline",
+                            "operationId": "HttpRequest",
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                          },
+                          "parameters": {
+                            "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                            "parameters/method": "POST",
+                            "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['req']}')/items(@{items('Each_stuck')?['Id']})",
+                            "parameters/headers": {
+                              "Accept": "application/json;odata=nometadata",
+                              "Content-Type": "application/json;odata=nometadata",
+                              "X-HTTP-Method": "MERGE",
+                              "IF-MATCH": "*"
+                            },
+                            "parameters/body": "@{string(outputs('Refire_body'))}"
+                          },
+                          "authentication": "@parameters('$authentication')"
+                        },
+                        "runAfter": {
+                          "Refire_body": [
+                            "Succeeded"
+                          ]
+                        }
+                      },
+                      "Count_attempt": {
+                        "type": "If",
+                        "expression": "@and(not(empty(first(body('Find_tx_m')?['value']))), not(and(not(empty(first(body('Find_tx_m')?['value']))), contains(createArray('Applied', 'Void', 'Cancelled', 'Reverted', 'Rolled Back'), string(first(body('Find_tx_m')?['value'])?['State'])))))",
+                        "actions": {
+                          "Attempt_body": {
+                            "type": "Compose",
+                            "inputs": {
+                              "Attempts": "@add(int(if(empty(first(body('Find_tx_m')?['value'])), '0', if(empty(first(split(string(coalesce(first(body('Find_tx_m')?['value'])?['Attempts'], '')), '.'))), '0', first(split(string(coalesce(first(body('Find_tx_m')?['value'])?['Attempts'], '')), '.'))))), 1)"
+                            },
+                            "runAfter": {}
+                          },
+                          "Save_attempt": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "host": {
+                                "connectionName": "shared_sharepointonline",
+                                "operationId": "HttpRequest",
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                              },
+                              "parameters": {
+                                "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                                "parameters/method": "POST",
+                                "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['hist']}')/items(@{if(empty(first(split(string(coalesce(first(body('Find_tx_m')?['value'])?['Id'], '')), '.'))), '0', first(split(string(coalesce(first(body('Find_tx_m')?['value'])?['Id'], '')), '.')))})",
+                                "parameters/headers": {
+                                  "Accept": "application/json;odata=nometadata",
+                                  "Content-Type": "application/json;odata=nometadata",
+                                  "X-HTTP-Method": "MERGE",
+                                  "IF-MATCH": "*"
+                                },
+                                "parameters/body": "@{string(outputs('Attempt_body'))}"
+                              },
+                              "authentication": "@parameters('$authentication')"
+                            },
+                            "runAfter": {
+                              "Attempt_body": [
+                                "Succeeded"
+                              ]
+                            }
+                          }
+                        },
+                        "else": {
+                          "actions": {}
+                        },
+                        "runAfter": {
+                          "Refire": [
+                            "Succeeded"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Not_picked_up": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "runAfter": {
+                "Stuck": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Get_attention": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['req']}')/items?$select=Id&$filter=Status eq 'Needs attention'&$top=5000",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Each_stuck": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Run_row": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Get_settings')?['value']",
+                "where": "@equals(item()?['Title'], 'LastDailyRun')"
+              },
+              "runAfter": {
+                "Get_attention": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Daily_stale": {
+              "type": "If",
+              "expression": "@less(ticks(if(empty(string(coalesce(first(body('Run_row'))?['Value'], ''))), '2000-01-01T00:00:00Z', string(first(body('Run_row'))?['Value']))), ticks(addHours(utcNow(), -26)))",
+              "actions": {
+                "Daily_stale_to": {
+                  "type": "Select",
+                  "inputs": {
+                    "from": "@body('Admins')",
+                    "select": {
+                      "send": "@and(true, equals(string(item()?['Status']), 'Active'))",
+                      "type": "ALR",
+                      "key": "@{concat('ALR|', 'daily', '|', outputs('Today'), '|', first(split(string(coalesce(item()?['SiteUserId'], '')), '.')))}",
+                      "recipientId": "@{first(split(string(coalesce(item()?['SiteUserId'], '')), '.'))}",
+                      "login": "@{item()?['Person']?['Name']}",
+                      "email": "@{coalesce(item()?['Person']?['EMail'], item()?['Email'])}",
+                      "actor": "@{''}",
+                      "actionId": "@{'0'}",
+                      "title": "@{'Daily reminders have not run'}",
+                      "area": "@{''}",
+                      "dueIso": "@{outputs('Today')}",
+                      "originalIso": "@{outputs('Today')}",
+                      "previousIso": "@{''}",
+                      "extCount": "@int(0)",
+                      "note": "@{concat('Daily tasks last ran at ', string(coalesce(first(body('Run_row'))?['Value'], 'an unknown time')), ' (UTC). Deadline reminders are not being sent. In Power Automate, check that ESG Competency Hub | 1 Daily tasks is turned on and look at its run history.')}"
+                    }
+                  },
+                  "runAfter": {}
+                },
+                "Daily_stale_add": {
+                  "type": "SetVariable",
+                  "inputs": {
+                    "name": "varAlerts",
+                    "value": "@union(variables('varAlerts'), body('Daily_stale_to'))"
+                  },
+                  "runAfter": {
+                    "Daily_stale_to": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {
+                "Run_row": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Get_failed": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/items?$select=Id,NotificationKey,NotificationType,State,Attempts,DueDay,NextAttemptAfter,SendingSince,RenderData,LastError&$filter=State eq 'Failed'&$top=5000",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=minimalmetadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Daily_stale": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Get_unknown": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/items?$select=Id,NotificationKey,NotificationType,State,Attempts,DueDay,NextAttemptAfter,SendingSince,RenderData,LastError&$filter=State eq 'Unknown'&$top=5000",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=minimalmetadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Get_failed": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Get_sending": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/items?$select=Id,NotificationKey,NotificationType,State,Attempts,DueDay,NextAttemptAfter,SendingSince,RenderData,LastError&$filter=State eq 'Sending'&$top=5000",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=minimalmetadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Get_unknown": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Retry_due": {
+              "type": "Query",
+              "inputs": {
+                "from": "@union(body('Get_failed')?['value'], body('Get_unknown')?['value'], body('Get_sending')?['value'])",
+                "where": "@or(and(not(equals(item()?['State'], 'Sending')), lessOrEquals(ticks(string(coalesce(item()?['NextAttemptAfter'], '2000-01-01T00:00:00Z'))), ticks(utcNow()))), and(equals(item()?['State'], 'Sending'), lessOrEquals(ticks(string(coalesce(item()?['SendingSince'], '2000-01-01T00:00:00Z'))), ticks(addMinutes(utcNow(), -30)))))"
+              },
+              "runAfter": {
+                "Get_sending": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Each_retry": {
+              "type": "Foreach",
+              "foreach": "@body('Retry_due')",
+              "runtimeConfiguration": {
+                "concurrency": {
+                  "repetitions": 1
+                }
+              },
+              "actions": {
+                "Render_r": {
+                  "type": "Compose",
+                  "inputs": "@json(string(coalesce(items('Each_retry')?['RenderData'], '{}')))",
+                  "runAfter": {}
+                },
+                "Give_up_r": {
+                  "type": "If",
+                  "expression": "@greaterOrEquals(int(if(empty(first(split(string(coalesce(items('Each_retry')?['Attempts'], '')), '.'))), '0', first(split(string(coalesce(items('Each_retry')?['Attempts'], '')), '.')))), 3)",
+                  "actions": {
+                    "Abandon_body": {
+                      "type": "Compose",
+                      "inputs": {
+                        "State": "Abandoned",
+                        "LastError": "Not sent after 3 attempts."
+                      },
+                      "runAfter": {}
+                    },
+                    "Abandon": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                          "parameters/method": "POST",
+                          "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/items(@{items('Each_retry')?['Id']})",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata",
+                            "Content-Type": "application/json;odata=nometadata",
+                            "X-HTTP-Method": "MERGE",
+                            "IF-MATCH": "@{items('Each_retry')?['odata.etag']}"
+                          },
+                          "parameters/body": "@{string(outputs('Abandon_body'))}"
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {
+                        "Abandon_body": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Abandon_alerts": {
+                      "type": "Select",
+                      "inputs": {
+                        "from": "@body('Admins')",
+                        "select": {
+                          "send": "@and(true, equals(string(item()?['Status']), 'Active'))",
+                          "type": "ALR",
+                          "key": "@{concat('ALR|', concat('email|', string(items('Each_retry')?['Id'])), '|', outputs('Today'), '|', first(split(string(coalesce(item()?['SiteUserId'], '')), '.')))}",
+                          "recipientId": "@{first(split(string(coalesce(item()?['SiteUserId'], '')), '.'))}",
+                          "login": "@{item()?['Person']?['Name']}",
+                          "email": "@{coalesce(item()?['Person']?['EMail'], item()?['Email'])}",
+                          "actor": "@{''}",
+                          "actionId": "@{'0'}",
+                          "title": "@{concat('An email could not be sent: ', string(outputs('Render_r')?['subject']))}",
+                          "area": "@{''}",
+                          "dueIso": "@{outputs('Today')}",
+                          "originalIso": "@{outputs('Today')}",
+                          "previousIso": "@{''}",
+                          "extCount": "@int(0)",
+                          "note": "@{concat('It was tried 3 times and has been given up. It was for ', string(outputs('Render_r')?['to']), '. ', string(coalesce(items('Each_retry')?['LastError'], '')))}"
+                        }
+                      },
+                      "runAfter": {
+                        "Abandon": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Add_abandon_alerts": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "varAlerts",
+                        "value": "@union(variables('varAlerts'), body('Abandon_alerts'))"
+                      },
+                      "runAfter": {
+                        "Abandon_alerts": [
+                          "Succeeded"
+                        ]
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {
+                      "Person_r": {
+                        "type": "Query",
+                        "inputs": {
+                          "from": "@body('Get_people')?['value']",
+                          "where": "@and(equals(first(split(string(coalesce(item()?['SiteUserId'], '')), '.')), string(outputs('Render_r')?['recipientId'])), equals(item()?['Status'], 'Active'))"
+                        },
+                        "runAfter": {}
+                      },
+                      "Get_action_r": {
+                        "type": "OpenApiConnection",
+                        "inputs": {
+                          "host": {
+                            "connectionName": "shared_sharepointonline",
+                            "operationId": "HttpRequest",
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                          },
+                          "parameters": {
+                            "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                            "parameters/method": "GET",
+                            "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['act']}')/items(@{if(empty(first(split(string(coalesce(outputs('Render_r')?['actionId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Render_r')?['actionId'], '')), '.')))})?$select=Id,IsOpen,DueDay,AssignedToId",
+                            "parameters/headers": {
+                              "Accept": "application/json;odata=nometadata"
+                            }
+                          },
+                          "authentication": "@parameters('$authentication')"
+                        },
+                        "runAfter": {
+                          "Person_r": [
+                            "Succeeded"
+                          ]
+                        }
+                      },
+                      "Still_wanted_r": {
+                        "type": "If",
+                        "expression": "@and(not(empty(body('Person_r'))), or(equals(string(items('Each_retry')?['NotificationType']), 'ALR'), and(equals(actions('Get_action_r')?['status'], 'Succeeded'), equals(body('Get_action_r')?['IsOpen'], true), or(not(contains(createArray('R7', 'DUE', 'OD'), string(items('Each_retry')?['NotificationType']))), and(equals(first(split(string(coalesce(body('Get_action_r')?['DueDay'], '')), '.')), first(split(string(coalesce(items('Each_retry')?['DueDay'], '')), '.'))), equals(first(split(string(coalesce(body('Get_action_r')?['AssignedToId'], '')), '.')), string(outputs('Render_r')?['recipientId'])))))))",
+                        "actions": {
+                          "Claim_body_r": {
+                            "type": "Compose",
+                            "inputs": {
+                              "State": "Sending",
+                              "Attempts": "@add(int(if(empty(first(split(string(coalesce(items('Each_retry')?['Attempts'], '')), '.'))), '0', first(split(string(coalesce(items('Each_retry')?['Attempts'], '')), '.')))), 1)",
+                              "SendingSince": "@{utcNow()}"
+                            },
+                            "runAfter": {}
+                          },
+                          "Claim_r": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "host": {
+                                "connectionName": "shared_sharepointonline",
+                                "operationId": "HttpRequest",
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                              },
+                              "parameters": {
+                                "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                                "parameters/method": "POST",
+                                "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/items(@{items('Each_retry')?['Id']})",
+                                "parameters/headers": {
+                                  "Accept": "application/json;odata=nometadata",
+                                  "Content-Type": "application/json;odata=nometadata",
+                                  "X-HTTP-Method": "MERGE",
+                                  "IF-MATCH": "@{items('Each_retry')?['odata.etag']}"
+                                },
+                                "parameters/body": "@{string(outputs('Claim_body_r'))}"
+                              },
+                              "authentication": "@parameters('$authentication')"
+                            },
+                            "runAfter": {
+                              "Claim_body_r": [
+                                "Succeeded"
+                              ]
+                            }
+                          },
+                          "Requeue_r": {
+                            "type": "AppendToArrayVariable",
+                            "inputs": {
+                              "name": "varOutbox",
+                              "value": {
+                                "id": "@items('Each_retry')?['Id']",
+                                "to": "@{outputs('Render_r')?['to']}",
+                                "subject": "@{outputs('Render_r')?['subject']}",
+                                "html": "@{if(contains(createArray('Unknown', 'Sending'), string(items('Each_retry')?['State'])), concat('<p style=\"color:#5b6774\"><i>If you have already received this message, please ignore it.</i></p>', string(outputs('Render_r')?['html'])), string(outputs('Render_r')?['html']))}",
+                                "type": "@{outputs('Render_r')?['type']}",
+                                "dueIso": "@{outputs('Render_r')?['dueIso']}",
+                                "actionId": "@{outputs('Render_r')?['actionId']}",
+                                "recipientId": "@{outputs('Render_r')?['recipientId']}",
+                                "login": "@{outputs('Render_r')?['login']}"
+                              }
+                            },
+                            "runAfter": {
+                              "Claim_r": [
+                                "Succeeded"
+                              ]
+                            }
+                          }
+                        },
+                        "else": {
+                          "actions": {
+                            "Skip_body_r": {
+                              "type": "Compose",
+                              "inputs": {
+                                "State": "Skipped",
+                                "SkipReason": "No longer needed: the action or its owner changed."
+                              },
+                              "runAfter": {}
+                            },
+                            "Skip_r": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "connectionName": "shared_sharepointonline",
+                                  "operationId": "HttpRequest",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                },
+                                "parameters": {
+                                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                                  "parameters/method": "POST",
+                                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/items(@{items('Each_retry')?['Id']})",
+                                  "parameters/headers": {
+                                    "Accept": "application/json;odata=nometadata",
+                                    "Content-Type": "application/json;odata=nometadata",
+                                    "X-HTTP-Method": "MERGE",
+                                    "IF-MATCH": "@{items('Each_retry')?['odata.etag']}"
+                                  },
+                                  "parameters/body": "@{string(outputs('Skip_body_r'))}"
+                                },
+                                "authentication": "@parameters('$authentication')"
+                              },
+                              "runAfter": {
+                                "Skip_body_r": [
+                                  "Succeeded"
+                                ]
+                              }
+                            }
+                          }
+                        },
+                        "runAfter": {
+                          "Get_action_r": [
+                            "Succeeded",
+                            "Failed",
+                            "TimedOut"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Render_r": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "runAfter": {
+                "Retry_due": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Each_new_notice_A": {
+              "type": "Foreach",
+              "foreach": "@variables('varAlerts')",
+              "runtimeConfiguration": {
+                "concurrency": {
+                  "repetitions": 1
+                }
+              },
+              "actions": {
+                "Token_A": {
+                  "type": "Compose",
+                  "inputs": "@concat('ESGN', toUpper(take(replace(guid(), '-', ''), 10)))",
+                  "runAfter": {}
+                },
+                "Subject_A": {
+                  "type": "Compose",
+                  "inputs": "@if(equals(items('Each_new_notice_A')?['type'], 'ASG'), concat('Action assigned to you: ', items('Each_new_notice_A')?['title']), if(equals(items('Each_new_notice_A')?['type'], 'EXT'), concat('Deadline moved: ', items('Each_new_notice_A')?['title']), if(equals(items('Each_new_notice_A')?['type'], 'RDY'), concat('Ready for your close-out check: ', items('Each_new_notice_A')?['title']), if(equals(items('Each_new_notice_A')?['type'], 'CLS'), concat('Action closed: ', items('Each_new_notice_A')?['title']), if(equals(items('Each_new_notice_A')?['type'], 'RAW'), concat('Action reassigned: ', items('Each_new_notice_A')?['title']), if(equals(items('Each_new_notice_A')?['type'], 'R7'), concat('Reminder: ', items('Each_new_notice_A')?['title'], ' is due in ', string(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_A')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000)), if(equals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_A')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000), 1), ' day', ' days')), if(equals(items('Each_new_notice_A')?['type'], 'DUE'), concat('Due today: ', items('Each_new_notice_A')?['title']), if(equals(items('Each_new_notice_A')?['type'], 'ALR'), concat('Competency Hub needs attention: ', items('Each_new_notice_A')?['title']), concat(items('Each_new_notice_A')?['title'], ' is ', string(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_A')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000))), if(equals(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_A')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000)), 1), ' day late', ' days late'))))))))))",
+                  "runAfter": {
+                    "Token_A": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Html_action_A": {
+                  "type": "Compose",
+                  "inputs": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:15px;color:#16222c\"><p style=\"color:#13516b;font-size:18px;font-weight:600;margin:0 0 12px\">ESG Competency Hub</p><p>@{if(equals(items('Each_new_notice_A')?['type'], 'ASG'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_A')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has given you an action in the ESG Competency Hub.'), if(equals(items('Each_new_notice_A')?['type'], 'EXT'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_A')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has moved the deadline of your action.'), if(equals(items('Each_new_notice_A')?['type'], 'RDY'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_A')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has marked this action as done. It is waiting for your close-out check.'), if(equals(items('Each_new_notice_A')?['type'], 'CLS'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_A')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has closed this action.'), if(equals(items('Each_new_notice_A')?['type'], 'RAW'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_A')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has given this action to someone else. It is no longer yours to do.'), if(equals(items('Each_new_notice_A')?['type'], 'R7'), concat('Your action is due in ', string(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_A')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000)), if(equals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_A')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000), 1), ' day.', ' days.')), if(equals(items('Each_new_notice_A')?['type'], 'DUE'), 'Your action is due today.', concat('Your action is ', string(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_A')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000))), if(equals(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_A')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000)), 1), ' day late.', ' days late.')))))))))}</p><table style=\"border-collapse:collapse;font-size:15px\"><tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">Action</td><td style=\"padding:4px 0\">@{concat('ACT-', substring(concat('0000', items('Each_new_notice_A')?['actionId']), sub(length(concat('0000', items('Each_new_notice_A')?['actionId'])), 5), 5))} – @{replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_A')?['title'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;')}</td></tr><tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">Area</td><td style=\"padding:4px 0\">@{replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_A')?['area'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;')}</td></tr><tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">Deadline</td><td style=\"padding:4px 0\">@{if(empty(string(coalesce(items('Each_new_notice_A')?['dueIso'], ''))), '', formatDateTime(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['dueIso'], ''))), '2000-01-01', string(items('Each_new_notice_A')?['dueIso'])), 'T00:00:00Z'), 'd MMMM yyyy'))}@{if(and(greater(items('Each_new_notice_A')?['extCount'], 0), not(equals(items('Each_new_notice_A')?['originalIso'], items('Each_new_notice_A')?['dueIso']))), concat(' (originally ', if(empty(string(coalesce(items('Each_new_notice_A')?['originalIso'], ''))), '', formatDateTime(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['originalIso'], ''))), '2000-01-01', string(items('Each_new_notice_A')?['originalIso'])), 'T00:00:00Z'), 'd MMMM yyyy')), ')'), '')}</td></tr>@{if(equals(items('Each_new_notice_A')?['type'], 'EXT'), concat('<tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">Was due</td><td style=\"padding:4px 0\">', if(empty(string(coalesce(items('Each_new_notice_A')?['previousIso'], ''))), '', formatDateTime(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['previousIso'], ''))), '2000-01-01', string(items('Each_new_notice_A')?['previousIso'])), 'T00:00:00Z'), 'd MMMM yyyy')), '</td></tr>'), '')}@{if(empty(items('Each_new_notice_A')?['note']), '', concat('<tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">', if(contains(createArray('EXT', 'RAW', 'ASG'), items('Each_new_notice_A')?['type']), 'Reason', 'Note'), '</td><td style=\"padding:4px 0\">', replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_A')?['note'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td></tr>'))}</table><p style=\"margin:20px 0\"><a href=\"@{outputs('Site_url')}/SitePages/Hub.aspx?action=@{items('Each_new_notice_A')?['actionId']}\" style=\"background:#13516b;color:#ffffff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600\">Open the action</a></p><p style=\"color:#5b6774;font-size:12px\">This is an automated message from the ESG Competency Hub. Reference @{outputs('Token_A')}.</p></div>",
+                  "runAfter": {
+                    "Subject_A": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Html_alert_A": {
+                  "type": "Compose",
+                  "inputs": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:15px;color:#16222c\"><p style=\"color:#13516b;font-size:18px;font-weight:600;margin:0 0 12px\">ESG Competency Hub</p><p><b>@{replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_A')?['title'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;')}</b></p><p>@{replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_A')?['note'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;')}</p><p style=\"margin:20px 0\"><a href=\"@{outputs('Site_url')}/SitePages/Hub.aspx?view=admin\" style=\"background:#13516b;color:#ffffff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600\">Open Changes needing attention</a></p><p style=\"color:#5b6774;font-size:12px\">This is an automated alert from the ESG Competency Hub, sent to its administrators. Reference @{outputs('Token_A')}.</p></div>",
+                  "runAfter": {
+                    "Html_action_A": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Html_A": {
+                  "type": "Compose",
+                  "inputs": "@if(equals(items('Each_new_notice_A')?['type'], 'ALR'), outputs('Html_alert_A'), outputs('Html_action_A'))",
+                  "runAfter": {
+                    "Html_alert_A": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Render_A": {
+                  "type": "Compose",
+                  "inputs": {
+                    "to": "@{items('Each_new_notice_A')?['email']}",
+                    "subject": "@{outputs('Subject_A')}",
+                    "html": "@{outputs('Html_A')}",
+                    "type": "@{items('Each_new_notice_A')?['type']}",
+                    "dueIso": "@{items('Each_new_notice_A')?['dueIso']}",
+                    "actionId": "@{items('Each_new_notice_A')?['actionId']}",
+                    "recipientId": "@{items('Each_new_notice_A')?['recipientId']}",
+                    "login": "@{items('Each_new_notice_A')?['login']}"
+                  },
+                  "runAfter": {
+                    "Html_A": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Notice_values_A": {
+                  "type": "Compose",
+                  "inputs": [
+                    {
+                      "FieldName": "Title",
+                      "FieldValue": "@{take(outputs('Subject_A'), 255)}"
+                    },
+                    {
+                      "FieldName": "NotificationKey",
+                      "FieldValue": "@{items('Each_new_notice_A')?['key']}"
+                    },
+                    {
+                      "FieldName": "Token",
+                      "FieldValue": "@{outputs('Token_A')}"
+                    },
+                    {
+                      "FieldName": "NotificationType",
+                      "FieldValue": "@{items('Each_new_notice_A')?['type']}"
+                    },
+                    {
+                      "FieldName": "Recipient",
+                      "FieldValue": "@{concat('[{\"Key\":\"', items('Each_new_notice_A')?['login'], '\"}]')}"
+                    },
+                    {
+                      "FieldName": "RecipientEmail",
+                      "FieldValue": "@{items('Each_new_notice_A')?['email']}"
+                    },
+                    {
+                      "FieldName": "RecordType",
+                      "FieldValue": "@{if(equals(items('Each_new_notice_A')?['type'], 'ALR'), 'System', 'Action')}"
+                    },
+                    {
+                      "FieldName": "RecordId",
+                      "FieldValue": "@{items('Each_new_notice_A')?['actionId']}"
+                    },
+                    {
+                      "FieldName": "State",
+                      "FieldValue": "Sending"
+                    },
+                    {
+                      "FieldName": "Attempts",
+                      "FieldValue": "1"
+                    },
+                    {
+                      "FieldName": "SendingSince",
+                      "FieldValue": "@{convertFromUtc(utcNow(), 'GMT Standard Time', 'dd/MM/yyyy HH:mm')}"
+                    },
+                    {
+                      "FieldName": "RenderData",
+                      "FieldValue": "@{string(outputs('Render_A'))}"
+                    },
+                    {
+                      "FieldName": "DueDay",
+                      "FieldValue": "@{int(replace(items('Each_new_notice_A')?['dueIso'], '-', ''))}"
+                    }
+                  ],
+                  "runAfter": {
+                    "Render_A": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Notice_body_A": {
+                  "type": "Compose",
+                  "inputs": {
+                    "listItemCreateInfo": {
+                      "FolderPath": {
+                        "DecodedUrl": "@{outputs('Ids')?['notifRoot']}"
+                      },
+                      "UnderlyingObjectType": 0
+                    },
+                    "formValues": "@outputs('Notice_values_A')",
+                    "bNewDocumentUpdate": false
+                  },
+                  "runAfter": {
+                    "Notice_values_A": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Create_notice_A": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/AddValidateUpdateItemUsingPath",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata",
+                        "Content-Type": "application/json;odata=nometadata"
+                      },
+                      "parameters/body": "@{string(outputs('Notice_body_A'))}"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "Notice_body_A": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Notice_refused_A": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@coalesce(body('Create_notice_A')?['value'], createArray())",
+                    "where": "@equals(item()?['HasException'], true)"
+                  },
+                  "runAfter": {
+                    "Create_notice_A": [
+                      "Succeeded",
+                      "Failed",
+                      "TimedOut"
+                    ]
+                  }
+                },
+                "Notice_made_A": {
+                  "type": "If",
+                  "expression": "@and(equals(actions('Create_notice_A')?['status'], 'Succeeded'), empty(body('Notice_refused_A')))",
+                  "actions": {
+                    "Notice_id_A": {
+                      "type": "Query",
+                      "inputs": {
+                        "from": "@body('Create_notice_A')?['value']",
+                        "where": "@equals(item()?['FieldName'], 'Id')"
+                      },
+                      "runAfter": {}
+                    },
+                    "Has_notice_id_A": {
+                      "type": "If",
+                      "expression": "@empty(body('Notice_id_A'))",
+                      "actions": {
+                        "Get_notice_A": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                              "parameters/method": "GET",
+                              "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/items?$select=Id&$filter=NotificationKey eq '@{replace(string(coalesce(items('Each_new_notice_A')?['key'], '')), '''', '''''')}'",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata"
+                              }
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runAfter": {}
+                        },
+                        "Queue_read_A": {
+                          "type": "AppendToArrayVariable",
+                          "inputs": {
+                            "name": "varOutbox",
+                            "value": {
+                              "to": "@{items('Each_new_notice_A')?['email']}",
+                              "subject": "@{outputs('Subject_A')}",
+                              "html": "@{outputs('Html_A')}",
+                              "type": "@{items('Each_new_notice_A')?['type']}",
+                              "dueIso": "@{items('Each_new_notice_A')?['dueIso']}",
+                              "actionId": "@{items('Each_new_notice_A')?['actionId']}",
+                              "recipientId": "@{items('Each_new_notice_A')?['recipientId']}",
+                              "login": "@{items('Each_new_notice_A')?['login']}",
+                              "id": "@first(body('Get_notice_A')?['value'])?['Id']"
+                            }
+                          },
+                          "runAfter": {
+                            "Get_notice_A": [
+                              "Succeeded"
+                            ]
+                          }
+                        }
+                      },
+                      "else": {
+                        "actions": {
+                          "Queue_new_A": {
+                            "type": "AppendToArrayVariable",
+                            "inputs": {
+                              "name": "varOutbox",
+                              "value": {
+                                "to": "@{items('Each_new_notice_A')?['email']}",
+                                "subject": "@{outputs('Subject_A')}",
+                                "html": "@{outputs('Html_A')}",
+                                "type": "@{items('Each_new_notice_A')?['type']}",
+                                "dueIso": "@{items('Each_new_notice_A')?['dueIso']}",
+                                "actionId": "@{items('Each_new_notice_A')?['actionId']}",
+                                "recipientId": "@{items('Each_new_notice_A')?['recipientId']}",
+                                "login": "@{items('Each_new_notice_A')?['login']}",
+                                "id": "@int(first(body('Notice_id_A'))?['FieldValue'])"
+                              }
+                            },
+                            "runAfter": {}
+                          }
+                        }
+                      },
+                      "runAfter": {
+                        "Notice_id_A": [
+                          "Succeeded"
+                        ]
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {
+                      "Find_notice_A": {
+                        "type": "OpenApiConnection",
+                        "inputs": {
+                          "host": {
+                            "connectionName": "shared_sharepointonline",
+                            "operationId": "HttpRequest",
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                          },
+                          "parameters": {
+                            "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                            "parameters/method": "GET",
+                            "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/items?$select=Id&$filter=NotificationKey eq '@{replace(string(coalesce(items('Each_new_notice_A')?['key'], '')), '''', '''''')}'",
+                            "parameters/headers": {
+                              "Accept": "application/json;odata=nometadata"
+                            }
+                          },
+                          "authentication": "@parameters('$authentication')"
+                        },
+                        "runAfter": {}
+                      },
+                      "Notice_exists_A": {
+                        "type": "If",
+                        "expression": "@empty(body('Find_notice_A')?['value'])",
+                        "actions": {
+                          "Notice_failed_A": {
+                            "type": "Compose",
+                            "inputs": "@int('An email could not be queued. See Create_notice_A.')",
+                            "runAfter": {}
+                          }
+                        },
+                        "else": {
+                          "actions": {}
+                        },
+                        "runAfter": {
+                          "Find_notice_A": [
+                            "Succeeded"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Notice_refused_A": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "runAfter": {
+                "Each_retry": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Health_row": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Get_settings')?['value']",
+                "where": "@equals(item()?['Title'], 'QueueHealth')"
+              },
+              "runAfter": {
+                "Each_new_notice_A": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Health_value": {
+              "type": "Compose",
+              "inputs": {
+                "state": "@{if(variables('varDown'), 'Down', 'Healthy')}",
+                "reason": "@{if(variables('varDown'), 'Changes are not being picked up by the request flow.', '')}",
+                "checkedAt": "@{utcNow()}",
+                "attention": "@length(body('Get_attention')?['value'])"
+              },
+              "runAfter": {
+                "Health_row": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Health_body": {
+              "type": "Compose",
+              "inputs": {
+                "Value": "@{string(outputs('Health_value'))}"
+              },
+              "runAfter": {
+                "Health_value": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Record_health": {
+              "type": "If",
+              "expression": "@empty(body('Health_row'))",
+              "actions": {},
+              "else": {
+                "actions": {
+                  "Save_health": {
+                    "type": "OpenApiConnection",
+                    "inputs": {
+                      "host": {
+                        "connectionName": "shared_sharepointonline",
+                        "operationId": "HttpRequest",
+                        "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                      },
+                      "parameters": {
+                        "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                        "parameters/method": "POST",
+                        "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['settings']}')/items(@{first(body('Health_row'))?['Id']})",
+                        "parameters/headers": {
+                          "Accept": "application/json;odata=nometadata",
+                          "Content-Type": "application/json;odata=nometadata",
+                          "X-HTTP-Method": "MERGE",
+                          "IF-MATCH": "*"
+                        },
+                        "parameters/body": "@{string(outputs('Health_body'))}"
+                      },
+                      "authentication": "@parameters('$authentication')"
+                    },
+                    "runAfter": {}
+                  }
+                }
+              },
+              "runAfter": {
+                "Health_body": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Initialize_varPart": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Send_emails": {
+          "type": "Scope",
+          "actions": {
+            "Each_email": {
+              "type": "Foreach",
+              "foreach": "@variables('varOutbox')",
+              "runtimeConfiguration": {
+                "concurrency": {
+                  "repetitions": 1
+                }
+              },
+              "actions": {
+                "Send_mail": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_office365",
+                      "operationId": "SendEmailV2",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                    },
+                    "parameters": {
+                      "emailMessage/To": "@{items('Each_email')?['to']}",
+                      "emailMessage/Subject": "@{items('Each_email')?['subject']}",
+                      "emailMessage/Body": "@{items('Each_email')?['html']}",
+                      "emailMessage/Importance": "Normal"
+                    },
+                    "authentication": "@parameters('$authentication')",
+                    "retryPolicy": {
+                      "type": "none"
+                    }
+                  },
+                  "runtimeConfiguration": {
+                    "secureData": {
+                      "properties": [
+                        "inputs",
+                        "outputs"
+                      ]
+                    }
+                  },
+                  "runAfter": {}
+                },
+                "Mail_sent": {
+                  "type": "If",
+                  "expression": "@equals(actions('Send_mail')?['status'], 'Succeeded')",
+                  "actions": {
+                    "Sent_body": {
+                      "type": "Compose",
+                      "inputs": {
+                        "State": "Sent",
+                        "SentAt": "@{utcNow()}",
+                        "LastError": ""
+                      },
+                      "runAfter": {}
+                    },
+                    "Mark_sent": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                          "parameters/method": "POST",
+                          "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/items(@{items('Each_email')?['id']})",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata",
+                            "Content-Type": "application/json;odata=nometadata",
+                            "X-HTTP-Method": "MERGE",
+                            "IF-MATCH": "*"
+                          },
+                          "parameters/body": "@{string(outputs('Sent_body'))}"
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {
+                        "Sent_body": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Covers": {
+                      "type": "If",
+                      "expression": "@and(contains(createArray('ASG', 'EXT'), items('Each_email')?['type']), greaterOrEquals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_email')?['dueIso'], ''))), outputs('Today'), string(items('Each_email')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000), 0), lessOrEquals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_email')?['dueIso'], ''))), outputs('Today'), string(items('Each_email')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000), 7))",
+                      "actions": {
+                        "Cover_values": {
+                          "type": "Compose",
+                          "inputs": [
+                            {
+                              "FieldName": "Title",
+                              "FieldValue": "Covered by an earlier email"
+                            },
+                            {
+                              "FieldName": "NotificationKey",
+                              "FieldValue": "@{concat(if(equals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_email')?['dueIso'], ''))), outputs('Today'), string(items('Each_email')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000), 0), 'DUE', 'R7'), '|', items('Each_email')?['actionId'], '|', string(int(replace(items('Each_email')?['dueIso'], '-', ''))), '|', items('Each_email')?['recipientId'])}"
+                            },
+                            {
+                              "FieldName": "NotificationType",
+                              "FieldValue": "@{if(equals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_email')?['dueIso'], ''))), outputs('Today'), string(items('Each_email')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000), 0), 'DUE', 'R7')}"
+                            },
+                            {
+                              "FieldName": "Recipient",
+                              "FieldValue": "@{concat('[{\"Key\":\"', items('Each_email')?['login'], '\"}]')}"
+                            },
+                            {
+                              "FieldName": "RecipientEmail",
+                              "FieldValue": "@{items('Each_email')?['to']}"
+                            },
+                            {
+                              "FieldName": "RecordType",
+                              "FieldValue": "Action"
+                            },
+                            {
+                              "FieldName": "RecordId",
+                              "FieldValue": "@{items('Each_email')?['actionId']}"
+                            },
+                            {
+                              "FieldName": "State",
+                              "FieldValue": "Skipped"
+                            },
+                            {
+                              "FieldName": "SkipReason",
+                              "FieldValue": "@{concat('Covered by the ', items('Each_email')?['type'], ' email')}"
+                            },
+                            {
+                              "FieldName": "RenderData",
+                              "FieldValue": "{}"
+                            },
+                            {
+                              "FieldName": "DueDay",
+                              "FieldValue": "@{int(replace(items('Each_email')?['dueIso'], '-', ''))}"
+                            }
+                          ],
+                          "runAfter": {}
+                        },
+                        "Cover_body": {
+                          "type": "Compose",
+                          "inputs": {
+                            "listItemCreateInfo": {
+                              "FolderPath": {
+                                "DecodedUrl": "@{outputs('Ids')?['notifRoot']}"
+                              },
+                              "UnderlyingObjectType": 0
+                            },
+                            "formValues": "@outputs('Cover_values')",
+                            "bNewDocumentUpdate": false
+                          },
+                          "runAfter": {
+                            "Cover_values": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Cover": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                              "parameters/method": "POST",
+                              "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/AddValidateUpdateItemUsingPath",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata",
+                                "Content-Type": "application/json;odata=nometadata"
+                              },
+                              "parameters/body": "@{string(outputs('Cover_body'))}"
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runAfter": {
+                            "Cover_body": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Covered": {
+                          "type": "Compose",
+                          "inputs": "done",
+                          "runAfter": {
+                            "Cover": [
+                              "Succeeded",
+                              "Failed",
+                              "TimedOut"
+                            ]
+                          }
+                        }
+                      },
+                      "else": {
+                        "actions": {}
+                      },
+                      "runAfter": {
+                        "Mark_sent": [
+                          "Succeeded"
+                        ]
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {
+                      "Send_code": {
+                        "type": "Compose",
+                        "inputs": "@coalesce(outputs('Send_mail')?['statusCode'], 0)",
+                        "runAfter": {}
+                      },
+                      "Unsent_body": {
+                        "type": "Compose",
+                        "inputs": {
+                          "State": "@{if(contains(createArray(400, 401, 403, 404, 413, 429), outputs('Send_code')), 'Failed', 'Unknown')}",
+                          "LastError": "@{concat('The email was not confirmed as sent (', string(outputs('Send_code')), '). Run ', workflow()?['run']?['name'], '.')}",
+                          "NextAttemptAfter": "@{addMinutes(utcNow(), 15)}"
+                        },
+                        "runAfter": {
+                          "Send_code": [
+                            "Succeeded"
+                          ]
+                        }
+                      },
+                      "Mark_unsent": {
+                        "type": "OpenApiConnection",
+                        "inputs": {
+                          "host": {
+                            "connectionName": "shared_sharepointonline",
+                            "operationId": "HttpRequest",
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                          },
+                          "parameters": {
+                            "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                            "parameters/method": "POST",
+                            "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/items(@{items('Each_email')?['id']})",
+                            "parameters/headers": {
+                              "Accept": "application/json;odata=nometadata",
+                              "Content-Type": "application/json;odata=nometadata",
+                              "X-HTTP-Method": "MERGE",
+                              "IF-MATCH": "*"
+                            },
+                            "parameters/body": "@{string(outputs('Unsent_body'))}"
+                          },
+                          "authentication": "@parameters('$authentication')"
+                        },
+                        "runAfter": {
+                          "Unsent_body": [
+                            "Succeeded"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Send_mail": [
+                      "Succeeded",
+                      "Failed",
+                      "TimedOut"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "runAfter": {
+            "Try": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Catch": {
+          "type": "Scope",
+          "actions": {
+            "Terminate_failed": {
+              "type": "Terminate",
+              "inputs": {
+                "runStatus": "Failed",
+                "runError": {
+                  "code": "ESGHub",
+                  "message": "The queue monitor failed. See the failed action in the run history."
+                }
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Try": [
+              "Failed",
+              "TimedOut"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "schemaVersion": "1.0.0.0"
+}

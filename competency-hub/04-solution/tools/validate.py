@@ -22,7 +22,7 @@ actions add addDays addHours addMinutes addSeconds addToTime and array base64 bo
 convertTimeZone convertToUtc createArray dataUri dayOfMonth dayOfWeek dayOfYear decodeBase64 decodeUriComponent div empty endsWith
 equals first float formatDateTime formatNumber getFutureTime getPastTime greater greaterOrEquals guid if indexOf int item items
 join json last lastIndexOf length less lessOrEquals listCallbackUrl max min mod mul not null or outputs parameters rand range
-replace result select setProperty skip split startOfDay startOfHour startOfMonth startsWith string sub substring take ticks toLower
+removeProperty replace result select setProperty skip split startOfDay startOfHour startOfMonth startsWith string sub substring take ticks toLower
 toUpper trigger triggerBody triggerOutputs trim union uriComponent uriPath utcNow variables workflow xml xpath
 '''.split())
 REQUIRED = {

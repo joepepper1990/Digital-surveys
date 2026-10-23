@@ -359,8 +359,8 @@ def call(name, a, ctx):
     if name == 'startOfMonth':
         dt = parse_ts(a[0])
         return iso(dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0))
-    if name in ('addDays', 'addMinutes'):
-        dt = parse_ts(a[0]) + (timedelta(days=a[1]) if name == 'addDays' else timedelta(minutes=a[1]))
+    if name in ('addDays', 'addHours', 'addMinutes'):
+        dt = parse_ts(a[0]) + {'addDays': timedelta(days=a[1]), 'addHours': timedelta(hours=a[1]), 'addMinutes': timedelta(minutes=a[1])}[name]
         return fmt(dt, a[2]) if len(a) > 2 else iso(dt)
     if name == 'addToTime':
         dt = parse_ts(a[0])
@@ -389,6 +389,10 @@ def call(name, a, ctx):
         if not all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in a):
             raise ExprError(name + ' needs numbers')
         return a[0] <= a[1] if name == 'lessOrEquals' else a[0] >= a[1]
+    if name == 'removeProperty':
+        if not isinstance(a[0], dict):
+            raise ExprError('removeProperty() expects an object')
+        return {k: v for k, v in a[0].items() if k != a[1]}
     if name == 'union' and a and all(isinstance(x, dict) for x in a):   # objects: properties merged, later ones win
         out = {}
         for o in a:
