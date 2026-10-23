@@ -93,6 +93,38 @@
   }
   function band(off) { return off < 0 ? 'late' : off < 7 ? 'soon' : 'later'; }
 
+
+  // Area detail for the area panel: actions generated from each area's counts, notices and register entries.
+  var TITLES = ['Monthly equipment checks', 'Update local instruction', 'Training records review', 'Calibration certificates filed', 'Survey meter source check',
+    'Review of work instructions', 'Spares stock count', 'Housekeeping inspection', 'Procedure walk-down', 'Lessons learned write-up', 'Check alarm set points',
+    'Replace worn labels', 'Data sheet sign-off', 'Contractor briefing pack', 'Waste route review', 'Sample bottle reorder', 'Log book audit',
+    'Equipment loan returns', 'Risk assessment refresh', 'Shift handover checklist', 'Fault report follow-up', 'Quality check of records'];
+  var OWNERS = ['Andrea Medlicott', 'Kelly Bates', 'Ben Beak', 'Dave Beeching', 'Aiden Gorham', 'Jake Stafford', 'Chloe Tilly', 'Trevor Baldwin',
+    'Rachel Boulden', 'Mark Buckley', 'Luke Cain', 'Adrian Cooke', 'Charlie Everitt', 'Matt Henley', 'Kevin Hewitt', 'Richard Howe', 'Nick Pearce', 'Steve Punnett'];
+  var ISSUES = {
+    GRS: [['Degradation', 'Sampling pump flow drifting low', 'Open'], ['Degradation', 'SP-4 sample point blocked', 'Under review'], ['Improvement', 'Move logbook to tablet', 'Open']],
+    FLK: [['Degradation', 'FH40 probe cable worn', 'Under review'], ['Improvement', 'Shadow board for flask tools', 'Open']],
+    RP: [['Degradation', 'Survey meter battery life short', 'Open'], ['Improvement', 'Pre-filled survey forms', 'Resolved']],
+    ALS: [['Degradation', 'Fume cupboard 2 low face velocity', 'Resolved']],
+    RW: [['Improvement', 'Colour-coded drum labels', 'Open']]
+  };
+  function areaDetail(key) {
+    var a = BY[key], i = AREAS.indexOf(a), list = [], n = 0;
+    function add(off) { list.push({ title: TITLES[(i * 5 + n) % TITLES.length], owner: OWNERS[(i * 7 + n * 3) % OWNERS.length], off: off, due: dueText(off), band: band(off) }); n++; }
+    for (var k = 0; k < a.late; k++) add(-(2 + k * 3));
+    for (k = 0; k < a.soon; k++) add(1 + k * 2 > 6 ? 6 : 1 + k * 2);
+    for (k = 0; k < a.open - a.late - a.soon; k++) add(9 + k * 4);
+    return {
+      area: a, actions: list,
+      notices: NOTICES.filter(function (x) { return x.area === key; }).map(function (x) { return { title: x.title, by: x.by, when: x.age === 0 ? 'Today' : x.age === 1 ? 'Yesterday' : x.age + ' days ago', important: x.important, kind: 'Notice' }; })
+        .concat([{ title: 'Reminder: keep the area log up to date', by: OWNERS[(i * 3) % OWNERS.length], when: '6 days ago', important: false, kind: 'Notice' }]),
+      issues: (ISSUES[key] || []).map(function (x) { return { kind: x[0], title: x[1], status: x[2] }; }),
+      next: a.next === null ? null : { when: wdShort(d(a.next)), time: '10:00', place: 'Admin building, room 2', items: a.flagged + a.late + 4, flagged: a.flagged },
+      last: { when: wdShort(d(a.last)), stale: a.last < -35 },
+      dates: DATES.filter(function (x) { return x.area === key; }).map(function (x) { return { title: x.title, when: wdShort(d(x.day)) }; })
+    };
+  }
+
   window.CHDATA = function (role) {
     var p = PEOPLE[role];
     var mine = MINE[role].map(function (r) {
@@ -134,6 +166,9 @@
           meetings: meetings.filter(function (m) { return Math.round((m.date - TODAY) / DAY) === i; })
         };
       }),
+      tiles: AREAS.map(function (a) { return { key: a.key, name: a.name, open: a.open, late: a.late, member: p.areas.indexOf(a.key) >= 0, stale: a.last < -35,
+        nextText: a.last < -35 ? 'No meeting since ' + short(d(a.last)) : a.next === null ? 'No meeting booked' : 'Meets ' + wdShort(d(a.next)) }; }),
+      areaDetail: areaDetail,
       helpers: { short: short, wdShort: wdShort }
     };
   };

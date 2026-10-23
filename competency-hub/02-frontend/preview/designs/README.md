@@ -28,3 +28,12 @@ To rebuild after editing `src/`: `python3 src/build.py`.
 - lists show as many items as fit, then "+ n more – see all", so nothing is cut off and nothing scrolls;
 - on a laptop-height window the bottom row (areas, notices, meetings) starts collapsed;
 - on a phone the page falls back to ordinary scrolling.
+
+## Design 4, third version (23 October 2026)
+
+- The Meetings and Notices panels are gone: meetings show in the week strip, and notices live inside each area.
+- The week strip sizes itself to its content, so a day with two entries is never cut off.
+- All ten areas are tiles ("View only" on areas you don't belong to). Choosing one collapses the other sections,
+  shrinks the tiles to a strip of names, and opens the area in place: its actions, notices and improvements and
+  degradations, and its meetings and dates, with Raise an action here and Post a notice here. ✕ or Esc closes it.
+- Still no page scrolling at 1920 × 960, 1920 × 1080 or 1366 × 768, for every role, with or without an area open.

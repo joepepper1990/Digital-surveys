@@ -79,8 +79,8 @@
   .chip.r { margin-left: auto; }
 
   /* This week */
-  .week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; height: 100%; }
-  .day { border: 1px solid var(--line); border-radius: 10px; padding: 8px 9px; display: flex; flex-direction: column; gap: 5px; min-width: 0; background: #fff; }
+  .week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; }
+  .day { min-height: 96px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 9px; display: flex; flex-direction: column; gap: 5px; min-width: 0; background: #fff; }
   .day.today { border: 2px solid var(--brand); padding: 7px 8px; }
   .day.weekend { background: #faf9fd; }
   .dh { display: flex; align-items: baseline; gap: 6px; }
@@ -113,12 +113,41 @@
   .areas2 { display: grid; grid-template-columns: 1fr 1fr; column-gap: 18px; align-content: start; }
   .areas2 .rw { border-bottom: 1px solid var(--line); }
 
+  /* Area tiles */
+  .tiles { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 10px; }
+  .tile { all: unset; box-sizing: border-box; cursor: pointer; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 9px 11px; display: flex; flex-direction: column; gap: 4px; min-width: 0; position: relative; }
+  .tile:hover { border-color: #cfcaf1; } .tile:focus-visible { outline: 3px solid var(--brand-2); outline-offset: 2px; }
+  .tile[aria-pressed="true"] { border: 2px solid var(--brand); background: var(--brand-soft); padding: 8px 10px; }
+  .tile .tn { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile .chip { align-self: flex-start; }
+  .tile .tm { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .tile .tm.warn { color: var(--soon); font-weight: 600; }
+  .tile .vo, .ph .vo { position: absolute; top: 9px; right: 10px; font-size: 10.5px; font-weight: 700; color: var(--muted); background: var(--later-bg); border-radius: 5px; padding: 0 6px; }
+  .ph .vo { position: static; }
+  .tile.visitor .tn { color: #3d3a55; }
+  .tiles.compact .tile { flex-direction: row; align-items: center; padding: 6px 10px; gap: 6px; }
+  .tiles.compact .tile[aria-pressed="true"] { padding: 5px 9px; }
+  .tiles.compact .tile .tm, .tiles.compact .tile .vo { display: none; }
+  .tiles.compact .tile .chip { align-self: center; margin-left: auto; }
+  /* Area panel */
+  .area-panel { border: 2px solid var(--brand); }
+  .area-panel .ph h2 { font-size: 16px; }
+  .area-panel .acts { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .btn.sm { padding: 4px 12px; font-size: 12.5px; }
+  .x-btn { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--line); background: #fff; font-size: 13px; }
+  .cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; height: 100%; min-height: 0; }
+  .col { background: var(--well); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; min-height: 0; }
+  .col h3 { flex: none; margin: 0 0 6px; font-size: 13px; display: flex; gap: 8px; align-items: center; }
+  .col h3 span { margin-left: auto; background: #fff; color: var(--muted); border-radius: 999px; padding: 0 8px; font-size: 11.5px; }
+  .col h3 span:empty { display: none; }
+  .col .rw { border-bottom-color: #ddd9ee; }
+  .col .rw > .chip { width: 92px; text-align: center; }
   /* Small or narrow windows: fall back to ordinary scrolling */
+  @media (max-width: 1500px) { .tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); } .tiles.compact { grid-template-columns: repeat(10, minmax(0, 1fr)); } .tiles.compact .tile .chip { display: none; } }
   @media (max-width: 900px), (max-height: 560px) {
     #pv { height: auto; } .pv-app { overflow: visible; }
     .stack { display: flex; flex-direction: column; }
     .row3 { grid-template-columns: 1fr; }
-    .week { grid-template-columns: repeat(2, 1fr); } .lanes { grid-template-columns: 1fr; }
+    .week { grid-template-columns: repeat(2, 1fr); } .lanes, .cols { grid-template-columns: 1fr; } .tiles { grid-template-columns: repeat(2, 1fr); }
     .fitlist { overflow: visible; } .pills, .me div { display: none; } .bar { flex-wrap: wrap; height: auto; padding: 8px 16px; }
     .stack, .hello { padding-left: 16px; padding-right: 16px; }
   }
@@ -131,7 +160,7 @@
   var KEY = 'ch-home-collapsed';
   function loadState() { try { return JSON.parse(localStorage.getItem(KEY)) || null; } catch (e) { return null; } }
   function saveState(s) { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch (e) { /* not available */ } }
-  var state = loadState() || { areas: innerHeight < 900, notices: innerHeight < 900, meetings: innerHeight < 900 };
+  var state = loadState() || {};
   var fitters = [];
 
   function chevron() { var s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('width', '18'); s.setAttribute('height', '18'); s.setAttribute('fill', 'none'); s.setAttribute('stroke', 'currentColor'); s.setAttribute('stroke-width', '2.2'); s.setAttribute('aria-hidden', 'true'); var p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('d', 'm6 9 6 6 6-6'); s.appendChild(p); return s; }
@@ -142,10 +171,11 @@
     var p = h('section', { class: 'panel' + (state[id] ? ' closed' : ''), 'data-id': id, 'aria-label': title });
     var tg = h('button', { class: 'tg', type: 'button', 'aria-expanded': String(!state[id]), 'aria-controls': bodyId },
       h('h2', { text: title }), h('span', { class: 'sum', text: summary }), h('span', { class: 'chev' }, chevron()));
+    p.setClosed = function (c) { p.classList.toggle('closed', c); tg.setAttribute('aria-expanded', String(!c)); };
     tg.addEventListener('click', function () {
-      state[id] = !state[id]; saveState(state);
-      p.classList.toggle('closed', state[id]); tg.setAttribute('aria-expanded', String(!state[id]));
-      onToggle(); refit();
+      var c = !p.classList.contains('closed');
+      if (!window.CH_AREA_OPEN) { state[id] = c; saveState(state); }
+      p.setClosed(c); onToggle(); refit();
     });
     p.appendChild(h('div', { class: 'ph' }, tg, link ? h('a', { class: 'all', href: '#', text: link }) : null));
     p.appendChild(h('div', { class: 'pb', id: bodyId }, body));
@@ -222,37 +252,90 @@
     lanes.push(lane('Coming up', '#8a95a5', D.later.map(card), 'Nothing further ahead.', 'see all'));
     var lanesEl = h('div', { class: 'lanes', style: '--n:' + lanes.length }, lanes);
 
-    // Bottom row
-    var areaRows = D.areas.map(function (a) {
-      return h('div', { class: 'rw' }, h('span', { class: 'tx' }, h('b', { text: a.name }), h('small', { text: a.stale ? 'No meeting since 2 Sep' : a.nextText })),
-        h('span', { class: 'chip ' + (a.late ? 'late' : 'ok'), text: a.late ? a.late + ' late' : a.open + ' open' }));
-    });
-    var noticeRows = D.notices.map(function (n) {
-      return h('div', { class: 'rw' }, h('span', { class: 'dot' + (n.important ? ' on' : ''), title: n.important ? 'Important' : '' }),
-        h('span', { class: 'tx' }, h('b', { text: n.title }), h('small', { text: (n.important ? 'Important · ' : '') + n.area.name + ' · ' + n.when })));
-    });
+    // All ten areas as tiles; clicking one opens it in place.
     var M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    var meetingRows = D.meetings.map(function (m) {
-      return h('div', { class: 'rw' }, h('div', { class: 'cal' }, h('small', { text: M[m.date.getUTCMonth()] }), h('b', { text: String(m.date.getUTCDate()) })),
-        h('span', { class: 'tx' }, h('b', { text: m.area.name }), h('small', { text: m.when + ' · ' + m.time + ' · ' + m.items + ' agenda items' })));
-    });
-    var lateAreas = D.areas.filter(function (a) { return a.late; }).length;
-    var important = D.notices.filter(function (n) { return n.important; }).length;
+    var lateAreas = D.tiles.filter(function (a) { return a.late; }).length;
+    var openKey = null, lastTile = null, areaPanel = null;
+    var tileEls = {};
+    var tiles = h('div', { class: 'tiles' }, D.tiles.map(function (a) {
+      var t = h('button', { class: 'tile' + (a.member ? '' : ' visitor'), type: 'button', 'aria-pressed': 'false', title: a.name },
+        h('span', { class: 'tn', text: a.name }),
+        h('span', { class: 'chip ' + (a.late ? 'late' : 'ok'), text: a.late ? a.late + ' late' : a.open + ' open' }),
+        h('span', { class: 'tm' + (a.stale ? ' warn' : ''), text: a.nextText }),
+        a.member ? null : h('span', { class: 'vo', text: 'View only' }));
+      t.addEventListener('click', function () { if (openKey === a.key) closeArea(); else openArea(a.key, t); });
+      tileEls[a.key] = t;
+      return t;
+    }));
+
+    function areaView(key) {
+      var x = D.areaDetail(key), a = x.area, tile = D.tiles.filter(function (t) { return t.key === key; })[0];
+      var acts = x.actions.map(function (c) {
+        return h('div', { class: 'card', tabindex: '0', title: c.title }, h('div', { class: 't', text: c.title }),
+          h('div', { class: 'm' }, h('span', { class: 'x', text: c.owner }), h('span', { class: 'chip r ' + c.band, text: c.due })));
+      });
+      var news = x.notices.filter(function (n) { return n.important; }).concat(x.notices.filter(function (n) { return !n.important; })).map(function (n) {
+        return h('div', { class: 'rw' }, h('span', { class: 'dot' + (n.important ? ' on' : ''), title: n.important ? 'Important' : '' }),
+          h('span', { class: 'tx' }, h('b', { text: n.title }), h('small', { text: (n.important ? 'Important notice' : 'Notice') + ' · ' + n.by + ' · ' + n.when })));
+      }).concat(x.issues.map(function (r) {
+        return h('div', { class: 'rw' }, h('span', { class: 'chip ' + (r.kind === 'Degradation' ? 'late' : 'ok'), text: r.kind }),
+          h('span', { class: 'tx' }, h('b', { text: r.title }), h('small', { text: r.status })));
+      }));
+      var diary = [];
+      if (x.next) diary.push(h('div', { class: 'rw' }, h('div', { class: 'cal' }, h('small', { text: x.next.when.split(' ')[2] }), h('b', { text: x.next.when.split(' ')[1] })),
+        h('span', { class: 'tx' }, h('b', { text: 'Next meeting · ' + x.next.when }), h('small', { text: x.next.time + ' · ' + x.next.place + ' · ' + x.next.items + ' agenda items, ' + x.next.flagged + ' flagged' }))));
+      diary.push(h('div', { class: 'rw' }, h('span', { class: 'chip ' + (x.last.stale ? 'soon' : 'kind'), text: 'Last met' }),
+        h('span', { class: 'tx' }, h('b', { text: x.last.when }), h('small', { text: x.last.stale ? 'Over a month ago – a meeting is due' : 'Minutes available' }))));
+      x.dates.forEach(function (dt) { diary.push(h('div', { class: 'rw' }, h('span', { class: 'chip mtg', text: dt.when }), h('span', { class: 'tx' }, h('b', { text: dt.title }), h('small', { text: 'Important date' })))); });
+      if (!x.next) diary.unshift(h('div', { class: 'rw' }, h('span', { class: 'chip late', text: 'None booked' }), h('span', { class: 'tx' }, h('b', { text: 'No meeting booked' }), h('small', { text: 'Someone who runs meetings here can book one' }))));
+
+      function col(title, count, list) { return h('div', { class: 'col' }, h('h3', null, title, h('span', { text: count })), list); }
+      var close = h('button', { class: 'x-btn', type: 'button', 'aria-label': 'Close ' + a.name, text: '✕' });
+      close.addEventListener('click', closeArea);
+      var member = tile.member;
+      var pnl = h('section', { class: 'panel area-panel', 'aria-label': a.name },
+        h('div', { class: 'ph' }, h('h2', { text: a.name }),
+          h('span', { class: 'sum', text: a.open + ' open · ' + (a.late ? a.late + ' late' : 'none late') + ' · ' + tile.nextText }),
+          member ? null : h('span', { class: 'vo', text: 'View only' }),
+          h('span', { class: 'acts' }, member || D.isMgmt ? h('button', { class: 'btn sm', type: 'button', text: 'Raise an action here' }) : null,
+            h('button', { class: 'btn sm', type: 'button', text: 'Post a notice here' }), close)),
+        h('div', { class: 'pb' }, h('div', { class: 'cols' },
+          col('Actions', String(acts.length), fitList(acts, 'all ' + a.name + ' actions')),
+          col('Notices & issues', String(news.length), fitList(news, 'all notices and issues', 'rows')),
+          col('Meetings & dates', '', fitList(diary, 'calendar', 'rows')))));
+      return pnl;
+    }
 
     var stack = h('div', { class: 'stack' });
+    var weekP = panel('week', 'This week', dueCount + ' due · ' + mtgCount + ' meeting' + (mtgCount === 1 ? '' : 's'), week, 'Open calendar', layout);
+    var actP = panel('actions', D.isMgmt ? 'Your work' : 'Your actions', D.late.length + ' late · ' + D.soon.length + ' this week · ' + D.later.length + ' later' + (D.canManage ? ' · ' + D.manage.length + ' to manage' : ''), lanesEl, 'All actions', layout);
+    var areaP = panel('areas', 'Areas', 'All ten · ' + lateAreas + ' with late actions · choose one to open it', tiles, 'Browse', layout);
     function layout() {
-      var bottomOpen = !(state.areas && state.notices && state.meetings);
-      var rows = [state.week ? 'auto' : 'clamp(112px, 17vh, 150px)', state.actions ? 'auto' : 'minmax(0, 1.55fr)', bottomOpen ? 'minmax(0, 1fr)' : 'auto'];
-      if (state.actions && bottomOpen) rows[2] = 'minmax(0, 1fr)';
-      if (state.actions && !bottomOpen) rows.push('1fr');
+      var rows = ['auto', actP.classList.contains('closed') ? 'auto' : 'minmax(0, 1fr)', 'auto'];
+      if (openKey) rows.push('minmax(0, 1fr)');
+      else if (actP.classList.contains('closed')) rows.push('1fr');
       stack.style.gridTemplateRows = rows.join(' ');
     }
-    stack.appendChild(panel('week', 'This week', dueCount + ' due · ' + mtgCount + ' meeting' + (mtgCount === 1 ? '' : 's'), week, 'Open calendar', layout));
-    stack.appendChild(panel('actions', D.isMgmt ? 'Your work' : 'Your actions', D.late.length + ' late · ' + D.soon.length + ' this week · ' + D.later.length + ' later' + (D.canManage ? ' · ' + D.manage.length + ' to manage' : ''), lanesEl, 'All actions', layout));
-    stack.appendChild(h('div', { class: 'row3' },
-      panel('areas', D.isMgmt ? 'All areas' : 'Your areas', D.areas.length + ' areas · ' + (lateAreas ? lateAreas + ' with late actions' : 'none late'), fitList(areaRows, 'all areas', 'rows areas2'), 'Browse', layout),
-      panel('notices', 'Notices', important ? important + ' important' : D.notices.length + ' recent', fitList(noticeRows, 'all notices', 'rows'), 'All', layout),
-      panel('meetings', 'Meetings', D.meetings[0] ? 'Next ' + D.meetings[0].when : 'None booked', fitList(meetingRows, 'all meetings', 'rows'), 'All', layout)));
+    function openArea(key, t) {
+      if (areaPanel) areaPanel.remove();
+      if (openKey) tileEls[openKey].setAttribute('aria-pressed', 'false');
+      openKey = key; lastTile = t; window.CH_AREA_OPEN = true;
+      weekP.setClosed(true); actP.setClosed(true); areaP.setClosed(false);
+      tiles.classList.add('compact'); t.setAttribute('aria-pressed', 'true');
+      areaPanel = areaView(key); stack.appendChild(areaPanel);
+      layout(); refit();
+    }
+    function closeArea() {
+      if (!openKey) return;
+      tileEls[openKey].setAttribute('aria-pressed', 'false');
+      openKey = null; window.CH_AREA_OPEN = false;
+      areaPanel.remove(); areaPanel = null; tiles.classList.remove('compact');
+      weekP.setClosed(!!state.week); actP.setClosed(!!state.actions); areaP.setClosed(!!state.areas);
+      layout(); refit();
+      if (lastTile) lastTile.focus();
+    }
+    document.onkeydown = function (e) { if (e.key === 'Escape' && openKey) closeArea(); };
+    stack.appendChild(weekP); stack.appendChild(actP); stack.appendChild(areaP);
     layout();
 
     root.appendChild(bar); root.appendChild(hello); root.appendChild(stack);
