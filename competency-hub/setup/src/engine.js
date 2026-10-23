@@ -484,9 +484,37 @@ CHS.engine = (function () {
       note(changed ? 'create' : 'ok', step, changed ? 'Set permissions on "' + label + '": ' + describe(expected) + '.' : '"' + label + '" permissions already in place.');
     }
 
+    // True when every area folder of the list takes its permissions from the list. A folder counts as having its
+    // own permissions when SharePoint says so, or when its grants differ from the list's.
+    async function areaFoldersInherit(l, step) {
+      var listGrants = JSON.stringify(sortGrants(await assignments(listPath(l.key))));
+      var own = [];
+      for (var a = 0; a < areas.length; a++) {
+        var path = folderItemPath(rootUrl(l) + '/' + areas[a].key);
+        var flag = null;
+        try { flag = (await rest.get(path + '?$select=HasUniqueRoleAssignments')).HasUniqueRoleAssignments; } catch (e) { flag = null; }
+        var grants = null;
+        try { grants = JSON.stringify(sortGrants(await assignments(path))); } catch (e) { grants = null; }
+        if (grants === null) continue; // not created yet: it will inherit when it is made
+        if (flag === true || grants !== listGrants) own.push(areas[a].key);
+      }
+      if (!own.length) { note('ok', step, 'The area folders of "' + l.title + '" take their permissions from the list.'); return true; }
+      note('stop', step, 'These area folders of "' + l.title + '" have their own permissions, so changing the list would not reach them: ' + own.join(', ') +
+        '. Nothing was changed on "' + l.title + '". Reset them to inherit (folder → Manage access → Stop sharing / Delete unique permissions), then run Setup again.');
+      return false;
+    }
+    function sortGrants(list) {
+      return list.map(function (x) { return x.id + ':' + x.roles.slice().sort().join(','); }).sort();
+    }
+
     function has(list, pid, rid) { return list.some(function (a) { return a.id === pid && a.roles.indexOf(rid) >= 0; }); }
     function describe(grants) {
-      return grants.map(function (g) { return g[0].replace('Members:', '') + (g[0].indexOf('Members:') === 0 ? ' members' : '') + ' ' + g[1]; }).join(', ');
+      var who = { Owners: 'Owners', AllUsers: 'All Users', Management: 'Management', Administrators: 'Administrators', NoticePosters: 'Notice Posters', Person: 'the person' };
+      var level = { FullControl: 'Full Control', Read: 'Read', Add: 'Add', Contribute: 'Contribute', Edit: 'Edit' };
+      return grants.map(function (g) {
+        var name = g[0].indexOf('Members:') === 0 ? g[0].replace('Members:', '') + ' members' : (who[g[0]] || g[0]);
+        return name + ': ' + (level[g[1]] || g[1]);
+      }).join('; ');
     }
 
     async function permissions() {
@@ -496,6 +524,8 @@ CHS.engine = (function () {
         if (!S.lists[l.key] || S.lists[l.key].broken) continue;
         var p = l.permissions || {};
         var listSec = S.lists[l.key].planned ? null : listPath(l.key);
+        // A list whose grants are changed exactly relies on its area folders inheriting from it: check that first.
+        if (listSec && p.exact && l.folders === 'areas' && !p.areaFolders && !(await areaFoldersInherit(l, step))) continue;
         if (listSec) await secure(listSec, l.title, p.list || [], false, step, !!p.exact);
         else note('create', step, 'Would give "' + l.title + '" its own permissions: ' + describe([['Owners', 'FullControl']].concat(p.list || [])) + '.');
         if (p.areaFolders) {
@@ -755,7 +785,7 @@ CHS.engine = (function () {
       await secure("/_api/web/lists(guid'" + pages.Id + "')/items(" + hub[0].Id + ')', 'Hub.aspx page', [['AllUsers', 'Read']], true, step);
     }
 
-    // Plan REV5 §4.4: the active people allowed to post notices are members of Notice posters.
+    // Spec §4.4: the active people allowed to post notices are members of Notice posters.
     async function noticePosters() {
       var step = 'Notice posters';
       if (S.lists.people.planned) { note('create', step, 'Would add everyone allowed to post notices to Notice posters.'); return; }

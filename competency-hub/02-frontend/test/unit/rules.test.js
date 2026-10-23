@@ -73,7 +73,7 @@ test('who may do what: owner and managers extend and complete; members add updat
   assert.equal(R.roles(done, 112, who('Technician', ['FLK'])).canComplete, false);
 });
 
-test('meeting rights: edit, reassign and close the area\'s actions – never reopen, and never in another area (plan REV5 §4.2)', () => {
+test('meeting rights: edit, reassign and close the area\'s actions – never reopen, and never in another area (spec §4.2)', () => {
   const open = { ownerId: 112, raisedById: 103, areaKey: 'FLK', status: 'Open' };
   const closed = Object.assign({}, open, { status: 'Closed' });
   const ops = (r) => [r.canEdit, r.canReassign, r.canClose, r.canStatus, r.canExtend, r.canComplete];

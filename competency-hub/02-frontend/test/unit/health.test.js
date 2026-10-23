@@ -1,4 +1,4 @@
-// Limited mode (plan REV5 REL-5): each part of the automatic processing is judged on its own.
+// Limited mode (spec REL-5): each part of the automatic processing is judged on its own.
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -49,4 +49,28 @@ test('a monitor that has never reported blocks nothing', () => {
   const h = CH.health.judge(rows(null, ''), WED_10);
   assert.equal(h.processing, 'unknown');
   assert.equal(h.reminders, 'unknown');
+});
+
+test('at the start of the working day the last out-of-hours report still counts until the first check is due', () => {
+  // Wednesday 07:10 in London (06:10 UTC); the last report was the 06:00 out-of-hours check
+  const h = CH.health.judge(rows({ state: 'Healthy', checkedAt: '2026-10-22T05:00:00Z' }), at('2026-10-22T06:10:00Z'));
+  assert.equal(h.processing, 'ok');
+  // by 08:00 a working-hours check is overdue
+  assert.equal(CH.health.judge(rows({ state: 'Healthy', checkedAt: '2026-10-22T05:00:00Z' }), at('2026-10-22T07:00:00Z')).processing, 'down');
+});
+
+test('when only the administration flow is behind, staff can carry on', () => {
+  const h = CH.health.judge(rows({ state: 'Healthy', checkedAt: '2026-10-22T08:55:00Z', admin: 'Down', adminReason: 'Administration changes are not being picked up.' }), WED_10);
+  assert.equal(h.processing, 'ok');
+  assert.equal(h.administration, 'down');
+  assert.equal(h.adminReason, 'Administration changes are not being picked up.');
+});
+
+test('the furthest deadline follows the MaxDeadlineYears setting, within 1 to 5 years', () => {
+  const with_ = (v) => CH.health.judge(rows(null).concat([{ Title: 'MaxDeadlineYears', Value: v }]), WED_10).maxDeadlineYears;
+  assert.equal(with_('1'), 1);
+  assert.equal(with_('5'), 5);
+  assert.equal(with_('9'), 2);
+  assert.equal(with_('x'), 2);
+  assert.equal(CH.health.judge(rows(null), WED_10).maxDeadlineYears, 2);
 });

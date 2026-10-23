@@ -258,7 +258,7 @@ window.MockDrivers = (function () {
       var item = await until(function () { return all('.items .item-open').filter(function (b) { return b.textContent.indexOf('Replace FH40 probe') >= 0; })[0]; });
       var noteAfterReload = item.textContent;
       await until(function () { return text().indexOf('Deadline moved to') >= 0; }, 120000);
-      var confirmedNoteGone = all('.items .item-open').filter(function (b) { return b.textContent.indexOf('Replace FH40 probe') >= 0; })[0].textContent.indexOf('being recorded') < 0;
+      var confirmedNoteGone = all('.items .item-open').filter(function (b) { return b.textContent.indexOf('Replace FH40 probe') >= 0; })[0].textContent.indexOf('recorded') < 0;
       // Raise an action, reload before the flow has run, then open the new action from the list.
       byText('button', 'Raise an action').click();
       type(await until(function () { return q('#ch-r-title'); }), 'Check spare filter stock');
@@ -331,7 +331,7 @@ window.MockDrivers = (function () {
       await wait(50);
       return { inside: inside, closed: !q('#ch-a'), focusBack: document.activeElement === item };
     },
-    // Limited mode (plan REV5 REL-5): a banner for everyone; queued changes are not offered; the instant update still is.
+    // Limited mode (spec REL-5): a banner for everyone; queued changes are not offered; the instant update still is.
     limitedMode: async function () {
       await until(function () { return q('.limited'); });
       var banner = q('.limited').textContent;
@@ -344,7 +344,7 @@ window.MockDrivers = (function () {
       var buttons = all('#ch-a .actions-row .btn').map(function (b) { return [b.textContent, b.disabled]; });
       return { banner: banner, raiseOpened: raiseOpened, toast: toast, buttons: buttons, note: q('#ch-a .actions-row').textContent, writes: MockSharePoint.writes.length };
     },
-    // A change the flow fails on is shown as retrying, never as saved and never as given up (plan REV5 REL-2).
+    // A change the flow fails on is shown as retrying, never as saved and never as given up (spec REL-2).
     retrying: async function () {
       (await until(function () { return all('.item-open').filter(function (b) { return b.textContent.indexOf('Replace FH40 probe') >= 0; })[0]; })).click();
       await until(function () { return q('#ch-a .actions-row'); });
@@ -374,7 +374,7 @@ window.MockDrivers = (function () {
       return { line: line, page: page, items: items, confirmText: confirmText, partlyFound: !!partly, tx: tx,
         unlocked: !MockSharePoint.data.Actions[1].PendingRequestKey, writes: MockSharePoint.writes.slice() };
     },
-    // People administration (plan REV5 ADM-1 to ADM-3): add one person, change someone's areas, and never your own.
+    // People administration (spec ADM-1 to ADM-3): add one person, change someone's areas, and never your own.
     peoplePage: async function () {
       byText('button', 'Open Administration').click();
       (await until(function () { return byText('.subtabs button', 'People'); })).click();
@@ -423,7 +423,7 @@ window.MockDrivers = (function () {
         chair: !!chair, selfNote: selfNote, selfButtons: selfButtons,
         writes: MockSharePoint.writes.map(function (w) { return w.list + '/' + w.folder; }) };
     },
-    // A technician without meeting rights raises only for themselves (plan REV5 §4.2).
+    // A technician without meeting rights raises only for themselves (spec §4.2).
     technicianRaise: async function () {
       (await until(function () { return byText('button', 'Raise an action'); })).click();
       await until(function () { return q('#ch-r-title'); });

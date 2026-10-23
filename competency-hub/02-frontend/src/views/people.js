@@ -1,4 +1,4 @@
-// Administration → People (plan REV5 ADM-1 to ADM-3, ADM-6). Administrators add people, and for each person set the
+// Administration → People (spec ADM-1 to ADM-3, ADM-6). Administrators add people, and for each person set the
 // role, the areas (tick boxes), "Can run meetings" in each area, an optional end date, notice posting and the
 // administrator flag – or mark them as left. Every change is one queued request, checked again by the
 // Administration flow, which narrows access first and reads each group back. Nobody can change their own access.

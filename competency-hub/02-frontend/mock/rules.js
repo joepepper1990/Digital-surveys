@@ -4,7 +4,7 @@ window.MockRules = (function () {
   var CH = {};
   // Fixed names and limits. Lists are addressed by display title; folders by list URL name.
   CH.config = {
-    VERSION: '0.5.0',
+    VERSION: '0.5.1',
     ENVIRONMENT: 'TEST',
     lists: {
       competencies: { title: 'Competencies', url: 'Competencies' },
@@ -135,7 +135,7 @@ window.MockRules = (function () {
 
     function isOpen(status) { return OPEN_STATUSES.indexOf(status) >= 0; }
 
-    var SELF_ONLY = 'As a technician you can raise actions for yourself in this area. Ask an engineer or meeting lead to raise it for someone else.';
+    var SELF_ONLY = 'As a technician you can raise actions for yourself in this area. Ask an engineer, or someone who runs meetings in this area, to raise it for someone else.';
 
     // ctx: { today, maxYears, canWrite(areaKey), ownerAllowed(areaKey, ownerId), canRaiseFor(areaKey, ownerId) }
     function validateRaise(v, ctx) {
@@ -152,7 +152,7 @@ window.MockRules = (function () {
       else if (!e.areaKey && ctx.canRaiseFor && !ctx.canRaiseFor(v.areaKey, Number(v.ownerId))) e.ownerId = SELF_ONLY;
       if (!D.isIso(v.dueIso || '')) e.dueIso = 'Choose a target date.';
       else if (v.dueIso < ctx.today) e.dueIso = 'The target date cannot be in the past.';
-      else if (v.dueIso > addYears(ctx.today, ctx.maxYears)) e.dueIso = 'Choose a date within ' + ctx.maxYears + ' years.';
+      else if (v.dueIso > addYears(ctx.today, ctx.maxYears)) e.dueIso = 'Choose a date within ' + ctx.maxYears + (ctx.maxYears === 1 ? ' year.' : ' years.');
       if (v.priority && PRIORITIES.indexOf(v.priority) < 0) e.priority = 'Choose a priority.';
       return e;
     }
@@ -260,7 +260,7 @@ window.MockRules = (function () {
       return {};
     }
 
-    // Who may do what with an action (plan REV5 §4.2), judged against its primary area. Each operation has its own
+    // Who may do what with an action (spec §4.2), judged against its primary area. Each operation has its own
     // rule; the request flow applies the same ones. personId: SiteUserId. access: CH.access result.
     //   management, or an engineer of the area:       edit, reassign, close, reopen
     //   "Can run meetings" in the area:                 edit, reassign, close – never reopen

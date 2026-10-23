@@ -13,7 +13,7 @@ import check_package
 import flows
 import validate
 
-GOOD = flows.build_all()
+GOOD = flows.build_all(raw=True)   # the checks below break steps by their short names
 
 
 def broken(change):
@@ -55,6 +55,10 @@ class BrokenFlowsAreRejected(unittest.TestCase):
     def expect(self, change, fragment):
         probs = broken(change)
         self.assertTrue(any(fragment in p for p in probs), probs)
+
+    def test_expression_too_long(self):
+        long_expr = "@concat(" + ", ".join(["'x'"] * 2100) + ")"
+        self.expect(lambda d, f: find(d, 'Folder_name').__setitem__('inputs', long_expr), 'over the 8192 Power Automate allows')
 
     def test_unknown_function(self):
         self.expect(lambda d, f: find(d, 'Folder_name').__setitem__('inputs', "@lastItem(split('a', '/'))"), 'unknown function lastItem')

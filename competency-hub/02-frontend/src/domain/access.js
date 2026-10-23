@@ -41,12 +41,13 @@ CH.access = (function () {
       isMember: function (key) { return !!member[key]; },
       // Members, Team Leaders and the Group Head may add and change things in an active area.
       canWrite: function (key) { return active(key) && (management || !!member[key]); },
-      // Every active user may post a notice on any active area's noticeboard (K4.1, A-1).
-      canPostNotice: function (key) { return active(key); },
+      // Every active user may post on any active area's noticeboard unless an administrator has turned
+      // their "Can post notices" switch off (spec §4.4); SharePoint enforces the same through Notice Posters.
+      canPostNotice: function (key) { return active(key) && person.CanPostNotices !== false; },
       isTechnician: role === 'Technician',
       // An engineer who is a member of the area.
       isEngineerIn: function (key) { return active(key) && role === 'Engineer' && !!member[key]; },
-      // "Can run meetings" in this area, set for each person and area by an administrator (plan REV5 §4).
+      // "Can run meetings" in this area, set for each person and area by an administrator (spec §4).
       chairs: function (key) { return active(key) && !!member[key] && !!meetingAdmin[key]; },
       // Areas whose actions this person looks after (for the lists that gather them): management, engineers, meeting runners.
       canManage: function (key) {
@@ -55,7 +56,7 @@ CH.access = (function () {
       runsMeetings: function (key) { return active(key) && (management || (!!member[key] && !!meetingAdmin[key])); },
       // Moderating others' notices and comments: engineers of the area and management – never meeting rights alone.
       canModerate: function (key) { return active(key) && (management || (role === 'Engineer' && !!member[key])); },
-      // A technician without meeting rights in the area may raise actions only for themselves (plan REV5 §4.4).
+      // A technician without meeting rights in the area may raise actions only for themselves (spec §4.2).
       canRaiseFor: function (key, ownerId, selfId) {
         if (!active(key) || !(management || !!member[key])) return false;
         return role !== 'Technician' || !!meetingAdmin[key] || Number(ownerId) === Number(selfId);

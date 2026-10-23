@@ -412,7 +412,7 @@ test('Without the flag, a list that really inherits its permissions is still fou
   requests.unique = false;
   requests.ra = [];
   const check = await run('check');
-  assert.ok(check.entries.some((e) => e.text === 'Would give "Requests" its own permissions: Owners FullControl.'), 'inheriting Requests list is reported');
+  assert.ok(check.entries.some((e) => e.text === 'Would give "Requests" its own permissions: Owners: Full Control.'), 'inheriting Requests list is reported');
   assert.equal((await run('apply')).result.ok, true);
   assert.equal(requests.unique, true);
   assert.ok(!requests.ra.some((a) => a.p === groupId(site, 'ESG Competency Hub Visitors')), 'site visitors cannot see Requests');
@@ -484,7 +484,8 @@ test('The Noticeboard regrant: All Users keep Read, only Notice posters may add,
 
   const check = await run('check');
   const planned = check.entries.filter((e) => e.level === 'create').map((e) => e.text).join(' | ');
-  assert.match(planned, /Would give "Noticeboard" its own permissions: Owners FullControl, AllUsers Read, NoticePosters Add/);
+  assert.match(planned, /Would give "Noticeboard" its own permissions: Owners: Full Control; All Users: Read; Notice Posters: Add/);
+  assert.ok(check.entries.some((e) => e.text === 'The area folders of "Noticeboard" take their permissions from the list.'), 'Check confirms the folders inherit');
   assert.ok(notices.ra.some((a) => a.p === allUsers && a.r.includes(add)), 'Check changes nothing');
 
   const apply = await run('apply');
@@ -503,4 +504,17 @@ test('The Noticeboard regrant: All Users keep Read, only Notice posters may add,
   site.writes.length = 0;
   const again = await run('check');
   assert.equal(again.result.created, 0, again.entries.filter((e) => e.level === 'create').map((e) => e.text).join(' | '));
+});
+
+test('The Noticeboard change stops, changing nothing, if an area folder has its own permissions', async () => {
+  const { site, run } = newSite();
+  assert.equal((await run('apply')).result.ok, true);
+  const notices = listByUrl(site, 'Noticeboard');
+  const f = folder(site, notices, 'FLK');
+  f.unique = true;
+  f.ra = [{ p: groupId(site, 'Competency Hub – All Users'), r: [roleId(site, 'Competency Hub Read')] }];
+  const before = JSON.stringify(notices.ra);
+  const apply = await run('apply');
+  assert.ok(apply.stops.some((s) => /area folders of "Noticeboard" have their own permissions.*FLK/.test(s)), apply.stops.join(' | '));
+  assert.equal(JSON.stringify(notices.ra), before, 'the list grants are untouched');
 });

@@ -7,7 +7,7 @@ CH.requests = (function () {
   var EVERY = 60;
   var GIVE_UP_MINUTES = 15;
   var STOP_MINUTES = 120;
-  // Still on its way: waiting, being processed, or failed and being retried by the queue monitor (plan REV5 REL-2).
+  // Still on its way: waiting, being processed, or failed and being retried by the queue monitor (spec REL-2).
   var OPEN_STATUSES = ['Submitted', 'Processing', 'Failed'];
   // An administrator's decision about another change: it is confirmed by its own request alone.
   var ADMIN_TYPES = ['RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting'];
@@ -87,10 +87,13 @@ CH.requests = (function () {
     // Status is indexed, so it leads the filter; AuthorId keeps it to this person's requests.
     async function resume() {
       var found = [];
-      var statuses = OPEN_STATUSES.concat(['Needs attention']);
+      var statuses = OPEN_STATUSES.concat(['Needs attention', 'Cancelled', 'Reverted']);
+      // a change an administrator cancelled or reverted is shown once more after a reload, for a day
+      var since = new Date(Date.now() - 24 * 3600000).toISOString();
       for (var i = 0; i < statuses.length; i++) {
+        var recent = statuses[i] === 'Cancelled' || statuses[i] === 'Reverted' ? " and Modified ge datetime'" + since + "'" : '';
         var res = await app.sp.items(CH.config.lists.requests.title, '$select=Id,Title,RequestKey,RequestType,TargetId,Created' +
-          "&$filter=Status eq '" + statuses[i] + "' and AuthorId eq " + Number(app.person.SiteUserId), 100);
+          "&$filter=Status eq '" + statuses[i] + "' and AuthorId eq " + Number(app.person.SiteUserId) + recent, 100);
         found = found.concat(res.rows);
       }
       found.sort(function (a, b) { return a.Id - b.Id; }).forEach(function (row) {
@@ -115,8 +118,13 @@ CH.requests = (function () {
       var row = null;
       try { row = await findRequest(entry.key); } catch (_) { row = null; }
       var status = row && row.Status;
+      // waiting in the queue, or being worked on now (spec REL-2)
+      if ((status === 'Processing') !== !!entry.processing) {
+        entry.processing = status === 'Processing';
+        onChange(entry);
+      }
       if (status === 'Rejected') return settle(entry, 'rejected', row.ResultMessage || 'This change was not accepted.');
-      // Honest states (plan REV5 REL-2): only Completed, confirmed on the record, ever reads as saved.
+      // Honest states (spec REL-2): only Completed, confirmed on the record, ever reads as saved.
       if (status === 'Needs attention') {
         return settle(entry, 'attention', row.ResultMessage || 'Not recorded – an administrator has been told.');
       }
@@ -167,6 +175,31 @@ CH.requests = (function () {
       entry.state = state;
       entry.message = message;
       onChange(entry);
+      if (state === 'attention') watchAttention(entry);
+    }
+
+    // A change that needs an administrator: every few minutes, see whether they have tried it again (it is then
+    // followed as before) or cancelled or reverted it.
+    function watchAttention(entry) {
+      if (stopped) return;
+      timers.push(setTimeout(async function () {
+        if (stopped || entry.state !== 'attention') return;
+        var row = null;
+        try { row = await findRequest(entry.key); } catch (_) { row = null; }
+        var status = row && row.Status;
+        if (OPEN_STATUSES.indexOf(status) >= 0) {
+          entry.state = 'submitted';
+          entry.message = '';
+          entry.retrying = false;
+          entry.polls = 0;
+          entry.submittedAt = new Date();
+          onChange(entry);
+          return schedule(entry);
+        }
+        if (status === 'Needs attention' || !status) return watchAttention(entry);
+        entry.state = 'submitted';
+        poll(entry);
+      }, 5 * 60000));
     }
 
     return {

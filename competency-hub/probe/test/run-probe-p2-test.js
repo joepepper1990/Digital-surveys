@@ -56,7 +56,7 @@ function respond(method, url, body) {
     const key = decodeURIComponent(url).match(/RequestKey eq '([^']+)'/)[1];
     const area = requests[key];
     return json(200, { value: [area === 'GRS' ? { Status: 'Completed', ResultMessage: 'ACT-00099 raised.' }
-      : { Status: 'Rejected', ResultMessage: 'As a technician you can raise actions for yourself in this area. Ask an engineer or meeting lead to raise it for someone else.' }] });
+      : { Status: 'Rejected', ResultMessage: 'As a technician you can raise actions for yourself in this area. Ask an engineer, or someone who runs meetings in this area, to raise it for someone else.' }] });
   }
   if (method === 'GET' && url.includes("getbytitle('Requests')")) return json(200, { value: [{ Id: 5, AuthorId: ME }] });
   if (method === 'GET' && url.includes("getbytitle('Noticeboard')/items(55)")) return json(200, { AuthorId: ME });

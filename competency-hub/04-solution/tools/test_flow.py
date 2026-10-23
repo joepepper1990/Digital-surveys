@@ -29,7 +29,7 @@ def site():
     for uid, title, email in ((JOE, 'Pepper Joseph', 'joseph.pepper@example.test'), (RACHEL, 'Boulden Rachel', 'rachel.boulden@example.test'),
                               (KELLY, 'Bates Kelly', 'kelly.bates@example.test'), (KAI, 'Todd Kai', 'kai.todd@example.test')):
         s.add_user(uid, title, email)
-    # the Competency Hub groups, as Setup made them (plan E.4, REV5 §4.4)
+    # the Competency Hub groups, as Setup made them (plan E.4, spec §4.4)
     s.gid = {name: s.add_group('Competency Hub – ' + name) for name in ('All Users', 'Management', 'Administrators', 'Notice Posters')}
     for i, k in enumerate(AREAS):
         gid = s.add_group('Competency Hub – {0} Members'.format(k))
@@ -398,7 +398,7 @@ class Robustness(unittest.TestCase):
         s = site()
         r = submit(s, RACHEL, 'DeleteEverything', {}, target=s.action, revision=2)
         run(s, r)
-        self.assertEqual(request(s, r)['ResultMessage'], 'This kind of request is not handled yet.')
+        self.assertEqual(request(s, r)['ResultMessage'], 'This kind of change is not recognised.')
 
     def test_event_time_rule(self):
         # created 10 minutes before the claim: the request's own time counts; 2 hours before: the claim time does
@@ -477,7 +477,7 @@ class Emails(unittest.TestCase):
         self.assertEqual(s.sent, [])
 
     def test_the_owner_closing_tells_nobody_and_a_close_out_asks_the_raiser(self):
-        # plan REV5 D1: no closure email to the raiser (rejected); the close-out check is a request to act, so it stays
+        # spec D1: no closure email to the raiser (rejected); the close-out check is a request to act, so it stays
         for close_out, expected in ((False, []), (True, [('kelly.bates@example.test', 'Ready for your close-out check: Replace FH40 probe')])):
             with self.subTest(close_out=close_out):
                 s = site()
@@ -866,7 +866,7 @@ class Calls(unittest.TestCase):
         self.assertEqual(tx['FirstClaimedAt'], '2026-10-21T09:30:00Z')
 
 
-# --------------------------------------------------------------------------------------------- safety net (plan REV5 REL-1 to REL-4)
+# --------------------------------------------------------------------------------------------- safety net (spec REL-1 to REL-4)
 WEEKDAY = datetime(2026, 10, 21, 10, 0, tzinfo=UK).astimezone(timezone.utc)      # Wednesday, working hours
 NIGHT = datetime(2026, 10, 24, 3, 5, tzinfo=UK).astimezone(timezone.utc)         # Saturday, first run of the hour
 
@@ -1021,7 +1021,7 @@ class Monitor(unittest.TestCase):
         self.assertEqual(health(s)['state'], 'Healthy', 'one put-back is normal')
         age(s, 'requests', r, 15)
         run_monitor(s, WEEKDAY + timedelta(minutes=15))
-        self.assertEqual((health(s)['state'], health(s)['reason']), ('Down', 'Changes are not being picked up by the request flow.'))
+        self.assertEqual((health(s)['state'], health(s)['reason']), ('Down', 'Changes to actions are not being picked up by ESG Competency Hub | 2 Request queue.'))
         run(s, r, now=WEEKDAY + timedelta(minutes=20))
         run_monitor(s, WEEKDAY + timedelta(minutes=30))
         self.assertEqual(health(s)['state'], 'Healthy', 'back to normal by itself')
@@ -1107,7 +1107,7 @@ class Administration(unittest.TestCase):
         s, r = self.stuck(self.partly)
         res = self.ask(s, 'CancelTransaction', r)
         self.assertEqual((res['Status'], res['ResultMessage']),
-                         ('Rejected', 'Part of this change has already been made, so it cannot be cancelled. Use Finish or Revert.'))
+                         ('Rejected', 'Part of this change has already been made, so it cannot be cancelled. Use Finish (or Revert, for a change to an action).'))
         self.assertEqual(request(s, r)['Status'], 'Needs attention')
 
     def test_revert_writes_the_previous_values_back_and_says_so(self):
@@ -1201,7 +1201,7 @@ class Routing(unittest.TestCase):
 
 
 class HistoryForReports(unittest.TestCase):
-    """Plan REV5 H-1: every action event says who owned the action and which deadline was in force, and a completion
+    """Spec H-1: every action event says who owned the action and which deadline was in force, and a completion
     or closure says what kind it was, so later statistics need nothing reconstructed."""
     def event(self, s, key=KEY):
         return s.rows('history', RequestKey=key + '|1')[0]['f']
@@ -1238,7 +1238,7 @@ class HistoryForReports(unittest.TestCase):
 
 
 class Permissions(unittest.TestCase):
-    """Plan REV5 §4: meeting rights and the technician restriction, enforced by the flow whatever the page sends."""
+    """Spec §4: meeting rights and the technician restriction, enforced by the flow whatever the page sends."""
     def chair(self, s, uid, key, on=True):
         row = next(r for r in s.rows('members', PersonId=uid) if r['f']['MembershipKey'] == '{0}|{1}'.format(key, uid))
         row['f']['CanManageMeetings'] = on
@@ -1311,7 +1311,7 @@ class Permissions(unittest.TestCase):
         self.assertEqual(self.change(s, KELLY, 'CloseAction', {'outcome': 'Completed', 'note': ''})['Status'], 'Completed')
 
 
-# --------------------------------------------------------------------------------------------- people (plan REV5 §3.2, §4)
+# --------------------------------------------------------------------------------------------- people (spec §3.2, §4)
 SADIE = None
 
 
@@ -1355,7 +1355,7 @@ class People(unittest.TestCase):
         self.assertTrue(fold['unique'])
         self.assertEqual(fold['ra'][uid], {2003})
         ev = s.rows('history', RequestKey=KEY2 + '|1')[0]
-        self.assertEqual((ev['dir'], ev['f']['EventType'], ev['f']['ActorId'], ev['f']['Title']), ('Administration', 'AddPerson', JOE, 'Added Young Sadie'))
+        self.assertEqual((ev['dir'], ev['f']['EventType'], ev['f']['ActorId'], ev['f']['Title']), ('Administration', 'Person Added', JOE, 'Added Young Sadie'))
         self.assertIn('"DOS"', ev['f']['NewValue'])
 
     def test_someone_not_in_microsoft_365_or_already_here_is_refused(self):
@@ -1486,7 +1486,7 @@ class Settings(unittest.TestCase):
                                      ('MonitorHours', '06:30|18:00|30', 'Setting saved.'), ('MonitorHours', '18:00|06:30|30', None), ('MonitorHours', '6:30|18:00|30', None),
                                      ('MonitorHours', '06:30|18:00|5', None), ('LastDailyRun', '2026', 'Choose a setting.')):
             with self.subTest(name=name, value=value):
-                res, eng = run_people(s, JOE, 'UpdateSetting', {'name': name, 'value': value}, key='k-' + name + value)
+                res, eng = run_people(s, JOE, 'UpdateSetting', {'name': name, 'value': value}, key='k-' + name + value.replace('|', '-'))
                 if message == 'Setting saved.':
                     self.assertEqual((res['Status'], self.setting(s, name)), ('Completed', value), eng.log)
                 else:
@@ -1515,7 +1515,7 @@ class TemporaryAccess(unittest.TestCase):
         self.assertEqual(row['Status'], 'Removed')
         self.assertNotIn(RACHEL, s.groups[s.gid['GRS']]['users'])
         ev = [r for r in s.rows('history') if str(r['f'].get('RequestKey', '')).startswith('SYS|Expire|')]
-        self.assertEqual((len(ev), ev[0]['dir'], ev[0]['f']['EventType']), (1, 'Administration', 'AccessExpired'))
+        self.assertEqual((len(ev), ev[0]['dir'], ev[0]['f']['EventType']), (1, 'Administration', 'Temporary Access Ended'))
         run_daily(s, date(2026, 10, 23))
         self.assertEqual(len([r for r in s.rows('history') if str(r['f'].get('RequestKey', '')).startswith('SYS|Expire|')]), 1)
 
@@ -1529,6 +1529,134 @@ class TemporaryAccess(unittest.TestCase):
         self.assertEqual([m['subject'] for m in alerts], ['Competency Hub needs attention: Temporary access has ended, but open actions remain: Boulden Rachel in FLK'])
         run_daily(s, date(2026, 10, 22), hour=7)
         self.assertEqual(len([m for m in s.sent if 'needs attention' in m['subject']]), 1)
+
+
+class ReviewFindings(unittest.TestCase):
+    """Faults found in the review of 23 October 2026, each reproduced first and kept here so they stay fixed."""
+
+    def test_an_administration_change_is_checked_again_after_an_early_failure(self):
+        s = site()
+        s.tenant['sadie.young@example.test'] = 'Young Sadie'
+        s.clock = WEEKDAY
+        # Kelly is not an administrator; the first run fails at the Microsoft 365 look-up, before anything is decided
+        r = submit(s, KELLY, 'AddPerson', {'email': 'sadie.young@example.test', 'role': 'Team Leader', 'administrator': True, 'areas': []}, key=KEY2)
+        s.writes.clear()
+        s.fail_at = 3
+        run_admin(s, r)
+        s.fail_at = None
+        age(s, 'requests', r, 11)
+        run_monitor(s, s.clock)
+        run_admin(s, r, now=s.clock + timedelta(minutes=1))
+        self.assertEqual((request(s, r)['Status'], request(s, r)['ResultMessage']), ('Rejected', 'Only a Competency Hub administrator can do this.'))
+        self.assertFalse([u for u in s.users.values() if u['Email'] == 'sadie.young@example.test' and u['Id'] in s.groups[s.gid['Administrators']]['users']])
+
+    def test_emails_about_a_reverted_change_are_not_sent(self):
+        from wdl import ActionFailed
+        s = site()
+        s.clock = WEEKDAY
+        orig, on = s.rest, {'v': True}
+
+        def release_fails(method, uri, headers, body):
+            if on['v'] and headers.get('X-HTTP-Method') == 'MERGE' and 'Actions' in uri and body and 'LastRequestKey' in body:
+                raise ActionFailed('500 release failed')
+            return orig(method, uri, headers, body)
+        s.rest = release_fails
+        r = submit(s, KELLY, 'ExtendDeadline', Extend().payload(), target=s.action, revision=2)
+        Monitor.fail_three_times(None, s, r, None)
+        on['v'] = False
+        a = submit(s, JOE, 'RevertTransaction', {'txId': tx_of(s, r)['id'], 'note': ''}, target=tx_of(s, r)['id'], key=KEY2)
+        run_admin(s, a, now=s.clock + timedelta(minutes=1))
+        self.assertEqual(request(s, r)['Status'], 'Reverted')
+        run_monitor(s, s.clock + timedelta(minutes=45))
+        self.assertEqual([m['subject'] for m in s.sent if 'needs attention' not in m['subject']], [])
+        self.assertEqual(s.rows('notifications', NotificationType='EXT')[0]['f']['State'], 'Skipped')
+        ev = [h['f'] for h in s.rows('history') if h['f'].get('RequestKey') == KEY2 + '|2'][0]
+        self.assertTrue(ev['OwnerId'] and ev['DueDayAtEvent'] and ev['ActorId'] and ev['EventTime'], ev)
+
+    def test_a_retry_taken_by_the_other_flow_is_skipped_not_failed(self):
+        s, row = Retries().failed_extension_email(400)
+        due_on(s, '2026-10-22')
+        orig = s.rest
+
+        def monitor_got_there_first(method, uri, headers, body):
+            out = orig(method, uri, headers, body)
+            if method == 'GET' and "State eq 'Failed'" in uri:
+                for it in s.by_key['notifications']['items'].values():
+                    if it['f'].get('State') == 'Failed':
+                        it['version'] += 1
+            return out
+        s.rest = monitor_got_there_first
+        st, _ = run_daily(s, date(2026, 10, 22))
+        self.assertEqual(st, 'Succeeded')
+        self.assertTrue(s.rows('settings', Title='LastDailyRun')[0]['f']['Value'])
+        self.assertIn('Due today: Replace FH40 probe', [m['subject'] for m in s.sent])
+
+    def test_one_bad_membership_never_stops_the_reminders(self):
+        s = site()
+        due_on(s, '2026-10-22')
+        TemporaryAccess().expire(s, RACHEL, 'GRS', '2026-10-20')
+        s.rows('competencies', CompetencyKey='GRS')[0]['f']['MembersGroupId'] = 9999.0
+        st, _ = run_daily(s, date(2026, 10, 22))
+        subjects = [m['subject'] for m in s.sent]
+        self.assertEqual(st, 'Succeeded')
+        self.assertIn('Due today: Replace FH40 probe', subjects)
+        self.assertTrue(any('Temporary access could not be ended' in x for x in subjects), subjects)
+        self.assertTrue(s.rows('settings', Title='LastDailyRun')[0]['f']['Value'])
+
+    def test_a_request_that_can_never_be_recorded_is_refused_not_retried_for_ever(self):
+        s = site()
+        s.clock = WEEKDAY
+        r1 = submit(s, RACHEL, 'ExtendDeadline', Extend().payload(), target=s.action, revision=2)
+        run(s, r1)
+        r2 = submit(s, RACHEL, 'ChangeStatus', {'status': 'Open'}, target=s.action, revision=3, key=KEY + '|1')
+        run(s, r2)
+        self.assertEqual(request(s, r2)['Status'], 'Rejected')
+
+    def test_a_stopped_administration_flow_does_not_stop_staff(self):
+        s = site()
+        s.clock = WEEKDAY
+        r = submit(s, JOE, 'UpdateSetting', {'name': 'ReminderDaysBefore', 'value': '5'}, key=KEY2)
+        age(s, 'requests', r, 11)
+        run_monitor(s, WEEKDAY)
+        age(s, 'requests', r, 15)
+        run_monitor(s, WEEKDAY + timedelta(minutes=15))
+        self.assertEqual((health(s)['state'], health(s)['admin']), ('Healthy', 'Down'))
+
+    def test_a_short_outlook_outage_loses_no_email(self):
+        s = site()
+        s.clock = WEEKDAY
+        s.mail_fail = [429, 429]          # Outlook throttling for about half an hour
+        r = submit(s, KELLY, 'ExtendDeadline', Extend().payload(), target=s.action, revision=2)
+        run(s, r)
+        for m in (16, 32, 48):
+            run_monitor(s, WEEKDAY + timedelta(minutes=m))
+        row = s.rows('notifications', NotificationType='EXT')[0]['f']
+        self.assertNotEqual(row['State'], 'Abandoned')
+        run_monitor(s, WEEKDAY + timedelta(hours=7))
+        self.assertEqual(row['State'], 'Sent')
+
+    def test_an_unknown_kind_of_change_is_refused_without_reading_anything(self):
+        s = site()
+        r = submit(s, RACHEL, 'DeleteEverything', {})
+        run(s, r)
+        self.assertEqual((request(s, r)['Status'], request(s, r)['ResultMessage']), ('Rejected', 'This kind of change is not recognised.'))
+
+    def test_a_partly_made_people_change_cannot_be_cancelled(self):
+        s = site()
+        s.clock = WEEKDAY
+        r = submit(s, JOE, 'UpdatePerson', {'personId': RACHEL, 'areas': [{'key': 'FLK'}], 'role': 'Technician'})
+        s.fail_if = lambda m, path, where: m == 'MERGE' and path.startswith('People/')
+        run_admin(s, r)
+        for _ in range(3):
+            age(s, 'requests', r, 11)
+            run_monitor(s, s.clock)
+            if request(s, r)['Status'] == 'Submitted':
+                run_admin(s, r, now=s.clock + timedelta(minutes=1))
+        s.fail_if = None
+        self.assertEqual(request(s, r)['ResultMessage'], 'Not fully recorded – an administrator has been told and will finish it.')
+        c = submit(s, JOE, 'CancelTransaction', {'txId': tx_of(s, r)['id'], 'note': ''}, target=tx_of(s, r)['id'], key=KEY2)
+        run_admin(s, c, now=s.clock + timedelta(minutes=1))
+        self.assertEqual(request(s, c)['Status'], 'Rejected')
 
 
 if __name__ == '__main__':

@@ -148,7 +148,7 @@ footer { text-align: center; color: var(--muted); font-size: calc(12 * var(--u))
 }
 @media (pointer: coarse) { .btn, .areastrip button, .subtabs button { min-height: 44px; } }
 
-/* Administration (plan REV5 §3.2): results of a change, the areas table, the changes needing attention */
+/* Administration (spec §3.2): results of a change, the areas table, the changes needing attention */
 .ok-note { background: #e6f3eb; color: #1b5e37; border-radius: calc(8 * var(--u)); padding: calc(8 * var(--u)) calc(12 * var(--u)); }
 .limited { background: #fde8e9; color: #7a1d22; }
 .admin-change { display: block; border-bottom: 1px solid var(--line); padding: calc(12 * var(--u)) 0; }

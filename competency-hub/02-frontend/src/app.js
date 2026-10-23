@@ -36,7 +36,7 @@ CH.app = (function () {
       return [
         app.stale ? h('p', { class: 'stale-copy', role: 'alert' }, h('b', { text: 'A newer version of the Competency Hub is available. ' }),
           'Press Ctrl+F5 to load it. Until then some buttons may not work.') : null,
-        // Limited mode (plan REV5 REL-5): only the changes that need automatic processing are paused.
+        // Limited mode (spec REL-5): only the changes that need automatic processing are paused.
         app.queueBlocked() ? h('p', { class: 'stale-copy limited', role: 'alert' }, h('b', { text: 'Changes can\'t be processed at the moment. ' }),
           'You can still read everything, add updates to actions and post notices. Raising and changing actions will be back shortly – nothing you have already sent is lost.') : null,
         h('header', { class: 'bar' }, h('div', { class: 'bar-in' },
@@ -104,7 +104,7 @@ CH.app = (function () {
         var how = { rejected: 'not accepted: ', attention: 'not recorded: ', cancelled: 'cancelled: ', reverted: 'reverted: ' }[e.state];
         return h('li', { class: waiting ? 'pending' : 'section-note' }, h('b', { text: e.label }),
           waiting ? ' – submitted ' + CH.dates.ukTime(e.submittedAt) + (e.retrying ? '. ' + e.message
-            : ', being recorded (usually under 5 minutes).' + (e.state === 'slow' ? ' ' + e.message : ''))
+            : (e.processing ? ', being recorded now.' : ', waiting to be recorded (usually under 5 minutes).') + (e.state === 'slow' ? ' ' + e.message : ''))
             : ' – ' + how + e.message + ' ',
           waiting ? null : CH.ui.linkButton('Dismiss', function () { app.tracker.dismiss(e); }));
       });

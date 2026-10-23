@@ -1,3 +1,6 @@
+> **Historical record.** This is revision 3 of the plan, kept for reference. The current specification is
+> [PLAN.md](PLAN.md) (Revision 5).
+
 # ESG Competency Hub — Planning Package (revision 3)
 
 **Environmental Safety Group, Dungeness B Power Station**
@@ -50,8 +53,7 @@ Section L lists every change; J.2 lists each review finding and its resolution.
 
 ### 0.1 Recorded results from the ESG 1-to-1 project (evidence, not re-verified for the new site)
 
-The 1-to-1 project's documentation (branch `claude/esg-technician-1-to-1-607sc3`,
-Stage 0A/0B reports, 14–16 Oct 2026) records the following results in this
+The 1-to-1 project's documentation (Stage 0A/0B reports, 14–16 Oct 2026) records the following results in this
 tenant. Comments in the 1-to-1 code say its Welcome wrapper was adapted from the
 DSL application. The `dsl-master-conformance` repository attached to this session
 is **empty**, so DSL code could not be reviewed.
@@ -114,7 +116,7 @@ Legend:
 | Item | Status |
 |---|---|
 | All functional requirements in the brief: users, memberships, roles, modules, extensions, reminders, meetings, dashboard, administration, security, audit, testing and deliverables | **[Brief]** — none removed |
-| Professional, natural naming; clean HTML, CSS and JavaScript; no references to AI | **[Brief]**, reaffirmed **[You]** |
+| Professional, natural naming and wording; clean HTML, CSS and JavaScript | **[Brief]**, reaffirmed **[You]** |
 | The Competency Hub is a separate project, unrelated to earlier work in this repository | **[You]** |
 | Frontend: Welcome by Accelerator 365 with professional HTML, CSS and JavaScript. Backend: SharePoint lists and Power Automate. No SPFx, React or Power Apps. | **[You]** |
 | Welcome is installed and proven with the DSL and ESG 1-to-1 applications | **[You]** (supported by the 0.1 evidence for the 1-to-1) |

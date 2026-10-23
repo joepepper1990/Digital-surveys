@@ -121,7 +121,7 @@ check('raise: empty title and a past date are refused, in plain words', res.ok &
 check('raise: an engineer\'s owner list holds area members and management, with "(you)"', res.ok && res.result.owners.some((o) => /Richard Harrisson \(you\)/.test(o)) &&
   res.result.owners.some((o) => /Robert Starbuck – Group Head/.test(o)) && res.result.owners.length > 5, JSON.stringify(res && res.result && res.result.owners));
 check('raise: summary shown, then "being recorded" until the flow confirms it', res.ok && /Order replacement smear papers/.test(res.result.summary) &&
-  /being recorded/.test(res.result.stripText), JSON.stringify(res));
+  /(being|to be) recorded/.test(res.result.stripText), JSON.stringify(res));
 check('raise: the new action appears once confirmed, and the note goes', res.ok && res.result.listed && res.result.stripGone && res.result.request.status === 'Completed', JSON.stringify(res));
 check('raise: once confirmed, the new action opens on click without a reload', res.ok && res.result.reachable && res.result.opens, JSON.stringify(res));
 check('raise: the only write is a request in the user\'s own folder', res.ok && res.result.writes.length === 1 && res.result.writes[0].list === 'Requests' &&
@@ -131,12 +131,12 @@ check('action panel: what, who and when in plain words, with the original deadli
   /Rachel Boulden is doing it/.test(res.result.before) && /Deadline moved once \(was/.test(res.result.before), JSON.stringify(res && res.result && res.result.before));
 check('update: saved instantly into the action\'s own folder and listed', res.ok && res.result.writes[0].list === 'Updates' && res.result.writes[0].folder === 'FLK/A40', JSON.stringify(res));
 check('extend: a short reason is refused; the effect is explained', res.ok && /10 characters/.test(res.result.reasonError) && /The new deadline will be/.test(res.result.effect), JSON.stringify(res));
-check('extend: pending while recorded, buttons disabled, then the history shows both changes', res.ok && /being recorded/.test(res.result.pending) &&
+check('extend: pending while recorded, buttons disabled, then the history shows both changes', res.ok && /(being|to be) recorded/.test(res.result.pending) &&
   res.result.buttonsDisabled && /Show all deadline changes \(2\)/.test(res.result.after) && res.result.history === 2, JSON.stringify(res));
 res = drive('as=' + RACHEL + '&action=40&drive=reloadWhilePending', SLOW);
 check('reload while an extension is recorded: the note comes back, then clears once confirmed', res.ok && /change being recorded/.test(res.result.noteAfterReload) &&
   res.result.confirmedNoteGone, JSON.stringify(res));
-check('reload while a raised action is recorded: the strip comes back, and the new action opens on click', res.ok && /being recorded/.test(res.result.stripAfterReload) &&
+check('reload while a raised action is recorded: the strip comes back, and the new action opens on click', res.ok && /(being|to be) recorded/.test(res.result.stripAfterReload) &&
   res.result.reachable && res.result.opened, JSON.stringify(res));
 res = drive('as=' + RACHEL + '&drive=staleCopy&stamp=0.0.1');
 check('an old copy of an app file is reported, with Ctrl+F5', res.ok && /Ctrl\+F5/.test(res.result.banner), JSON.stringify(res));
@@ -195,7 +195,7 @@ open('as=' + RACHEL + '&area=RW', ['--window-size=1366,1100', '--screenshot=' + 
 open('as=' + RACHEL + '&mode=unknown', ['--window-size=1366,700', '--screenshot=' + path.join(SHOTS, 'unknown-user-1366.png')]);
 check('screenshots written', fs.readdirSync(SHOTS).filter((f) => f.endsWith('.png')).length >= 11);
 
-// Safety net (plan REV5 REL-2, REL-3, REL-5)
+// Safety net (spec REL-2, REL-3, REL-5)
 res = drive('as=' + RACHEL + '&mode=limited&drive=limitedMode');
 check('limited mode: a banner explains that changes are paused and nothing is lost', res.ok && /can't be processed at the moment/.test(res.result.banner) && /nothing you have already sent is lost/.test(res.result.banner), JSON.stringify(res));
 check('limited mode: raising is not offered, with a plain message', res.ok && !res.result.raiseOpened && /Raising actions is paused/.test(res.result.toast), JSON.stringify(res));
@@ -217,7 +217,7 @@ check('staff see no administration line', !t.includes('Open Administration') && 
 t = text(dump('as=' + RACHEL + '&view=admin').dom);
 check('the admin page refuses anyone who is not an administrator', t.includes('Only Competency Hub administrators can use this page.') && !t.includes('Automatic processing'));
 
-// People administration and the technician restriction (plan REV5 §3.2, §4.2)
+// People administration and the technician restriction (spec §3.2, §4.2)
 res = drive('as=' + JOE + '&drive=peoplePage', SLOW);
 check('people: everyone is listed and the search narrows the list', res.ok && res.result.names >= 28 && JSON.stringify(res.result.found) === '["Rachel Boulden"]', JSON.stringify(res));
 check('people: an empty email is refused before anything is sent', res.ok && /Enter their email address/.test(res.result.emptyError), JSON.stringify(res));

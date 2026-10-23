@@ -1,4 +1,4 @@
-// Whether the automatic processing behind the Hub is working (plan REV5 REL-5). The queue monitor writes its
+// Whether the automatic processing behind the Hub is working (spec REL-5). The queue monitor writes its
 // findings to the Settings row QueueHealth; Daily tasks writes LastDailyRun. The app judges both itself, so a
 // monitor that has stopped is noticed too: its report simply goes stale. Each part is judged on its own –
 // stale reminders never stop people changing actions.
@@ -21,6 +21,12 @@ CH.health = (function () {
     return { start: minutes(p[0], 7 * 60), end: minutes(p[1], 19 * 60 + 45), interval: Math.max(15, Number(p[2]) || 60) };
   }
 
+  // MaxDeadlineYears: a whole number from 1 to 5, as the flow accepts it; 2 when missing or unreadable.
+  function years(text) {
+    var n = /^\d{1,2}$/.test(String(text || '').trim()) ? Number(text) : 0;
+    return n >= 1 && n <= 5 ? n : CH.config.maxDeadlineYears;
+  }
+
   function ukClock(now) {
     var parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
       .formatToParts(now);
@@ -40,8 +46,12 @@ CH.health = (function () {
     var report = parse(value(rows, 'QueueHealth'));
     var h = hours(value(rows, 'MonitorHours'));
     var clock = ukClock(now);
-    var working = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].indexOf(clock.weekday) >= 0 && clock.minutes >= h.start && clock.minutes <= h.end;
-    var out = { processing: 'unknown', reminders: 'unknown', reason: '', checkedAt: null, lastDailyRun: null, attention: 0 };
+    var weekday = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].indexOf(clock.weekday) >= 0;
+    // The tighter limit starts only once the first working-hours check has had time to report: until then the
+    // latest report may be the last one from outside working hours.
+    var working = weekday && clock.minutes >= h.start + WORKING_SLACK_MINUTES && clock.minutes <= h.end;
+    var out = { processing: 'unknown', reminders: 'unknown', administration: 'ok', adminReason: '', reason: '', checkedAt: null, lastDailyRun: null,
+      attention: 0, maxDeadlineYears: years(value(rows, 'MaxDeadlineYears')) };
     if (report && report.checkedAt) {
       out.checkedAt = new Date(report.checkedAt);
       out.attention = Number(report.attention) || 0;
@@ -50,6 +60,8 @@ CH.health = (function () {
       if (report.state === 'Down') { out.processing = 'down'; out.reason = report.reason || 'Changes are not being processed.'; }
       else if (age > limit) { out.processing = 'down'; out.reason = 'The queue monitor has not reported since ' + CH.dates.ukTime(out.checkedAt) + '.'; }
       else out.processing = 'ok';
+      // Administration changes go through their own flow: when only that one is behind, staff can carry on.
+      if (report.admin === 'Down') { out.administration = 'down'; out.adminReason = report.adminReason || 'Administration changes are not being picked up.'; }
     }
     var daily = value(rows, 'LastDailyRun');
     if (daily) {

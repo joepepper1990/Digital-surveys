@@ -78,7 +78,7 @@ window.MockFlow = (function () {
         return finish(req, 'Completed', 'ACT-' + ('0000' + id).slice(-5) + ' raised.', id);
       }
 
-      // People administration (plan REV5 §3.2), much simplified: the same refusals, and the records as the flow leaves them.
+      // People administration (spec §3.2), much simplified: the same refusals, and the records as the flow leaves them.
       if (['AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson'].indexOf(req.RequestType) >= 0) {
         if (!requester.IsAdministrator) return finish(req, 'Rejected', 'Only a Competency Hub administrator can do this.');
         var target = req.RequestType === 'AddPerson' ? null : person(Number(payload.personId));
@@ -117,7 +117,7 @@ window.MockFlow = (function () {
         if ('administrator' in payload) target.IsAdministrator = !!payload.administrator;
         return finish(req, 'Completed', (req.RequestType === 'AddPerson' ? 'Added ' : 'Saved the changes for ') + target.Title + '.', uid);
       }
-      // An administrator's decision about a change needing attention (plan REV5 REL-3), much simplified.
+      // An administrator's decision about a change needing attention (spec REL-3), much simplified.
       if (['RetryTransaction', 'CancelTransaction', 'RevertTransaction'].indexOf(req.RequestType) >= 0) {
         if (!requester.IsAdministrator) return finish(req, 'Rejected', 'Only a Competency Hub administrator can do this.');
         var tx = data.History.filter(function (h) { return h.Id === Number(payload.txId) && h.RowKind === 'Transaction'; })[0];

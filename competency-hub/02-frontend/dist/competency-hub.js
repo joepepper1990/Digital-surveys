@@ -1,11 +1,11 @@
-/* ESG Competency Hub 0.5.0 – built from src/ by tools/build.js. Do not edit. */
+/* ESG Competency Hub 0.5.1 – built from src/ by tools/build.js. Do not edit. */
 window.ESGCompetencyHub = function (ctx) {
   'use strict';
   var CH = {};
   /* src/core/config.js */
   // Fixed names and limits. Lists are addressed by display title; folders by list URL name.
   CH.config = {
-    VERSION: '0.5.0',
+    VERSION: '0.5.1',
     ENVIRONMENT: 'TEST',
     lists: {
       competencies: { title: 'Competencies', url: 'Competencies' },
@@ -284,7 +284,7 @@ window.ESGCompetencyHub = function (ctx) {
     var EVERY = 60;
     var GIVE_UP_MINUTES = 15;
     var STOP_MINUTES = 120;
-    // Still on its way: waiting, being processed, or failed and being retried by the queue monitor (plan REV5 REL-2).
+    // Still on its way: waiting, being processed, or failed and being retried by the queue monitor (spec REL-2).
     var OPEN_STATUSES = ['Submitted', 'Processing', 'Failed'];
     // An administrator's decision about another change: it is confirmed by its own request alone.
     var ADMIN_TYPES = ['RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting'];
@@ -364,10 +364,13 @@ window.ESGCompetencyHub = function (ctx) {
       // Status is indexed, so it leads the filter; AuthorId keeps it to this person's requests.
       async function resume() {
         var found = [];
-        var statuses = OPEN_STATUSES.concat(['Needs attention']);
+        var statuses = OPEN_STATUSES.concat(['Needs attention', 'Cancelled', 'Reverted']);
+        // a change an administrator cancelled or reverted is shown once more after a reload, for a day
+        var since = new Date(Date.now() - 24 * 3600000).toISOString();
         for (var i = 0; i < statuses.length; i++) {
+          var recent = statuses[i] === 'Cancelled' || statuses[i] === 'Reverted' ? " and Modified ge datetime'" + since + "'" : '';
           var res = await app.sp.items(CH.config.lists.requests.title, '$select=Id,Title,RequestKey,RequestType,TargetId,Created' +
-            "&$filter=Status eq '" + statuses[i] + "' and AuthorId eq " + Number(app.person.SiteUserId), 100);
+            "&$filter=Status eq '" + statuses[i] + "' and AuthorId eq " + Number(app.person.SiteUserId) + recent, 100);
           found = found.concat(res.rows);
         }
         found.sort(function (a, b) { return a.Id - b.Id; }).forEach(function (row) {
@@ -392,8 +395,13 @@ window.ESGCompetencyHub = function (ctx) {
         var row = null;
         try { row = await findRequest(entry.key); } catch (_) { row = null; }
         var status = row && row.Status;
+        // waiting in the queue, or being worked on now (spec REL-2)
+        if ((status === 'Processing') !== !!entry.processing) {
+          entry.processing = status === 'Processing';
+          onChange(entry);
+        }
         if (status === 'Rejected') return settle(entry, 'rejected', row.ResultMessage || 'This change was not accepted.');
-        // Honest states (plan REV5 REL-2): only Completed, confirmed on the record, ever reads as saved.
+        // Honest states (spec REL-2): only Completed, confirmed on the record, ever reads as saved.
         if (status === 'Needs attention') {
           return settle(entry, 'attention', row.ResultMessage || 'Not recorded – an administrator has been told.');
         }
@@ -444,6 +452,31 @@ window.ESGCompetencyHub = function (ctx) {
         entry.state = state;
         entry.message = message;
         onChange(entry);
+        if (state === 'attention') watchAttention(entry);
+      }
+
+      // A change that needs an administrator: every few minutes, see whether they have tried it again (it is then
+      // followed as before) or cancelled or reverted it.
+      function watchAttention(entry) {
+        if (stopped) return;
+        timers.push(setTimeout(async function () {
+          if (stopped || entry.state !== 'attention') return;
+          var row = null;
+          try { row = await findRequest(entry.key); } catch (_) { row = null; }
+          var status = row && row.Status;
+          if (OPEN_STATUSES.indexOf(status) >= 0) {
+            entry.state = 'submitted';
+            entry.message = '';
+            entry.retrying = false;
+            entry.polls = 0;
+            entry.submittedAt = new Date();
+            onChange(entry);
+            return schedule(entry);
+          }
+          if (status === 'Needs attention' || !status) return watchAttention(entry);
+          entry.state = 'submitted';
+          poll(entry);
+        }, 5 * 60000));
       }
 
       return {
@@ -516,12 +549,13 @@ window.ESGCompetencyHub = function (ctx) {
         isMember: function (key) { return !!member[key]; },
         // Members, Team Leaders and the Group Head may add and change things in an active area.
         canWrite: function (key) { return active(key) && (management || !!member[key]); },
-        // Every active user may post a notice on any active area's noticeboard (K4.1, A-1).
-        canPostNotice: function (key) { return active(key); },
+        // Every active user may post on any active area's noticeboard unless an administrator has turned
+        // their "Can post notices" switch off (spec §4.4); SharePoint enforces the same through Notice Posters.
+        canPostNotice: function (key) { return active(key) && person.CanPostNotices !== false; },
         isTechnician: role === 'Technician',
         // An engineer who is a member of the area.
         isEngineerIn: function (key) { return active(key) && role === 'Engineer' && !!member[key]; },
-        // "Can run meetings" in this area, set for each person and area by an administrator (plan REV5 §4).
+        // "Can run meetings" in this area, set for each person and area by an administrator (spec §4).
         chairs: function (key) { return active(key) && !!member[key] && !!meetingAdmin[key]; },
         // Areas whose actions this person looks after (for the lists that gather them): management, engineers, meeting runners.
         canManage: function (key) {
@@ -530,7 +564,7 @@ window.ESGCompetencyHub = function (ctx) {
         runsMeetings: function (key) { return active(key) && (management || (!!member[key] && !!meetingAdmin[key])); },
         // Moderating others' notices and comments: engineers of the area and management – never meeting rights alone.
         canModerate: function (key) { return active(key) && (management || (role === 'Engineer' && !!member[key])); },
-        // A technician without meeting rights in the area may raise actions only for themselves (plan REV5 §4.4).
+        // A technician without meeting rights in the area may raise actions only for themselves (spec §4.2).
         canRaiseFor: function (key, ownerId, selfId) {
           if (!active(key) || !(management || !!member[key])) return false;
           return role !== 'Technician' || !!meetingAdmin[key] || Number(ownerId) === Number(selfId);
@@ -562,7 +596,7 @@ window.ESGCompetencyHub = function (ctx) {
 
     function isOpen(status) { return OPEN_STATUSES.indexOf(status) >= 0; }
 
-    var SELF_ONLY = 'As a technician you can raise actions for yourself in this area. Ask an engineer or meeting lead to raise it for someone else.';
+    var SELF_ONLY = 'As a technician you can raise actions for yourself in this area. Ask an engineer, or someone who runs meetings in this area, to raise it for someone else.';
 
     // ctx: { today, maxYears, canWrite(areaKey), ownerAllowed(areaKey, ownerId), canRaiseFor(areaKey, ownerId) }
     function validateRaise(v, ctx) {
@@ -579,7 +613,7 @@ window.ESGCompetencyHub = function (ctx) {
       else if (!e.areaKey && ctx.canRaiseFor && !ctx.canRaiseFor(v.areaKey, Number(v.ownerId))) e.ownerId = SELF_ONLY;
       if (!D.isIso(v.dueIso || '')) e.dueIso = 'Choose a target date.';
       else if (v.dueIso < ctx.today) e.dueIso = 'The target date cannot be in the past.';
-      else if (v.dueIso > addYears(ctx.today, ctx.maxYears)) e.dueIso = 'Choose a date within ' + ctx.maxYears + ' years.';
+      else if (v.dueIso > addYears(ctx.today, ctx.maxYears)) e.dueIso = 'Choose a date within ' + ctx.maxYears + (ctx.maxYears === 1 ? ' year.' : ' years.');
       if (v.priority && PRIORITIES.indexOf(v.priority) < 0) e.priority = 'Choose a priority.';
       return e;
     }
@@ -687,7 +721,7 @@ window.ESGCompetencyHub = function (ctx) {
       return {};
     }
 
-    // Who may do what with an action (plan REV5 §4.2), judged against its primary area. Each operation has its own
+    // Who may do what with an action (spec §4.2), judged against its primary area. Each operation has its own
     // rule; the request flow applies the same ones. personId: SiteUserId. access: CH.access result.
     //   management, or an engineer of the area:       edit, reassign, close, reopen
     //   "Can run meetings" in the area:                 edit, reassign, close – never reopen
@@ -945,7 +979,7 @@ window.ESGCompetencyHub = function (ctx) {
   })();
 
   /* src/domain/health.js */
-  // Whether the automatic processing behind the Hub is working (plan REV5 REL-5). The queue monitor writes its
+  // Whether the automatic processing behind the Hub is working (spec REL-5). The queue monitor writes its
   // findings to the Settings row QueueHealth; Daily tasks writes LastDailyRun. The app judges both itself, so a
   // monitor that has stopped is noticed too: its report simply goes stale. Each part is judged on its own –
   // stale reminders never stop people changing actions.
@@ -968,6 +1002,12 @@ window.ESGCompetencyHub = function (ctx) {
       return { start: minutes(p[0], 7 * 60), end: minutes(p[1], 19 * 60 + 45), interval: Math.max(15, Number(p[2]) || 60) };
     }
 
+    // MaxDeadlineYears: a whole number from 1 to 5, as the flow accepts it; 2 when missing or unreadable.
+    function years(text) {
+      var n = /^\d{1,2}$/.test(String(text || '').trim()) ? Number(text) : 0;
+      return n >= 1 && n <= 5 ? n : CH.config.maxDeadlineYears;
+    }
+
     function ukClock(now) {
       var parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
         .formatToParts(now);
@@ -987,8 +1027,12 @@ window.ESGCompetencyHub = function (ctx) {
       var report = parse(value(rows, 'QueueHealth'));
       var h = hours(value(rows, 'MonitorHours'));
       var clock = ukClock(now);
-      var working = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].indexOf(clock.weekday) >= 0 && clock.minutes >= h.start && clock.minutes <= h.end;
-      var out = { processing: 'unknown', reminders: 'unknown', reason: '', checkedAt: null, lastDailyRun: null, attention: 0 };
+      var weekday = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].indexOf(clock.weekday) >= 0;
+      // The tighter limit starts only once the first working-hours check has had time to report: until then the
+      // latest report may be the last one from outside working hours.
+      var working = weekday && clock.minutes >= h.start + WORKING_SLACK_MINUTES && clock.minutes <= h.end;
+      var out = { processing: 'unknown', reminders: 'unknown', administration: 'ok', adminReason: '', reason: '', checkedAt: null, lastDailyRun: null,
+        attention: 0, maxDeadlineYears: years(value(rows, 'MaxDeadlineYears')) };
       if (report && report.checkedAt) {
         out.checkedAt = new Date(report.checkedAt);
         out.attention = Number(report.attention) || 0;
@@ -997,6 +1041,8 @@ window.ESGCompetencyHub = function (ctx) {
         if (report.state === 'Down') { out.processing = 'down'; out.reason = report.reason || 'Changes are not being processed.'; }
         else if (age > limit) { out.processing = 'down'; out.reason = 'The queue monitor has not reported since ' + CH.dates.ukTime(out.checkedAt) + '.'; }
         else out.processing = 'ok';
+        // Administration changes go through their own flow: when only that one is behind, staff can carry on.
+        if (report.admin === 'Down') { out.administration = 'down'; out.adminReason = report.adminReason || 'Administration changes are not being picked up.'; }
       }
       var daily = value(rows, 'LastDailyRun');
       if (daily) {
@@ -1226,7 +1272,7 @@ window.ESGCompetencyHub = function (ctx) {
       return ui.card('Your actions', [
         h('div', { class: 'row card-link' }, ui.linkButton('See all, including ones you raised', function () { app.showMine(0); })),
         ui.sectionNote(app.model.sections.actions, 'actions'),
-        ui.actionList(mine, function (a) { return a.areaName; }, 'You have no open actions. Nice work.', app.model.sections.actions, app.openAction, app.pendingNote)
+        ui.actionList(mine, function (a) { return a.areaName; }, 'You have no open actions.', app.model.sections.actions, app.openAction, app.pendingNote)
       ]);
     }
 
@@ -1303,7 +1349,7 @@ window.ESGCompetencyHub = function (ctx) {
       ]);
     }
 
-    // Administrators see at once when something needs them (plan REV5 REL-4, REL-5).
+    // Administrators see at once when something needs them (spec REL-4, REL-5).
     function adminLine(app) {
       if (!app.access.isAdministrator) return null;
       var hl = app.health || {};
@@ -1332,7 +1378,7 @@ window.ESGCompetencyHub = function (ctx) {
           h('b', { class: late ? 'txt-late' : '', text: late + ' late' }), stale ? [', and ', h('b', { text: stale + (stale === 1 ? ' area' : ' areas') }), ' with no recent meeting.'] : '.'));
         out.push(h('div', { class: 'row actions-row' },
           ui.button('Raise an action', function () { app.raiseAction(postFirst); }, 'main'),
-          ui.button('Post a notice', function () { app.postNotice(postFirst); })));
+          acc.canPostNotice(postFirst) ? ui.button('Post a notice', function () { app.postNotice(postFirst); }) : null));
         out.push(h('h2', { text: 'All areas' }));
         out.push(ui.tileGrid(m.areas.filter(function (a) { return a.status === 'Active'; }), m, false, app.openArea));
         out.push(h('div', { class: 'cols3' },
@@ -1343,7 +1389,7 @@ window.ESGCompetencyHub = function (ctx) {
         out.push(h('p', { class: 'lead', text: acc.isEngineer ? 'Your actions, and what you look after as an engineer.' : 'Here is what needs your attention.' }));
         out.push(h('div', { class: 'row actions-row' },
           acc.memberAreas.length ? ui.button('Raise an action', function () { app.raiseAction(acc.memberAreas[0]); }, 'main') : null,
-          ui.button('Post a notice', function () { app.postNotice(postFirst); })));
+          acc.canPostNotice(postFirst) ? ui.button('Post a notice', function () { app.postNotice(postFirst); }) : null));
         var mine = m.areas.filter(function (a) { return acc.isMember(a.key) && a.status === 'Active'; });
         var others = m.areas.filter(function (a) { return !acc.isMember(a.key) && a.status === 'Active'; });
         out.push(h('h2', { text: 'Your areas' }));
@@ -1396,7 +1442,7 @@ window.ESGCompetencyHub = function (ctx) {
     function noticesTab(app, area) {
       var list = app.model.notices.filter(function (n) { return n.areaKey === area.key; });
       return [
-        h('div', { class: 'row tab-actions' }, ui.button('Post a notice', function () { app.postNotice(area.key); })),
+        h('div', { class: 'row tab-actions' }, app.access.canPostNotice(area.key) ? ui.button('Post a notice', function () { app.postNotice(area.key); }) : null),
         ui.sectionNote(app.model.sections.notices, 'notices'),
         list.length ? h('ul', { class: 'plain' }, list.map(function (n) {
           return h('li', null, h('span', null,
@@ -1452,12 +1498,12 @@ window.ESGCompetencyHub = function (ctx) {
         out.push(h('div', { class: 'viewonly-bar', role: 'note' }, h('b', { text: 'Archived. ' }), 'This area is kept for reference and can no longer be changed.'));
       } else if (!acc.canWrite(key)) {
         out.push(h('div', { class: 'viewonly-bar', role: 'note' }, h('b', { text: 'View only. ' }),
-          'You are not a member of ' + area.name + ', so you can read everything here and post on its noticeboard, but cannot change anything else. ' +
+          'You are not a member of ' + area.name + ', so you can read everything here' + (acc.canPostNotice(key) ? ' and post on its noticeboard' : '') + ', but cannot change anything else. ' +
           'Speak to one of the ' + area.name + ' engineers or your Team Leader if something needs doing.'));
       } else {
         out.push(h('div', { class: 'row actions-row' },
           ui.button('Raise an action', function () { app.raiseAction(key); }, 'main'),
-          ui.button('Post a notice', function () { app.postNotice(key); }),
+          acc.canPostNotice(key) ? ui.button('Post a notice', function () { app.postNotice(key); }) : null,
           acc.runsMeetings(key) ? ui.button(s.nextMeeting ? 'Start meeting' : 'Book a meeting', function () { app.comingSoon('Meetings'); }) : null));
       }
 
@@ -1612,6 +1658,8 @@ window.ESGCompetencyHub = function (ctx) {
       var mine = m.areas.filter(function (a) { return app.access.canWrite(a.key); });
       if (!mine.length) { CH.ui.toast(app.root, 'You are not a member of any area yet, so you cannot raise actions.', 'info'); return; }
       var today = m.today;
+      // the limit an administrator sets (MaxDeadlineYears), the same one the flow checks
+      var maxYears = (app.health && app.health.maxDeadlineYears) || CH.config.maxDeadlineYears;
       var step = 0;
       var key = CH.requests.newKey();
 
@@ -1621,19 +1669,19 @@ window.ESGCompetencyHub = function (ctx) {
         return h('option', { value: a.key, selected: a.key === areaKey ? true : null, text: a.name });
       }));
       var owner = h('select', { id: 'ch-r-ownerId' });
-      var due = h('input', { id: 'ch-r-dueIso', type: 'date', min: today, max: R.addYears(today, CH.config.maxDeadlineYears) });
+      var due = h('input', { id: 'ch-r-dueIso', type: 'date', min: today, max: R.addYears(today, maxYears) });
       var priority = h('select', { id: 'ch-r-priority' }, R.PRIORITIES.map(function (p) { return h('option', { value: p, selected: p === 'Normal' ? true : null, text: p }); }));
       var closeOut = h('input', { id: 'ch-r-closeOut', type: 'checkbox' });
       var closeOutTouched = false;
       closeOut.addEventListener('change', function () { closeOutTouched = true; });
       priority.addEventListener('change', function () { if (!closeOutTouched) closeOut.checked = priority.value === 'High'; });
 
-      var selfNote = h('p', { class: 'explain', id: 'ch-r-self-only', text: 'As a technician you can raise actions for yourself in this area. An engineer or meeting lead can raise them for someone else.' });
+      var selfNote = h('p', { class: 'explain', id: 'ch-r-self-only', text: 'As a technician you can raise actions for yourself in this area. An engineer, or someone who runs meetings in this area, can raise them for someone else.' });
       function fillOwners() {
         var current = owner.value || String(app.person.SiteUserId);
         CH.dom.clear(owner);
         owner.appendChild(h('option', { value: '', text: 'Choose a person' }));
-        // a technician without meeting rights in this area is offered only themselves (plan REV5 §4.4)
+        // a technician without meeting rights in this area is offered only themselves (spec §4.2)
         m.ownersFor(area.value).filter(function (p) { return app.access.canRaiseFor(area.value, p.id, app.person.SiteUserId); }).forEach(function (p) {
           owner.appendChild(h('option', { value: String(p.id), selected: String(p.id) === current ? true : null,
             text: p.name + (Number(p.id) === Number(app.person.SiteUserId) ? ' (you)' : '') + (CH.config.managementRoles.indexOf(p.role) >= 0 ? ' – ' + p.role : '') }));
@@ -1651,7 +1699,7 @@ window.ESGCompetencyHub = function (ctx) {
       }
       function errorsFor(keys) {
         var all = R.validateRaise(values(), {
-          today: today, maxYears: CH.config.maxDeadlineYears, canWrite: app.access.canWrite,
+          today: today, maxYears: maxYears, canWrite: app.access.canWrite,
           canRaiseFor: function (k, id) { return app.access.canRaiseFor(k, id, app.person.SiteUserId); },
           ownerAllowed: function (k, id) { return m.ownersFor(k).some(function (p) { return Number(p.id) === id; }); }
         });
@@ -1672,7 +1720,7 @@ window.ESGCompetencyHub = function (ctx) {
       var panes = [
         [field('Title', title, 'A short summary, for example "Replace FH40 probe".'), field('Description', description, 'What needs doing and anything the owner should know.')],
         [field('Area', area), field('Who will do it?', owner, 'Members of the area, and Team Leaders and the Group Head.'), selfNote],
-        [field('Target date', due, 'From today up to ' + CH.config.maxDeadlineYears + ' years ahead.'),
+        [field('Target date', due, 'From today up to ' + maxYears + (maxYears === 1 ? ' year' : ' years') + ' ahead.'),
           h('details', { class: 'more' }, h('summary', { text: 'More options' }),
             field('Priority', priority), h('label', { class: 'check' }, closeOut, ' Needs a close-out check before it is closed'))],
         null
@@ -1752,7 +1800,8 @@ window.ESGCompetencyHub = function (ctx) {
       var entry = app.tracker.forTarget(action.id);
       if (entry && (entry.state === 'submitted' || entry.state === 'slow')) {
         return h('p', { class: 'pending', role: 'status' }, h('b', { text: entry.label }), ' – submitted ' + timeOf(entry.submittedAt) +
-          (entry.retrying ? '. ' + entry.message : ', being recorded (usually under 5 minutes).' + (entry.state === 'slow' ? ' ' + entry.message : '')));
+          (entry.retrying ? '. ' + entry.message : entry.processing ? ', being recorded now.' + (entry.state === 'slow' ? ' ' + entry.message : '')
+            : ', waiting to be recorded (usually under 5 minutes).' + (entry.state === 'slow' ? ' ' + entry.message : '')));
       }
       var heading = { rejected: 'Not accepted: ', attention: 'Not recorded: ', cancelled: 'Cancelled: ', reverted: 'Reverted: ' }[entry && entry.state];
       if (heading) {
@@ -1875,7 +1924,7 @@ window.ESGCompetencyHub = function (ctx) {
                   (u.EntryType === 'Blocker' ? ' · blocker' : '') })));
             })) : h('p', { class: 'muted', text: 'No updates yet.' })
         ]);
-        // In limited mode only the instant update stays available (plan REV5 REL-5).
+        // In limited mode only the instant update stays available (spec REL-5).
         var blocked = app.queueBlocked();
         Array.prototype.forEach.call(dlg.body.querySelectorAll('.actions-row .btn, .more .btn-link'), function (b) {
           b.disabled = !!busy || (blocked && b.textContent !== 'Add an update');
@@ -2183,7 +2232,7 @@ window.ESGCompetencyHub = function (ctx) {
         h('div', { class: 'panel', role: 'tabpanel' },
           ui.sectionNote(app.model.sections.actions, 'actions'),
           ui.actionList(list, function (a) { return a.areaName + (tab === 0 ? '' : ' · ' + a.ownerName) + (a.blocker ? ' · waiting on something' : ''); },
-            tab === 0 ? 'You have no open actions. Nice work.' : 'No open actions here.', app.model.sections.actions, app.openAction, app.pendingNote),
+            tab === 0 ? 'You have no open actions.' : 'No open actions here.', app.model.sections.actions, app.openAction, app.pendingNote),
           finished)
       ];
     }
@@ -2192,7 +2241,7 @@ window.ESGCompetencyHub = function (ctx) {
   })();
 
   /* src/views/people.js */
-  // Administration → People (plan REV5 ADM-1 to ADM-3, ADM-6). Administrators add people, and for each person set the
+  // Administration → People (spec ADM-1 to ADM-3, ADM-6). Administrators add people, and for each person set the
   // role, the areas (tick boxes), "Can run meetings" in each area, an optional end date, notice posting and the
   // administrator flag – or mark them as left. Every change is one queued request, checked again by the
   // Administration flow, which narrows access first and reads each group back. Nobody can change their own access.
@@ -2393,7 +2442,7 @@ window.ESGCompetencyHub = function (ctx) {
   })();
 
   /* src/views/admin.js */
-  // Administration (plan REV5 REL-3): whether automatic processing is working, and the changes that need an
+  // Administration (spec REL-3): whether automatic processing is working, and the changes that need an
   // administrator. Each change shows what was asked, by whom and when, how far it got and the last error, with the
   // choices that are honest for its state: Try again or Cancel when nothing was changed; Finish or Revert when part
   // of it was made. Every choice is a queued request checked again by the Administration flow.
@@ -2407,7 +2456,13 @@ window.ESGCompetencyHub = function (ctx) {
     var ACTION_TYPES = ['RaiseAction', 'ExtendDeadline', 'MarkComplete', 'ChangeStatus', 'ReassignAction', 'CloseAction', 'ReopenAction', 'EditActionDetails'];
     var WORDS = {
       RaiseAction: 'Raise an action', ExtendDeadline: 'Move a deadline', MarkComplete: 'Mark an action as done', ChangeStatus: 'Change the status of an action',
-      ReassignAction: 'Reassign an action', CloseAction: 'Close an action', ReopenAction: 'Reopen an action', EditActionDetails: 'Edit the details of an action'
+      ReassignAction: 'Reassign an action', CloseAction: 'Close an action', ReopenAction: 'Reopen an action', EditActionDetails: 'Edit the details of an action',
+      AddPerson: 'Add a person', UpdatePerson: 'Change a person\'s access', PersonLeft: 'Mark a person as left', ReactivatePerson: 'Reactivate a person',
+      UpdateSetting: 'Change a setting', RetryTransaction: 'Try a change again', CancelTransaction: 'Cancel a change', RevertTransaction: 'Revert a change'
+    };
+    var SETTING_WORDS = {
+      OverdueReminderIntervalDays: 'days between late reminders', ReminderDaysBefore: 'days before the deadline for the first reminder',
+      MaxDeadlineYears: 'furthest deadline in years', MonitorHours: 'queue monitor hours'
     };
 
     function parse(text) { try { return JSON.parse(text || '{}') || {}; } catch (_) { return {}; } }
@@ -2417,7 +2472,7 @@ window.ESGCompetencyHub = function (ctx) {
       var title = CH.config.lists.history.title;
       var rows = [];
       for (var i = 0; i < OPEN_STATES.length; i++) {
-        var res = await app.sp.items(title, '$select=Id,Title,RequestKey,RequestType,RecordId,State,Attempts,LastError,FirstClaimedAt,ActorId,Payload,Created,Modified' +
+        var res = await app.sp.items(title, '$select=Id,Title,RequestKey,RequestType,RecordId,State,Attempts,LastError,FirstClaimedAt,ActorId,Payload,StepsDone,Created,Modified' +
           "&$filter=RowKind eq 'Transaction' and State eq '" + OPEN_STATES[i] + "'", 500);
         rows = rows.concat(res.rows);
       }
@@ -2429,6 +2484,12 @@ window.ESGCompetencyHub = function (ctx) {
       for (var j = 0; j < rows.length; j++) {
         var r = rows[j];
         var action = null;
+        var payload = parse(r.Payload);
+        if (ACTION_TYPES.indexOf(r.RequestType) < 0) {
+          // people, settings and decisions: once decided, groups or rows may already have changed
+          out.push({ tx: r, action: null, partly: String(r.StepsDone || '').indexOf('DECIDED') >= 0, payload: payload, admin: true });
+          continue;
+        }
         try {
           var q = r.RequestType === 'RaiseAction'
             ? "$filter=CreatedRequestKey eq '" + CH.sp.escapeOData('F|' + r.RequestKey) + "'"
@@ -2437,7 +2498,7 @@ window.ESGCompetencyHub = function (ctx) {
           action = found.rows[0] || null;
         } catch (_) { action = null; }
         var partly = !!action && action.PendingRequestKey === r.RequestKey;
-        out.push({ tx: r, action: action, partly: partly, payload: parse(r.Payload) });
+        out.push({ tx: r, action: action, partly: partly, payload: payload });
       }
       return out;
     }
@@ -2445,15 +2506,22 @@ window.ESGCompetencyHub = function (ctx) {
     function describe(app, item) {
       var r = item.tx;
       var what = WORDS[r.RequestType] || r.RequestType;
+      var p = item.payload;
       if (item.action) what += ': ' + 'ACT-' + ('0000' + item.action.Id).slice(-5) + ' ' + item.action.Title;
-      else if (r.RequestType === 'RaiseAction' && item.payload.title) what += ': ' + item.payload.title;
+      else if (r.RequestType === 'RaiseAction' && p.title) what += ': ' + p.title;
+      else if (r.RequestType === 'AddPerson' && p.email) what += ': ' + p.email;
+      else if (p.personId) what += ': ' + app.model.nameOf(p.personId);
+      else if (r.RequestType === 'UpdateSetting' && p.name) what += ': ' + (SETTING_WORDS[p.name] || p.name);
       return what;
     }
 
     function stateWords(item) {
-      if (item.tx.State === 'Needs attention') return item.partly ? 'Part made – the record is locked' : 'Not made – nothing was changed';
-      if (item.tx.State === 'Failed') return 'Failed – being retried automatically';
-      return 'Stopped part-way – being retried automatically';
+      if (item.tx.State === 'Needs attention') {
+        if (!item.partly) return 'Not made – nothing was changed';
+        return item.admin ? 'Partly done – choose Finish to complete it' : 'Partly done – the action stays locked until you finish or revert it';
+      }
+      if (item.tx.State === 'Failed') return 'Failed – being tried again automatically';
+      return 'Interrupted – being tried again automatically';
     }
 
     function healthCard(app) {
@@ -2463,6 +2531,8 @@ window.ESGCompetencyHub = function (ctx) {
         'Last checked at ' + D.ukTime(hl.checkedAt) + '.'), ui.chip('done', 'Working')));
       else if (hl.processing === 'down') lines.push(h('li', null, h('span', null, h('b', { text: 'Automatic processing is not working. ' }), hl.reason,
         ' Staff cannot send changes until it recovers. In Power Automate, check the flows ESG Competency Hub | 2 Request queue and 3 Queue monitor.'), ui.chip('late', 'Not working')));
+      if (hl.administration === 'down') lines.push(h('li', null, h('span', null, h('b', { text: 'Administration changes are not being processed. ' }), hl.adminReason,
+        ' Staff can carry on as normal. In Power Automate, check that ESG Competency Hub | 6 Administration is turned on.'), ui.chip('late', 'Not working')));
       else lines.push(h('li', null, h('span', null, h('b', { text: 'The queue monitor has not reported yet. ' }),
         'Check that the flow ESG Competency Hub | 3 Queue monitor is turned on.'), ui.chip('soon', 'Unknown')));
       if (hl.reminders === 'ok') lines.push(h('li', null, h('span', null, h('b', { text: 'Reminders ran ' }), D.short(D.localDate(hl.lastDailyRun)) + ' at ' + D.ukTime(hl.lastDailyRun) + '.'), ui.chip('done', 'Working')));
@@ -2475,7 +2545,7 @@ window.ESGCompetencyHub = function (ctx) {
       var isAction = ACTION_TYPES.indexOf(item.tx.RequestType) >= 0;
       var list = item.partly
         ? [['RetryTransaction', 'Finish', 'Try the rest of this change again. What was already made stays.'],
-          isAction ? ['RevertTransaction', 'Revert', item.tx.RequestType === 'RaiseAction'
+          isAction && !item.admin ? ['RevertTransaction', 'Revert', item.tx.RequestType === 'RaiseAction'
             ? 'Withdraw the half-created action. It is closed as withdrawn and kept in the history.'
             : 'Put the action back as it was before this change. The reversal is recorded in the history.'] : null]
         : [['RetryTransaction', 'Try again', 'Put this change back in the queue to be tried again.'],
@@ -2617,7 +2687,7 @@ window.ESGCompetencyHub = function (ctx) {
         return [
           app.stale ? h('p', { class: 'stale-copy', role: 'alert' }, h('b', { text: 'A newer version of the Competency Hub is available. ' }),
             'Press Ctrl+F5 to load it. Until then some buttons may not work.') : null,
-          // Limited mode (plan REV5 REL-5): only the changes that need automatic processing are paused.
+          // Limited mode (spec REL-5): only the changes that need automatic processing are paused.
           app.queueBlocked() ? h('p', { class: 'stale-copy limited', role: 'alert' }, h('b', { text: 'Changes can\'t be processed at the moment. ' }),
             'You can still read everything, add updates to actions and post notices. Raising and changing actions will be back shortly – nothing you have already sent is lost.') : null,
           h('header', { class: 'bar' }, h('div', { class: 'bar-in' },
@@ -2685,7 +2755,7 @@ window.ESGCompetencyHub = function (ctx) {
           var how = { rejected: 'not accepted: ', attention: 'not recorded: ', cancelled: 'cancelled: ', reverted: 'reverted: ' }[e.state];
           return h('li', { class: waiting ? 'pending' : 'section-note' }, h('b', { text: e.label }),
             waiting ? ' – submitted ' + CH.dates.ukTime(e.submittedAt) + (e.retrying ? '. ' + e.message
-              : ', being recorded (usually under 5 minutes).' + (e.state === 'slow' ? ' ' + e.message : ''))
+              : (e.processing ? ', being recorded now.' : ', waiting to be recorded (usually under 5 minutes).') + (e.state === 'slow' ? ' ' + e.message : ''))
               : ' – ' + how + e.message + ' ',
             waiting ? null : CH.ui.linkButton('Dismiss', function () { app.tracker.dismiss(e); }));
         });

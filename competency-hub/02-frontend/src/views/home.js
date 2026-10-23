@@ -27,7 +27,7 @@ CH.views.home = (function () {
     return ui.card('Your actions', [
       h('div', { class: 'row card-link' }, ui.linkButton('See all, including ones you raised', function () { app.showMine(0); })),
       ui.sectionNote(app.model.sections.actions, 'actions'),
-      ui.actionList(mine, function (a) { return a.areaName; }, 'You have no open actions. Nice work.', app.model.sections.actions, app.openAction, app.pendingNote)
+      ui.actionList(mine, function (a) { return a.areaName; }, 'You have no open actions.', app.model.sections.actions, app.openAction, app.pendingNote)
     ]);
   }
 
@@ -104,7 +104,7 @@ CH.views.home = (function () {
     ]);
   }
 
-  // Administrators see at once when something needs them (plan REV5 REL-4, REL-5).
+  // Administrators see at once when something needs them (spec REL-4, REL-5).
   function adminLine(app) {
     if (!app.access.isAdministrator) return null;
     var hl = app.health || {};
@@ -133,7 +133,7 @@ CH.views.home = (function () {
         h('b', { class: late ? 'txt-late' : '', text: late + ' late' }), stale ? [', and ', h('b', { text: stale + (stale === 1 ? ' area' : ' areas') }), ' with no recent meeting.'] : '.'));
       out.push(h('div', { class: 'row actions-row' },
         ui.button('Raise an action', function () { app.raiseAction(postFirst); }, 'main'),
-        ui.button('Post a notice', function () { app.postNotice(postFirst); })));
+        acc.canPostNotice(postFirst) ? ui.button('Post a notice', function () { app.postNotice(postFirst); }) : null));
       out.push(h('h2', { text: 'All areas' }));
       out.push(ui.tileGrid(m.areas.filter(function (a) { return a.status === 'Active'; }), m, false, app.openArea));
       out.push(h('div', { class: 'cols3' },
@@ -144,7 +144,7 @@ CH.views.home = (function () {
       out.push(h('p', { class: 'lead', text: acc.isEngineer ? 'Your actions, and what you look after as an engineer.' : 'Here is what needs your attention.' }));
       out.push(h('div', { class: 'row actions-row' },
         acc.memberAreas.length ? ui.button('Raise an action', function () { app.raiseAction(acc.memberAreas[0]); }, 'main') : null,
-        ui.button('Post a notice', function () { app.postNotice(postFirst); })));
+        acc.canPostNotice(postFirst) ? ui.button('Post a notice', function () { app.postNotice(postFirst); }) : null));
       var mine = m.areas.filter(function (a) { return acc.isMember(a.key) && a.status === 'Active'; });
       var others = m.areas.filter(function (a) { return !acc.isMember(a.key) && a.status === 'Active'; });
       out.push(h('h2', { text: 'Your areas' }));

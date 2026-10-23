@@ -69,3 +69,11 @@ test('the administrator flag alone grants nothing operational', () => {
   assert.equal(acc.canWrite('FLK'), false);
   assert.equal(acc.canManage('FLK'), false);
 });
+
+test('"Can post notices" switched off: no notice posting anywhere, everything else unchanged', () => {
+  const acc = A.build(person({ CanPostNotices: false }), [{ areaKey: 'FLK', canManageMeetings: false }], areas);
+  assert.equal(acc.canPostNotice('FLK'), false);
+  assert.equal(acc.canPostNotice('RW'), false);
+  assert.equal(acc.canWrite('FLK'), true);
+  assert.equal(A.build(person(), [], areas).canPostNotice('RW'), true);
+});

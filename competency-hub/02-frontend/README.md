@@ -2,6 +2,31 @@
 
 Plain HTML, CSS and JavaScript, delivered as a Welcome by Accelerator 365 custom layout. Same-origin SharePoint REST runs as the signed-in user. There are no libraries and no external calls.
 
+## Version 0.5.1: Release 2 – administration and permissions
+
+- **Administration → People** (administrators only): find a person; add one, or paste a list; a person's role, areas
+  (member, *Can run meetings*, optional end date), *Can post notices* and administrator; mark as left or reactivate;
+  their change history. Nobody can change their own access. Every change is a request checked again by the
+  Administration flow and shown as "Done and verified" only once the flow has read the permissions back.
+- **The corrected permission rules** (plan Revision 5 §4.2) in `domain/rules.js` and `domain/access.js`, the same as the
+  flows: a technician without meeting rights in an area raises actions there only for themselves; meeting rights in an
+  area allow editing, reassigning and closing its actions but not reopening or moderating.
+- *Post a notice* is offered only while the person's *Can post notices* switch is on.
+- The furthest deadline follows the `MaxDeadlineYears` setting.
+- The Administration page names people and settings changes in words, and offers only **Finish** for a people or
+  settings change that was partly made.
+- A change is shown as "waiting to be recorded" until the flow picks it up and "being recorded now" while it runs. A
+  change an administrator cancels or reverts is shown to its sender, also after a reload.
+
+## Version 0.4.0: Release 1 – safety net
+
+- Honest states: waiting, being recorded, retrying automatically, needs attention (nothing made, or partly made and
+  locked), cancelled, reverted, saved. "Saved" is shown only when the action itself carries the change with no lock.
+- **Administration → Changes needing attention**: the health of automatic processing, and each change that needs an
+  administrator, with Try again, Cancel, Finish or Revert as honest for its state.
+- **Limited mode**: when the queue monitor reports processing as down, or has stopped reporting, the buttons that send
+  changes are paused with a plain message. Reading and adding updates carry on; the app returns to normal by itself.
+
 ## Version 0.3.0: the rest of an action's life (plan K9)
 
 - **More options** in the action panel, showing only what the person may do: **Change status** (Open, In progress,

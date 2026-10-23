@@ -34,19 +34,20 @@ test('resume tracks the person\'s own Submitted and Processing requests again, o
   assert.equal(entries[1].state, 'submitted');
   assert.equal(tracker.forTarget(40).label, 'More time for “Replace FH40 probe”');
   assert.equal(entries[0].submittedAt.toISOString(), '2026-10-21T14:58:00.000Z');
-  assert.ok(queries.every((q) => /\$filter=Status eq '[\w ]+' and AuthorId eq 112$/.test(q)), queries.join('\n'));
+  assert.ok(queries.every((q) => /\$filter=Status eq '[\w ]+' and AuthorId eq 112( and Modified ge datetime'[\dT:.Z-]+')?$/.test(q)), queries.join('\n'));
 });
 
-test('resume asks only for requests still on their way, or waiting for an administrator', async () => {
+test('resume asks for requests still on their way, waiting for an administrator, or cancelled or reverted in the last day', async () => {
   const queries = [];
   const tracker = CH.requests.tracker(fakeApp({}, queries), () => {});
   assert.equal(await tracker.resume(), 0);
   tracker.stop();
-  assert.deepEqual(queries.map((q) => /Status eq '([\w ]+)'/.exec(q)[1]), ['Submitted', 'Processing', 'Failed', 'Needs attention']);
+  assert.deepEqual(queries.map((q) => /Status eq '([\w ]+)'/.exec(q)[1]), ['Submitted', 'Processing', 'Failed', 'Needs attention', 'Cancelled', 'Reverted']);
+  assert.ok(queries.slice(4).every((q) => /and Modified ge datetime'/.test(q)), queries.join('\n'));
   assert.equal(tracker.entries().length, 0);
 });
 
-// Honest states (plan REV5 REL-2): each request status the flows write is shown for what it is.
+// Honest states (spec REL-2): each request status the flows write is shown for what it is.
 function pollingApp(script) {
   let n = 0;
   return {

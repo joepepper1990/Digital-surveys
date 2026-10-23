@@ -28,7 +28,7 @@ CH.views.area = (function () {
   function noticesTab(app, area) {
     var list = app.model.notices.filter(function (n) { return n.areaKey === area.key; });
     return [
-      h('div', { class: 'row tab-actions' }, ui.button('Post a notice', function () { app.postNotice(area.key); })),
+      h('div', { class: 'row tab-actions' }, app.access.canPostNotice(area.key) ? ui.button('Post a notice', function () { app.postNotice(area.key); }) : null),
       ui.sectionNote(app.model.sections.notices, 'notices'),
       list.length ? h('ul', { class: 'plain' }, list.map(function (n) {
         return h('li', null, h('span', null,
@@ -84,12 +84,12 @@ CH.views.area = (function () {
       out.push(h('div', { class: 'viewonly-bar', role: 'note' }, h('b', { text: 'Archived. ' }), 'This area is kept for reference and can no longer be changed.'));
     } else if (!acc.canWrite(key)) {
       out.push(h('div', { class: 'viewonly-bar', role: 'note' }, h('b', { text: 'View only. ' }),
-        'You are not a member of ' + area.name + ', so you can read everything here and post on its noticeboard, but cannot change anything else. ' +
+        'You are not a member of ' + area.name + ', so you can read everything here' + (acc.canPostNotice(key) ? ' and post on its noticeboard' : '') + ', but cannot change anything else. ' +
         'Speak to one of the ' + area.name + ' engineers or your Team Leader if something needs doing.'));
     } else {
       out.push(h('div', { class: 'row actions-row' },
         ui.button('Raise an action', function () { app.raiseAction(key); }, 'main'),
-        ui.button('Post a notice', function () { app.postNotice(key); }),
+        acc.canPostNotice(key) ? ui.button('Post a notice', function () { app.postNotice(key); }) : null,
         acc.runsMeetings(key) ? ui.button(s.nextMeeting ? 'Start meeting' : 'Book a meeting', function () { app.comingSoon('Meetings'); }) : null));
     }
 

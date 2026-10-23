@@ -75,7 +75,7 @@ CH.views.myActions = (function () {
       h('div', { class: 'panel', role: 'tabpanel' },
         ui.sectionNote(app.model.sections.actions, 'actions'),
         ui.actionList(list, function (a) { return a.areaName + (tab === 0 ? '' : ' · ' + a.ownerName) + (a.blocker ? ' · waiting on something' : ''); },
-          tab === 0 ? 'You have no open actions. Nice work.' : 'No open actions here.', app.model.sections.actions, app.openAction, app.pendingNote),
+          tab === 0 ? 'You have no open actions.' : 'No open actions here.', app.model.sections.actions, app.openAction, app.pendingNote),
         finished)
     ];
   }

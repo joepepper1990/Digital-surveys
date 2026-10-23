@@ -31,6 +31,9 @@ REQUIRED = {
 }
 
 
+MAX_EXPRESSION = 8192
+
+
 def expressions(s):
     """Yield the expressions inside a workflow string value."""
     if not isinstance(s, str):
@@ -163,6 +166,9 @@ class Flow:
             for v in node:
                 self.check_strings(v, path, where, in_query)
         elif isinstance(node, str):
+            # Power Automate refuses to save a flow with an expression longer than 8,192 characters
+            if len(node) > MAX_EXPRESSION and any(True for _ in expressions(node)):
+                self.p('{0}: expression is {1} characters, over the {2} Power Automate allows'.format(where, len(node), MAX_EXPRESSION))
             for e in expressions(node):
                 probs, calls = parse_check(e)
                 for pr in probs:
@@ -360,15 +366,42 @@ def max_nesting(definition):
     return max((lv for lv, _, _ in nesting_levels(definition)), default=0)
 
 
-def validate_all(flows):
+def validate_all(flows, raw=None):
+    """All checks. The checks that look for particular steps by name (email text, list addresses) run on `raw`, the
+    same flows with their short names, when given."""
     probs = []
+    for f in raw or []:
+        probs += check_rest_columns(f)
+        probs += check_email_escaping(f)
+    for f in flows:
+        names = []
+
+        def walk(actions):
+            for n, a in actions.items():
+                names.append(n)
+                for k in ('actions',):
+                    if k in a:
+                        walk(a[k])
+                if a.get('else'):
+                    walk(a['else']['actions'])
+                for c in (a.get('cases') or {}).values():
+                    walk(c['actions'])
+                if a.get('default'):
+                    walk(a['default']['actions'])
+        walk(f['json']['properties']['definition']['actions'])
+        bad = [n for n in names if len(n) > 80 or not re.match(r'^[A-Za-z0-9_()]+$', n)]
+        if bad:
+            probs.append('[{0}] step names Power Automate would not accept: {1}'.format(f['name'], bad[:5]))
+        if len(names) != len(set(names)):
+            probs.append('[{0}] step names used twice: {1}'.format(f['name'], sorted({n for n in names if names.count(n) > 1})[:5]))
     for f in flows:
         probs += Flow(f['name'], f['json']['properties']['definition']).run()
         probs += check_secure(f)
-        probs += check_rest_columns(f)
+        if raw is None:
+            probs += check_rest_columns(f)
+            probs += check_email_escaping(f)
         probs += check_platform(f)
         probs += check_nesting(f['name'], f['json']['properties']['definition'])
-        probs += check_email_escaping(f)
         refs = f['json']['properties']['connectionReferences']
         used = set(re.findall(r'"connectionName": "([^"]+)"', json.dumps(f['json'])))
         if used - set(refs):

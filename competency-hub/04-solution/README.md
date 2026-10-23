@@ -1,130 +1,110 @@
 # ESG Competency Hub – Power Automate solution
 
-`ESGCompetencyHub_1_2_0_0_unmanaged.zip` is the solution to import into Power Automate (plan K7.3, K8). It holds:
+`ESGCompetencyHub_1_4_1_0_unmanaged.zip` is the solution to import into Power Automate. It holds four flows, which all
+ship **Off** so nothing runs until you turn them on:
+
+| Flow | What it does |
+|---|---|
+| **ESG Competency Hub \| 1 Daily tasks** | Every morning at 06:00 UK time: deadline reminders, another try for emails that were not sent, and the end of temporary access to an area |
+| **ESG Competency Hub \| 2 Request queue** | Records the changes to actions that people send from the Hub: raise, move a deadline, mark as done, change status, reassign, edit, close and reopen |
+| **ESG Competency Hub \| 3 Queue monitor** | Every 15 minutes in working hours and hourly outside them: puts stalled changes back in the queue, retries emails, tells the administrators about anything that needs them, and records whether processing is healthy |
+| **ESG Competency Hub \| 6 Administration** | Records administrators' changes: people, their areas, meeting rights and notice posting, settings, and the decisions on changes needing attention |
 
 | Part | Name |
 |---|---|
-| Flow | **ESG Competency Hub \| 1 Daily tasks** – every morning at 06:00 UK time; ships **Off** |
-| Flow | **ESG Competency Hub \| 2 Request queue** – ships **Off**; turn it on after import |
 | Connection reference | `esghub_sharedsharepointonline_hub` – ESG Competency Hub SharePoint |
 | Connection reference | `esghub_sharedoffice365_hub` – ESG Competency Hub Outlook (emails are sent from this connection's mailbox) |
 | Environment variable | `esghub_CompetencyHubSiteUrl` – ESG Competency Hub Site URL (no trailing slash) |
 | Publisher | ESG Competency Hub, prefix `esghub` (its own, so nothing clashes with the ESG 1-to-1 solution in the same environment) |
 
-`schema/schema.json` is the single description of the lists. Setup builds the site from it, and the flow tools check every
-column the flow uses against it.
+Flows 4 (Records) and 5 (Meetings) come with Releases 3 to 5.
 
-## Version 1.2.0.0: the rest of an action's life (plan K9)
+`schema/schema.json` is the single description of the lists. Setup builds the site from it, and the flow tools check
+every column a flow uses against it.
 
-Five more request types: **ChangeStatus**, **ReassignAction**, **CloseAction**, **ReopenAction** and
-**EditActionDetails**, each with the same checks as the app (same messages), the lock and revision, a History event
-(Status Changed, Reassigned, Closed, Reopened, Details Edited) and emails: a reassignment tells the new owner (ASG) and
-the previous owner (RAW); closing tells the owner and the raiser (CLS); never the person who made the change.
+## How a change is recorded
 
-The changes to an existing action are built **once** (`change_all()` in `flows.py`): each kind adds only small Switch
-cases that set its verdict, plan, values, event fields, result and emails. That keeps the request flow at about 380
-actions (Power Automate allows 500); building each kind separately had reached 895.
+Staff never write to the business lists. The app writes a request into the person's own folder of the **Requests**
+list (`Requests/u{SiteUserId}`), and a flow records it:
 
-## Version 1.1.0.0: emails and reminders (plan K8)
+1. **Who.** The requester is the person whose folder the request is in. A request anywhere else, from someone marked
+   Left, or with an unusable reference is refused at once.
+2. **Claim and private copy.** The request is claimed with its ETag, and copied into a change record in
+   `History/Transactions`. From then on the flow works from that copy, so editing the request item changes nothing.
+3. **Checks.** The same rules as the app (`02-frontend/src/domain/rules.js`), with the same messages. A kind of change
+   the flow does not know is refused before anything is read.
+4. **Apply.** The previous values are stored first. The action is changed with its ETag, together with its lock
+   (`PendingRequestKey`) and `Revision + 1`; a change someone else made in between means nothing was done, and the
+   request is refused with "This action was updated by someone else…".
+5. **Commit**, in this order: the History event; the email rows; the lock released with `LastRequestKey` set; the
+   change record Applied; the request Completed. The app shows "Saved" only when the request is Completed **and** the
+   action carries `LastRequestKey` with no lock.
+
+Administration changes follow the same pattern. Each is decided once – the decision is written on the change record
+(`StepsDone` DECIDED), so a run that fails before deciding checks everything again. Group and folder permissions are
+read back after every change; access is narrowed before the records say so and widened after.
+
+## When something goes wrong
+
+- **A run fails or stops.** The request shows "Not recorded yet – retrying automatically". The queue monitor puts it
+  back in the queue after 10 minutes (15 for a run that stopped part-way); every step checks whether it was already
+  done, so the change finishes exactly once.
+- **Three attempts fail.** The change goes to the administrators' page *Changes needing attention* and they get an
+  alert email (at most one a day for each problem). The page says honestly whether part of it was made:
+  - nothing made: **Try again** or **Cancel**;
+  - part of an action change made: **Finish** or **Revert** (Revert writes the previous values back only if nobody
+    has changed the action since, and emails about the reverted change are not sent);
+  - part of a people or settings change made: **Finish** only.
+- **A flow stops.** If changes to actions are not picked up, the monitor records processing as Down and the app
+  pauses the buttons that send changes (reading and adding updates carry on). If only the Administration flow is
+  behind, the administrators are told and staff carry on as normal.
+- **Emails.** Each email has one row in the Notification Log, keyed so it is never made twice. A refused send is
+  tried again after 15 minutes and then after 6 hours; a send with an unclear outcome is tried again with "If you have
+  already received this message, please ignore it". After three attempts the email is abandoned and the administrators
+  are told. Daily tasks and the monitor can both reach the same row at 06:00; whichever is second leaves it alone.
+- **Temporary access.** Daily tasks ends memberships the day after their end date, after the reminders, so a problem
+  with one membership can never stop them. If open actions remain, or the person cannot be taken out of the group,
+  the administrators are told instead.
+
+## Emails
 
 | Email | To | When |
 |---|---|---|
-| Action assigned to you (ASG) | The owner, unless they raised it | When the action is raised |
+| Action assigned to you (ASG) | The owner, unless they raised it | When the action is raised or reassigned to them |
+| No longer yours (RAW) | The previous owner, unless they made the change | When an action is reassigned |
 | Deadline moved (EXT) | The owner, unless they moved it | On each extension |
 | Ready for your close-out check (RDY) | The raiser, unless they marked it done | An action needing a close-out check is marked done |
-| Action closed (CLS) | The owner and the raiser, except whoever closed it | An action is closed |
-| Reminder: due in N days (R7) | The owner | The first morning with 1–7 days left (`ReminderDaysBefore`) |
+| Action closed (CLS) | The owner, unless they closed it | An action is closed |
+| Reminder: due in N days (R7) | The owner | The first morning with `ReminderDaysBefore` days or fewer left |
 | Due today (DUE) | The owner | The morning of the deadline |
 | N days late (OD) | The owner | Day 1 late, then every `OverdueReminderIntervalDays` |
+| Competency Hub needs attention (ALR) | Every active administrator | A change needing attention, an abandoned email, a stopped flow, temporary access that could not be ended |
 
-- **Notification Log is the ledger** (plan F.4.2). Each email has one row, keyed so it is never made twice
-  (`ASG|{request}|{person}`, `R7|{action}|{DueDay}|{person}`, `OD|{action}|{DueDay}|{n}|{person}` …). The row holds the
-  rendered email and a reference (`ESGN…`) that is also printed in the email.
-- **Request queue.** The rows are made before the change counts as applied; the emails are sent after the request is
-  Completed (`Send_emails`), so a mail problem never touches the change.
-- **Daily tasks.** One indexed query finds every open action due by the end of the reminder window, one more finds the
-  reminders already made, and only missing keys are queued, so a missed morning is caught up and a second run sends
-  nothing. An assignment or new deadline 0–7 days away that was **sent** marks that reminder Skipped.
-- **Retries.** A refused send (4xx) is Failed; anything unclear (time-out, 5xx) is Unknown. The daily run tries both
-  again, Unknown ones with "If you have already received this message, please ignore it", and gives up after 3 attempts
-  (Abandoned). Rows left Sending for 30 minutes by a run that stopped count as Unknown. The connector never retries on
-  its own. Searching Sent Items to settle an Unknown row (probe P-12) is not built yet.
-- **Escaping.** Every value a person typed is HTML-escaped; `validate.py` refuses an email body that shows one without
-  the escaping.
-- **Not yet:** reassignment, minutes, the weekly summary, the calendar digest, administrator alerts, and the
-  `NotifyRaiserOnExtension` / `NotifyOnClosure` settings (closure emails always go; the raiser is not told about
-  extensions).
+Every value a person typed is HTML-escaped; the validator refuses an email body that shows one without it.
 
-## Version 1.0.0.1: fewer SharePoint calls (plan K7.10)
+## Step names in the designer
 
-The first test on the site took 9½ minutes, almost all of it waiting on SharePoint calls. This version makes **20 calls
-to raise an action (was 31)** and **16 to extend or complete one (was 26)**. The same checks and records are made:
-
-- **Lists by address.** Every list is reached as `GetList('/sites/…/Lists/<url>')`, so no call is needed to find them.
-- **First run.** When a run has just created the transaction row, nothing for the request can exist yet, so the
-  "already done?" look-ups (existing action, folders, event row) are skipped. A resubmitted run is not a first run and
-  makes every check, as before.
-- **Returned Ids.** New items' Ids are taken from the create response (read back only if missing); the claim time is
-  written with the transaction row; both sign-in names come from one call; the area comes with the action (`$expand`);
-  the lock this run took is released without reading the action again.
-
-`test_flow.py` holds a call budget per request type, so a later change that adds calls fails the tests.
-
-Import it over 1.0.0.0 as an **upgrade**; the connection and site address stay as they are.
-
-## What the flow does
-
-When a request in the **Requests** list is created or changed to *Submitted* (the trigger checks every 2 minutes):
-
-1. **Requester.** It takes the requester from the folder the request is in: their own `u{SiteUserId}` folder, made by
-   Setup with the flow's account. A request anywhere else, from someone marked Left, or created by someone other than
-   the folder's person is **Rejected** without a transaction.
-2. **Claim.** It claims the request with its ETag. A second run gets a 412 and stops.
-3. **Private copy.** It copies the request into a transaction row in `History/Transactions`. Everything after this
-   works from that copy, so editing the request item changes nothing.
-4. **Event time.** This is the request's own time if it is within 30 minutes of the first claim; otherwise it is the
-   claim time.
-5. **Checks.** It applies the same rules as the app (`02-frontend/src/domain/rules.js`), with the same messages:
-   - **RaiseAction:** the area, the owner, title, description, target date (today to 2 years ahead) and priority.
-   - **ExtendDeadline:** owner or action manager; open; not locked; same revision and deadline as the user saw; new
-     date after the current one and not in the past; reason 10–1,000 characters.
-   - **MarkComplete:** owner or action manager; open; not locked; same revision.
-6. **Apply.**
-   - The plan (previous values) is stored on the transaction first.
-   - The action is changed with its ETag, together with its lock (`PendingRequestKey`) and `Revision + 1`.
-   - If someone changed the action in between, the 412 means nothing was done, so the request is Rejected with
-     *"This action was updated by someone else…"*.
-   - For RaiseAction, the action is created in `Actions/{area}` with `CreatedRequestKey = F|{key}`, and its folder
-     `Updates/{area}/A{id}` is created for instant updates.
-7. **Commit.**
-   1. The event row is written in `History/{area}/A{id}`; extensions get every EXT-04 field.
-   2. The transaction is marked *Applied*.
-   3. The lock is released and `LastRequestKey` is set, which is what the app waits for.
-   4. The request is marked *Completed* with a message, for example *"Deadline moved to 28 October 2026."*
-
-If a run fails, the request is marked *Failed* and the transaction *Failed*. Setting the request's Status back to
-*Submitted* runs it again; every step checks whether it was already done, so it finishes correctly. The Queue Monitor
-that will do this automatically comes in the next increment, together with notifications.
+`flows.py` names its steps briefly, with a short code for the part of the flow each belongs to. When the solution is
+built, `designer_names.py` gives every step a plain name instead – for example *Read the request*, *Create the change
+record if new*, *Add to Notice Posters if wanted (people)* – and changes every reference to match. The validator checks
+both forms, and the 116 flow tests run on the renamed flows, so a missed reference fails the build.
 
 ## Tools (`tools/`)
 
-Python 3.9+ only; nothing to install.
+Python 3.9+ only; nothing to install. `sh run_all.sh` runs everything.
 
 | File | Purpose |
 |---|---|
-| `flows.py` | The flow, written in Python and generated as Power Automate's JSON |
-| `validate.py` | Static checks. Expressions parse and use real functions; every reference exists and is in scope; `runAfter` chains are complete; REST columns exist in `schema.json`; standard connectors only; no secure inputs or outputs where Power Automate rejects them; nesting ≤ 8; ≤ 500 actions. Adapted from the ESG 1-to-1 validator, whose import lessons it keeps. |
-| `wdl.py` | A small interpreter for the workflow language, adapted from the 1-to-1's, so the real flow JSON can be run in tests |
-| `hub_fake.py` | A simulated Hub site that answers exactly the REST calls the flow makes. It follows SharePoint's rules for ETags, refused fields, required and unique columns, site-format dates, and Number columns returned as doubles. |
-| `test_flow.py` | 22 tests of the real flow JSON: each request type accepted and refused, identity from the folder, races, the event-time rule, and an interruption at **every** write followed by a resubmission that ends in exactly the state of an uninterrupted run |
-| `test_validate.py` | 19 deliberately broken flows and packages that must be rejected |
+| `flows.py` | The four flows, written in Python and generated as Power Automate's JSON |
+| `designer_names.py` | The plain step names used in the solution |
+| `validate.py` | Static checks: expressions parse, use real functions and stay under Power Automate's 8,192-character limit; every reference exists and is in scope; `runAfter` chains are complete; REST columns exist in `schema.json`; standard connectors only; step names Power Automate accepts; nesting ≤ 8; ≤ 500 actions per flow |
+| `wdl.py` | A small interpreter for the workflow language, so the real flow JSON can be run in tests |
+| `hub_fake.py` | A simulated Hub site that answers the REST calls the flows make, following SharePoint's rules for ETags, refused fields, required and unique columns, dates, Number columns returned as doubles, folders that do not exist (404) and removals of something that is not there |
+| `test_flow.py` | 116 tests of the real flow JSON, including an interruption at every write followed by recovery, races between runs, and one test for each fault found in the review of 23 October 2026 |
+| `test_validate.py` | 21 deliberately broken flows and packages that must be rejected |
 | `build_solution.py` | Validates, then writes `src/` and the zip in the layout Microsoft's `pac` CLI writes |
-| `check_package.py` | Compares the zip, element by element, with the ESG 1-to-1 solution that pac packed and that imported in the tenant: file order, encodings, line endings, `solution.xml`, `customizations.xml`, connection references and environment variables |
-| `run_all.sh` | Runs all of the above |
+| `check_package.py` | Compares the zip, element by element, with the ESG 1-to-1 solution that pac packed and that imported in the tenant |
 
-**Evidence class: LOCAL / OFFLINE-SIMULATED.** The import, the connection and the flow's behaviour on the real site are
-proven only by importing it and testing it there (HOW-TO in the download package).
-
-**Known risk.** This zip is written by `build_solution.py`, not by `pac` (which is not available here). Its structure
-matches a pac-packed solution that imported, but the first import is the real test. If the import is refused, the
-error message names what to change.
+**Evidence class: LOCAL / OFFLINE-SIMULATED.** Solutions 1.0.0.0 to 1.2.0.0, packed the same way, imported and ran on
+the real site. This version adds two flows and many new SharePoint calls (groups, folder permissions, `ensureuser`);
+those are proven only by importing it and testing it there (HOW-TO in the download package).

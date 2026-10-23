@@ -10,8 +10,8 @@ It creates, from `../04-solution/schema/schema.json`:
 |---|---|
 | Pre-checks | You are a site owner; regional settings are English (UK) and London time; only owners can share; for a Microsoft 365 group site, your confirmation that the group has owners only |
 | Permission levels | Competency Hub Read, Add and Contribute |
-| Groups | All Users, Management, Administrators and one Members group per area (13). Membership visible to members only, no join requests. |
-| Lists | 14 lists and the Records Export library, with columns, required fields, indexes, unique keys, versioning (100), attachments, "edit own items" and search crawling as the schema says |
+| Groups | All Users, Management, Administrators, Notice Posters and one Members group per area (14). Membership visible to members only, no join requests. |
+| Lists | 15 lists and two libraries (Records Export, Meeting Minutes), with columns, required fields, indexes, unique keys, versioning (100), attachments, "edit own items" and search crawling as the schema says |
 | Folders | Area folders, History `Administration`, `Transactions` and `{Key}/Records`, Requests `System` |
 | Permissions | Every list gets its own permissions (Owners Full Control plus the schema's grants); area folders on Updates and Calendar Events; History `Administration` and `Transactions` |
 | Data | The settings rows and the ten competency areas |
@@ -19,14 +19,24 @@ It creates, from `../04-solution/schema/schema.json`:
 | People import | Optional. One line per person: `email, role, area keys` |
 | App page access | All Users get Read on the Welcome layouts library, the Welcome errors list and `Hub.aspx` (when it exists) |
 
-**Status:** applied on the site on 21 October 2026, with no stops or warnings
-(plan K6.6). Run it again after creating `Hub.aspx` to open that page to All Users.
+**Status:** version 1.1 applied on the site on 21 October 2026, with no stops or
+warnings. **Version 1.2** (Release 2) adds the Feedback list, the Meeting Minutes
+library with its area folders, the Notice Posters group, `People.CanPostNotices`,
+the History reporting columns, the test-record markers, new settings and the new
+choices on existing columns. Built and tested locally.
 
 **Check** changes nothing and lists what Apply would do. **Apply** needs `SETUP`
-typed first. It only adds what is missing, never deletes or changes anything it
-finds that differs from the plan (it reports it and stops instead), reads every
-change back, and can be run again safely. If it stops part-way, running Apply
-again continues from where it stopped.
+typed first. It only adds what is missing and reads every change back, and can
+be run again safely. If it stops part-way, running Apply again continues from
+where it stopped. Data is never deleted.
+
+There is one deliberate change to existing permissions in 1.2: the Noticeboard
+goes from "All Users can add" to "All Users can read, Notice Posters can add", so
+an administrator can stop one person posting. Setup first confirms that every
+Noticeboard area folder still takes its permissions from the list (otherwise the
+change would not reach it) and stops, changing nothing, if one does not. It gives
+Notice Posters Add before taking Add away from All Users, so nobody is locked out
+in between, and puts every active person in Notice Posters.
 
 ## Owner runbook
 

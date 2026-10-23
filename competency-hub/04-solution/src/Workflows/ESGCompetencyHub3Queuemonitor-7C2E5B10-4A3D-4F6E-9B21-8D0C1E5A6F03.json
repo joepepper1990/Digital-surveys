@@ -58,7 +58,7 @@
         }
       },
       "actions": {
-        "Initialize_varOutbox": {
+        "Initialise_emails_to_send": {
           "type": "InitializeVariable",
           "inputs": {
             "variables": [
@@ -71,7 +71,7 @@
           },
           "runAfter": {}
         },
-        "Initialize_varAlerts": {
+        "Initialise_alerts": {
           "type": "InitializeVariable",
           "inputs": {
             "variables": [
@@ -83,12 +83,12 @@
             ]
           },
           "runAfter": {
-            "Initialize_varOutbox": [
+            "Initialise_emails_to_send": [
               "Succeeded"
             ]
           }
         },
-        "Initialize_varDown": {
+        "Initialise_request_queue_stopped": {
           "type": "InitializeVariable",
           "inputs": {
             "variables": [
@@ -100,12 +100,29 @@
             ]
           },
           "runAfter": {
-            "Initialize_varAlerts": [
+            "Initialise_alerts": [
               "Succeeded"
             ]
           }
         },
-        "Initialize_varPart": {
+        "Initialise_administration_stopped": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varAdminDown",
+                "type": "boolean",
+                "value": false
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_request_queue_stopped": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_partly_made": {
           "type": "InitializeVariable",
           "inputs": {
             "variables": [
@@ -117,7 +134,7 @@
             ]
           },
           "runAfter": {
-            "Initialize_varDown": [
+            "Initialise_administration_stopped": [
               "Succeeded"
             ]
           }
@@ -130,7 +147,7 @@
               "inputs": "@if(endsWith(uriPath(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')), '/'), take(uriPath(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')), sub(length(uriPath(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)'))), 1)), uriPath(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')))",
               "runAfter": {}
             },
-            "Site_url": {
+            "Site_address": {
               "type": "Compose",
               "inputs": "@if(endsWith(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)'), '/'), take(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)'), sub(length(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')), 1)), parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)'))",
               "runAfter": {
@@ -139,7 +156,7 @@
                 ]
               }
             },
-            "Ids": {
+            "List_addresses": {
               "type": "Compose",
               "inputs": {
                 "req": "@{outputs('Site_path')}/Lists/Requests",
@@ -160,30 +177,30 @@
                 "peopleRoot": "@{outputs('Site_path')}/Lists/People"
               },
               "runAfter": {
-                "Site_url": [
+                "Site_address": [
                   "Succeeded"
                 ]
               }
             },
-            "Today": {
+            "Today_in_the_UK": {
               "type": "Compose",
               "inputs": "@convertFromUtc(utcNow(), 'GMT Standard Time', 'yyyy-MM-dd')",
               "runAfter": {
-                "Ids": [
+                "List_addresses": [
                   "Succeeded"
                 ]
               }
             },
-            "Now_uk": {
+            "UK_time_now": {
               "type": "Compose",
               "inputs": "@convertFromUtc(utcNow(), 'GMT Standard Time')",
               "runAfter": {
-                "Today": [
+                "Today_in_the_UK": [
                   "Succeeded"
                 ]
               }
             },
-            "Get_settings": {
+            "Read_the_settings": {
               "type": "OpenApiConnection",
               "inputs": {
                 "host": {
@@ -194,7 +211,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['settings']}')/items?$select=Id,Title,Value&$top=500",
+                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['settings']}')/items?$select=Id,Title,Value&$top=500",
                   "parameters/headers": {
                     "Accept": "application/json;odata=nometadata"
                   }
@@ -202,44 +219,44 @@
                 "authentication": "@parameters('$authentication')"
               },
               "runAfter": {
-                "Now_uk": [
+                "UK_time_now": [
                   "Succeeded"
                 ]
               }
             },
-            "Hours_row": {
+            "Monitor_hours_setting": {
               "type": "Query",
               "inputs": {
-                "from": "@body('Get_settings')?['value']",
+                "from": "@body('Read_the_settings')?['value']",
                 "where": "@equals(item()?['Title'], 'MonitorHours')"
               },
               "runAfter": {
-                "Get_settings": [
+                "Read_the_settings": [
                   "Succeeded"
                 ]
               }
             },
-            "Minute": {
+            "Minute_of_the_day": {
               "type": "Compose",
-              "inputs": "@add(mul(int(formatDateTime(outputs('Now_uk'), 'HH')), 60), int(formatDateTime(outputs('Now_uk'), 'mm')))",
+              "inputs": "@add(mul(int(formatDateTime(outputs('UK_time_now'), 'HH')), 60), int(formatDateTime(outputs('UK_time_now'), 'mm')))",
               "runAfter": {
-                "Hours_row": [
+                "Monitor_hours_setting": [
                   "Succeeded"
                 ]
               }
             },
-            "Working": {
+            "In_working_hours": {
               "type": "Compose",
-              "inputs": "@and(greaterOrEquals(dayOfWeek(outputs('Now_uk')), 1), lessOrEquals(dayOfWeek(outputs('Now_uk')), 5), greaterOrEquals(outputs('Minute'), add(mul(int(substring(split(string(coalesce(first(body('Hours_row'))?['Value'], '07:00|19:45|60')), '|')[0], 0, 2)), 60), int(substring(split(string(coalesce(first(body('Hours_row'))?['Value'], '07:00|19:45|60')), '|')[0], 3, 2)))), lessOrEquals(outputs('Minute'), add(mul(int(substring(split(string(coalesce(first(body('Hours_row'))?['Value'], '07:00|19:45|60')), '|')[1], 0, 2)), 60), int(substring(split(string(coalesce(first(body('Hours_row'))?['Value'], '07:00|19:45|60')), '|')[1], 3, 2)))))",
+              "inputs": "@and(greaterOrEquals(dayOfWeek(outputs('UK_time_now')), 1), lessOrEquals(dayOfWeek(outputs('UK_time_now')), 5), greaterOrEquals(outputs('Minute_of_the_day'), add(mul(int(substring(split(string(coalesce(first(body('Monitor_hours_setting'))?['Value'], '07:00|19:45|60')), '|')[0], 0, 2)), 60), int(substring(split(string(coalesce(first(body('Monitor_hours_setting'))?['Value'], '07:00|19:45|60')), '|')[0], 3, 2)))), lessOrEquals(outputs('Minute_of_the_day'), add(mul(int(substring(split(string(coalesce(first(body('Monitor_hours_setting'))?['Value'], '07:00|19:45|60')), '|')[1], 0, 2)), 60), int(substring(split(string(coalesce(first(body('Monitor_hours_setting'))?['Value'], '07:00|19:45|60')), '|')[1], 3, 2)))))",
               "runAfter": {
-                "Minute": [
+                "Minute_of_the_day": [
                   "Succeeded"
                 ]
               }
             },
-            "Due": {
+            "Is_a_check_due_now": {
               "type": "If",
-              "expression": "@or(outputs('Working'), less(mod(outputs('Minute'), max(15, int(split(string(coalesce(first(body('Hours_row'))?['Value'], '07:00|19:45|60')), '|')[2]))), 15))",
+              "expression": "@or(outputs('In_working_hours'), less(mod(outputs('Minute_of_the_day'), max(15, int(split(string(coalesce(first(body('Monitor_hours_setting'))?['Value'], '07:00|19:45|60')), '|')[2]))), 15))",
               "actions": {},
               "else": {
                 "actions": {
@@ -253,12 +270,12 @@
                 }
               },
               "runAfter": {
-                "Working": [
+                "In_working_hours": [
                   "Succeeded"
                 ]
               }
             },
-            "Get_people": {
+            "Read_the_people": {
               "type": "OpenApiConnection",
               "inputs": {
                 "host": {
@@ -269,7 +286,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['people']}')/items?$select=Id,Title,SiteUserId,Status,IsAdministrator,Email,Person/Name,Person/EMail&$expand=Person&$top=5000",
+                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['people']}')/items?$select=Id,Title,SiteUserId,Status,IsAdministrator,Email,Person/Name,Person/EMail&$expand=Person&$top=5000",
                   "parameters/headers": {
                     "Accept": "application/json;odata=nometadata"
                   }
@@ -277,24 +294,24 @@
                 "authentication": "@parameters('$authentication')"
               },
               "runAfter": {
-                "Due": [
+                "Is_a_check_due_now": [
                   "Succeeded"
                 ]
               }
             },
-            "Admins": {
+            "Active_administrators": {
               "type": "Query",
               "inputs": {
-                "from": "@body('Get_people')?['value']",
+                "from": "@body('Read_the_people')?['value']",
                 "where": "@and(equals(item()?['IsAdministrator'], true), equals(item()?['Status'], 'Active'))"
               },
               "runAfter": {
-                "Get_people": [
+                "Read_the_people": [
                   "Succeeded"
                 ]
               }
             },
-            "Get_req_submitted": {
+            "Get_request_submitted": {
               "type": "OpenApiConnection",
               "inputs": {
                 "host": {
@@ -305,7 +322,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['req']}')/items?$select=Id,Title,RequestKey,RequestType,TargetId,Status,Attempts,Created,Modified,AuthorId&$filter=Status eq 'Submitted'&$top=5000",
+                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items?$select=Id,Title,RequestKey,RequestType,TargetId,Status,Attempts,Created,Modified,AuthorId&$filter=Status eq 'Submitted'&$top=5000",
                   "parameters/headers": {
                     "Accept": "application/json;odata=minimalmetadata"
                   }
@@ -313,12 +330,12 @@
                 "authentication": "@parameters('$authentication')"
               },
               "runAfter": {
-                "Admins": [
+                "Active_administrators": [
                   "Succeeded"
                 ]
               }
             },
-            "Get_req_processing": {
+            "Get_request_processing": {
               "type": "OpenApiConnection",
               "inputs": {
                 "host": {
@@ -329,7 +346,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['req']}')/items?$select=Id,Title,RequestKey,RequestType,TargetId,Status,Attempts,Created,Modified,AuthorId&$filter=Status eq 'Processing'&$top=5000",
+                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items?$select=Id,Title,RequestKey,RequestType,TargetId,Status,Attempts,Created,Modified,AuthorId&$filter=Status eq 'Processing'&$top=5000",
                   "parameters/headers": {
                     "Accept": "application/json;odata=minimalmetadata"
                   }
@@ -337,12 +354,12 @@
                 "authentication": "@parameters('$authentication')"
               },
               "runAfter": {
-                "Get_req_submitted": [
+                "Get_request_submitted": [
                   "Succeeded"
                 ]
               }
             },
-            "Get_req_failed": {
+            "Get_request_failed": {
               "type": "OpenApiConnection",
               "inputs": {
                 "host": {
@@ -353,7 +370,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['req']}')/items?$select=Id,Title,RequestKey,RequestType,TargetId,Status,Attempts,Created,Modified,AuthorId&$filter=Status eq 'Failed'&$top=5000",
+                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items?$select=Id,Title,RequestKey,RequestType,TargetId,Status,Attempts,Created,Modified,AuthorId&$filter=Status eq 'Failed'&$top=5000",
                   "parameters/headers": {
                     "Accept": "application/json;odata=minimalmetadata"
                   }
@@ -361,33 +378,41 @@
                 "authentication": "@parameters('$authentication')"
               },
               "runAfter": {
-                "Get_req_processing": [
+                "Get_request_processing": [
                   "Succeeded"
                 ]
               }
             },
-            "Stuck": {
+            "Changes_that_have_stalled": {
               "type": "Query",
               "inputs": {
-                "from": "@union(body('Get_req_submitted')?['value'], body('Get_req_processing')?['value'], body('Get_req_failed')?['value'])",
+                "from": "@union(body('Get_request_submitted')?['value'], body('Get_request_processing')?['value'], body('Get_request_failed')?['value'])",
                 "where": "@or(and(equals(item()?['Status'], 'Submitted'), less(ticks(string(coalesce(item()?['Modified'], '2000-01-01T00:00:00Z'))), ticks(addMinutes(utcNow(), -10)))), and(equals(item()?['Status'], 'Processing'), less(ticks(string(coalesce(item()?['Modified'], '2000-01-01T00:00:00Z'))), ticks(addMinutes(utcNow(), -15)))), and(equals(item()?['Status'], 'Failed'), less(ticks(string(coalesce(item()?['Modified'], '2000-01-01T00:00:00Z'))), ticks(addMinutes(utcNow(), -10)))))"
               },
               "runAfter": {
-                "Get_req_failed": [
+                "Get_request_failed": [
                   "Succeeded"
                 ]
               }
             },
-            "Each_stuck": {
+            "Each_stalled_change": {
               "type": "Foreach",
-              "foreach": "@body('Stuck')",
+              "foreach": "@body('Changes_that_have_stalled')",
               "runtimeConfiguration": {
                 "concurrency": {
                   "repetitions": 1
                 }
               },
               "actions": {
-                "Find_tx_m": {
+                "Person_who_sent_it": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@body('Read_the_people')?['value']",
+                    "where": "@equals(first(split(string(coalesce(item()?['SiteUserId'], '')), '.')), first(split(string(coalesce(items('Each_stalled_change')?['AuthorId'], '')), '.')))"
+                  },
+                  "runAfter": {}
+                },
+                "Find_the_change_record": {
                   "type": "OpenApiConnection",
                   "inputs": {
                     "host": {
@@ -398,24 +423,47 @@
                     "parameters": {
                       "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                       "parameters/method": "GET",
-                      "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['hist']}')/items?$select=Id,Title,RequestKey,RequestType,RecordId,State,Attempts,LastError&$filter=RequestItemId eq @{items('Each_stuck')?['Id']} and RowKind eq 'Transaction'",
+                      "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items?$select=Id,Title,RequestKey,RequestType,RecordId,State,Attempts,LastError,StepsDone&$filter=RequestItemId eq @{items('Each_stalled_change')?['Id']} and RowKind eq 'Transaction'",
                       "parameters/headers": {
                         "Accept": "application/json;odata=nometadata"
                       }
                     },
                     "authentication": "@parameters('$authentication')"
                   },
-                  "runAfter": {}
+                  "runAfter": {
+                    "Person_who_sent_it": [
+                      "Succeeded"
+                    ]
+                  }
                 },
-                "Not_picked_up": {
+                "Not_picked_up_by_its_flow": {
                   "type": "If",
-                  "expression": "@and(equals(items('Each_stuck')?['Status'], 'Submitted'), empty(first(body('Find_tx_m')?['value'])), greater(int(if(empty(first(split(string(coalesce(items('Each_stuck')?['Attempts'], '')), '.'))), '0', first(split(string(coalesce(items('Each_stuck')?['Attempts'], '')), '.')))), 0))",
+                  "expression": "@and(equals(items('Each_stalled_change')?['Status'], 'Submitted'), empty(first(body('Find_the_change_record')?['value'])), greater(int(if(empty(first(split(string(coalesce(items('Each_stalled_change')?['Attempts'], '')), '.'))), '0', first(split(string(coalesce(items('Each_stalled_change')?['Attempts'], '')), '.')))), 0))",
                   "actions": {
-                    "Mark_down": {
-                      "type": "SetVariable",
-                      "inputs": {
-                        "name": "varDown",
-                        "value": true
+                    "Which_flow_has_stopped": {
+                      "type": "If",
+                      "expression": "@contains(createArray('RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting'), string(items('Each_stalled_change')?['RequestType']))",
+                      "actions": {
+                        "Administration_flow_has_stopped": {
+                          "type": "SetVariable",
+                          "inputs": {
+                            "name": "varAdminDown",
+                            "value": true
+                          },
+                          "runAfter": {}
+                        }
+                      },
+                      "else": {
+                        "actions": {
+                          "Request_queue_has_stopped": {
+                            "type": "SetVariable",
+                            "inputs": {
+                              "name": "varDown",
+                              "value": true
+                            },
+                            "runAfter": {}
+                          }
+                        }
                       },
                       "runAfter": {}
                     }
@@ -424,14 +472,14 @@
                     "actions": {}
                   },
                   "runAfter": {
-                    "Find_tx_m": [
+                    "Find_the_change_record": [
                       "Succeeded"
                     ]
                   }
                 },
-                "Give_up": {
+                "Hand_over_after_three_attempts": {
                   "type": "If",
-                  "expression": "@and(not(empty(first(body('Find_tx_m')?['value']))), not(and(not(empty(first(body('Find_tx_m')?['value']))), contains(createArray('Applied', 'Void', 'Cancelled', 'Reverted', 'Rolled Back'), string(first(body('Find_tx_m')?['value'])?['State'])))), greaterOrEquals(int(if(empty(first(body('Find_tx_m')?['value'])), '0', if(empty(first(split(string(coalesce(first(body('Find_tx_m')?['value'])?['Attempts'], '')), '.'))), '0', first(split(string(coalesce(first(body('Find_tx_m')?['value'])?['Attempts'], '')), '.'))))), 3))",
+                  "expression": "@or(and(not(empty(first(body('Find_the_change_record')?['value']))), not(and(not(empty(first(body('Find_the_change_record')?['value']))), contains(createArray('Applied', 'Void', 'Cancelled', 'Reverted', 'Rolled Back'), string(first(body('Find_the_change_record')?['value'])?['State'])))), greaterOrEquals(int(if(empty(first(body('Find_the_change_record')?['value'])), '0', if(empty(first(split(string(coalesce(first(body('Find_the_change_record')?['value'])?['Attempts'], '')), '.'))), '0', first(split(string(coalesce(first(body('Find_the_change_record')?['value'])?['Attempts'], '')), '.'))))), 3)), and(empty(first(body('Find_the_change_record')?['value'])), not(equals(items('Each_stalled_change')?['Status'], 'Submitted')), greaterOrEquals(int(if(empty(first(split(string(coalesce(items('Each_stalled_change')?['Attempts'], '')), '.'))), '0', first(split(string(coalesce(items('Each_stalled_change')?['Attempts'], '')), '.')))), 3)))",
                   "actions": {
                     "Part_unknown": {
                       "type": "SetVariable",
@@ -441,78 +489,107 @@
                       },
                       "runAfter": {}
                     },
-                    "Find_part": {
+                    "Was_part_of_it_made": {
                       "type": "If",
-                      "expression": "@equals(string(first(body('Find_tx_m')?['value'])?['RequestType']), 'RaiseAction')",
-                      "actions": {
-                        "Get_raised_m": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "GET",
-                              "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['act']}')/items?$select=Id&$filter=CreatedRequestKey eq 'F%7C@{replace(string(coalesce(first(body('Find_tx_m')?['value'])?['RequestKey'], '')), '''', '''''')}'",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata"
-                              }
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {}
-                        },
-                        "Set_part_raised": {
-                          "type": "SetVariable",
-                          "inputs": {
-                            "name": "varPart",
-                            "value": "@not(empty(body('Get_raised_m')?['value']))"
-                          },
-                          "runAfter": {
-                            "Get_raised_m": [
-                              "Succeeded"
-                            ]
-                          }
-                        }
-                      },
+                      "expression": "@empty(first(body('Find_the_change_record')?['value']))",
+                      "actions": {},
                       "else": {
                         "actions": {
-                          "Get_changed_m": {
-                            "type": "OpenApiConnection",
-                            "inputs": {
-                              "host": {
-                                "connectionName": "shared_sharepointonline",
-                                "operationId": "HttpRequest",
-                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                              },
-                              "parameters": {
-                                "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                                "parameters/method": "GET",
-                                "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['act']}')/items(@{if(empty(first(split(string(coalesce(first(body('Find_tx_m')?['value'])?['RecordId'], '')), '.'))), '0', first(split(string(coalesce(first(body('Find_tx_m')?['value'])?['RecordId'], '')), '.')))})?$select=Id,PendingRequestKey",
-                                "parameters/headers": {
-                                  "Accept": "application/json;odata=nometadata"
+                          "By_kind_of_change": {
+                            "type": "If",
+                            "expression": "@contains(createArray('RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting'), string(items('Each_stalled_change')?['RequestType']))",
+                            "actions": {
+                              "Decided_means_partly_made": {
+                                "type": "SetVariable",
+                                "inputs": {
+                                  "name": "varPart",
+                                  "value": "@contains(string(coalesce(first(body('Find_the_change_record')?['value'])?['StepsDone'], '')), 'DECIDED')"
+                                },
+                                "runAfter": {}
+                              }
+                            },
+                            "else": {
+                              "actions": {
+                                "Did_the_action_change": {
+                                  "type": "If",
+                                  "expression": "@equals(string(first(body('Find_the_change_record')?['value'])?['RequestType']), 'RaiseAction')",
+                                  "actions": {
+                                    "Get_raised_(stuck_change)": {
+                                      "type": "OpenApiConnection",
+                                      "inputs": {
+                                        "host": {
+                                          "connectionName": "shared_sharepointonline",
+                                          "operationId": "HttpRequest",
+                                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                        },
+                                        "parameters": {
+                                          "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                                          "parameters/method": "GET",
+                                          "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['act']}')/items?$select=Id&$filter=CreatedRequestKey eq 'F%7C@{replace(string(coalesce(first(body('Find_the_change_record')?['value'])?['RequestKey'], '')), '''', '''''')}'",
+                                          "parameters/headers": {
+                                            "Accept": "application/json;odata=nometadata"
+                                          }
+                                        },
+                                        "authentication": "@parameters('$authentication')"
+                                      },
+                                      "runAfter": {}
+                                    },
+                                    "Set_part_raised": {
+                                      "type": "SetVariable",
+                                      "inputs": {
+                                        "name": "varPart",
+                                        "value": "@not(empty(body('Get_raised_(stuck_change)')?['value']))"
+                                      },
+                                      "runAfter": {
+                                        "Get_raised_(stuck_change)": [
+                                          "Succeeded"
+                                        ]
+                                      }
+                                    }
+                                  },
+                                  "else": {
+                                    "actions": {
+                                      "Get_changed_(stuck_change)": {
+                                        "type": "OpenApiConnection",
+                                        "inputs": {
+                                          "host": {
+                                            "connectionName": "shared_sharepointonline",
+                                            "operationId": "HttpRequest",
+                                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                          },
+                                          "parameters": {
+                                            "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                                            "parameters/method": "GET",
+                                            "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['act']}')/items(@{if(empty(first(split(string(coalesce(first(body('Find_the_change_record')?['value'])?['RecordId'], '')), '.'))), '0', first(split(string(coalesce(first(body('Find_the_change_record')?['value'])?['RecordId'], '')), '.')))})?$select=Id,PendingRequestKey",
+                                            "parameters/headers": {
+                                              "Accept": "application/json;odata=nometadata"
+                                            }
+                                          },
+                                          "authentication": "@parameters('$authentication')"
+                                        },
+                                        "runAfter": {}
+                                      },
+                                      "Set_part_changed": {
+                                        "type": "SetVariable",
+                                        "inputs": {
+                                          "name": "varPart",
+                                          "value": "@and(equals(actions('Get_changed_(stuck_change)')?['status'], 'Succeeded'), equals(string(coalesce(body('Get_changed_(stuck_change)')?['PendingRequestKey'], '')), string(first(body('Find_the_change_record')?['value'])?['RequestKey'])))"
+                                        },
+                                        "runAfter": {
+                                          "Get_changed_(stuck_change)": [
+                                            "Succeeded",
+                                            "Failed",
+                                            "TimedOut"
+                                          ]
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "runAfter": {}
                                 }
-                              },
-                              "authentication": "@parameters('$authentication')"
+                              }
                             },
                             "runAfter": {}
-                          },
-                          "Set_part_changed": {
-                            "type": "SetVariable",
-                            "inputs": {
-                              "name": "varPart",
-                              "value": "@and(equals(actions('Get_changed_m')?['status'], 'Succeeded'), equals(string(coalesce(body('Get_changed_m')?['PendingRequestKey'], '')), string(first(body('Find_tx_m')?['value'])?['RequestKey'])))"
-                            },
-                            "runAfter": {
-                              "Get_changed_m": [
-                                "Succeeded",
-                                "Failed",
-                                "TimedOut"
-                              ]
-                            }
                           }
                         }
                       },
@@ -522,58 +599,68 @@
                         ]
                       }
                     },
-                    "Attention_tx": {
+                    "Needs_attention": {
                       "type": "Compose",
                       "inputs": {
                         "State": "Needs attention"
                       },
                       "runAfter": {
-                        "Find_part": [
+                        "Was_part_of_it_made": [
                           "Succeeded"
                         ]
                       }
                     },
-                    "Save_attention_tx": {
-                      "type": "OpenApiConnection",
-                      "inputs": {
-                        "host": {
-                          "connectionName": "shared_sharepointonline",
-                          "operationId": "HttpRequest",
-                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                        },
-                        "parameters": {
-                          "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                          "parameters/method": "POST",
-                          "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['hist']}')/items(@{if(empty(first(split(string(coalesce(first(body('Find_tx_m')?['value'])?['Id'], '')), '.'))), '0', first(split(string(coalesce(first(body('Find_tx_m')?['value'])?['Id'], '')), '.')))})",
-                          "parameters/headers": {
-                            "Accept": "application/json;odata=nometadata",
-                            "Content-Type": "application/json;odata=nometadata",
-                            "X-HTTP-Method": "MERGE",
-                            "IF-MATCH": "*"
-                          },
-                          "parameters/body": "@{string(outputs('Attention_tx'))}"
-                        },
-                        "authentication": "@parameters('$authentication')"
+                    "Is_there_a_change_record": {
+                      "type": "If",
+                      "expression": "@empty(first(body('Find_the_change_record')?['value']))",
+                      "actions": {},
+                      "else": {
+                        "actions": {
+                          "Save_on_the_change_record": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "host": {
+                                "connectionName": "shared_sharepointonline",
+                                "operationId": "HttpRequest",
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                              },
+                              "parameters": {
+                                "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                                "parameters/method": "POST",
+                                "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items(@{if(empty(first(split(string(coalesce(first(body('Find_the_change_record')?['value'])?['Id'], '')), '.'))), '0', first(split(string(coalesce(first(body('Find_the_change_record')?['value'])?['Id'], '')), '.')))})",
+                                "parameters/headers": {
+                                  "Accept": "application/json;odata=nometadata",
+                                  "Content-Type": "application/json;odata=nometadata",
+                                  "X-HTTP-Method": "MERGE",
+                                  "IF-MATCH": "*"
+                                },
+                                "parameters/body": "@{string(outputs('Needs_attention'))}"
+                              },
+                              "authentication": "@parameters('$authentication')"
+                            },
+                            "runAfter": {}
+                          }
+                        }
                       },
                       "runAfter": {
-                        "Attention_tx": [
+                        "Needs_attention": [
                           "Succeeded"
                         ]
                       }
                     },
-                    "Attention_req": {
+                    "Needs_attention_message": {
                       "type": "Compose",
                       "inputs": {
                         "Status": "Needs attention",
-                        "ResultMessage": "@{if(variables('varPart'), 'Not fully recorded – an administrator has been told. The record is locked until it is resolved.', 'Not recorded – an administrator has been told. Nothing was changed.')}"
+                        "ResultMessage": "@{if(variables('varPart'), if(contains(createArray('RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting'), string(items('Each_stalled_change')?['RequestType'])), 'Not fully recorded – an administrator has been told and will finish it.', 'Not fully recorded – an administrator has been told. The record is locked until it is resolved.'), 'Not recorded – an administrator has been told. Nothing was changed.')}"
                       },
                       "runAfter": {
-                        "Save_attention_tx": [
+                        "Is_there_a_change_record": [
                           "Succeeded"
                         ]
                       }
                     },
-                    "Save_attention_req": {
+                    "Save_on_the_request": {
                       "type": "OpenApiConnection",
                       "inputs": {
                         "host": {
@@ -584,19 +671,19 @@
                         "parameters": {
                           "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                           "parameters/method": "POST",
-                          "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['req']}')/items(@{items('Each_stuck')?['Id']})",
+                          "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{items('Each_stalled_change')?['Id']})",
                           "parameters/headers": {
                             "Accept": "application/json;odata=nometadata",
                             "Content-Type": "application/json;odata=nometadata",
                             "X-HTTP-Method": "MERGE",
                             "IF-MATCH": "*"
                           },
-                          "parameters/body": "@{string(outputs('Attention_req'))}"
+                          "parameters/body": "@{string(outputs('Needs_attention_message'))}"
                         },
                         "authentication": "@parameters('$authentication')"
                       },
                       "runAfter": {
-                        "Attention_req": [
+                        "Needs_attention_message": [
                           "Succeeded"
                         ]
                       }
@@ -608,23 +695,23 @@
                         "Attention_alert_to": {
                           "type": "Select",
                           "inputs": {
-                            "from": "@body('Admins')",
+                            "from": "@body('Active_administrators')",
                             "select": {
                               "send": "@and(true, equals(string(item()?['Status']), 'Active'))",
                               "type": "ALR",
-                              "key": "@{concat('ALR|', concat('request|', string(items('Each_stuck')?['Id'])), '|', outputs('Today'), '|', first(split(string(coalesce(item()?['SiteUserId'], '')), '.')))}",
+                              "key": "@{concat('ALR|', concat('request|', string(items('Each_stalled_change')?['Id'])), '|', outputs('Today_in_the_UK'), '|', first(split(string(coalesce(item()?['SiteUserId'], '')), '.')))}",
                               "recipientId": "@{first(split(string(coalesce(item()?['SiteUserId'], '')), '.'))}",
                               "login": "@{item()?['Person']?['Name']}",
                               "email": "@{coalesce(item()?['Person']?['EMail'], item()?['Email'])}",
                               "actor": "@{''}",
                               "actionId": "@{'0'}",
-                              "title": "@{concat('A change could not be recorded: ', string(items('Each_stuck')?['Title']))}",
+                              "title": "@{concat('A change could not be recorded: ', string(items('Each_stalled_change')?['Title']))}",
                               "area": "@{''}",
-                              "dueIso": "@{outputs('Today')}",
-                              "originalIso": "@{outputs('Today')}",
+                              "dueIso": "@{outputs('Today_in_the_UK')}",
+                              "originalIso": "@{outputs('Today_in_the_UK')}",
                               "previousIso": "@{''}",
                               "extCount": "@int(0)",
-                              "note": "@{concat('It was submitted at ', string(items('Each_stuck')?['Created']), ' (UTC) and tried 3 times. ', if(variables('varPart'), 'Part of it was made, so the record stays locked until you choose Finish or Revert.', 'Nothing was changed. You can try it again or cancel it.'), ' Last error: ', string(coalesce(first(body('Find_tx_m')?['value'])?['LastError'], 'none recorded')))}"
+                              "note": "@{concat('It was sent by ', string(coalesce(first(body('Person_who_sent_it'))?['Title'], 'someone')), ' on ', if(empty(string(coalesce(items('Each_stalled_change')?['Created'], ''))), 'an unknown time', concat(formatDateTime(convertFromUtc(if(empty(string(coalesce(items('Each_stalled_change')?['Created'], ''))), '2000-01-01T00:00:00Z', string(coalesce(items('Each_stalled_change')?['Created'], ''))), 'GMT Standard Time'), 'd MMMM yyyy'), ' at ', formatDateTime(convertFromUtc(if(empty(string(coalesce(items('Each_stalled_change')?['Created'], ''))), '2000-01-01T00:00:00Z', string(coalesce(items('Each_stalled_change')?['Created'], ''))), 'GMT Standard Time'), 'HH:mm'))), ' and tried 3 times. ', if(variables('varPart'), if(contains(createArray('RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting'), string(items('Each_stalled_change')?['RequestType'])), 'Part of it was made, so it cannot be cancelled: choose Finish to complete it.', 'Part of it was made, so the record stays locked until you choose Finish or Revert.'), 'Nothing was changed. You can try it again or cancel it.'), ' Last error: ', string(coalesce(first(body('Find_the_change_record')?['value'])?['LastError'], 'none recorded')))}"
                             }
                           },
                           "runAfter": {}
@@ -646,7 +733,7 @@
                         "actions": {}
                       },
                       "runAfter": {
-                        "Save_attention_req": [
+                        "Save_on_the_request": [
                           "Succeeded"
                         ]
                       }
@@ -654,15 +741,15 @@
                   },
                   "else": {
                     "actions": {
-                      "Refire_body": {
+                      "Back_in_the_queue": {
                         "type": "Compose",
                         "inputs": {
                           "Status": "Submitted",
-                          "Attempts": "@add(int(if(empty(first(split(string(coalesce(items('Each_stuck')?['Attempts'], '')), '.'))), '0', first(split(string(coalesce(items('Each_stuck')?['Attempts'], '')), '.')))), 1)"
+                          "Attempts": "@add(int(if(empty(first(split(string(coalesce(items('Each_stalled_change')?['Attempts'], '')), '.'))), '0', first(split(string(coalesce(items('Each_stalled_change')?['Attempts'], '')), '.')))), 1)"
                         },
                         "runAfter": {}
                       },
-                      "Refire": {
+                      "Put_back_in_the_queue": {
                         "type": "OpenApiConnection",
                         "inputs": {
                           "host": {
@@ -673,31 +760,31 @@
                           "parameters": {
                             "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                             "parameters/method": "POST",
-                            "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['req']}')/items(@{items('Each_stuck')?['Id']})",
+                            "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{items('Each_stalled_change')?['Id']})",
                             "parameters/headers": {
                               "Accept": "application/json;odata=nometadata",
                               "Content-Type": "application/json;odata=nometadata",
                               "X-HTTP-Method": "MERGE",
                               "IF-MATCH": "*"
                             },
-                            "parameters/body": "@{string(outputs('Refire_body'))}"
+                            "parameters/body": "@{string(outputs('Back_in_the_queue'))}"
                           },
                           "authentication": "@parameters('$authentication')"
                         },
                         "runAfter": {
-                          "Refire_body": [
+                          "Back_in_the_queue": [
                             "Succeeded"
                           ]
                         }
                       },
-                      "Count_attempt": {
+                      "Count_the_attempt": {
                         "type": "If",
-                        "expression": "@and(not(empty(first(body('Find_tx_m')?['value']))), not(and(not(empty(first(body('Find_tx_m')?['value']))), contains(createArray('Applied', 'Void', 'Cancelled', 'Reverted', 'Rolled Back'), string(first(body('Find_tx_m')?['value'])?['State'])))))",
+                        "expression": "@and(not(empty(first(body('Find_the_change_record')?['value']))), not(and(not(empty(first(body('Find_the_change_record')?['value']))), contains(createArray('Applied', 'Void', 'Cancelled', 'Reverted', 'Rolled Back'), string(first(body('Find_the_change_record')?['value'])?['State'])))))",
                         "actions": {
-                          "Attempt_body": {
+                          "Attempt_request": {
                             "type": "Compose",
                             "inputs": {
-                              "Attempts": "@add(int(if(empty(first(body('Find_tx_m')?['value'])), '0', if(empty(first(split(string(coalesce(first(body('Find_tx_m')?['value'])?['Attempts'], '')), '.'))), '0', first(split(string(coalesce(first(body('Find_tx_m')?['value'])?['Attempts'], '')), '.'))))), 1)"
+                              "Attempts": "@add(int(if(empty(first(body('Find_the_change_record')?['value'])), '0', if(empty(first(split(string(coalesce(first(body('Find_the_change_record')?['value'])?['Attempts'], '')), '.'))), '0', first(split(string(coalesce(first(body('Find_the_change_record')?['value'])?['Attempts'], '')), '.'))))), 1)"
                             },
                             "runAfter": {}
                           },
@@ -712,19 +799,19 @@
                               "parameters": {
                                 "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                                 "parameters/method": "POST",
-                                "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['hist']}')/items(@{if(empty(first(split(string(coalesce(first(body('Find_tx_m')?['value'])?['Id'], '')), '.'))), '0', first(split(string(coalesce(first(body('Find_tx_m')?['value'])?['Id'], '')), '.')))})",
+                                "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items(@{if(empty(first(split(string(coalesce(first(body('Find_the_change_record')?['value'])?['Id'], '')), '.'))), '0', first(split(string(coalesce(first(body('Find_the_change_record')?['value'])?['Id'], '')), '.')))})",
                                 "parameters/headers": {
                                   "Accept": "application/json;odata=nometadata",
                                   "Content-Type": "application/json;odata=nometadata",
                                   "X-HTTP-Method": "MERGE",
                                   "IF-MATCH": "*"
                                 },
-                                "parameters/body": "@{string(outputs('Attempt_body'))}"
+                                "parameters/body": "@{string(outputs('Attempt_request'))}"
                               },
                               "authentication": "@parameters('$authentication')"
                             },
                             "runAfter": {
-                              "Attempt_body": [
+                              "Attempt_request": [
                                 "Succeeded"
                               ]
                             }
@@ -734,7 +821,7 @@
                           "actions": {}
                         },
                         "runAfter": {
-                          "Refire": [
+                          "Put_back_in_the_queue": [
                             "Succeeded"
                           ]
                         }
@@ -742,19 +829,19 @@
                     }
                   },
                   "runAfter": {
-                    "Not_picked_up": [
+                    "Not_picked_up_by_its_flow": [
                       "Succeeded"
                     ]
                   }
                 }
               },
               "runAfter": {
-                "Stuck": [
+                "Changes_that_have_stalled": [
                   "Succeeded"
                 ]
               }
             },
-            "Get_attention": {
+            "Read_changes_needing_attention": {
               "type": "OpenApiConnection",
               "inputs": {
                 "host": {
@@ -765,7 +852,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['req']}')/items?$select=Id&$filter=Status eq 'Needs attention'&$top=5000",
+                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items?$select=Id&$filter=Status eq 'Needs attention'&$top=5000",
                   "parameters/headers": {
                     "Accept": "application/json;odata=nometadata"
                   }
@@ -773,35 +860,35 @@
                 "authentication": "@parameters('$authentication')"
               },
               "runAfter": {
-                "Each_stuck": [
+                "Each_stalled_change": [
                   "Succeeded"
                 ]
               }
             },
-            "Run_row": {
+            "Last_daily_run_setting": {
               "type": "Query",
               "inputs": {
-                "from": "@body('Get_settings')?['value']",
+                "from": "@body('Read_the_settings')?['value']",
                 "where": "@equals(item()?['Title'], 'LastDailyRun')"
               },
               "runAfter": {
-                "Get_attention": [
+                "Read_changes_needing_attention": [
                   "Succeeded"
                 ]
               }
             },
             "Daily_stale": {
               "type": "If",
-              "expression": "@less(ticks(if(empty(string(coalesce(first(body('Run_row'))?['Value'], ''))), '2000-01-01T00:00:00Z', string(first(body('Run_row'))?['Value']))), ticks(addHours(utcNow(), -26)))",
+              "expression": "@less(ticks(if(empty(string(coalesce(first(body('Last_daily_run_setting'))?['Value'], ''))), '2000-01-01T00:00:00Z', string(first(body('Last_daily_run_setting'))?['Value']))), ticks(addHours(utcNow(), -26)))",
               "actions": {
                 "Daily_stale_to": {
                   "type": "Select",
                   "inputs": {
-                    "from": "@body('Admins')",
+                    "from": "@body('Active_administrators')",
                     "select": {
                       "send": "@and(true, equals(string(item()?['Status']), 'Active'))",
                       "type": "ALR",
-                      "key": "@{concat('ALR|', 'daily', '|', outputs('Today'), '|', first(split(string(coalesce(item()?['SiteUserId'], '')), '.')))}",
+                      "key": "@{concat('ALR|', 'daily', '|', outputs('Today_in_the_UK'), '|', first(split(string(coalesce(item()?['SiteUserId'], '')), '.')))}",
                       "recipientId": "@{first(split(string(coalesce(item()?['SiteUserId'], '')), '.'))}",
                       "login": "@{item()?['Person']?['Name']}",
                       "email": "@{coalesce(item()?['Person']?['EMail'], item()?['Email'])}",
@@ -809,11 +896,11 @@
                       "actionId": "@{'0'}",
                       "title": "@{'Daily reminders have not run'}",
                       "area": "@{''}",
-                      "dueIso": "@{outputs('Today')}",
-                      "originalIso": "@{outputs('Today')}",
+                      "dueIso": "@{outputs('Today_in_the_UK')}",
+                      "originalIso": "@{outputs('Today_in_the_UK')}",
                       "previousIso": "@{''}",
                       "extCount": "@int(0)",
-                      "note": "@{concat('Daily tasks last ran at ', string(coalesce(first(body('Run_row'))?['Value'], 'an unknown time')), ' (UTC). Deadline reminders are not being sent. In Power Automate, check that ESG Competency Hub | 1 Daily tasks is turned on and look at its run history.')}"
+                      "note": "@{concat('Daily tasks last ran on ', if(empty(string(coalesce(first(body('Last_daily_run_setting'))?['Value'], ''))), 'an unknown time', concat(formatDateTime(convertFromUtc(if(empty(string(coalesce(first(body('Last_daily_run_setting'))?['Value'], ''))), '2000-01-01T00:00:00Z', string(coalesce(first(body('Last_daily_run_setting'))?['Value'], ''))), 'GMT Standard Time'), 'd MMMM yyyy'), ' at ', formatDateTime(convertFromUtc(if(empty(string(coalesce(first(body('Last_daily_run_setting'))?['Value'], ''))), '2000-01-01T00:00:00Z', string(coalesce(first(body('Last_daily_run_setting'))?['Value'], ''))), 'GMT Standard Time'), 'HH:mm'))), '. Deadline reminders are not being sent. In Power Automate, check that ESG Competency Hub | 1 Daily tasks is turned on and look at its run history.')}"
                     }
                   },
                   "runAfter": {}
@@ -835,12 +922,12 @@
                 "actions": {}
               },
               "runAfter": {
-                "Run_row": [
+                "Last_daily_run_setting": [
                   "Succeeded"
                 ]
               }
             },
-            "Get_failed": {
+            "Emails_that_failed": {
               "type": "OpenApiConnection",
               "inputs": {
                 "host": {
@@ -851,7 +938,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/items?$select=Id,NotificationKey,NotificationType,State,Attempts,DueDay,NextAttemptAfter,SendingSince,RenderData,LastError&$filter=State eq 'Failed'&$top=5000",
+                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notif']}')/items?$select=Id,NotificationKey,NotificationType,State,Attempts,DueDay,NextAttemptAfter,SendingSince,RenderData,LastError&$filter=State eq 'Failed'&$top=5000",
                   "parameters/headers": {
                     "Accept": "application/json;odata=minimalmetadata"
                   }
@@ -864,7 +951,7 @@
                 ]
               }
             },
-            "Get_unknown": {
+            "Emails_with_an_unclear_outcome": {
               "type": "OpenApiConnection",
               "inputs": {
                 "host": {
@@ -875,7 +962,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/items?$select=Id,NotificationKey,NotificationType,State,Attempts,DueDay,NextAttemptAfter,SendingSince,RenderData,LastError&$filter=State eq 'Unknown'&$top=5000",
+                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notif']}')/items?$select=Id,NotificationKey,NotificationType,State,Attempts,DueDay,NextAttemptAfter,SendingSince,RenderData,LastError&$filter=State eq 'Unknown'&$top=5000",
                   "parameters/headers": {
                     "Accept": "application/json;odata=minimalmetadata"
                   }
@@ -883,12 +970,12 @@
                 "authentication": "@parameters('$authentication')"
               },
               "runAfter": {
-                "Get_failed": [
+                "Emails_that_failed": [
                   "Succeeded"
                 ]
               }
             },
-            "Get_sending": {
+            "Emails_left_sending": {
               "type": "OpenApiConnection",
               "inputs": {
                 "host": {
@@ -899,7 +986,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/items?$select=Id,NotificationKey,NotificationType,State,Attempts,DueDay,NextAttemptAfter,SendingSince,RenderData,LastError&$filter=State eq 'Sending'&$top=5000",
+                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notif']}')/items?$select=Id,NotificationKey,NotificationType,State,Attempts,DueDay,NextAttemptAfter,SendingSince,RenderData,LastError&$filter=State eq 'Sending'&$top=5000",
                   "parameters/headers": {
                     "Accept": "application/json;odata=minimalmetadata"
                   }
@@ -907,42 +994,42 @@
                 "authentication": "@parameters('$authentication')"
               },
               "runAfter": {
-                "Get_unknown": [
+                "Emails_with_an_unclear_outcome": [
                   "Succeeded"
                 ]
               }
             },
-            "Retry_due": {
+            "Emails_due_another_try": {
               "type": "Query",
               "inputs": {
-                "from": "@union(body('Get_failed')?['value'], body('Get_unknown')?['value'], body('Get_sending')?['value'])",
+                "from": "@union(body('Emails_that_failed')?['value'], body('Emails_with_an_unclear_outcome')?['value'], body('Emails_left_sending')?['value'])",
                 "where": "@or(and(not(equals(item()?['State'], 'Sending')), lessOrEquals(ticks(string(coalesce(item()?['NextAttemptAfter'], '2000-01-01T00:00:00Z'))), ticks(utcNow()))), and(equals(item()?['State'], 'Sending'), lessOrEquals(ticks(string(coalesce(item()?['SendingSince'], '2000-01-01T00:00:00Z'))), ticks(addMinutes(utcNow(), -30)))))"
               },
               "runAfter": {
-                "Get_sending": [
+                "Emails_left_sending": [
                   "Succeeded"
                 ]
               }
             },
-            "Each_retry": {
+            "Each_email_to_try_again": {
               "type": "Foreach",
-              "foreach": "@body('Retry_due')",
+              "foreach": "@body('Emails_due_another_try')",
               "runtimeConfiguration": {
                 "concurrency": {
                   "repetitions": 1
                 }
               },
               "actions": {
-                "Render_r": {
+                "The_stored_email": {
                   "type": "Compose",
-                  "inputs": "@json(string(coalesce(items('Each_retry')?['RenderData'], '{}')))",
+                  "inputs": "@json(string(coalesce(items('Each_email_to_try_again')?['RenderData'], '{}')))",
                   "runAfter": {}
                 },
-                "Give_up_r": {
+                "Three_attempts_already": {
                   "type": "If",
-                  "expression": "@greaterOrEquals(int(if(empty(first(split(string(coalesce(items('Each_retry')?['Attempts'], '')), '.'))), '0', first(split(string(coalesce(items('Each_retry')?['Attempts'], '')), '.')))), 3)",
+                  "expression": "@greaterOrEquals(int(if(empty(first(split(string(coalesce(items('Each_email_to_try_again')?['Attempts'], '')), '.'))), '0', first(split(string(coalesce(items('Each_email_to_try_again')?['Attempts'], '')), '.')))), 3)",
                   "actions": {
-                    "Abandon_body": {
+                    "Abandoned": {
                       "type": "Compose",
                       "inputs": {
                         "State": "Abandoned",
@@ -950,7 +1037,7 @@
                       },
                       "runAfter": {}
                     },
-                    "Abandon": {
+                    "Mark_as_abandoned": {
                       "type": "OpenApiConnection",
                       "inputs": {
                         "host": {
@@ -961,75 +1048,87 @@
                         "parameters": {
                           "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                           "parameters/method": "POST",
-                          "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/items(@{items('Each_retry')?['Id']})",
+                          "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notif']}')/items(@{items('Each_email_to_try_again')?['Id']})",
                           "parameters/headers": {
                             "Accept": "application/json;odata=nometadata",
                             "Content-Type": "application/json;odata=nometadata",
                             "X-HTTP-Method": "MERGE",
-                            "IF-MATCH": "@{items('Each_retry')?['odata.etag']}"
+                            "IF-MATCH": "@{items('Each_email_to_try_again')?['odata.etag']}"
                           },
-                          "parameters/body": "@{string(outputs('Abandon_body'))}"
+                          "parameters/body": "@{string(outputs('Abandoned'))}"
                         },
                         "authentication": "@parameters('$authentication')"
                       },
                       "runAfter": {
-                        "Abandon_body": [
+                        "Abandoned": [
                           "Succeeded"
                         ]
                       }
                     },
-                    "Abandon_alerts": {
-                      "type": "Select",
-                      "inputs": {
-                        "from": "@body('Admins')",
-                        "select": {
-                          "send": "@and(true, equals(string(item()?['Status']), 'Active'))",
-                          "type": "ALR",
-                          "key": "@{concat('ALR|', concat('email|', string(items('Each_retry')?['Id'])), '|', outputs('Today'), '|', first(split(string(coalesce(item()?['SiteUserId'], '')), '.')))}",
-                          "recipientId": "@{first(split(string(coalesce(item()?['SiteUserId'], '')), '.'))}",
-                          "login": "@{item()?['Person']?['Name']}",
-                          "email": "@{coalesce(item()?['Person']?['EMail'], item()?['Email'])}",
-                          "actor": "@{''}",
-                          "actionId": "@{'0'}",
-                          "title": "@{concat('An email could not be sent: ', string(outputs('Render_r')?['subject']))}",
-                          "area": "@{''}",
-                          "dueIso": "@{outputs('Today')}",
-                          "originalIso": "@{outputs('Today')}",
-                          "previousIso": "@{''}",
-                          "extCount": "@int(0)",
-                          "note": "@{concat('It was tried 3 times and has been given up. It was for ', string(outputs('Render_r')?['to']), '. ', string(coalesce(items('Each_retry')?['LastError'], '')))}"
+                    "Tell_the_administrators": {
+                      "type": "If",
+                      "expression": "@equals(actions('Mark_as_abandoned')?['status'], 'Succeeded')",
+                      "actions": {
+                        "Alert_for_each_administrator": {
+                          "type": "Select",
+                          "inputs": {
+                            "from": "@body('Active_administrators')",
+                            "select": {
+                              "send": "@and(true, equals(string(item()?['Status']), 'Active'))",
+                              "type": "ALR",
+                              "key": "@{concat('ALR|', concat('email|', string(items('Each_email_to_try_again')?['Id'])), '|', outputs('Today_in_the_UK'), '|', first(split(string(coalesce(item()?['SiteUserId'], '')), '.')))}",
+                              "recipientId": "@{first(split(string(coalesce(item()?['SiteUserId'], '')), '.'))}",
+                              "login": "@{item()?['Person']?['Name']}",
+                              "email": "@{coalesce(item()?['Person']?['EMail'], item()?['Email'])}",
+                              "actor": "@{''}",
+                              "actionId": "@{'0'}",
+                              "title": "@{concat('An email could not be sent: ', string(outputs('The_stored_email')?['subject']))}",
+                              "area": "@{''}",
+                              "dueIso": "@{outputs('Today_in_the_UK')}",
+                              "originalIso": "@{outputs('Today_in_the_UK')}",
+                              "previousIso": "@{''}",
+                              "extCount": "@int(0)",
+                              "note": "@{concat('It failed three times and will not be tried again. It was for ', string(outputs('The_stored_email')?['to']), '. ', string(coalesce(items('Each_email_to_try_again')?['LastError'], '')))}"
+                            }
+                          },
+                          "runAfter": {}
+                        },
+                        "Add_abandon_alerts": {
+                          "type": "SetVariable",
+                          "inputs": {
+                            "name": "varAlerts",
+                            "value": "@union(variables('varAlerts'), body('Alert_for_each_administrator'))"
+                          },
+                          "runAfter": {
+                            "Alert_for_each_administrator": [
+                              "Succeeded"
+                            ]
+                          }
                         }
                       },
-                      "runAfter": {
-                        "Abandon": [
-                          "Succeeded"
-                        ]
-                      }
-                    },
-                    "Add_abandon_alerts": {
-                      "type": "SetVariable",
-                      "inputs": {
-                        "name": "varAlerts",
-                        "value": "@union(variables('varAlerts'), body('Abandon_alerts'))"
+                      "else": {
+                        "actions": {}
                       },
                       "runAfter": {
-                        "Abandon_alerts": [
-                          "Succeeded"
+                        "Mark_as_abandoned": [
+                          "Succeeded",
+                          "Failed",
+                          "TimedOut"
                         ]
                       }
                     }
                   },
                   "else": {
                     "actions": {
-                      "Person_r": {
+                      "Is_the_recipient_active": {
                         "type": "Query",
                         "inputs": {
-                          "from": "@body('Get_people')?['value']",
-                          "where": "@and(equals(first(split(string(coalesce(item()?['SiteUserId'], '')), '.')), string(outputs('Render_r')?['recipientId'])), equals(item()?['Status'], 'Active'))"
+                          "from": "@body('Read_the_people')?['value']",
+                          "where": "@and(equals(first(split(string(coalesce(item()?['SiteUserId'], '')), '.')), string(outputs('The_stored_email')?['recipientId'])), equals(item()?['Status'], 'Active'))"
                         },
                         "runAfter": {}
                       },
-                      "Get_action_r": {
+                      "Read_the_action": {
                         "type": "OpenApiConnection",
                         "inputs": {
                           "host": {
@@ -1040,7 +1139,7 @@
                           "parameters": {
                             "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                             "parameters/method": "GET",
-                            "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['act']}')/items(@{if(empty(first(split(string(coalesce(outputs('Render_r')?['actionId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Render_r')?['actionId'], '')), '.')))})?$select=Id,IsOpen,DueDay,AssignedToId",
+                            "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['act']}')/items(@{if(empty(first(split(string(coalesce(outputs('The_stored_email')?['actionId'], '')), '.'))), '0', first(split(string(coalesce(outputs('The_stored_email')?['actionId'], '')), '.')))})?$select=Id,IsOpen,DueDay,AssignedToId",
                             "parameters/headers": {
                               "Accept": "application/json;odata=nometadata"
                             }
@@ -1048,25 +1147,25 @@
                           "authentication": "@parameters('$authentication')"
                         },
                         "runAfter": {
-                          "Person_r": [
+                          "Is_the_recipient_active": [
                             "Succeeded"
                           ]
                         }
                       },
-                      "Still_wanted_r": {
+                      "Is_the_email_still_wanted": {
                         "type": "If",
-                        "expression": "@and(not(empty(body('Person_r'))), or(equals(string(items('Each_retry')?['NotificationType']), 'ALR'), and(equals(actions('Get_action_r')?['status'], 'Succeeded'), equals(body('Get_action_r')?['IsOpen'], true), or(not(contains(createArray('R7', 'DUE', 'OD'), string(items('Each_retry')?['NotificationType']))), and(equals(first(split(string(coalesce(body('Get_action_r')?['DueDay'], '')), '.')), first(split(string(coalesce(items('Each_retry')?['DueDay'], '')), '.'))), equals(first(split(string(coalesce(body('Get_action_r')?['AssignedToId'], '')), '.')), string(outputs('Render_r')?['recipientId'])))))))",
+                        "expression": "@and(not(empty(body('Is_the_recipient_active'))), or(equals(string(items('Each_email_to_try_again')?['NotificationType']), 'ALR'), and(equals(actions('Read_the_action')?['status'], 'Succeeded'), equals(body('Read_the_action')?['IsOpen'], true), or(not(contains(createArray('R7', 'DUE', 'OD'), string(items('Each_email_to_try_again')?['NotificationType']))), and(equals(first(split(string(coalesce(body('Read_the_action')?['DueDay'], '')), '.')), first(split(string(coalesce(items('Each_email_to_try_again')?['DueDay'], '')), '.'))), equals(first(split(string(coalesce(body('Read_the_action')?['AssignedToId'], '')), '.')), string(outputs('The_stored_email')?['recipientId'])))))))",
                         "actions": {
-                          "Claim_body_r": {
+                          "Sending_again": {
                             "type": "Compose",
                             "inputs": {
                               "State": "Sending",
-                              "Attempts": "@add(int(if(empty(first(split(string(coalesce(items('Each_retry')?['Attempts'], '')), '.'))), '0', first(split(string(coalesce(items('Each_retry')?['Attempts'], '')), '.')))), 1)",
+                              "Attempts": "@add(int(if(empty(first(split(string(coalesce(items('Each_email_to_try_again')?['Attempts'], '')), '.'))), '0', first(split(string(coalesce(items('Each_email_to_try_again')?['Attempts'], '')), '.')))), 1)",
                               "SendingSince": "@{utcNow()}"
                             },
                             "runAfter": {}
                           },
-                          "Claim_r": {
+                          "Claim_the_email": {
                             "type": "OpenApiConnection",
                             "inputs": {
                               "host": {
@@ -1077,49 +1176,62 @@
                               "parameters": {
                                 "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                                 "parameters/method": "POST",
-                                "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/items(@{items('Each_retry')?['Id']})",
+                                "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notif']}')/items(@{items('Each_email_to_try_again')?['Id']})",
                                 "parameters/headers": {
                                   "Accept": "application/json;odata=nometadata",
                                   "Content-Type": "application/json;odata=nometadata",
                                   "X-HTTP-Method": "MERGE",
-                                  "IF-MATCH": "@{items('Each_retry')?['odata.etag']}"
+                                  "IF-MATCH": "@{items('Each_email_to_try_again')?['odata.etag']}"
                                 },
-                                "parameters/body": "@{string(outputs('Claim_body_r'))}"
+                                "parameters/body": "@{string(outputs('Sending_again'))}"
                               },
                               "authentication": "@parameters('$authentication')"
                             },
                             "runAfter": {
-                              "Claim_body_r": [
+                              "Sending_again": [
                                 "Succeeded"
                               ]
                             }
                           },
-                          "Requeue_r": {
-                            "type": "AppendToArrayVariable",
-                            "inputs": {
-                              "name": "varOutbox",
-                              "value": {
-                                "id": "@items('Each_retry')?['Id']",
-                                "to": "@{outputs('Render_r')?['to']}",
-                                "subject": "@{outputs('Render_r')?['subject']}",
-                                "html": "@{if(contains(createArray('Unknown', 'Sending'), string(items('Each_retry')?['State'])), concat('<p style=\"color:#5b6774\"><i>If you have already received this message, please ignore it.</i></p>', string(outputs('Render_r')?['html'])), string(outputs('Render_r')?['html']))}",
-                                "type": "@{outputs('Render_r')?['type']}",
-                                "dueIso": "@{outputs('Render_r')?['dueIso']}",
-                                "actionId": "@{outputs('Render_r')?['actionId']}",
-                                "recipientId": "@{outputs('Render_r')?['recipientId']}",
-                                "login": "@{outputs('Render_r')?['login']}"
+                          "Claimed_by_this_run": {
+                            "type": "If",
+                            "expression": "@equals(actions('Claim_the_email')?['status'], 'Succeeded')",
+                            "actions": {
+                              "Add_to_the_emails_to_send": {
+                                "type": "AppendToArrayVariable",
+                                "inputs": {
+                                  "name": "varOutbox",
+                                  "value": {
+                                    "id": "@items('Each_email_to_try_again')?['Id']",
+                                    "to": "@{outputs('The_stored_email')?['to']}",
+                                    "subject": "@{outputs('The_stored_email')?['subject']}",
+                                    "html": "@{if(contains(createArray('Unknown', 'Sending'), string(items('Each_email_to_try_again')?['State'])), concat('<p style=\"color:#5b6774\"><i>If you have already received this message, please ignore it.</i></p>', string(outputs('The_stored_email')?['html'])), string(outputs('The_stored_email')?['html']))}",
+                                    "type": "@{outputs('The_stored_email')?['type']}",
+                                    "dueIso": "@{outputs('The_stored_email')?['dueIso']}",
+                                    "actionId": "@{outputs('The_stored_email')?['actionId']}",
+                                    "recipientId": "@{outputs('The_stored_email')?['recipientId']}",
+                                    "login": "@{outputs('The_stored_email')?['login']}",
+                                    "attempts": "@{add(int(if(empty(first(split(string(coalesce(items('Each_email_to_try_again')?['Attempts'], '')), '.'))), '0', first(split(string(coalesce(items('Each_email_to_try_again')?['Attempts'], '')), '.')))), 1)}"
+                                  }
+                                },
+                                "runAfter": {}
                               }
                             },
+                            "else": {
+                              "actions": {}
+                            },
                             "runAfter": {
-                              "Claim_r": [
-                                "Succeeded"
+                              "Claim_the_email": [
+                                "Succeeded",
+                                "Failed",
+                                "TimedOut"
                               ]
                             }
                           }
                         },
                         "else": {
                           "actions": {
-                            "Skip_body_r": {
+                            "No_longer_needed": {
                               "type": "Compose",
                               "inputs": {
                                 "State": "Skipped",
@@ -1127,7 +1239,7 @@
                               },
                               "runAfter": {}
                             },
-                            "Skip_r": {
+                            "Mark_as_not_needed": {
                               "type": "OpenApiConnection",
                               "inputs": {
                                 "host": {
@@ -1138,27 +1250,38 @@
                                 "parameters": {
                                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                                   "parameters/method": "POST",
-                                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/items(@{items('Each_retry')?['Id']})",
+                                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notif']}')/items(@{items('Each_email_to_try_again')?['Id']})",
                                   "parameters/headers": {
                                     "Accept": "application/json;odata=nometadata",
                                     "Content-Type": "application/json;odata=nometadata",
                                     "X-HTTP-Method": "MERGE",
-                                    "IF-MATCH": "@{items('Each_retry')?['odata.etag']}"
+                                    "IF-MATCH": "@{items('Each_email_to_try_again')?['odata.etag']}"
                                   },
-                                  "parameters/body": "@{string(outputs('Skip_body_r'))}"
+                                  "parameters/body": "@{string(outputs('No_longer_needed'))}"
                                 },
                                 "authentication": "@parameters('$authentication')"
                               },
                               "runAfter": {
-                                "Skip_body_r": [
+                                "No_longer_needed": [
                                   "Succeeded"
+                                ]
+                              }
+                            },
+                            "Done_with_it": {
+                              "type": "Compose",
+                              "inputs": "done",
+                              "runAfter": {
+                                "Mark_as_not_needed": [
+                                  "Succeeded",
+                                  "Failed",
+                                  "TimedOut"
                                 ]
                               }
                             }
                           }
                         },
                         "runAfter": {
-                          "Get_action_r": [
+                          "Read_the_action": [
                             "Succeeded",
                             "Failed",
                             "TimedOut"
@@ -1168,19 +1291,19 @@
                     }
                   },
                   "runAfter": {
-                    "Render_r": [
+                    "The_stored_email": [
                       "Succeeded"
                     ]
                   }
                 }
               },
               "runAfter": {
-                "Retry_due": [
+                "Emails_due_another_try": [
                   "Succeeded"
                 ]
               }
             },
-            "Each_new_notice_A": {
+            "Each_new_email_(alerts)": {
               "type": "Foreach",
               "foreach": "@variables('varAlerts')",
               "runtimeConfiguration": {
@@ -1189,99 +1312,100 @@
                 }
               },
               "actions": {
-                "Token_A": {
+                "Token_(alerts)": {
                   "type": "Compose",
                   "inputs": "@concat('ESGN', toUpper(take(replace(guid(), '-', ''), 10)))",
                   "runAfter": {}
                 },
-                "Subject_A": {
+                "Subject_(alerts)": {
                   "type": "Compose",
-                  "inputs": "@if(equals(items('Each_new_notice_A')?['type'], 'ASG'), concat('Action assigned to you: ', items('Each_new_notice_A')?['title']), if(equals(items('Each_new_notice_A')?['type'], 'EXT'), concat('Deadline moved: ', items('Each_new_notice_A')?['title']), if(equals(items('Each_new_notice_A')?['type'], 'RDY'), concat('Ready for your close-out check: ', items('Each_new_notice_A')?['title']), if(equals(items('Each_new_notice_A')?['type'], 'CLS'), concat('Action closed: ', items('Each_new_notice_A')?['title']), if(equals(items('Each_new_notice_A')?['type'], 'RAW'), concat('Action reassigned: ', items('Each_new_notice_A')?['title']), if(equals(items('Each_new_notice_A')?['type'], 'R7'), concat('Reminder: ', items('Each_new_notice_A')?['title'], ' is due in ', string(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_A')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000)), if(equals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_A')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000), 1), ' day', ' days')), if(equals(items('Each_new_notice_A')?['type'], 'DUE'), concat('Due today: ', items('Each_new_notice_A')?['title']), if(equals(items('Each_new_notice_A')?['type'], 'ALR'), concat('Competency Hub needs attention: ', items('Each_new_notice_A')?['title']), concat(items('Each_new_notice_A')?['title'], ' is ', string(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_A')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000))), if(equals(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_A')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000)), 1), ' day late', ' days late'))))))))))",
+                  "inputs": "@if(equals(items('Each_new_email_(alerts)')?['type'], 'ASG'), concat('Action assigned to you: ', items('Each_new_email_(alerts)')?['title']), if(equals(items('Each_new_email_(alerts)')?['type'], 'EXT'), concat('Deadline moved: ', items('Each_new_email_(alerts)')?['title']), if(equals(items('Each_new_email_(alerts)')?['type'], 'RDY'), concat('Ready for your close-out check: ', items('Each_new_email_(alerts)')?['title']), if(equals(items('Each_new_email_(alerts)')?['type'], 'CLS'), concat('Action closed: ', items('Each_new_email_(alerts)')?['title']), if(equals(items('Each_new_email_(alerts)')?['type'], 'RAW'), concat('Action reassigned: ', items('Each_new_email_(alerts)')?['title']), if(equals(items('Each_new_email_(alerts)')?['type'], 'R7'), concat('Reminder: ', items('Each_new_email_(alerts)')?['title'], ' is due in ', string(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_email_(alerts)')?['dueIso'], ''))), outputs('Today_in_the_UK'), string(items('Each_new_email_(alerts)')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z'))), 864000000000)), if(equals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_email_(alerts)')?['dueIso'], ''))), outputs('Today_in_the_UK'), string(items('Each_new_email_(alerts)')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z'))), 864000000000), 1), ' day', ' days')), if(equals(items('Each_new_email_(alerts)')?['type'], 'DUE'), concat('Due today: ', items('Each_new_email_(alerts)')?['title']), if(equals(items('Each_new_email_(alerts)')?['type'], 'ALR'), concat('Competency Hub needs attention: ', items('Each_new_email_(alerts)')?['title']), concat(items('Each_new_email_(alerts)')?['title'], ' is ', string(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_email_(alerts)')?['dueIso'], ''))), outputs('Today_in_the_UK'), string(items('Each_new_email_(alerts)')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z'))), 864000000000))), if(equals(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_email_(alerts)')?['dueIso'], ''))), outputs('Today_in_the_UK'), string(items('Each_new_email_(alerts)')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z'))), 864000000000)), 1), ' day late', ' days late'))))))))))",
                   "runAfter": {
-                    "Token_A": [
+                    "Token_(alerts)": [
                       "Succeeded"
                     ]
                   }
                 },
-                "Html_action_A": {
+                "Email_text_for_an_action_(alerts)": {
                   "type": "Compose",
-                  "inputs": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:15px;color:#16222c\"><p style=\"color:#13516b;font-size:18px;font-weight:600;margin:0 0 12px\">ESG Competency Hub</p><p>@{if(equals(items('Each_new_notice_A')?['type'], 'ASG'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_A')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has given you an action in the ESG Competency Hub.'), if(equals(items('Each_new_notice_A')?['type'], 'EXT'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_A')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has moved the deadline of your action.'), if(equals(items('Each_new_notice_A')?['type'], 'RDY'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_A')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has marked this action as done. It is waiting for your close-out check.'), if(equals(items('Each_new_notice_A')?['type'], 'CLS'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_A')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has closed this action.'), if(equals(items('Each_new_notice_A')?['type'], 'RAW'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_A')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has given this action to someone else. It is no longer yours to do.'), if(equals(items('Each_new_notice_A')?['type'], 'R7'), concat('Your action is due in ', string(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_A')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000)), if(equals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_A')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000), 1), ' day.', ' days.')), if(equals(items('Each_new_notice_A')?['type'], 'DUE'), 'Your action is due today.', concat('Your action is ', string(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_A')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000))), if(equals(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['dueIso'], ''))), outputs('Today'), string(items('Each_new_notice_A')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000)), 1), ' day late.', ' days late.')))))))))}</p><table style=\"border-collapse:collapse;font-size:15px\"><tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">Action</td><td style=\"padding:4px 0\">@{concat('ACT-', substring(concat('0000', items('Each_new_notice_A')?['actionId']), sub(length(concat('0000', items('Each_new_notice_A')?['actionId'])), 5), 5))} – @{replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_A')?['title'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;')}</td></tr><tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">Area</td><td style=\"padding:4px 0\">@{replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_A')?['area'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;')}</td></tr><tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">Deadline</td><td style=\"padding:4px 0\">@{if(empty(string(coalesce(items('Each_new_notice_A')?['dueIso'], ''))), '', formatDateTime(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['dueIso'], ''))), '2000-01-01', string(items('Each_new_notice_A')?['dueIso'])), 'T00:00:00Z'), 'd MMMM yyyy'))}@{if(and(greater(items('Each_new_notice_A')?['extCount'], 0), not(equals(items('Each_new_notice_A')?['originalIso'], items('Each_new_notice_A')?['dueIso']))), concat(' (originally ', if(empty(string(coalesce(items('Each_new_notice_A')?['originalIso'], ''))), '', formatDateTime(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['originalIso'], ''))), '2000-01-01', string(items('Each_new_notice_A')?['originalIso'])), 'T00:00:00Z'), 'd MMMM yyyy')), ')'), '')}</td></tr>@{if(equals(items('Each_new_notice_A')?['type'], 'EXT'), concat('<tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">Was due</td><td style=\"padding:4px 0\">', if(empty(string(coalesce(items('Each_new_notice_A')?['previousIso'], ''))), '', formatDateTime(concat(if(empty(string(coalesce(items('Each_new_notice_A')?['previousIso'], ''))), '2000-01-01', string(items('Each_new_notice_A')?['previousIso'])), 'T00:00:00Z'), 'd MMMM yyyy')), '</td></tr>'), '')}@{if(empty(items('Each_new_notice_A')?['note']), '', concat('<tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">', if(contains(createArray('EXT', 'RAW', 'ASG'), items('Each_new_notice_A')?['type']), 'Reason', 'Note'), '</td><td style=\"padding:4px 0\">', replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_A')?['note'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td></tr>'))}</table><p style=\"margin:20px 0\"><a href=\"@{outputs('Site_url')}/SitePages/Hub.aspx?action=@{items('Each_new_notice_A')?['actionId']}\" style=\"background:#13516b;color:#ffffff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600\">Open the action</a></p><p style=\"color:#5b6774;font-size:12px\">This is an automated message from the ESG Competency Hub. Reference @{outputs('Token_A')}.</p></div>",
+                  "inputs": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:15px;color:#16222c\"><p style=\"color:#13516b;font-size:18px;font-weight:600;margin:0 0 12px\">ESG Competency Hub</p><p>@{if(equals(items('Each_new_email_(alerts)')?['type'], 'ASG'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_email_(alerts)')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has given you an action in the ESG Competency Hub.'), if(equals(items('Each_new_email_(alerts)')?['type'], 'EXT'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_email_(alerts)')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has moved the deadline of your action.'), if(equals(items('Each_new_email_(alerts)')?['type'], 'RDY'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_email_(alerts)')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has marked this action as done. It is waiting for your close-out check.'), if(equals(items('Each_new_email_(alerts)')?['type'], 'CLS'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_email_(alerts)')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has closed this action.'), if(equals(items('Each_new_email_(alerts)')?['type'], 'RAW'), concat(replace(replace(replace(replace(replace(string(coalesce(items('Each_new_email_(alerts)')?['actor'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' has given this action to someone else. It is no longer yours to do.'), if(equals(items('Each_new_email_(alerts)')?['type'], 'R7'), concat('Your action is due in ', string(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_email_(alerts)')?['dueIso'], ''))), outputs('Today_in_the_UK'), string(items('Each_new_email_(alerts)')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z'))), 864000000000)), if(equals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_email_(alerts)')?['dueIso'], ''))), outputs('Today_in_the_UK'), string(items('Each_new_email_(alerts)')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z'))), 864000000000), 1), ' day.', ' days.')), if(equals(items('Each_new_email_(alerts)')?['type'], 'DUE'), 'Your action is due today.', concat('Your action is ', string(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_email_(alerts)')?['dueIso'], ''))), outputs('Today_in_the_UK'), string(items('Each_new_email_(alerts)')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z'))), 864000000000))), if(equals(sub(0, div(sub(ticks(concat(if(empty(string(coalesce(items('Each_new_email_(alerts)')?['dueIso'], ''))), outputs('Today_in_the_UK'), string(items('Each_new_email_(alerts)')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z'))), 864000000000)), 1), ' day late.', ' days late.')))))))))}</p><table style=\"border-collapse:collapse;font-size:15px\"><tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">Action</td><td style=\"padding:4px 0\">@{concat('ACT-', substring(concat('0000', items('Each_new_email_(alerts)')?['actionId']), sub(length(concat('0000', items('Each_new_email_(alerts)')?['actionId'])), 5), 5))} – @{replace(replace(replace(replace(replace(string(coalesce(items('Each_new_email_(alerts)')?['title'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;')}</td></tr><tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">Area</td><td style=\"padding:4px 0\">@{replace(replace(replace(replace(replace(string(coalesce(items('Each_new_email_(alerts)')?['area'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;')}</td></tr><tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">Deadline</td><td style=\"padding:4px 0\">@{if(empty(string(coalesce(items('Each_new_email_(alerts)')?['dueIso'], ''))), '', formatDateTime(concat(if(empty(string(coalesce(items('Each_new_email_(alerts)')?['dueIso'], ''))), '2000-01-01', string(items('Each_new_email_(alerts)')?['dueIso'])), 'T00:00:00Z'), 'd MMMM yyyy'))}@{if(and(greater(items('Each_new_email_(alerts)')?['extCount'], 0), not(equals(items('Each_new_email_(alerts)')?['originalIso'], items('Each_new_email_(alerts)')?['dueIso']))), concat(' (originally ', if(empty(string(coalesce(items('Each_new_email_(alerts)')?['originalIso'], ''))), '', formatDateTime(concat(if(empty(string(coalesce(items('Each_new_email_(alerts)')?['originalIso'], ''))), '2000-01-01', string(items('Each_new_email_(alerts)')?['originalIso'])), 'T00:00:00Z'), 'd MMMM yyyy')), ')'), '')}</td></tr>@{if(equals(items('Each_new_email_(alerts)')?['type'], 'EXT'), concat('<tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">Was due</td><td style=\"padding:4px 0\">', if(empty(string(coalesce(items('Each_new_email_(alerts)')?['previousIso'], ''))), '', formatDateTime(concat(if(empty(string(coalesce(items('Each_new_email_(alerts)')?['previousIso'], ''))), '2000-01-01', string(items('Each_new_email_(alerts)')?['previousIso'])), 'T00:00:00Z'), 'd MMMM yyyy')), '</td></tr>'), '')}@{if(empty(items('Each_new_email_(alerts)')?['note']), '', concat('<tr><td style=\"padding:4px 16px 4px 0;color:#5b6774\">', if(contains(createArray('EXT', 'RAW', 'ASG'), items('Each_new_email_(alerts)')?['type']), 'Reason', 'Note'), '</td><td style=\"padding:4px 0\">', replace(replace(replace(replace(replace(string(coalesce(items('Each_new_email_(alerts)')?['note'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td></tr>'))}</table><p style=\"margin:20px 0\"><a href=\"@{outputs('Site_address')}/SitePages/Hub.aspx?action=@{items('Each_new_email_(alerts)')?['actionId']}\" style=\"background:#13516b;color:#ffffff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600\">Open the action</a></p><p style=\"color:#5b6774;font-size:12px\">This is an automated message from the ESG Competency Hub. Reference @{outputs('Token_(alerts)')}.</p></div>",
                   "runAfter": {
-                    "Subject_A": [
+                    "Subject_(alerts)": [
                       "Succeeded"
                     ]
                   }
                 },
-                "Html_alert_A": {
+                "Email_text_for_an_alert_(alerts)": {
                   "type": "Compose",
-                  "inputs": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:15px;color:#16222c\"><p style=\"color:#13516b;font-size:18px;font-weight:600;margin:0 0 12px\">ESG Competency Hub</p><p><b>@{replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_A')?['title'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;')}</b></p><p>@{replace(replace(replace(replace(replace(string(coalesce(items('Each_new_notice_A')?['note'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;')}</p><p style=\"margin:20px 0\"><a href=\"@{outputs('Site_url')}/SitePages/Hub.aspx?view=admin\" style=\"background:#13516b;color:#ffffff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600\">Open Changes needing attention</a></p><p style=\"color:#5b6774;font-size:12px\">This is an automated alert from the ESG Competency Hub, sent to its administrators. Reference @{outputs('Token_A')}.</p></div>",
+                  "inputs": "<div style=\"font-family:Segoe UI,Arial,sans-serif;font-size:15px;color:#16222c\"><p style=\"color:#13516b;font-size:18px;font-weight:600;margin:0 0 12px\">ESG Competency Hub</p><p><b>@{replace(replace(replace(replace(replace(string(coalesce(items('Each_new_email_(alerts)')?['title'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;')}</b></p><p>@{replace(replace(replace(replace(replace(string(coalesce(items('Each_new_email_(alerts)')?['note'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;')}</p><p style=\"margin:20px 0\"><a href=\"@{outputs('Site_address')}/SitePages/Hub.aspx?view=admin\" style=\"background:#13516b;color:#ffffff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:600\">Open Changes needing attention</a></p><p style=\"color:#5b6774;font-size:12px\">This is an automated alert from the ESG Competency Hub, sent to its administrators. Reference @{outputs('Token_(alerts)')}.</p></div>",
                   "runAfter": {
-                    "Html_action_A": [
+                    "Email_text_for_an_action_(alerts)": [
                       "Succeeded"
                     ]
                   }
                 },
-                "Html_A": {
+                "Email_text_(alerts)": {
                   "type": "Compose",
-                  "inputs": "@if(equals(items('Each_new_notice_A')?['type'], 'ALR'), outputs('Html_alert_A'), outputs('Html_action_A'))",
+                  "inputs": "@if(equals(items('Each_new_email_(alerts)')?['type'], 'ALR'), outputs('Email_text_for_an_alert_(alerts)'), outputs('Email_text_for_an_action_(alerts)'))",
                   "runAfter": {
-                    "Html_alert_A": [
+                    "Email_text_for_an_alert_(alerts)": [
                       "Succeeded"
                     ]
                   }
                 },
-                "Render_A": {
+                "Render_(alerts)": {
                   "type": "Compose",
                   "inputs": {
-                    "to": "@{items('Each_new_notice_A')?['email']}",
-                    "subject": "@{outputs('Subject_A')}",
-                    "html": "@{outputs('Html_A')}",
-                    "type": "@{items('Each_new_notice_A')?['type']}",
-                    "dueIso": "@{items('Each_new_notice_A')?['dueIso']}",
-                    "actionId": "@{items('Each_new_notice_A')?['actionId']}",
-                    "recipientId": "@{items('Each_new_notice_A')?['recipientId']}",
-                    "login": "@{items('Each_new_notice_A')?['login']}"
+                    "to": "@{items('Each_new_email_(alerts)')?['email']}",
+                    "subject": "@{outputs('Subject_(alerts)')}",
+                    "html": "@{outputs('Email_text_(alerts)')}",
+                    "type": "@{items('Each_new_email_(alerts)')?['type']}",
+                    "dueIso": "@{items('Each_new_email_(alerts)')?['dueIso']}",
+                    "actionId": "@{items('Each_new_email_(alerts)')?['actionId']}",
+                    "recipientId": "@{items('Each_new_email_(alerts)')?['recipientId']}",
+                    "login": "@{items('Each_new_email_(alerts)')?['login']}",
+                    "attempts": "1"
                   },
                   "runAfter": {
-                    "Html_A": [
+                    "Email_text_(alerts)": [
                       "Succeeded"
                     ]
                   }
                 },
-                "Notice_values_A": {
+                "Email_fields_(alerts)": {
                   "type": "Compose",
                   "inputs": [
                     {
                       "FieldName": "Title",
-                      "FieldValue": "@{take(outputs('Subject_A'), 255)}"
+                      "FieldValue": "@{take(outputs('Subject_(alerts)'), 255)}"
                     },
                     {
                       "FieldName": "NotificationKey",
-                      "FieldValue": "@{items('Each_new_notice_A')?['key']}"
+                      "FieldValue": "@{items('Each_new_email_(alerts)')?['key']}"
                     },
                     {
                       "FieldName": "Token",
-                      "FieldValue": "@{outputs('Token_A')}"
+                      "FieldValue": "@{outputs('Token_(alerts)')}"
                     },
                     {
                       "FieldName": "NotificationType",
-                      "FieldValue": "@{items('Each_new_notice_A')?['type']}"
+                      "FieldValue": "@{items('Each_new_email_(alerts)')?['type']}"
                     },
                     {
                       "FieldName": "Recipient",
-                      "FieldValue": "@{concat('[{\"Key\":\"', items('Each_new_notice_A')?['login'], '\"}]')}"
+                      "FieldValue": "@{concat('[{\"Key\":\"', items('Each_new_email_(alerts)')?['login'], '\"}]')}"
                     },
                     {
                       "FieldName": "RecipientEmail",
-                      "FieldValue": "@{items('Each_new_notice_A')?['email']}"
+                      "FieldValue": "@{items('Each_new_email_(alerts)')?['email']}"
                     },
                     {
                       "FieldName": "RecordType",
-                      "FieldValue": "@{if(equals(items('Each_new_notice_A')?['type'], 'ALR'), 'System', 'Action')}"
+                      "FieldValue": "@{if(equals(items('Each_new_email_(alerts)')?['type'], 'ALR'), 'System', 'Action')}"
                     },
                     {
                       "FieldName": "RecordId",
-                      "FieldValue": "@{items('Each_new_notice_A')?['actionId']}"
+                      "FieldValue": "@{items('Each_new_email_(alerts)')?['actionId']}"
                     },
                     {
                       "FieldName": "State",
@@ -1297,38 +1421,38 @@
                     },
                     {
                       "FieldName": "RenderData",
-                      "FieldValue": "@{string(outputs('Render_A'))}"
+                      "FieldValue": "@{string(outputs('Render_(alerts)'))}"
                     },
                     {
                       "FieldName": "DueDay",
-                      "FieldValue": "@{int(replace(items('Each_new_notice_A')?['dueIso'], '-', ''))}"
+                      "FieldValue": "@{int(replace(items('Each_new_email_(alerts)')?['dueIso'], '-', ''))}"
                     }
                   ],
                   "runAfter": {
-                    "Render_A": [
+                    "Render_(alerts)": [
                       "Succeeded"
                     ]
                   }
                 },
-                "Notice_body_A": {
+                "Email_request_(alerts)": {
                   "type": "Compose",
                   "inputs": {
                     "listItemCreateInfo": {
                       "FolderPath": {
-                        "DecodedUrl": "@{outputs('Ids')?['notifRoot']}"
+                        "DecodedUrl": "@{outputs('List_addresses')?['notifRoot']}"
                       },
                       "UnderlyingObjectType": 0
                     },
-                    "formValues": "@outputs('Notice_values_A')",
+                    "formValues": "@outputs('Email_fields_(alerts)')",
                     "bNewDocumentUpdate": false
                   },
                   "runAfter": {
-                    "Notice_values_A": [
+                    "Email_fields_(alerts)": [
                       "Succeeded"
                     ]
                   }
                 },
-                "Create_notice_A": {
+                "Create_email_(alerts)": {
                   "type": "OpenApiConnection",
                   "inputs": {
                     "host": {
@@ -1339,52 +1463,52 @@
                     "parameters": {
                       "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                       "parameters/method": "POST",
-                      "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/AddValidateUpdateItemUsingPath",
+                      "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notif']}')/AddValidateUpdateItemUsingPath",
                       "parameters/headers": {
                         "Accept": "application/json;odata=nometadata",
                         "Content-Type": "application/json;odata=nometadata"
                       },
-                      "parameters/body": "@{string(outputs('Notice_body_A'))}"
+                      "parameters/body": "@{string(outputs('Email_request_(alerts)'))}"
                     },
                     "authentication": "@parameters('$authentication')"
                   },
                   "runAfter": {
-                    "Notice_body_A": [
+                    "Email_request_(alerts)": [
                       "Succeeded"
                     ]
                   }
                 },
-                "Notice_refused_A": {
+                "Email_refused_(alerts)": {
                   "type": "Query",
                   "inputs": {
-                    "from": "@coalesce(body('Create_notice_A')?['value'], createArray())",
+                    "from": "@coalesce(body('Create_email_(alerts)')?['value'], createArray())",
                     "where": "@equals(item()?['HasException'], true)"
                   },
                   "runAfter": {
-                    "Create_notice_A": [
+                    "Create_email_(alerts)": [
                       "Succeeded",
                       "Failed",
                       "TimedOut"
                     ]
                   }
                 },
-                "Notice_made_A": {
+                "Check_email_was_created_(alerts)": {
                   "type": "If",
-                  "expression": "@and(equals(actions('Create_notice_A')?['status'], 'Succeeded'), empty(body('Notice_refused_A')))",
+                  "expression": "@and(equals(actions('Create_email_(alerts)')?['status'], 'Succeeded'), empty(body('Email_refused_(alerts)')))",
                   "actions": {
-                    "Notice_id_A": {
+                    "Email_ID_(alerts)": {
                       "type": "Query",
                       "inputs": {
-                        "from": "@body('Create_notice_A')?['value']",
+                        "from": "@body('Create_email_(alerts)')?['value']",
                         "where": "@equals(item()?['FieldName'], 'Id')"
                       },
                       "runAfter": {}
                     },
-                    "Has_notice_id_A": {
+                    "Has_email_ID_(alerts)": {
                       "type": "If",
-                      "expression": "@empty(body('Notice_id_A'))",
+                      "expression": "@empty(body('Email_ID_(alerts)'))",
                       "actions": {
-                        "Get_notice_A": {
+                        "Get_email_(alerts)": {
                           "type": "OpenApiConnection",
                           "inputs": {
                             "host": {
@@ -1395,7 +1519,7 @@
                             "parameters": {
                               "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                               "parameters/method": "GET",
-                              "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/items?$select=Id&$filter=NotificationKey eq '@{replace(string(coalesce(items('Each_new_notice_A')?['key'], '')), '''', '''''')}'",
+                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notif']}')/items?$select=Id&$filter=NotificationKey eq '@{replace(string(coalesce(items('Each_new_email_(alerts)')?['key'], '')), '''', '''''')}'",
                               "parameters/headers": {
                                 "Accept": "application/json;odata=nometadata"
                               }
@@ -1404,24 +1528,25 @@
                           },
                           "runAfter": {}
                         },
-                        "Queue_read_A": {
+                        "Queue_read_(alerts)": {
                           "type": "AppendToArrayVariable",
                           "inputs": {
                             "name": "varOutbox",
                             "value": {
-                              "to": "@{items('Each_new_notice_A')?['email']}",
-                              "subject": "@{outputs('Subject_A')}",
-                              "html": "@{outputs('Html_A')}",
-                              "type": "@{items('Each_new_notice_A')?['type']}",
-                              "dueIso": "@{items('Each_new_notice_A')?['dueIso']}",
-                              "actionId": "@{items('Each_new_notice_A')?['actionId']}",
-                              "recipientId": "@{items('Each_new_notice_A')?['recipientId']}",
-                              "login": "@{items('Each_new_notice_A')?['login']}",
-                              "id": "@first(body('Get_notice_A')?['value'])?['Id']"
+                              "to": "@{items('Each_new_email_(alerts)')?['email']}",
+                              "subject": "@{outputs('Subject_(alerts)')}",
+                              "html": "@{outputs('Email_text_(alerts)')}",
+                              "type": "@{items('Each_new_email_(alerts)')?['type']}",
+                              "dueIso": "@{items('Each_new_email_(alerts)')?['dueIso']}",
+                              "actionId": "@{items('Each_new_email_(alerts)')?['actionId']}",
+                              "recipientId": "@{items('Each_new_email_(alerts)')?['recipientId']}",
+                              "login": "@{items('Each_new_email_(alerts)')?['login']}",
+                              "attempts": "1",
+                              "id": "@first(body('Get_email_(alerts)')?['value'])?['Id']"
                             }
                           },
                           "runAfter": {
-                            "Get_notice_A": [
+                            "Get_email_(alerts)": [
                               "Succeeded"
                             ]
                           }
@@ -1429,20 +1554,21 @@
                       },
                       "else": {
                         "actions": {
-                          "Queue_new_A": {
+                          "Queue_new_(alerts)": {
                             "type": "AppendToArrayVariable",
                             "inputs": {
                               "name": "varOutbox",
                               "value": {
-                                "to": "@{items('Each_new_notice_A')?['email']}",
-                                "subject": "@{outputs('Subject_A')}",
-                                "html": "@{outputs('Html_A')}",
-                                "type": "@{items('Each_new_notice_A')?['type']}",
-                                "dueIso": "@{items('Each_new_notice_A')?['dueIso']}",
-                                "actionId": "@{items('Each_new_notice_A')?['actionId']}",
-                                "recipientId": "@{items('Each_new_notice_A')?['recipientId']}",
-                                "login": "@{items('Each_new_notice_A')?['login']}",
-                                "id": "@int(first(body('Notice_id_A'))?['FieldValue'])"
+                                "to": "@{items('Each_new_email_(alerts)')?['email']}",
+                                "subject": "@{outputs('Subject_(alerts)')}",
+                                "html": "@{outputs('Email_text_(alerts)')}",
+                                "type": "@{items('Each_new_email_(alerts)')?['type']}",
+                                "dueIso": "@{items('Each_new_email_(alerts)')?['dueIso']}",
+                                "actionId": "@{items('Each_new_email_(alerts)')?['actionId']}",
+                                "recipientId": "@{items('Each_new_email_(alerts)')?['recipientId']}",
+                                "login": "@{items('Each_new_email_(alerts)')?['login']}",
+                                "attempts": "1",
+                                "id": "@int(first(body('Email_ID_(alerts)'))?['FieldValue'])"
                               }
                             },
                             "runAfter": {}
@@ -1450,7 +1576,7 @@
                         }
                       },
                       "runAfter": {
-                        "Notice_id_A": [
+                        "Email_ID_(alerts)": [
                           "Succeeded"
                         ]
                       }
@@ -1458,7 +1584,7 @@
                   },
                   "else": {
                     "actions": {
-                      "Find_notice_A": {
+                      "Find_email_(alerts)": {
                         "type": "OpenApiConnection",
                         "inputs": {
                           "host": {
@@ -1469,7 +1595,7 @@
                           "parameters": {
                             "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                             "parameters/method": "GET",
-                            "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/items?$select=Id&$filter=NotificationKey eq '@{replace(string(coalesce(items('Each_new_notice_A')?['key'], '')), '''', '''''')}'",
+                            "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notif']}')/items?$select=Id&$filter=NotificationKey eq '@{replace(string(coalesce(items('Each_new_email_(alerts)')?['key'], '')), '''', '''''')}'",
                             "parameters/headers": {
                               "Accept": "application/json;odata=nometadata"
                             }
@@ -1478,13 +1604,13 @@
                         },
                         "runAfter": {}
                       },
-                      "Notice_exists_A": {
+                      "Email_exists_(alerts)": {
                         "type": "If",
-                        "expression": "@empty(body('Find_notice_A')?['value'])",
+                        "expression": "@empty(body('Find_email_(alerts)')?['value'])",
                         "actions": {
-                          "Notice_failed_A": {
+                          "Email_failed_(alerts)": {
                             "type": "Compose",
-                            "inputs": "@int('An email could not be queued. See Create_notice_A.')",
+                            "inputs": "@int('An email could not be queued. See Create email (alerts).')",
                             "runAfter": {}
                           }
                         },
@@ -1492,7 +1618,7 @@
                           "actions": {}
                         },
                         "runAfter": {
-                          "Find_notice_A": [
+                          "Find_email_(alerts)": [
                             "Succeeded"
                           ]
                         }
@@ -1500,62 +1626,64 @@
                     }
                   },
                   "runAfter": {
-                    "Notice_refused_A": [
+                    "Email_refused_(alerts)": [
                       "Succeeded"
                     ]
                   }
                 }
               },
               "runAfter": {
-                "Each_retry": [
+                "Each_email_to_try_again": [
                   "Succeeded"
                 ]
               }
             },
-            "Health_row": {
+            "Health_setting": {
               "type": "Query",
               "inputs": {
-                "from": "@body('Get_settings')?['value']",
+                "from": "@body('Read_the_settings')?['value']",
                 "where": "@equals(item()?['Title'], 'QueueHealth')"
               },
               "runAfter": {
-                "Each_new_notice_A": [
+                "Each_new_email_(alerts)": [
                   "Succeeded"
                 ]
               }
             },
-            "Health_value": {
+            "Health_now": {
               "type": "Compose",
               "inputs": {
                 "state": "@{if(variables('varDown'), 'Down', 'Healthy')}",
-                "reason": "@{if(variables('varDown'), 'Changes are not being picked up by the request flow.', '')}",
+                "reason": "@{if(variables('varDown'), 'Changes to actions are not being picked up by ESG Competency Hub | 2 Request queue.', '')}",
+                "admin": "@{if(variables('varAdminDown'), 'Down', 'Healthy')}",
+                "adminReason": "@{if(variables('varAdminDown'), 'Administration changes are not being picked up by ESG Competency Hub | 6 Administration.', '')}",
                 "checkedAt": "@{utcNow()}",
-                "attention": "@length(body('Get_attention')?['value'])"
+                "attention": "@length(body('Read_changes_needing_attention')?['value'])"
               },
               "runAfter": {
-                "Health_row": [
+                "Health_setting": [
                   "Succeeded"
                 ]
               }
             },
-            "Health_body": {
+            "Health_setting_value": {
               "type": "Compose",
               "inputs": {
-                "Value": "@{string(outputs('Health_value'))}"
+                "Value": "@{string(outputs('Health_now'))}"
               },
               "runAfter": {
-                "Health_value": [
+                "Health_now": [
                   "Succeeded"
                 ]
               }
             },
-            "Record_health": {
+            "Save_the_health": {
               "type": "If",
-              "expression": "@empty(body('Health_row'))",
+              "expression": "@empty(body('Health_setting'))",
               "actions": {},
               "else": {
                 "actions": {
-                  "Save_health": {
+                  "Save_the_health_setting": {
                     "type": "OpenApiConnection",
                     "inputs": {
                       "host": {
@@ -1566,14 +1694,14 @@
                       "parameters": {
                         "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                         "parameters/method": "POST",
-                        "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['settings']}')/items(@{first(body('Health_row'))?['Id']})",
+                        "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['settings']}')/items(@{first(body('Health_setting'))?['Id']})",
                         "parameters/headers": {
                           "Accept": "application/json;odata=nometadata",
                           "Content-Type": "application/json;odata=nometadata",
                           "X-HTTP-Method": "MERGE",
                           "IF-MATCH": "*"
                         },
-                        "parameters/body": "@{string(outputs('Health_body'))}"
+                        "parameters/body": "@{string(outputs('Health_setting_value'))}"
                       },
                       "authentication": "@parameters('$authentication')"
                     },
@@ -1582,22 +1710,22 @@
                 }
               },
               "runAfter": {
-                "Health_body": [
+                "Health_setting_value": [
                   "Succeeded"
                 ]
               }
             }
           },
           "runAfter": {
-            "Initialize_varPart": [
+            "Initialise_partly_made": [
               "Succeeded"
             ]
           }
         },
-        "Send_emails": {
+        "Send_the_emails": {
           "type": "Scope",
           "actions": {
-            "Each_email": {
+            "Each_email_to_send": {
               "type": "Foreach",
               "foreach": "@variables('varOutbox')",
               "runtimeConfiguration": {
@@ -1615,9 +1743,9 @@
                       "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
                     },
                     "parameters": {
-                      "emailMessage/To": "@{items('Each_email')?['to']}",
-                      "emailMessage/Subject": "@{items('Each_email')?['subject']}",
-                      "emailMessage/Body": "@{items('Each_email')?['html']}",
+                      "emailMessage/To": "@{items('Each_email_to_send')?['to']}",
+                      "emailMessage/Subject": "@{items('Each_email_to_send')?['subject']}",
+                      "emailMessage/Body": "@{items('Each_email_to_send')?['html']}",
                       "emailMessage/Importance": "Normal"
                     },
                     "authentication": "@parameters('$authentication')",
@@ -1635,11 +1763,11 @@
                   },
                   "runAfter": {}
                 },
-                "Mail_sent": {
+                "Was_the_email_sent": {
                   "type": "If",
                   "expression": "@equals(actions('Send_mail')?['status'], 'Succeeded')",
                   "actions": {
-                    "Sent_body": {
+                    "Sent_request": {
                       "type": "Compose",
                       "inputs": {
                         "State": "Sent",
@@ -1648,7 +1776,7 @@
                       },
                       "runAfter": {}
                     },
-                    "Mark_sent": {
+                    "Mark_the_email_sent": {
                       "type": "OpenApiConnection",
                       "inputs": {
                         "host": {
@@ -1659,28 +1787,28 @@
                         "parameters": {
                           "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                           "parameters/method": "POST",
-                          "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/items(@{items('Each_email')?['id']})",
+                          "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notif']}')/items(@{items('Each_email_to_send')?['id']})",
                           "parameters/headers": {
                             "Accept": "application/json;odata=nometadata",
                             "Content-Type": "application/json;odata=nometadata",
                             "X-HTTP-Method": "MERGE",
                             "IF-MATCH": "*"
                           },
-                          "parameters/body": "@{string(outputs('Sent_body'))}"
+                          "parameters/body": "@{string(outputs('Sent_request'))}"
                         },
                         "authentication": "@parameters('$authentication')"
                       },
                       "runAfter": {
-                        "Sent_body": [
+                        "Sent_request": [
                           "Succeeded"
                         ]
                       }
                     },
-                    "Covers": {
+                    "Does_this_email_make_a_reminder_unnecessary": {
                       "type": "If",
-                      "expression": "@and(contains(createArray('ASG', 'EXT'), items('Each_email')?['type']), greaterOrEquals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_email')?['dueIso'], ''))), outputs('Today'), string(items('Each_email')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000), 0), lessOrEquals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_email')?['dueIso'], ''))), outputs('Today'), string(items('Each_email')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000), 7))",
+                      "expression": "@and(contains(createArray('ASG', 'EXT'), items('Each_email_to_send')?['type']), greaterOrEquals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_email_to_send')?['dueIso'], ''))), outputs('Today_in_the_UK'), string(items('Each_email_to_send')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z'))), 864000000000), 0), lessOrEquals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_email_to_send')?['dueIso'], ''))), outputs('Today_in_the_UK'), string(items('Each_email_to_send')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z'))), 864000000000), 7))",
                       "actions": {
-                        "Cover_values": {
+                        "Cover_fields": {
                           "type": "Compose",
                           "inputs": [
                             {
@@ -1689,19 +1817,19 @@
                             },
                             {
                               "FieldName": "NotificationKey",
-                              "FieldValue": "@{concat(if(equals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_email')?['dueIso'], ''))), outputs('Today'), string(items('Each_email')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000), 0), 'DUE', 'R7'), '|', items('Each_email')?['actionId'], '|', string(int(replace(items('Each_email')?['dueIso'], '-', ''))), '|', items('Each_email')?['recipientId'])}"
+                              "FieldValue": "@{concat(if(equals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_email_to_send')?['dueIso'], ''))), outputs('Today_in_the_UK'), string(items('Each_email_to_send')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z'))), 864000000000), 0), 'DUE', 'R7'), '|', items('Each_email_to_send')?['actionId'], '|', string(int(replace(items('Each_email_to_send')?['dueIso'], '-', ''))), '|', items('Each_email_to_send')?['recipientId'])}"
                             },
                             {
                               "FieldName": "NotificationType",
-                              "FieldValue": "@{if(equals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_email')?['dueIso'], ''))), outputs('Today'), string(items('Each_email')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today'), 'T00:00:00Z'))), 864000000000), 0), 'DUE', 'R7')}"
+                              "FieldValue": "@{if(equals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_email_to_send')?['dueIso'], ''))), outputs('Today_in_the_UK'), string(items('Each_email_to_send')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z'))), 864000000000), 0), 'DUE', 'R7')}"
                             },
                             {
                               "FieldName": "Recipient",
-                              "FieldValue": "@{concat('[{\"Key\":\"', items('Each_email')?['login'], '\"}]')}"
+                              "FieldValue": "@{concat('[{\"Key\":\"', items('Each_email_to_send')?['login'], '\"}]')}"
                             },
                             {
                               "FieldName": "RecipientEmail",
-                              "FieldValue": "@{items('Each_email')?['to']}"
+                              "FieldValue": "@{items('Each_email_to_send')?['to']}"
                             },
                             {
                               "FieldName": "RecordType",
@@ -1709,7 +1837,7 @@
                             },
                             {
                               "FieldName": "RecordId",
-                              "FieldValue": "@{items('Each_email')?['actionId']}"
+                              "FieldValue": "@{items('Each_email_to_send')?['actionId']}"
                             },
                             {
                               "FieldName": "State",
@@ -1717,7 +1845,7 @@
                             },
                             {
                               "FieldName": "SkipReason",
-                              "FieldValue": "@{concat('Covered by the ', items('Each_email')?['type'], ' email')}"
+                              "FieldValue": "@{if(equals(items('Each_email_to_send')?['type'], 'ASG'), 'Not needed: the email about the new action already gave the deadline.', 'Not needed: the email about the new deadline already gave it.')}"
                             },
                             {
                               "FieldName": "RenderData",
@@ -1725,25 +1853,25 @@
                             },
                             {
                               "FieldName": "DueDay",
-                              "FieldValue": "@{int(replace(items('Each_email')?['dueIso'], '-', ''))}"
+                              "FieldValue": "@{int(replace(items('Each_email_to_send')?['dueIso'], '-', ''))}"
                             }
                           ],
                           "runAfter": {}
                         },
-                        "Cover_body": {
+                        "Cover_request": {
                           "type": "Compose",
                           "inputs": {
                             "listItemCreateInfo": {
                               "FolderPath": {
-                                "DecodedUrl": "@{outputs('Ids')?['notifRoot']}"
+                                "DecodedUrl": "@{outputs('List_addresses')?['notifRoot']}"
                               },
                               "UnderlyingObjectType": 0
                             },
-                            "formValues": "@outputs('Cover_values')",
+                            "formValues": "@outputs('Cover_fields')",
                             "bNewDocumentUpdate": false
                           },
                           "runAfter": {
-                            "Cover_values": [
+                            "Cover_fields": [
                               "Succeeded"
                             ]
                           }
@@ -1759,22 +1887,22 @@
                             "parameters": {
                               "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                               "parameters/method": "POST",
-                              "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/AddValidateUpdateItemUsingPath",
+                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notif']}')/AddValidateUpdateItemUsingPath",
                               "parameters/headers": {
                                 "Accept": "application/json;odata=nometadata",
                                 "Content-Type": "application/json;odata=nometadata"
                               },
-                              "parameters/body": "@{string(outputs('Cover_body'))}"
+                              "parameters/body": "@{string(outputs('Cover_request'))}"
                             },
                             "authentication": "@parameters('$authentication')"
                           },
                           "runAfter": {
-                            "Cover_body": [
+                            "Cover_request": [
                               "Succeeded"
                             ]
                           }
                         },
-                        "Covered": {
+                        "Reminder_already_covered": {
                           "type": "Compose",
                           "inputs": "done",
                           "runAfter": {
@@ -1790,7 +1918,7 @@
                         "actions": {}
                       },
                       "runAfter": {
-                        "Mark_sent": [
+                        "Mark_the_email_sent": [
                           "Succeeded"
                         ]
                       }
@@ -1803,12 +1931,12 @@
                         "inputs": "@coalesce(outputs('Send_mail')?['statusCode'], 0)",
                         "runAfter": {}
                       },
-                      "Unsent_body": {
+                      "Unsent_request": {
                         "type": "Compose",
                         "inputs": {
                           "State": "@{if(contains(createArray(400, 401, 403, 404, 413, 429), outputs('Send_code')), 'Failed', 'Unknown')}",
                           "LastError": "@{concat('The email was not confirmed as sent (', string(outputs('Send_code')), '). Run ', workflow()?['run']?['name'], '.')}",
-                          "NextAttemptAfter": "@{addMinutes(utcNow(), 15)}"
+                          "NextAttemptAfter": "@{if(greaterOrEquals(int(coalesce(items('Each_email_to_send')?['attempts'], '1')), 2), addHours(utcNow(), 6), addMinutes(utcNow(), 15))}"
                         },
                         "runAfter": {
                           "Send_code": [
@@ -1816,7 +1944,7 @@
                           ]
                         }
                       },
-                      "Mark_unsent": {
+                      "Mark_the_email_not_sent": {
                         "type": "OpenApiConnection",
                         "inputs": {
                           "host": {
@@ -1827,19 +1955,19 @@
                           "parameters": {
                             "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                             "parameters/method": "POST",
-                            "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['notif']}')/items(@{items('Each_email')?['id']})",
+                            "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notif']}')/items(@{items('Each_email_to_send')?['id']})",
                             "parameters/headers": {
                               "Accept": "application/json;odata=nometadata",
                               "Content-Type": "application/json;odata=nometadata",
                               "X-HTTP-Method": "MERGE",
                               "IF-MATCH": "*"
                             },
-                            "parameters/body": "@{string(outputs('Unsent_body'))}"
+                            "parameters/body": "@{string(outputs('Unsent_request'))}"
                           },
                           "authentication": "@parameters('$authentication')"
                         },
                         "runAfter": {
-                          "Unsent_body": [
+                          "Unsent_request": [
                             "Succeeded"
                           ]
                         }
@@ -1866,7 +1994,7 @@
         "Catch": {
           "type": "Scope",
           "actions": {
-            "Terminate_failed": {
+            "Stop_as_failed": {
               "type": "Terminate",
               "inputs": {
                 "runStatus": "Failed",

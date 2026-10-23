@@ -3,7 +3,7 @@
   <Entities />
   <Roles />
   <Workflows>
-    <Workflow WorkflowId="{7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f02}" Name="ESG Competency Hub | 2 Request queue" Description="Applies the requests people send from the Competency Hub page: raise an action, move its deadline, mark it as done.">
+    <Workflow WorkflowId="{7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f02}" Name="ESG Competency Hub | 2 Request queue" Description="Records the changes to actions that people send from the Competency Hub page: raising, updating, moving deadlines, reassigning, closing and reopening.">
       <JsonFileName>/Workflows/ESGCompetencyHub2Requestqueue-7C2E5B10-4A3D-4F6E-9B21-8D0C1E5A6F02.json</JsonFileName>
       <Type>1</Type>
       <Subprocess>0</Subprocess>
@@ -29,7 +29,7 @@
         <LocalizedName languagecode="1033" description="ESG Competency Hub | 2 Request queue" />
       </LocalizedNames>
     </Workflow>
-    <Workflow WorkflowId="{7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f01}" Name="ESG Competency Hub | 1 Daily tasks" Description="Every morning: the 7-day, due-today and late reminders, and another try for emails that were not sent.">
+    <Workflow WorkflowId="{7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f01}" Name="ESG Competency Hub | 1 Daily tasks" Description="Every morning at 06:00: the deadline reminders, another try for emails that were not sent, and the end of temporary access to an area.">
       <JsonFileName>/Workflows/ESGCompetencyHub1Dailytasks-7C2E5B10-4A3D-4F6E-9B21-8D0C1E5A6F01.json</JsonFileName>
       <Type>1</Type>
       <Subprocess>0</Subprocess>
@@ -81,7 +81,7 @@
         <LocalizedName languagecode="1033" description="ESG Competency Hub | 3 Queue monitor" />
       </LocalizedNames>
     </Workflow>
-    <Workflow WorkflowId="{7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f06}" Name="ESG Competency Hub | 6 Administration" Description="Applies administrators' requests from the Competency Hub page: try a change again, cancel it, or revert it.">
+    <Workflow WorkflowId="{7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f06}" Name="ESG Competency Hub | 6 Administration" Description="Records administrators' changes from the Competency Hub page: people, their areas and permissions, settings, and decisions on changes needing attention.">
       <JsonFileName>/Workflows/ESGCompetencyHub6Administration-7C2E5B10-4A3D-4F6E-9B21-8D0C1E5A6F06.json</JsonFileName>
       <Type>1</Type>
       <Subprocess>0</Subprocess>

@@ -1,4 +1,4 @@
-// Administration (plan REV5 REL-3): whether automatic processing is working, and the changes that need an
+// Administration (spec REL-3): whether automatic processing is working, and the changes that need an
 // administrator. Each change shows what was asked, by whom and when, how far it got and the last error, with the
 // choices that are honest for its state: Try again or Cancel when nothing was changed; Finish or Revert when part
 // of it was made. Every choice is a queued request checked again by the Administration flow.
@@ -12,7 +12,13 @@ CH.views.admin = (function () {
   var ACTION_TYPES = ['RaiseAction', 'ExtendDeadline', 'MarkComplete', 'ChangeStatus', 'ReassignAction', 'CloseAction', 'ReopenAction', 'EditActionDetails'];
   var WORDS = {
     RaiseAction: 'Raise an action', ExtendDeadline: 'Move a deadline', MarkComplete: 'Mark an action as done', ChangeStatus: 'Change the status of an action',
-    ReassignAction: 'Reassign an action', CloseAction: 'Close an action', ReopenAction: 'Reopen an action', EditActionDetails: 'Edit the details of an action'
+    ReassignAction: 'Reassign an action', CloseAction: 'Close an action', ReopenAction: 'Reopen an action', EditActionDetails: 'Edit the details of an action',
+    AddPerson: 'Add a person', UpdatePerson: 'Change a person\'s access', PersonLeft: 'Mark a person as left', ReactivatePerson: 'Reactivate a person',
+    UpdateSetting: 'Change a setting', RetryTransaction: 'Try a change again', CancelTransaction: 'Cancel a change', RevertTransaction: 'Revert a change'
+  };
+  var SETTING_WORDS = {
+    OverdueReminderIntervalDays: 'days between late reminders', ReminderDaysBefore: 'days before the deadline for the first reminder',
+    MaxDeadlineYears: 'furthest deadline in years', MonitorHours: 'queue monitor hours'
   };
 
   function parse(text) { try { return JSON.parse(text || '{}') || {}; } catch (_) { return {}; } }
@@ -22,7 +28,7 @@ CH.views.admin = (function () {
     var title = CH.config.lists.history.title;
     var rows = [];
     for (var i = 0; i < OPEN_STATES.length; i++) {
-      var res = await app.sp.items(title, '$select=Id,Title,RequestKey,RequestType,RecordId,State,Attempts,LastError,FirstClaimedAt,ActorId,Payload,Created,Modified' +
+      var res = await app.sp.items(title, '$select=Id,Title,RequestKey,RequestType,RecordId,State,Attempts,LastError,FirstClaimedAt,ActorId,Payload,StepsDone,Created,Modified' +
         "&$filter=RowKind eq 'Transaction' and State eq '" + OPEN_STATES[i] + "'", 500);
       rows = rows.concat(res.rows);
     }
@@ -34,6 +40,12 @@ CH.views.admin = (function () {
     for (var j = 0; j < rows.length; j++) {
       var r = rows[j];
       var action = null;
+      var payload = parse(r.Payload);
+      if (ACTION_TYPES.indexOf(r.RequestType) < 0) {
+        // people, settings and decisions: once decided, groups or rows may already have changed
+        out.push({ tx: r, action: null, partly: String(r.StepsDone || '').indexOf('DECIDED') >= 0, payload: payload, admin: true });
+        continue;
+      }
       try {
         var q = r.RequestType === 'RaiseAction'
           ? "$filter=CreatedRequestKey eq '" + CH.sp.escapeOData('F|' + r.RequestKey) + "'"
@@ -42,7 +54,7 @@ CH.views.admin = (function () {
         action = found.rows[0] || null;
       } catch (_) { action = null; }
       var partly = !!action && action.PendingRequestKey === r.RequestKey;
-      out.push({ tx: r, action: action, partly: partly, payload: parse(r.Payload) });
+      out.push({ tx: r, action: action, partly: partly, payload: payload });
     }
     return out;
   }
@@ -50,15 +62,22 @@ CH.views.admin = (function () {
   function describe(app, item) {
     var r = item.tx;
     var what = WORDS[r.RequestType] || r.RequestType;
+    var p = item.payload;
     if (item.action) what += ': ' + 'ACT-' + ('0000' + item.action.Id).slice(-5) + ' ' + item.action.Title;
-    else if (r.RequestType === 'RaiseAction' && item.payload.title) what += ': ' + item.payload.title;
+    else if (r.RequestType === 'RaiseAction' && p.title) what += ': ' + p.title;
+    else if (r.RequestType === 'AddPerson' && p.email) what += ': ' + p.email;
+    else if (p.personId) what += ': ' + app.model.nameOf(p.personId);
+    else if (r.RequestType === 'UpdateSetting' && p.name) what += ': ' + (SETTING_WORDS[p.name] || p.name);
     return what;
   }
 
   function stateWords(item) {
-    if (item.tx.State === 'Needs attention') return item.partly ? 'Part made – the record is locked' : 'Not made – nothing was changed';
-    if (item.tx.State === 'Failed') return 'Failed – being retried automatically';
-    return 'Stopped part-way – being retried automatically';
+    if (item.tx.State === 'Needs attention') {
+      if (!item.partly) return 'Not made – nothing was changed';
+      return item.admin ? 'Partly done – choose Finish to complete it' : 'Partly done – the action stays locked until you finish or revert it';
+    }
+    if (item.tx.State === 'Failed') return 'Failed – being tried again automatically';
+    return 'Interrupted – being tried again automatically';
   }
 
   function healthCard(app) {
@@ -68,6 +87,8 @@ CH.views.admin = (function () {
       'Last checked at ' + D.ukTime(hl.checkedAt) + '.'), ui.chip('done', 'Working')));
     else if (hl.processing === 'down') lines.push(h('li', null, h('span', null, h('b', { text: 'Automatic processing is not working. ' }), hl.reason,
       ' Staff cannot send changes until it recovers. In Power Automate, check the flows ESG Competency Hub | 2 Request queue and 3 Queue monitor.'), ui.chip('late', 'Not working')));
+    if (hl.administration === 'down') lines.push(h('li', null, h('span', null, h('b', { text: 'Administration changes are not being processed. ' }), hl.adminReason,
+      ' Staff can carry on as normal. In Power Automate, check that ESG Competency Hub | 6 Administration is turned on.'), ui.chip('late', 'Not working')));
     else lines.push(h('li', null, h('span', null, h('b', { text: 'The queue monitor has not reported yet. ' }),
       'Check that the flow ESG Competency Hub | 3 Queue monitor is turned on.'), ui.chip('soon', 'Unknown')));
     if (hl.reminders === 'ok') lines.push(h('li', null, h('span', null, h('b', { text: 'Reminders ran ' }), D.short(D.localDate(hl.lastDailyRun)) + ' at ' + D.ukTime(hl.lastDailyRun) + '.'), ui.chip('done', 'Working')));
@@ -80,7 +101,7 @@ CH.views.admin = (function () {
     var isAction = ACTION_TYPES.indexOf(item.tx.RequestType) >= 0;
     var list = item.partly
       ? [['RetryTransaction', 'Finish', 'Try the rest of this change again. What was already made stays.'],
-        isAction ? ['RevertTransaction', 'Revert', item.tx.RequestType === 'RaiseAction'
+        isAction && !item.admin ? ['RevertTransaction', 'Revert', item.tx.RequestType === 'RaiseAction'
           ? 'Withdraw the half-created action. It is closed as withdrawn and kept in the history.'
           : 'Put the action back as it was before this change. The reversal is recorded in the history.'] : null]
       : [['RetryTransaction', 'Try again', 'Put this change back in the queue to be tried again.'],

@@ -20,9 +20,9 @@
 </head>
 <body>
 <h1>ESG Competency Hub – Releases 1 and 2</h1>
-<p>This package brings the Hub from app 0.3.0 and solution 1.2.0.0 (what you have now) to <strong>app 0.5.0</strong>, <strong>solution 1.4.0.0</strong> and <strong>Setup 1.2</strong>. Updated 23 October 2026.</p>
+<p>This package brings the Hub from app 0.3.0 and solution 1.2.0.0 (what you have now) to <strong>app 0.5.1</strong>, <strong>solution 1.4.1.0</strong> and <strong>Setup 1.2</strong>. Updated 23 October 2026, after a full review.</p>
 <ul>
-  <li><strong>Release 1, safety net:</strong> a queue monitor that recovers stuck changes and retries emails; honest "being recorded / retrying / needs attention" messages; an <em>Administration</em> page; and a limited mode when processing is down.</li>
+  <li><strong>Release 1, safety net:</strong> a queue monitor that recovers stalled changes and retries emails; clear messages while a change is waiting, being recorded, being retried or needs an administrator; an <em>Administration</em> page; and a reduced mode in which the buttons that send changes are paused while changes can't be processed.</li>
   <li><strong>Release 2, administration and permissions:</strong> add people, choose their areas, meeting rights, access end dates and notice posting from the app; the corrected technician and meeting rights; Feedback list and Meeting Minutes library ready for later releases.</li>
 </ul>
 <p class="note">Everything here was built and tested on a simulated SharePoint site only. Each part below changes your Competency Hub site or your Power Automate environment, so do it only when you are ready. Nobody else gets access until you add them.</p>
@@ -30,7 +30,7 @@
 <table>
   <tr><th>Folder</th><th>Files</th><th>When</th></tr>
   <tr><td><code>1-Setup</code></td><td><code>CH_Setup.html</code>, <code>CH_Setup.js</code></td><td>Part A</td></tr>
-  <tr><td><code>2-Power-Automate</code></td><td><code>ESGCompetencyHub_1_4_0_0_unmanaged.zip</code></td><td>Part B – import as it is. <strong>Don't unzip it.</strong></td></tr>
+  <tr><td><code>2-Power-Automate</code></td><td><code>ESGCompetencyHub_1_4_1_0_unmanaged.zip</code></td><td>Part B – import as it is. <strong>Don't unzip it.</strong></td></tr>
   <tr><td><code>3-App</code></td><td><code>competency-hub.html</code>, <code>competency-hub.js</code></td><td>Part C</td></tr>
   <tr><td><code>4-Permission-probe</code></td><td><code>CH_Probe_P2.html</code>, <code>CH_Probe_P2.js</code></td><td>Part E, with the test account</td></tr>
 </table>
@@ -45,9 +45,9 @@
   <li>Delete the two Setup files and the HubSetup page again.</li>
 </ol>
 
-<h2>Part B – solution 1.4.0.0 (about 10 minutes)</h2>
+<h2>Part B – solution 1.4.1.0 (about 10 minutes)</h2>
 <ol>
-  <li>In Power Automate, same environment: <strong>Solutions → Import solution → Browse</strong>, choose <code>ESGCompetencyHub_1_4_0_0_unmanaged.zip</code>, <em>Next</em>. It should say <strong>upgrade</strong>.</li>
+  <li>In Power Automate, same environment: <strong>Solutions → Import solution → Browse</strong>, choose <code>ESGCompetencyHub_1_4_1_0_unmanaged.zip</code>, <em>Next</em>. It should say <strong>upgrade</strong>.</li>
   <li>Keep the SharePoint and Outlook connections and the site address, then <em>Import</em>.</li>
   <li>Open the solution. There are now <strong>four</strong> flows. Make sure all four are <strong>On</strong>:
     <ul class="sub">
@@ -56,20 +56,21 @@
     </ul></li>
 </ol>
 
-<h2>Part C – app 0.5.0</h2>
+<h2>Part C – app 0.5.1</h2>
 <ol>
   <li>Upload both files from <code>3-App</code> to <em>Welcome Web Part - Custom Layouts</em> (<em>Replace</em>).</li>
-  <li>On the Hub page, edit the web part, <strong>Reset layout cache</strong>, <em>Republish</em>, and reload with <strong>Ctrl+F5</strong>. The footer should say <strong>0.5.0</strong>.</li>
+  <li>On the Hub page, edit the web part, <strong>Reset layout cache</strong>, <em>Republish</em>, and reload with <strong>Ctrl+F5</strong>. The footer should say <strong>0.5.1</strong>.</li>
 </ol>
 
 <h2>Part D – try the safety net (Release 1)</h2>
 <ol>
   <li>On the home page, click <strong>Open Administration</strong>. The first card should say <em>Automatic processing is working</em> once the queue monitor has run (within 15 minutes in working hours).</li>
-  <li>Turn <em>2 Request queue</em> <strong>Off</strong>. Raise a <strong>TEST</strong> action. It shows <em>being recorded</em>.</li>
-  <li>After about 20 minutes, turn <em>2 Request queue</em> back <strong>On</strong>. Within 15 minutes the monitor sends the request again and the action appears, without you doing anything else.</li>
+  <li>Turn <em>2 Request queue</em> <strong>Off</strong>. Raise a <strong>TEST</strong> action. It shows <em>waiting to be recorded</em>.</li>
+  <li>Within about 25 minutes the monitor notices that nothing is being picked up. The app then shows a banner saying changes can't be processed, and pauses the buttons that send changes. That is expected: it is what staff would see.</li>
+  <li>Turn <em>2 Request queue</em> back <strong>On</strong>. Within 15 minutes the monitor sends the request again, the action appears without you doing anything else, and the banner goes at the next check.</li>
   <li>Send me a screenshot of the Administration page and the run history of <em>3 Queue monitor</em>.</li>
 </ol>
-<p class="note">If the monitor ever stops, the app shows a banner to say changes can't be processed and pauses the buttons that send changes. Reading and adding updates keep working.</p>
+<p class="note">The same banner appears if the monitor itself stops. Reading and adding updates always keep working. If only <em>6 Administration</em> is off, staff carry on as normal and the Administration page says so.</p>
 
 <h2>Part E – administration and the permission probe (Release 2)</h2>
 <p>This needs <strong>one ordinary account</strong> that is not a site owner, for example a test account from IT or a colleague for one session. A site owner can't be used: owners bypass permissions, so every check would pass without proving anything.</p>

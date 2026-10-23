@@ -15,7 +15,8 @@ CH.views.actionPanel = (function () {
     var entry = app.tracker.forTarget(action.id);
     if (entry && (entry.state === 'submitted' || entry.state === 'slow')) {
       return h('p', { class: 'pending', role: 'status' }, h('b', { text: entry.label }), ' – submitted ' + timeOf(entry.submittedAt) +
-        (entry.retrying ? '. ' + entry.message : ', being recorded (usually under 5 minutes).' + (entry.state === 'slow' ? ' ' + entry.message : '')));
+        (entry.retrying ? '. ' + entry.message : entry.processing ? ', being recorded now.' + (entry.state === 'slow' ? ' ' + entry.message : '')
+          : ', waiting to be recorded (usually under 5 minutes).' + (entry.state === 'slow' ? ' ' + entry.message : '')));
     }
     var heading = { rejected: 'Not accepted: ', attention: 'Not recorded: ', cancelled: 'Cancelled: ', reverted: 'Reverted: ' }[entry && entry.state];
     if (heading) {
@@ -138,7 +139,7 @@ CH.views.actionPanel = (function () {
                 (u.EntryType === 'Blocker' ? ' · blocker' : '') })));
           })) : h('p', { class: 'muted', text: 'No updates yet.' })
       ]);
-      // In limited mode only the instant update stays available (plan REV5 REL-5).
+      // In limited mode only the instant update stays available (spec REL-5).
       var blocked = app.queueBlocked();
       Array.prototype.forEach.call(dlg.body.querySelectorAll('.actions-row .btn, .more .btn-link'), function (b) {
         b.disabled = !!busy || (blocked && b.textContent !== 'Add an update');

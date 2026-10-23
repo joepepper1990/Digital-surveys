@@ -6,9 +6,9 @@
       <LocalizedName description="ESG Competency Hub" languagecode="1033" />
     </LocalizedNames>
     <Descriptions>
-      <Description description="ESG Competency Hub: the request queue flow that applies changes sent from the Competency Hub page, and the daily reminders." languagecode="1033" />
+      <Description description="ESG Competency Hub: the flows that record the changes sent from the Competency Hub page, send its emails and reminders, and watch that everything is processed." languagecode="1033" />
     </Descriptions>
-    <Version>1.4.0.0</Version>
+    <Version>1.4.1.0</Version>
     <Managed>0</Managed>
     <Publisher>
       <UniqueName>ESGCompetencyHub</UniqueName>

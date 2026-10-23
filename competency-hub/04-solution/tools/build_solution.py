@@ -22,7 +22,7 @@ import validate
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, '..'))
 SRC = os.path.join(ROOT, 'src')
-VERSION = '1.4.0.0'
+VERSION = '1.4.1.0'
 INTRODUCED = '1.0.0.0'   # the version the request flow and environment variable first appeared in
 UNIQUE = 'ESGCompetencyHub'
 DISPLAY = 'ESG Competency Hub'
@@ -30,7 +30,7 @@ PREFIX = 'esghub'
 OPTION_PREFIX = '63587'
 ZIP = os.path.join(ROOT, 'ESGCompetencyHub_{0}_unmanaged.zip'.format(VERSION.replace('.', '_')))
 BOM = '﻿'
-DESCRIPTION = 'ESG Competency Hub: the request queue flow that applies changes sent from the Competency Hub page, and the daily reminders.'
+DESCRIPTION = 'ESG Competency Hub: the flows that record the changes sent from the Competency Hub page, send its emails and reminders, and watch that everything is processed.'
 CONN_DISPLAY = {'shared_sharepointonline': 'ESG Competency Hub SharePoint', 'shared_office365': 'ESG Competency Hub Outlook'}
 
 
@@ -142,7 +142,7 @@ def zip_bytes(files):
 
 def build():
     fl = flows.build_all()
-    probs = validate.validate_all(fl)
+    probs = validate.validate_all(fl, raw=flows.build_all(raw=True))
     if probs:
         raise SystemExit('Flow validation failed:\n  ' + '\n  '.join(probs))
     files = package_files(fl)

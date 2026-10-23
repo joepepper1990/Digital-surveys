@@ -238,10 +238,8 @@ class HubFake:
                         return {'Id': fold['id'], 'AuthorId': fold['author'], 'FileSystemObjectType': 1}
                     if fold:
                         return {'Exists': True}
-            if m.group(2):
-                fail(404, 'File Not Found.')
-            return {'Exists': False}
-        # groups, users and permissions (plan REV5 §4: the Administration flow)
+            fail(404, 'File Not Found.')
+        # groups, users and permissions (spec §4: the Administration flow)
         if method == 'GET' and path == '_api/web/sitegroups':
             return {'value': [{'Id': gid, 'Title': g['Title']} for gid, g in sorted(self.groups.items())]}
         m = re.match(r'^_api/web/sitegroups\((\d+)\)/users(/removebyid\((\d+)\))?$', path)
@@ -254,6 +252,8 @@ class HubFake:
                 return {'value': [{'Id': u} for u in sorted(g['users']) if not ids or u in ids]}
             if m.group(2):
                 self._write('REMOVE', 'group {0}'.format(m.group(1)))
+                if int(m.group(3)) not in g['users']:
+                    fail(404, 'User cannot be found.')
                 g['users'].discard(int(m.group(3)))
                 return {}
             self._write('ADDUSER', 'group {0}'.format(m.group(1)))
@@ -298,7 +298,9 @@ class HubFake:
                 return {}
             rest_part = m.group(3)
             if method == 'GET':
-                return {'value': [{'PrincipalId': pid, 'RoleDefinitionBindings': [{'Id': r} for r in sorted(rs)]} for pid, rs in sorted(ra.items())]}
+                only = [int(x) for x in re.findall(r'PrincipalId eq (\d+)', params.get('$filter', ''))]
+                return {'value': [{'PrincipalId': pid, 'RoleDefinitionBindings': [{'Id': r} for r in sorted(rs)]} for pid, rs in sorted(ra.items())
+                                  if not only or pid in only]}
             mm = re.match(r'^/(addroleassignment|removeroleassignment)\(principalid=(\d+),roledefid=(\d+)\)$', rest_part)
             if not mm:
                 fail(400, 'not simulated: ' + path)
@@ -308,6 +310,8 @@ class HubFake:
             pid, rid = int(mm.group(2)), int(mm.group(3))
             if mm.group(1) == 'addroleassignment':
                 ra.setdefault(pid, set()).add(rid)
+            elif rid not in ra.get(pid, set()):
+                fail(400, 'The role assignment does not exist.')
             else:
                 ra.get(pid, set()).discard(rid)
                 if pid in ra and not ra[pid]:
@@ -361,6 +365,17 @@ class HubFake:
     def _matches(self, lst, it, flt):
         if not flt:
             return True
+        # startswith(Column,'text') clauses joined by "or" (the only "or" the flows use)
+        sw = re.findall(r"startswith\((\w+),'((?:[^']|'')*)'\)", flt)
+        if sw:
+            if re.sub(r"startswith\((\w+),'((?:[^']|'')*)'\)", '', flt).replace(' or ', '').strip():
+                fail(400, 'filter not simulated: ' + flt)
+            for col, pre in sw:
+                if col not in lst['fields']:
+                    fail(400, 'Column in filter does not exist: ' + col)
+                if str(it['f'].get(col) or '').startswith(pre.replace("''", "'")):
+                    return True
+            return False
         for clause in re.split(r'\s+and\s+', flt):
             m = re.match(r"^(\w+) (eq|le|ge|lt|gt) (?:'((?:[^']|'')*)'|(-?\d+(?:\.\d+)?))$", clause.strip())
             if not m:

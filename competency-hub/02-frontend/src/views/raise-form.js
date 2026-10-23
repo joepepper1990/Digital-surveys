@@ -18,6 +18,8 @@ CH.views.raiseForm = (function () {
     var mine = m.areas.filter(function (a) { return app.access.canWrite(a.key); });
     if (!mine.length) { CH.ui.toast(app.root, 'You are not a member of any area yet, so you cannot raise actions.', 'info'); return; }
     var today = m.today;
+    // the limit an administrator sets (MaxDeadlineYears), the same one the flow checks
+    var maxYears = (app.health && app.health.maxDeadlineYears) || CH.config.maxDeadlineYears;
     var step = 0;
     var key = CH.requests.newKey();
 
@@ -27,19 +29,19 @@ CH.views.raiseForm = (function () {
       return h('option', { value: a.key, selected: a.key === areaKey ? true : null, text: a.name });
     }));
     var owner = h('select', { id: 'ch-r-ownerId' });
-    var due = h('input', { id: 'ch-r-dueIso', type: 'date', min: today, max: R.addYears(today, CH.config.maxDeadlineYears) });
+    var due = h('input', { id: 'ch-r-dueIso', type: 'date', min: today, max: R.addYears(today, maxYears) });
     var priority = h('select', { id: 'ch-r-priority' }, R.PRIORITIES.map(function (p) { return h('option', { value: p, selected: p === 'Normal' ? true : null, text: p }); }));
     var closeOut = h('input', { id: 'ch-r-closeOut', type: 'checkbox' });
     var closeOutTouched = false;
     closeOut.addEventListener('change', function () { closeOutTouched = true; });
     priority.addEventListener('change', function () { if (!closeOutTouched) closeOut.checked = priority.value === 'High'; });
 
-    var selfNote = h('p', { class: 'explain', id: 'ch-r-self-only', text: 'As a technician you can raise actions for yourself in this area. An engineer or meeting lead can raise them for someone else.' });
+    var selfNote = h('p', { class: 'explain', id: 'ch-r-self-only', text: 'As a technician you can raise actions for yourself in this area. An engineer, or someone who runs meetings in this area, can raise them for someone else.' });
     function fillOwners() {
       var current = owner.value || String(app.person.SiteUserId);
       CH.dom.clear(owner);
       owner.appendChild(h('option', { value: '', text: 'Choose a person' }));
-      // a technician without meeting rights in this area is offered only themselves (plan REV5 §4.4)
+      // a technician without meeting rights in this area is offered only themselves (spec §4.2)
       m.ownersFor(area.value).filter(function (p) { return app.access.canRaiseFor(area.value, p.id, app.person.SiteUserId); }).forEach(function (p) {
         owner.appendChild(h('option', { value: String(p.id), selected: String(p.id) === current ? true : null,
           text: p.name + (Number(p.id) === Number(app.person.SiteUserId) ? ' (you)' : '') + (CH.config.managementRoles.indexOf(p.role) >= 0 ? ' – ' + p.role : '') }));
@@ -57,7 +59,7 @@ CH.views.raiseForm = (function () {
     }
     function errorsFor(keys) {
       var all = R.validateRaise(values(), {
-        today: today, maxYears: CH.config.maxDeadlineYears, canWrite: app.access.canWrite,
+        today: today, maxYears: maxYears, canWrite: app.access.canWrite,
         canRaiseFor: function (k, id) { return app.access.canRaiseFor(k, id, app.person.SiteUserId); },
         ownerAllowed: function (k, id) { return m.ownersFor(k).some(function (p) { return Number(p.id) === id; }); }
       });
@@ -78,7 +80,7 @@ CH.views.raiseForm = (function () {
     var panes = [
       [field('Title', title, 'A short summary, for example "Replace FH40 probe".'), field('Description', description, 'What needs doing and anything the owner should know.')],
       [field('Area', area), field('Who will do it?', owner, 'Members of the area, and Team Leaders and the Group Head.'), selfNote],
-      [field('Target date', due, 'From today up to ' + CH.config.maxDeadlineYears + ' years ahead.'),
+      [field('Target date', due, 'From today up to ' + maxYears + (maxYears === 1 ? ' year' : ' years') + ' ahead.'),
         h('details', { class: 'more' }, h('summary', { text: 'More options' }),
           field('Priority', priority), h('label', { class: 'check' }, closeOut, ' Needs a close-out check before it is closed'))],
       null

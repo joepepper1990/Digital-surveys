@@ -1,4 +1,4 @@
-// ESG Competency Hub — Release 2 permission probe (plan REV5 §7.1 PR, §8). Run it signed in as the ORDINARY
+// ESG Competency Hub — Release 2 permission probe (spec §7.1 PR, §8). Run it signed in as the ORDINARY
 // test account (a technician added through the People page), never as a site owner: an owner passes every
 // check by bypassing permissions, which proves nothing.
 // "Run read checks" only reads. "Run write checks" tries writes that must be refused, and makes at most one
