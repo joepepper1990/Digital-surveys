@@ -12,7 +12,7 @@ This project is separate from the other applications in this repository.
 | Part | State |
 |---|---|
 | Site and Setup (`setup/`) | Setup 1.1 applied on the site. **Setup 1.2** (Feedback list, Meeting Minutes library, Notice Posters group, new columns and settings) built and tested locally |
-| App (`02-frontend/`) | 0.3.0 running on the site. **0.5.1** (safety net, Administration page with People) built and tested locally |
+| App (`02-frontend/`) | 0.3.0 running on the site. **0.6.0** (safety net, Administration page with People, new *My week* home page) built and tested locally |
 | Flows (`04-solution/`) | 1.2.0.0 running on the site. **1.4.1.0** (four flows: Daily tasks, Request queue, Queue monitor, Administration) built and tested locally |
 | Permission probe (`probe/CH_Probe_P2.*`) | Built and tested locally; to be run on the site with an ordinary test account |
 
@@ -53,7 +53,7 @@ Each folder has a README. Real sign-in names, email addresses and the tenant add
 | Command | What it runs |
 |---|---|
 | `sh 04-solution/tools/run_all.sh` | Flow build check, 21 validator tests, 116 flow tests, package comparison |
-| `node --test 02-frontend/test/unit/*.test.js` | 64 app unit tests |
+| `node --test 02-frontend/test/unit/*.test.js` | 66 app unit tests |
 | `node 02-frontend/test/browser/run.js` | Browser checks of every journey on the simulated site, at three screen widths |
 | `node --test setup/test/setup.test.js` | 23 Setup tests, including a resumed Apply and an upgrade from the previous release |
 | `node probe/test/run-probe-p2-test.js` | The permission probe against secured, leaky and owner-run simulated sites |

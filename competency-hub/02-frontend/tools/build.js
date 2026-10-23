@@ -8,7 +8,7 @@ const crypto = require('crypto');
 
 const ROOT = path.join(__dirname, '..');
 const MODULES = [
-  'src/core/config.js', 'src/core/dom.js', 'src/core/dates.js', 'src/core/sp.js', 'src/core/requests.js',
+  'src/core/config.js', 'src/core/dom.js', 'src/core/names.js', 'src/core/dates.js', 'src/core/sp.js', 'src/core/requests.js',
   'src/domain/access.js', 'src/domain/rules.js', 'src/domain/model.js', 'src/domain/health.js',
   'src/ui/components.js', 'src/ui/dialog.js',
   'src/views/home.js', 'src/views/area.js', 'src/views/notice-form.js', 'src/views/raise-form.js', 'src/views/action-panel.js', 'src/views/my-actions.js', 'src/views/people.js', 'src/views/admin.js',
@@ -34,7 +34,7 @@ function scopeCss(css, scope) {
       out += head + ' {\n' + scopeCss(body, scope) + '}\n';
     } else {
       const selectors = head.split(',').map((s) => s.trim()).map((s) =>
-        s === '.ch' ? scope + ' .ch' : s === '*' ? scope + ' .ch *' : scope + ' .ch ' + s);
+        s === '.ch' || s.startsWith('.ch.') ? scope + ' ' + s : s === '*' ? scope + ' .ch *' : scope + ' .ch ' + s);
       out += selectors.join(', ') + ' {' + body.trim().replace(/\s+/g, ' ') + '}\n';
     }
     i = j;

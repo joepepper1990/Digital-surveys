@@ -56,7 +56,7 @@ CH.model = (function () {
 
     var personBySiteId = {};
     people.forEach(function (p) { personBySiteId[p.SiteUserId] = p; });
-    function nameOf(id) { return personBySiteId[id] ? personBySiteId[id].Title : 'Unknown person'; }
+    function nameOf(id) { var p = personBySiteId[id]; return p ? CH.names.display(p.Title, p.Email) : 'Unknown person'; }
 
     var membersByArea = {};
     var meetingAdmins = {};
@@ -178,7 +178,7 @@ CH.model = (function () {
     function ownersFor(key) {
       return people.filter(function (p) {
         return p.Status === 'Active' && ((membersByArea[key] || {})[p.SiteUserId] || CH.config.managementRoles.indexOf(p.Role) >= 0);
-      }).map(function (p) { return { id: p.SiteUserId, name: p.Title, role: p.Role }; })
+      }).map(function (p) { return { id: p.SiteUserId, name: CH.names.display(p.Title, p.Email), role: p.Role }; })
         .sort(function (a, b) { return a.name.localeCompare(b.name); });
     }
     var actionById = {};

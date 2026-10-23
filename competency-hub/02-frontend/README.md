@@ -2,6 +2,24 @@
 
 Plain HTML, CSS and JavaScript, delivered as a Welcome by Accelerator 365 custom layout. Same-origin SharePoint REST runs as the signed-in user. There are no libraries and no external calls.
 
+## Version 0.6.0: the new home page ("My week")
+
+The home page approved on 23 October 2026 (preview: `preview/designs/design-4-week.html`):
+
+- **Fits the window.** On a desktop the page never scrolls. Sections are panels that fold to their header line, and
+  the open ones share the height; lists show as many items as fit, then "+ n more – see all". Folded sections are
+  remembered in the browser. On a laptop-height window the Areas panel starts folded. Phones keep ordinary scrolling.
+- **This week**: the next seven days, with your actions due each day (late ones on today) and meetings in your areas.
+- **Your actions** in columns: *For you to manage* (engineers) or *Needs your attention* (Team Leaders and the Group
+  Head), then *Late*, *Due this week* and *Coming up*. Every card is the same size and opens the action.
+- **Areas**: all ten as tiles. Choosing one folds the other sections and opens the area in place – its actions, its
+  notices, and its meetings and dates – with *Raise an action here*, *Post a notice here* and *Full page*. ✕ or Escape
+  closes it and focus returns to the tile. `?area=FLK` opens Flask this way; `?view=area&area=FLK` opens the full page.
+- **Top bar**: *My week*, *My actions* and (administrators) *Administration*; on the home page, *Post a notice* and
+  *Raise an action*.
+- **Names first name first** ("Joseph Pepper" rather than the directory's "Pepper Joseph"), worked out from the
+  firstname.lastname address (`src/core/names.js`).
+
 ## Version 0.5.1: Release 2 – administration and permissions
 
 - **Administration → People** (administrators only): find a person; add one, or paste a list; a person's role, areas

@@ -86,6 +86,58 @@ CH.ui = (function () {
     setTimeout(function () { if (region.textContent === text) { region.textContent = ''; region.className = 'toast'; } }, 6000);
   }
 
+
+  // Collapsed sections on the home page, remembered in this browser only (storage may be unavailable).
+  var FOLD_KEY = 'esg-competency-hub-home';
+  function folded() {
+    try { return JSON.parse(window.localStorage.getItem(FOLD_KEY)) || {}; } catch (_) { return {}; }
+  }
+  function saveFolded(state) { try { window.localStorage.setItem(FOLD_KEY, JSON.stringify(state)); } catch (_) { /* not remembered */ } }
+
+  // One home panel: a header button (title, summary, arrow), an optional link, and a body.
+  function panel(id, title, summary, body, opts) {
+    var o = opts || {};
+    var closed = !!o.closed;
+    var bodyId = 'ch-hp-' + id;
+    var arrow = h('span', { class: 'hm-chev', 'aria-hidden': 'true', text: '›' });
+    return h('section', { class: 'hm-panel' + (closed ? ' closed' : '') + (o.extraClass ? ' ' + o.extraClass : ''), 'data-panel': id },
+      h('div', { class: 'hm-ph' },
+        h('button', { type: 'button', class: 'hm-tg', 'aria-expanded': String(!closed), 'aria-controls': bodyId, onclick: o.onToggle },
+          h('h2', { text: title }), h('span', { class: 'hm-sum', text: summary }), arrow),
+        o.link ? linkButton(o.link[0], o.link[1]) : null),
+      h('div', { class: 'hm-pb', id: bodyId }, body));
+  }
+
+  // A list that shows only the items that fit, then "+ n more". It never scrolls and never cuts an item.
+  var fits = [];
+  function fitList(items, moreLabel, onMore, extraClass) {
+    var list = h('div', { class: 'hm-fit' + (extraClass ? ' ' + extraClass : '') }, items);
+    var more = h('button', { type: 'button', class: 'btn-link hm-more', onclick: onMore });
+    function fit() {
+      items.forEach(function (x) { x.hidden = false; });
+      more.hidden = true;
+      if (!list.isConnected || getComputedStyle(list).overflow === 'visible') return;
+      var over = function () { return list.scrollHeight > list.clientHeight + 1; };
+      if (!over()) return;
+      more.hidden = false;
+      var shown = items.length;
+      while (shown > 0 && over()) { shown--; items[shown].hidden = true; }
+      if (shown === items.length) { more.hidden = true; return; }
+      more.textContent = shown ? '+ ' + (items.length - shown) + ' more – ' + moreLabel : items.length + ' – ' + moreLabel;
+    }
+    var entry = { fit: fit, observer: null };
+    if (typeof window.ResizeObserver === 'function') {
+      var last = -1;
+      entry.observer = new window.ResizeObserver(function () { if (list.clientHeight !== last) { last = list.clientHeight; fit(); } });
+      entry.observer.observe(list);
+    }
+    fits.push(entry);
+    more.hidden = true;
+    return [list, more];
+  }
+  function refit() { fits.forEach(function (f) { f.fit(); }); }
+  function resetFits() { fits.forEach(function (f) { if (f.observer) f.observer.disconnect(); }); fits = []; }
+
   // Size steps by the width the app has (plan K6.9), so wide screens are not left with small text.
   var SCALE_STEPS = [[2400, 1.5], [2000, 1.35], [1700, 1.2], [1400, 1.1]];
   function scaleFor(width) {
@@ -107,6 +159,7 @@ CH.ui = (function () {
   return {
     scaleFor: scaleFor, TEXT_SIZES: TEXT_SIZES, textSize: textSize, textFactor: textFactor, saveTextSize: saveTextSize,
     chip: chip, card: card, button: button, linkButton: linkButton, sectionNote: sectionNote,
-    actionList: actionList, tile: tile, tileGrid: tileGrid, areaStatusLines: areaStatusLines, toast: toast
+    actionList: actionList, tile: tile, tileGrid: tileGrid, areaStatusLines: areaStatusLines, toast: toast,
+    folded: folded, saveFolded: saveFolded, panel: panel, fitList: fitList, refit: refit, resetFits: resetFits
   };
 })();

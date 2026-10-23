@@ -435,6 +435,40 @@ window.MockDrivers = (function () {
       var note = q('#ch-r-self-only');
       return { owners: owners, note: note.textContent, shown: note.style.display !== 'none' };
     },
+
+    // The home page (approved 23 October 2026): fits the window, opens an area in place, Escape closes it and
+    // focus returns to its tile, and folded sections are remembered after a reload.
+    homeFit: async function () {
+      window.localStorage.removeItem('esg-competency-hub-home');
+      await until(function () { return q('.hm-stack'); });
+      await wait(300);
+      function scrolls() { return document.documentElement.scrollHeight > window.innerHeight + 1; }
+      function cut() {
+        return all('.hm-fit, .hm-day, .hm-card').filter(function (n) { return n.offsetParent && n.scrollHeight > n.clientHeight + 1; }).length;
+      }
+      var home = { scrolls: scrolls(), cut: cut(), fitted: document.querySelector('[data-ch-root]').classList.contains('ch-fit') };
+      var areasPanel = q('[data-panel="areas"]');
+      if (areasPanel.classList.contains('closed')) { areasPanel.querySelector('.hm-tg').click(); await wait(200); }
+      var tile = all('.hm-tile')[2];
+      var name = tile.querySelector('b').textContent;
+      tile.focus();
+      tile.click();
+      await until(function () { return q('.hm-area'); });
+      await wait(200);
+      var opened = { name: q('.hm-area h2').textContent, scrolls: scrolls(), cut: cut(), compact: !!q('.hm-tiles.compact'),
+        weekFolded: q('[data-panel="week"]').classList.contains('closed'), actionsFolded: q('[data-panel="actions"]').classList.contains('closed') };
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await wait(100);
+      var closed = { gone: !q('.hm-area'), focus: document.activeElement && document.activeElement.getAttribute('data-area'), weekOpen: !q('[data-panel="week"]').classList.contains('closed') };
+      q('[data-panel="week"] .hm-tg').click();
+      await wait(100);
+      MockSharePoint.reload();
+      await until(function () { return q('.hm-stack'); });
+      await wait(200);
+      var remembered = q('[data-panel="week"]').classList.contains('closed');
+      window.localStorage.removeItem('esg-competency-hub-home');
+      return { home: home, name: name, opened: opened, closed: closed, remembered: remembered };
+    },
     // Open every area and every tab: the shell must make no writes at all.
     readOnlyAudit: async function () {
       await until(function () { return q('.tile'); });
@@ -443,6 +477,7 @@ window.MockDrivers = (function () {
         var tile = all('.tile').filter(function (t) { return t.querySelector('b').firstChild.textContent === names[i]; })[0];
         if (!tile) { byText('button', '‹ Overview').click(); await wait(50); tile = all('.tile').filter(function (t) { return t.querySelector('b').firstChild.textContent === names[i]; })[0]; }
         tile.click();
+        (await until(function () { return byText('.hm-area .btn-link', 'Full page'); })).click();
         await until(function () { return q('.subtabs'); });
         for (var t = 0; t < 4; t++) { all('.subtabs button')[t].click(); await wait(20); }
         byText('button', '‹ Overview').click();

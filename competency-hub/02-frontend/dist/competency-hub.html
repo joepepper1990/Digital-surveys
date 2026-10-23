@@ -142,9 +142,111 @@
 .SCOPE .ch .people-list .item-open {width: 100%;}
 .SCOPE .ch #ch-p-search {min-width: calc(260 * var(--u)); padding: calc(6 * var(--u)) calc(10 * var(--u)); border: 1px solid var(--line); border-radius: calc(6 * var(--u));}
 .SCOPE .ch .result {margin: calc(8 * var(--u)) 0;}
+.SCOPE .ch .pills {display: flex; gap: calc(2 * var(--u)); background: rgba(255, 255, 255, .12); border-radius: calc(999 * var(--u)); padding: calc(3 * var(--u));}
+.SCOPE .ch .pills button {background: none; border: 0; color: #dbe8ee; padding: calc(5 * var(--u)) calc(14 * var(--u)); border-radius: calc(999 * var(--u)); font-weight: 600; font-size: calc(14 * var(--u));}
+.SCOPE .ch .pills button[aria-current="page"] {background: #fff; color: var(--navy);}
+.SCOPE .ch .bar-btns {margin-left: auto; display: flex; gap: calc(8 * var(--u));}
+.SCOPE .ch .bar-btns .btn {min-height: calc(36 * var(--u)); padding: calc(6 * var(--u)) calc(16 * var(--u));}
+.SCOPE .ch .bar-btns + .who {margin-left: 0;}
+.SCOPE .ch .hm-hello {display: flex; align-items: baseline; gap: calc(14 * var(--u)); flex-wrap: wrap; margin-bottom: calc(10 * var(--u));}
+.SCOPE .ch .hm-hello h1 {margin: 0; font-size: calc(24 * var(--u));}
+.SCOPE .ch .hm-hello p {margin: 0; color: var(--muted);}
+.SCOPE .ch .admin-line {margin: 0 0 calc(10 * var(--u));}
+.SCOPE .ch .hm-stack {display: flex; flex-direction: column; gap: calc(14 * var(--u));}
+.SCOPE .ch .hm-panel {background: var(--card); border: 1px solid var(--line); border-radius: calc(12 * var(--u)); display: flex; flex-direction: column; min-height: 0; overflow: hidden;}
+.SCOPE .ch .hm-panel.closed {align-self: stretch;}
+.SCOPE .ch .hm-ph {flex: none; display: flex; align-items: center; gap: calc(10 * var(--u)); min-height: calc(44 * var(--u)); padding: 0 calc(12 * var(--u)) 0 calc(16 * var(--u)); border-bottom: 1px solid var(--line);}
+.SCOPE .ch .hm-panel.closed .hm-ph {border-bottom: 0;}
+.SCOPE .ch .hm-ph h2 {margin: 0; font-size: calc(16 * var(--u)); white-space: nowrap;}
+.SCOPE .ch .hm-tg {display: flex; align-items: center; gap: calc(10 * var(--u)); flex: 1; min-width: 0; background: none; border: 0; padding: calc(8 * var(--u)) 0; text-align: left; color: inherit;}
+.SCOPE .ch .hm-sum {color: var(--muted); font-size: calc(14 * var(--u)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+.SCOPE .ch .hm-chev {margin-left: auto; font-size: calc(22 * var(--u)); line-height: 1; color: var(--muted); transform: rotate(90deg); transition: transform .15s;}
+.SCOPE .ch .hm-panel.closed .hm-chev {transform: none;}
+.SCOPE .ch .hm-ph .btn-link {white-space: nowrap; font-weight: 600; text-decoration: none;}
+.SCOPE .ch .hm-pb {flex: 1; min-height: 0; padding: calc(12 * var(--u)) calc(14 * var(--u)); display: flex; flex-direction: column; overflow: hidden;}
+.SCOPE .ch .hm-panel.closed .hm-pb {display: none;}
+.SCOPE .ch .hm-fit {display: flex; flex-direction: column; gap: calc(8 * var(--u));}
+.SCOPE .ch .hm-fit [hidden], .SCOPE .ch .hm-more[hidden] {display: none !important;}
+.SCOPE .ch .hm-more {align-self: flex-start; font-weight: 600; text-decoration: none; padding: calc(4 * var(--u)) 0 0;}
+.SCOPE .ch .hm-empty {flex: none; margin: 0; border: 1.5px dashed var(--line); border-radius: calc(10 * var(--u)); padding: calc(12 * var(--u)); color: var(--muted); text-align: center; background: rgba(255, 255, 255, .6);}
+.SCOPE .ch .item-open.hm-card, .SCOPE .ch .hm-card {flex: none; display: flex; flex-direction: column; align-items: stretch; justify-content: center; gap: calc(3 * var(--u)); height: calc(58 * var(--u)); background: #fff; border: 1px solid var(--line); border-radius: calc(10 * var(--u)); padding: calc(6 * var(--u)) calc(12 * var(--u)); text-align: left; min-width: 0;}
+.SCOPE .ch .item-open.hm-card:hover {border-color: var(--navy);}
+.SCOPE .ch .hm-card .t {font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+.SCOPE .ch .hm-meta {display: flex; align-items: center; gap: calc(6 * var(--u)); min-width: 0; font-size: calc(13 * var(--u)); color: var(--muted);}
+.SCOPE .ch .hm-meta .when {margin-left: auto; font-size: calc(12.5 * var(--u)); padding: 0 calc(8 * var(--u)); line-height: calc(20 * var(--u));}
+.SCOPE .ch .hm-meta .when.hm-area-chip {margin-left: 0; background: var(--navy-soft); color: var(--navy); max-width: 55%; overflow: hidden; text-overflow: ellipsis;}
+.SCOPE .ch .hm-meta .when:only-child {margin-left: 0;}
+.SCOPE .ch .hm-x, .SCOPE .ch .hm-note {white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+.SCOPE .ch .hm-note {color: var(--navy); font-weight: 600;}
+.SCOPE .ch .hm-week {display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: calc(10 * var(--u));}
+.SCOPE .ch .hm-day {min-height: calc(100 * var(--u)); border: 1px solid var(--line); border-radius: calc(10 * var(--u)); padding: calc(8 * var(--u)) calc(9 * var(--u)); display: flex; flex-direction: column; gap: calc(5 * var(--u)); min-width: 0; background: #fff;}
+.SCOPE .ch .hm-day.today {border: 2px solid var(--navy); padding: calc(7 * var(--u)) calc(8 * var(--u));}
+.SCOPE .ch .hm-day.weekend {background: #fafbfc;}
+.SCOPE .ch .hm-dh {display: flex; align-items: baseline; gap: calc(6 * var(--u));}
+.SCOPE .ch .hm-dh b {font-size: calc(19 * var(--u)); line-height: 1;}
+.SCOPE .ch .hm-dh span {color: var(--muted); font-weight: 600; font-size: calc(13 * var(--u)); text-transform: uppercase;}
+.SCOPE .ch .hm-dh em {margin-left: auto; font-style: normal; font-size: calc(11 * var(--u)); font-weight: 700; color: #fff; background: var(--navy); border-radius: calc(999 * var(--u)); padding: 0 calc(8 * var(--u));}
+.SCOPE .ch .hm-ev {display: block; width: 100%; border: 0; text-align: left; border-radius: calc(7 * var(--u)); padding: calc(3 * var(--u)) calc(8 * var(--u)); font-size: calc(13 * var(--u)); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+.SCOPE .ch .hm-ev.late {background: var(--late-bg); color: var(--late);}
+.SCOPE .ch .hm-ev.soon {background: var(--soon-bg); color: var(--soon);}
+.SCOPE .ch .hm-ev.mtg {background: var(--navy-soft); color: var(--navy);}
+.SCOPE .ch .hm-none {color: var(--muted); font-size: calc(13 * var(--u)); margin-top: auto;}
+.SCOPE .ch .hm-plus {color: var(--muted); font-size: calc(12.5 * var(--u)); font-weight: 600;}
+.SCOPE .ch .hm-lanes {display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: calc(12 * var(--u)); flex: 1; min-height: 0;}
+.SCOPE .ch .hm-lane, .SCOPE .ch .hm-col {overflow: hidden; background: #eef2f5; border-radius: calc(12 * var(--u)); padding: calc(10 * var(--u)); display: flex; flex-direction: column; min-height: 0;}
+.SCOPE .ch .hm-lane h3, .SCOPE .ch .hm-col h3 {flex: none; margin: 0 calc(2 * var(--u)) calc(8 * var(--u)); font-size: calc(14 * var(--u)); display: flex; align-items: center; gap: calc(8 * var(--u));}
+.SCOPE .ch .hm-count {margin-left: auto; background: #fff; color: var(--muted); border-radius: calc(999 * var(--u)); padding: 0 calc(8 * var(--u)); font-size: calc(12 * var(--u));}
+.SCOPE .ch .hm-tiles {display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: calc(10 * var(--u));}
+.SCOPE .ch .tile.hm-tile {min-height: 0; border-top-width: 1px; border-top-color: var(--line); padding: calc(9 * var(--u)) calc(11 * var(--u)); gap: calc(4 * var(--u)); border-radius: calc(12 * var(--u)); min-width: 0; position: relative;}
+.SCOPE .ch .tile.hm-tile b {font-size: calc(15 * var(--u)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;}
+.SCOPE .ch .hm-tr {display: flex; align-items: center; gap: calc(6 * var(--u)); min-width: 0;}
+.SCOPE .ch .tile.hm-tile .vo {margin: 0; font-size: calc(11 * var(--u)); padding: 0 calc(6 * var(--u)); border-radius: calc(5 * var(--u)); white-space: nowrap;}
+.SCOPE .ch .tile.hm-tile .when {align-self: flex-start; margin-left: 0; font-size: calc(12.5 * var(--u)); padding: 0 calc(8 * var(--u)); line-height: calc(20 * var(--u));}
+.SCOPE .ch .hm-tm {font-size: calc(12.5 * var(--u)); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+.SCOPE .ch .tile.hm-tile[aria-pressed="true"] {border: 2px solid var(--navy); background: var(--navy-soft);}
+.SCOPE .ch .hm-tiles.compact .tile.hm-tile {flex-direction: row; align-items: center; padding: calc(6 * var(--u)) calc(10 * var(--u));}
+.SCOPE .ch .hm-tiles.compact .hm-tm, .SCOPE .ch .hm-tiles.compact .tile.hm-tile .vo {display: none;}
+.SCOPE .ch .hm-tiles.compact .hm-tr {margin-left: auto;}
+.SCOPE .ch .hm-area {border: 2px solid var(--navy);}
+.SCOPE .ch .hm-area .hm-ph h2 {font-size: calc(18 * var(--u));}
+.SCOPE .ch .hm-area .vo {font-size: calc(12 * var(--u)); font-weight: 700; color: var(--muted); background: #eef1f4; border-radius: calc(5 * var(--u)); padding: 0 calc(6 * var(--u));}
+.SCOPE .ch .hm-acts {margin-left: auto; display: flex; gap: calc(8 * var(--u)); align-items: center;}
+.SCOPE .ch .hm-acts .btn {min-height: calc(32 * var(--u)); padding: calc(4 * var(--u)) calc(12 * var(--u)); font-size: calc(14 * var(--u));}
+.SCOPE .ch .hm-x-btn {width: calc(32 * var(--u)); height: calc(32 * var(--u)); border-radius: calc(8 * var(--u)); border: 1px solid var(--line); background: #fff;}
+.SCOPE .ch .hm-cols {display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: calc(14 * var(--u)); flex: 1; min-height: 0;}
+.SCOPE .ch .hm-rw {flex: none; display: flex; align-items: center; gap: calc(10 * var(--u)); min-height: calc(48 * var(--u)); border-bottom: 1px solid #dfe5ea; min-width: 0;}
+.SCOPE .ch .hm-rw:last-child {border-bottom: 0;}
+.SCOPE .ch .hm-rw .when {margin-left: 0; width: calc(100 * var(--u)); text-align: center; font-size: calc(12.5 * var(--u)); padding: 0 calc(6 * var(--u));}
+.SCOPE .ch .hm-tx {min-width: 0; flex: 1;}
+.SCOPE .ch .hm-tx b, .SCOPE .ch .hm-tx small {display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+.SCOPE .ch .hm-tx small {color: var(--muted); font-size: calc(13 * var(--u));}
+.SCOPE .ch .hm-dot {width: calc(8 * var(--u)); height: calc(8 * var(--u)); border-radius: 50%; background: #c3ccd4; flex: none;}
+.SCOPE .ch .hm-dot.on {background: var(--accent);}
+.SCOPE .ch .hm-later {flex: none; margin: calc(6 * var(--u)) 0 0;}
+.SCOPE .ch.ch-fit {min-height: 0; overflow: hidden;}
+.SCOPE .ch.ch-fit .shell {min-height: 0;}
+.SCOPE .ch.ch-fit main {min-height: 0; display: flex; flex-direction: column; overflow: hidden; padding: calc(14 * var(--u)) calc(24 * var(--u)) calc(10 * var(--u));}
+.SCOPE .ch.ch-fit footer {padding: calc(2 * var(--u));}
+.SCOPE .ch.ch-fit .request-strip {flex: none; margin-bottom: calc(10 * var(--u));}
+.SCOPE .ch.ch-fit .hm-stack {flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto;}
+.SCOPE .ch.ch-fit .hm-stack.acts-closed {grid-template-rows: auto auto auto 1fr;}
+.SCOPE .ch.ch-fit .hm-stack.area-open {grid-template-rows: auto auto auto minmax(0, 1fr);}
+.SCOPE .ch.ch-fit .hm-fit {flex: 1; min-height: 0; overflow: hidden;}
+@media (max-width: 1500px) {
+.SCOPE .ch .hm-tiles {grid-template-columns: repeat(5, minmax(0, 1fr));}
+.SCOPE .ch .hm-tiles.compact {grid-template-columns: repeat(10, minmax(0, 1fr));}
+.SCOPE .ch .hm-tiles.compact .hm-tr {display: none;}
+}
+@media (max-width: 900px) {
+.SCOPE .ch .hm-week {grid-template-columns: repeat(2, 1fr);}
+.SCOPE .ch .hm-lanes, .SCOPE .ch .hm-cols {grid-template-columns: 1fr;}
+.SCOPE .ch .hm-tiles, .SCOPE .ch .hm-tiles.compact {grid-template-columns: repeat(2, 1fr);}
+.SCOPE .ch .pills {order: 5;}
+.SCOPE .ch .bar-btns {margin-left: 0;}
+}
 
         </style>
-        <div class="ch" data-ch-root data-ch-version="0.5.1"><p>Loading the ESG Competency Hub…</p></div>
+        <div class="ch" data-ch-root data-ch-version="0.6.0"><p>Loading the ESG Competency Hub…</p></div>
         <script
             src="competency-hub.js"
             data-layout

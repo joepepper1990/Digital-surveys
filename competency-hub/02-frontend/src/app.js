@@ -42,12 +42,50 @@ CH.app = (function () {
         h('header', { class: 'bar' }, h('div', { class: 'bar-in' },
           h('div', { class: 'brand' }, 'ESG Competency Hub', h('small', { text: 'Environmental Safety Group' })),
           C.ENVIRONMENT !== 'PRODUCTION' ? h('span', { class: 'env', text: C.ENVIRONMENT + ' – not live data' }) : null,
-          app.person ? h('span', { class: 'who', text: app.person.Title + ' · ' + app.person.Role }) : null,
+          app.person && app.model ? nav() : null,
+          app.person && app.model && app.state.view === 'home' ? homeButtons() : null,
+          app.person ? h('span', { class: 'who', text: CH.names.display(app.person.Title, app.person.Email) + ' · ' + app.person.Role }) : null,
           textSizeControl())),
         h('main', { id: 'ch-main', tabindex: '-1' }, content),
         h('p', { class: 'toast', 'data-ch-live': true, role: 'status', 'aria-live': 'polite' }),
         h('footer', { text: 'ESG Competency Hub · version ' + C.VERSION })
       ];
+    }
+
+    // Main pages, as pills in the bar. Only pages that exist are listed.
+    function nav() {
+      var v = app.state.view;
+      var items = [['My week', v === 'home', app.goHome], ['My actions', v === 'mine', function () { app.showMine(0); }]];
+      if (app.access && app.access.isAdministrator) items.push(['Administration', v === 'admin', app.showAdmin]);
+      return h('nav', { class: 'pills', 'aria-label': 'Main' }, items.map(function (x) {
+        return h('button', { type: 'button', 'aria-current': x[1] ? 'page' : null, onclick: x[2], text: x[0] });
+      }));
+    }
+
+    function homeButtons() {
+      var acc = app.access;
+      var first = acc.memberAreas[0] || (app.model.areas[0] && app.model.areas[0].key);
+      return h('span', { class: 'bar-btns' },
+        acc.canPostNotice(first) ? CH.ui.button('Post a notice', function () { app.postNotice(first); }) : null,
+        acc.memberAreas.length || acc.isManagement ? CH.ui.button('Raise an action', function () { app.raiseAction(first); }, 'main') : null);
+    }
+
+    // On the home page the app fills the window exactly, so the page itself never scrolls. Small windows
+    // (phones, or very short windows) keep ordinary scrolling.
+    function fitToWindow() {
+      if (!app.root || !app.root.style || !app.root.classList) return;
+      var fit = app.state.view === 'home' && !!app.model && window.innerWidth > 900 && window.innerHeight > 560;
+      app.root.classList.toggle('ch-fit', fit);
+      if (!fit) { app.root.style.height = ''; return; }
+      var top = app.root.getBoundingClientRect().top + (window.scrollY || 0);
+      app.root.style.height = Math.max(window.innerHeight - top, 480) + 'px';
+      CH.ui.refit();
+    }
+
+    function onKey(e) {
+      if (e.key !== 'Escape' || app.state.view !== 'home' || !app.state.homeArea) return;
+      if (app.layer && app.layer.firstChild) return;   // a dialog is open; it handles Escape itself
+      app.openAreaHere(null);
     }
 
     function applySize() {
@@ -89,6 +127,7 @@ CH.app = (function () {
       }
       CH.dom.clear(app.shell);
       CH.dom.append(app.shell, frame(content));
+      fitToWindow();
     }
 
     // Raised actions being recorded, changes that were not accepted, and requests that never left the browser.
@@ -152,7 +191,15 @@ CH.app = (function () {
 
     app.goHome = function () { app.state = { view: 'home', area: null, tab: 0 }; render(true); };
     app.showAdmin = function () { app.admin = null; app.state = { view: 'admin', area: null, tab: 0 }; render(true); };
-    app.refreshView = function () { render(false); };
+    app.refreshView = function (moveFocus) { render(!!moveFocus); };
+    // Opens an area in place on the home page (key), or closes it (null). Focus stays with the area's tile.
+    app.openAreaHere = function (key) {
+      var was = app.state.homeArea;
+      app.state = { view: 'home', area: null, tab: 0, homeArea: key || null };
+      render(false);
+      var tile = app.root.querySelector('.hm-tile[data-area="' + (key || was || '') + '"]');
+      if (tile) tile.focus();
+    };
     // True while automatic processing is down: queued changes are not offered and not sent.
     app.queueBlocked = function () { return !!app.health && app.health.processing === 'down'; };
     app.openArea = function (key) { app.state = { view: 'area', area: key, tab: 0 }; render(true); };
@@ -256,10 +303,13 @@ CH.app = (function () {
       }
       var params = new URLSearchParams(window.location.search);
       var areaParam = (params.get('area') || '').toUpperCase();
-      if (app.model.areaByKey[areaParam]) app.state = { view: 'area', area: areaParam, tab: 0 };
+      // ?area=KEY opens the area on the home page; ?view=area&area=KEY opens its full page.
+      if (app.model.areaByKey[areaParam]) app.state = params.get('view') === 'area' ? { view: 'area', area: areaParam, tab: 0 } : { view: 'home', area: null, tab: 0, homeArea: areaParam };
       if (params.get('view') === 'mine') app.state = { view: 'mine', area: null, tab: 0, areaFilter: '' };
       if (params.get('view') === 'admin') app.state = { view: 'admin', area: null, tab: 0 };
       healthTimer = setInterval(checkHealth, HEALTH_EVERY_MS);
+      window.addEventListener('resize', fitToWindow);
+      document.addEventListener('keydown', onKey);
       render(false);
       var actionParam = Number(params.get('action'));
       if (actionParam) CH.views.actionPanel.open(app, actionParam);
@@ -286,6 +336,8 @@ CH.app = (function () {
         if (healthTimer) clearInterval(healthTimer);
         if (observer) observer.disconnect();
         window.removeEventListener('resize', applySize);
+        window.removeEventListener('resize', fitToWindow);
+        document.removeEventListener('keydown', onKey);
       }
     };
   }

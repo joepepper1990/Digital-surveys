@@ -1,11 +1,11 @@
-/* ESG Competency Hub 0.5.1 – built from src/ by tools/build.js. Do not edit. */
+/* ESG Competency Hub 0.6.0 – built from src/ by tools/build.js. Do not edit. */
 window.ESGCompetencyHub = function (ctx) {
   'use strict';
   var CH = {};
   /* src/core/config.js */
   // Fixed names and limits. Lists are addressed by display title; folders by list URL name.
   CH.config = {
-    VERSION: '0.5.1',
+    VERSION: '0.6.0',
     ENVIRONMENT: 'TEST',
     lists: {
       competencies: { title: 'Competencies', url: 'Competencies' },
@@ -60,6 +60,23 @@ window.ESGCompetencyHub = function (ctx) {
     }
 
     return { h: h, append: append, clear: clear };
+  })();
+
+  /* src/core/names.js */
+  // People's names for display. The directory stores names surname first ("Pepper Joseph"); addresses are
+  // firstname.lastname@, so the first name from the address tells us which word to move to the front.
+  CH.names = (function () {
+    function display(title, email) {
+      var name = String(title || '').trim();
+      var local = String(email || '').split('@')[0].toLowerCase();
+      var first = /^[a-z][a-z'-]*[.]/.test(local) ? local.split('.')[0] : '';
+      var words = name.split(/\s+/);
+      if (!first || words.length < 2) return name;
+      if (words[0].toLowerCase() === first) return name;
+      if (words[words.length - 1].toLowerCase() === first) return [words[words.length - 1]].concat(words.slice(0, -1)).join(' ');
+      return name;
+    }
+    return { display: display };
   })();
 
   /* src/core/dates.js */
@@ -820,7 +837,7 @@ window.ESGCompetencyHub = function (ctx) {
 
       var personBySiteId = {};
       people.forEach(function (p) { personBySiteId[p.SiteUserId] = p; });
-      function nameOf(id) { return personBySiteId[id] ? personBySiteId[id].Title : 'Unknown person'; }
+      function nameOf(id) { var p = personBySiteId[id]; return p ? CH.names.display(p.Title, p.Email) : 'Unknown person'; }
 
       var membersByArea = {};
       var meetingAdmins = {};
@@ -942,7 +959,7 @@ window.ESGCompetencyHub = function (ctx) {
       function ownersFor(key) {
         return people.filter(function (p) {
           return p.Status === 'Active' && ((membersByArea[key] || {})[p.SiteUserId] || CH.config.managementRoles.indexOf(p.Role) >= 0);
-        }).map(function (p) { return { id: p.SiteUserId, name: p.Title, role: p.Role }; })
+        }).map(function (p) { return { id: p.SiteUserId, name: CH.names.display(p.Title, p.Email), role: p.Role }; })
           .sort(function (a, b) { return a.name.localeCompare(b.name); });
       }
       var actionById = {};
@@ -1144,6 +1161,58 @@ window.ESGCompetencyHub = function (ctx) {
       setTimeout(function () { if (region.textContent === text) { region.textContent = ''; region.className = 'toast'; } }, 6000);
     }
 
+
+    // Collapsed sections on the home page, remembered in this browser only (storage may be unavailable).
+    var FOLD_KEY = 'esg-competency-hub-home';
+    function folded() {
+      try { return JSON.parse(window.localStorage.getItem(FOLD_KEY)) || {}; } catch (_) { return {}; }
+    }
+    function saveFolded(state) { try { window.localStorage.setItem(FOLD_KEY, JSON.stringify(state)); } catch (_) { /* not remembered */ } }
+
+    // One home panel: a header button (title, summary, arrow), an optional link, and a body.
+    function panel(id, title, summary, body, opts) {
+      var o = opts || {};
+      var closed = !!o.closed;
+      var bodyId = 'ch-hp-' + id;
+      var arrow = h('span', { class: 'hm-chev', 'aria-hidden': 'true', text: '›' });
+      return h('section', { class: 'hm-panel' + (closed ? ' closed' : '') + (o.extraClass ? ' ' + o.extraClass : ''), 'data-panel': id },
+        h('div', { class: 'hm-ph' },
+          h('button', { type: 'button', class: 'hm-tg', 'aria-expanded': String(!closed), 'aria-controls': bodyId, onclick: o.onToggle },
+            h('h2', { text: title }), h('span', { class: 'hm-sum', text: summary }), arrow),
+          o.link ? linkButton(o.link[0], o.link[1]) : null),
+        h('div', { class: 'hm-pb', id: bodyId }, body));
+    }
+
+    // A list that shows only the items that fit, then "+ n more". It never scrolls and never cuts an item.
+    var fits = [];
+    function fitList(items, moreLabel, onMore, extraClass) {
+      var list = h('div', { class: 'hm-fit' + (extraClass ? ' ' + extraClass : '') }, items);
+      var more = h('button', { type: 'button', class: 'btn-link hm-more', onclick: onMore });
+      function fit() {
+        items.forEach(function (x) { x.hidden = false; });
+        more.hidden = true;
+        if (!list.isConnected || getComputedStyle(list).overflow === 'visible') return;
+        var over = function () { return list.scrollHeight > list.clientHeight + 1; };
+        if (!over()) return;
+        more.hidden = false;
+        var shown = items.length;
+        while (shown > 0 && over()) { shown--; items[shown].hidden = true; }
+        if (shown === items.length) { more.hidden = true; return; }
+        more.textContent = shown ? '+ ' + (items.length - shown) + ' more – ' + moreLabel : items.length + ' – ' + moreLabel;
+      }
+      var entry = { fit: fit, observer: null };
+      if (typeof window.ResizeObserver === 'function') {
+        var last = -1;
+        entry.observer = new window.ResizeObserver(function () { if (list.clientHeight !== last) { last = list.clientHeight; fit(); } });
+        entry.observer.observe(list);
+      }
+      fits.push(entry);
+      more.hidden = true;
+      return [list, more];
+    }
+    function refit() { fits.forEach(function (f) { f.fit(); }); }
+    function resetFits() { fits.forEach(function (f) { if (f.observer) f.observer.disconnect(); }); fits = []; }
+
     // Size steps by the width the app has (plan K6.9), so wide screens are not left with small text.
     var SCALE_STEPS = [[2400, 1.5], [2000, 1.35], [1700, 1.2], [1400, 1.1]];
     function scaleFor(width) {
@@ -1165,7 +1234,8 @@ window.ESGCompetencyHub = function (ctx) {
     return {
       scaleFor: scaleFor, TEXT_SIZES: TEXT_SIZES, textSize: textSize, textFactor: textFactor, saveTextSize: saveTextSize,
       chip: chip, card: card, button: button, linkButton: linkButton, sectionNote: sectionNote,
-      actionList: actionList, tile: tile, tileGrid: tileGrid, areaStatusLines: areaStatusLines, toast: toast
+      actionList: actionList, tile: tile, tileGrid: tileGrid, areaStatusLines: areaStatusLines, toast: toast,
+      folded: folded, saveFolded: saveFolded, panel: panel, fitList: fitList, refit: refit, resetFits: resetFits
     };
   })();
 
@@ -1243,7 +1313,9 @@ window.ESGCompetencyHub = function (ctx) {
   })();
 
   /* src/views/home.js */
-  // Front pages by role (plan K1/K2): tiles at full width, then three columns of useful lists.
+  // The home page ("My week", approved 23 October 2026): it fits the window without scrolling. Sections are
+  // panels that collapse to their header; lists show what fits, then "+ n more". The ten area tiles open an
+  // area in place, and the other sections fold away to make room for it.
   CH.views = CH.views || {};
   CH.views.home = (function () {
     var h = CH.dom.h;
@@ -1267,88 +1339,6 @@ window.ESGCompetencyHub = function (ctx) {
       return (app.person.Title || '').split(' ')[0];
     }
 
-    function myActions(app) {
-      var mine = app.model.actions.filter(function (a) { return a.ownerId === app.person.SiteUserId; });
-      return ui.card('Your actions', [
-        h('div', { class: 'row card-link' }, ui.linkButton('See all, including ones you raised', function () { app.showMine(0); })),
-        ui.sectionNote(app.model.sections.actions, 'actions'),
-        ui.actionList(mine, function (a) { return a.areaName; }, 'You have no open actions.', app.model.sections.actions, app.openAction, app.pendingNote)
-      ]);
-    }
-
-    function meetingsCard(app, keys, title) {
-      var list = keys.map(function (k) { return { area: app.model.areaByKey[k], s: app.model.stats[k] }; })
-        .filter(function (x) { return x.area && x.s.nextMeeting; })
-        .sort(function (a, b) { return a.s.nextMeeting.localeCompare(b.s.nextMeeting); }).slice(0, 5);
-      return ui.card(title, [
-        ui.sectionNote(app.model.sections.meetings, 'meetings'),
-        list.length ? h('ul', { class: 'plain' }, list.map(function (x) {
-          return h('li', null,
-            h('span', null, h('b', { text: x.area.name }), h('br'), h('span', { class: 'muted small', text: D.weekdayShort(x.s.nextMeeting) })),
-            x.s.flagged ? ui.chip('later', x.s.flagged + ' to discuss') : null);
-        })) : h('p', { class: 'muted', text: 'No meetings booked in your areas yet.' })
-      ]);
-    }
-
-    function noticesCard(app, keys) {
-      var list = app.model.notices.filter(function (n) { return keys.indexOf(n.areaKey) >= 0; }).slice(0, 4);
-      return ui.card('New on your noticeboards', [
-        ui.sectionNote(app.model.sections.notices, 'notices'),
-        list.length ? h('ul', { class: 'plain' }, list.map(function (n) {
-          return h('li', null, h('span', null, h('span', { text: n.title }), h('br'),
-            h('span', { class: 'muted small', text: app.model.areaByKey[n.areaKey].name + ' · ' + n.authorName + ' · ' + D.short(n.createdIso) +
-              (n.fromOutside ? ' · from outside the area' : '') })));
-        })) : h('p', { class: 'muted', text: 'Nothing new on your noticeboards.' })
-      ]);
-    }
-
-    function manageCard(app) {
-      var keys = app.model.areas.filter(function (a) { return app.access.canManage(a.key); }).map(function (a) { return a.key; });
-      if (app.model.sections.actions === 'unavailable') return ui.card('For you to manage', ui.sectionNote('unavailable', 'actions'), 'manage');
-      // Each action counts once, even when it is shared between several of these areas.
-      var mine = app.model.actions.filter(function (a) { return keys.some(function (k) { return app.model.inArea(a, k); }); });
-      var closeOut = mine.filter(function (a) { return a.waitingCloseOut; }).length;
-      var late = mine.filter(function (a) { return a.group === 'late'; }).length;
-      var flagged = keys.reduce(function (n, k) { return n + app.model.stats[k].flagged; }, 0);
-      var runs = keys.filter(function (k) { return app.access.runsMeetings(k) && app.model.stats[k].nextMeeting; })
-        .sort(function (a, b) { return app.model.stats[a].nextMeeting.localeCompare(app.model.stats[b].nextMeeting); });
-      var next = runs[0];
-      return ui.card('For you to manage', [
-        h('div', { class: 'manage-grid' },
-          h('div', null, h('span', { class: 'num', text: closeOut }), 'actions waiting for a close-out check'),
-          h('div', null, h('span', { class: 'num' + (late ? ' txt-late' : ''), text: late }), 'late actions in areas you look after'),
-          h('div', null, h('span', { class: 'num', text: flagged }), 'items flagged for discussion')),
-        next ? h('p', null, h('b', { text: 'Next meeting to prepare: ' }),
-          app.model.areaByKey[next].name + ', ' + D.weekdayShort(app.model.stats[next].nextMeeting) + '.')
-          : h('p', { class: 'muted', text: 'No meetings for you to run are booked.' })
-      ], 'manage');
-    }
-
-    function attentionCard(app) {
-      var m = app.model;
-      var items = [];
-      m.areas.forEach(function (a) {
-        if (a.status === 'Active' && m.stats[a.key].meetingStale) {
-          items.push(h('li', null, h('span', null, h('b', { text: a.name }),
-            m.stats[a.key].lastMeeting ? ' has not met since ' + D.long(m.stats[a.key].lastMeeting) : ' has no meeting on record',
-            h('br'), h('span', { class: 'muted small', text: 'No meeting booked' })), ui.chip('soon', 'Meeting overdue')));
-        }
-      });
-      if (m.sections.actions !== 'unavailable') m.actions.filter(function (a) { return a.group === 'late'; })
-        .sort(function (a, b) { return a.dueIso.localeCompare(b.dueIso); }).slice(0, 6).forEach(function (a) {
-          items.push(h('li', null, h('button', { type: 'button', class: 'item-open', onclick: function () { app.openAction(a); } },
-            h('span', null, h('b', { text: a.title }), h('br'),
-              h('span', { class: 'muted small', text: a.areaName + ' · ' + a.ownerName + (a.extensions >= 2 ? ' · deadline moved ' + a.extensions + ' times' : '') })),
-            ui.chip('late', a.dueText))));
-        });
-      var closeOut = m.actions.filter(function (a) { return a.waitingCloseOut; }).length;
-      if (closeOut) items.push(h('li', null, h('span', null, h('b', { text: closeOut + (closeOut === 1 ? ' action is' : ' actions are') }), ' waiting for a close-out check')));
-      return ui.card('Needs your attention', [
-        ui.sectionNote(m.sections.actions, 'actions'),
-        items.length ? h('ul', { class: 'plain' }, items) : m.sections.actions === 'unavailable' ? null : h('p', { class: 'muted', text: 'Nothing needs your attention right now.' })
-      ]);
-    }
-
     // Administrators see at once when something needs them (spec REL-4, REL-5).
     function adminLine(app) {
       if (!app.access.isAdministrator) return null;
@@ -1362,49 +1352,228 @@ window.ESGCompetencyHub = function (ctx) {
         ui.linkButton('Open Administration', app.showAdmin));
     }
 
+    function byDue(a, b) { return a.dueIso.localeCompare(b.dueIso); }
+
+    // A uniform card: title on one line, then a meta line with chips. Opens the action when given one.
+    function actionCard(app, a, meta) {
+      var note = app.pendingNote(a);
+      return h('button', { type: 'button', class: 'item-open hm-card', title: a.title, onclick: function () { app.openAction(a); } },
+        h('span', { class: 't', text: a.title }),
+        h('span', { class: 'hm-meta' }, meta, note ? h('span', { class: 'hm-note', text: note }) : null,
+          h('span', { class: 'when w-' + (a.waitingCloseOut ? 'later' : a.group), text: a.dueText })));
+    }
+    function infoCard(text, kind, kindClass, onclick) {
+      return h(onclick ? 'button' : 'div', onclick ? { type: 'button', class: 'item-open hm-card', title: text, onclick: onclick } : { class: 'hm-card', title: text },
+        h('span', { class: 't', text: text }), h('span', { class: 'hm-meta' }, h('span', { class: 'when w-' + (kindClass || 'later'), text: kind })));
+    }
+
+    function lane(title, colour, cards, emptyText, onMore) {
+      var body = cards.length ? ui.fitList(cards, 'see all', onMore, 'items') : h('p', { class: 'hm-empty', text: emptyText });
+      return h('div', { class: 'hm-lane' },
+        h('h3', null, h('span', { class: 'dot', style: 'background:' + colour, 'aria-hidden': 'true' }), title, h('span', { class: 'hm-count', text: String(cards.length) })),
+        body);
+    }
+
+    // Engineers: what they look after in their areas (close-out checks, late work, flags, overdue meetings).
+    function manageCards(app) {
+      var m = app.model;
+      var keys = m.areas.filter(function (a) { return app.access.canManage(a.key); }).map(function (a) { return a.key; });
+      var cards = [];
+      var mineInAreas = m.actions.filter(function (a) { return keys.some(function (k) { return m.inArea(a, k); }); });
+      mineInAreas.filter(function (a) { return a.waitingCloseOut; }).forEach(function (a) {
+        cards.push(infoCard(a.title + ' is done – check and close it', 'Close-out check', 'later', function () { app.openAction(a); }));
+      });
+      mineInAreas.filter(function (a) { return a.group === 'late' && a.ownerId !== app.person.SiteUserId; }).sort(byDue).forEach(function (a) {
+        cards.push(infoCard(a.title + ' (' + a.ownerName + ')', a.dueText, 'late', function () { app.openAction(a); }));
+      });
+      keys.forEach(function (k) {
+        var s = m.stats[k];
+        if (s.flagged) cards.push(infoCard(s.flagged + (s.flagged === 1 ? ' item' : ' items') + ' flagged for the ' + m.areaByKey[k].name + ' meeting', 'For the meeting', 'soon'));
+        if (app.access.runsMeetings(k) && s.meetingStale) cards.push(infoCard(s.lastMeeting ? 'No ' + m.areaByKey[k].name + ' meeting since ' + D.short(s.lastMeeting) : 'No ' + m.areaByKey[k].name + ' meeting booked', 'Meeting', 'soon'));
+      });
+      return cards;
+    }
+
+    // Team Leaders and the Group Head: what needs attention across the group.
+    function attentionCards(app) {
+      var m = app.model;
+      var cards = [];
+      m.areas.forEach(function (a) {
+        var s = m.stats[a.key];
+        if (a.status === 'Active' && s.meetingStale) cards.push(infoCard(a.name + (s.lastMeeting ? ' has not met since ' + D.long(s.lastMeeting) : ' has no meeting on record'), 'Meeting overdue', 'soon'));
+      });
+      m.actions.filter(function (a) { return a.group === 'late'; }).sort(byDue).forEach(function (a) {
+        cards.push(infoCard(a.title + ' · ' + a.areaName + ' · ' + a.ownerName + (a.extensions >= 2 ? ' · deadline moved ' + a.extensions + ' times' : ''), a.dueText, 'late', function () { app.openAction(a); }));
+      });
+      var closeOut = m.actions.filter(function (a) { return a.waitingCloseOut; }).length;
+      if (closeOut) cards.push(infoCard(closeOut + (closeOut === 1 ? ' action is' : ' actions are') + ' waiting for a close-out check', 'Close-out', 'later'));
+      return cards;
+    }
+
+    function areaKeysForMe(app) {
+      return app.model.areas.filter(function (a) { return a.status === 'Active' && (app.access.isManagement || app.access.isMember(a.key)); }).map(function (a) { return a.key; });
+    }
+
+    // Seven days from today: my actions due each day (late ones on today) and meetings in my areas.
+    function weekStrip(app, mine) {
+      var m = app.model;
+      var keys = areaKeysForMe(app);
+      var days = [];
+      for (var i = 0; i < 7; i++) {
+        var iso = D.addDays(m.today, i);
+        var dow = D.weekday(iso);
+        var evs = mine.filter(function (a) { return !a.waitingCloseOut && (a.dueIso === iso || (i === 0 && a.group === 'late')); }).sort(byDue).map(function (a) {
+          return h('button', { type: 'button', class: 'hm-ev ' + (a.group === 'late' ? 'late' : 'soon'), title: a.title + ' – ' + a.dueText, onclick: function () { app.openAction(a); }, text: a.title });
+        }).concat(keys.filter(function (k) { return m.stats[k].nextMeeting === iso; }).map(function (k) {
+          return h('span', { class: 'hm-ev mtg', title: m.areaByKey[k].name + ' meeting', text: m.areaByKey[k].name + ' meeting' });
+        }));
+        var weekend = dow === 'Saturday' || dow === 'Sunday';
+        days.push(h('div', { class: 'hm-day' + (i === 0 ? ' today' : '') + (weekend ? ' weekend' : '') },
+          h('div', { class: 'hm-dh' }, h('b', { text: String(Number(iso.slice(8, 10))) }), h('span', { text: dow.slice(0, 3) }), i === 0 ? h('em', { text: 'Today' }) : null),
+          evs.slice(0, 2), evs.length > 2 ? h('span', { class: 'hm-plus', text: '+ ' + (evs.length - 2) + ' more' }) : null,
+          evs.length ? null : h('span', { class: 'hm-none', text: weekend ? 'Weekend' : 'Nothing due' })));
+      }
+      var due = mine.filter(function (a) { return !a.waitingCloseOut && D.daysBetween(m.today, a.dueIso) < 7; }).length;
+      var meets = keys.filter(function (k) { var n = m.stats[k].nextMeeting; return n && D.daysBetween(m.today, n) < 7; }).length;
+      return { el: h('div', { class: 'hm-week' }, days), summary: due + ' due · ' + meets + (meets === 1 ? ' meeting' : ' meetings') };
+    }
+
+    function tileFor(app, a) {
+      var m = app.model;
+      var s = m.stats[a.key];
+      var viewOnly = !app.access.canWrite(a.key);
+      var unavailable = m.sections.actions === 'unavailable';
+      var open = app.state.homeArea === a.key;
+      return h('button', { type: 'button', class: 'tile hm-tile' + (viewOnly ? ' view-only' : ''), 'data-area': a.key, 'aria-pressed': String(open),
+        'aria-label': a.name + (viewOnly ? ', view only' : ''), onclick: function () { app.openAreaHere(open ? null : a.key); } },
+        h('b', null, a.name),
+        h('span', { class: 'hm-tr' }, unavailable ? h('span', { class: 'when w-soon', text: 'Action figures unavailable' })
+          : h('span', { class: 'when w-' + (s.late ? 'late' : 'ok'), text: s.late ? s.late + ' late' : s.open + ' open' }),
+          viewOnly ? h('span', { class: 'vo', text: 'View only' }) : null),
+        h('span', { class: 'hm-tm' + (s.meetingStale ? ' txt-soon' : ''), text: s.nextMeeting ? 'Meets ' + D.weekdayShort(s.nextMeeting)
+          : s.meetingStale ? (s.lastMeeting ? 'No meeting since ' + D.short(s.lastMeeting) : 'No meeting booked') : 'No meeting booked' }));
+    }
+
+    // The chosen area, opened in place: its actions, notices and meetings.
+    function areaPanel(app, key) {
+      var m = app.model;
+      var acc = app.access;
+      var area = m.areaByKey[key];
+      var s = m.stats[key];
+      var order = { late: 0, soon: 1, later: 2 };
+      var acts = m.actions.filter(function (a) { return m.inArea(a, key); })
+        .sort(function (a, b) { return (order[a.group] - order[b.group]) || byDue(a, b); })
+        .map(function (a) { return actionCard(app, a, h('span', { class: 'hm-x', text: a.ownerName + (a.areaKey !== key ? ' · shared from ' + a.areaName : '') })); });
+      var notices = m.notices.filter(function (n) { return n.areaKey === key; });
+      notices = notices.filter(function (n) { return n.important; }).concat(notices.filter(function (n) { return !n.important; }));
+      var news = notices.map(function (n) {
+        return h('div', { class: 'hm-rw' }, h('span', { class: 'hm-dot' + (n.important ? ' on' : ''), title: n.important ? 'Important' : null }),
+          h('span', { class: 'hm-tx' }, h('b', { text: n.title }),
+            h('small', { text: (n.important ? 'Important · ' : '') + (n.fromOutside ? 'From ' + n.authorName + ', outside ' + area.name : n.authorName) + ' · ' + D.short(n.createdIso) })));
+      });
+      var diary = [];
+      if (s.nextMeeting) diary.push(h('div', { class: 'hm-rw' }, h('span', { class: 'when w-ok', text: D.weekdayShort(s.nextMeeting) }),
+        h('span', { class: 'hm-tx' }, h('b', { text: 'Next meeting' }), h('small', { text: s.flagged ? s.flagged + (s.flagged === 1 ? ' item' : ' items') + ' flagged for discussion' : 'Nothing flagged yet' }))));
+      else diary.push(h('div', { class: 'hm-rw' }, h('span', { class: 'when w-soon', text: 'Not booked' }),
+        h('span', { class: 'hm-tx' }, h('b', { text: 'No meeting booked' }), h('small', { text: 'Someone who runs meetings here can book one' }))));
+      diary.push(h('div', { class: 'hm-rw' }, h('span', { class: 'when w-later', text: 'Last met' }),
+        h('span', { class: 'hm-tx' }, h('b', { text: s.lastMeeting ? D.long(s.lastMeeting) : 'None on record' }), h('small', { text: s.meetingStale ? 'A meeting is overdue' : 'Minutes are kept with the meeting' }))));
+      m.calendar.filter(function (e) { return e.areaKey === key; }).forEach(function (e) {
+        diary.push(h('div', { class: 'hm-rw' }, h('span', { class: 'when w-later', text: D.weekdayShort(e.dateIso) }),
+          h('span', { class: 'hm-tx' }, h('b', { text: e.title }), h('small', { text: e.important ? 'Important date' : 'In the calendar' }))));
+      });
+      function full(tab) { return function () { app.state = { view: 'area', area: key, tab: tab }; app.refreshView(true); }; }
+      function col(title, count, list) {
+        return h('div', { class: 'hm-col' }, h('h3', null, title, count === null ? null : h('span', { class: 'hm-count', text: String(count) })), list);
+      }
+      var unavailable = m.sections.actions === 'unavailable';
+      return h('section', { class: 'hm-panel hm-area', 'aria-label': area.name },
+        h('div', { class: 'hm-ph' },
+          h('h2', { text: area.name }),
+          h('span', { class: 'hm-sum', text: (unavailable ? 'Action figures unavailable' : s.open + ' open · ' + (s.late ? s.late + ' late' : 'none late')) + ' · ' +
+            (s.nextMeeting ? 'next meeting ' + D.weekdayShort(s.nextMeeting) : s.lastMeeting ? 'no meeting since ' + D.short(s.lastMeeting) : 'no meeting booked') }),
+          acc.canWrite(key) ? null : h('span', { class: 'vo', text: 'View only' }),
+          h('span', { class: 'hm-acts' },
+            acc.canWrite(key) && area.status === 'Active' ? ui.button('Raise an action here', function () { app.raiseAction(key); }) : null,
+            acc.canPostNotice(key) ? ui.button('Post a notice here', function () { app.postNotice(key); }) : null,
+            ui.linkButton('Full page', full(0)),
+            h('button', { type: 'button', class: 'hm-x-btn', 'aria-label': 'Close ' + area.name, text: '✕', onclick: function () { app.openAreaHere(null); } }))),
+        h('div', { class: 'hm-pb' }, h('div', { class: 'hm-cols' },
+          col('Actions', unavailable ? null : acts.length, unavailable ? ui.sectionNote('unavailable', 'actions')
+            : acts.length ? ui.fitList(acts, 'all ' + area.name + ' actions', full(0), 'items') : h('p', { class: 'hm-empty', text: 'There are no open actions in ' + area.name + '.' })),
+          col('Notices & issues', notices.length, [ui.sectionNote(m.sections.notices, 'notices'),
+            news.length ? ui.fitList(news, 'all notices', full(1)) : h('p', { class: 'hm-empty', text: 'Nothing has been posted on the ' + area.name + ' noticeboard yet.' }),
+            h('p', { class: 'muted small hm-later', text: 'The improvements and degradations register joins this list in the next version.' })]),
+          col('Meetings & dates', null, ui.fitList(diary, 'calendar', full(2))))));
+    }
+
     function render(app) {
       var m = app.model;
       var acc = app.access;
-      var out = [h('h1', { text: greeting(firstName(app)) }), adminLine(app)];
-      var postFirst = acc.memberAreas[0] || (m.areas[0] && m.areas[0].key);
+      var openKey = app.state.homeArea && m.areaByKey[app.state.homeArea] ? app.state.homeArea : null;
+      var fold = ui.folded();
+      // On a laptop-height window the areas start folded, so your actions get the room; the choice is then remembered.
+      if (fold.areas === undefined && window.innerHeight < 900) fold.areas = true;
+      var unavailable = m.sections.actions === 'unavailable';
+      ui.resetFits();
 
-      if (acc.isManagement) {
-        // Totals count each action once, even when it is shared between areas (MGT-01).
-        var open = m.actions.length;
-        var late = m.actions.filter(function (a) { return a.group === 'late'; }).length;
-        var stale = m.areas.filter(function (a) { return a.status === 'Active' && m.stats[a.key].meetingStale; }).length;
-        if (m.sections.actions === 'unavailable') out.push(h('p', { class: 'sentence', text: 'Action figures could not be loaded just now. Reload the page to try again.' }));
-        else out.push(h('p', { class: 'sentence' }, 'Across the group: ', h('b', { text: open + ' open actions' }), ', ',
-          h('b', { class: late ? 'txt-late' : '', text: late + ' late' }), stale ? [', and ', h('b', { text: stale + (stale === 1 ? ' area' : ' areas') }), ' with no recent meeting.'] : '.'));
-        out.push(h('div', { class: 'row actions-row' },
-          ui.button('Raise an action', function () { app.raiseAction(postFirst); }, 'main'),
-          acc.canPostNotice(postFirst) ? ui.button('Post a notice', function () { app.postNotice(postFirst); }) : null));
-        out.push(h('h2', { text: 'All areas' }));
-        out.push(ui.tileGrid(m.areas.filter(function (a) { return a.status === 'Active'; }), m, false, app.openArea));
-        out.push(h('div', { class: 'cols3' },
-          h('div', null, attentionCard(app)),
-          h('div', null, myActions(app)),
-          h('div', null, meetingsCard(app, m.areas.map(function (a) { return a.key; }), 'Coming meetings'))));
-      } else {
-        out.push(h('p', { class: 'lead', text: acc.isEngineer ? 'Your actions, and what you look after as an engineer.' : 'Here is what needs your attention.' }));
-        out.push(h('div', { class: 'row actions-row' },
-          acc.memberAreas.length ? ui.button('Raise an action', function () { app.raiseAction(acc.memberAreas[0]); }, 'main') : null,
-          acc.canPostNotice(postFirst) ? ui.button('Post a notice', function () { app.postNotice(postFirst); }) : null));
-        var mine = m.areas.filter(function (a) { return acc.isMember(a.key) && a.status === 'Active'; });
-        var others = m.areas.filter(function (a) { return !acc.isMember(a.key) && a.status === 'Active'; });
-        out.push(h('h2', { text: 'Your areas' }));
-        out.push(mine.length ? ui.tileGrid(mine, m, false, app.openArea)
-          : h('p', { class: 'muted', text: 'You are not a member of any area yet. Ask a Team Leader to add you.' }));
-        var keys = mine.map(function (a) { return a.key; });
-        out.push(acc.isEngineer
-          ? h('div', { class: 'cols3' }, h('div', null, manageCard(app)), h('div', null, myActions(app)), h('div', null, meetingsCard(app, keys, 'Your next meetings'), noticesCard(app, keys)))
-          : h('div', { class: 'cols3' }, h('div', null, myActions(app)), h('div', null, meetingsCard(app, keys, 'Your next meetings')), h('div', null, noticesCard(app, keys))));
-        if (others.length) {
-          out.push(h('h2', { class: 'other-heading', text: 'Other areas' }));
-          out.push(h('p', { class: 'muted other-note', text: 'You can see everything in these areas and post on their noticeboards. Only their members can change anything else.' }));
-          out.push(ui.tileGrid(others, m, true, app.openArea));
-        }
+      var mine = m.actions.filter(function (a) { return a.ownerId === app.person.SiteUserId; }).sort(byDue);
+      var late = mine.filter(function (a) { return a.group === 'late'; });
+      var soon = mine.filter(function (a) { return a.group === 'soon' && !a.waitingCloseOut; });
+      var later = mine.filter(function (a) { return a.group === 'later' || a.waitingCloseOut; });
+      var keys = areaKeysForMe(app);
+      var next = keys.filter(function (k) { return m.stats[k].nextMeeting; }).sort(function (a, b) { return m.stats[a].nextMeeting.localeCompare(m.stats[b].nextMeeting); })[0];
+
+      // One line: greeting, then the day in a sentence. Management sees group totals (each action counted once).
+      var summary;
+      if (unavailable) summary = [h('span', { text: acc.isManagement ? 'Action figures could not be loaded just now. Reload the page to try again.' : 'Your actions could not be loaded just now.' })];
+      else {
+        var groupLate = m.actions.filter(function (a) { return a.group === 'late'; }).length;
+        var lateN = acc.isManagement ? groupLate : late.length;
+        summary = [acc.isManagement ? 'Across the group: ' + m.actions.length + ' open actions · ' : '',
+          lateN ? h('b', { class: 'txt-late', text: lateN + ' late' }) : 'nothing late',
+          ' · ' + soon.length + (acc.isManagement ? ' of yours' : '') + ' due this week',
+          next ? ' · next meeting ' + m.areaByKey[next].name + ', ' + D.weekdayShort(m.stats[next].nextMeeting) : ''];
       }
+      var out = [h('div', { class: 'hm-hello' }, h('h1', { text: greeting(firstName(app)) }), h('p', null, summary)), adminLine(app)];
+
+      function toggle(id) {
+        return function () {
+          if (openKey) { app.state.homeArea = null; fold[id] = false; }
+          else fold[id] = !fold[id];
+          ui.saveFolded(fold);
+          app.refreshView();
+        };
+      }
+
+      var week = weekStrip(app, mine);
+      var weekClosed = openKey ? true : !!fold.week;
+      var actsClosed = openKey ? true : !!fold.actions;
+      var areasClosed = openKey ? false : !!fold.areas;
+
+      var lanes = [];
+      if (!unavailable) {
+        if (acc.isManagement) lanes.push(lane('Needs your attention', 'var(--navy)', attentionCards(app), 'Nothing needs your attention right now.', function () { app.showMine(0); }));
+        else if (acc.isEngineer) lanes.push(lane('For you to manage', 'var(--navy)', manageCards(app), 'Nothing for you to manage right now.', function () { app.showMine(0); }));
+        lanes.push(lane('Late', 'var(--late)', late.map(function (a) { return actionCard(app, a, h('span', { class: 'when hm-area-chip', text: a.areaName })); }), 'Nothing late.', function () { app.showMine(0); }));
+        lanes.push(lane('Due this week', 'var(--soon)', soon.map(function (a) { return actionCard(app, a, h('span', { class: 'when hm-area-chip', text: a.areaName })); }), 'Nothing due this week.', function () { app.showMine(0); }));
+        lanes.push(lane('Coming up', '#8a95a5', later.map(function (a) { return actionCard(app, a, h('span', { class: 'when hm-area-chip', text: a.areaName })); }), 'Nothing further ahead.', function () { app.showMine(0); }));
+      }
+      var actionsBody = [ui.sectionNote(m.sections.actions, 'actions'), lanes.length ? h('div', { class: 'hm-lanes', style: '--n:' + lanes.length }, lanes) : null];
+      var actsSummary = unavailable ? 'Could not load actions' : late.length + ' late · ' + soon.length + ' this week · ' + later.length + ' later';
+
+      var active = m.areas.filter(function (a) { return a.status === 'Active'; });
+      var lateAreas = active.filter(function (a) { return m.stats[a.key].late; }).length;
+      var tiles = h('div', { class: 'hm-tiles' + (openKey ? ' compact' : '') }, active.map(function (a) { return tileFor(app, a); }));
+
+      var stack = h('div', { class: 'hm-stack' + (openKey ? ' area-open' : '') + (actsClosed ? ' acts-closed' : '') },
+        ui.panel('week', 'This week', week.summary, week.el, { closed: weekClosed, onToggle: toggle('week') }),
+        ui.panel('actions', acc.isManagement ? 'Your work' : 'Your actions', actsSummary, actionsBody,
+          { closed: actsClosed, onToggle: toggle('actions'), link: ['All my actions', function () { app.showMine(0); }] }),
+        ui.panel('areas', 'Areas', active.length + ' areas' + (unavailable ? '' : ' · ' + lateAreas + ' with late actions') + (openKey ? '' : ' · choose one to open it'), tiles,
+          { closed: areasClosed, onToggle: toggle('areas') }),
+        openKey ? areaPanel(app, openKey) : null);
+      out.push(stack);
       return out;
     }
 
@@ -2693,12 +2862,50 @@ window.ESGCompetencyHub = function (ctx) {
           h('header', { class: 'bar' }, h('div', { class: 'bar-in' },
             h('div', { class: 'brand' }, 'ESG Competency Hub', h('small', { text: 'Environmental Safety Group' })),
             C.ENVIRONMENT !== 'PRODUCTION' ? h('span', { class: 'env', text: C.ENVIRONMENT + ' – not live data' }) : null,
-            app.person ? h('span', { class: 'who', text: app.person.Title + ' · ' + app.person.Role }) : null,
+            app.person && app.model ? nav() : null,
+            app.person && app.model && app.state.view === 'home' ? homeButtons() : null,
+            app.person ? h('span', { class: 'who', text: CH.names.display(app.person.Title, app.person.Email) + ' · ' + app.person.Role }) : null,
             textSizeControl())),
           h('main', { id: 'ch-main', tabindex: '-1' }, content),
           h('p', { class: 'toast', 'data-ch-live': true, role: 'status', 'aria-live': 'polite' }),
           h('footer', { text: 'ESG Competency Hub · version ' + C.VERSION })
         ];
+      }
+
+      // Main pages, as pills in the bar. Only pages that exist are listed.
+      function nav() {
+        var v = app.state.view;
+        var items = [['My week', v === 'home', app.goHome], ['My actions', v === 'mine', function () { app.showMine(0); }]];
+        if (app.access && app.access.isAdministrator) items.push(['Administration', v === 'admin', app.showAdmin]);
+        return h('nav', { class: 'pills', 'aria-label': 'Main' }, items.map(function (x) {
+          return h('button', { type: 'button', 'aria-current': x[1] ? 'page' : null, onclick: x[2], text: x[0] });
+        }));
+      }
+
+      function homeButtons() {
+        var acc = app.access;
+        var first = acc.memberAreas[0] || (app.model.areas[0] && app.model.areas[0].key);
+        return h('span', { class: 'bar-btns' },
+          acc.canPostNotice(first) ? CH.ui.button('Post a notice', function () { app.postNotice(first); }) : null,
+          acc.memberAreas.length || acc.isManagement ? CH.ui.button('Raise an action', function () { app.raiseAction(first); }, 'main') : null);
+      }
+
+      // On the home page the app fills the window exactly, so the page itself never scrolls. Small windows
+      // (phones, or very short windows) keep ordinary scrolling.
+      function fitToWindow() {
+        if (!app.root || !app.root.style || !app.root.classList) return;
+        var fit = app.state.view === 'home' && !!app.model && window.innerWidth > 900 && window.innerHeight > 560;
+        app.root.classList.toggle('ch-fit', fit);
+        if (!fit) { app.root.style.height = ''; return; }
+        var top = app.root.getBoundingClientRect().top + (window.scrollY || 0);
+        app.root.style.height = Math.max(window.innerHeight - top, 480) + 'px';
+        CH.ui.refit();
+      }
+
+      function onKey(e) {
+        if (e.key !== 'Escape' || app.state.view !== 'home' || !app.state.homeArea) return;
+        if (app.layer && app.layer.firstChild) return;   // a dialog is open; it handles Escape itself
+        app.openAreaHere(null);
       }
 
       function applySize() {
@@ -2740,6 +2947,7 @@ window.ESGCompetencyHub = function (ctx) {
         }
         CH.dom.clear(app.shell);
         CH.dom.append(app.shell, frame(content));
+        fitToWindow();
       }
 
       // Raised actions being recorded, changes that were not accepted, and requests that never left the browser.
@@ -2803,7 +3011,15 @@ window.ESGCompetencyHub = function (ctx) {
 
       app.goHome = function () { app.state = { view: 'home', area: null, tab: 0 }; render(true); };
       app.showAdmin = function () { app.admin = null; app.state = { view: 'admin', area: null, tab: 0 }; render(true); };
-      app.refreshView = function () { render(false); };
+      app.refreshView = function (moveFocus) { render(!!moveFocus); };
+      // Opens an area in place on the home page (key), or closes it (null). Focus stays with the area's tile.
+      app.openAreaHere = function (key) {
+        var was = app.state.homeArea;
+        app.state = { view: 'home', area: null, tab: 0, homeArea: key || null };
+        render(false);
+        var tile = app.root.querySelector('.hm-tile[data-area="' + (key || was || '') + '"]');
+        if (tile) tile.focus();
+      };
       // True while automatic processing is down: queued changes are not offered and not sent.
       app.queueBlocked = function () { return !!app.health && app.health.processing === 'down'; };
       app.openArea = function (key) { app.state = { view: 'area', area: key, tab: 0 }; render(true); };
@@ -2907,10 +3123,13 @@ window.ESGCompetencyHub = function (ctx) {
         }
         var params = new URLSearchParams(window.location.search);
         var areaParam = (params.get('area') || '').toUpperCase();
-        if (app.model.areaByKey[areaParam]) app.state = { view: 'area', area: areaParam, tab: 0 };
+        // ?area=KEY opens the area on the home page; ?view=area&area=KEY opens its full page.
+        if (app.model.areaByKey[areaParam]) app.state = params.get('view') === 'area' ? { view: 'area', area: areaParam, tab: 0 } : { view: 'home', area: null, tab: 0, homeArea: areaParam };
         if (params.get('view') === 'mine') app.state = { view: 'mine', area: null, tab: 0, areaFilter: '' };
         if (params.get('view') === 'admin') app.state = { view: 'admin', area: null, tab: 0 };
         healthTimer = setInterval(checkHealth, HEALTH_EVERY_MS);
+        window.addEventListener('resize', fitToWindow);
+        document.addEventListener('keydown', onKey);
         render(false);
         var actionParam = Number(params.get('action'));
         if (actionParam) CH.views.actionPanel.open(app, actionParam);
@@ -2937,6 +3156,8 @@ window.ESGCompetencyHub = function (ctx) {
           if (healthTimer) clearInterval(healthTimer);
           if (observer) observer.disconnect();
           window.removeEventListener('resize', applySize);
+          window.removeEventListener('resize', fitToWindow);
+          document.removeEventListener('keydown', onKey);
         }
       };
     }

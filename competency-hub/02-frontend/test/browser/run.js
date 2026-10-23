@@ -43,7 +43,7 @@ const RACHEL = 112, RICHARD = 107, JOE = 126, ROBERT = 129;
 let r = dump('as=' + RACHEL);
 let t = text(r.dom);
 check('technician home: no script errors', r.errors.length === 0, r.errors.join(' | '));
-check('technician home: own areas, then other areas marked view only', t.includes('Your areas') && t.includes('Other areas') && t.includes('View only'));
+check('technician home: this week, actions and all ten areas, other areas marked view only', t.includes('This week') && t.includes('Your actions') && t.includes('10 areas') && t.includes('View only'));
 check('technician home: own late action shown in plain words', t.includes('Replace FH40 probe') && t.includes('2 days late'));
 check('technician home: uncommitted action never shown', !t.includes('Half-created'));
 check('technician home: no management or engineer panels', !t.includes('Needs your attention') && !t.includes('For you to manage'));
@@ -51,27 +51,49 @@ check('environment badge says TEST', t.includes('TEST – not live data'));
 
 r = dump('as=' + RICHARD);
 t = text(r.dom);
-check('engineer home: "For you to manage" panel', r.errors.length === 0 && t.includes('For you to manage') && t.includes('late actions in areas you look after'));
+check('engineer home: "For you to manage" lists late work in their areas, with owners', r.errors.length === 0 && t.includes('For you to manage') && t.includes('Green Stream sampling backlog (Luke Cain)'));
 
 r = dump('as=' + ROBERT);
 t = text(r.dom);
-check('group head home: all areas, attention list, totals count shared actions once', r.errors.length === 0 && t.includes('All areas') &&
-  t.includes('Needs your attention') && t.includes('26 open actions') && !t.includes('Other areas'));
+check('group head home: all areas, attention list, totals count shared actions once', r.errors.length === 0 && t.includes('10 areas') &&
+  t.includes('Needs your attention') && t.includes('26 open actions') && !t.includes('View only'));
 r = dump('as=' + JOE);
 check('team leader home: same overview as group head', text(r.dom).includes('Needs your attention'));
 
+
+// Home page fits the window with no page scrolling, for every role, with and without an area open
+[[1920, 990], [1366, 798]].forEach(([w, hh]) => {
+  [['technician', RACHEL], ['engineer', RICHARD], ['group head', ROBERT]].forEach(([who, id]) => {
+    const d = open('as=' + id + '&drive=homeFit', ['--window-size=' + w + ',' + hh, '--dump-dom']);
+    const m = /<pre id="drive-result">([\s\S]*?)<\/pre>/.exec(d.dom);
+    const res = m ? JSON.parse(m[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&')) : { ok: false, error: d.errors.join(' | ') };
+    const x = res.result || {};
+    check('home fits ' + w + '×' + hh + ' (' + who + '): no page scroll, nothing cut off', res.ok && x.home.fitted && !x.home.scrolls && !x.home.cut, JSON.stringify(res));
+    check('area opens in place ' + w + '×' + hh + ' (' + who + '): other sections fold, still no scroll', res.ok && x.opened.name === x.name &&
+      x.opened.compact && x.opened.weekFolded && x.opened.actionsFolded && !x.opened.scrolls && !x.opened.cut, JSON.stringify(res));
+    if (w === 1920 && id === RACHEL) {
+      check('Escape closes the area, puts the sections back and returns focus to its tile', res.ok && x.closed.gone && x.closed.weekOpen && !!x.closed.focus, JSON.stringify(res));
+      check('a folded section is remembered after a reload', res.ok && x.remembered, JSON.stringify(res));
+    }
+  });
+});
+t = text(dump('as=' + RACHEL + '&area=FLK').dom);
+check('?area=FLK opens Flask in place on the home page', t.includes('Flask') && t.includes('Raise an action here') && t.includes('Full page'));
+t = text(dump('as=' + RACHEL + '&area=RW').dom);
+check('an area you are not a member of opens view only, with no raise button', t.includes('View only') && !t.includes('Raise an action here') && t.includes('Post a notice here'));
+
 // Area pages
-r = dump('as=' + RACHEL + '&area=RW');
+r = dump('as=' + RACHEL + '&view=area&area=RW');
 t = text(r.dom);
 check('non-member area: view-only bar, no raise or meeting buttons', t.includes('View only.') && !t.includes('Raise an action') && !t.includes('Start meeting'));
-r = dump('as=' + RACHEL + '&area=FLK');
+r = dump('as=' + RACHEL + '&view=area&area=FLK');
 t = text(r.dom);
 check('member area: raise and post available, no meeting control for a technician', t.includes('Raise an action') && t.includes('Post a notice') && !t.includes('Start meeting'));
-t = text(dump('as=' + RACHEL + '&area=RP').dom);
+t = text(dump('as=' + RACHEL + '&view=area&area=RP').dom);
 check('a shared action appears in the linked area, labelled with its home area', t.includes('Contamination monitor checks') && t.includes('shared from Flask'));
-r = dump('as=' + RICHARD + '&area=RW');
+r = dump('as=' + RICHARD + '&view=area&area=RW');
 check('engineer in own area: meeting control offered', text(r.dom).includes('Start meeting'));
-r = dump('as=' + ROBERT + '&area=DSL');
+r = dump('as=' + ROBERT + '&view=area&area=DSL');
 check('group head: writes in every area', text(r.dom).includes('Raise an action') && !text(r.dom).includes('View only.'));
 
 // Fail-closed identity and error states
@@ -83,7 +105,7 @@ const states = [
 ];
 states.forEach(([name, q, expect]) => {
   const d = text(dump('as=' + RACHEL + '&' + q).dom);
-  check('fails closed – ' + name + ': message shown, no operational data', d.includes(expect) && !d.includes('Your areas') && !d.includes('Replace FH40 probe'));
+  check('fails closed – ' + name + ': message shown, no operational data', d.includes(expect) && !d.includes('This week') && !d.includes('Replace FH40 probe'));
 });
 t = text(dump('as=' + RACHEL + '&mode=actions404').dom);
 check('missing Actions list: explained, not shown as "no actions"', t.includes('Could not load actions') && !t.includes('You have no open actions') && !t.includes('Nothing late') && t.includes('Action figures unavailable'));
@@ -92,7 +114,7 @@ check('missing Actions list: management sees no false totals', t.includes('Actio
 t = text(dump('as=' + ROBERT + '&mode=actionsPartial').dom);
 check('read limit reached: marked as not complete', t.includes('This list is not complete'));
 t = text(dump('as=' + RACHEL + '&mode=slow').dom);
-check('slow responses: page still completes', t.includes('Your areas'));
+check('slow responses: page still completes', t.includes('This week'));
 
 // Scripted interactions
 function drive(query, budget) {
@@ -101,15 +123,15 @@ function drive(query, budget) {
   if (!m) return { ok: false, error: 'no result; script errors: ' + d.errors.join(' | ') };
   return JSON.parse(m[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>'));
 }
-let res = drive('as=' + RACHEL + '&area=RW&drive=postNoticeOutside');
+let res = drive('as=' + RACHEL + '&view=area&area=RW&drive=postNoticeOutside');
 check('non-member posts a notice: outside note shown, "important" hidden', res.ok && res.result.outsideShown && res.result.importantHidden, JSON.stringify(res));
 check('non-member notice appears labelled as from outside the area', res.ok && res.result.labelled, JSON.stringify(res));
 check('the notice is the only write, to the Noticeboard Radwaste folder', res.ok && res.result.writes.length === 1 &&
   res.result.writes[0].list === 'Noticeboard' && res.result.writes[0].folder === 'RW', JSON.stringify(res));
-res = drive('as=' + RACHEL + '&area=FLK&drive=noticeValidation');
+res = drive('as=' + RACHEL + '&view=area&area=FLK&drive=noticeValidation');
 check('empty notice: errors shown, focus on title, nothing sent', res.ok && res.result.titleError && res.result.bodyError &&
   res.result.focused === 'ch-n-title' && res.result.writes === 0, JSON.stringify(res));
-res = drive('as=' + RACHEL + '&area=FLK&drive=keyboardTabs');
+res = drive('as=' + RACHEL + '&view=area&area=FLK&drive=keyboardTabs');
 check('arrow keys move between area tabs', res.ok && res.result.selected === 'Notices & issues' && res.result.focused === 'Notices & issues', JSON.stringify(res));
 res = drive('as=' + ROBERT + '&drive=readOnlyAudit');
 check('every area and tab opened: no writes, no POSTs', res.ok && res.result.areasVisited === 10 && res.result.writes === 0 && res.result.posts === 0, JSON.stringify(res));
@@ -191,7 +213,7 @@ fs.mkdirSync(SHOTS, { recursive: true });
     open('as=' + id, ['--window-size=' + w + ',1500', '--screenshot=' + path.join(SHOTS, name + '-' + w + '.png')]);
   });
 });
-open('as=' + RACHEL + '&area=RW', ['--window-size=1366,1100', '--screenshot=' + path.join(SHOTS, 'technician-view-only-area-1366.png')]);
+open('as=' + RACHEL + '&view=area&area=RW', ['--window-size=1366,1100', '--screenshot=' + path.join(SHOTS, 'technician-view-only-area-1366.png')]);
 open('as=' + RACHEL + '&mode=unknown', ['--window-size=1366,700', '--screenshot=' + path.join(SHOTS, 'unknown-user-1366.png')]);
 check('screenshots written', fs.readdirSync(SHOTS).filter((f) => f.endsWith('.png')).length >= 11);
 
