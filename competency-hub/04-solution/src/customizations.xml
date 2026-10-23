@@ -81,6 +81,32 @@
         <LocalizedName languagecode="1033" description="ESG Competency Hub | 3 Queue monitor" />
       </LocalizedNames>
     </Workflow>
+    <Workflow WorkflowId="{7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f04}" Name="ESG Competency Hub | 4 Records" Description="Records changes to notices, comments and the improvements and degradations register sent from the Competency Hub page, and links between register entries and actions.">
+      <JsonFileName>/Workflows/ESGCompetencyHub4Records-7C2E5B10-4A3D-4F6E-9B21-8D0C1E5A6F04.json</JsonFileName>
+      <Type>1</Type>
+      <Subprocess>0</Subprocess>
+      <Category>5</Category>
+      <Mode>0</Mode>
+      <Scope>4</Scope>
+      <OnDemand>0</OnDemand>
+      <TriggerOnCreate>0</TriggerOnCreate>
+      <TriggerOnDelete>0</TriggerOnDelete>
+      <AsyncAutodelete>0</AsyncAutodelete>
+      <SyncWorkflowLogOnFailure>0</SyncWorkflowLogOnFailure>
+      <StateCode>0</StateCode>
+      <StatusCode>1</StatusCode>
+      <RunAs>1</RunAs>
+      <IsTransacted>1</IsTransacted>
+      <IntroducedVersion>1.5.0.0</IntroducedVersion>
+      <IsCustomizable>1</IsCustomizable>
+      <BusinessProcessType>0</BusinessProcessType>
+      <IsCustomProcessingStepAllowedForOtherPublishers>1</IsCustomProcessingStepAllowedForOtherPublishers>
+      <ModernFlowType>0</ModernFlowType>
+      <PrimaryEntity>none</PrimaryEntity>
+      <LocalizedNames>
+        <LocalizedName languagecode="1033" description="ESG Competency Hub | 4 Records" />
+      </LocalizedNames>
+    </Workflow>
     <Workflow WorkflowId="{7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f06}" Name="ESG Competency Hub | 6 Administration" Description="Records administrators' changes from the Competency Hub page: people, their areas and permissions, settings, and decisions on changes needing attention.">
       <JsonFileName>/Workflows/ESGCompetencyHub6Administration-7C2E5B10-4A3D-4F6E-9B21-8D0C1E5A6F06.json</JsonFileName>
       <Type>1</Type>

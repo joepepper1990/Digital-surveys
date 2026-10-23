@@ -269,6 +269,23 @@
             ]
           }
         },
+        "Initialise_entry": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varEntry",
+                "type": "object",
+                "value": {}
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_action": [
+              "Succeeded"
+            ]
+          }
+        },
         "Initialise_user_id": {
           "type": "InitializeVariable",
           "inputs": {
@@ -281,7 +298,7 @@
             ]
           },
           "runAfter": {
-            "Initialise_action": [
+            "Initialise_entry": [
               "Succeeded"
             ]
           }
@@ -519,13 +536,17 @@
                 "comps": "@{outputs('Site_path')}/Lists/Competencies",
                 "notif": "@{outputs('Site_path')}/Lists/NotificationLog",
                 "settings": "@{outputs('Site_path')}/Lists/Settings",
+                "notices": "@{outputs('Site_path')}/Lists/Noticeboard",
+                "reg": "@{outputs('Site_path')}/Lists/ImprovementRegister",
                 "reqRoot": "@{outputs('Site_path')}/Lists/Requests",
                 "actRoot": "@{outputs('Site_path')}/Lists/Actions",
                 "histRoot": "@{outputs('Site_path')}/Lists/History",
                 "updRoot": "@{outputs('Site_path')}/Lists/Updates",
                 "notifRoot": "@{outputs('Site_path')}/Lists/NotificationLog",
                 "membersRoot": "@{outputs('Site_path')}/Lists/CompetencyMembers",
-                "peopleRoot": "@{outputs('Site_path')}/Lists/People"
+                "peopleRoot": "@{outputs('Site_path')}/Lists/People",
+                "regRoot": "@{outputs('Site_path')}/Lists/ImprovementRegister",
+                "noticesRoot": "@{outputs('Site_path')}/Lists/Noticeboard"
               },
               "runAfter": {
                 "Site_address": [
@@ -1623,7 +1644,7 @@
                   "actions": {
                     "Reason_to_refuse_if_any_(decision)": {
                       "type": "Compose",
-                      "inputs": "@if(not(and(equals(outputs('Person_who_sent_it')?['IsAdministrator'], true), equals(string(outputs('Person_who_sent_it')?['Status']), 'Active'))), 'Only a Competency Hub administrator can do this.', if(or(not(equals(actions('Get_target_(decision)')?['status'], 'Succeeded')), not(equals(string(body('Get_target_(decision)')?['RowKind']), 'Transaction')), not(endsWith(string(body('Get_target_(decision)')?['FileDirRef']), '/Transactions'))), 'That change could not be found.', if(contains(createArray('Applied', 'Void', 'Cancelled', 'Reverted', 'Rolled Back'), string(body('Get_target_(decision)')?['State'])), 'This change is already finished.', if(and(equals(string(body('Get_target_request_(decision)')?['Status']), 'Processing'), greater(ticks(string(coalesce(body('Get_target_request_(decision)')?['Modified'], '2000-01-01T00:00:00Z'))), ticks(addMinutes(utcNow(), -15)))), 'This change is being processed right now. Try again in a few minutes.', if(and(equals(string(variables('varTx')?['RequestType']), 'CancelTransaction'), or(and(contains(createArray('RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting'), string(body('Get_target_(decision)')?['RequestType'])), contains(string(coalesce(body('Get_target_(decision)')?['StepsDone'], '')), 'DECIDED')), and(not(empty(string(coalesce(variables('varAct')?['Id'], '')))), or(and(not(empty(string(coalesce(variables('varAct')?['Id'], '')))), equals(string(coalesce(variables('varAct')?['PendingRequestKey'], '')), string(body('Get_target_(decision)')?['RequestKey']))), equals(string(coalesce(variables('varAct')?['LastRequestKey'], '')), string(body('Get_target_(decision)')?['RequestKey'])))))), 'Part of this change has already been made, so it cannot be cancelled. Use Finish (or Revert, for a change to an action).', if(and(equals(string(variables('varTx')?['RequestType']), 'RevertTransaction'), not(contains(createArray('RaiseAction', 'ExtendDeadline', 'MarkComplete', 'ChangeStatus', 'ReassignAction', 'CloseAction', 'ReopenAction', 'EditActionDetails'), string(body('Get_target_(decision)')?['RequestType'])))), 'Only changes to actions can be reverted.', if(and(equals(string(variables('varTx')?['RequestType']), 'RevertTransaction'), not(and(not(empty(string(coalesce(variables('varAct')?['Id'], '')))), equals(string(coalesce(variables('varAct')?['PendingRequestKey'], '')), string(body('Get_target_(decision)')?['RequestKey']))))), 'Nothing from this change was made, so there is nothing to revert. Use Try again.', if(and(equals(string(variables('varTx')?['RequestType']), 'RevertTransaction'), not(equals(string(body('Get_target_(decision)')?['RequestType']), 'RaiseAction')), not(equals(int(if(empty(first(split(string(coalesce(variables('varAct')?['Revision'], '')), '.'))), '0', first(split(string(coalesce(variables('varAct')?['Revision'], '')), '.')))), add(int(if(empty(first(split(string(coalesce(json(string(coalesce(body('Get_target_(decision)')?['PreviousValue'], '{}')))?['prev']?['Revision'], '')), '.'))), '0', first(split(string(coalesce(json(string(coalesce(body('Get_target_(decision)')?['PreviousValue'], '{}')))?['prev']?['Revision'], '')), '.')))), 1)))), 'The action has been changed since, so this cannot be reverted automatically.', ''))))))))",
+                      "inputs": "@if(not(and(equals(outputs('Person_who_sent_it')?['IsAdministrator'], true), equals(string(outputs('Person_who_sent_it')?['Status']), 'Active'))), 'Only a Competency Hub administrator can do this.', if(or(not(equals(actions('Get_target_(decision)')?['status'], 'Succeeded')), not(equals(string(body('Get_target_(decision)')?['RowKind']), 'Transaction')), not(endsWith(string(body('Get_target_(decision)')?['FileDirRef']), '/Transactions'))), 'That change could not be found.', if(contains(createArray('Applied', 'Void', 'Cancelled', 'Reverted', 'Rolled Back'), string(body('Get_target_(decision)')?['State'])), 'This change is already finished.', if(and(equals(string(body('Get_target_request_(decision)')?['Status']), 'Processing'), greater(ticks(string(coalesce(body('Get_target_request_(decision)')?['Modified'], '2000-01-01T00:00:00Z'))), ticks(addMinutes(utcNow(), -15)))), 'This change is being processed right now. Try again in a few minutes.', if(and(equals(string(variables('varTx')?['RequestType']), 'CancelTransaction'), or(and(contains(createArray('RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting', 'EditNotice', 'ArchiveNotice', 'PinNotice', 'HideComment', 'RaiseRegisterEntry', 'UpdateRegisterEntry', 'LinkActionToEntry', 'UnlinkActionFromEntry'), string(body('Get_target_(decision)')?['RequestType'])), contains(string(coalesce(body('Get_target_(decision)')?['StepsDone'], '')), 'DECIDED')), and(not(empty(string(coalesce(variables('varAct')?['Id'], '')))), or(and(not(empty(string(coalesce(variables('varAct')?['Id'], '')))), equals(string(coalesce(variables('varAct')?['PendingRequestKey'], '')), string(body('Get_target_(decision)')?['RequestKey']))), equals(string(coalesce(variables('varAct')?['LastRequestKey'], '')), string(body('Get_target_(decision)')?['RequestKey'])))))), 'Part of this change has already been made, so it cannot be cancelled. Use Finish (or Revert, for a change to an action).', if(and(equals(string(variables('varTx')?['RequestType']), 'RevertTransaction'), not(contains(createArray('RaiseAction', 'ExtendDeadline', 'MarkComplete', 'ChangeStatus', 'ReassignAction', 'CloseAction', 'ReopenAction', 'EditActionDetails'), string(body('Get_target_(decision)')?['RequestType'])))), 'Only changes to actions can be reverted.', if(and(equals(string(variables('varTx')?['RequestType']), 'RevertTransaction'), not(and(not(empty(string(coalesce(variables('varAct')?['Id'], '')))), equals(string(coalesce(variables('varAct')?['PendingRequestKey'], '')), string(body('Get_target_(decision)')?['RequestKey']))))), 'Nothing from this change was made, so there is nothing to revert. Use Try again.', if(and(equals(string(variables('varTx')?['RequestType']), 'RevertTransaction'), not(equals(string(body('Get_target_(decision)')?['RequestType']), 'RaiseAction')), not(equals(int(if(empty(first(split(string(coalesce(variables('varAct')?['Revision'], '')), '.'))), '0', first(split(string(coalesce(variables('varAct')?['Revision'], '')), '.')))), add(int(if(empty(first(split(string(coalesce(json(string(coalesce(body('Get_target_(decision)')?['PreviousValue'], '{}')))?['prev']?['Revision'], '')), '.'))), '0', first(split(string(coalesce(json(string(coalesce(body('Get_target_(decision)')?['PreviousValue'], '{}')))?['prev']?['Revision'], '')), '.')))), 1)))), 'The action has been changed since, so this cannot be reverted automatically.', ''))))))))",
                       "runAfter": {}
                     },
                     "Refused_or_allowed_(decision)": {
@@ -3019,7 +3040,7 @@
                         "actions": {
                           "Reason_to_refuse_if_any_(setting)": {
                             "type": "Compose",
-                            "inputs": "@if(not(and(equals(outputs('Person_who_sent_it')?['IsAdministrator'], true), equals(string(outputs('Person_who_sent_it')?['Status']), 'Active'))), 'Only a Competency Hub administrator can do this.', if(not(contains(createArray('OverdueReminderIntervalDays', 'ReminderDaysBefore', 'MaxDeadlineYears', 'MonitorHours'), string(coalesce(outputs('Payload')?['name'], '')))), 'Choose a setting.', if(empty(first(body('The_setting_(setting)'))), 'That setting is missing. Run Setup again.', if(and(contains(createArray('OverdueReminderIntervalDays', 'ReminderDaysBefore'), string(coalesce(outputs('Payload')?['name'], ''))), or(not(and(greater(length(outputs('New_value_(setting)')), 0), lessOrEquals(length(outputs('New_value_(setting)')), 2), empty(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(outputs('New_value_(setting)'), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', '')))), less(int(if(and(greater(length(outputs('New_value_(setting)')), 0), lessOrEquals(length(outputs('New_value_(setting)')), 2), empty(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(outputs('New_value_(setting)'), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''))), outputs('New_value_(setting)'), '0')), 1), greater(int(if(and(greater(length(outputs('New_value_(setting)')), 0), lessOrEquals(length(outputs('New_value_(setting)')), 2), empty(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(outputs('New_value_(setting)'), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''))), outputs('New_value_(setting)'), '0')), 30))), 'Enter a whole number of days from 1 to 30.', if(and(equals(string(coalesce(outputs('Payload')?['name'], '')), 'MaxDeadlineYears'), or(not(and(greater(length(outputs('New_value_(setting)')), 0), lessOrEquals(length(outputs('New_value_(setting)')), 2), empty(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(outputs('New_value_(setting)'), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', '')))), less(int(if(and(greater(length(outputs('New_value_(setting)')), 0), lessOrEquals(length(outputs('New_value_(setting)')), 2), empty(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(outputs('New_value_(setting)'), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''))), outputs('New_value_(setting)'), '0')), 1), greater(int(if(and(greater(length(outputs('New_value_(setting)')), 0), lessOrEquals(length(outputs('New_value_(setting)')), 2), empty(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(outputs('New_value_(setting)'), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''))), outputs('New_value_(setting)'), '0')), 5))), 'Enter a whole number of years from 1 to 5.', if(and(equals(string(coalesce(outputs('Payload')?['name'], '')), 'MonitorHours'), not(outputs('Are_the_hours_valid_(setting)'))), 'Give the start and end of working hours (start before end), and at least 15 minutes between checks outside them.', ''))))))",
+                            "inputs": "@if(not(and(equals(outputs('Person_who_sent_it')?['IsAdministrator'], true), equals(string(outputs('Person_who_sent_it')?['Status']), 'Active'))), 'Only a Competency Hub administrator can do this.', if(not(contains(createArray('OverdueReminderIntervalDays', 'ReminderDaysBefore', 'DueSoonDays', 'MaxDeadlineYears', 'MonitorHours'), string(coalesce(outputs('Payload')?['name'], '')))), 'Choose a setting.', if(empty(first(body('The_setting_(setting)'))), 'That setting is missing. Run Setup again.', if(and(contains(createArray('OverdueReminderIntervalDays', 'ReminderDaysBefore', 'DueSoonDays'), string(coalesce(outputs('Payload')?['name'], ''))), or(not(and(greater(length(outputs('New_value_(setting)')), 0), lessOrEquals(length(outputs('New_value_(setting)')), 2), empty(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(outputs('New_value_(setting)'), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', '')))), less(int(if(and(greater(length(outputs('New_value_(setting)')), 0), lessOrEquals(length(outputs('New_value_(setting)')), 2), empty(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(outputs('New_value_(setting)'), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''))), outputs('New_value_(setting)'), '0')), 1), greater(int(if(and(greater(length(outputs('New_value_(setting)')), 0), lessOrEquals(length(outputs('New_value_(setting)')), 2), empty(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(outputs('New_value_(setting)'), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''))), outputs('New_value_(setting)'), '0')), 30))), 'Enter a whole number of days from 1 to 30.', if(and(equals(string(coalesce(outputs('Payload')?['name'], '')), 'MaxDeadlineYears'), or(not(and(greater(length(outputs('New_value_(setting)')), 0), lessOrEquals(length(outputs('New_value_(setting)')), 2), empty(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(outputs('New_value_(setting)'), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', '')))), less(int(if(and(greater(length(outputs('New_value_(setting)')), 0), lessOrEquals(length(outputs('New_value_(setting)')), 2), empty(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(outputs('New_value_(setting)'), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''))), outputs('New_value_(setting)'), '0')), 1), greater(int(if(and(greater(length(outputs('New_value_(setting)')), 0), lessOrEquals(length(outputs('New_value_(setting)')), 2), empty(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(outputs('New_value_(setting)'), '0', ''), '1', ''), '2', ''), '3', ''), '4', ''), '5', ''), '6', ''), '7', ''), '8', ''), '9', ''))), outputs('New_value_(setting)'), '0')), 5))), 'Enter a whole number of years from 1 to 5.', if(and(equals(string(coalesce(outputs('Payload')?['name'], '')), 'MonitorHours'), not(outputs('Are_the_hours_valid_(setting)'))), 'Give the start and end of working hours (start before end), and at least 15 minutes between checks outside them.', ''))))))",
                             "runAfter": {}
                           },
                           "Refused_or_allowed_(setting)": {
@@ -3253,7 +3274,7 @@
                             "inputs": [
                               {
                                 "FieldName": "Title",
-                                "FieldValue": "@{concat('Setting changed: ', if(equals(string(coalesce(outputs('Payload')?['name'], '')), 'OverdueReminderIntervalDays'), 'days between late reminders', if(equals(string(coalesce(outputs('Payload')?['name'], '')), 'ReminderDaysBefore'), 'days before the deadline for the first reminder', if(equals(string(coalesce(outputs('Payload')?['name'], '')), 'MaxDeadlineYears'), 'furthest deadline in years', 'queue monitor hours'))))}"
+                                "FieldValue": "@{concat('Setting changed: ', if(equals(string(coalesce(outputs('Payload')?['name'], '')), 'OverdueReminderIntervalDays'), 'days between late reminders', if(equals(string(coalesce(outputs('Payload')?['name'], '')), 'ReminderDaysBefore'), 'days before the deadline for the first reminder', if(equals(string(coalesce(outputs('Payload')?['name'], '')), 'DueSoonDays'), 'days counted as due soon', if(equals(string(coalesce(outputs('Payload')?['name'], '')), 'MaxDeadlineYears'), 'furthest deadline in years', 'queue monitor hours')))))}"
                               },
                               {
                                 "FieldName": "RowKind",
@@ -6994,158 +7015,105 @@
         "Send_the_emails": {
           "type": "Scope",
           "actions": {
-            "Each_email_to_send": {
-              "type": "Foreach",
-              "foreach": "@variables('varOutbox')",
-              "runtimeConfiguration": {
-                "concurrency": {
-                  "repetitions": 1
-                }
-              },
+            "Any_email": {
+              "type": "If",
+              "expression": "@not(empty(variables('varOutbox')))",
               "actions": {
-                "Send_mail": {
+                "Cover_settings": {
                   "type": "OpenApiConnection",
                   "inputs": {
                     "host": {
-                      "connectionName": "shared_office365",
-                      "operationId": "SendEmailV2",
-                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
                     },
                     "parameters": {
-                      "emailMessage/To": "@{items('Each_email_to_send')?['to']}",
-                      "emailMessage/Subject": "@{items('Each_email_to_send')?['subject']}",
-                      "emailMessage/Body": "@{items('Each_email_to_send')?['html']}",
-                      "emailMessage/Importance": "Normal"
+                      "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                      "parameters/method": "GET",
+                      "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['settings']}')/items?$select=Title,Value&$filter=Title eq 'ReminderDaysBefore'",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata"
+                      }
                     },
-                    "authentication": "@parameters('$authentication')",
-                    "retryPolicy": {
-                      "type": "none"
-                    }
-                  },
-                  "runtimeConfiguration": {
-                    "secureData": {
-                      "properties": [
-                        "inputs",
-                        "outputs"
-                      ]
-                    }
+                    "authentication": "@parameters('$authentication')"
                   },
                   "runAfter": {}
                 },
-                "Was_the_email_sent": {
-                  "type": "If",
-                  "expression": "@equals(actions('Send_mail')?['status'], 'Succeeded')",
+                "Cover_row": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@if(equals(actions('Cover_settings')?['status'], 'Succeeded'), body('Cover_settings')?['value'], createArray())",
+                    "where": "@true"
+                  },
+                  "runAfter": {
+                    "Cover_settings": [
+                      "Succeeded",
+                      "Failed",
+                      "TimedOut"
+                    ]
+                  }
+                },
+                "Cover_days": {
+                  "type": "Compose",
+                  "inputs": "@int(if(empty(string(coalesce(first(body('Cover_row'))?['Value'], ''))), '7', string(first(body('Cover_row'))?['Value'])))",
+                  "runAfter": {
+                    "Cover_row": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Each_email_to_send": {
+                  "type": "Foreach",
+                  "foreach": "@variables('varOutbox')",
+                  "runtimeConfiguration": {
+                    "concurrency": {
+                      "repetitions": 1
+                    }
+                  },
                   "actions": {
-                    "Sent_request": {
-                      "type": "Compose",
-                      "inputs": {
-                        "State": "Sent",
-                        "SentAt": "@{utcNow()}",
-                        "LastError": ""
-                      },
-                      "runAfter": {}
-                    },
-                    "Mark_the_email_sent": {
+                    "Send_mail": {
                       "type": "OpenApiConnection",
                       "inputs": {
                         "host": {
-                          "connectionName": "shared_sharepointonline",
-                          "operationId": "HttpRequest",
-                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                          "connectionName": "shared_office365",
+                          "operationId": "SendEmailV2",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_office365"
                         },
                         "parameters": {
-                          "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                          "parameters/method": "POST",
-                          "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notif']}')/items(@{items('Each_email_to_send')?['id']})",
-                          "parameters/headers": {
-                            "Accept": "application/json;odata=nometadata",
-                            "Content-Type": "application/json;odata=nometadata",
-                            "X-HTTP-Method": "MERGE",
-                            "IF-MATCH": "*"
-                          },
-                          "parameters/body": "@{string(outputs('Sent_request'))}"
+                          "emailMessage/To": "@{items('Each_email_to_send')?['to']}",
+                          "emailMessage/Subject": "@{items('Each_email_to_send')?['subject']}",
+                          "emailMessage/Body": "@{items('Each_email_to_send')?['html']}",
+                          "emailMessage/Importance": "Normal"
                         },
-                        "authentication": "@parameters('$authentication')"
+                        "authentication": "@parameters('$authentication')",
+                        "retryPolicy": {
+                          "type": "none"
+                        }
                       },
-                      "runAfter": {
-                        "Sent_request": [
-                          "Succeeded"
-                        ]
-                      }
+                      "runtimeConfiguration": {
+                        "secureData": {
+                          "properties": [
+                            "inputs",
+                            "outputs"
+                          ]
+                        }
+                      },
+                      "runAfter": {}
                     },
-                    "Does_this_email_make_a_reminder_unnecessary": {
+                    "Was_the_email_sent": {
                       "type": "If",
-                      "expression": "@and(contains(createArray('ASG', 'EXT'), items('Each_email_to_send')?['type']), greaterOrEquals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_email_to_send')?['dueIso'], ''))), outputs('Today_in_the_UK'), string(items('Each_email_to_send')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z'))), 864000000000), 0), lessOrEquals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_email_to_send')?['dueIso'], ''))), outputs('Today_in_the_UK'), string(items('Each_email_to_send')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z'))), 864000000000), 7))",
+                      "expression": "@equals(actions('Send_mail')?['status'], 'Succeeded')",
                       "actions": {
-                        "Cover_fields": {
-                          "type": "Compose",
-                          "inputs": [
-                            {
-                              "FieldName": "Title",
-                              "FieldValue": "Covered by an earlier email"
-                            },
-                            {
-                              "FieldName": "NotificationKey",
-                              "FieldValue": "@{concat(if(equals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_email_to_send')?['dueIso'], ''))), outputs('Today_in_the_UK'), string(items('Each_email_to_send')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z'))), 864000000000), 0), 'DUE', 'R7'), '|', items('Each_email_to_send')?['actionId'], '|', string(int(replace(items('Each_email_to_send')?['dueIso'], '-', ''))), '|', items('Each_email_to_send')?['recipientId'])}"
-                            },
-                            {
-                              "FieldName": "NotificationType",
-                              "FieldValue": "@{if(equals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_email_to_send')?['dueIso'], ''))), outputs('Today_in_the_UK'), string(items('Each_email_to_send')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z'))), 864000000000), 0), 'DUE', 'R7')}"
-                            },
-                            {
-                              "FieldName": "Recipient",
-                              "FieldValue": "@{concat('[{\"Key\":\"', items('Each_email_to_send')?['login'], '\"}]')}"
-                            },
-                            {
-                              "FieldName": "RecipientEmail",
-                              "FieldValue": "@{items('Each_email_to_send')?['to']}"
-                            },
-                            {
-                              "FieldName": "RecordType",
-                              "FieldValue": "Action"
-                            },
-                            {
-                              "FieldName": "RecordId",
-                              "FieldValue": "@{items('Each_email_to_send')?['actionId']}"
-                            },
-                            {
-                              "FieldName": "State",
-                              "FieldValue": "Skipped"
-                            },
-                            {
-                              "FieldName": "SkipReason",
-                              "FieldValue": "@{if(equals(items('Each_email_to_send')?['type'], 'ASG'), 'Not needed: the email about the new action already gave the deadline.', 'Not needed: the email about the new deadline already gave it.')}"
-                            },
-                            {
-                              "FieldName": "RenderData",
-                              "FieldValue": "{}"
-                            },
-                            {
-                              "FieldName": "DueDay",
-                              "FieldValue": "@{int(replace(items('Each_email_to_send')?['dueIso'], '-', ''))}"
-                            }
-                          ],
-                          "runAfter": {}
-                        },
-                        "Cover_request": {
+                        "Sent_request": {
                           "type": "Compose",
                           "inputs": {
-                            "listItemCreateInfo": {
-                              "FolderPath": {
-                                "DecodedUrl": "@{outputs('List_addresses')?['notifRoot']}"
-                              },
-                              "UnderlyingObjectType": 0
-                            },
-                            "formValues": "@outputs('Cover_fields')",
-                            "bNewDocumentUpdate": false
+                            "State": "Sent",
+                            "SentAt": "@{utcNow()}",
+                            "LastError": ""
                           },
-                          "runAfter": {
-                            "Cover_fields": [
-                              "Succeeded"
-                            ]
-                          }
+                          "runAfter": {}
                         },
-                        "Cover": {
+                        "Mark_the_email_sent": {
                           "type": "OpenApiConnection",
                           "inputs": {
                             "host": {
@@ -7156,102 +7124,213 @@
                             "parameters": {
                               "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                               "parameters/method": "POST",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notif']}')/AddValidateUpdateItemUsingPath",
+                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notif']}')/items(@{items('Each_email_to_send')?['id']})",
                               "parameters/headers": {
                                 "Accept": "application/json;odata=nometadata",
-                                "Content-Type": "application/json;odata=nometadata"
+                                "Content-Type": "application/json;odata=nometadata",
+                                "X-HTTP-Method": "MERGE",
+                                "IF-MATCH": "*"
                               },
-                              "parameters/body": "@{string(outputs('Cover_request'))}"
+                              "parameters/body": "@{string(outputs('Sent_request'))}"
                             },
                             "authentication": "@parameters('$authentication')"
                           },
                           "runAfter": {
-                            "Cover_request": [
+                            "Sent_request": [
                               "Succeeded"
                             ]
                           }
                         },
-                        "Reminder_already_covered": {
-                          "type": "Compose",
-                          "inputs": "done",
+                        "Does_this_email_make_a_reminder_unnecessary": {
+                          "type": "If",
+                          "expression": "@and(contains(createArray('ASG', 'EXT'), items('Each_email_to_send')?['type']), greaterOrEquals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_email_to_send')?['dueIso'], ''))), outputs('Today_in_the_UK'), string(items('Each_email_to_send')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z'))), 864000000000), 0), lessOrEquals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_email_to_send')?['dueIso'], ''))), outputs('Today_in_the_UK'), string(items('Each_email_to_send')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z'))), 864000000000), outputs('Cover_days')))",
+                          "actions": {
+                            "Cover_fields": {
+                              "type": "Compose",
+                              "inputs": [
+                                {
+                                  "FieldName": "Title",
+                                  "FieldValue": "Covered by an earlier email"
+                                },
+                                {
+                                  "FieldName": "NotificationKey",
+                                  "FieldValue": "@{concat(if(equals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_email_to_send')?['dueIso'], ''))), outputs('Today_in_the_UK'), string(items('Each_email_to_send')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z'))), 864000000000), 0), 'DUE', 'R7'), '|', items('Each_email_to_send')?['actionId'], '|', string(int(replace(items('Each_email_to_send')?['dueIso'], '-', ''))), '|', items('Each_email_to_send')?['recipientId'])}"
+                                },
+                                {
+                                  "FieldName": "NotificationType",
+                                  "FieldValue": "@{if(equals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_email_to_send')?['dueIso'], ''))), outputs('Today_in_the_UK'), string(items('Each_email_to_send')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z'))), 864000000000), 0), 'DUE', 'R7')}"
+                                },
+                                {
+                                  "FieldName": "Recipient",
+                                  "FieldValue": "@{concat('[{\"Key\":\"', items('Each_email_to_send')?['login'], '\"}]')}"
+                                },
+                                {
+                                  "FieldName": "RecipientEmail",
+                                  "FieldValue": "@{items('Each_email_to_send')?['to']}"
+                                },
+                                {
+                                  "FieldName": "RecordType",
+                                  "FieldValue": "Action"
+                                },
+                                {
+                                  "FieldName": "RecordId",
+                                  "FieldValue": "@{items('Each_email_to_send')?['actionId']}"
+                                },
+                                {
+                                  "FieldName": "State",
+                                  "FieldValue": "Skipped"
+                                },
+                                {
+                                  "FieldName": "SkipReason",
+                                  "FieldValue": "@{if(equals(items('Each_email_to_send')?['type'], 'ASG'), 'Not needed: the email about the new action already gave the deadline.', 'Not needed: the email about the new deadline already gave it.')}"
+                                },
+                                {
+                                  "FieldName": "RenderData",
+                                  "FieldValue": "{}"
+                                },
+                                {
+                                  "FieldName": "DueDay",
+                                  "FieldValue": "@{int(replace(items('Each_email_to_send')?['dueIso'], '-', ''))}"
+                                }
+                              ],
+                              "runAfter": {}
+                            },
+                            "Cover_request": {
+                              "type": "Compose",
+                              "inputs": {
+                                "listItemCreateInfo": {
+                                  "FolderPath": {
+                                    "DecodedUrl": "@{outputs('List_addresses')?['notifRoot']}"
+                                  },
+                                  "UnderlyingObjectType": 0
+                                },
+                                "formValues": "@outputs('Cover_fields')",
+                                "bNewDocumentUpdate": false
+                              },
+                              "runAfter": {
+                                "Cover_fields": [
+                                  "Succeeded"
+                                ]
+                              }
+                            },
+                            "Cover": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "connectionName": "shared_sharepointonline",
+                                  "operationId": "HttpRequest",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                },
+                                "parameters": {
+                                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                                  "parameters/method": "POST",
+                                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notif']}')/AddValidateUpdateItemUsingPath",
+                                  "parameters/headers": {
+                                    "Accept": "application/json;odata=nometadata",
+                                    "Content-Type": "application/json;odata=nometadata"
+                                  },
+                                  "parameters/body": "@{string(outputs('Cover_request'))}"
+                                },
+                                "authentication": "@parameters('$authentication')"
+                              },
+                              "runAfter": {
+                                "Cover_request": [
+                                  "Succeeded"
+                                ]
+                              }
+                            },
+                            "Reminder_already_covered": {
+                              "type": "Compose",
+                              "inputs": "done",
+                              "runAfter": {
+                                "Cover": [
+                                  "Succeeded",
+                                  "Failed",
+                                  "TimedOut"
+                                ]
+                              }
+                            }
+                          },
+                          "else": {
+                            "actions": {}
+                          },
                           "runAfter": {
-                            "Cover": [
-                              "Succeeded",
-                              "Failed",
-                              "TimedOut"
+                            "Mark_the_email_sent": [
+                              "Succeeded"
                             ]
                           }
                         }
                       },
                       "else": {
-                        "actions": {}
+                        "actions": {
+                          "Send_code": {
+                            "type": "Compose",
+                            "inputs": "@coalesce(outputs('Send_mail')?['statusCode'], 0)",
+                            "runAfter": {}
+                          },
+                          "Unsent_request": {
+                            "type": "Compose",
+                            "inputs": {
+                              "State": "@{if(contains(createArray(400, 401, 403, 404, 413, 429), outputs('Send_code')), 'Failed', 'Unknown')}",
+                              "LastError": "@{concat('The email was not confirmed as sent (', string(outputs('Send_code')), '). Run ', workflow()?['run']?['name'], '.')}",
+                              "NextAttemptAfter": "@{if(greaterOrEquals(int(coalesce(items('Each_email_to_send')?['attempts'], '1')), 2), addHours(utcNow(), 6), addMinutes(utcNow(), 15))}"
+                            },
+                            "runAfter": {
+                              "Send_code": [
+                                "Succeeded"
+                              ]
+                            }
+                          },
+                          "Mark_the_email_not_sent": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "host": {
+                                "connectionName": "shared_sharepointonline",
+                                "operationId": "HttpRequest",
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                              },
+                              "parameters": {
+                                "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                                "parameters/method": "POST",
+                                "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notif']}')/items(@{items('Each_email_to_send')?['id']})",
+                                "parameters/headers": {
+                                  "Accept": "application/json;odata=nometadata",
+                                  "Content-Type": "application/json;odata=nometadata",
+                                  "X-HTTP-Method": "MERGE",
+                                  "IF-MATCH": "*"
+                                },
+                                "parameters/body": "@{string(outputs('Unsent_request'))}"
+                              },
+                              "authentication": "@parameters('$authentication')"
+                            },
+                            "runAfter": {
+                              "Unsent_request": [
+                                "Succeeded"
+                              ]
+                            }
+                          }
+                        }
                       },
                       "runAfter": {
-                        "Mark_the_email_sent": [
-                          "Succeeded"
+                        "Send_mail": [
+                          "Succeeded",
+                          "Failed",
+                          "TimedOut"
                         ]
                       }
                     }
                   },
-                  "else": {
-                    "actions": {
-                      "Send_code": {
-                        "type": "Compose",
-                        "inputs": "@coalesce(outputs('Send_mail')?['statusCode'], 0)",
-                        "runAfter": {}
-                      },
-                      "Unsent_request": {
-                        "type": "Compose",
-                        "inputs": {
-                          "State": "@{if(contains(createArray(400, 401, 403, 404, 413, 429), outputs('Send_code')), 'Failed', 'Unknown')}",
-                          "LastError": "@{concat('The email was not confirmed as sent (', string(outputs('Send_code')), '). Run ', workflow()?['run']?['name'], '.')}",
-                          "NextAttemptAfter": "@{if(greaterOrEquals(int(coalesce(items('Each_email_to_send')?['attempts'], '1')), 2), addHours(utcNow(), 6), addMinutes(utcNow(), 15))}"
-                        },
-                        "runAfter": {
-                          "Send_code": [
-                            "Succeeded"
-                          ]
-                        }
-                      },
-                      "Mark_the_email_not_sent": {
-                        "type": "OpenApiConnection",
-                        "inputs": {
-                          "host": {
-                            "connectionName": "shared_sharepointonline",
-                            "operationId": "HttpRequest",
-                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                          },
-                          "parameters": {
-                            "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                            "parameters/method": "POST",
-                            "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notif']}')/items(@{items('Each_email_to_send')?['id']})",
-                            "parameters/headers": {
-                              "Accept": "application/json;odata=nometadata",
-                              "Content-Type": "application/json;odata=nometadata",
-                              "X-HTTP-Method": "MERGE",
-                              "IF-MATCH": "*"
-                            },
-                            "parameters/body": "@{string(outputs('Unsent_request'))}"
-                          },
-                          "authentication": "@parameters('$authentication')"
-                        },
-                        "runAfter": {
-                          "Unsent_request": [
-                            "Succeeded"
-                          ]
-                        }
-                      }
-                    }
-                  },
                   "runAfter": {
-                    "Send_mail": [
-                      "Succeeded",
-                      "Failed",
-                      "TimedOut"
+                    "Cover_days": [
+                      "Succeeded"
                     ]
                   }
                 }
-              }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {}
             }
           },
           "runAfter": {

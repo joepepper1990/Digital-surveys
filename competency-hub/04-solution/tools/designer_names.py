@@ -18,6 +18,9 @@ PARTS = {
               'r': 'retry', '': ''},
     'daily': {'D': 'reminders', 'A': 'alerts', 'c': 'reminder', 'x': 'temporary access', 'r': 'retry', '': ''},
     'monitor': {'A': 'alerts', 'm': 'stuck change', 'r': 'retry', '': ''},
+    'records': {'NE': 'edit notice', 'NA': 'archive notice', 'NP': 'pin notice', 'NH': 'hide comment', 'RR': 'raise entry',
+                'RU': 'update entry', 'RL': 'link action', 'RX': 'unlink action', 'N': 'records', 'K': 'unknown kind', 'K0': 'unreadable',
+                'missing': 'missing', 'r': 'retry', '': ''},
     'admin': {'T': 'decision', 'P': 'people', 'G': 'setting', 'RH': 'history folder', 'K0': 'unreadable', 'r': 'retry', '': ''},
 }
 

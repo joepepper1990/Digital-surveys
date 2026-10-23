@@ -29,7 +29,7 @@ SECURE = {'secureData': {'properties': ['inputs', 'outputs']}}
 
 # The lists the flow uses, by the key it uses in outputs('Ids'), and their web address (RootFolder name).
 LIST_URLS = {'req': 'requests', 'act': 'actions', 'hist': 'history', 'upd': 'updates', 'people': 'people', 'members': 'members',
-             'comps': 'competencies', 'notif': 'notifications', 'settings': 'settings'}
+             'comps': 'competencies', 'notif': 'notifications', 'settings': 'settings', 'notices': 'notices', 'reg': 'register'}
 LIST_KEYS = {k: BY_KEY[v]['title'] for k, v in LIST_URLS.items()}
 REQUEST_LIST = BY_KEY['requests']['title']
 MANAGEMENT = "createArray('Team Leader', 'Group Head')"
@@ -199,7 +199,7 @@ def site_and_ids():
     ids = {}
     for key in LIST_KEYS:
         ids[key] = "@{outputs('Site_path')}/Lists/" + BY_KEY[LIST_URLS[key]]['url']
-    for key in ('req', 'act', 'hist', 'upd', 'notif', 'members', 'people'):
+    for key in ('req', 'act', 'hist', 'upd', 'notif', 'members', 'people', 'reg', 'notices'):
         ids[key + 'Root'] = ids[key]
     return [('Site_path', compose("@if(endsWith(" + path + ", '/'), take(" + path + ", sub(length(" + path + "), 1)), " + path + ")")),
             ('Site_url', compose("@if(endsWith(" + SITE + ", '/'), take(" + SITE + ", sub(length(" + SITE + "), 1)), " + SITE + ")")),
@@ -233,6 +233,22 @@ def notice(send, ntype, key, person, actor_name, action_id, title, area, due_iso
             'actor': '@{' + actor_name + '}', 'actionId': '@{' + action_id + '}', 'title': '@{' + title + '}', 'area': '@{' + area + '}',
             'dueIso': '@{' + due_iso + '}', 'originalIso': '@{' + (original_iso or due_iso) + '}', 'previousIso': '@{' + previous_iso + '}',
             'extCount': '@int(' + ext_count + ')', 'note': '@{' + note + '}'}
+
+
+def reminder_words(type_expr, title_expr, due_expr):
+    """Subject and opening line of a reminder (R7, DUE, OD) as they read today: a reminder sent again on a later day
+    says how many days are left (or late) on that day, not on the day it was first written."""
+    days = days_until(due_expr)
+    late = "sub(0, " + days + ")"
+    plural = lambda n, one, many: "if(equals(" + n + ", 1), " + q(one) + ", " + q(many) + ")"
+    is_ = lambda t: "equals(" + type_expr + ", '" + t + "')"
+    subject = ("if(" + is_('R7') + ", concat('Reminder: ', " + title_expr + ", ' is due in ', string(" + days + "), " + plural(days, ' day', ' days') + "), "
+               "if(" + is_('DUE') + ", concat('Due today: ', " + title_expr + "), "
+               "concat(" + title_expr + ", ' is ', string(" + late + "), " + plural(late, ' day late', ' days late') + ")))")
+    intro = ("if(" + is_('R7') + ", concat('Your action is due in ', string(" + days + "), " + plural(days, ' day.', ' days.') + "), "
+             "if(" + is_('DUE') + ", 'Your action is due today.', "
+             "concat('Your action is ', string(" + late + "), " + plural(late, ' day late.', ' days late.') + ")))")
+    return subject, intro
 
 
 def outbox_create(sfx, items_expr):
@@ -292,7 +308,8 @@ def outbox_create(sfx, items_expr):
                   'Reference @{outputs(\'Token' + sfx + '\')}.</p></div>')
     mail = {'to': '@{' + T('email') + '}', 'subject': "@{outputs('Subject" + sfx + "')}", 'html': "@{outputs('Html" + sfx + "')}",
             'type': '@{' + T('type') + '}', 'dueIso': '@{' + T('dueIso') + '}', 'actionId': '@{' + T('actionId') + '}',
-            'recipientId': '@{' + T('recipientId') + '}', 'login': '@{' + T('login') + '}', 'attempts': '1'}
+            'recipientId': '@{' + T('recipientId') + '}', 'login': '@{' + T('login') + '}', 'attempts': '1',
+            'title': '@{' + T('title') + '}', 'phrase': '@{' + intro + '}'}
     values, call = create_in_folder('notif', "@{outputs('Ids')?['notifRoot']}", 'Notice_values' + sfx, 'Notice_body' + sfx)
     find = L('notif', "/items?$select=Id&$filter=NotificationKey eq '@{" + esc(T('key')) + "}'")
     created = "and(equals(actions('Create_notice" + sfx + "')?['status'], 'Succeeded'), empty(body('Notice_refused" + sfx + "')))"
@@ -361,7 +378,7 @@ def send_outbox(sfx):
             ('Sent_body' + sfx, compose({'State': 'Sent', 'SentAt': '@{utcNow()}', 'LastError': ''})),
             ('Mark_sent' + sfx, merge(item, 'Sent_body' + sfx)),
             # an assignment or new deadline 0-7 days away has told the owner already: that reminder is not needed
-            ('Covers' + sfx, cond("@and(contains(createArray('ASG', 'EXT'), " + T('type') + "), greaterOrEquals(" + days + ", 0), lessOrEquals(" + days + ", 7))", seq(
+            ('Covers' + sfx, cond("@and(contains(createArray('ASG', 'EXT'), " + T('type') + "), greaterOrEquals(" + days + ", 0), lessOrEquals(" + days + ", outputs('Cover_days" + sfx + "')))", seq(
                 ('Cover_values' + sfx, form({'Title': 'Covered by an earlier email', 'NotificationKey': '@{' + cover_key + '}',
                                              'NotificationType': "@{if(equals(" + days + ", 0), 'DUE', 'R7')}",
                                              'Recipient': "@{concat('[{\"Key\":\"', " + T('login') + ", '\"}]')}", 'RecipientEmail': '@{' + T('to') + '}',
@@ -383,6 +400,21 @@ def send_outbox(sfx):
         )), {'Send_mail' + sfx: TOLERANT})),
     )})
 
+
+
+def send_outbox_steps(sfx):
+    """The email sender with what it needs first: how many days before a deadline the first reminder goes
+    (ReminderDaysBefore), so an assignment or new deadline inside that window makes the reminder unnecessary."""
+    row = "first(body('Cover_row" + sfx + "'))"
+    loop, act = send_outbox(sfx)
+    # nothing to send (most runs): no call at all
+    return seq(('Any_email' + sfx, cond("@not(empty(variables('varOutbox')))", seq(
+        ('Cover_settings' + sfx, http('GET', L('settings', "/items?$select=Title,Value&$filter=Title eq 'ReminderDaysBefore'"))),
+        ('Cover_row' + sfx, after(query("@if(equals(actions('Cover_settings" + sfx + "')?['status'], 'Succeeded'), body('Cover_settings" + sfx + "')?['value'], createArray())", "@true"),
+                                  {'Cover_settings' + sfx: TOLERANT})),
+        ('Cover_days' + sfx, after(compose("@int(if(empty(string(coalesce(" + row + "?['Value'], ''))), '7', string(" + row + "?['Value'])))"),
+                                   {'Cover_row' + sfx: OK})),
+        (loop, act)))))
 
 
 def alert_notices(name, admins_expr, key_expr, title_expr, detail_expr):
@@ -430,8 +462,12 @@ def retry_emails():
                 "and(equals(" + idstr("body('Get_action_r')?['DueDay']") + ", " + idstr(RI + "?['DueDay']") + "), "
                 "equals(" + idstr("body('Get_action_r')?['AssignedToId']") + ", string(" + RD + "?['recipientId'])))))))")
     again = "<p style=\"color:#5b6774\"><i>If you have already received this message, please ignore it.</i></p>"
-    retry_mail = {'id': "@" + RI + "?['Id']", 'to': "@{" + RD + "?['to']}", 'subject': "@{" + RD + "?['subject']}",
-                  'html': "@{if(contains(createArray('Unknown', 'Sending'), string(" + RI + "?['State'])), concat(" + q(again) + ", string(" + RD + "?['html'])), string(" + RD + "?['html']))}",
+    # a reminder tried again on a later day is reworded for today (rows written before 1.5.0.0 keep their words)
+    REWORD = "and(contains(createArray('R7', 'DUE', 'OD'), string(" + RD + "?['type'])), not(empty(string(coalesce(" + RD + "?['phrase'], '')))))"
+    new_subject, new_intro = reminder_words("string(" + RD + "?['type'])", "string(" + RD + "?['title'])", "string(" + RD + "?['dueIso'])")
+    html_now = "if(" + REWORD + ", replace(string(" + RD + "?['html']), string(" + RD + "?['phrase']), " + new_intro + "), string(" + RD + "?['html']))"
+    retry_mail = {'id': "@" + RI + "?['Id']", 'to': "@{" + RD + "?['to']}", 'subject': "@{if(" + REWORD + ", " + new_subject + ", string(" + RD + "?['subject']))}",
+                  'html': "@{if(contains(createArray('Unknown', 'Sending'), string(" + RI + "?['State'])), concat(" + q(again) + ", " + html_now + "), " + html_now + ")}",
                   'type': "@{" + RD + "?['type']}", 'dueIso': "@{" + RD + "?['dueIso']}", 'actionId': "@{" + RD + "?['actionId']}",
                   'recipientId': "@{" + RD + "?['recipientId']}", 'login': "@{" + RD + "?['login']}",
                   'attempts': "@{add(int(" + idq(RI + "?['Attempts']") + "), 1)}"}
@@ -478,7 +514,12 @@ def retry_emails():
 # Request queue takes everything else (so an unknown kind is still answered, with a refusal).
 DOMAIN_TYPES = {
     'admin': ['RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting'],
+    'records': ['EditNotice', 'ArchiveNotice', 'PinNotice', 'HideComment', 'RaiseRegisterEntry', 'UpdateRegisterEntry', 'LinkActionToEntry',
+                'UnlinkActionFromEntry'],
 }
+# Changes decided once and carried out step by step (StepsDone DECIDED): once decided they may be part-made, so they
+# can be finished but not cancelled. Only changes to actions hold a lock and can be reverted.
+DECIDED_TYPES = [t for d in ('admin', 'records') for t in DOMAIN_TYPES[d]]
 ACTION_TYPES = ['RaiseAction', 'ExtendDeadline', 'MarkComplete', 'ChangeStatus', 'ReassignAction', 'CloseAction', 'ReopenAction', 'EditActionDetails']
 FINAL_TX = "createArray('Applied', 'Void', 'Cancelled', 'Reverted', 'Rolled Back')"
 
@@ -629,6 +670,12 @@ def flow_request_queue(domain='actions'):
     DUE_OK = "and(equals(variables('varDue'), " + DUE + "), not(empty(" + DUE + ")))"
     DUE_SAFE = "if(" + DUE_OK + ", " + DUE + ", '2000-01-01')"
     MAX_DAY = "outputs('Max_due_R')"
+    # raised from an improvement or degradation (spec REG-3): the entry must be in the same area and still open
+    ENTRY_ID = idq(P + "?['sourceEntryId']")
+    ENTRY = "variables('varEntry')"
+    LINKED = "greater(int(" + ENTRY_ID + "), 0)"
+    ENTRY_OK = ("and(not(empty(string(coalesce(" + ENTRY + "?['Id'], '')))), equals(" + idstr(ENTRY + "?['CompetencyId']") + ", "
+                + idstr(AREA_R + "?['Id']") + "), not(equals(string(" + ENTRY + "?['Status']), 'Closed')))")
     verdict_r = ("@if(greater(variables('varExistingId'), 0), '', "
                  "if(or(empty(" + AREA_R + "), not(or(" + IS_MGMT + ", not(empty(body('My_member_R')))))), 'Choose one of your areas.', "
                  "if(or(empty(" + OWNER_R + "), not(equals(string(" + OWNER_R + "?['Status']), 'Active')), "
@@ -637,6 +684,7 @@ def flow_request_queue(domain='actions'):
                  # spec §4.2: a technician without meeting rights in the area raises only for themselves
                  "if(and(equals(string(" + ME + "?['Role']), 'Technician'), not(equals(first(body('My_member_R'))?['CanManageMeetings'], true)), "
                  "not(equals(" + idstr(OWNER_R + "?['SiteUserId']") + ", " + SENDER + "))), " + q(SELF_ONLY) + ", "
+                 "if(and(" + LINKED + ", not(" + ENTRY_OK + ")), 'That improvement or degradation could not be found in this area, or it is closed.', "
                  "if(empty(" + TITLE + "), 'Enter what needs doing.', "
                  "if(greater(length(" + TITLE + "), 255), 'Keep the title to 255 characters or fewer.', "
                  "if(empty(" + DESC + "), 'Add a short description.', "
@@ -644,7 +692,7 @@ def flow_request_queue(domain='actions'):
                  "if(not(" + DUE_OK + "), 'Choose a target date.', "
                  "if(less(" + day_num(DUE_SAFE) + ", " + day_num(TODAY) + "), 'The target date cannot be in the past.', "
                  "if(greater(" + day_num(DUE_SAFE) + ", " + day_num(MAX_DAY) + "), concat('Choose a date within ', string(outputs('Years_R')), if(equals(outputs('Years_R'), 1), ' year.', ' years.')), "
-                 "if(not(contains(createArray('Low', 'Normal', 'High'), " + PRIO + ")), 'Choose a priority.', ''))))))))))))")
+                 "if(not(contains(createArray('Low', 'Normal', 'High'), " + PRIO + ")), 'Choose a priority.', '')))))))))))))")
     action_path = "@{outputs('Ids')?['actRoot']}/@{" + AREA_R + "?['CompetencyKey']}"
     act_values, act_call = create_in_folder('act', action_path, 'Action_values_R', 'Action_body_R')
     claims = lambda person: "@{concat('[{\"Key\":\"', " + person + "?['Person']?['Name'], '\"}]')}"
@@ -659,6 +707,12 @@ def flow_request_queue(domain='actions'):
         ('Check_existing_R', cond("@not(variables('varFresh'))", seq(
             ('Find_existing_R', http('GET', L('act', "/items?$select=Id,CompetencyId&$filter=CreatedRequestKey eq 'F%7C@{" + esc(KEY) + "}'"))),
             ('Existing_found_R', set_var('varExistingId', "@int(if(empty(" + EXISTING_R + "), '0', " + idstr("first(" + EXISTING_R + ")?['Id']") + "))")),
+        ))),
+        # only when the action is raised from an entry (one call fewer for every other raise)
+        ('Entry_given_R', cond('@' + LINKED, seq(
+            ('Get_entry_R', http('GET', L('reg', "/items(@{" + ENTRY_ID + "})?$select=Id,CompetencyId,Status"))),
+            ('Entry_read_R', after(set_var('varEntry', "@if(equals(actions('Get_entry_R')?['status'], 'Succeeded'), body('Get_entry_R'), json('{}'))"),
+                                   {'Get_entry_R': TOLERANT})),
         ))),
         ('Read_due_R', set_var('varDue', "@{formatDateTime(concat(" + DUE + ", 'T00:00:00Z'), 'yyyy-MM-dd')}")),
         # the furthest deadline (MaxDeadlineYears, set by an administrator), and whether this is still pre-go-live testing
@@ -679,7 +733,7 @@ def flow_request_queue(domain='actions'):
                     'OriginalDueDate': '@{' + uk_form_date(DUE) + '}', 'CurrentDueDate': '@{' + uk_form_date(DUE) + '}',
                     'DueDay': '@{' + day_num(DUE) + '}', 'Status': 'Open', 'IsOpen': '1', 'Priority': '@{' + PRIO + '}',
                     'RequiresCloseOut': "@{if(equals(" + P + "?['requiresCloseOut'], true), '1', '0')}", 'ExtensionCount': '0', 'Revision': '1',
-                    'SourceType': 'None', 'IsCrossCompetency': '0', 'PendingRequestKey': '@{' + KEY + '}', 'CreatedRequestKey': 'F|@{' + KEY + '}',
+                    'SourceType': "@{if(" + LINKED + ", 'Register', 'None')}", 'SourceId': "@{if(" + LINKED + ", " + ENTRY_ID + ", '')}", 'IsCrossCompetency': '0', 'PendingRequestKey': '@{' + KEY + '}', 'CreatedRequestKey': 'F|@{' + KEY + '}',
                     'IsTestRecord': "@{if(empty(body('Testing_R')), '0', '1')}"})),
                 ('Action_body_R', act_values),
                 ('Create_action_R', act_call),
@@ -1025,7 +1079,7 @@ def flow_request_queue(domain='actions'):
         HAS_ACT = "not(empty(string(coalesce(" + ACT + "?['Id'], ''))))"
         LOCKED = "and(" + HAS_ACT + ", equals(string(coalesce(" + ACT + "?['PendingRequestKey'], '')), " + TKEY + "))"
         # people and settings changes have no action: once decided, groups or rows may already have changed
-        ADMIN_PART = ("and(contains(createArray(" + ", ".join(q(x) for x in DOMAIN_TYPES['admin']) + "), " + TTYPE + "), "
+        ADMIN_PART = ("and(contains(createArray(" + ", ".join(q(x) for x in DECIDED_TYPES) + "), " + TTYPE + "), "
                       "contains(string(coalesce(" + T + "?['StepsDone'], '')), 'DECIDED'))")
         APPLIED = "or(" + ADMIN_PART + ", and(" + HAS_ACT + ", or(" + LOCKED + ", equals(string(coalesce(" + ACT + "?['LastRequestKey'], '')), " + TKEY + "))))"
         REVERTED_HERE = "and(" + HAS_ACT + ", equals(string(coalesce(" + ACT + "?['LastRequestKey'], '')), " + KEY + "))"
@@ -1461,9 +1515,9 @@ def flow_request_queue(domain='actions'):
         ev_values, ev_call = create_in_folder('hist', "@{outputs('Ids')?['histRoot']}/Administration", 'S_event_values' + sfx, 'S_event_body' + sfx)
         verdict = chain(
             ("not(" + IS_ADMIN + ")", 'Only a Competency Hub administrator can do this.'),
-            ("not(contains(createArray('OverdueReminderIntervalDays', 'ReminderDaysBefore', 'MaxDeadlineYears', 'MonitorHours'), " + NAME + "))", 'Choose a setting.'),
+            ("not(contains(createArray('OverdueReminderIntervalDays', 'ReminderDaysBefore', 'DueSoonDays', 'MaxDeadlineYears', 'MonitorHours'), " + NAME + "))", 'Choose a setting.'),
             ("empty(" + ROW + ")", 'That setting is missing. Run Setup again.'),
-            ("and(contains(createArray('OverdueReminderIntervalDays', 'ReminderDaysBefore'), " + NAME + "), or(not(" + whole(VALUE) + "), less(" + NUM + ", 1), greater(" + NUM + ", 30)))",
+            ("and(contains(createArray('OverdueReminderIntervalDays', 'ReminderDaysBefore', 'DueSoonDays'), " + NAME + "), or(not(" + whole(VALUE) + "), less(" + NUM + ", 1), greater(" + NUM + ", 30)))",
              'Enter a whole number of days from 1 to 30.'),
             ("and(equals(" + NAME + ", 'MaxDeadlineYears'), or(not(" + whole(VALUE) + "), less(" + NUM + ", 1), greater(" + NUM + ", 5)))", 'Enter a whole number of years from 1 to 5.'),
             ("and(equals(" + NAME + ", 'MonitorHours'), not(outputs('Hours_ok" + sfx + "')))",
@@ -1489,7 +1543,8 @@ def flow_request_queue(domain='actions'):
             ('Find_s_event' + sfx, http('GET', L('hist', "/items?$select=Id&$filter=RequestKey eq '@{" + esc(ev_key) + "}'"))),
             ('Need_s_event' + sfx, cond("@empty(body('Find_s_event" + sfx + "')?['value'])", seq(
                 ('S_event_values' + sfx, form({'Title': "@{concat('Setting changed: ', if(equals(" + NAME + ", 'OverdueReminderIntervalDays'), 'days between late reminders', if(equals(" + NAME + ", 'ReminderDaysBefore'), "
-                                                       "'days before the deadline for the first reminder', if(equals(" + NAME + ", 'MaxDeadlineYears'), 'furthest deadline in years', 'queue monitor hours'))))}", 'RowKind': 'Event', 'RequestKey': '@{' + ev_key + '}',
+                                                       "'days before the deadline for the first reminder', if(equals(" + NAME + ", 'DueSoonDays'), 'days counted as due soon', "
+                                                       "if(equals(" + NAME + ", 'MaxDeadlineYears'), 'furthest deadline in years', 'queue monitor hours')))))}", 'RowKind': 'Event', 'RequestKey': '@{' + ev_key + '}',
                                                'RecordType': 'Setting', 'RecordId': "@{" + ROW + "?['Id']}", 'EventType': 'Setting Changed', 'RequestType': 'UpdateSetting',
                                                'PreviousValue': "@{outputs('Previous" + sfx + "')}", 'NewValue': '@{' + VALUE + '}'})),
                 ('S_event_body' + sfx, ev_values),
@@ -1503,6 +1558,280 @@ def flow_request_queue(domain='actions'):
             *finish_request(sfx, 'Completed', "'Setting saved.'"),
         )
 
+
+
+    # ---------------------------------------------------------------- noticeboard and register (spec §3.4, §3.5)
+    def records_switch():
+        """Changes to notices, comments and the improvements and degradations register. Each is decided once (the
+        same rules as the app, spec §4.2), then written with the record's ETag together with its Revision and
+        LastRequestKey; a History event in the area's folder records it. A resumed run carries out what was decided."""
+        MOD_ROLE = "equals(string(" + ME + "?['Role']), 'Engineer')"
+        COMPS = "body('Get_comps_N')?['value']"
+        OWN = "string(" + TX + "?['RequestType'])"
+        text_len = lambda f: "length(trim(string(coalesce(" + P + "?['" + f + "'], ''))))"
+        TEXT = lambda f: "trim(string(coalesce(" + P + "?['" + f + "'], '')))"
+        HAS = lambda f: "contains(" + P + ", '" + f + "')"
+        ev_key_uri = "concat(" + KEY + ", '%7C1')"
+
+        def ctx_for(code, T, area_key_expr):
+            AREA = "first(body('Area" + code + "'))"
+            MEMBER = "first(body('My_member" + code + "'))"
+            in_area = "not(empty(" + MEMBER + "))"
+            return {'T': T, 'AREA': AREA, 'MEMBER': MEMBER, 'AREA_KEY': area_key_expr,
+                    'AUTHOR': "equals(" + idstr(T + "?['AuthorId']") + ", " + SENDER + ")",
+                    # moderators: management and the area's engineers; meeting rights alone do not moderate
+                    'MOD': "or(" + IS_MGMT + ", and(" + in_area + ", " + MOD_ROLE + "))",
+                    'CHAIR': "and(" + in_area + ", equals(" + MEMBER + "?['CanManageMeetings'], true))",
+                    'WRITES': "or(" + IS_MGMT + ", " + in_area + ")"}
+
+        def area_steps(code, area_key_expr):
+            return [('Area' + code, query('@' + COMPS, "@equals(string(item()?['CompetencyKey']), " + area_key_expr + ")")),
+                    ('My_member' + code, query("@body('Get_my_memberships')?['value']",
+                                               "@equals(" + idstr("item()?['CompetencyId']") + ", " + idstr("first(body('Area" + code + "'))?['Id']") + ")"))]
+
+        def event_steps(code, area_key_expr, area_id_expr, record_type, record_id_expr, title_expr, event_type, more=None):
+            values, call = create_in_folder('hist', "@{outputs('Ids')?['histRoot']}/@{" + area_key_expr + "}", 'Rec_event_values' + code, 'Rec_event_body' + code)
+            find = L('hist', "/items?$select=Id&$filter=RequestKey eq '@{" + ev_key_uri + "}'")
+            return [
+                ('Find_rec_event' + code, http('GET', find)),
+                ('Need_rec_event' + code, cond("@empty(body('Find_rec_event" + code + "')?['value'])", seq(
+                    ('Rec_event_values' + code, form(dict({'Title': '@{take(' + title_expr + ', 255)}', 'RowKind': 'Event',
+                                                           'RequestKey': '@{concat(' + KEY + ", '|1')}", 'RecordType': record_type,
+                                                           'RecordId': '@{' + record_id_expr + '}', 'EventType': event_type,
+                                                           'RequestType': '@{' + OWN + '}'}, **(more or {})))),
+                    ('Rec_event_body' + code, values),
+                    ('Rec_event' + code, call),
+                    *created_ok('Rec_event' + code, 'Rec_event_made' + code, 'The History event could not be created. See Rec_event' + code + '.'),
+                ))),
+                ('Get_rec_event' + code, http('GET', find)),
+                ('Rec_event_details' + code, compose({'ActorId': '@int(' + SENDER + ')', 'EventTime': '@{' + EVENT_TIME + '}', 'ProcessedAt': '@{utcNow()}',
+                                                     'CompetencyId': '@int(' + area_id_expr + ')'})),
+                ('Save_rec_event' + code, merge(L('hist', "/items(@{first(body('Get_rec_event" + code + "')?['value'])?['Id']})"), 'Rec_event_details' + code)),
+            ]
+
+        def change(code, lst, sel, record_type, verdict, values, title, event_type, result, standard=True, more_apply=None, reads=None,
+                   already=None, event_more=None, record_type_expr=None):
+            """One kind of change to an existing notice, comment or register entry."""
+            T = "body('Get_rec" + code + "')"
+            area_key = "last(split(string(" + T + "?['FileDirRef']), '/'))"
+            c = ctx_for(code, T, area_key)
+            item = L(lst, "/items(@{" + idq(TX + "?['RecordId']") + "})")
+            ALREADY = already(c) if already else "equals(string(coalesce(" + T + "?['LastRequestKey'], '')), " + KEY + ")"
+            stale = ("and(" + ("greater(int(" + idq(TX + "?['ExpectedRevision']") + "), 0), not(equals(" + idstr(T + "?['Revision']") + ", "
+                     + idstr(TX + "?['ExpectedRevision']") + "))") + ")") if standard else "false"
+            fixed = {'Revision': "@add(int(" + idq(T + "?['Revision']") + "), 1)", 'LastRequestKey': '@{' + KEY + '}'} if standard else {}
+            return seq(
+                ('Get_rec' + code, http('GET', item + sel, meta=True)),
+                ('Rec_read' + code, after(cond("@equals(actions('Get_rec" + code + "')?['status'], 'Succeeded')", None, seq(
+                    ('Rec_missing' + code, cond("@equals(outputs('Get_rec" + code + "')?['statusCode'], 404)", reject(code + '_missing', "'That could not be found. It may have been removed.'"),
+                                                seq(('Rec_unreadable' + code, fail_here('It could not be read. See Get_rec' + code + '.'))))))),
+                    {'Get_rec' + code: TOLERANT})),
+                *area_steps(code, area_key),
+                *(reads(c) if reads else []),
+                ('Decide' + code, cond('@' + UNDECIDED, seq(
+                    ('Verdict' + code, compose("@if(" + ALREADY + ", '', if(empty(" + c['AREA'] + "), 'That could not be found.', if(" + stale + ", "
+                                               + q('This was changed by someone else. Review the latest details and try again.') + ", " + verdict(c) + ")))")),
+                    ('Decided' + code, cond("@empty(outputs('Verdict" + code + "'))",
+                                            seq(*tx_update('planned' + code, {'State': 'Planned', 'StepsDone': 'DECIDED',
+                                                                              'PreviousValue': "@{string(" + T + ")}"})),
+                                            reject(code, "outputs('Verdict" + code + "')"))),
+                ))),
+                ('Apply' + code, cond("@not(" + ALREADY + ")", seq(
+                    ('Rec_values_own' + code, compose(values(c))),
+                    ('Rec_values_fixed' + code, compose(fixed)),
+                    ('Rec_values' + code, compose("@union(outputs('Rec_values_own" + code + "'), outputs('Rec_values_fixed" + code + "'))")),
+                    ('Save_rec' + code, merge(item, 'Rec_values' + code, if_match="@{" + T + "?['odata.etag']}")),
+                ))),
+                *(more_apply(c) if more_apply else []),
+                *event_steps(code, area_key, idstr(c['AREA'] + "?['Id']"), record_type_expr(c) if record_type_expr else record_type,
+                             idstr(T + "?['Id']"), title(c), event_type, event_more(c) if event_more else None),
+                *tx_update('applied' + code, {'State': 'Applied', 'ProcessedAt': '@{utcNow()}'}),
+                *finish_request(code, 'Completed', result(c), 'int(' + idq(T + "?['Id']") + ')'),
+            )
+
+        notice_sel = '?$select=Id,Title,Body,Category,IsImportant,ImportantUntil,Status,AuthorId,Revision,LastRequestKey,FileDirRef'
+        CATS = "createArray('General', 'Request', 'Improvement idea', 'Safety', 'Equipment', 'Other')"
+        IMPORTANT_TO = "formatDateTime(addDays(concat(" + TODAY + ", 'T00:00:00Z'), 30), 'yyyy-MM-dd')"
+        edit_notice = change(
+            '_NE', 'notices', notice_sel, 'Notice',
+            lambda c: chain(("not(equals(string(" + c['T'] + "?['Status']), 'Active'))", 'This notice has been archived.'),
+                            ("not(or(" + c['AUTHOR'] + ", " + c['MOD'] + "))", 'Only the person who posted it, or the engineers of the area and management, can change this notice.'),
+                            ("and(" + HAS('title') + ", equals(" + text_len('title') + ", 0))", 'Give the notice a title.'),
+                            ("and(" + HAS('title') + ", greater(" + text_len('title') + ", 255))", 'Keep the title to 255 characters or fewer.'),
+                            ("and(" + HAS('body') + ", equals(" + text_len('body') + ", 0))", 'Write the notice.'),
+                            ("and(" + HAS('body') + ", greater(" + text_len('body') + ", 5000))", 'Keep the notice to 5,000 characters or fewer.'),
+                            ("and(" + HAS('category') + ", not(contains(" + CATS + ", string(coalesce(" + P + "?['category'], '')))))", 'Choose a category.'),
+                            # an author may mark their own notice important for up to 30 days; pinning is for moderators
+                            ("and(" + HAS('important') + ", not(" + c['AUTHOR'] + "), not(" + c['MOD'] + "))", 'Only the person who posted it can mark it important.')),
+            lambda c: {'Title': "@{if(" + HAS('title') + ", " + TEXT('title') + ", " + c['T'] + "?['Title'])}",
+                       'Body': "@{if(" + HAS('body') + ", " + TEXT('body') + ", " + c['T'] + "?['Body'])}",
+                       'Category': "@{if(" + HAS('category') + ", " + P + "?['category'], coalesce(" + c['T'] + "?['Category'], 'General'))}",
+                       'IsImportant': "@if(" + HAS('important') + ", equals(" + P + "?['important'], true), equals(" + c['T'] + "?['IsImportant'], true))",
+                       'ImportantUntil': "@if(" + HAS('important') + ", if(equals(" + P + "?['important'], true), " + uk_midnight(IMPORTANT_TO) + ", null), " + c['T'] + "?['ImportantUntil'])"},
+            lambda c: "concat('Notice edited: ', string(" + c['T'] + "?['Title']))", 'Notice Edited', lambda c: "'Notice saved.'",
+            event_more=lambda c: {'PreviousValue': "@{take(string(" + c['T'] + "?['Body']), 2000)}", 'NewValue': "@{take(" + TEXT('body') + ", 2000)}"})
+        archive_notice = change(
+            '_NA', 'notices', notice_sel, 'Notice',
+            lambda c: chain(("not(equals(string(" + c['T'] + "?['Status']), 'Active'))", 'This notice is already archived.'),
+                            ("not(or(" + c['AUTHOR'] + ", " + c['MOD'] + "))", 'Only the person who posted it, or the engineers of the area and management, can archive this notice.')),
+            lambda c: {'Status': 'Archived', 'IsImportant': False},
+            lambda c: "concat('Notice archived: ', string(" + c['T'] + "?['Title']))", 'Notice Archived', lambda c: "'Notice archived.'")
+        PIN = "equals(" + P + "?['pinned'], true)"
+        pin_notice = change(
+            '_NP', 'notices', notice_sel, 'Notice',
+            lambda c: chain(("not(equals(string(" + c['T'] + "?['Status']), 'Active'))", 'This notice has been archived.'),
+                            ("not(" + c['MOD'] + ")", 'Only the engineers of the area and management can pin notices.')),
+            # pinned stays important with no end date; unpinned is no longer important
+            lambda c: {'IsImportant': "@" + PIN, 'ImportantUntil': None},
+            lambda c: "concat(if(" + PIN + ", 'Notice pinned: ', 'Notice unpinned: '), string(" + c['T'] + "?['Title']))",
+            "@{if(" + PIN + ", 'Notice Pinned', 'Notice Unpinned')}", lambda c: "if(" + PIN + ", 'Notice pinned.', 'Notice unpinned.')")
+        hide_comment = change(
+            '_NH', 'upd', '?$select=Id,Body,EntryType,ParentType,ParentId,IsHidden,AuthorId,FileDirRef', 'Notice',
+            lambda c: chain(("not(equals(string(" + c['T'] + "?['EntryType']), 'Comment'))", 'Only comments can be hidden.'),
+                            ("not(" + c['MOD'] + ")", 'Only the engineers of the area and management can hide comments.')),
+            lambda c: {'IsHidden': True},
+            lambda c: "concat('Comment hidden by a moderator: ', take(string(" + c['T'] + "?['Body']), 120))", 'Comment Hidden', lambda c: "'Comment hidden.'",
+            standard=False, already=lambda c: "equals(" + c['T'] + "?['IsHidden'], true)",
+            record_type_expr=lambda c: "@{if(equals(string(" + c['T'] + "?['ParentType']), 'Register Entry'), 'Register Entry', 'Notice')}")
+
+        # ---- the register (spec REG-1 to REG-5)
+        reg_sel = ('?$select=Id,Title,Description,EntryType,Impact,Status,Outcome,RaisedById,ResponsiblePersonId,Revision,LastRequestKey,FileDirRef,'
+                   'CompetencyId')
+        TYPES = "createArray('Improvement', 'Degradation', 'Concern', 'Opportunity', 'Positive Observation')"
+        IMPACTS = "createArray('Low', 'Medium', 'High')"
+        STATUSES = "createArray('Open', 'Under Review', 'Resolved', 'Closed')"
+        RESP = lambda code: "first(body('Get_resp" + code + "')?['value'])"
+        RESP_OK = lambda code: ("and(not(empty(" + RESP(code) + ")), equals(string(" + RESP(code) + "?['Status']), 'Active'), "
+                                "or(contains(" + MANAGEMENT + ", string(" + RESP(code) + "?['Role'])), not(empty(body('Resp_member" + code + "')?['value']))))")
+        claims = lambda person: "@{concat('[{\"Key\":\"', " + person + "?['Person']?['Name'], '\"}]')}"
+
+        def manages(c):
+            # raiser, responsible person, the area's engineers, its meeting runners, management (REG-2)
+            return ("or(" + c['MOD'] + ", " + c['CHAIR'] + ", equals(" + idstr(c['T'] + "?['RaisedById']") + ", " + SENDER + "), "
+                    "equals(" + idstr(c['T'] + "?['ResponsiblePersonId']") + ", " + SENDER + "))")
+        resp_reads = lambda code, area_id: [
+            ('Get_resp' + code, http('GET', L('people', "/items?$select=Id,Title,SiteUserId,Role,Status,Person/Name&$expand=Person&$filter=SiteUserId eq @{" + idq(P + "?['responsibleId']") + "}"))),
+            ('Resp_member' + code, http('GET', L('members', "/items?$select=Id&$filter=PersonId eq @{" + idq(P + "?['responsibleId']") + "} and CompetencyId eq @{"
+                                             + area_id + "} and Status eq 'Active'")))]
+        NEW_STATUS = "string(coalesce(" + P + "?['status'], ''))"
+        DONE_STATUS = "contains(createArray('Resolved', 'Closed'), " + NEW_STATUS + ")"
+        update_entry = change(
+            '_RU', 'reg', reg_sel, 'Register Entry',
+            lambda c: chain(("not(" + manages(c) + ")", 'Only the person who raised it, the person responsible, the engineers and meeting runners of the area, and management can change this entry.'),
+                            ("and(" + HAS('title') + ", equals(" + text_len('title') + ", 0))", 'Give the entry a title.'),
+                            ("and(" + HAS('title') + ", greater(" + text_len('title') + ", 255))", 'Keep the title to 255 characters or fewer.'),
+                            ("and(" + HAS('description') + ", greater(" + text_len('description') + ", 5000))", 'Keep the description to 5,000 characters or fewer.'),
+                            ("and(" + HAS('impact') + ", not(contains(" + IMPACTS + ", string(coalesce(" + P + "?['impact'], '')))))", 'Choose the impact.'),
+                            ("and(" + HAS('status') + ", not(contains(" + STATUSES + ", " + NEW_STATUS + ")))", 'Choose a status.'),
+                            ("and(" + HAS('status') + ", " + DONE_STATUS + ", less(" + text_len('outcome') + ", 10))", 'Record the outcome (at least 10 characters).'),
+                            ("greater(" + text_len('outcome') + ", 2000)", 'Keep the outcome to 2,000 characters or fewer.'),
+                            ("and(" + HAS('responsibleId') + ", not(" + RESP_OK('_RU') + "))", 'Choose a member of this area or a Team Leader.')),
+            lambda c: {'Title': "@{if(" + HAS('title') + ", " + TEXT('title') + ", " + c['T'] + "?['Title'])}",
+                       'Description': "@{if(" + HAS('description') + ", " + TEXT('description') + ", coalesce(" + c['T'] + "?['Description'], ''))}",
+                       'Impact': "@{if(" + HAS('impact') + ", " + P + "?['impact'], coalesce(" + c['T'] + "?['Impact'], 'Medium'))}",
+                       'Status': "@{if(" + HAS('status') + ", " + NEW_STATUS + ", " + c['T'] + "?['Status'])}",
+                       'Outcome': "@{if(" + HAS('outcome') + ", " + TEXT('outcome') + ", coalesce(" + c['T'] + "?['Outcome'], ''))}",
+                       'ResponsiblePersonId': "@if(" + HAS('responsibleId') + ", int(" + idq(P + "?['responsibleId']") + "), " + c['T'] + "?['ResponsiblePersonId'])",
+                       'DateResolved': "@if(" + HAS('status') + ", if(" + DONE_STATUS + ", " + EVENT_TIME + ", null), " + c['T'] + "?['DateResolved'])"},
+            lambda c: "concat(if(" + HAS('status') + ", concat('Status changed to ', " + NEW_STATUS + ", ': '), 'Entry updated: '), string(" + c['T'] + "?['Title']))",
+            "@{if(" + HAS('status') + ", 'Entry Status Changed', 'Entry Updated')}", lambda c: "'Entry saved.'",
+            reads=lambda c: resp_reads('_RU', idq(c['AREA'] + "?['Id']")),
+            event_more=lambda c: {'PreviousValue': "@{string(" + c['T'] + "?['Status'])}", 'NewValue': "@{if(" + HAS('status') + ", " + NEW_STATUS + ", '')}",
+                                  'Note': "@{" + TEXT('outcome') + "}"})
+
+        # linking an action: one record, never a copy (REG-3). The action must be open and in the entry's area.
+        LA = "body('Get_link_action_N')"
+        LINK_ID = idq(P + "?['actionId']")
+        def link_case(code, linking):
+            def reads(c):
+                return [('Get_link_action' + code, http('GET', L('act', "/items(@{" + LINK_ID + "})?$select=Id,Title,CompetencyId,IsOpen,SourceType,SourceId,PendingRequestKey"), meta=True)),
+                        ('Link_action_ok' + code, after(compose("@if(equals(actions('Get_link_action" + code + "')?['status'], 'Succeeded'), body('Get_link_action" + code + "'), json('{}'))"),
+                                                       {'Get_link_action' + code: TOLERANT}))]
+            A = lambda code: "outputs('Link_action_ok" + code + "')"
+            LINKED_HERE = lambda c: "and(equals(string(coalesce(" + A(code) + "?['SourceType'], '')), 'Register'), equals(" + idstr(A(code) + "?['SourceId']") + ", " + idstr(c['T'] + "?['Id']") + "))"
+            def verdict(c):
+                rules = [("not(" + manages(c) + ")", 'Only the people who look after this entry can link actions to it.'),
+                         ("empty(string(coalesce(" + A(code) + "?['Id'], '')))", 'That action could not be found.')]
+                if linking:
+                    rules += [("not(equals(" + idstr(A(code) + "?['CompetencyId']") + ", " + idstr(c['T'] + "?['CompetencyId']") + "))", 'Choose an action in the same area as this entry.'),
+                              ("not(equals(" + A(code) + "?['IsOpen'], true))", 'Choose an open action.'),
+                              ("and(equals(string(coalesce(" + A(code) + "?['SourceType'], '')), 'Register'), not(" + LINKED_HERE(c) + "))", 'That action is already linked to another entry.')]
+                else:
+                    rules += [("not(" + LINKED_HERE(c) + ")", 'That action is not linked to this entry.')]
+                return chain(*rules)
+            def more(c):
+                link_body = {'SourceType': 'Register', 'SourceId': '@int(' + idstr(c['T'] + "?['Id']") + ')'} if linking else {'SourceType': 'None', 'SourceId': None}
+                done = LINKED_HERE(c) if linking else "not(" + LINKED_HERE(c) + ")"
+                return [('Link_needed' + code, cond("@not(" + done + ")", seq(
+                    ('Link_body' + code, compose(link_body)),
+                    ('Save_link' + code, merge(L('act', "/items(@{" + LINK_ID + "})"), 'Link_body' + code, if_match="@{" + A(code) + "?['odata.etag']}")),
+                )))]
+            return change(code, 'reg', reg_sel, 'Register Entry', verdict, lambda c: {},
+                          lambda c: "concat(if(" + ('true' if linking else 'false') + ", 'Action linked: ', 'Action unlinked: '), string(" + A(code) + "?['Title']))",
+                          'Action Linked' if linking else 'Action Unlinked',
+                          lambda c: "'Action linked.'" if linking else "'Action unlinked.'",
+                          reads=reads, more_apply=more,
+                          event_more=lambda c: {'NewValue': '@{' + LINK_ID + '}'})
+        link_entry = link_case('_RL', True)
+        unlink_entry = link_case('_RX', False)
+
+        # ---- raising an entry: created once, found by the key it was created with
+        code = '_RR'
+        AREA = "first(body('Area" + code + "'))"
+        MEMBER = "first(body('My_member" + code + "'))"
+        AREA_KEY_IN = "string(coalesce(" + P + "?['areaKey'], ''))"
+        FOUND = "body('Find_entry" + code + "')?['value']"
+        ENTRY_ID = "string(variables('varActionId'))"
+        reg_values, reg_call = create_in_folder('reg', "@{outputs('Ids')?['regRoot']}/@{" + AREA + "?['CompetencyKey']}", 'Entry_values' + code, 'Entry_body' + code)
+        raise_entry = seq(
+            *area_steps(code, AREA_KEY_IN),
+            *resp_reads(code, idq(AREA + "?['Id']")),
+            ('Find_entry' + code, http('GET', L('reg', "/items?$select=Id&$filter=CreatedRequestKey eq 'F%7C@{" + esc(KEY) + "}'"))),
+            ('Get_settings' + code, http('GET', L('settings', "/items?$select=Title,Value&$top=500"))),
+            ('Testing' + code, query("@body('Get_settings" + code + "')?['value']", "@and(equals(item()?['Title'], 'PreGoLiveTesting'), equals(item()?['Value'], 'Yes'))")),
+            ('Decide' + code, cond('@and(' + UNDECIDED + ", empty(" + FOUND + "))", seq(
+                ('Verdict' + code, compose('@' + chain(
+                    ("or(empty(" + AREA + "), not(equals(string(" + AREA + "?['Status']), 'Active')), not(or(" + IS_MGMT + ", not(empty(" + MEMBER + ")))))", 'Choose one of your areas.'),
+                    ("not(contains(" + TYPES + ", string(coalesce(" + P + "?['entryType'], ''))))", 'Choose the type of entry.'),
+                    ("not(contains(" + IMPACTS + ", string(coalesce(" + P + "?['impact'], ''))))", 'Choose the impact.'),
+                    ("equals(" + text_len('title') + ", 0)", 'Give the entry a title.'),
+                    ("greater(" + text_len('title') + ", 255)", 'Keep the title to 255 characters or fewer.'),
+                    ("equals(" + text_len('description') + ", 0)", 'Describe it.'),
+                    ("greater(" + text_len('description') + ", 5000)", 'Keep the description to 5,000 characters or fewer.'),
+                    ("not(" + RESP_OK(code) + ")", 'Choose a member of this area or a Team Leader.')))),
+                ('Decided' + code, cond("@empty(outputs('Verdict" + code + "'))",
+                                        seq(*tx_update('planned' + code, {'State': 'Planned', 'StepsDone': 'DECIDED'})),
+                                        reject(code, "outputs('Verdict" + code + "')"))),
+            ))),
+            ('Need_entry' + code, cond("@empty(" + FOUND + ")", seq(
+                ('Entry_values' + code, form({
+                    'Title': '@{' + TEXT('title') + '}', 'Description': '@{' + TEXT('description') + '}', 'Competency': '@{' + idstr(AREA + "?['Id']") + '}',
+                    'EntryType': "@{" + P + "?['entryType']}", 'Impact': "@{" + P + "?['impact']}", 'Status': 'Open',
+                    'RaisedBy': claims(ME), 'ResponsiblePerson': claims(RESP(code)),
+                    'DateRaised': "@{convertFromUtc(" + EVENT_TIME + ", 'GMT Standard Time', 'dd/MM/yyyy HH:mm')}",
+                    'Revision': '1', 'LastRequestKey': '@{' + KEY + '}', 'CreatedRequestKey': 'F|@{' + KEY + '}',
+                    'IsTestRecord': "@{if(empty(body('Testing" + code + "')), '0', '1')}"})),
+                ('Entry_body' + code, reg_values),
+                ('Create_entry' + code, reg_call),
+                *created_ok('Create_entry' + code, 'Entry_created' + code, 'The entry could not be created. See Create_entry' + code + '.'),
+                ('Get_new_entry' + code, http('GET', L('reg', "/items?$select=Id&$filter=CreatedRequestKey eq 'F%7C@{" + esc(KEY) + "}'"))),
+                ('Set_new_entry' + code, set_var('varActionId', "@int(" + idstr("first(body('Get_new_entry" + code + "')?['value'])?['Id']") + ")")),
+            ), seq(
+                ('Set_found_entry' + code, set_var('varActionId', "@int(" + idstr("first(" + FOUND + ")?['Id']") + ")")),
+            ))),
+            *event_steps(code, "string(" + AREA + "?['CompetencyKey'])", idstr(AREA + "?['Id']"), 'Register Entry', ENTRY_ID,
+                         "concat(string(" + P + "?['entryType']), ' raised: ', " + TEXT('title') + ")", 'Entry Raised'),
+            *tx_update('applied' + code, {'State': 'Applied', 'ProcessedAt': '@{utcNow()}'}),
+            *finish_request(code, 'Completed', "concat('REG-', substring(concat('0000', " + ENTRY_ID + "), sub(length(concat('0000', " + ENTRY_ID + ")), 5), 5), ' raised.')",
+                            'int(' + ENTRY_ID + ')'),
+        )
+        return seq(
+            ('Get_comps_N', http('GET', L('comps', "/items?$select=Id,Title,CompetencyKey,Status&$top=500"))),
+            ('Record_type', switch("@" + OWN, {'EditNotice': edit_notice, 'ArchiveNotice': archive_notice, 'PinNotice': pin_notice, 'HideComment': hide_comment,
+                                                'RaiseRegisterEntry': raise_entry, 'UpdateRegisterEntry': update_entry, 'LinkActionToEntry': link_entry,
+                                                'UnlinkActionFromEntry': unlink_entry},
+                                   reject('_K', "'This kind of change is not recognised.'"))),
+        )
 
     # ---------------------------------------------------------------- common part
     IN_OWN = ("and(equals(string(" + R + "?['FileDirRef']), concat(outputs('Ids')?['reqRoot'], '/', outputs('Folder_name'))), "
@@ -1613,7 +1942,7 @@ def flow_request_queue(domain='actions'):
                                          'ReassignAction': reassign_case, 'CloseAction': close_case, 'ReopenAction': reopen_case,
                                          'EditActionDetails': edit_case})))),
                          reject('_K', "'This kind of change is not recognised.'"))
-         if domain == 'actions' else
+         if domain == 'actions' else scope(records_switch()) if domain == 'records' else
          cond("@contains(createArray('RetryTransaction', 'CancelTransaction', 'RevertTransaction'), string(" + TX + "?['RequestType']))",
               admin_switch(),
               seq(('Settings_or_people', cond("@equals(string(" + TX + "?['RequestType']), 'UpdateSetting')", settings_switch(), people_switch()))))),
@@ -1640,6 +1969,7 @@ def flow_request_queue(domain='actions'):
                   ('Initialize_varEventId', init_var('varEventId', 'integer', 0)),
                   ('Initialize_varLockedHere', init_var('varLockedHere', 'boolean', False)),
                   ('Initialize_varAct', init_var('varAct', 'object', {})),
+                  ('Initialize_varEntry', init_var('varEntry', 'object', {})),
                   ('Initialize_varUid', init_var('varUid', 'integer', 0)),
                   ('Initialize_varLogin', init_var('varLogin', 'string', '')),
                   ('Initialize_varName', init_var('varName', 'string', '')),
@@ -1656,8 +1986,7 @@ def flow_request_queue(domain='actions'):
                   ('Initialize_varNoticeList', init_var('varNoticeList', 'array', [])))
     actions['Try'] = after(scope(try_actions), {'Initialize_varNoticeList': OK})
     # emails for a change that is complete: a failure here never touches the request, and the daily run retries
-    email_loop, email_act = send_outbox('')
-    actions['Send_emails'] = after(scope({email_loop: email_act}), {'Try': OK})
+    actions['Send_emails'] = after(scope(send_outbox_steps('')), {'Try': OK})
     actions['Catch'] = catch
     others = [t for d, types in DOMAIN_TYPES.items() if d != domain for t in types]
     mine = ("@not(contains(createArray(" + ", ".join(q(x) for x in others) + "), string(triggerBody()?['RequestType'])))" if domain == 'actions'
@@ -1802,8 +2131,7 @@ def flow_daily_tasks():
                   ('Initialize_varNotices', init_var('varNotices', 'array', [])),
                   ('Initialize_varAlerts', init_var('varAlerts', 'array', [])))
     actions['Try'] = after(scope(try_actions), {'Initialize_varAlerts': OK})
-    email_loop, email_act = send_outbox('')
-    actions['Send_emails'] = after(scope({email_loop: email_act}), {'Try': OK})
+    actions['Send_emails'] = after(scope(send_outbox_steps('')), {'Try': OK})
     actions['Catch'] = after(scope(seq(('Terminate_failed', terminate('Failed', 'The daily tasks failed. See the failed action in the run history.')))),
                              {'Try': FAILED})
     triggers = {'Every_morning': {
@@ -1839,6 +2167,9 @@ def flow_queue_monitor():
     partly = 'Not fully recorded – an administrator has been told. The record is locked until it is resolved.'
     partly_admin = 'Not fully recorded – an administrator has been told and will finish it.'
     ADMIN_TYPE = "contains(createArray(" + ", ".join(q(x) for x in DOMAIN_TYPES['admin']) + "), string(" + S + "?['RequestType']))"
+    RECORD_TYPE = "contains(createArray(" + ", ".join(q(x) for x in DOMAIN_TYPES['records']) + "), string(" + S + "?['RequestType']))"
+    # decided once, then carried out step by step: part-made as soon as it was decided
+    DECIDED_TYPE = "contains(createArray(" + ", ".join(q(x) for x in DECIDED_TYPES) + "), string(" + S + "?['RequestType']))"
     ASKER = "string(coalesce(first(body('Asker'))?['Title'], 'someone'))"
     try_actions = seq(
         *site_and_ids(),
@@ -1867,7 +2198,9 @@ def flow_queue_monitor():
             # a request the monitor already put back and that is still not picked up: processing has stopped
             # a request the monitor already put back and that is still not picked up: that flow has stopped
             ('Not_picked_up', cond("@and(equals(" + S + "?['Status'], 'Submitted'), empty(" + TXM + "), greater(int(" + idq(S + "?['Attempts']") + "), 0))", seq(
-                ('Which_flow_down', cond("@" + ADMIN_TYPE, seq(('Mark_admin_down', set_var('varAdminDown', True))), seq(('Mark_down', set_var('varDown', True))))),
+                ('Which_flow_down', cond("@" + ADMIN_TYPE, seq(('Mark_admin_down', set_var('varAdminDown', True))),
+                                         seq(('Records_or_actions', cond("@" + RECORD_TYPE, seq(('Mark_records_down', set_var('varRecordsDown', True))),
+                                                                         seq(('Mark_down', set_var('varDown', True)))))))),
             ))),
             # three attempts, or a request that never got as far as its transaction after three tries
             ('Give_up', cond("@or(and(not(empty(" + TXM + ")), not(" + FINAL_M + "), greaterOrEquals(" + ATTEMPTS + ", 3)), "
@@ -1875,7 +2208,7 @@ def flow_queue_monitor():
                 # part-made: an administration change once it was decided (it may have changed groups already);
                 # an action change when the action carries it: its lock (or, for a raise, the action exists)
                 ('Part_unknown', set_var('varPart', False)),
-                ('Find_part', cond("@empty(" + TXM + ")", None, seq(('Part_by_type', cond("@" + ADMIN_TYPE, seq(
+                ('Find_part', cond("@empty(" + TXM + ")", None, seq(('Part_by_type', cond("@" + DECIDED_TYPE, seq(
                     ('Set_part_admin', set_var('varPart', "@contains(string(coalesce(" + TXM + "?['StepsDone'], '')), 'DECIDED')")),
                 ), seq(('Find_action_part', cond("@equals(string(" + TXM + "?['RequestType']), 'RaiseAction')", seq(
                     ('Get_raised_m', http('GET', L('act', "/items?$select=Id&$filter=CreatedRequestKey eq 'F%7C@{" + esc(TXM + "?['RequestKey']") + "}'"))),
@@ -1888,11 +2221,11 @@ def flow_queue_monitor():
                 ))))))))),
                 ('Attention_tx', compose({'State': 'Needs attention'})),
                 ('Has_tx_m', cond("@empty(" + TXM + ")", None, seq(('Save_attention_tx', merge(tx_item, 'Attention_tx'))))),
-                ('Attention_req', compose({'Status': 'Needs attention', 'ResultMessage': "@{if(" + PART + ", if(" + ADMIN_TYPE + ", " + q(partly_admin) + ", " + q(partly) + "), " + q(nothing) + ")}"})),
+                ('Attention_req', compose({'Status': 'Needs attention', 'ResultMessage': "@{if(" + PART + ", if(" + DECIDED_TYPE + ", " + q(partly_admin) + ", " + q(partly) + "), " + q(nothing) + ")}"})),
                 ('Save_attention_req', merge(req_item, 'Attention_req')),
                 alert_if('Attention_alert', 'true', "concat('request|', string(" + S + "?['Id']))",
                          "concat('A change could not be recorded: ', string(" + S + "?['Title']))",
-                         "concat('It was sent by ', " + ASKER + ", ' on ', " + uk_when(S + "?['Created']") + ", ' and tried 3 times. ', if(" + PART + ", if(" + ADMIN_TYPE + ", "
+                         "concat('It was sent by ', " + ASKER + ", ' on ', " + uk_when(S + "?['Created']") + ", ' and tried 3 times. ', if(" + PART + ", if(" + DECIDED_TYPE + ", "
                          "'Part of it was made, so it cannot be cancelled: choose Finish to complete it.', "
                          "'Part of it was made, so the record stays locked until you choose Finish or Revert.'), 'Nothing was changed. You can try it again or cancel it.'), "
                          "' Last error: ', string(coalesce(" + TXM + "?['LastError'], 'none recorded')))"),
@@ -1922,6 +2255,9 @@ def flow_queue_monitor():
                                   # administration has its own flow: when only that one is behind, staff can carry on
                                   'admin': "@{if(variables('varAdminDown'), 'Down', 'Healthy')}",
                                   'adminReason': "@{if(variables('varAdminDown'), 'Administration changes are not being picked up by ESG Competency Hub | 6 Administration.', '')}",
+                                  # notices and the register have their own flow: when only that one is behind, actions carry on
+                                  'records': "@{if(variables('varRecordsDown'), 'Down', 'Healthy')}",
+                                  'recordsReason': "@{if(variables('varRecordsDown'), 'Changes to notices and the register are not being picked up by ESG Competency Hub | 4 Records.', '')}",
                                   'checkedAt': '@{utcNow()}', 'attention': "@length(body('Get_attention')?['value'])"})),
         ('Health_body', compose({'Value': "@{string(outputs('Health_value'))}"})),
         ('Record_health', cond("@empty(body('Health_row'))", None, seq(
@@ -1932,10 +2268,10 @@ def flow_queue_monitor():
                   ('Initialize_varAlerts', init_var('varAlerts', 'array', [])),
                   ('Initialize_varDown', init_var('varDown', 'boolean', False)),
                   ('Initialize_varAdminDown', init_var('varAdminDown', 'boolean', False)),
+                  ('Initialize_varRecordsDown', init_var('varRecordsDown', 'boolean', False)),
                   ('Initialize_varPart', init_var('varPart', 'boolean', False)))
     actions['Try'] = after(scope(try_actions), {'Initialize_varPart': OK})
-    email_loop, email_act = send_outbox('')
-    actions['Send_emails'] = after(scope({email_loop: email_act}), {'Try': OK})
+    actions['Send_emails'] = after(scope(send_outbox_steps('')), {'Try': OK})
     actions['Catch'] = after(scope(seq(('Terminate_failed', terminate('Failed', 'The queue monitor failed. See the failed action in the run history.')))),
                              {'Try': FAILED})
     triggers = {'Every_15_minutes': {
@@ -1973,6 +2309,11 @@ FLOWS = [
      'description': 'Every 15 minutes in working hours and hourly outside them: puts stalled changes back in the queue, retries emails, '
                     'tells the administrators about anything that needs them, and records whether processing is healthy.',
      'introduced': '1.3.0.0'},
+    {'id': '7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f04', 'name': 'ESG Competency Hub | 4 Records', 'build': lambda: flow_request_queue('records'),
+     'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': False,
+     'description': 'Records changes to notices, comments and the improvements and degradations register sent from the Competency Hub page, '
+                    'and links between register entries and actions.',
+     'introduced': '1.5.0.0'},
     {'id': '7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f06', 'name': 'ESG Competency Hub | 6 Administration', 'build': lambda: flow_request_queue('admin'),
      'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': False,
      'description': "Records administrators' changes from the Competency Hub page: people, their areas and permissions, settings, and decisions on changes needing attention.",
@@ -1980,7 +2321,7 @@ FLOWS = [
 ]
 
 
-KIND = {'1': 'daily', '2': 'queue', '3': 'monitor', '6': 'admin'}
+KIND = {'1': 'daily', '2': 'queue', '3': 'monitor', '4': 'records', '6': 'admin'}
 
 
 def build_all(raw=False):

@@ -22,7 +22,7 @@ import validate
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, '..'))
 SRC = os.path.join(ROOT, 'src')
-VERSION = '1.4.1.0'
+VERSION = '1.5.0.0'
 INTRODUCED = '1.0.0.0'   # the version the request flow and environment variable first appeared in
 UNIQUE = 'ESGCompetencyHub'
 DISPLAY = 'ESG Competency Hub'
