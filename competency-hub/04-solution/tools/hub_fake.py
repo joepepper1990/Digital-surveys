@@ -45,6 +45,11 @@ class HubFake:
         self.sent = []                    # emails the Outlook connector sent: {'to', 'subject', 'body'}
         self.mail_fail = []               # outcomes for the next sends, in order: 400 (refused), 500 or 'timeout' (unclear)
         self.clock = datetime(2026, 10, 21, 9, 30, tzinfo=timezone.utc)
+        self.groups = {}                  # id -> {'Title', 'users': set of user ids}
+        self.tenant = {}                  # email -> display name: people in Microsoft 365 who may not be site users yet
+        self.next_principal = 500
+        self.roledefs = {1073741829: 'Full Control', 1073741830: 'Edit', 2001: 'Competency Hub Read', 2002: 'Competency Hub Add',
+                         2003: 'Competency Hub Contribute'}
         for l in LISTS:
             lid = str(uuid.uuid4())
             root = SITE_REL + ('/' + l['url'] if l['template'] == 101 else '/Lists/' + l['url'])
@@ -57,6 +62,20 @@ class HubFake:
     # ------------------------------------------------------------------ test helpers
     def add_user(self, uid, title, email):
         self.users[uid] = {'Id': uid, 'Title': title, 'LoginName': 'i:0#.f|membership|' + email, 'Email': email}
+
+    def add_group(self, title, users=()):
+        gid = self.next_principal
+        self.next_principal += 1
+        self.groups[gid] = {'Title': title, 'users': set(users)}
+        return gid
+
+    def group_users(self, title):
+        return next(g['users'] for g in self.groups.values() if g['Title'] == title)
+
+    def folder_item(self, key, path):
+        lst = self.by_key[key]
+        d, _, leaf = path.rpartition('/')
+        return self._find_folder(lst, d, leaf)
 
     def folder(self, key, path, author=None):
         """Creates folders along path (relative to the list root) as the given author (default: the flow's account)."""
@@ -222,6 +241,78 @@ class HubFake:
             if m.group(2):
                 fail(404, 'File Not Found.')
             return {'Exists': False}
+        # groups, users and permissions (plan REV5 §4: the Administration flow)
+        if method == 'GET' and path == '_api/web/sitegroups':
+            return {'value': [{'Id': gid, 'Title': g['Title']} for gid, g in sorted(self.groups.items())]}
+        m = re.match(r'^_api/web/sitegroups\((\d+)\)/users(/removebyid\((\d+)\))?$', path)
+        if m:
+            g = self.groups.get(int(m.group(1)))
+            if not g:
+                fail(404, 'Group cannot be found.')
+            if method == 'GET':
+                ids = [int(x) for x in re.findall(r'Id eq (\d+)', params.get('$filter', ''))]
+                return {'value': [{'Id': u} for u in sorted(g['users']) if not ids or u in ids]}
+            if m.group(2):
+                self._write('REMOVE', 'group {0}'.format(m.group(1)))
+                g['users'].discard(int(m.group(3)))
+                return {}
+            self._write('ADDUSER', 'group {0}'.format(m.group(1)))
+            data = json.loads(body)
+            if '__metadata' not in data:
+                fail(400, 'The entity type must be given (__metadata) in the verbose format.')
+            u = next((u for u in self.users.values() if u['LoginName'] == data.get('LoginName')), None)
+            if not u:
+                fail(404, 'The user does not exist or is not unique.')
+            g['users'].add(u['Id'])
+            return {}
+        if method == 'POST' and path == '_api/web/ensureuser':
+            self._write('ENSURE', 'user')
+            login = json.loads(body)['logonName']
+            email = login.split('|')[-1]
+            u = next((u for u in self.users.values() if u['LoginName'].lower() == login.lower()), None)
+            if not u:
+                if email not in self.tenant:
+                    fail(404, 'The specified user ' + email + ' could not be found.')
+                uid = self.next_principal
+                self.next_principal += 1
+                self.add_user(uid, self.tenant[email], email)
+                u = self.users[uid]
+            return {'Id': u['Id'], 'Title': u['Title'], 'LoginName': u['LoginName'], 'Email': u['Email']}
+        if method == 'GET' and path == '_api/web/roledefinitions':
+            return {'value': [{'Id': rid, 'Name': n} for rid, n in sorted(self.roledefs.items())]}
+        m = re.match(r"^_api/web/GetFolderByServerRelativePath\(decodedurl='((?:[^']|'')*)'\)/ListItemAllFields/(breakroleinheritance|roleassignments)(.*)$", path)
+        if m:
+            url = m.group(1).replace("''", "'")
+            lst = next((l for l in self.lists.values() if url.startswith(l['root'] + '/')), None)
+            d, _, leaf = url[len(lst['root']) + 1:].rpartition('/') if lst else ('', '', '')
+            fold = lst and self._find_folder(lst, d, leaf)
+            if not fold:
+                fail(404, 'File Not Found.')
+            ra = fold.setdefault('ra', {})
+            if m.group(2) == 'breakroleinheritance':
+                self._write('BREAK', url)
+                if not fold.get('unique'):
+                    fold['unique'] = True
+                    ra.clear()
+                    ra[self.me] = {1073741829}          # copied from the list: its owners
+                return {}
+            rest_part = m.group(3)
+            if method == 'GET':
+                return {'value': [{'PrincipalId': pid, 'RoleDefinitionBindings': [{'Id': r} for r in sorted(rs)]} for pid, rs in sorted(ra.items())]}
+            mm = re.match(r'^/(addroleassignment|removeroleassignment)\(principalid=(\d+),roledefid=(\d+)\)$', rest_part)
+            if not mm:
+                fail(400, 'not simulated: ' + path)
+            if not fold.get('unique'):
+                fail(400, 'This operation is not allowed on an object that inherits permissions.')
+            self._write(mm.group(1).upper(), url)
+            pid, rid = int(mm.group(2)), int(mm.group(3))
+            if mm.group(1) == 'addroleassignment':
+                ra.setdefault(pid, set()).add(rid)
+            else:
+                ra.get(pid, set()).discard(rid)
+                if pid in ra and not ra[pid]:
+                    del ra[pid]
+            return {}
         m = re.match(r"^_api/web/siteusers$", path)
         if method == 'GET' and m:
             ids = [int(x) for x in re.findall(r'Id eq (\d+)', params.get('$filter', ''))]

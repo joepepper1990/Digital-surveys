@@ -146,7 +146,9 @@
                 "actRoot": "@{outputs('Site_path')}/Lists/Actions",
                 "histRoot": "@{outputs('Site_path')}/Lists/History",
                 "updRoot": "@{outputs('Site_path')}/Lists/Updates",
-                "notifRoot": "@{outputs('Site_path')}/Lists/NotificationLog"
+                "notifRoot": "@{outputs('Site_path')}/Lists/NotificationLog",
+                "membersRoot": "@{outputs('Site_path')}/Lists/CompetencyMembers",
+                "peopleRoot": "@{outputs('Site_path')}/Lists/People"
               },
               "runAfter": {
                 "Site_url": [
@@ -595,6 +597,384 @@
                 ]
               }
             },
+            "Get_comps": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['comps']}')/items?$select=Id,Title,CompetencyKey,MembersGroupId&$top=500",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Each_candidate": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Get_temporary": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['members']}')/items?$select=Id,CompetencyId,PersonId,MembershipKey,AccessExpires&$filter=Status eq 'Active'&$top=5000",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {
+                "Get_comps": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Expired": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Get_temporary')?['value']",
+                "where": "@and(not(empty(string(coalesce(item()?['AccessExpires'], '')))), less(int(replace(convertFromUtc(string(coalesce(item()?['AccessExpires'], '2999-01-01T00:00:00Z')), 'GMT Standard Time', 'yyyy-MM-dd'), '-', '')), int(replace(outputs('Today'), '-', ''))))"
+              },
+              "runAfter": {
+                "Get_temporary": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Each_expired": {
+              "type": "Foreach",
+              "foreach": "@body('Expired')",
+              "runtimeConfiguration": {
+                "concurrency": {
+                  "repetitions": 1
+                }
+              },
+              "actions": {
+                "Area_x": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@body('Get_comps')?['value']",
+                    "where": "@equals(first(split(string(coalesce(item()?['Id'], '')), '.')), first(split(string(coalesce(items('Each_expired')?['CompetencyId'], '')), '.')))"
+                  },
+                  "runAfter": {}
+                },
+                "Who_x": {
+                  "type": "Query",
+                  "inputs": {
+                    "from": "@body('Get_people')?['value']",
+                    "where": "@equals(first(split(string(coalesce(item()?['SiteUserId'], '')), '.')), first(split(string(coalesce(items('Each_expired')?['PersonId'], '')), '.')))"
+                  },
+                  "runAfter": {
+                    "Area_x": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Owned_x": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                      "parameters/method": "GET",
+                      "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['act']}')/items?$select=Id&$filter=AssignedToId eq @{if(empty(first(split(string(coalesce(items('Each_expired')?['PersonId'], '')), '.'))), '0', first(split(string(coalesce(items('Each_expired')?['PersonId'], '')), '.')))} and IsOpen eq 1 and CompetencyId eq @{if(empty(first(split(string(coalesce(items('Each_expired')?['CompetencyId'], '')), '.'))), '0', first(split(string(coalesce(items('Each_expired')?['CompetencyId'], '')), '.')))}",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata"
+                      }
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "Who_x": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Can_remove_x": {
+                  "type": "If",
+                  "expression": "@empty(body('Owned_x')?['value'])",
+                  "actions": {
+                    "Out_x": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                          "parameters/method": "POST",
+                          "parameters/uri": "_api/web/sitegroups(@{if(empty(first(split(string(coalesce(first(body('Area_x'))?['MembersGroupId'], '')), '.'))), '0', first(split(string(coalesce(first(body('Area_x'))?['MembersGroupId'], '')), '.')))})/users/removebyid(@{if(empty(first(split(string(coalesce(items('Each_expired')?['PersonId'], '')), '.'))), '0', first(split(string(coalesce(items('Each_expired')?['PersonId'], '')), '.')))})",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata"
+                          }
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {}
+                    },
+                    "Back_x": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                          "parameters/method": "GET",
+                          "parameters/uri": "_api/web/sitegroups(@{if(empty(first(split(string(coalesce(first(body('Area_x'))?['MembersGroupId'], '')), '.'))), '0', first(split(string(coalesce(first(body('Area_x'))?['MembersGroupId'], '')), '.')))})/users?$select=Id&$filter=Id eq @{if(empty(first(split(string(coalesce(items('Each_expired')?['PersonId'], '')), '.'))), '0', first(split(string(coalesce(items('Each_expired')?['PersonId'], '')), '.')))}",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata"
+                          }
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {
+                        "Out_x": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Gone_x": {
+                      "type": "If",
+                      "expression": "@empty(body('Back_x')?['value'])",
+                      "actions": {},
+                      "else": {
+                        "actions": {
+                          "Still_x": {
+                            "type": "Compose",
+                            "inputs": "@int('An expired membership could not be removed. See Out_x.')",
+                            "runAfter": {}
+                          }
+                        }
+                      },
+                      "runAfter": {
+                        "Back_x": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Ended_x": {
+                      "type": "Compose",
+                      "inputs": {
+                        "Status": "Removed",
+                        "DateRemoved": "@{utcNow()}",
+                        "CanManageMeetings": false
+                      },
+                      "runAfter": {
+                        "Gone_x": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Save_ended_x": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                          "parameters/method": "POST",
+                          "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['members']}')/items(@{items('Each_expired')?['Id']})",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata",
+                            "Content-Type": "application/json;odata=nometadata",
+                            "X-HTTP-Method": "MERGE",
+                            "IF-MATCH": "*"
+                          },
+                          "parameters/body": "@{string(outputs('Ended_x'))}"
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {
+                        "Ended_x": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Ended_event_values": {
+                      "type": "Compose",
+                      "inputs": [
+                        {
+                          "FieldName": "Title",
+                          "FieldValue": "@{take(concat('Temporary access ended: ', string(first(body('Who_x'))?['Title']), ' – ', string(first(body('Area_x'))?['Title'])), 255)}"
+                        },
+                        {
+                          "FieldName": "RowKind",
+                          "FieldValue": "Event"
+                        },
+                        {
+                          "FieldName": "RequestKey",
+                          "FieldValue": "@{concat('SYS|Expire|', string(items('Each_expired')?['Id']), '|', outputs('Today'))}"
+                        },
+                        {
+                          "FieldName": "RecordType",
+                          "FieldValue": "Membership"
+                        },
+                        {
+                          "FieldName": "RecordId",
+                          "FieldValue": "@{items('Each_expired')?['Id']}"
+                        },
+                        {
+                          "FieldName": "EventType",
+                          "FieldValue": "AccessExpired"
+                        },
+                        {
+                          "FieldName": "OwnerId",
+                          "FieldValue": "@{if(empty(first(split(string(coalesce(items('Each_expired')?['PersonId'], '')), '.'))), '0', first(split(string(coalesce(items('Each_expired')?['PersonId'], '')), '.')))}"
+                        }
+                      ],
+                      "runAfter": {
+                        "Save_ended_x": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Ended_event_body": {
+                      "type": "Compose",
+                      "inputs": {
+                        "listItemCreateInfo": {
+                          "FolderPath": {
+                            "DecodedUrl": "@{outputs('Ids')?['histRoot']}/Administration"
+                          },
+                          "UnderlyingObjectType": 0
+                        },
+                        "formValues": "@outputs('Ended_event_values')",
+                        "bNewDocumentUpdate": false
+                      },
+                      "runAfter": {
+                        "Ended_event_values": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Ended_event": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                          "parameters/method": "POST",
+                          "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['hist']}')/AddValidateUpdateItemUsingPath",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata",
+                            "Content-Type": "application/json;odata=nometadata"
+                          },
+                          "parameters/body": "@{string(outputs('Ended_event_body'))}"
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {
+                        "Ended_event_body": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Ended_event_done": {
+                      "type": "Compose",
+                      "inputs": "done",
+                      "runAfter": {
+                        "Ended_event": [
+                          "Succeeded",
+                          "Failed",
+                          "TimedOut"
+                        ]
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {
+                      "Expiry_alert": {
+                        "type": "If",
+                        "expression": "@true",
+                        "actions": {
+                          "Expiry_alert_to": {
+                            "type": "Select",
+                            "inputs": {
+                              "from": "@body('Admins')",
+                              "select": {
+                                "send": "@and(true, equals(string(item()?['Status']), 'Active'))",
+                                "type": "ALR",
+                                "key": "@{concat('ALR|', concat('expiry|', string(items('Each_expired')?['Id'])), '|', outputs('Today'), '|', first(split(string(coalesce(item()?['SiteUserId'], '')), '.')))}",
+                                "recipientId": "@{first(split(string(coalesce(item()?['SiteUserId'], '')), '.'))}",
+                                "login": "@{item()?['Person']?['Name']}",
+                                "email": "@{coalesce(item()?['Person']?['EMail'], item()?['Email'])}",
+                                "actor": "@{''}",
+                                "actionId": "@{'0'}",
+                                "title": "@{concat('Temporary access has ended, but open actions remain: ', string(first(body('Who_x'))?['Title']), ' in ', string(first(body('Area_x'))?['Title']))}",
+                                "area": "@{''}",
+                                "dueIso": "@{outputs('Today')}",
+                                "originalIso": "@{outputs('Today')}",
+                                "previousIso": "@{''}",
+                                "extCount": "@int(0)",
+                                "note": "@{concat(string(first(body('Who_x'))?['Title']), ' still owns ', string(length(body('Owned_x')?['value'])), ' open action(s) in ', string(first(body('Area_x'))?['Title']), ', so their access there was not removed. Reassign the actions, then untick the area in Administration.')}"
+                              }
+                            },
+                            "runAfter": {}
+                          },
+                          "Expiry_alert_add": {
+                            "type": "SetVariable",
+                            "inputs": {
+                              "name": "varAlerts",
+                              "value": "@union(variables('varAlerts'), body('Expiry_alert_to'))"
+                            },
+                            "runAfter": {
+                              "Expiry_alert_to": [
+                                "Succeeded"
+                              ]
+                            }
+                          }
+                        },
+                        "else": {
+                          "actions": {}
+                        },
+                        "runAfter": {}
+                      }
+                    }
+                  },
+                  "runAfter": {
+                    "Owned_x": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "runAfter": {
+                "Expired": [
+                  "Succeeded"
+                ]
+              }
+            },
             "To_remind": {
               "type": "Query",
               "inputs": {
@@ -602,7 +982,7 @@
                 "where": "@equals(item()?['send'], true)"
               },
               "runAfter": {
-                "Each_candidate": [
+                "Each_expired": [
                   "Succeeded"
                 ]
               }

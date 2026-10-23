@@ -389,6 +389,8 @@ def call(name, a, ctx):
         if not all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in a):
             raise ExprError(name + ' needs numbers')
         return a[0] <= a[1] if name == 'lessOrEquals' else a[0] >= a[1]
+    if name == 'skip':
+        return list(a[0])[int(a[1]):]
     if name == 'removeProperty':
         if not isinstance(a[0], dict):
             raise ExprError('removeProperty() expects an object')

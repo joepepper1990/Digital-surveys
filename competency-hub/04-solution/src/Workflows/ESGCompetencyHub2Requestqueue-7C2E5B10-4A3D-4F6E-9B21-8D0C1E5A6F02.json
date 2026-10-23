@@ -57,7 +57,7 @@
               "expression": "@not(equals(triggerBody()?['{IsFolder}'], true))"
             },
             {
-              "expression": "@not(contains(createArray('RetryTransaction', 'CancelTransaction', 'RevertTransaction'), string(triggerBody()?['RequestType'])))"
+              "expression": "@not(contains(createArray('RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting'), string(triggerBody()?['RequestType'])))"
             }
           ],
           "runtimeConfiguration": {
@@ -269,6 +269,57 @@
             ]
           }
         },
+        "Initialize_varUid": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varUid",
+                "type": "integer",
+                "value": 0
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_varAct": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_varLogin": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varLogin",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_varUid": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialize_varName": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varName",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialize_varLogin": [
+              "Succeeded"
+            ]
+          }
+        },
         "Initialize_varOutbox": {
           "type": "InitializeVariable",
           "inputs": {
@@ -281,7 +332,7 @@
             ]
           },
           "runAfter": {
-            "Initialize_varAct": [
+            "Initialize_varName": [
               "Succeeded"
             ]
           }
@@ -472,7 +523,9 @@
                 "actRoot": "@{outputs('Site_path')}/Lists/Actions",
                 "histRoot": "@{outputs('Site_path')}/Lists/History",
                 "updRoot": "@{outputs('Site_path')}/Lists/Updates",
-                "notifRoot": "@{outputs('Site_path')}/Lists/NotificationLog"
+                "notifRoot": "@{outputs('Site_path')}/Lists/NotificationLog",
+                "membersRoot": "@{outputs('Site_path')}/Lists/CompetencyMembers",
+                "peopleRoot": "@{outputs('Site_path')}/Lists/People"
               },
               "runAfter": {
                 "Site_url": [
@@ -1513,9 +1566,24 @@
                         ]
                       }
                     },
-                    "Max_due_R": {
-                      "type": "Compose",
-                      "inputs": "@formatDateTime(addToTime(concat(outputs('Today'), 'T00:00:00Z'), 24, 'Month'), 'yyyy-MM-dd')",
+                    "Get_settings_R": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                          "parameters/method": "GET",
+                          "parameters/uri": "_api/web/GetList('@{outputs('Ids')?['settings']}')/items?$select=Title,Value&$top=500",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata"
+                          }
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
                       "runAfter": {
                         "Read_due_R": [
                           "Succeeded",
@@ -1524,9 +1592,51 @@
                         ]
                       }
                     },
+                    "Years_row_R": {
+                      "type": "Query",
+                      "inputs": {
+                        "from": "@body('Get_settings_R')?['value']",
+                        "where": "@equals(item()?['Title'], 'MaxDeadlineYears')"
+                      },
+                      "runAfter": {
+                        "Get_settings_R": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Years_R": {
+                      "type": "Compose",
+                      "inputs": "@max(1, int(if(empty(string(coalesce(first(body('Years_row_R'))?['Value'], ''))), '2', string(first(body('Years_row_R'))?['Value']))))",
+                      "runAfter": {
+                        "Years_row_R": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Testing_R": {
+                      "type": "Query",
+                      "inputs": {
+                        "from": "@body('Get_settings_R')?['value']",
+                        "where": "@and(equals(item()?['Title'], 'PreGoLiveTesting'), equals(item()?['Value'], 'Yes'))"
+                      },
+                      "runAfter": {
+                        "Years_R": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Max_due_R": {
+                      "type": "Compose",
+                      "inputs": "@formatDateTime(addToTime(concat(outputs('Today'), 'T00:00:00Z'), mul(outputs('Years_R'), 12), 'Month'), 'yyyy-MM-dd')",
+                      "runAfter": {
+                        "Testing_R": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
                     "Verdict_R": {
                       "type": "Compose",
-                      "inputs": "@if(greater(variables('varExistingId'), 0), '', if(or(empty(first(body('Get_area_R')?['value'])), not(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Requester')?['Role'])), not(empty(body('My_member_R')))))), 'Choose one of your areas.', if(or(empty(first(body('Get_owner_R')?['value'])), not(equals(string(first(body('Get_owner_R')?['value'])?['Status']), 'Active')), not(or(contains(createArray('Team Leader', 'Group Head'), string(first(body('Get_owner_R')?['value'])?['Role'])), not(empty(body('Owner_member_R')?['value']))))), 'Choose a member of this area or a Team Leader.', if(empty(trim(string(coalesce(outputs('Payload')?['title'], '')))), 'Enter what needs doing.', if(greater(length(trim(string(coalesce(outputs('Payload')?['title'], '')))), 255), 'Keep the title to 255 characters or fewer.', if(empty(trim(string(coalesce(outputs('Payload')?['description'], '')))), 'Add a short description.', if(greater(length(trim(string(coalesce(outputs('Payload')?['description'], '')))), 5000), 'Keep the description to 5,000 characters or fewer.', if(not(and(equals(variables('varDue'), string(coalesce(outputs('Payload')?['dueIso'], ''))), not(empty(string(coalesce(outputs('Payload')?['dueIso'], '')))))), 'Choose a target date.', if(less(int(replace(if(and(equals(variables('varDue'), string(coalesce(outputs('Payload')?['dueIso'], ''))), not(empty(string(coalesce(outputs('Payload')?['dueIso'], ''))))), string(coalesce(outputs('Payload')?['dueIso'], '')), '2000-01-01'), '-', '')), int(replace(outputs('Today'), '-', ''))), 'The target date cannot be in the past.', if(greater(int(replace(if(and(equals(variables('varDue'), string(coalesce(outputs('Payload')?['dueIso'], ''))), not(empty(string(coalesce(outputs('Payload')?['dueIso'], ''))))), string(coalesce(outputs('Payload')?['dueIso'], '')), '2000-01-01'), '-', '')), int(replace(outputs('Max_due_R'), '-', ''))), 'Choose a date within 2 years.', if(not(contains(createArray('Low', 'Normal', 'High'), string(coalesce(outputs('Payload')?['priority'], 'Normal')))), 'Choose a priority.', '')))))))))))",
+                      "inputs": "@if(greater(variables('varExistingId'), 0), '', if(or(empty(first(body('Get_area_R')?['value'])), not(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Requester')?['Role'])), not(empty(body('My_member_R')))))), 'Choose one of your areas.', if(or(empty(first(body('Get_owner_R')?['value'])), not(equals(string(first(body('Get_owner_R')?['value'])?['Status']), 'Active')), not(or(contains(createArray('Team Leader', 'Group Head'), string(first(body('Get_owner_R')?['value'])?['Role'])), not(empty(body('Owner_member_R')?['value']))))), 'Choose a member of this area or a Team Leader.', if(and(equals(string(outputs('Requester')?['Role']), 'Technician'), not(equals(first(body('My_member_R'))?['CanManageMeetings'], true)), not(equals(first(split(string(coalesce(first(body('Get_owner_R')?['value'])?['SiteUserId'], '')), '.')), outputs('Sender_id')))), 'As a technician you can raise actions for yourself in this area. Ask an engineer or meeting lead to raise it for someone else.', if(empty(trim(string(coalesce(outputs('Payload')?['title'], '')))), 'Enter what needs doing.', if(greater(length(trim(string(coalesce(outputs('Payload')?['title'], '')))), 255), 'Keep the title to 255 characters or fewer.', if(empty(trim(string(coalesce(outputs('Payload')?['description'], '')))), 'Add a short description.', if(greater(length(trim(string(coalesce(outputs('Payload')?['description'], '')))), 5000), 'Keep the description to 5,000 characters or fewer.', if(not(and(equals(variables('varDue'), string(coalesce(outputs('Payload')?['dueIso'], ''))), not(empty(string(coalesce(outputs('Payload')?['dueIso'], '')))))), 'Choose a target date.', if(less(int(replace(if(and(equals(variables('varDue'), string(coalesce(outputs('Payload')?['dueIso'], ''))), not(empty(string(coalesce(outputs('Payload')?['dueIso'], ''))))), string(coalesce(outputs('Payload')?['dueIso'], '')), '2000-01-01'), '-', '')), int(replace(outputs('Today'), '-', ''))), 'The target date cannot be in the past.', if(greater(int(replace(if(and(equals(variables('varDue'), string(coalesce(outputs('Payload')?['dueIso'], ''))), not(empty(string(coalesce(outputs('Payload')?['dueIso'], ''))))), string(coalesce(outputs('Payload')?['dueIso'], '')), '2000-01-01'), '-', '')), int(replace(outputs('Max_due_R'), '-', ''))), concat('Choose a date within ', string(outputs('Years_R')), if(equals(outputs('Years_R'), 1), ' year.', ' years.')), if(not(contains(createArray('Low', 'Normal', 'High'), string(coalesce(outputs('Payload')?['priority'], 'Normal')))), 'Choose a priority.', ''))))))))))))",
                       "runAfter": {
                         "Max_due_R": [
                           "Succeeded"
@@ -1619,6 +1729,10 @@
                                 {
                                   "FieldName": "CreatedRequestKey",
                                   "FieldValue": "F|@{string(variables('varTx')?['RequestKey'])}"
+                                },
+                                {
+                                  "FieldName": "IsTestRecord",
+                                  "FieldValue": "@{if(empty(body('Testing_R')), '0', '1')}"
                                 }
                               ],
                               "runAfter": {}
@@ -3251,7 +3365,7 @@
                             "type": "SetVariable",
                             "inputs": {
                               "name": "varVerdict",
-                              "value": "@if(or(equals(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')), string(variables('varTx')?['RequestKey'])), equals(string(coalesce(body('Get_action_U')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey']))), '', if(and(not(empty(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')))), equals(string(coalesce(body('Get_action_U')?['CreatedRequestKey'], '')), concat('F|', string(coalesce(body('Get_action_U')?['PendingRequestKey'], ''))))), 'That action could not be found.', if(not(contains(createArray('Open', 'In Progress', 'Awaiting Input'), string(body('Get_action_U')?['Status']))), 'This action is no longer open, so its deadline cannot be moved.', if(not(or(equals(first(split(string(coalesce(body('Get_action_U')?['AssignedToId'], '')), '.')), outputs('Sender_id')), equals(first(split(string(coalesce(body('Get_action_U')?['RaisedById'], '')), '.')), outputs('Sender_id')), or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Requester')?['Role'])), and(not(empty(first(body('My_member_U')))), or(equals(string(outputs('Requester')?['Role']), 'Engineer'), equals(first(body('My_member_U'))?['CanManageMeetings'], true)))))), 'Only the owner or the people who manage this action can move its deadline.', if(not(empty(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')))), 'This action is being updated. Try again in a minute.', if(not(equals(first(split(string(coalesce(body('Get_action_U')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(not(equals(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.')), first(split(string(coalesce(outputs('Payload')?['expectedDueDay'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(not(and(equals(variables('varDue'), string(coalesce(outputs('Payload')?['newDueIso'], ''))), not(empty(string(coalesce(outputs('Payload')?['newDueIso'], '')))))), 'Choose the new deadline.', if(lessOrEquals(int(replace(if(and(equals(variables('varDue'), string(coalesce(outputs('Payload')?['newDueIso'], ''))), not(empty(string(coalesce(outputs('Payload')?['newDueIso'], ''))))), string(coalesce(outputs('Payload')?['newDueIso'], '')), '2000-01-01'), '-', '')), int(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.')))), concat('The new deadline must be after ', formatDateTime(concat(concat(substring(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.')), 0, 4), '-', substring(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.')), 4, 2), '-', substring(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.')), 6, 2)), 'T00:00:00Z'), 'd MMMM yyyy'), '.'), if(less(int(replace(if(and(equals(variables('varDue'), string(coalesce(outputs('Payload')?['newDueIso'], ''))), not(empty(string(coalesce(outputs('Payload')?['newDueIso'], ''))))), string(coalesce(outputs('Payload')?['newDueIso'], '')), '2000-01-01'), '-', '')), int(replace(outputs('Today'), '-', ''))), 'The new deadline cannot be in the past.', if(less(length(trim(string(coalesce(outputs('Payload')?['reason'], '')))), 10), 'Give a reason of at least 10 characters.', if(greater(length(trim(string(coalesce(outputs('Payload')?['reason'], '')))), 1000), 'Keep the reason to 1,000 characters or fewer.', ''))))))))))))"
+                              "value": "@if(or(equals(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')), string(variables('varTx')?['RequestKey'])), equals(string(coalesce(body('Get_action_U')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey']))), '', if(and(not(empty(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')))), equals(string(coalesce(body('Get_action_U')?['CreatedRequestKey'], '')), concat('F|', string(coalesce(body('Get_action_U')?['PendingRequestKey'], ''))))), 'That action could not be found.', if(not(contains(createArray('Open', 'In Progress', 'Awaiting Input'), string(body('Get_action_U')?['Status']))), 'This action is no longer open, so its deadline cannot be moved.', if(not(or(equals(first(split(string(coalesce(body('Get_action_U')?['AssignedToId'], '')), '.')), outputs('Sender_id')), or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Requester')?['Role'])), and(not(empty(first(body('My_member_U')))), equals(string(outputs('Requester')?['Role']), 'Engineer'))), and(not(empty(first(body('My_member_U')))), equals(first(body('My_member_U'))?['CanManageMeetings'], true)), equals(first(split(string(coalesce(body('Get_action_U')?['RaisedById'], '')), '.')), outputs('Sender_id'))))), 'Only the owner or the people who manage this action can move its deadline.', if(not(empty(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')))), 'This action is being updated. Try again in a minute.', if(not(equals(first(split(string(coalesce(body('Get_action_U')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(not(equals(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.')), first(split(string(coalesce(outputs('Payload')?['expectedDueDay'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(not(and(equals(variables('varDue'), string(coalesce(outputs('Payload')?['newDueIso'], ''))), not(empty(string(coalesce(outputs('Payload')?['newDueIso'], '')))))), 'Choose the new deadline.', if(lessOrEquals(int(replace(if(and(equals(variables('varDue'), string(coalesce(outputs('Payload')?['newDueIso'], ''))), not(empty(string(coalesce(outputs('Payload')?['newDueIso'], ''))))), string(coalesce(outputs('Payload')?['newDueIso'], '')), '2000-01-01'), '-', '')), int(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.')))), concat('The new deadline must be after ', formatDateTime(concat(concat(substring(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.')), 0, 4), '-', substring(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.')), 4, 2), '-', substring(first(split(string(coalesce(body('Get_action_U')?['DueDay'], '')), '.')), 6, 2)), 'T00:00:00Z'), 'd MMMM yyyy'), '.'), if(less(int(replace(if(and(equals(variables('varDue'), string(coalesce(outputs('Payload')?['newDueIso'], ''))), not(empty(string(coalesce(outputs('Payload')?['newDueIso'], ''))))), string(coalesce(outputs('Payload')?['newDueIso'], '')), '2000-01-01'), '-', '')), int(replace(outputs('Today'), '-', ''))), 'The new deadline cannot be in the past.', if(less(length(trim(string(coalesce(outputs('Payload')?['reason'], '')))), 10), 'Give a reason of at least 10 characters.', if(greater(length(trim(string(coalesce(outputs('Payload')?['reason'], '')))), 1000), 'Keep the reason to 1,000 characters or fewer.', ''))))))))))))"
                             },
                             "runAfter": {}
                           }
@@ -3264,7 +3378,7 @@
                             "type": "SetVariable",
                             "inputs": {
                               "name": "varVerdict",
-                              "value": "@if(or(equals(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')), string(variables('varTx')?['RequestKey'])), equals(string(coalesce(body('Get_action_U')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey']))), '', if(and(not(empty(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')))), equals(string(coalesce(body('Get_action_U')?['CreatedRequestKey'], '')), concat('F|', string(coalesce(body('Get_action_U')?['PendingRequestKey'], ''))))), 'That action could not be found.', if(not(contains(createArray('Open', 'In Progress', 'Awaiting Input'), string(body('Get_action_U')?['Status']))), 'This action is already done.', if(not(or(equals(first(split(string(coalesce(body('Get_action_U')?['AssignedToId'], '')), '.')), outputs('Sender_id')), equals(first(split(string(coalesce(body('Get_action_U')?['RaisedById'], '')), '.')), outputs('Sender_id')), or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Requester')?['Role'])), and(not(empty(first(body('My_member_U')))), or(equals(string(outputs('Requester')?['Role']), 'Engineer'), equals(first(body('My_member_U'))?['CanManageMeetings'], true)))))), 'Only the owner or the people who manage this action can mark it as done.', if(not(empty(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')))), 'This action is being updated. Try again in a minute.', if(not(equals(first(split(string(coalesce(body('Get_action_U')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(greater(length(trim(string(coalesce(outputs('Payload')?['note'], '')))), 1000), 'Keep the note to 1,000 characters or fewer.', '')))))))"
+                              "value": "@if(or(equals(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')), string(variables('varTx')?['RequestKey'])), equals(string(coalesce(body('Get_action_U')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey']))), '', if(and(not(empty(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')))), equals(string(coalesce(body('Get_action_U')?['CreatedRequestKey'], '')), concat('F|', string(coalesce(body('Get_action_U')?['PendingRequestKey'], ''))))), 'That action could not be found.', if(not(contains(createArray('Open', 'In Progress', 'Awaiting Input'), string(body('Get_action_U')?['Status']))), 'This action is already done.', if(not(or(equals(first(split(string(coalesce(body('Get_action_U')?['AssignedToId'], '')), '.')), outputs('Sender_id')), or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Requester')?['Role'])), and(not(empty(first(body('My_member_U')))), equals(string(outputs('Requester')?['Role']), 'Engineer'))), and(not(empty(first(body('My_member_U')))), equals(first(body('My_member_U'))?['CanManageMeetings'], true)), equals(first(split(string(coalesce(body('Get_action_U')?['RaisedById'], '')), '.')), outputs('Sender_id'))))), 'Only the owner or the people who manage this action can mark it as done.', if(not(empty(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')))), 'This action is being updated. Try again in a minute.', if(not(equals(first(split(string(coalesce(body('Get_action_U')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(greater(length(trim(string(coalesce(outputs('Payload')?['note'], '')))), 1000), 'Keep the note to 1,000 characters or fewer.', '')))))))"
                             },
                             "runAfter": {}
                           }
@@ -3277,7 +3391,7 @@
                             "type": "SetVariable",
                             "inputs": {
                               "name": "varVerdict",
-                              "value": "@if(or(equals(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')), string(variables('varTx')?['RequestKey'])), equals(string(coalesce(body('Get_action_U')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey']))), '', if(and(not(empty(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')))), equals(string(coalesce(body('Get_action_U')?['CreatedRequestKey'], '')), concat('F|', string(coalesce(body('Get_action_U')?['PendingRequestKey'], ''))))), 'That action could not be found.', if(not(contains(createArray('Open', 'In Progress', 'Awaiting Input'), string(body('Get_action_U')?['Status']))), 'This action is no longer open.', if(not(or(equals(first(split(string(coalesce(body('Get_action_U')?['AssignedToId'], '')), '.')), outputs('Sender_id')), equals(first(split(string(coalesce(body('Get_action_U')?['RaisedById'], '')), '.')), outputs('Sender_id')), or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Requester')?['Role'])), and(not(empty(first(body('My_member_U')))), or(equals(string(outputs('Requester')?['Role']), 'Engineer'), equals(first(body('My_member_U'))?['CanManageMeetings'], true)))))), 'Only the owner or the people who manage this action can change its status.', if(not(empty(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')))), 'This action is being updated. Try again in a minute.', if(not(equals(first(split(string(coalesce(body('Get_action_U')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(not(contains(createArray('Open', 'In Progress', 'Awaiting Input'), string(coalesce(outputs('Payload')?['status'], '')))), 'Choose a status.', if(equals(string(coalesce(outputs('Payload')?['status'], '')), string(body('Get_action_U')?['Status'])), 'Choose a different status.', if(and(equals(string(coalesce(outputs('Payload')?['status'], '')), 'Awaiting Input'), less(length(trim(string(coalesce(outputs('Payload')?['blocker'], '')))), 10)), 'Say what it is waiting on (at least 10 characters).', if(and(equals(string(coalesce(outputs('Payload')?['status'], '')), 'Awaiting Input'), greater(length(trim(string(coalesce(outputs('Payload')?['blocker'], '')))), 1000)), 'Keep it to 1,000 characters or fewer.', ''))))))))))"
+                              "value": "@if(or(equals(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')), string(variables('varTx')?['RequestKey'])), equals(string(coalesce(body('Get_action_U')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey']))), '', if(and(not(empty(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')))), equals(string(coalesce(body('Get_action_U')?['CreatedRequestKey'], '')), concat('F|', string(coalesce(body('Get_action_U')?['PendingRequestKey'], ''))))), 'That action could not be found.', if(not(contains(createArray('Open', 'In Progress', 'Awaiting Input'), string(body('Get_action_U')?['Status']))), 'This action is no longer open.', if(not(or(equals(first(split(string(coalesce(body('Get_action_U')?['AssignedToId'], '')), '.')), outputs('Sender_id')), or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Requester')?['Role'])), and(not(empty(first(body('My_member_U')))), equals(string(outputs('Requester')?['Role']), 'Engineer'))), and(not(empty(first(body('My_member_U')))), equals(first(body('My_member_U'))?['CanManageMeetings'], true)), equals(first(split(string(coalesce(body('Get_action_U')?['RaisedById'], '')), '.')), outputs('Sender_id'))))), 'Only the owner or the people who manage this action can change its status.', if(not(empty(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')))), 'This action is being updated. Try again in a minute.', if(not(equals(first(split(string(coalesce(body('Get_action_U')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(not(contains(createArray('Open', 'In Progress', 'Awaiting Input'), string(coalesce(outputs('Payload')?['status'], '')))), 'Choose a status.', if(equals(string(coalesce(outputs('Payload')?['status'], '')), string(body('Get_action_U')?['Status'])), 'Choose a different status.', if(and(equals(string(coalesce(outputs('Payload')?['status'], '')), 'Awaiting Input'), less(length(trim(string(coalesce(outputs('Payload')?['blocker'], '')))), 10)), 'Say what it is waiting on (at least 10 characters).', if(and(equals(string(coalesce(outputs('Payload')?['status'], '')), 'Awaiting Input'), greater(length(trim(string(coalesce(outputs('Payload')?['blocker'], '')))), 1000)), 'Keep it to 1,000 characters or fewer.', ''))))))))))"
                             },
                             "runAfter": {}
                           }
@@ -3358,7 +3472,7 @@
                             "type": "SetVariable",
                             "inputs": {
                               "name": "varVerdict",
-                              "value": "@if(or(equals(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')), string(variables('varTx')?['RequestKey'])), equals(string(coalesce(body('Get_action_U')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey']))), '', if(and(not(empty(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')))), equals(string(coalesce(body('Get_action_U')?['CreatedRequestKey'], '')), concat('F|', string(coalesce(body('Get_action_U')?['PendingRequestKey'], ''))))), 'That action could not be found.', if(not(contains(createArray('Open', 'In Progress', 'Awaiting Input'), string(body('Get_action_U')?['Status']))), 'This action is no longer open, so it cannot be reassigned.', if(not(or(equals(first(split(string(coalesce(body('Get_action_U')?['RaisedById'], '')), '.')), outputs('Sender_id')), or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Requester')?['Role'])), and(not(empty(first(body('My_member_U')))), or(equals(string(outputs('Requester')?['Role']), 'Engineer'), equals(first(body('My_member_U'))?['CanManageMeetings'], true)))))), 'Only the people who manage this action can reassign it.', if(not(empty(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')))), 'This action is being updated. Try again in a minute.', if(not(equals(first(split(string(coalesce(body('Get_action_U')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(equals(if(empty(first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.'))), '0'), 'Choose who will do it.', if(equals(if(empty(first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.'))), first(split(string(coalesce(body('Get_action_U')?['AssignedToId'], '')), '.'))), 'Choose someone other than the current owner.', if(not(and(not(empty(first(body('Get_new_owner_A')?['value']))), equals(string(first(body('Get_new_owner_A')?['value'])?['Status']), 'Active'), or(contains(createArray('Team Leader', 'Group Head'), string(first(body('Get_new_owner_A')?['value'])?['Role'])), not(empty(body('New_owner_member_A')?['value']))))), 'Choose a member of this area or a Team Leader.', if(less(length(trim(string(coalesce(outputs('Payload')?['reason'], '')))), 10), 'Give a reason of at least 10 characters.', if(greater(length(trim(string(coalesce(outputs('Payload')?['reason'], '')))), 1000), 'Keep the reason to 1,000 characters or fewer.', '')))))))))))"
+                              "value": "@if(or(equals(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')), string(variables('varTx')?['RequestKey'])), equals(string(coalesce(body('Get_action_U')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey']))), '', if(and(not(empty(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')))), equals(string(coalesce(body('Get_action_U')?['CreatedRequestKey'], '')), concat('F|', string(coalesce(body('Get_action_U')?['PendingRequestKey'], ''))))), 'That action could not be found.', if(not(contains(createArray('Open', 'In Progress', 'Awaiting Input'), string(body('Get_action_U')?['Status']))), 'This action is no longer open, so it cannot be reassigned.', if(not(or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Requester')?['Role'])), and(not(empty(first(body('My_member_U')))), equals(string(outputs('Requester')?['Role']), 'Engineer'))), and(not(empty(first(body('My_member_U')))), equals(first(body('My_member_U'))?['CanManageMeetings'], true)), and(equals(first(split(string(coalesce(body('Get_action_U')?['RaisedById'], '')), '.')), outputs('Sender_id')), not(and(equals(string(outputs('Requester')?['Role']), 'Technician'), not(and(not(empty(first(body('My_member_U')))), equals(first(body('My_member_U'))?['CanManageMeetings'], true)))))))), 'Only the people who manage this action can reassign it.', if(not(empty(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')))), 'This action is being updated. Try again in a minute.', if(not(equals(first(split(string(coalesce(body('Get_action_U')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(equals(if(empty(first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.'))), '0'), 'Choose who will do it.', if(equals(if(empty(first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.'))), first(split(string(coalesce(body('Get_action_U')?['AssignedToId'], '')), '.'))), 'Choose someone other than the current owner.', if(not(and(not(empty(first(body('Get_new_owner_A')?['value']))), equals(string(first(body('Get_new_owner_A')?['value'])?['Status']), 'Active'), or(contains(createArray('Team Leader', 'Group Head'), string(first(body('Get_new_owner_A')?['value'])?['Role'])), not(empty(body('New_owner_member_A')?['value']))))), 'Choose a member of this area or a Team Leader.', if(less(length(trim(string(coalesce(outputs('Payload')?['reason'], '')))), 10), 'Give a reason of at least 10 characters.', if(greater(length(trim(string(coalesce(outputs('Payload')?['reason'], '')))), 1000), 'Keep the reason to 1,000 characters or fewer.', '')))))))))))"
                             },
                             "runAfter": {
                               "New_owner_member_A": [
@@ -3375,7 +3489,7 @@
                             "type": "SetVariable",
                             "inputs": {
                               "name": "varVerdict",
-                              "value": "@if(or(equals(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')), string(variables('varTx')?['RequestKey'])), equals(string(coalesce(body('Get_action_U')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey']))), '', if(and(not(empty(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')))), equals(string(coalesce(body('Get_action_U')?['CreatedRequestKey'], '')), concat('F|', string(coalesce(body('Get_action_U')?['PendingRequestKey'], ''))))), 'That action could not be found.', if(not(or(contains(createArray('Open', 'In Progress', 'Awaiting Input'), string(body('Get_action_U')?['Status'])), equals(string(body('Get_action_U')?['Status']), 'Completed'))), 'This action is already closed.', if(not(or(equals(first(split(string(coalesce(body('Get_action_U')?['RaisedById'], '')), '.')), outputs('Sender_id')), or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Requester')?['Role'])), and(not(empty(first(body('My_member_U')))), or(equals(string(outputs('Requester')?['Role']), 'Engineer'), equals(first(body('My_member_U'))?['CanManageMeetings'], true)))))), 'Only the people who manage this action can close it.', if(not(empty(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')))), 'This action is being updated. Try again in a minute.', if(not(equals(first(split(string(coalesce(body('Get_action_U')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(not(contains(createArray('Completed', 'No longer required', 'Superseded', 'Other'), string(coalesce(outputs('Payload')?['outcome'], '')))), 'Choose an outcome.', if(and(not(equals(string(coalesce(outputs('Payload')?['outcome'], '')), 'Completed')), less(length(trim(string(coalesce(outputs('Payload')?['note'], '')))), 10)), 'Explain the outcome in at least 10 characters.', if(greater(length(trim(string(coalesce(outputs('Payload')?['note'], '')))), 1000), 'Keep the note to 1,000 characters or fewer.', '')))))))))"
+                              "value": "@if(or(equals(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')), string(variables('varTx')?['RequestKey'])), equals(string(coalesce(body('Get_action_U')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey']))), '', if(and(not(empty(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')))), equals(string(coalesce(body('Get_action_U')?['CreatedRequestKey'], '')), concat('F|', string(coalesce(body('Get_action_U')?['PendingRequestKey'], ''))))), 'That action could not be found.', if(not(or(contains(createArray('Open', 'In Progress', 'Awaiting Input'), string(body('Get_action_U')?['Status'])), equals(string(body('Get_action_U')?['Status']), 'Completed'))), 'This action is already closed.', if(not(or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Requester')?['Role'])), and(not(empty(first(body('My_member_U')))), equals(string(outputs('Requester')?['Role']), 'Engineer'))), and(not(empty(first(body('My_member_U')))), equals(first(body('My_member_U'))?['CanManageMeetings'], true)), equals(first(split(string(coalesce(body('Get_action_U')?['RaisedById'], '')), '.')), outputs('Sender_id')))), 'Only the people who manage this action can close it.', if(not(empty(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')))), 'This action is being updated. Try again in a minute.', if(not(equals(first(split(string(coalesce(body('Get_action_U')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(not(contains(createArray('Completed', 'No longer required', 'Superseded', 'Other'), string(coalesce(outputs('Payload')?['outcome'], '')))), 'Choose an outcome.', if(and(not(equals(string(coalesce(outputs('Payload')?['outcome'], '')), 'Completed')), less(length(trim(string(coalesce(outputs('Payload')?['note'], '')))), 10)), 'Explain the outcome in at least 10 characters.', if(greater(length(trim(string(coalesce(outputs('Payload')?['note'], '')))), 1000), 'Keep the note to 1,000 characters or fewer.', '')))))))))"
                             },
                             "runAfter": {}
                           }
@@ -3388,7 +3502,7 @@
                             "type": "SetVariable",
                             "inputs": {
                               "name": "varVerdict",
-                              "value": "@if(or(equals(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')), string(variables('varTx')?['RequestKey'])), equals(string(coalesce(body('Get_action_U')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey']))), '', if(and(not(empty(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')))), equals(string(coalesce(body('Get_action_U')?['CreatedRequestKey'], '')), concat('F|', string(coalesce(body('Get_action_U')?['PendingRequestKey'], ''))))), 'That action could not be found.', if(not(contains(createArray('Closed', 'Completed'), string(body('Get_action_U')?['Status']))), 'This action is already open.', if(not(or(equals(first(split(string(coalesce(body('Get_action_U')?['RaisedById'], '')), '.')), outputs('Sender_id')), or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Requester')?['Role'])), and(not(empty(first(body('My_member_U')))), or(equals(string(outputs('Requester')?['Role']), 'Engineer'), equals(first(body('My_member_U'))?['CanManageMeetings'], true)))))), 'Only the people who manage this action can reopen it.', if(not(empty(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')))), 'This action is being updated. Try again in a minute.', if(not(equals(first(split(string(coalesce(body('Get_action_U')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(less(length(trim(string(coalesce(outputs('Payload')?['reason'], '')))), 10), 'Give a reason of at least 10 characters.', if(greater(length(trim(string(coalesce(outputs('Payload')?['reason'], '')))), 1000), 'Keep the reason to 1,000 characters or fewer.', ''))))))))"
+                              "value": "@if(or(equals(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')), string(variables('varTx')?['RequestKey'])), equals(string(coalesce(body('Get_action_U')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey']))), '', if(and(not(empty(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')))), equals(string(coalesce(body('Get_action_U')?['CreatedRequestKey'], '')), concat('F|', string(coalesce(body('Get_action_U')?['PendingRequestKey'], ''))))), 'That action could not be found.', if(not(contains(createArray('Closed', 'Completed'), string(body('Get_action_U')?['Status']))), 'This action is already open.', if(not(or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Requester')?['Role'])), and(not(empty(first(body('My_member_U')))), equals(string(outputs('Requester')?['Role']), 'Engineer'))), equals(first(split(string(coalesce(body('Get_action_U')?['RaisedById'], '')), '.')), outputs('Sender_id')))), 'Only the people who manage this action can reopen it.', if(not(empty(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')))), 'This action is being updated. Try again in a minute.', if(not(equals(first(split(string(coalesce(body('Get_action_U')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(less(length(trim(string(coalesce(outputs('Payload')?['reason'], '')))), 10), 'Give a reason of at least 10 characters.', if(greater(length(trim(string(coalesce(outputs('Payload')?['reason'], '')))), 1000), 'Keep the reason to 1,000 characters or fewer.', ''))))))))"
                             },
                             "runAfter": {}
                           }
@@ -3401,7 +3515,7 @@
                             "type": "SetVariable",
                             "inputs": {
                               "name": "varVerdict",
-                              "value": "@if(or(equals(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')), string(variables('varTx')?['RequestKey'])), equals(string(coalesce(body('Get_action_U')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey']))), '', if(and(not(empty(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')))), equals(string(coalesce(body('Get_action_U')?['CreatedRequestKey'], '')), concat('F|', string(coalesce(body('Get_action_U')?['PendingRequestKey'], ''))))), 'That action could not be found.', if(not(contains(createArray('Open', 'In Progress', 'Awaiting Input'), string(body('Get_action_U')?['Status']))), 'This action is no longer open.', if(not(or(equals(first(split(string(coalesce(body('Get_action_U')?['RaisedById'], '')), '.')), outputs('Sender_id')), or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Requester')?['Role'])), and(not(empty(first(body('My_member_U')))), or(equals(string(outputs('Requester')?['Role']), 'Engineer'), equals(first(body('My_member_U'))?['CanManageMeetings'], true)))))), 'Only the people who manage this action can change its details.', if(not(empty(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')))), 'This action is being updated. Try again in a minute.', if(not(equals(first(split(string(coalesce(body('Get_action_U')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(not(or(contains(outputs('Payload'), 'title'), contains(outputs('Payload'), 'description'), contains(outputs('Payload'), 'priority'), contains(outputs('Payload'), 'requiresCloseOut'))), 'Nothing has changed.', if(and(contains(outputs('Payload'), 'title'), equals(length(trim(string(coalesce(outputs('Payload')?['title'], '')))), 0)), 'Enter what needs doing.', if(and(contains(outputs('Payload'), 'title'), greater(length(trim(string(coalesce(outputs('Payload')?['title'], '')))), 255)), 'Keep the title to 255 characters or fewer.', if(and(contains(outputs('Payload'), 'description'), equals(length(trim(string(coalesce(outputs('Payload')?['description'], '')))), 0)), 'Add a short description.', if(and(contains(outputs('Payload'), 'description'), greater(length(trim(string(coalesce(outputs('Payload')?['description'], '')))), 5000)), 'Keep the description to 5,000 characters or fewer.', if(and(contains(outputs('Payload'), 'priority'), not(contains(createArray('Low', 'Normal', 'High'), string(coalesce(outputs('Payload')?['priority'], ''))))), 'Choose a priority.', ''))))))))))))"
+                              "value": "@if(or(equals(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')), string(variables('varTx')?['RequestKey'])), equals(string(coalesce(body('Get_action_U')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey']))), '', if(and(not(empty(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')))), equals(string(coalesce(body('Get_action_U')?['CreatedRequestKey'], '')), concat('F|', string(coalesce(body('Get_action_U')?['PendingRequestKey'], ''))))), 'That action could not be found.', if(not(contains(createArray('Open', 'In Progress', 'Awaiting Input'), string(body('Get_action_U')?['Status']))), 'This action is no longer open.', if(not(or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Requester')?['Role'])), and(not(empty(first(body('My_member_U')))), equals(string(outputs('Requester')?['Role']), 'Engineer'))), and(not(empty(first(body('My_member_U')))), equals(first(body('My_member_U'))?['CanManageMeetings'], true)), equals(first(split(string(coalesce(body('Get_action_U')?['RaisedById'], '')), '.')), outputs('Sender_id')))), 'Only the people who manage this action can change its details.', if(not(empty(string(coalesce(body('Get_action_U')?['PendingRequestKey'], '')))), 'This action is being updated. Try again in a minute.', if(not(equals(first(split(string(coalesce(body('Get_action_U')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(or(contains(outputs('Payload'), 'ownerId'), contains(outputs('Payload'), 'AssignedTo'), contains(outputs('Payload'), 'AssignedToId')), 'The owner is changed with Reassign.', if(not(or(contains(outputs('Payload'), 'title'), contains(outputs('Payload'), 'description'), contains(outputs('Payload'), 'priority'), contains(outputs('Payload'), 'requiresCloseOut'))), 'Nothing has changed.', if(and(contains(outputs('Payload'), 'title'), equals(length(trim(string(coalesce(outputs('Payload')?['title'], '')))), 0)), 'Enter what needs doing.', if(and(contains(outputs('Payload'), 'title'), greater(length(trim(string(coalesce(outputs('Payload')?['title'], '')))), 255)), 'Keep the title to 255 characters or fewer.', if(and(contains(outputs('Payload'), 'description'), equals(length(trim(string(coalesce(outputs('Payload')?['description'], '')))), 0)), 'Add a short description.', if(and(contains(outputs('Payload'), 'description'), greater(length(trim(string(coalesce(outputs('Payload')?['description'], '')))), 5000)), 'Keep the description to 5,000 characters or fewer.', if(and(contains(outputs('Payload'), 'priority'), not(contains(createArray('Low', 'Normal', 'High'), string(coalesce(outputs('Payload')?['priority'], ''))))), 'Choose a priority.', '')))))))))))))"
                             },
                             "runAfter": {}
                           }

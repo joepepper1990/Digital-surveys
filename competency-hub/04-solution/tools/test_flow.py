@@ -29,18 +29,31 @@ def site():
     for uid, title, email in ((JOE, 'Pepper Joseph', 'joseph.pepper@example.test'), (RACHEL, 'Boulden Rachel', 'rachel.boulden@example.test'),
                               (KELLY, 'Bates Kelly', 'kelly.bates@example.test'), (KAI, 'Todd Kai', 'kai.todd@example.test')):
         s.add_user(uid, title, email)
+    # the Competency Hub groups, as Setup made them (plan E.4, REV5 §4.4)
+    s.gid = {name: s.add_group('Competency Hub – ' + name) for name in ('All Users', 'Management', 'Administrators', 'Notice Posters')}
     for i, k in enumerate(AREAS):
-        s.add('competencies', '', {'Title': k, 'CompetencyKey': k, 'SortOrder': (i + 1) * 10, 'Status': 'Active'})
+        gid = s.add_group('Competency Hub – {0} Members'.format(k))
+        s.gid[k] = gid
+        s.add('competencies', '', {'Title': k, 'CompetencyKey': k, 'SortOrder': (i + 1) * 10, 'Status': 'Active', 'MembersGroupId': float(gid)})
         for lst in ('actions', 'updates', 'history', 'members'):
             s.folder(lst, k)
     s.folder('history', 'Transactions')
     s.folder('history', 'Administration')
     for uid in (JOE, RACHEL, KELLY, KAI):
         s.folder('requests', 'u{0}'.format(uid))
+        # each person's own folder: its own permissions, the person can add and edit (Setup, plan E.4)
+        s.folder_item('requests', 'u{0}'.format(uid)).update({'unique': True, 'ra': {s.me: {1073741829}, uid: {2003}}})
     for uid, title, role in ((JOE, 'Pepper Joseph', 'Team Leader'), (RACHEL, 'Boulden Rachel', 'Technician'),
                              (KELLY, 'Bates Kelly', 'Engineer'), (KAI, 'Todd Kai', 'Engineer')):
         s.add('people', '', {'Title': title, 'PersonId': uid, 'Email': title, 'SiteUserId': float(uid), 'Role': role, 'IsAdministrator': uid == JOE,
                              'Status': 'Active'})
+    for uid in (JOE, RACHEL, KELLY, KAI):
+        s.groups[s.gid['All Users']]['users'].add(uid)
+        s.groups[s.gid['Notice Posters']]['users'].add(uid)
+    s.groups[s.gid['Management']]['users'].add(JOE)
+    s.groups[s.gid['Administrators']]['users'].add(JOE)
+    for uid, key in ((RACHEL, 'FLK'), (RACHEL, 'GRS'), (KELLY, 'FLK'), (KAI, 'RW')):
+        s.groups[s.gid[key]]['users'].add(uid)
     # Rachel: FLK and GRS; Kelly: FLK (engineer, runs meetings); Kai: RW only
     for uid, key, mtg in ((RACHEL, 'FLK', False), (RACHEL, 'GRS', False), (KELLY, 'FLK', True), (KAI, 'RW', True)):
         s.add('members', key, {'Title': key, 'CompetencyId': AREAS.index(key) + 1, 'PersonId': uid, 'MembershipKey': '{0}|{1}'.format(key, uid),
@@ -54,7 +67,7 @@ def site():
     s.folder('updates', 'FLK/A{0}'.format(s.action))
     s.folder('history', 'FLK/A{0}'.format(s.action))   # made when the action was raised
     for title, value in (('OverdueReminderIntervalDays', '7'), ('ReminderDaysBefore', '7'), ('LastDailyRun', ''), ('QueueHealth', ''),
-                         ('MonitorHours', '07:00|19:45|60')):
+                         ('MonitorHours', '07:00|19:45|60'), ('MaxDeadlineYears', '2'), ('PreGoLiveTesting', 'Yes')):
         s.add('settings', '', {'Title': title, 'Value': value})
     s.monitor_alive = True    # the queue monitor reported a moment ago (healthy_monitor)
     s.daily_alive = True      # Daily tasks ran this morning (run_monitor)
@@ -107,6 +120,7 @@ class RaiseAction(unittest.TestCase):
         # 28 October 2026 is after the clocks go back (25 October), so UK midnight is 00:00 UTC
         self.assertEqual((f['DueDay'], f['OriginalDueDate'], f['CurrentDueDate']), (20261028.0, '2026-10-28T00:00:00Z', '2026-10-28T00:00:00Z'))
         self.assertEqual((f['Status'], f['IsOpen'], f['Revision'], f['ExtensionCount']), ('Open', True, 1.0, 0.0))
+        self.assertEqual(f['IsTestRecord'], True, 'marked as a test record while pre-go-live testing is on')
         self.assertEqual((f['PendingRequestKey'] or None, f['LastRequestKey']), (None, KEY), 'lock released, change confirmed')
         self.assertEqual(a['dir'], 'FLK')
         self.assertTrue(s._find_folder(s.by_key['updates'], 'FLK', 'A{0}'.format(a['id'])), 'Updates folder for the action')
@@ -598,7 +612,7 @@ class Daily(unittest.TestCase):
         s = site()
         due_on(s, '2026-12-31')
         run_daily(s, date(2026, 10, 21))
-        self.assertLessEqual(len(s.calls), 8, s.calls)   # settings, people, actions, ledger, 3 retry states, LastDailyRun
+        self.assertLessEqual(len(s.calls), 10, s.calls)   # settings, people, actions, ledger, areas, memberships, 3 retry states, LastDailyRun
 
 
 class Retries(unittest.TestCase):
@@ -771,7 +785,7 @@ class MoreChanges(unittest.TestCase):
 class Calls(unittest.TestCase):
     """Fewer SharePoint calls per request (plan K7.10): a first run skips every "already done?" look-up."""
     # SharePoint calls for the change itself; each email adds at most 3 (queue it, record the outcome, cover a reminder)
-    BUDGET = {'RaiseAction': 19, 'ExtendDeadline': 17, 'MarkComplete': 17}
+    BUDGET = {'RaiseAction': 20, 'ExtendDeadline': 17, 'MarkComplete': 17}
 
     def first_run(self, rtype, s=None):
         s = s or site()
@@ -1295,6 +1309,226 @@ class Permissions(unittest.TestCase):
         self.chair(s, KELLY, 'FLK', on=False)
         s.item('actions', s.action)['f']['RaisedById'] = KAI
         self.assertEqual(self.change(s, KELLY, 'CloseAction', {'outcome': 'Completed', 'note': ''})['Status'], 'Completed')
+
+
+# --------------------------------------------------------------------------------------------- people (plan REV5 §3.2, §4)
+SADIE = None
+
+
+def run_people(s, sender, rtype, payload, key=KEY2, now=None):
+    r = submit(s, sender, rtype, payload, key=key)
+    status, eng = run_admin(s, r, now=now)
+    return request(s, r), eng
+
+
+def member_row(s, uid, key):
+    rows = [r for r in s.rows('members', PersonId=uid) if r['f']['MembershipKey'] == '{0}|{1}'.format(key, uid)]
+    return rows[0]['f'] if rows else None
+
+
+class People(unittest.TestCase):
+    def new_site(self):
+        s = site()
+        s.tenant['sadie.young@example.test'] = 'Young Sadie'
+        return s
+
+    def sadie(self, s):
+        return next(u for u in s.users.values() if u['Email'] == 'sadie.young@example.test')['Id']
+
+    def test_an_administrator_adds_a_person_with_areas_and_meeting_rights(self):
+        s = self.new_site()
+        res, eng = run_people(s, JOE, 'AddPerson', {'email': 'Sadie.Young@example.test ', 'role': 'Technician',
+                                                     'areas': [{'key': 'GRS', 'chair': False}, {'key': 'DOS', 'chair': True, 'expires': '2026-12-31'}]})
+        self.assertEqual((res['Status'], res['ResultMessage']), ('Completed', 'Added Young Sadie.'), eng.log)
+        uid = self.sadie(s)
+        p = s.rows('people', SiteUserId=float(uid))[0]['f']
+        self.assertEqual((p['Role'], p['Status'], p['IsAdministrator'], p['CanPostNotices'], p['Email']), ('Technician', 'Active', False, True, 'sadie.young@example.test'))
+        self.assertTrue(p['AccessVerifiedOn'])
+        for g in ('All Users', 'Notice Posters', 'GRS', 'DOS'):
+            self.assertIn(uid, s.groups[s.gid[g]]['users'], g)
+        for g in ('Management', 'Administrators', 'FLK'):
+            self.assertNotIn(uid, s.groups[s.gid[g]]['users'], g)
+        self.assertEqual((member_row(s, uid, 'GRS')['CanManageMeetings'], member_row(s, uid, 'DOS')['CanManageMeetings']), (False, True))
+        self.assertEqual(member_row(s, uid, 'DOS')['AccessExpires'], '2026-12-31T00:00:00Z')
+        # her own request folder, which only she (and the owners) can use
+        fold = s.folder_item('requests', 'u{0}'.format(uid))
+        self.assertTrue(fold['unique'])
+        self.assertEqual(fold['ra'][uid], {2003})
+        ev = s.rows('history', RequestKey=KEY2 + '|1')[0]
+        self.assertEqual((ev['dir'], ev['f']['EventType'], ev['f']['ActorId'], ev['f']['Title']), ('Administration', 'AddPerson', JOE, 'Added Young Sadie'))
+        self.assertIn('"DOS"', ev['f']['NewValue'])
+
+    def test_someone_not_in_microsoft_365_or_already_here_is_refused(self):
+        s = self.new_site()
+        res, _ = run_people(s, JOE, 'AddPerson', {'email': 'nobody@example.test', 'role': 'Technician', 'areas': []})
+        self.assertEqual((res['Status'], res['ResultMessage']), ('Rejected', 'That email address was not found in Microsoft 365. Check the spelling.'))
+        res, _ = run_people(s, JOE, 'AddPerson', {'email': 'kai.todd@example.test', 'role': 'Engineer', 'areas': []}, key='k3')
+        self.assertEqual((res['Status'], res['ResultMessage']), ('Rejected', 'Todd Kai is already in the Hub.'))
+
+    def test_only_administrators_and_never_for_themselves(self):
+        s = self.new_site()
+        res, _ = run_people(s, KELLY, 'UpdatePerson', {'personId': RACHEL, 'canPostNotices': False})
+        self.assertEqual(res['ResultMessage'], 'Only a Competency Hub administrator can do this.')
+        res, _ = run_people(s, JOE, 'UpdatePerson', {'personId': JOE, 'role': 'Engineer'}, key='k3')
+        self.assertEqual(res['ResultMessage'], "You can't change your own access. Ask another administrator.")
+        self.assertIn(RACHEL, s.groups[s.gid['Notice Posters']]['users'])
+
+    def test_areas_and_meeting_rights_change_together_narrowing_first(self):
+        s = self.new_site()
+        # Rachel leaves Green Stream, joins Radwaste, and gets meeting rights in Flask
+        res, eng = run_people(s, JOE, 'UpdatePerson', {'personId': RACHEL, 'areas': [{'key': 'FLK', 'chair': True}, {'key': 'RW', 'chair': False}]})
+        self.assertEqual(res['Status'], 'Completed', eng.log)
+        self.assertNotIn(RACHEL, s.groups[s.gid['GRS']]['users'])
+        self.assertIn(RACHEL, s.groups[s.gid['RW']]['users'])
+        self.assertEqual((member_row(s, RACHEL, 'GRS')['Status'], member_row(s, RACHEL, 'FLK')['CanManageMeetings'], member_row(s, RACHEL, 'RW')['Status']),
+                         ('Removed', True, 'Active'))
+        # the group was left before the record said so, and joined only after the record said so
+        order = [w for w in s.writes if w[0] in ('REMOVE', 'ADDUSER') or w[1].startswith('Competency Members') or w[0] == 'ADD' and w[1] == 'Competency Members']
+        self.assertEqual(order[0][0], 'REMOVE')
+        self.assertEqual(order[-1][0], 'ADDUSER')
+
+    def test_an_area_with_their_open_actions_is_not_removed(self):
+        s = self.new_site()
+        res, _ = run_people(s, JOE, 'UpdatePerson', {'personId': RACHEL, 'areas': [{'key': 'GRS', 'chair': False}]})
+        self.assertEqual((res['Status'], res['ResultMessage']), ('Rejected', 'Not removed from FLK: open actions there are still theirs. Reassign them first.'))
+        self.assertIn(RACHEL, s.groups[s.gid['FLK']]['users'])
+
+    def test_notice_posting_off_and_on_again(self):
+        s = self.new_site()
+        res, _ = run_people(s, JOE, 'UpdatePerson', {'personId': RACHEL, 'canPostNotices': False})
+        self.assertEqual(res['Status'], 'Completed')
+        self.assertNotIn(RACHEL, s.groups[s.gid['Notice Posters']]['users'])
+        self.assertEqual(s.rows('people', SiteUserId=float(RACHEL))[0]['f']['CanPostNotices'], False)
+        # nothing else changed
+        self.assertIn(RACHEL, s.groups[s.gid['All Users']]['users'])
+        self.assertEqual({k for k in AREAS if RACHEL in s.groups[s.gid[k]]['users']}, {'FLK', 'GRS'})
+        res, _ = run_people(s, JOE, 'UpdatePerson', {'personId': RACHEL, 'canPostNotices': True}, key='k3')
+        self.assertIn(RACHEL, s.groups[s.gid['Notice Posters']]['users'])
+
+    def test_a_role_change_moves_the_management_group(self):
+        s = self.new_site()
+        run_people(s, JOE, 'UpdatePerson', {'personId': KELLY, 'role': 'Team Leader'})
+        self.assertIn(KELLY, s.groups[s.gid['Management']]['users'])
+        run_people(s, JOE, 'UpdatePerson', {'personId': KELLY, 'role': 'Engineer'}, key='k3')
+        self.assertNotIn(KELLY, s.groups[s.gid['Management']]['users'])
+
+    def test_administrators_are_made_and_unmade_by_another_administrator(self):
+        s = self.new_site()
+        run_people(s, JOE, 'UpdatePerson', {'personId': KELLY, 'administrator': True})
+        self.assertIn(KELLY, s.groups[s.gid['Administrators']]['users'])
+        self.assertEqual(s.rows('people', SiteUserId=float(KELLY))[0]['f']['IsAdministrator'], True)
+        res, _ = run_people(s, KELLY, 'UpdatePerson', {'personId': JOE, 'administrator': False}, key='k3')
+        self.assertEqual(res['Status'], 'Completed')
+        self.assertNotIn(JOE, s.groups[s.gid['Administrators']]['users'])
+
+    def test_a_leaver_loses_all_access_and_comes_back_by_reactivation(self):
+        s = self.new_site()
+        res, _ = run_people(s, JOE, 'PersonLeft', {'personId': RACHEL})
+        self.assertEqual((res['Status'], res['ResultMessage']), ('Rejected', 'Boulden Rachel still has 1 open action. Reassign them first.'))
+        s.item('actions', s.action)['f']['AssignedToId'] = KELLY
+        res, eng = run_people(s, JOE, 'PersonLeft', {'personId': RACHEL}, key='k3')
+        self.assertEqual(res['Status'], 'Completed', eng.log)
+        self.assertFalse(any(RACHEL in g['users'] for g in s.groups.values()))
+        p = s.rows('people', SiteUserId=float(RACHEL))[0]['f']
+        self.assertEqual((p['Status'], p['IsAdministrator']), ('Left', False))
+        self.assertEqual({member_row(s, RACHEL, k)['Status'] for k in ('FLK', 'GRS')}, {'Removed'})
+        fold = s.folder_item('requests', 'u{0}'.format(RACHEL))
+        self.assertEqual(fold['ra'][RACHEL], {2001}, 'her old requests stay readable to her, nothing more')
+        res, _ = run_people(s, JOE, 'ReactivatePerson', {'personId': RACHEL}, key='k4')
+        self.assertEqual(res['Status'], 'Completed')
+        self.assertTrue({RACHEL} <= s.groups[s.gid['All Users']]['users'] & s.groups[s.gid['Notice Posters']]['users'])
+        self.assertEqual(s.folder_item('requests', 'u{0}'.format(RACHEL))['ra'][RACHEL], {2003})
+        self.assertEqual(s.rows('people', SiteUserId=float(RACHEL))[0]['f']['Status'], 'Active')
+
+    def test_an_expiry_date_in_the_past_is_refused(self):
+        s = self.new_site()
+        res, _ = run_people(s, JOE, 'UpdatePerson', {'personId': RACHEL, 'areas': [{'key': 'FLK'}, {'key': 'GRS'}, {'key': 'DOS', 'expires': '2026-10-01'}]})
+        self.assertEqual(res['ResultMessage'], 'An end date for access cannot be in the past.')
+
+    def test_adding_and_changing_survive_an_interruption_at_every_write(self):
+        cases = [('AddPerson', {'email': 'sadie.young@example.test', 'role': 'Technician', 'areas': [{'key': 'GRS'}, {'key': 'DOS', 'chair': True}]}),
+                 ('UpdatePerson', {'personId': RACHEL, 'areas': [{'key': 'FLK', 'chair': True}, {'key': 'RW'}], 'canPostNotices': False})]
+        for rtype, payload in cases:
+            ref = self.new_site()
+            r = submit(ref, JOE, rtype, payload, key=KEY2)
+            ref.writes.clear()
+            run_admin(ref, r)
+            self.assertEqual(request(ref, r)['Status'], 'Completed')
+            total = len(ref.writes)
+            want_groups = {g: set(v['users']) for g, v in ref.groups.items()}
+            want_rows = sorted((x['f']['MembershipKey'], x['f']['Status'], x['f']['CanManageMeetings']) for x in ref.rows('members'))
+            for k in range(1, total + 1):
+                with self.subTest(rtype=rtype, write=k, of=total):
+                    s = self.new_site()
+                    r = submit(s, JOE, rtype, payload, key=KEY2)
+                    s.writes.clear()
+                    s.fail_at = k
+                    run_admin(s, r)
+                    s.fail_at = None
+                    if request(s, r)['Status'] != 'Completed':
+                        request(s, r)['Status'] = 'Submitted'
+                        status, eng = run_admin(s, r, now=s.clock + timedelta(minutes=10))
+                        self.assertEqual(request(s, r)['Status'], 'Completed', eng.log)
+                    self.assertEqual({g: set(v['users']) for g, v in s.groups.items()}, want_groups)
+                    self.assertEqual(sorted((x['f']['MembershipKey'], x['f']['Status'], x['f']['CanManageMeetings']) for x in s.rows('members')), want_rows)
+                    self.assertEqual(len(s.rows('people')), len(ref.rows('people')))
+                    self.assertEqual(len(s.rows('history', RequestKey=KEY2 + '|1')), 1)
+
+
+class Settings(unittest.TestCase):
+    def setting(self, s, name):
+        return s.rows('settings', Title=name)[0]['f']['Value']
+
+    def test_safe_settings_are_checked_and_recorded(self):
+        s = site()
+        for name, value, message in (('OverdueReminderIntervalDays', '14', 'Setting saved.'), ('OverdueReminderIntervalDays', '45', 'Enter a whole number of days from 1 to 30.'),
+                                     ('OverdueReminderIntervalDays', '7x', 'Enter a whole number of days from 1 to 30.'),
+                                     ('MonitorHours', '06:30|18:00|30', 'Setting saved.'), ('MonitorHours', '18:00|06:30|30', None), ('MonitorHours', '6:30|18:00|30', None),
+                                     ('MonitorHours', '06:30|18:00|5', None), ('LastDailyRun', '2026', 'Choose a setting.')):
+            with self.subTest(name=name, value=value):
+                res, eng = run_people(s, JOE, 'UpdateSetting', {'name': name, 'value': value}, key='k-' + name + value)
+                if message == 'Setting saved.':
+                    self.assertEqual((res['Status'], self.setting(s, name)), ('Completed', value), eng.log)
+                else:
+                    self.assertEqual(res['Status'], 'Rejected')
+                    if message:
+                        self.assertEqual(res['ResultMessage'], message)
+        ev = s.rows('history', RequestKey='k-OverdueReminderIntervalDays14|1')[0]['f']
+        self.assertEqual((ev['PreviousValue'], ev['NewValue'], ev['ActorId']), ('7', '14', JOE))
+        res, _ = run_people(s, KELLY, 'UpdateSetting', {'name': 'OverdueReminderIntervalDays', 'value': '3'}, key='k-kelly')
+        self.assertEqual(res['ResultMessage'], 'Only a Competency Hub administrator can do this.')
+
+
+class TemporaryAccess(unittest.TestCase):
+    def expire(self, s, uid, key, iso):
+        row = next(r for r in s.rows('members', PersonId=uid) if r['f']['MembershipKey'] == '{0}|{1}'.format(key, uid))
+        d = date.fromisoformat(iso)
+        row['f']['AccessExpires'] = datetime(d.year, d.month, d.day, tzinfo=UK).astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+        return row['f']
+
+    def test_access_ends_the_day_after_its_end_date(self):
+        s = site()
+        row = self.expire(s, RACHEL, 'GRS', '2026-10-21')
+        run_daily(s, date(2026, 10, 21))
+        self.assertEqual(row['Status'], 'Active', 'still theirs on the end date itself')
+        run_daily(s, date(2026, 10, 22))
+        self.assertEqual(row['Status'], 'Removed')
+        self.assertNotIn(RACHEL, s.groups[s.gid['GRS']]['users'])
+        ev = [r for r in s.rows('history') if str(r['f'].get('RequestKey', '')).startswith('SYS|Expire|')]
+        self.assertEqual((len(ev), ev[0]['dir'], ev[0]['f']['EventType']), (1, 'Administration', 'AccessExpired'))
+        run_daily(s, date(2026, 10, 23))
+        self.assertEqual(len([r for r in s.rows('history') if str(r['f'].get('RequestKey', '')).startswith('SYS|Expire|')]), 1)
+
+    def test_open_actions_keep_the_access_and_the_administrators_are_told_once_a_day(self):
+        s = site()
+        row = self.expire(s, RACHEL, 'FLK', '2026-10-20')
+        run_daily(s, date(2026, 10, 22))
+        self.assertEqual(row['Status'], 'Active')
+        self.assertIn(RACHEL, s.groups[s.gid['FLK']]['users'])
+        alerts = [m for m in s.sent if 'needs attention' in m['subject']]
+        self.assertEqual([m['subject'] for m in alerts], ['Competency Hub needs attention: Temporary access has ended, but open actions remain: Boulden Rachel in FLK'])
+        run_daily(s, date(2026, 10, 22), hour=7)
+        self.assertEqual(len([m for m in s.sent if 'needs attention' in m['subject']]), 1)
 
 
 if __name__ == '__main__':

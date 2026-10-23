@@ -155,7 +155,9 @@
                 "actRoot": "@{outputs('Site_path')}/Lists/Actions",
                 "histRoot": "@{outputs('Site_path')}/Lists/History",
                 "updRoot": "@{outputs('Site_path')}/Lists/Updates",
-                "notifRoot": "@{outputs('Site_path')}/Lists/NotificationLog"
+                "notifRoot": "@{outputs('Site_path')}/Lists/NotificationLog",
+                "membersRoot": "@{outputs('Site_path')}/Lists/CompetencyMembers",
+                "peopleRoot": "@{outputs('Site_path')}/Lists/People"
               },
               "runAfter": {
                 "Site_url": [

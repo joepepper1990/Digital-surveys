@@ -11,7 +11,7 @@ references, environment variables as definition parameters, OpenApiConnection ac
 
 Nothing tenant-specific is in here: the site address is an environment variable set at import.
 """
-from hub_schema import BY_KEY
+from hub_schema import BY_KEY, SCHEMA
 
 SP_API = '/providers/Microsoft.PowerApps/apis/shared_sharepointonline'
 CONN = {'shared_sharepointonline': 'esghub_sharedsharepointonline_hub', 'shared_office365': 'esghub_sharedoffice365_hub'}
@@ -40,7 +40,6 @@ SELF_ONLY = 'As a technician you can raise actions for yourself in this area. As
 REVERTABLE = ['Status', 'IsOpen', 'Blocker', 'AssignedToId', 'DueDay', 'CurrentDueDate', 'ExtensionCount', 'LastExtendedOn', 'DateCompleted',
               'DateClosed', 'ClosedById', 'CloseOutcome', 'ClosureNote', 'Title', 'Description', 'Priority', 'RequiresCloseOut', 'Revision']
 DAY_TICKS = 864000000000
-MAX_DEADLINE_MONTHS = 24   # MaxDeadlineYears = 2 (plan B.3 ACT-03; the app uses the same value)
 
 
 def q(s):
@@ -200,7 +199,7 @@ def site_and_ids():
     ids = {}
     for key in LIST_KEYS:
         ids[key] = "@{outputs('Site_path')}/Lists/" + BY_KEY[LIST_URLS[key]]['url']
-    for key in ('req', 'act', 'hist', 'upd', 'notif'):
+    for key in ('req', 'act', 'hist', 'upd', 'notif', 'members', 'people'):
         ids[key + 'Root'] = ids[key]
     return [('Site_path', compose("@if(endsWith(" + path + ", '/'), take(" + path + ", sub(length(" + path + "), 1)), " + path + ")")),
             ('Site_url', compose("@if(endsWith(" + SITE + ", '/'), take(" + SITE + ", sub(length(" + SITE + "), 1)), " + SITE + ")")),
@@ -465,7 +464,7 @@ def retry_emails():
 # Which flow applies which kind of request (plan REV5 §5.3): each flow's trigger takes only its own kinds, and the
 # Request queue takes everything else (so an unknown kind is still answered, with a refusal).
 DOMAIN_TYPES = {
-    'admin': ['RetryTransaction', 'CancelTransaction', 'RevertTransaction'],
+    'admin': ['RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting'],
 }
 ACTION_TYPES = ['RaiseAction', 'ExtendDeadline', 'MarkComplete', 'ChangeStatus', 'ReassignAction', 'CloseAction', 'ReopenAction', 'EditActionDetails']
 FINAL_TX = "createArray('Applied', 'Void', 'Cancelled', 'Reverted', 'Rolled Back')"
@@ -627,7 +626,7 @@ def flow_request_queue(domain='actions'):
                  "if(greater(length(" + DESC + "), 5000), 'Keep the description to 5,000 characters or fewer.', "
                  "if(not(" + DUE_OK + "), 'Choose a target date.', "
                  "if(less(" + day_num(DUE_SAFE) + ", " + day_num(TODAY) + "), 'The target date cannot be in the past.', "
-                 "if(greater(" + day_num(DUE_SAFE) + ", " + day_num(MAX_DAY) + "), 'Choose a date within 2 years.', "
+                 "if(greater(" + day_num(DUE_SAFE) + ", " + day_num(MAX_DAY) + "), concat('Choose a date within ', string(outputs('Years_R')), if(equals(outputs('Years_R'), 1), ' year.', ' years.')), "
                  "if(not(contains(createArray('Low', 'Normal', 'High'), " + PRIO + ")), 'Choose a priority.', ''))))))))))))")
     action_path = "@{outputs('Ids')?['actRoot']}/@{" + AREA_R + "?['CompetencyKey']}"
     act_values, act_call = create_in_folder('act', action_path, 'Action_values_R', 'Action_body_R')
@@ -645,8 +644,13 @@ def flow_request_queue(domain='actions'):
             ('Existing_found_R', set_var('varExistingId', "@int(if(empty(" + EXISTING_R + "), '0', " + idstr("first(" + EXISTING_R + ")?['Id']") + "))")),
         ))),
         ('Read_due_R', set_var('varDue', "@{formatDateTime(concat(" + DUE + ", 'T00:00:00Z'), 'yyyy-MM-dd')}")),
-        ('Max_due_R', after(compose("@formatDateTime(addToTime(concat(" + TODAY + ", 'T00:00:00Z'), " + str(MAX_DEADLINE_MONTHS) + ", 'Month'), 'yyyy-MM-dd')"),
-                            {'Read_due_R': TOLERANT})),
+        # the furthest deadline (MaxDeadlineYears, set by an administrator), and whether this is still pre-go-live testing
+        ('Get_settings_R', after(http('GET', L('settings', "/items?$select=Title,Value&$top=500")), {'Read_due_R': TOLERANT})),
+        ('Years_row_R', query("@body('Get_settings_R')?['value']", "@equals(item()?['Title'], 'MaxDeadlineYears')")),
+        ('Years_R', compose("@max(1, int(if(empty(string(coalesce(first(body('Years_row_R'))?['Value'], ''))), '2', string(first(body('Years_row_R'))?['Value']))))")),
+        ('Testing_R', query("@body('Get_settings_R')?['value']", "@and(equals(item()?['Title'], 'PreGoLiveTesting'), equals(item()?['Value'], 'Yes'))")),
+        ('Max_due_R', after(compose("@formatDateTime(addToTime(concat(" + TODAY + ", 'T00:00:00Z'), mul(outputs('Years_R'), 12), 'Month'), 'yyyy-MM-dd')"),
+                            {'Testing_R': OK})),
         ('Verdict_R', compose(verdict_r)),
         ('Allowed_R', cond("@empty(outputs('Verdict_R'))", seq(
             ('Is_new_R', cond("@equals(variables('varExistingId'), 0)", seq(
@@ -658,7 +662,8 @@ def flow_request_queue(domain='actions'):
                     'OriginalDueDate': '@{' + uk_form_date(DUE) + '}', 'CurrentDueDate': '@{' + uk_form_date(DUE) + '}',
                     'DueDay': '@{' + day_num(DUE) + '}', 'Status': 'Open', 'IsOpen': '1', 'Priority': '@{' + PRIO + '}',
                     'RequiresCloseOut': "@{if(equals(" + P + "?['requiresCloseOut'], true), '1', '0')}", 'ExtensionCount': '0', 'Revision': '1',
-                    'SourceType': 'None', 'IsCrossCompetency': '0', 'PendingRequestKey': '@{' + KEY + '}', 'CreatedRequestKey': 'F|@{' + KEY + '}'})),
+                    'SourceType': 'None', 'IsCrossCompetency': '0', 'PendingRequestKey': '@{' + KEY + '}', 'CreatedRequestKey': 'F|@{' + KEY + '}',
+                    'IsTestRecord': "@{if(empty(body('Testing_R')), '0', '1')}"})),
                 ('Action_body_R', act_values),
                 ('Create_action_R', act_call),
                 *created_ok('Create_action_R', 'Action_created_R', 'The action could not be created. See Create_action_R.'),
@@ -1122,6 +1127,321 @@ def flow_request_queue(domain='actions'):
                             "'Cancelled. Nothing was changed.', 'Reverted.'))", 'int(' + idq(T + "?['Id']") + ')'),
         )
 
+    # ---------------------------------------------------------------- administrators: people and settings (plan REV5 §3.2, §4)
+    def people_switch():
+        """Adds a person, changes a person's role, areas, meeting rights, notice posting and administrator flag,
+        marks a leaver, or reactivates one – all as one transaction. Access is always narrowed first: groups are left
+        before the record says so, and joined only after it does, each read back. Nobody may change their own access,
+        and there is always at least one active administrator."""
+        sfx = '_P'
+        OWN = "string(" + TX + "?['RequestType'])"
+        TYPE_IS = lambda x: "equals(" + OWN + ", '" + x + "')"
+        FIRST = "equals(string(" + TX + "?['State']), 'Received')"
+        IS_ADMIN = "and(equals(" + ME + "?['IsAdministrator'], true), equals(string(" + ME + "?['Status']), 'Active'))"
+        UID = "string(variables('varUid'))"
+        LOGIN = "variables('varLogin')"
+        PERSON = "first(body('Get_person" + sfx + "')?['value'])"
+        HAS = lambda f: "contains(" + P + ", '" + f + "')"
+        ROLE = "string(if(" + HAS('role') + ", " + P + "?['role'], coalesce(" + PERSON + "?['Role'], '')))"
+        LEAVING = TYPE_IS('PersonLeft')
+        POSTS = "and(not(" + LEAVING + "), if(" + HAS('canPostNotices') + ", equals(" + P + "?['canPostNotices'], true), not(equals(" + PERSON + "?['CanPostNotices'], false))))"
+        ADMINW = "and(not(" + LEAVING + "), if(" + HAS('administrator') + ", equals(" + P + "?['administrator'], true), equals(" + PERSON + "?['IsAdministrator'], true)))"
+        MGMTW = "and(not(" + LEAVING + "), contains(" + MANAGEMENT + ", " + ROLE + "))"
+        # the areas wanted: given in the request; a leaver none; a reactivation keeps what the records say
+        AREAS = ("if(" + LEAVING + ", createArray(), if(" + HAS('areas') + ", " + P + "?['areas'], body('Active_areas" + sfx + "')))")
+        COMPS = "body('Get_comps" + sfx + "')?['value']"
+        group = lambda name: "string(first(body('Groups" + sfx + "_" + name + "'))?['Id'])"
+        GROUP_TITLES = {g['key']: g['title'] for g in SCHEMA['groups'] if not g.get('perArea')}
+        ROLES = "createArray('Engineer', 'Technician', 'Team Leader', 'Group Head')"
+        folder_url = "@{outputs('Ids')?['reqRoot']}/u@{" + UID + "}"
+        folder_api = "_api/web/GetFolderByServerRelativePath(decodedurl='" + folder_url + "')/ListItemAllFields"
+        role_id = lambda name: "string(first(body('Role_" + name + sfx + "'))?['Id'])"
+
+        def verbose_post(uri, body):
+            return {'type': 'OpenApiConnection',
+                    'inputs': {'host': {'connectionName': 'shared_sharepointonline', 'operationId': 'HttpRequest', 'apiId': SP_API},
+                               'parameters': {'dataset': '@' + SITE, 'parameters/method': 'POST', 'parameters/uri': uri,
+                                              'parameters/headers': {'Accept': 'application/json;odata=verbose', 'Content-Type': 'application/json;odata=verbose'},
+                                              'parameters/body': body},
+                               'authentication': "@parameters('$authentication')"}}
+
+        def in_group(name, gid, want):
+            """Puts the person in (want true) or out of a group, then reads it back; nothing happens if it is already so."""
+            users = "_api/web/sitegroups(@{" + gid + "})/users"
+            check = users + "?$select=Id&$filter=Id eq @{" + UID + "}"
+            has = "not(empty(body('" + name + "_now')?['value']))"
+            act = (verbose_post(users, "@{concat('{\"__metadata\":{\"type\":\"SP.User\"},\"LoginName\":\"', " + LOGIN + ", '\"}')}") if want
+                   else http('POST', users + "/removebyid(@{" + UID + "})"))
+            return [(name + '_now', http('GET', check)),
+                    (name + '_change', cond("@" + ("not(" + has + ")" if want else has), seq(
+                        (name + '_do', act),
+                        (name + '_back', http('GET', check)),
+                        (name + '_kept', cond("@" + ("empty" if want else "not(empty") + "(body('" + name + "_back')?['value'])" + ("" if want else ")"),
+                                              seq((name + '_stop', fail_here('A group membership did not change as asked. See ' + name + '_do.'))))),
+                    )))]
+
+        def grant(name, add, rid):
+            act = 'addroleassignment' if add else 'removeroleassignment'
+            return (name, http('POST', folder_api + "/roleassignments/" + act + "(principalid=@{" + UID + "},roledefid=@{" + rid + "})"))
+
+        area_row = lambda it: "first(body('Rows" + it + "'))"
+        AREA_WANT = lambda it: "first(body('Want" + it + "'))"
+        area_gid = lambda it: idstr("items('" + it + "')?['MembersGroupId']")
+        mem_values, mem_call = create_in_folder('members', "@{outputs('Ids')?['membersRoot']}/@{items('Each_add" + sfx + "')?['CompetencyKey']}",
+                                                'Member_values' + sfx, 'Member_body' + sfx)
+        person_values, person_call = create_in_folder('people', "@{outputs('Ids')?['peopleRoot']}", 'Person_values' + sfx, 'Person_body' + sfx)
+        fold_values, fold_call = create_in_folder('req', "@{outputs('Ids')?['reqRoot']}", 'Fold_values' + sfx, 'Fold_body' + sfx, leaf_expr="u@{" + UID + "}")
+        ev_values, ev_call = create_in_folder('hist', "@{outputs('Ids')?['histRoot']}/Administration", 'P_event_values' + sfx, 'P_event_body' + sfx)
+        ev_key = "concat(" + KEY + ", '|1')"
+        expires_iso = lambda w: "string(coalesce(" + w + "?['expires'], ''))"
+        NAME = "string(coalesce(" + PERSON + "?['Title'], variables('varName'), 'this person'))"
+        before = {'role': "@" + PERSON + "?['Role']", 'canPostNotices': "@" + PERSON + "?['CanPostNotices']", 'administrator': "@" + PERSON + "?['IsAdministrator']",
+                  'status': "@" + PERSON + "?['Status']", 'areas': "@body('Active_areas" + sfx + "')"}
+        after_ = {'role': "@" + ROLE, 'canPostNotices': "@" + POSTS, 'administrator': "@" + ADMINW, 'status': "@if(" + LEAVING + ", 'Left', 'Active')",
+                  'areas': "@" + AREAS}
+        blocked = ("body('Blocked" + sfx + "')")
+        verdict = chain(
+            ("not(" + IS_ADMIN + ")", 'Only a Competency Hub administrator can do this.'),
+            ("equals(" + UID + ", " + SENDER + ")", "You can't change your own access. Ask another administrator."),
+            ("and(" + TYPE_IS('AddPerson') + ", equals(variables('varUid'), 0))", 'That email address was not found in Microsoft 365. Check the spelling.'),
+            ("and(" + TYPE_IS('AddPerson') + ", not(empty(" + PERSON + ")), equals(string(" + PERSON + "?['Status']), 'Left'))",
+             "@concat(" + NAME + ", ' is already in the Hub but marked as left. Use Reactivate instead.')"),
+            ("and(" + TYPE_IS('AddPerson') + ", not(empty(" + PERSON + ")))", "@concat(" + NAME + ", ' is already in the Hub.')"),
+            ("and(contains(createArray('UpdatePerson', 'PersonLeft'), " + OWN + "), or(empty(" + PERSON + "), not(equals(string(" + PERSON + "?['Status']), 'Active'))))",
+             'This person is not active in the Hub.'),
+            ("and(" + TYPE_IS('ReactivatePerson') + ", or(empty(" + PERSON + "), not(equals(string(" + PERSON + "?['Status']), 'Left'))))", 'This person is already active.'),
+            ("not(contains(" + ROLES + ", " + ROLE + "))", 'Choose a role.'),
+            ("not(empty(body('Bad_areas" + sfx + "')))", 'Choose areas from the list.'),
+            ("not(empty(body('Bad_dates" + sfx + "')))", 'An end date for access cannot be in the past.'),
+            ("and(" + LEAVING + ", not(empty(body('Get_owned" + sfx + "')?['value'])))",
+             "@concat(" + NAME + ", ' still has ', string(length(body('Get_owned" + sfx + "')?['value'])), if(equals(length(body('Get_owned" + sfx + "')?['value']), 1), "
+             "' open action', ' open actions'), '. Reassign them first.')"),
+            ("not(empty(" + blocked + "))", "@concat('Not removed from ', join(" + blocked + ", ', '), ': open actions there are still theirs. Reassign them first.')"),
+            ("and(equals(" + PERSON + "?['IsAdministrator'], true), not(" + ADMINW + "), lessOrEquals(length(body('Get_admins" + sfx + "')?['value']), 1))",
+             'There must always be at least one active administrator.'))
+        return seq(
+            ('Get_groups' + sfx, http('GET', "_api/web/sitegroups?$select=Id,Title&$top=1000")),
+            *[('Groups' + sfx + '_' + k, query("@body('Get_groups" + sfx + "')?['value']", "@equals(item()?['Title'], " + q(title) + ")")) for k, title in GROUP_TITLES.items()],
+            ('Get_roles' + sfx, http('GET', "_api/web/roledefinitions?$select=Id,Name")),
+            ('Role_Contribute' + sfx, query("@body('Get_roles" + sfx + "')?['value']", "@equals(item()?['Name'], 'Competency Hub Contribute')")),
+            ('Role_Read' + sfx, query("@body('Get_roles" + sfx + "')?['value']", "@equals(item()?['Name'], 'Competency Hub Read')")),
+            ('Get_comps' + sfx, http('GET', L('comps', "/items?$select=Id,Title,CompetencyKey,Status,MembersGroupId&$top=500"))),
+            # who: an added person is looked up in Microsoft 365 by email; anyone else is a People row
+            ('Who' + sfx, cond("@" + TYPE_IS('AddPerson'), seq(
+                ('Ensure' + sfx, http('POST', '_api/web/ensureuser', "@{concat('{\"logonName\":\"i:0#.f|membership|', toLower(trim(string(coalesce(" + P + "?['email'], '')))), '\"}')}")),
+                # only "not found" means the address is wrong; any other failure is tried again later
+                ('Ensure_failed' + sfx, after(cond("@and(not(equals(actions('Ensure" + sfx + "')?['status'], 'Succeeded')), not(equals(outputs('Ensure" + sfx + "')?['statusCode'], 404)))",
+                                                   seq(('Ensure_stop' + sfx, fail_here('Microsoft 365 could not be asked about this person. See Ensure' + sfx + '.')))),
+                                              {'Ensure' + sfx: TOLERANT})),
+                ('Set_uid_new' + sfx, after(set_var('varUid', "@int(if(equals(actions('Ensure" + sfx + "')?['status'], 'Succeeded'), string(body('Ensure" + sfx + "')?['Id']), '0'))"),
+                                            {'Ensure_failed' + sfx: OK})),
+                ('Set_login_new' + sfx, set_var('varLogin', "@{if(equals(actions('Ensure" + sfx + "')?['status'], 'Succeeded'), body('Ensure" + sfx + "')?['LoginName'], '')}")),
+                ('Set_name_new' + sfx, set_var('varName', "@{if(equals(actions('Ensure" + sfx + "')?['status'], 'Succeeded'), body('Ensure" + sfx + "')?['Title'], '')}")),
+            ), seq(
+                ('Set_uid' + sfx, set_var('varUid', "@int(" + idq(P + "?['personId']") + ")")),
+            ))),
+            ('Get_person' + sfx, http('GET', L('people', "/items?$select=Id,Title,SiteUserId,Role,Status,IsAdministrator,CanPostNotices,Person/Name&$expand=Person"
+                                                          "&$filter=SiteUserId eq @{" + UID + "}"))),
+            ('Login_known' + sfx, cond("@empty(" + LOGIN + ")", seq(
+                ('Set_login' + sfx, set_var('varLogin', "@{coalesce(" + PERSON + "?['Person']?['Name'], '')}")),
+            ))),
+            ('Get_rows' + sfx, http('GET', L('members', "/items?$select=Id,CompetencyId,MembershipKey,Status,CanManageMeetings,AccessExpires&$filter=PersonId eq @{" + UID + "}&$top=500"))),
+            ('Active_rows' + sfx, query("@body('Get_rows" + sfx + "')?['value']", "@equals(item()?['Status'], 'Active')")),
+            ('Active_areas' + sfx, {'type': 'Select', 'inputs': {'from': "@body('Active_rows" + sfx + "')", 'select': {
+                'key': "@first(split(string(item()?['MembershipKey']), '|'))", 'chair': "@equals(item()?['CanManageMeetings'], true)", 'expires': ''}}}),
+            ('Get_owned' + sfx, http('GET', L('act', "/items?$select=Id,CompetencyId&$filter=AssignedToId eq @{" + UID + "} and IsOpen eq 1&$top=5000"))),
+            ('Get_admins' + sfx, http('GET', L('people', "/items?$select=Id,SiteUserId&$filter=IsAdministrator eq 1 and Status eq 'Active'"))),
+            ('Wanted_keys' + sfx, {'type': 'Select', 'inputs': {'from': "@" + AREAS, 'select': "@string(item()?['key'])"}}),
+            ('Area_keys' + sfx, {'type': 'Select', 'inputs': {'from': "@" + COMPS, 'select': "@string(item()?['CompetencyKey'])"}}),
+            ('Bad_areas' + sfx, query("@body('Wanted_keys" + sfx + "')", "@not(contains(body('Area_keys" + sfx + "'), item()))")),
+            ('Bad_dates' + sfx, query("@" + AREAS, "@and(not(empty(string(coalesce(item()?['expires'], '')))), less(" + day_num(
+                "if(empty(string(coalesce(item()?['expires'], ''))), '9999-12-31', string(item()?['expires']))") + ", " + day_num(TODAY) + "))")),
+            # open actions in an area the person is leaving (management keeps any action, so a Team Leader is never blocked)
+            ('Leaving_areas' + sfx, query("@" + COMPS, "@and(not(contains(body('Wanted_keys" + sfx + "'), string(item()?['CompetencyKey']))), not(" + MGMTW + "))")),
+            ('Owned_areas' + sfx, {'type': 'Select', 'inputs': {'from': "@body('Get_owned" + sfx + "')?['value']", 'select': "@" + idstr("item()?['CompetencyId']")}}),
+            ('Blocked_comps' + sfx, query("@body('Leaving_areas" + sfx + "')", "@contains(body('Owned_areas" + sfx + "'), " + idstr("item()?['Id']") + ")")),
+            ('Blocked' + sfx, {'type': 'Select', 'inputs': {'from': "@if(" + LEAVING + ", createArray(), body('Blocked_comps" + sfx + "'))", 'select': "@string(item()?['Title'])"}}),
+            ('Before' + sfx, compose(before)),
+            ('Decide' + sfx, cond('@' + FIRST, seq(
+                ('Verdict' + sfx, compose('@' + verdict)),
+                ('Decided' + sfx, cond("@empty(outputs('Verdict" + sfx + "'))",
+                                       seq(*tx_update('planned' + sfx, {'State': 'Planned', 'PreviousValue': '@{string(outputs(\'Before' + sfx + '\'))}'})),
+                                       reject(sfx, "outputs('Verdict" + sfx + "')"))),
+            ))),
+            # a new person: their People row and their own request folder, as Setup makes them
+            ('New_person' + sfx, cond("@" + TYPE_IS('AddPerson'), seq(
+                ('Need_row' + sfx, cond("@empty(" + PERSON + ")", seq(
+                    ('Person_values' + sfx, form({
+                        'Title': "@{variables('varName')}", 'Person': "@{concat('[{\"Key\":\"', " + LOGIN + ", '\"}]')}",
+                        'Email': "@{toLower(trim(string(" + P + "?['email'])))}", 'SiteUserId': '@{' + UID + '}', 'Role': '@{' + ROLE + '}',
+                        'IsAdministrator': '0', 'Status': 'Active', 'CanPostNotices': "@{if(" + POSTS + ", '1', '0')}", 'Revision': '1',
+                        'CreatedRequestKey': "F|@{" + KEY + "}"})),
+                    ('Person_body' + sfx, person_values),
+                    ('Create_person' + sfx, person_call),
+                    *created_ok('Create_person' + sfx, 'Person_made' + sfx, 'The People row could not be created. See Create_person' + sfx + '.'),
+                ))),
+                ('Find_fold' + sfx, http('GET', "_api/web/GetFolderByServerRelativePath(decodedurl='" + folder_url + "')?$select=Exists")),
+                ('Need_fold' + sfx, cond("@not(equals(body('Find_fold" + sfx + "')?['Exists'], true))", seq(
+                    ('Fold_values' + sfx, form({'Title': "u@{" + UID + "}"})),
+                    ('Fold_body' + sfx, fold_values),
+                    ('Create_fold' + sfx, fold_call),
+                    *created_ok('Create_fold' + sfx, 'Fold_made' + sfx, 'The request folder could not be created. See Create_fold' + sfx + '.'),
+                ))),
+                ('Break_fold' + sfx, http('POST', folder_api + "/breakroleinheritance(copyRoleAssignments=true,clearSubscopes=true)")),
+                grant('Grant_fold' + sfx, True, role_id('Contribute')),
+            ))),
+            # narrow first: the groups this person is leaving, each read back, before the records say so
+            ('Each_remove' + sfx, {'type': 'Foreach', 'foreach': "@" + COMPS, 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
+                ('Rows_r' + sfx, query("@body('Active_rows" + sfx + "')", "@equals(" + idstr("item()?['CompetencyId']") + ", " + idstr("items('Each_remove" + sfx + "')?['Id']") + ")")),
+                ('Leave_area' + sfx, cond("@and(not(empty(body('Rows_r" + sfx + "'))), not(contains(body('Wanted_keys" + sfx + "'), string(items('Each_remove" + sfx + "')?['CompetencyKey']))))", seq(
+                    *in_group('Out_area' + sfx, area_gid('Each_remove' + sfx), False),
+                    ('Removed_row' + sfx, compose({'Status': 'Removed', 'DateRemoved': '@{utcNow()}', 'CanManageMeetings': False})),
+                    ('Save_removed' + sfx, merge(L('members', "/items(@{first(body('Rows_r" + sfx + "'))?['Id']})"), 'Removed_row' + sfx)),
+                ))),
+            )}),
+            *[step for k, want in (('Management', MGMTW), ('NoticePosters', POSTS), ('Administrators', ADMINW))
+              for step in [('Leave_' + k + sfx, cond("@not(" + want + ")", seq(*in_group('Out_' + k + sfx, group(k), False))))]],
+            ('Leave_all' + sfx, cond("@" + LEAVING, seq(
+                *in_group('Out_AllUsers' + sfx, group('AllUsers'), False),
+                grant('Fold_read' + sfx, True, role_id('Read')),
+                grant('Fold_no_contribute' + sfx, False, role_id('Contribute')),
+            ))),
+            # the record
+            ('Get_person_now' + sfx, http('GET', L('people', "/items?$select=Id&$filter=SiteUserId eq @{" + UID + "}"))),
+            # a leaver keeps the administrator's notice-posting decision for a later reactivation; only the group goes
+            ('Person_now' + sfx, compose({'Role': '@{' + ROLE + '}', 'CanPostNotices': "@if(" + LEAVING + ", not(equals(" + PERSON + "?['CanPostNotices'], false)), " + POSTS + ")",
+                                          'IsAdministrator': '@' + ADMINW,
+                                          'Status': "@{if(" + LEAVING + ", 'Left', 'Active')}", 'DateLeft': "@if(" + LEAVING + ", " + uk_midnight(TODAY) + ", null)"})),
+            ('Save_person' + sfx, merge(L('people', "/items(@{first(body('Get_person_now" + sfx + "')?['value'])?['Id']})"), 'Person_now' + sfx)),
+            # then the grants: the area rows first, then the groups, each read back
+            ('Each_add' + sfx, {'type': 'Foreach', 'foreach': "@" + COMPS, 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
+                ('Want_a' + sfx, query("@" + AREAS, "@equals(string(item()?['key']), string(items('Each_add" + sfx + "')?['CompetencyKey']))")),
+                ('Join_area' + sfx, cond("@not(empty(body('Want_a" + sfx + "')))", seq(
+                    ('Rows_a' + sfx, query("@body('Get_rows" + sfx + "')?['value']", "@equals(" + idstr("item()?['CompetencyId']") + ", " + idstr("items('Each_add" + sfx + "')?['Id']") + ")")),
+                    ('Has_row' + sfx, cond("@empty(body('Rows_a" + sfx + "'))", seq(
+                        ('Member_values' + sfx, form({
+                            'Title': "@{concat(" + NAME + ", ' – ', items('Each_add" + sfx + "')?['CompetencyKey'])}",
+                            'Competency': "@{items('Each_add" + sfx + "')?['Id']}", 'Person': "@{concat('[{\"Key\":\"', " + LOGIN + ", '\"}]')}",
+                            'MembershipKey': "@{concat(items('Each_add" + sfx + "')?['CompetencyKey'], '|', " + UID + ")}",
+                            'CanManageMeetings': "@{if(equals(first(body('Want_a" + sfx + "'))?['chair'], true), '1', '0')}",
+                            'AccessExpires': "@{if(empty(" + expires_iso("first(body('Want_a" + sfx + "'))") + "), '', " + uk_form_date(
+                                "if(empty(" + expires_iso("first(body('Want_a" + sfx + "'))") + "), '2000-01-01', " + expires_iso("first(body('Want_a" + sfx + "'))") + ")") + ")}",
+                            'Status': 'Active', 'DateAdded': "@{convertFromUtc(utcNow(), 'GMT Standard Time', 'dd/MM/yyyy HH:mm')}", 'Revision': '1',
+                            'CreatedRequestKey': "@{concat('F|', " + KEY + ", '|', items('Each_add" + sfx + "')?['CompetencyKey'])}"})),
+                        ('Member_body' + sfx, mem_values),
+                        ('Create_member' + sfx, mem_call),
+                        *created_ok('Create_member' + sfx, 'Member_made' + sfx, 'The membership could not be recorded. See Create_member' + sfx + '.'),
+                    ), seq(
+                        ('Member_now' + sfx, compose({'Status': 'Active', 'DateRemoved': None,
+                                                       'CanManageMeetings': "@equals(first(body('Want_a" + sfx + "'))?['chair'], true)",
+                                                       'AccessExpires': "@if(empty(" + expires_iso("first(body('Want_a" + sfx + "'))") + "), null, " + uk_midnight(
+                                                           "if(empty(" + expires_iso("first(body('Want_a" + sfx + "'))") + "), '2000-01-01', " + expires_iso("first(body('Want_a" + sfx + "'))") + ")") + ")"})),
+                        ('Save_member' + sfx, merge(L('members', "/items(@{first(body('Rows_a" + sfx + "'))?['Id']})"), 'Member_now' + sfx)),
+                    ))),
+                    *in_group('In_area' + sfx, area_gid('Each_add' + sfx), True),
+                ))),
+            )}),
+            ('Join_all' + sfx, cond("@not(" + LEAVING + ")", seq(
+                *in_group('In_AllUsers' + sfx, group('AllUsers'), True),
+                ('Back_to_contribute' + sfx, cond("@" + TYPE_IS('ReactivatePerson'), seq(
+                    grant('Fold_contribute' + sfx, True, role_id('Contribute')),
+                    grant('Fold_no_read' + sfx, False, role_id('Read')),
+                ))),
+            ))),
+            *[step for k, want in (('Management', MGMTW), ('NoticePosters', POSTS), ('Administrators', ADMINW))
+              for step in [('Join_' + k + sfx, cond("@" + want, seq(*in_group('In_' + k + sfx, group(k), True))))]],
+            ('Verified' + sfx, compose({'AccessVerifiedOn': '@{utcNow()}'})),
+            ('Save_verified' + sfx, merge(L('people', "/items(@{first(body('Get_person_now" + sfx + "')?['value'])?['Id']})"), 'Verified' + sfx)),
+            ('After' + sfx, compose(after_)),
+            # the audit: who changed whose access, from what to what (plan REV5 ADM-6)
+            ('Find_p_event' + sfx, http('GET', L('hist', "/items?$select=Id&$filter=RequestKey eq '@{" + esc(ev_key) + "}'"))),
+            ('Need_p_event' + sfx, cond("@empty(body('Find_p_event" + sfx + "')?['value'])", seq(
+                ('P_event_values' + sfx, form({
+                    'Title': "@{take(concat(if(" + TYPE_IS('AddPerson') + ", 'Added ', if(" + LEAVING + ", 'Marked as left: ', if(" + TYPE_IS('ReactivatePerson') + ", 'Reactivated ', "
+                             "'Access changed for '))), " + NAME + "), 255)}",
+                    'RowKind': 'Event', 'RequestKey': '@{' + ev_key + '}', 'RecordType': 'Person',
+                    'RecordId': "@{first(body('Get_person_now" + sfx + "')?['value'])?['Id']}", 'EventType': '@{' + OWN + '}', 'RequestType': '@{' + OWN + '}',
+                    'PreviousValue': "@{coalesce(" + TX + "?['PreviousValue'], string(outputs('Before" + sfx + "')))}", 'NewValue': "@{string(outputs('After" + sfx + "'))}",
+                    'OwnerId': '@{' + UID + '}'})),
+                ('P_event_body' + sfx, ev_values),
+                ('P_event' + sfx, ev_call),
+                *created_ok('P_event' + sfx, 'P_event_made' + sfx, 'The History event could not be created. See P_event' + sfx + '.'),
+                ('Get_p_event' + sfx, http('GET', L('hist', "/items?$select=Id&$filter=RequestKey eq '@{" + esc(ev_key) + "}'"))),
+                ('P_event_details' + sfx, compose({'ActorId': '@int(' + SENDER + ')', 'EventTime': '@{' + EVENT_TIME + '}', 'ProcessedAt': '@{utcNow()}'})),
+                ('Save_p_event' + sfx, merge(L('hist', "/items(@{first(body('Get_p_event" + sfx + "')?['value'])?['Id']})"), 'P_event_details' + sfx)),
+            ))),
+            *tx_update('applied' + sfx, {'State': 'Applied', 'ProcessedAt': '@{utcNow()}'}),
+            *finish_request(sfx, 'Completed', "concat(if(" + TYPE_IS('AddPerson') + ", 'Added ', if(" + LEAVING + ", 'Marked as left: ', if(" + TYPE_IS('ReactivatePerson') + ", "
+                            "'Reactivated ', 'Saved the changes for '))), " + NAME + ", '.')", "int(" + UID + ")"),
+        )
+
+    # ---------------------------------------------------------------- administrators: the settings editor (plan REV5 ADM-4)
+    def settings_switch():
+        """Four safe settings, each checked on the server: whole numbers in range, or working hours as HH:MM|HH:MM|N."""
+        sfx = '_G'
+        NAME = "string(coalesce(" + P + "?['name'], ''))"
+        VALUE = "trim(string(coalesce(" + P + "?['value'], '')))"
+        IS_ADMIN = "and(equals(" + ME + "?['IsAdministrator'], true), equals(string(" + ME + "?['Status']), 'Active'))"
+        FIRST = "equals(string(" + TX + "?['State']), 'Received')"
+        def no_digits(expr):
+            for d in '0123456789':
+                expr = "replace(" + expr + ", '" + d + "', '')"
+            return expr
+        whole = lambda expr: "and(greater(length(" + expr + "), 0), lessOrEquals(length(" + expr + "), 2), empty(" + no_digits(expr) + "))"
+        NUM = "int(if(" + whole(VALUE) + ", " + VALUE + ", '0'))"
+        PARTS = "split(" + VALUE + ", '|')"
+        # every argument is evaluated, so nothing here may fail on a badly formed value: parts are taken with skip/first,
+        # and text is padded before substring
+        part = lambda i: "string(coalesce(first(skip(" + PARTS + ", " + str(i) + ")), ''))"
+        pad = lambda e: "concat(" + e + ", '00000')"
+        hhmm_ok = lambda e: "and(equals(length(" + e + "), 5), equals(" + no_digits(e) + ", ':'), equals(substring(" + pad(e) + ", 2, 1), ':'))"
+        hhmm = lambda e: ("add(mul(int(if(" + hhmm_ok(e) + ", substring(" + pad(e) + ", 0, 2), '0')), 60), "
+                          "int(if(" + hhmm_ok(e) + ", substring(" + pad(e) + ", 3, 2), '0')))")
+        HOURS_OK = ("and(equals(length(" + PARTS + "), 3), " + hhmm_ok(part(0)) + ", " + hhmm_ok(part(1)) + ", " + whole(part(2)) + ", "
+                    "less(" + hhmm(part(0)) + ", " + hhmm(part(1)) + "), lessOrEquals(" + hhmm(part(1)) + ", 1439), "
+                    "greaterOrEquals(int(if(" + whole(part(2)) + ", " + part(2) + ", '0')), 15))")
+        ROW = "first(body('Setting_row" + sfx + "'))"
+        ev_key = "concat(" + KEY + ", '|1')"
+        ev_values, ev_call = create_in_folder('hist', "@{outputs('Ids')?['histRoot']}/Administration", 'S_event_values' + sfx, 'S_event_body' + sfx)
+        verdict = chain(
+            ("not(" + IS_ADMIN + ")", 'Only a Competency Hub administrator can do this.'),
+            ("not(contains(createArray('OverdueReminderIntervalDays', 'ReminderDaysBefore', 'MaxDeadlineYears', 'MonitorHours'), " + NAME + "))", 'Choose a setting.'),
+            ("empty(" + ROW + ")", 'That setting is missing. Run Setup again.'),
+            ("and(contains(createArray('OverdueReminderIntervalDays', 'ReminderDaysBefore'), " + NAME + "), or(not(" + whole(VALUE) + "), less(" + NUM + ", 1), greater(" + NUM + ", 30)))",
+             'Enter a whole number of days from 1 to 30.'),
+            ("and(equals(" + NAME + ", 'MaxDeadlineYears'), or(not(" + whole(VALUE) + "), less(" + NUM + ", 1), greater(" + NUM + ", 5)))", 'Enter a whole number of years from 1 to 5.'),
+            ("and(equals(" + NAME + ", 'MonitorHours'), not(" + HOURS_OK + "))",
+             'Give the start and end of working hours (start before end), and at least 15 minutes between checks outside them.'))
+        return seq(
+            ('Get_setting' + sfx, http('GET', L('settings', "/items?$select=Id,Title,Value&$top=500"))),
+            ('Setting_row' + sfx, query("@body('Get_setting" + sfx + "')?['value']", "@equals(item()?['Title'], " + NAME + ")")),
+            ('Decide' + sfx, cond('@' + FIRST, seq(
+                ('Verdict' + sfx, compose('@' + verdict)),
+                ('Decided' + sfx, cond("@empty(outputs('Verdict" + sfx + "'))",
+                                       seq(*tx_update('planned' + sfx, {'State': 'Planned', 'PreviousValue': "@{string(coalesce(" + ROW + "?['Value'], ''))}"})),
+                                       reject(sfx, "outputs('Verdict" + sfx + "')"))),
+            ))),
+            # the value before the change: kept on the transaction, or read now on a first run
+            ('Previous' + sfx, compose("@coalesce(" + TX + "?['PreviousValue'], " + ROW + "?['Value'], '')")),
+            ('Setting_value' + sfx, compose({'Value': '@{' + VALUE + '}'})),
+            ('Save_setting' + sfx, merge(L('settings', "/items(@{" + ROW + "?['Id']})"), 'Setting_value' + sfx)),
+            ('Find_s_event' + sfx, http('GET', L('hist', "/items?$select=Id&$filter=RequestKey eq '@{" + esc(ev_key) + "}'"))),
+            ('Need_s_event' + sfx, cond("@empty(body('Find_s_event" + sfx + "')?['value'])", seq(
+                ('S_event_values' + sfx, form({'Title': "@{concat('Setting changed: ', " + NAME + ")}", 'RowKind': 'Event', 'RequestKey': '@{' + ev_key + '}',
+                                               'RecordType': 'Setting', 'RecordId': "@{" + ROW + "?['Id']}", 'EventType': 'UpdateSetting', 'RequestType': 'UpdateSetting',
+                                               'PreviousValue': "@{outputs('Previous" + sfx + "')}", 'NewValue': '@{' + VALUE + '}'})),
+                ('S_event_body' + sfx, ev_values),
+                ('S_event' + sfx, ev_call),
+                *created_ok('S_event' + sfx, 'S_event_made' + sfx, 'The History event could not be created. See S_event' + sfx + '.'),
+                ('Get_s_event' + sfx, http('GET', L('hist', "/items?$select=Id&$filter=RequestKey eq '@{" + esc(ev_key) + "}'"))),
+                ('S_event_details' + sfx, compose({'ActorId': '@int(' + SENDER + ')', 'EventTime': '@{' + EVENT_TIME + '}', 'ProcessedAt': '@{utcNow()}'})),
+                ('Save_s_event' + sfx, merge(L('hist', "/items(@{first(body('Get_s_event" + sfx + "')?['value'])?['Id']})"), 'S_event_details' + sfx)),
+            ))),
+            *tx_update('applied' + sfx, {'State': 'Applied', 'ProcessedAt': '@{utcNow()}'}),
+            *finish_request(sfx, 'Completed', "'Setting saved.'"),
+        )
+
+
     # ---------------------------------------------------------------- common part
     IN_OWN = ("and(equals(string(" + R + "?['FileDirRef']), concat(outputs('Ids')?['reqRoot'], '/', outputs('Folder_name'))), "
               "startsWith(outputs('Folder_name'), 'u'))")
@@ -1221,7 +1541,10 @@ def flow_request_queue(domain='actions'):
                            change_all({'ExtendDeadline': extend_case, 'MarkComplete': complete_case, 'ChangeStatus': status_case,
                                        'ReassignAction': reassign_case, 'CloseAction': close_case, 'ReopenAction': reopen_case,
                                        'EditActionDetails': edit_case}))
-         if domain == 'actions' else scope(admin_switch())),
+         if domain == 'actions' else
+         cond("@contains(createArray('RetryTransaction', 'CancelTransaction', 'RevertTransaction'), string(" + TX + "?['RequestType']))",
+              admin_switch(),
+              seq(('Settings_or_people', cond("@equals(string(" + TX + "?['RequestType']), 'UpdateSetting')", settings_switch(), people_switch()))))),
     )
     fail_body = {'Status': 'Failed', 'ResultMessage': 'Not recorded yet – retrying automatically.'}
     catch = after(scope(seq(
@@ -1245,6 +1568,9 @@ def flow_request_queue(domain='actions'):
                   ('Initialize_varEventId', init_var('varEventId', 'integer', 0)),
                   ('Initialize_varLockedHere', init_var('varLockedHere', 'boolean', False)),
                   ('Initialize_varAct', init_var('varAct', 'object', {})),
+                  ('Initialize_varUid', init_var('varUid', 'integer', 0)),
+                  ('Initialize_varLogin', init_var('varLogin', 'string', '')),
+                  ('Initialize_varName', init_var('varName', 'string', '')),
                   ('Initialize_varOutbox', init_var('varOutbox', 'array', [])),
                   # what each kind of change sets for the shared steps (change_all)
                   ('Initialize_varVerdict', init_var('varVerdict', 'string', '')),
@@ -1285,6 +1611,8 @@ def flow_daily_tasks():
     TODAY = "outputs('Today')"
     PEOPLE = "body('Get_people')?['value']"
     C = "items('Each_candidate')"
+    X = "items('Each_expired')"
+    ended_values, ended_call = create_in_folder('hist', "@{outputs('Ids')?['histRoot']}/Administration", 'Ended_event_values', 'Ended_event_body')
     setting = lambda name, default: ("@max(0, int(if(empty(string(coalesce(first(body('" + name + "_row'))?['Value'], ''))), " + q(default) + ", "
                                      "string(first(body('" + name + "_row'))?['Value']))))")
     left = "outputs('Left_c')"
@@ -1341,6 +1669,38 @@ def flow_daily_tasks():
             ('Owner_c', query('@' + PEOPLE, "@equals(" + idstr("item()?['SiteUserId']") + ", " + idstr(C + "?['AssignedToId']") + ")")),
             ('New_c', cond("@not(contains(body('Known_keys'), outputs('Key_c')))", seq(
                 ('Add_reminder', {'type': 'AppendToArrayVariable', 'inputs': {'name': 'varNotices', 'value': reminder}}),
+            ))),
+        )}),
+        # temporary access ends by itself (plan REV5 ADM-2): the day after its end date, unless the person still has
+        # open actions in that area – then the administrators are told instead, once a day
+        ('Get_comps', http('GET', L('comps', "/items?$select=Id,Title,CompetencyKey,MembersGroupId&$top=500"))),
+        ('Get_temporary', http('GET', L('members', "/items?$select=Id,CompetencyId,PersonId,MembershipKey,AccessExpires&$filter=Status eq 'Active'&$top=5000"))),
+        ('Expired', query("@body('Get_temporary')?['value']", "@and(not(empty(string(coalesce(item()?['AccessExpires'], '')))), "
+                          "less(" + day_num("convertFromUtc(string(coalesce(item()?['AccessExpires'], '2999-01-01T00:00:00Z')), 'GMT Standard Time', 'yyyy-MM-dd')") + ", "
+                          + day_num(TODAY) + "))")),
+        ('Each_expired', {'type': 'Foreach', 'foreach': "@body('Expired')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
+            ('Area_x', query("@body('Get_comps')?['value']", "@equals(" + idstr("item()?['Id']") + ", " + idstr(X + "?['CompetencyId']") + ")")),
+            ('Who_x', query('@' + PEOPLE, "@equals(" + idstr("item()?['SiteUserId']") + ", " + idstr(X + "?['PersonId']") + ")")),
+            ('Owned_x', http('GET', L('act', "/items?$select=Id&$filter=AssignedToId eq @{" + idq(X + "?['PersonId']") + "} and IsOpen eq 1 and CompetencyId eq @{"
+                                              + idq(X + "?['CompetencyId']") + "}"))),
+            ('Can_remove_x', cond("@empty(body('Owned_x')?['value'])", seq(
+                ('Out_x', http('POST', "_api/web/sitegroups(@{" + idq("first(body('Area_x'))?['MembersGroupId']") + "})/users/removebyid(@{" + idq(X + "?['PersonId']") + "})")),
+                ('Back_x', http('GET', "_api/web/sitegroups(@{" + idq("first(body('Area_x'))?['MembersGroupId']") + "})/users?$select=Id&$filter=Id eq @{" + idq(X + "?['PersonId']") + "}")),
+                ('Gone_x', cond("@empty(body('Back_x')?['value'])", None, seq(('Still_x', fail_here('An expired membership could not be removed. See Out_x.'))))),
+                ('Ended_x', compose({'Status': 'Removed', 'DateRemoved': '@{utcNow()}', 'CanManageMeetings': False})),
+                ('Save_ended_x', merge(L('members', "/items(@{" + X + "?['Id']})"), 'Ended_x')),
+                ('Ended_event_values', form({'Title': "@{take(concat('Temporary access ended: ', string(first(body('Who_x'))?['Title']), ' – ', string(first(body('Area_x'))?['Title'])), 255)}",
+                                             'RowKind': 'Event', 'RequestKey': "@{concat('SYS|Expire|', string(" + X + "?['Id']), '|', " + TODAY + ")}", 'RecordType': 'Membership',
+                                             'RecordId': "@{" + X + "?['Id']}", 'EventType': 'AccessExpired', 'OwnerId': '@{' + idq(X + "?['PersonId']") + '}'})),
+                ('Ended_event_body', ended_values),
+                ('Ended_event', after(ended_call, {'Ended_event_body': OK})),
+                # a run that stops after this is safe: the row is already Removed, so it is not found again
+                ('Ended_event_done', after(compose('done'), {'Ended_event': TOLERANT})),
+            ), seq(
+                alert_if('Expiry_alert', 'true', "concat('expiry|', string(" + X + "?['Id']))",
+                         "concat('Temporary access has ended, but open actions remain: ', string(first(body('Who_x'))?['Title']), ' in ', string(first(body('Area_x'))?['Title']))",
+                         "concat(string(first(body('Who_x'))?['Title']), ' still owns ', string(length(body('Owned_x')?['value'])), ' open action(s) in ', string(first(body('Area_x'))?['Title']), "
+                         "', so their access there was not removed. Reassign the actions, then untick the area in Administration.')"),
             ))),
         )}),
         ('To_remind', query("@variables('varNotices')", "@equals(item()?['send'], true)")),
