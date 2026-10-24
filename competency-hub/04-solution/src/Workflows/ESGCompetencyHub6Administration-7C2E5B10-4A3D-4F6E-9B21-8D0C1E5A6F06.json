@@ -4079,7 +4079,7 @@
                         "Wanted_keys_(people)": {
                           "type": "Select",
                           "inputs": {
-                            "from": "@if(equals(string(variables('varTx')?['RequestType']), 'PersonLeft'), createArray(), if(contains(outputs('Payload'), 'areas'), if(or(not(contains(outputs('Payload'), 'areas')), startsWith(string(outputs('Payload')?['areas']), '[')), outputs('Payload')?['areas'], createArray()), body('Active_areas_(people)')))",
+                            "from": "@if(equals(string(variables('varTx')?['RequestType']), 'PersonLeft'), json('[]'), if(contains(outputs('Payload'), 'areas'), if(or(not(contains(outputs('Payload'), 'areas')), startsWith(string(outputs('Payload')?['areas']), '[')), outputs('Payload')?['areas'], json('[]')), body('Active_areas_(people)')))",
                             "select": "@string(item()?['key'])"
                           },
                           "runAfter": {
@@ -4115,7 +4115,7 @@
                         "Access_end_dates_in_the_past_(people)": {
                           "type": "Query",
                           "inputs": {
-                            "from": "@if(equals(string(variables('varTx')?['RequestType']), 'PersonLeft'), createArray(), if(contains(outputs('Payload'), 'areas'), if(or(not(contains(outputs('Payload'), 'areas')), startsWith(string(outputs('Payload')?['areas']), '[')), outputs('Payload')?['areas'], createArray()), body('Active_areas_(people)')))",
+                            "from": "@if(equals(string(variables('varTx')?['RequestType']), 'PersonLeft'), json('[]'), if(contains(outputs('Payload'), 'areas'), if(or(not(contains(outputs('Payload'), 'areas')), startsWith(string(outputs('Payload')?['areas']), '[')), outputs('Payload')?['areas'], json('[]')), body('Active_areas_(people)')))",
                             "where": "@and(not(empty(string(coalesce(item()?['expires'], '')))), less(int(replace(if(empty(string(coalesce(item()?['expires'], ''))), '9999-12-31', string(item()?['expires'])), '-', '')), int(replace(outputs('Today_in_the_UK'), '-', ''))))"
                           },
                           "runAfter": {
@@ -4163,7 +4163,7 @@
                         "Names_of_those_areas_(people)": {
                           "type": "Select",
                           "inputs": {
-                            "from": "@if(equals(string(variables('varTx')?['RequestType']), 'PersonLeft'), createArray(), body('Areas_that_cannot_be_taken_away_(people)'))",
+                            "from": "@if(equals(string(variables('varTx')?['RequestType']), 'PersonLeft'), json('[]'), body('Areas_that_cannot_be_taken_away_(people)'))",
                             "select": "@string(item()?['Title'])"
                           },
                           "runAfter": {
@@ -4664,7 +4664,7 @@
                             "Give_them_Contribute_on_their_new_request_folder_levels_(people)": {
                               "type": "Select",
                               "inputs": {
-                                "from": "@coalesce(first(body('Give_them_Contribute_on_their_new_request_folder_check_first_(people)')?['value'])?['RoleDefinitionBindings'], createArray())",
+                                "from": "@coalesce(first(body('Give_them_Contribute_on_their_new_request_folder_check_first_(people)')?['value'])?['RoleDefinitionBindings'], json('[]'))",
                                 "select": "@int(item()?['Id'])"
                               },
                               "runAfter": {
@@ -4724,7 +4724,7 @@
                                 "Give_them_Contribute_on_their_new_request_folder_levels_read_back_(people)": {
                                   "type": "Select",
                                   "inputs": {
-                                    "from": "@coalesce(first(body('Give_them_Contribute_on_their_new_request_folder_read_back_(people)')?['value'])?['RoleDefinitionBindings'], createArray())",
+                                    "from": "@coalesce(first(body('Give_them_Contribute_on_their_new_request_folder_read_back_(people)')?['value'])?['RoleDefinitionBindings'], json('[]'))",
                                     "select": "@int(item()?['Id'])"
                                   },
                                   "runAfter": {
@@ -4841,7 +4841,7 @@
                             "Rec_out_want_(people)": {
                               "type": "Query",
                               "inputs": {
-                                "from": "@if(equals(string(variables('varTx')?['RequestType']), 'PersonLeft'), createArray(), if(contains(outputs('Payload'), 'areas'), if(or(not(contains(outputs('Payload'), 'areas')), startsWith(string(outputs('Payload')?['areas']), '[')), outputs('Payload')?['areas'], createArray()), body('Active_areas_(people)')))",
+                                "from": "@if(equals(string(variables('varTx')?['RequestType']), 'PersonLeft'), json('[]'), if(contains(outputs('Payload'), 'areas'), if(or(not(contains(outputs('Payload'), 'areas')), startsWith(string(outputs('Payload')?['areas']), '[')), outputs('Payload')?['areas'], json('[]')), body('Active_areas_(people)')))",
                                 "where": "@and(equals(string(item()?['key']), last(split(string(items('Rec_out_(people)')?['FileDirRef']), '/'))), equals(item()?['chair'], true))"
                               },
                               "runAfter": {}
@@ -5617,7 +5617,7 @@
                                 "Give_Read_on_their_request_folder_levels_(people)": {
                                   "type": "Select",
                                   "inputs": {
-                                    "from": "@coalesce(first(body('Give_Read_on_their_request_folder_check_first_(people)')?['value'])?['RoleDefinitionBindings'], createArray())",
+                                    "from": "@coalesce(first(body('Give_Read_on_their_request_folder_check_first_(people)')?['value'])?['RoleDefinitionBindings'], json('[]'))",
                                     "select": "@int(item()?['Id'])"
                                   },
                                   "runAfter": {
@@ -5677,7 +5677,7 @@
                                     "Give_Read_on_their_request_folder_levels_read_back_(people)": {
                                       "type": "Select",
                                       "inputs": {
-                                        "from": "@coalesce(first(body('Give_Read_on_their_request_folder_read_back_(people)')?['value'])?['RoleDefinitionBindings'], createArray())",
+                                        "from": "@coalesce(first(body('Give_Read_on_their_request_folder_read_back_(people)')?['value'])?['RoleDefinitionBindings'], json('[]'))",
                                         "select": "@int(item()?['Id'])"
                                       },
                                       "runAfter": {
@@ -5742,7 +5742,7 @@
                                 "Take_away_Contribute_on_their_request_folder_levels_(people)": {
                                   "type": "Select",
                                   "inputs": {
-                                    "from": "@coalesce(first(body('Take_away_Contribute_on_their_request_folder_check_first_(people)')?['value'])?['RoleDefinitionBindings'], createArray())",
+                                    "from": "@coalesce(first(body('Take_away_Contribute_on_their_request_folder_check_first_(people)')?['value'])?['RoleDefinitionBindings'], json('[]'))",
                                     "select": "@int(item()?['Id'])"
                                   },
                                   "runAfter": {
@@ -5802,7 +5802,7 @@
                                     "Take_away_Contribute_on_their_request_folder_levels_read_back_(people)": {
                                       "type": "Select",
                                       "inputs": {
-                                        "from": "@coalesce(first(body('Take_away_Contribute_on_their_request_folder_read_back_(people)')?['value'])?['RoleDefinitionBindings'], createArray())",
+                                        "from": "@coalesce(first(body('Take_away_Contribute_on_their_request_folder_read_back_(people)')?['value'])?['RoleDefinitionBindings'], json('[]'))",
                                         "select": "@int(item()?['Id'])"
                                       },
                                       "runAfter": {
@@ -5941,7 +5941,7 @@
                             "Is_this_area_ticked_(people)": {
                               "type": "Query",
                               "inputs": {
-                                "from": "@if(equals(string(variables('varTx')?['RequestType']), 'PersonLeft'), createArray(), if(contains(outputs('Payload'), 'areas'), if(or(not(contains(outputs('Payload'), 'areas')), startsWith(string(outputs('Payload')?['areas']), '[')), outputs('Payload')?['areas'], createArray()), body('Active_areas_(people)')))",
+                                "from": "@if(equals(string(variables('varTx')?['RequestType']), 'PersonLeft'), json('[]'), if(contains(outputs('Payload'), 'areas'), if(or(not(contains(outputs('Payload'), 'areas')), startsWith(string(outputs('Payload')?['areas']), '[')), outputs('Payload')?['areas'], json('[]')), body('Active_areas_(people)')))",
                                 "where": "@equals(string(item()?['key']), string(items('Each_add_(people)')?['CompetencyKey']))"
                               },
                               "runAfter": {}
@@ -6382,7 +6382,7 @@
                                 "Give_Contribute_on_their_request_folder_levels_(people)": {
                                   "type": "Select",
                                   "inputs": {
-                                    "from": "@coalesce(first(body('Give_Contribute_on_their_request_folder_check_first_(people)')?['value'])?['RoleDefinitionBindings'], createArray())",
+                                    "from": "@coalesce(first(body('Give_Contribute_on_their_request_folder_check_first_(people)')?['value'])?['RoleDefinitionBindings'], json('[]'))",
                                     "select": "@int(item()?['Id'])"
                                   },
                                   "runAfter": {
@@ -6442,7 +6442,7 @@
                                     "Give_Contribute_on_their_request_folder_levels_read_back_(people)": {
                                       "type": "Select",
                                       "inputs": {
-                                        "from": "@coalesce(first(body('Give_Contribute_on_their_request_folder_read_back_(people)')?['value'])?['RoleDefinitionBindings'], createArray())",
+                                        "from": "@coalesce(first(body('Give_Contribute_on_their_request_folder_read_back_(people)')?['value'])?['RoleDefinitionBindings'], json('[]'))",
                                         "select": "@int(item()?['Id'])"
                                       },
                                       "runAfter": {
@@ -6507,7 +6507,7 @@
                                 "Take_away_Read_on_their_request_folder_levels_(people)": {
                                   "type": "Select",
                                   "inputs": {
-                                    "from": "@coalesce(first(body('Take_away_Read_on_their_request_folder_check_first_(people)')?['value'])?['RoleDefinitionBindings'], createArray())",
+                                    "from": "@coalesce(first(body('Take_away_Read_on_their_request_folder_check_first_(people)')?['value'])?['RoleDefinitionBindings'], json('[]'))",
                                     "select": "@int(item()?['Id'])"
                                   },
                                   "runAfter": {
@@ -6567,7 +6567,7 @@
                                     "Take_away_Read_on_their_request_folder_levels_read_back_(people)": {
                                       "type": "Select",
                                       "inputs": {
-                                        "from": "@coalesce(first(body('Take_away_Read_on_their_request_folder_read_back_(people)')?['value'])?['RoleDefinitionBindings'], createArray())",
+                                        "from": "@coalesce(first(body('Take_away_Read_on_their_request_folder_read_back_(people)')?['value'])?['RoleDefinitionBindings'], json('[]'))",
                                         "select": "@int(item()?['Id'])"
                                       },
                                       "runAfter": {
@@ -7010,7 +7010,7 @@
                             "canPostNotices": "@and(not(equals(string(variables('varTx')?['RequestType']), 'PersonLeft')), if(contains(outputs('Payload'), 'canPostNotices'), equals(outputs('Payload')?['canPostNotices'], true), not(equals(first(body('Get_person_(people)')?['value'])?['CanPostNotices'], false))))",
                             "administrator": "@and(not(equals(string(variables('varTx')?['RequestType']), 'PersonLeft')), if(contains(outputs('Payload'), 'administrator'), equals(outputs('Payload')?['administrator'], true), equals(first(body('Get_person_(people)')?['value'])?['IsAdministrator'], true)))",
                             "status": "@if(equals(string(variables('varTx')?['RequestType']), 'PersonLeft'), 'Left', 'Active')",
-                            "areas": "@if(equals(string(variables('varTx')?['RequestType']), 'PersonLeft'), createArray(), if(contains(outputs('Payload'), 'areas'), if(or(not(contains(outputs('Payload'), 'areas')), startsWith(string(outputs('Payload')?['areas']), '[')), outputs('Payload')?['areas'], createArray()), body('Active_areas_(people)')))"
+                            "areas": "@if(equals(string(variables('varTx')?['RequestType']), 'PersonLeft'), json('[]'), if(contains(outputs('Payload'), 'areas'), if(or(not(contains(outputs('Payload'), 'areas')), startsWith(string(outputs('Payload')?['areas']), '[')), outputs('Payload')?['areas'], json('[]')), body('Active_areas_(people)')))"
                           },
                           "runAfter": {
                             "Save_verified_(people)": [
@@ -7254,7 +7254,7 @@
                             "Rec_in_want_(people)": {
                               "type": "Query",
                               "inputs": {
-                                "from": "@if(equals(string(variables('varTx')?['RequestType']), 'PersonLeft'), createArray(), if(contains(outputs('Payload'), 'areas'), if(or(not(contains(outputs('Payload'), 'areas')), startsWith(string(outputs('Payload')?['areas']), '[')), outputs('Payload')?['areas'], createArray()), body('Active_areas_(people)')))",
+                                "from": "@if(equals(string(variables('varTx')?['RequestType']), 'PersonLeft'), json('[]'), if(contains(outputs('Payload'), 'areas'), if(or(not(contains(outputs('Payload'), 'areas')), startsWith(string(outputs('Payload')?['areas']), '[')), outputs('Payload')?['areas'], json('[]')), body('Active_areas_(people)')))",
                                 "where": "@and(equals(string(item()?['key']), last(split(string(items('Rec_in_(people)')?['FileDirRef']), '/'))), equals(item()?['chair'], true))"
                               },
                               "runAfter": {}
@@ -7500,7 +7500,7 @@
                 "Cover_row": {
                   "type": "Query",
                   "inputs": {
-                    "from": "@if(equals(actions('Cover_settings')?['status'], 'Succeeded'), body('Cover_settings')?['value'], createArray())",
+                    "from": "@if(equals(actions('Cover_settings')?['status'], 'Succeeded'), body('Cover_settings')?['value'], json('[]'))",
                     "where": "@true"
                   },
                   "runAfter": {

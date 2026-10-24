@@ -339,6 +339,8 @@ def call(name, a, ctx):
     if name == 'join':
         return a[1].join(to_str(x) for x in a[0])
     if name == 'createArray':
+        if not a:
+            raise ExprError("The template language function 'createArray' expects a comma separated list of parameters. The function was invoked with no parameters.")
         return list(a)
     if name in ('greater', 'less'):
         if not all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in a):

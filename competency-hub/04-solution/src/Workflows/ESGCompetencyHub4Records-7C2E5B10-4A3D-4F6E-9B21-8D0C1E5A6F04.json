@@ -7496,7 +7496,7 @@
                 "Cover_row": {
                   "type": "Query",
                   "inputs": {
-                    "from": "@if(equals(actions('Cover_settings')?['status'], 'Succeeded'), body('Cover_settings')?['value'], createArray())",
+                    "from": "@if(equals(actions('Cover_settings')?['status'], 'Succeeded'), body('Cover_settings')?['value'], json('[]'))",
                     "where": "@true"
                   },
                   "runAfter": {

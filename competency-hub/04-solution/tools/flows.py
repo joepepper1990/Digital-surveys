@@ -343,7 +343,7 @@ def outbox_create(sfx, items_expr):
             'RenderData': "@{string(outputs('Render" + sfx + "'))}", 'DueDay': '@{' + day_num(T('dueIso')) + '}'})),
         ('Notice_body' + sfx, values),
         ('Create_notice' + sfx, call),
-        ('Notice_refused' + sfx, after(query("@coalesce(body('Create_notice" + sfx + "')?['value'], createArray())", "@equals(item()?['HasException'], true)"),
+        ('Notice_refused' + sfx, after(query("@coalesce(body('Create_notice" + sfx + "')?['value'], json('[]'))", "@equals(item()?['HasException'], true)"),
                                        {'Create_notice' + sfx: TOLERANT})),
         # made now: it is sent when the work is complete. If not, the key may already have its row from an earlier
         # run (the daily run follows that one up); anything else is a real failure.
@@ -424,7 +424,7 @@ def send_outbox_steps(sfx):
     # nothing to send (most runs): no call at all
     return seq(('Any_email' + sfx, cond("@not(empty(variables('varOutbox')))", seq(
         ('Cover_settings' + sfx, http('GET', L('settings', "/items?$select=Title,Value&$filter=Title eq 'ReminderDaysBefore'"))),
-        ('Cover_row' + sfx, after(query("@if(equals(actions('Cover_settings" + sfx + "')?['status'], 'Succeeded'), body('Cover_settings" + sfx + "')?['value'], createArray())", "@true"),
+        ('Cover_row' + sfx, after(query("@if(equals(actions('Cover_settings" + sfx + "')?['status'], 'Succeeded'), body('Cover_settings" + sfx + "')?['value'], json('[]'))", "@true"),
                                   {'Cover_settings' + sfx: TOLERANT})),
         ('Cover_days' + sfx, after(compose("@int(if(empty(string(coalesce(" + row + "?['Value'], ''))), '7', string(" + row + "?['Value'])))"),
                                    {'Cover_row' + sfx: OK})),
@@ -605,7 +605,7 @@ def invite_steps(sfx, meeting_id_expr):
                         'calendarId': 'Calendar', 'search': '@' + TOKEN,
                         'startDateTimeUtc': "@formatDateTime(addDays(string(coalesce(" + M + "?['MeetingDate'], utcNow())), -1), 'yyyy-MM-ddTHH:mm:ss')",
                         'endDateTimeUtc': "@formatDateTime(addDays(string(coalesce(" + M + "?['MeetingDate'], utcNow())), 2), 'yyyy-MM-ddTHH:mm:ss')"})),
-                    ('Inv_match' + s, after(query("@if(equals(actions('Inv_search" + s + "')?['status'], 'Succeeded'), coalesce(body('Inv_search" + s + "')?['value'], createArray()), createArray())",
+                    ('Inv_match' + s, after(query("@if(equals(actions('Inv_search" + s + "')?['status'], 'Succeeded'), coalesce(body('Inv_search" + s + "')?['value'], json('[]')), json('[]'))",
                                                   "@contains(string(coalesce(item()?['body'], '')), " + TOKEN + ")"), {'Inv_search' + s: TOLERANT})),
                     # a search that failed says nothing: nothing is created this time (it could make a second invitation)
                     ('Inv_looked' + s, set_var('varInvLook', "@if(equals(actions('Inv_search" + s + "')?['status'], 'Succeeded'), 'ok', 'unclear')")),
@@ -1677,7 +1677,7 @@ def flow_request_queue(domain='actions'):
         # the areas wanted: given in the request; a leaver none; a reactivation keeps what the records say
         # a list given in any other shape counts as none, and is refused below (it must never stop the run)
         AREAS_OK = "or(not(" + HAS('areas') + "), startsWith(string(" + P + "?['areas']), '['))"
-        AREAS = ("if(" + LEAVING + ", createArray(), if(" + HAS('areas') + ", if(" + AREAS_OK + ", " + P + "?['areas'], createArray()), body('Active_areas" + sfx + "')))")
+        AREAS = ("if(" + LEAVING + ", json('[]'), if(" + HAS('areas') + ", if(" + AREAS_OK + ", " + P + "?['areas'], json('[]')), body('Active_areas" + sfx + "')))")
         COMPS = "body('Get_comps" + sfx + "')?['value']"
         group = lambda name: "string(first(body('Groups" + sfx + "_" + name + "'))?['Id'])"
         GROUP_TITLES = {g['key']: g['title'] for g in SCHEMA['groups'] if not g.get('perArea')}
@@ -1713,7 +1713,7 @@ def flow_request_queue(domain='actions'):
             """Gives (add) or takes away a permission level on the person's request folder, only if needed, then reads it back."""
             act = 'addroleassignment' if add else 'removeroleassignment'
             ra = folder_api + "/roleassignments?$filter=PrincipalId eq @{" + UID + "}&$expand=RoleDefinitionBindings&$select=PrincipalId,RoleDefinitionBindings/Id"
-            levels = lambda read: {'type': 'Select', 'inputs': {'from': "@coalesce(first(body('" + read + "')?['value'])?['RoleDefinitionBindings'], createArray())",
+            levels = lambda read: {'type': 'Select', 'inputs': {'from': "@coalesce(first(body('" + read + "')?['value'])?['RoleDefinitionBindings'], json('[]'))",
                                                                   'select': "@int(item()?['Id'])"}}
             has = lambda sel: "contains(body('" + sel + "'), int(" + rid + "))"
             return [(name + '_now', http('GET', ra)),
@@ -1835,7 +1835,7 @@ def flow_request_queue(domain='actions'):
             ('Leaving_areas' + sfx, query("@" + COMPS, "@and(not(contains(body('Wanted_keys" + sfx + "'), string(item()?['CompetencyKey']))), not(" + MGMTW + "))")),
             ('Owned_areas' + sfx, {'type': 'Select', 'inputs': {'from': "@body('Get_owned" + sfx + "')?['value']", 'select': "@" + idstr("item()?['CompetencyId']")}}),
             ('Blocked_comps' + sfx, query("@body('Leaving_areas" + sfx + "')", "@contains(body('Owned_areas" + sfx + "'), " + idstr("item()?['Id']") + ")")),
-            ('Blocked' + sfx, {'type': 'Select', 'inputs': {'from': "@if(" + LEAVING + ", createArray(), body('Blocked_comps" + sfx + "'))", 'select': "@string(item()?['Title'])"}}),
+            ('Blocked' + sfx, {'type': 'Select', 'inputs': {'from': "@if(" + LEAVING + ", json('[]'), body('Blocked_comps" + sfx + "'))", 'select': "@string(item()?['Title'])"}}),
             ('Before' + sfx, compose(before)),
             ('Decide' + sfx, cond('@' + FIRST, seq(
                 ('Verdict' + sfx, compose('@' + verdict)),
@@ -2336,7 +2336,7 @@ def flow_request_queue(domain='actions'):
         START = "string(if(" + HAS('start') + ", " + P + "?['start'], " + local('MeetingDate', 'HH:mm', "'2000-01-01T00:00:00Z'") + "))"
         END = "string(if(" + HAS('end') + ", " + P + "?['end'], " + local('EndTime', 'HH:mm', "'2000-01-01T01:00:00Z'") + "))"
         CHAIR = "string(if(" + HAS('chairId') + ", " + P + "?['chairId'], " + idstr(M + "?['ChairId']") + "))"
-        ATTENDEES = "if(" + HAS('attendeeIds') + ", coalesce(" + P + "?['attendeeIds'], createArray()), json(if(empty(string(coalesce(" + M + "?['Attendees'], ''))), '[]', string(" + M + "?['Attendees']))))"
+        ATTENDEES = "if(" + HAS('attendeeIds') + ", coalesce(" + P + "?['attendeeIds'], json('[]')), json(if(empty(string(coalesce(" + M + "?['Attendees'], ''))), '[]', string(" + M + "?['Attendees']))))"
         LOCATION = "string(if(" + HAS('location') + ", " + TEXT('location') + ", coalesce(" + M + "?['Location'], '')))"
         ONLINE = "string(if(" + HAS('onlineLink') + ", " + TEXT('onlineLink') + ", coalesce(" + M + "?['OnlineLink'], '')))"
         T = "outputs('When_M')"
@@ -2471,7 +2471,7 @@ def flow_request_queue(domain='actions'):
                 ('Break_record' + g, http('POST', REC_API + "/breakroleinheritance(copyRoleAssignments=true,clearSubscopes=true)")),
                 ('Each_grant' + g, {'type': 'Foreach', 'foreach': "@outputs('Wanted" + g + "')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
                     ('Grant_now' + g, http('GET', REC_API + "/roleassignments?$filter=PrincipalId eq @{" + E + "}&$expand=RoleDefinitionBindings&$select=PrincipalId,RoleDefinitionBindings/Id")),
-                    ('Grant_levels' + g, {'type': 'Select', 'inputs': {'from': "@coalesce(first(body('Grant_now" + g + "')?['value'])?['RoleDefinitionBindings'], createArray())", 'select': "@string(item()?['Id'])"}}),
+                    ('Grant_levels' + g, {'type': 'Select', 'inputs': {'from': "@coalesce(first(body('Grant_now" + g + "')?['value'])?['RoleDefinitionBindings'], json('[]'))", 'select': "@string(item()?['Id'])"}}),
                     ('Grant_needed' + g, cond("@not(contains(body('Grant_levels" + g + "'), " + role_id + "))", seq(
                         ('Grant' + g, http('POST', REC_API + "/roleassignments/addroleassignment(principalid=@{" + E + "},roledefid=@{" + role_id + "})")),
                     ))),
@@ -2586,7 +2586,7 @@ def flow_request_queue(domain='actions'):
             CUT_ID = "int(" + idq(S + "?['CutoffUpdatesId']") + ")"
             K = AREA_KEY
             IT = lambda col: "item()?['" + col + "']"
-            in_area = ("or(equals(" + idstr(IT('CompetencyId')) + ", " + A_ID + "), contains(coalesce(" + IT('LinkedCompetenciesId') + ", createArray()), int(" + A_ID + ")))")
+            in_area = ("or(equals(" + idstr(IT('CompetencyId')) + ", " + A_ID + "), contains(coalesce(" + IT('LinkedCompetenciesId') + ", json('[]')), int(" + A_ID + ")))")
             uncommitted = ("and(not(empty(string(coalesce(" + IT('PendingRequestKey') + ", '')))), "
                            "equals(string(" + IT('CreatedRequestKey') + "), concat('F|', string(" + IT('PendingRequestKey') + "))))")
             tk = lambda col: "ticks(string(coalesce(" + IT(col) + ", '2000-01-01T00:00:00Z')))"
@@ -2884,7 +2884,7 @@ def flow_request_queue(domain='actions'):
         IS_ADMIN = "and(equals(" + ME + "?['IsAdministrator'], true), equals(string(" + ME + "?['Status']), 'Active'))"
         TYPES = [('Action', 'act', ',SourceType,SourceId'), ('Notice', 'notices', ''), ('Register Entry', 'reg', ''), ('Meeting', 'mtg', ''), ('Feedback', 'fb', '')]
         code = {'Action': 'A', 'Notice': 'N', 'Register Entry': 'E', 'Meeting': 'M', 'Feedback': 'F'}
-        INC = lambda t: "coalesce(" + P + "?['include']?['" + t + "'], createArray())"
+        INC = lambda t: "coalesce(" + P + "?['include']?['" + t + "'], json('[]'))"
         IT = lambda col: "item()?['" + col + "']"
         reads = []
         for t, key, extra in TYPES:
@@ -2969,7 +2969,7 @@ def flow_request_queue(domain='actions'):
                     ('Dep_items' + sfx, http('GET', L('items', "/items?$select=Id&$filter=MeetingId eq @{" + ID + "}&$top=5000"))),
                     each_dep('item', 'items', "body('Dep_items" + sfx + "')?['value']"),
                     ('Dep_pdfs' + sfx, http('GET', "_api/web/GetFolderByServerRelativePath(decodedurl='@{outputs('Ids')?['minutesRoot']}/@{" + AREA + "}')/Files?$select=Name,ServerRelativeUrl")),
-                    ('Pdfs' + sfx, query("@coalesce(body('Dep_pdfs" + sfx + "')?['value'], createArray())", "@startsWith(string(" + IT('Name') + "), concat('MTG-', " + ID + ", '-v'))")),
+                    ('Pdfs' + sfx, query("@coalesce(body('Dep_pdfs" + sfx + "')?['value'], json('[]'))", "@startsWith(string(" + IT('Name') + "), concat('MTG-', " + ID + ", '-v'))")),
                     ('Each_pdf' + sfx, {'type': 'Foreach', 'foreach': "@body('Pdfs" + sfx + "')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
                         *recycle('Bin_pdf' + sfx, "_api/web/GetFileByServerRelativePath(decodedurl='@{items('Each_pdf" + sfx + "')?['ServerRelativeUrl']}')/recycle", 'A PDF of the minutes'))}),
                     *recycle('Bin_mtg_folder' + sfx, folder('itemsRoot', "MTG-@{" + ID + "}"), 'The meeting\'s folder'),
@@ -3531,7 +3531,7 @@ def flow_probe_invitations():
             'calendarId': 'Calendar', 'search': '@' + TOKEN,
             'startDateTimeUtc': "@formatDateTime(utcNow(), 'yyyy-MM-ddTHH:mm:ss')", 'endDateTimeUtc': "@formatDateTime(addDays(utcNow(), 3), 'yyyy-MM-ddTHH:mm:ss')"}),
             {'Probe_update': TOLERANT})),
-        ('Probe_found', after(query("@if(equals(actions('Probe_search')?['status'], 'Succeeded'), coalesce(body('Probe_search')?['value'], createArray()), createArray())",
+        ('Probe_found', after(query("@if(equals(actions('Probe_search')?['status'], 'Succeeded'), coalesce(body('Probe_search')?['value'], json('[]')), json('[]'))",
                                     "@contains(string(coalesce(item()?['body'], '')), " + TOKEN + ")"), {'Probe_search': TOLERANT})),
         ('Probe_cancel', after(outlook('CalendarDeleteItem_V2', {'calendar': 'Calendar', 'event': "@{body('Probe_create')?['id']}"}), {'Probe_found': TOLERANT})),
         ('Probe_results', after(compose({

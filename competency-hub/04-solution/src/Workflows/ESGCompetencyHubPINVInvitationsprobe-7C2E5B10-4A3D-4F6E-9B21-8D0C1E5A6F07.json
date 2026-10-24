@@ -268,7 +268,7 @@
         "Probe_found": {
           "type": "Query",
           "inputs": {
-            "from": "@if(equals(actions('Probe_search')?['status'], 'Succeeded'), coalesce(body('Probe_search')?['value'], createArray()), createArray())",
+            "from": "@if(equals(actions('Probe_search')?['status'], 'Succeeded'), coalesce(body('Probe_search')?['value'], json('[]')), json('[]'))",
             "where": "@contains(string(coalesce(item()?['body'], '')), outputs('Probe_reference'))"
           },
           "runAfter": {

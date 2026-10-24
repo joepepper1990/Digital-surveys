@@ -1321,7 +1321,7 @@
                               "Inv_match_(invitation)": {
                                 "type": "Query",
                                 "inputs": {
-                                  "from": "@if(equals(actions('Inv_search_(invitation)')?['status'], 'Succeeded'), coalesce(body('Inv_search_(invitation)')?['value'], createArray()), createArray())",
+                                  "from": "@if(equals(actions('Inv_search_(invitation)')?['status'], 'Succeeded'), coalesce(body('Inv_search_(invitation)')?['value'], json('[]')), json('[]'))",
                                   "where": "@contains(string(coalesce(item()?['body'], '')), string(coalesce(body('Inv_get_(invitation)')?['InviteToken'], '')))"
                                 },
                                 "runAfter": {
@@ -3445,7 +3445,7 @@
                 "Email_refused_(alerts)": {
                   "type": "Query",
                   "inputs": {
-                    "from": "@coalesce(body('Create_email_(alerts)')?['value'], createArray())",
+                    "from": "@coalesce(body('Create_email_(alerts)')?['value'], json('[]'))",
                     "where": "@equals(item()?['HasException'], true)"
                   },
                   "runAfter": {
@@ -3726,7 +3726,7 @@
                 "Cover_row": {
                   "type": "Query",
                   "inputs": {
-                    "from": "@if(equals(actions('Cover_settings')?['status'], 'Succeeded'), body('Cover_settings')?['value'], createArray())",
+                    "from": "@if(equals(actions('Cover_settings')?['status'], 'Succeeded'), body('Cover_settings')?['value'], json('[]'))",
                     "where": "@true"
                   },
                   "runAfter": {

@@ -2134,7 +2134,7 @@
                 "Att_ids_(meeting)": {
                   "type": "Select",
                   "inputs": {
-                    "from": "@if(contains(outputs('Payload'), 'attendeeIds'), coalesce(outputs('Payload')?['attendeeIds'], createArray()), json(if(empty(string(coalesce(variables('varMtg')?['Attendees'], ''))), '[]', string(variables('varMtg')?['Attendees']))))",
+                    "from": "@if(contains(outputs('Payload'), 'attendeeIds'), coalesce(outputs('Payload')?['attendeeIds'], json('[]')), json(if(empty(string(coalesce(variables('varMtg')?['Attendees'], ''))), '[]', string(variables('varMtg')?['Attendees']))))",
                     "select": "@string(item())"
                   },
                   "runAfter": {
@@ -3064,7 +3064,7 @@
                             "Grant_levels_(meeting)": {
                               "type": "Select",
                               "inputs": {
-                                "from": "@coalesce(first(body('Grant_now_(meeting)')?['value'])?['RoleDefinitionBindings'], createArray())",
+                                "from": "@coalesce(first(body('Grant_now_(meeting)')?['value'])?['RoleDefinitionBindings'], json('[]'))",
                                 "select": "@string(item()?['Id'])"
                               },
                               "runAfter": {
@@ -4480,7 +4480,7 @@
                           "type": "Query",
                           "inputs": {
                             "from": "@body('Sn_open_(meeting)')?['value']",
-                            "where": "@and(or(equals(first(split(string(coalesce(item()?['CompetencyId'], '')), '.')), first(split(string(coalesce(first(body('Area_(meeting)'))?['Id'], '')), '.'))), contains(coalesce(item()?['LinkedCompetenciesId'], createArray()), int(first(split(string(coalesce(first(body('Area_(meeting)'))?['Id'], '')), '.'))))), not(and(not(empty(string(coalesce(item()?['PendingRequestKey'], '')))), equals(string(item()?['CreatedRequestKey']), concat('F|', string(item()?['PendingRequestKey']))))), lessOrEquals(ticks(string(coalesce(item()?['DateRaised'], '2000-01-01T00:00:00Z'))), ticks(string(body('Get_started_(meeting)')?['CutoffTime']))))"
+                            "where": "@and(or(equals(first(split(string(coalesce(item()?['CompetencyId'], '')), '.')), first(split(string(coalesce(first(body('Area_(meeting)'))?['Id'], '')), '.'))), contains(coalesce(item()?['LinkedCompetenciesId'], json('[]')), int(first(split(string(coalesce(first(body('Area_(meeting)'))?['Id'], '')), '.'))))), not(and(not(empty(string(coalesce(item()?['PendingRequestKey'], '')))), equals(string(item()?['CreatedRequestKey']), concat('F|', string(item()?['PendingRequestKey']))))), lessOrEquals(ticks(string(coalesce(item()?['DateRaised'], '2000-01-01T00:00:00Z'))), ticks(string(body('Get_started_(meeting)')?['CutoffTime']))))"
                           },
                           "runAfter": {
                             "Sn_open_(meeting)": [
@@ -4516,7 +4516,7 @@
                           "type": "Query",
                           "inputs": {
                             "from": "@body('Sn_closed_(meeting)')?['value']",
-                            "where": "@and(or(equals(first(split(string(coalesce(item()?['CompetencyId'], '')), '.')), first(split(string(coalesce(first(body('Area_(meeting)'))?['Id'], '')), '.'))), contains(coalesce(item()?['LinkedCompetenciesId'], createArray()), int(first(split(string(coalesce(first(body('Area_(meeting)'))?['Id'], '')), '.'))))), not(and(not(empty(string(coalesce(item()?['PendingRequestKey'], '')))), equals(string(item()?['CreatedRequestKey']), concat('F|', string(item()?['PendingRequestKey']))))), greater(ticks(string(coalesce(item()?['DateClosed'], '2000-01-01T00:00:00Z'))), ticks(string(coalesce(body('Get_started_(meeting)')?['IntervalStart'], '2000-01-01T00:00:00Z')))), lessOrEquals(ticks(string(coalesce(item()?['DateClosed'], '2000-01-01T00:00:00Z'))), ticks(string(body('Get_started_(meeting)')?['CutoffTime']))))"
+                            "where": "@and(or(equals(first(split(string(coalesce(item()?['CompetencyId'], '')), '.')), first(split(string(coalesce(first(body('Area_(meeting)'))?['Id'], '')), '.'))), contains(coalesce(item()?['LinkedCompetenciesId'], json('[]')), int(first(split(string(coalesce(first(body('Area_(meeting)'))?['Id'], '')), '.'))))), not(and(not(empty(string(coalesce(item()?['PendingRequestKey'], '')))), equals(string(item()?['CreatedRequestKey']), concat('F|', string(item()?['PendingRequestKey']))))), greater(ticks(string(coalesce(item()?['DateClosed'], '2000-01-01T00:00:00Z'))), ticks(string(coalesce(body('Get_started_(meeting)')?['IntervalStart'], '2000-01-01T00:00:00Z')))), lessOrEquals(ticks(string(coalesce(item()?['DateClosed'], '2000-01-01T00:00:00Z'))), ticks(string(body('Get_started_(meeting)')?['CutoffTime']))))"
                           },
                           "runAfter": {
                             "Sn_closed_(meeting)": [
@@ -6219,7 +6219,7 @@
                 "Cover_row": {
                   "type": "Query",
                   "inputs": {
-                    "from": "@if(equals(actions('Cover_settings')?['status'], 'Succeeded'), body('Cover_settings')?['value'], createArray())",
+                    "from": "@if(equals(actions('Cover_settings')?['status'], 'Succeeded'), body('Cover_settings')?['value'], json('[]'))",
                     "where": "@true"
                   },
                   "runAfter": {
@@ -6759,7 +6759,7 @@
                               "Inv_match": {
                                 "type": "Query",
                                 "inputs": {
-                                  "from": "@if(equals(actions('Inv_search')?['status'], 'Succeeded'), coalesce(body('Inv_search')?['value'], createArray()), createArray())",
+                                  "from": "@if(equals(actions('Inv_search')?['status'], 'Succeeded'), coalesce(body('Inv_search')?['value'], json('[]')), json('[]'))",
                                   "where": "@contains(string(coalesce(item()?['body'], '')), string(coalesce(body('Inv_get')?['InviteToken'], '')))"
                                 },
                                 "runAfter": {

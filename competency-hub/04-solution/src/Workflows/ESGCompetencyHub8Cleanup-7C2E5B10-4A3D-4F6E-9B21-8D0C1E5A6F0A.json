@@ -1608,7 +1608,7 @@
                     "Inc_ids_A_(cleanup)": {
                       "type": "Select",
                       "inputs": {
-                        "from": "@coalesce(outputs('Payload')?['include']?['Action'], createArray())",
+                        "from": "@coalesce(outputs('Payload')?['include']?['Action'], json('[]'))",
                         "select": "@concat('Id eq ', string(int(item())))"
                       },
                       "runAfter": {
@@ -1628,7 +1628,7 @@
                         "parameters": {
                           "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                           "parameters/method": "GET",
-                          "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['act']}')/items?$select=Id,Title,FileDirRef,SourceType,SourceId&$filter=@{if(empty(coalesce(outputs('Payload')?['include']?['Action'], createArray())), 'Id eq 0', join(body('Inc_ids_A_(cleanup)'), ' or '))}&$top=500",
+                          "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['act']}')/items?$select=Id,Title,FileDirRef,SourceType,SourceId&$filter=@{if(empty(coalesce(outputs('Payload')?['include']?['Action'], json('[]'))), 'Id eq 0', join(body('Inc_ids_A_(cleanup)'), ' or '))}&$top=500",
                           "parameters/headers": {
                             "Accept": "application/json;odata=nometadata"
                           }
@@ -1694,7 +1694,7 @@
                     "Inc_ids_N_(cleanup)": {
                       "type": "Select",
                       "inputs": {
-                        "from": "@coalesce(outputs('Payload')?['include']?['Notice'], createArray())",
+                        "from": "@coalesce(outputs('Payload')?['include']?['Notice'], json('[]'))",
                         "select": "@concat('Id eq ', string(int(item())))"
                       },
                       "runAfter": {
@@ -1714,7 +1714,7 @@
                         "parameters": {
                           "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                           "parameters/method": "GET",
-                          "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notices']}')/items?$select=Id,Title,FileDirRef&$filter=@{if(empty(coalesce(outputs('Payload')?['include']?['Notice'], createArray())), 'Id eq 0', join(body('Inc_ids_N_(cleanup)'), ' or '))}&$top=500",
+                          "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notices']}')/items?$select=Id,Title,FileDirRef&$filter=@{if(empty(coalesce(outputs('Payload')?['include']?['Notice'], json('[]'))), 'Id eq 0', join(body('Inc_ids_N_(cleanup)'), ' or '))}&$top=500",
                           "parameters/headers": {
                             "Accept": "application/json;odata=nometadata"
                           }
@@ -1780,7 +1780,7 @@
                     "Inc_ids_E_(cleanup)": {
                       "type": "Select",
                       "inputs": {
-                        "from": "@coalesce(outputs('Payload')?['include']?['Register Entry'], createArray())",
+                        "from": "@coalesce(outputs('Payload')?['include']?['Register Entry'], json('[]'))",
                         "select": "@concat('Id eq ', string(int(item())))"
                       },
                       "runAfter": {
@@ -1800,7 +1800,7 @@
                         "parameters": {
                           "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                           "parameters/method": "GET",
-                          "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['reg']}')/items?$select=Id,Title,FileDirRef&$filter=@{if(empty(coalesce(outputs('Payload')?['include']?['Register Entry'], createArray())), 'Id eq 0', join(body('Inc_ids_E_(cleanup)'), ' or '))}&$top=500",
+                          "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['reg']}')/items?$select=Id,Title,FileDirRef&$filter=@{if(empty(coalesce(outputs('Payload')?['include']?['Register Entry'], json('[]'))), 'Id eq 0', join(body('Inc_ids_E_(cleanup)'), ' or '))}&$top=500",
                           "parameters/headers": {
                             "Accept": "application/json;odata=nometadata"
                           }
@@ -1866,7 +1866,7 @@
                     "Inc_ids_M_(cleanup)": {
                       "type": "Select",
                       "inputs": {
-                        "from": "@coalesce(outputs('Payload')?['include']?['Meeting'], createArray())",
+                        "from": "@coalesce(outputs('Payload')?['include']?['Meeting'], json('[]'))",
                         "select": "@concat('Id eq ', string(int(item())))"
                       },
                       "runAfter": {
@@ -1886,7 +1886,7 @@
                         "parameters": {
                           "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                           "parameters/method": "GET",
-                          "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['mtg']}')/items?$select=Id,Title,FileDirRef&$filter=@{if(empty(coalesce(outputs('Payload')?['include']?['Meeting'], createArray())), 'Id eq 0', join(body('Inc_ids_M_(cleanup)'), ' or '))}&$top=500",
+                          "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['mtg']}')/items?$select=Id,Title,FileDirRef&$filter=@{if(empty(coalesce(outputs('Payload')?['include']?['Meeting'], json('[]'))), 'Id eq 0', join(body('Inc_ids_M_(cleanup)'), ' or '))}&$top=500",
                           "parameters/headers": {
                             "Accept": "application/json;odata=nometadata"
                           }
@@ -1952,7 +1952,7 @@
                     "Inc_ids_F_(cleanup)": {
                       "type": "Select",
                       "inputs": {
-                        "from": "@coalesce(outputs('Payload')?['include']?['Feedback'], createArray())",
+                        "from": "@coalesce(outputs('Payload')?['include']?['Feedback'], json('[]'))",
                         "select": "@concat('Id eq ', string(int(item())))"
                       },
                       "runAfter": {
@@ -1972,7 +1972,7 @@
                         "parameters": {
                           "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                           "parameters/method": "GET",
-                          "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['fb']}')/items?$select=Id,Title,FileDirRef&$filter=@{if(empty(coalesce(outputs('Payload')?['include']?['Feedback'], createArray())), 'Id eq 0', join(body('Inc_ids_F_(cleanup)'), ' or '))}&$top=500",
+                          "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['fb']}')/items?$select=Id,Title,FileDirRef&$filter=@{if(empty(coalesce(outputs('Payload')?['include']?['Feedback'], json('[]'))), 'Id eq 0', join(body('Inc_ids_F_(cleanup)'), ' or '))}&$top=500",
                           "parameters/headers": {
                             "Accept": "application/json;odata=nometadata"
                           }
@@ -2771,7 +2771,7 @@
                         "Pdfs_(cleanup)": {
                           "type": "Query",
                           "inputs": {
-                            "from": "@coalesce(body('Dep_pdfs_(cleanup)')?['value'], createArray())",
+                            "from": "@coalesce(body('Dep_pdfs_(cleanup)')?['value'], json('[]'))",
                             "where": "@startsWith(string(item()?['Name']), concat('MTG-', string(items('Each_remove_(cleanup)')?['id']), '-v'))"
                           },
                           "runAfter": {
@@ -3446,7 +3446,7 @@
                 "Cover_row": {
                   "type": "Query",
                   "inputs": {
-                    "from": "@if(equals(actions('Cover_settings')?['status'], 'Succeeded'), body('Cover_settings')?['value'], createArray())",
+                    "from": "@if(equals(actions('Cover_settings')?['status'], 'Succeeded'), body('Cover_settings')?['value'], json('[]'))",
                     "where": "@true"
                   },
                   "runAfter": {

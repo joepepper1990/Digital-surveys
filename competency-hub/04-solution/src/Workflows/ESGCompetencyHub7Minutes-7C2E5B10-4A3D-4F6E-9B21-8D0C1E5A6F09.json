@@ -2143,7 +2143,7 @@
                 "Att_ids_(meeting)": {
                   "type": "Select",
                   "inputs": {
-                    "from": "@if(contains(outputs('Payload'), 'attendeeIds'), coalesce(outputs('Payload')?['attendeeIds'], createArray()), json(if(empty(string(coalesce(variables('varMtg')?['Attendees'], ''))), '[]', string(variables('varMtg')?['Attendees']))))",
+                    "from": "@if(contains(outputs('Payload'), 'attendeeIds'), coalesce(outputs('Payload')?['attendeeIds'], json('[]')), json(if(empty(string(coalesce(variables('varMtg')?['Attendees'], ''))), '[]', string(variables('varMtg')?['Attendees']))))",
                     "select": "@string(item())"
                   },
                   "runAfter": {
@@ -3209,7 +3209,7 @@
                                   "Grant_levels_(finalise)": {
                                     "type": "Select",
                                     "inputs": {
-                                      "from": "@coalesce(first(body('Grant_now_(finalise)')?['value'])?['RoleDefinitionBindings'], createArray())",
+                                      "from": "@coalesce(first(body('Grant_now_(finalise)')?['value'])?['RoleDefinitionBindings'], json('[]'))",
                                       "select": "@string(item()?['Id'])"
                                     },
                                     "runAfter": {
@@ -5024,7 +5024,7 @@
                 "Cover_row": {
                   "type": "Query",
                   "inputs": {
-                    "from": "@if(equals(actions('Cover_settings')?['status'], 'Succeeded'), body('Cover_settings')?['value'], createArray())",
+                    "from": "@if(equals(actions('Cover_settings')?['status'], 'Succeeded'), body('Cover_settings')?['value'], json('[]'))",
                     "where": "@true"
                   },
                   "runAfter": {

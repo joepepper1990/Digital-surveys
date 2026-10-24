@@ -350,6 +350,15 @@ def check_array_outputs(f):
             .format(f['name'], n) for n in bad]
 
 
+def check_empty_create_array(f):
+    """Power Automate refuses createArray() with no parameters at run time; an empty list is json('[]')."""
+    text = json.dumps(f['json']['properties']['definition'])
+    if re.search(r"createArray\(\s*\)", text):
+        return ['[{0}] createArray() with no parameters is refused at run time ("expects a comma separated list of parameters"); use json(\'[]\')'
+                .format(f['name'])]
+    return []
+
+
 MAX_NESTING = 8      # Power Automate: an action may be nested at most 8 levels deep (top-level actions are level 0)
 MAX_ACTIONS = 500    # Power Automate: actions per workflow
 
@@ -428,6 +437,7 @@ def validate_all(flows, raw=None):
             probs += check_email_escaping(f)
         probs += check_platform(f)
         probs += check_array_outputs(f)
+        probs += check_empty_create_array(f)
         probs += check_nesting(f['name'], f['json']['properties']['definition'])
         refs = f['json']['properties']['connectionReferences']
         used = set(re.findall(r'"connectionName": "([^"]+)"', json.dumps(f['json'])))
