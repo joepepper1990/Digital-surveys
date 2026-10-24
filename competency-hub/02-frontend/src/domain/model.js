@@ -9,7 +9,7 @@ CH.model = (function () {
     members: "$select=Id,CompetencyId,PersonId,CanManageMeetings,Status&$filter=Status eq 'Active'",
     actions: '$select=Id,Title,Description,CompetencyId,LinkedCompetenciesId,AssignedToId,RaisedById,DateRaised,DueDay,OriginalDueDate,' +
       'Status,IsOpen,Priority,ExtensionCount,RequiresCloseOut,Revision,PendingRequestKey,LastRequestKey,CreatedRequestKey,FileDirRef,' +
-      'Blocker,CloseOutcome,ClosureNote,DateClosed,SourceType,SourceId&$filter=IsOpen eq 1 and FSObjType eq 0',
+      'Blocker,CloseOutcome,ClosureNote,DateClosed,SourceType,SourceId,CoOwnerIds,CloseOutById&$filter=IsOpen eq 1 and FSObjType eq 0',
     notices: "$select=Id,Title,Body,Category,IsImportant,ImportantUntil,Status,AuthorId,Created,FileDirRef,Revision,LastRequestKey&$filter=Status eq 'Active' and FSObjType eq 0",
     register: '$select=Id,Title,Description,EntryType,Impact,Status,Outcome,RaisedById,ResponsiblePersonId,DateRaised,DateResolved,Revision,' +
       'LastRequestKey,CompetencyId,FileDirRef,Created&$filter=FSObjType eq 0',
@@ -20,12 +20,15 @@ CH.model = (function () {
     settings: '$select=Id,Title,Value'
   };
 
+  // Columns a later Setup adds: if the site does not have them yet, the list is read without them.
+  var OPTIONAL = { actions: ['CoOwnerIds', 'CloseOutById'] };
+
   // Reads each list independently; one failure does not hide the others.
   async function load(sp) {
     var raw = {};
     await Promise.all(Object.keys(QUERIES).map(async function (key) {
       try {
-        var res = await sp.items(CH.config.lists[key].title, QUERIES[key]);
+        var res = await sp.items(CH.config.lists[key].title, QUERIES[key], null, OPTIONAL[key]);
         raw[key] = { rows: res.rows, complete: res.complete };
       } catch (error) {
         raw[key] = { rows: [], complete: false, error: error.status || 0 };
@@ -96,6 +99,11 @@ CH.model = (function () {
       return !!p && CH.config.managementRoles.indexOf(p.Role) >= 0;
     }
 
+    // CoOwnerIds is stored as a JSON list of ids ('["112","103"]'); anything else is no co-owners.
+    function idList(text) {
+      try { var v = JSON.parse(text || '[]'); return Array.isArray(v) ? v.map(Number).filter(function (n) { return n > 0; }) : []; } catch (_) { return []; }
+    }
+
     // One action row as the views use it; also used for finished actions read on demand (actionFrom).
     function actionFrom(r) {
       var primary = areaById[r.CompetencyId];
@@ -108,6 +116,8 @@ CH.model = (function () {
         areaKey: primary ? primary.key : '', areaName: primary ? primary.name : 'Unknown area',
         linkedKeys: linked.map(function (a) { return a.key; }),
         ownerId: r.AssignedToId, ownerName: nameOf(r.AssignedToId), raisedById: r.RaisedById,
+        coOwnerIds: idList(r.CoOwnerIds), coOwnerNames: idList(r.CoOwnerIds).map(nameOf),
+        checkerId: r.CloseOutById ? Number(r.CloseOutById) : null, checkerName: r.CloseOutById ? nameOf(Number(r.CloseOutById)) : '',
         dueIso: dueIso, status: r.Status, extensions: r.ExtensionCount || 0,
         originalIso: r.OriginalDueDate ? D.localDate(r.OriginalDueDate) : dueIso,
         description: r.Description || '', priority: r.Priority || 'Normal', requiresCloseOut: !!r.RequiresCloseOut,
@@ -259,6 +269,12 @@ CH.model = (function () {
     });
 
     // Who may own an action in an area (ACT-03): its active members, and Team Leaders and the Group Head.
+    // On someone's to-do list: what they own, what they share as a co-owner, and a close-out check waiting for them.
+    function isMine(a, personId) {
+      var me = Number(personId);
+      return Number(a.ownerId) === me || a.coOwnerIds.indexOf(me) >= 0 || (a.waitingCloseOut && Number(a.checkerId) === me);
+    }
+
     function ownersFor(key) {
       return people.filter(function (p) {
         return p.Status === 'Active' && ((membersByArea[key] || {})[p.SiteUserId] || CH.config.managementRoles.indexOf(p.Role) >= 0);
@@ -271,7 +287,7 @@ CH.model = (function () {
     return {
       today: today, areas: areas, areaByKey: areaByKey, stats: stats, actions: actions, notices: notices, calendar: calendar,
       entries: entries, entryById: entryById, noticeById: noticeById, flags: flags, people: people, meetings: meetings, meetingById: meetingById,
-      inArea: inArea, nameOf: nameOf, ownersFor: ownersFor, actionById: actionById, actionFrom: actionFrom, membersByArea: membersByArea, chairsByArea: meetingAdmins,
+      inArea: inArea, nameOf: nameOf, ownersFor: ownersFor, isMine: isMine, actionById: actionById, actionFrom: actionFrom, membersByArea: membersByArea, chairsByArea: meetingAdmins,
       sections: {
         actions: section(raw.actions), notices: section(raw.notices), meetings: section(raw.meetings),
         calendar: section(raw.calendar), flags: section(raw.updates), members: section(raw.members), register: section(raw.register)

@@ -789,7 +789,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['people']}')/items?$select=Id,Title,SiteUserId,Role,Status,IsAdministrator,Email,Person/Name,Person/EMail&$expand=Person&$filter=SiteUserId eq @{replace(string(coalesce(outputs('Sender_ID'), '')), '''', '''''')}",
+                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['people']}')/items?$select=Id,Title,KnownAs,SiteUserId,Role,Status,IsAdministrator,Email,Person/Name,Person/EMail&$expand=Person&$filter=SiteUserId eq @{replace(string(coalesce(outputs('Sender_ID'), '')), '''', '''''')}",
                   "parameters/headers": {
                     "Accept": "application/json;odata=nometadata"
                   }
@@ -3409,71 +3409,6 @@
                                 "Succeeded"
                               ]
                             }
-                          },
-                          "Get_setting_event_(setting)": {
-                            "type": "OpenApiConnection",
-                            "inputs": {
-                              "host": {
-                                "connectionName": "shared_sharepointonline",
-                                "operationId": "HttpRequest",
-                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                              },
-                              "parameters": {
-                                "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                                "parameters/method": "GET",
-                                "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items?$select=Id&$filter=RequestKey eq '@{replace(string(coalesce(concat(string(variables('varTx')?['RequestKey']), '|1'), '')), '''', '''''')}'",
-                                "parameters/headers": {
-                                  "Accept": "application/json;odata=nometadata"
-                                }
-                              },
-                              "authentication": "@parameters('$authentication')"
-                            },
-                            "runAfter": {
-                              "Check_setting_event_was_created_(setting)": [
-                                "Succeeded"
-                              ]
-                            }
-                          },
-                          "Setting_event_details_(setting)": {
-                            "type": "Compose",
-                            "inputs": {
-                              "ActorId": "@int(outputs('Sender_ID'))",
-                              "EventTime": "@{outputs('Time_of_the_change')}",
-                              "ProcessedAt": "@{utcNow()}"
-                            },
-                            "runAfter": {
-                              "Get_setting_event_(setting)": [
-                                "Succeeded"
-                              ]
-                            }
-                          },
-                          "Save_setting_event_(setting)": {
-                            "type": "OpenApiConnection",
-                            "inputs": {
-                              "host": {
-                                "connectionName": "shared_sharepointonline",
-                                "operationId": "HttpRequest",
-                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                              },
-                              "parameters": {
-                                "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                                "parameters/method": "POST",
-                                "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items(@{first(body('Get_setting_event_(setting)')?['value'])?['Id']})",
-                                "parameters/headers": {
-                                  "Accept": "application/json;odata=nometadata",
-                                  "Content-Type": "application/json;odata=nometadata",
-                                  "X-HTTP-Method": "MERGE",
-                                  "IF-MATCH": "*"
-                                },
-                                "parameters/body": "@{string(outputs('Setting_event_details_(setting)'))}"
-                              },
-                              "authentication": "@parameters('$authentication')"
-                            },
-                            "runAfter": {
-                              "Setting_event_details_(setting)": [
-                                "Succeeded"
-                              ]
-                            }
                           }
                         },
                         "else": {
@@ -3485,6 +3420,71 @@
                           ]
                         }
                       },
+                      "Get_setting_event_(setting)": {
+                        "type": "OpenApiConnection",
+                        "inputs": {
+                          "host": {
+                            "connectionName": "shared_sharepointonline",
+                            "operationId": "HttpRequest",
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                          },
+                          "parameters": {
+                            "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                            "parameters/method": "GET",
+                            "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items?$select=Id&$filter=RequestKey eq '@{replace(string(coalesce(concat(string(variables('varTx')?['RequestKey']), '|1'), '')), '''', '''''')}'",
+                            "parameters/headers": {
+                              "Accept": "application/json;odata=nometadata"
+                            }
+                          },
+                          "authentication": "@parameters('$authentication')"
+                        },
+                        "runAfter": {
+                          "Create_setting_event_if_missing_(setting)": [
+                            "Succeeded"
+                          ]
+                        }
+                      },
+                      "Setting_event_details_(setting)": {
+                        "type": "Compose",
+                        "inputs": {
+                          "ActorId": "@int(outputs('Sender_ID'))",
+                          "EventTime": "@{outputs('Time_of_the_change')}",
+                          "ProcessedAt": "@{utcNow()}"
+                        },
+                        "runAfter": {
+                          "Get_setting_event_(setting)": [
+                            "Succeeded"
+                          ]
+                        }
+                      },
+                      "Save_setting_event_(setting)": {
+                        "type": "OpenApiConnection",
+                        "inputs": {
+                          "host": {
+                            "connectionName": "shared_sharepointonline",
+                            "operationId": "HttpRequest",
+                            "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                          },
+                          "parameters": {
+                            "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                            "parameters/method": "POST",
+                            "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items(@{first(body('Get_setting_event_(setting)')?['value'])?['Id']})",
+                            "parameters/headers": {
+                              "Accept": "application/json;odata=nometadata",
+                              "Content-Type": "application/json;odata=nometadata",
+                              "X-HTTP-Method": "MERGE",
+                              "IF-MATCH": "*"
+                            },
+                            "parameters/body": "@{string(outputs('Setting_event_details_(setting)'))}"
+                          },
+                          "authentication": "@parameters('$authentication')"
+                        },
+                        "runAfter": {
+                          "Setting_event_details_(setting)": [
+                            "Succeeded"
+                          ]
+                        }
+                      },
                       "Change_record_applied_(setting)": {
                         "type": "Compose",
                         "inputs": {
@@ -3492,7 +3492,7 @@
                           "ProcessedAt": "@{utcNow()}"
                         },
                         "runAfter": {
-                          "Create_setting_event_if_missing_(setting)": [
+                          "Save_setting_event_(setting)": [
                             "Succeeded"
                           ]
                         }
@@ -4375,6 +4375,10 @@
                                     {
                                       "FieldName": "Revision",
                                       "FieldValue": "1"
+                                    },
+                                    {
+                                      "FieldName": "KnownAs",
+                                      "FieldValue": "@{take(trim(string(coalesce(outputs('Payload')?['knownAs'], ''))), 40)}"
                                     },
                                     {
                                       "FieldName": "CreatedRequestKey",
@@ -7145,71 +7149,6 @@
                                   "Succeeded"
                                 ]
                               }
-                            },
-                            "Get_person_event_(people)": {
-                              "type": "OpenApiConnection",
-                              "inputs": {
-                                "host": {
-                                  "connectionName": "shared_sharepointonline",
-                                  "operationId": "HttpRequest",
-                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                                },
-                                "parameters": {
-                                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                                  "parameters/method": "GET",
-                                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items?$select=Id&$filter=RequestKey eq '@{replace(string(coalesce(concat(string(variables('varTx')?['RequestKey']), '|1'), '')), '''', '''''')}'",
-                                  "parameters/headers": {
-                                    "Accept": "application/json;odata=nometadata"
-                                  }
-                                },
-                                "authentication": "@parameters('$authentication')"
-                              },
-                              "runAfter": {
-                                "Check_person_event_was_created_(people)": [
-                                  "Succeeded"
-                                ]
-                              }
-                            },
-                            "Person_event_details_(people)": {
-                              "type": "Compose",
-                              "inputs": {
-                                "ActorId": "@int(outputs('Sender_ID'))",
-                                "EventTime": "@{outputs('Time_of_the_change')}",
-                                "ProcessedAt": "@{utcNow()}"
-                              },
-                              "runAfter": {
-                                "Get_person_event_(people)": [
-                                  "Succeeded"
-                                ]
-                              }
-                            },
-                            "Save_person_event_(people)": {
-                              "type": "OpenApiConnection",
-                              "inputs": {
-                                "host": {
-                                  "connectionName": "shared_sharepointonline",
-                                  "operationId": "HttpRequest",
-                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                                },
-                                "parameters": {
-                                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                                  "parameters/method": "POST",
-                                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items(@{first(body('Get_person_event_(people)')?['value'])?['Id']})",
-                                  "parameters/headers": {
-                                    "Accept": "application/json;odata=nometadata",
-                                    "Content-Type": "application/json;odata=nometadata",
-                                    "X-HTTP-Method": "MERGE",
-                                    "IF-MATCH": "*"
-                                  },
-                                  "parameters/body": "@{string(outputs('Person_event_details_(people)'))}"
-                                },
-                                "authentication": "@parameters('$authentication')"
-                              },
-                              "runAfter": {
-                                "Person_event_details_(people)": [
-                                  "Succeeded"
-                                ]
-                              }
                             }
                           },
                           "else": {
@@ -7217,6 +7156,71 @@
                           },
                           "runAfter": {
                             "Find_person_event_(people)": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Get_person_event_(people)": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                              "parameters/method": "GET",
+                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items?$select=Id&$filter=RequestKey eq '@{replace(string(coalesce(concat(string(variables('varTx')?['RequestKey']), '|1'), '')), '''', '''''')}'",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata"
+                              }
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runAfter": {
+                            "Create_person_event_if_missing_(people)": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Person_event_details_(people)": {
+                          "type": "Compose",
+                          "inputs": {
+                            "ActorId": "@int(outputs('Sender_ID'))",
+                            "EventTime": "@{outputs('Time_of_the_change')}",
+                            "ProcessedAt": "@{utcNow()}"
+                          },
+                          "runAfter": {
+                            "Get_person_event_(people)": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Save_person_event_(people)": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                              "parameters/method": "POST",
+                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items(@{first(body('Get_person_event_(people)')?['value'])?['Id']})",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata",
+                                "Content-Type": "application/json;odata=nometadata",
+                                "X-HTTP-Method": "MERGE",
+                                "IF-MATCH": "*"
+                              },
+                              "parameters/body": "@{string(outputs('Person_event_details_(people)'))}"
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runAfter": {
+                            "Person_event_details_(people)": [
                               "Succeeded"
                             ]
                           }
@@ -7343,7 +7347,7 @@
                             }
                           },
                           "runAfter": {
-                            "Create_person_event_if_missing_(people)": [
+                            "Save_person_event_(people)": [
                               "Succeeded"
                             ]
                           }
@@ -7580,7 +7584,7 @@
                         },
                         "Does_this_email_make_a_reminder_unnecessary": {
                           "type": "If",
-                          "expression": "@and(contains(createArray('ASG', 'EXT'), items('Each_email_to_send')?['type']), greaterOrEquals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_email_to_send')?['dueIso'], ''))), outputs('Today_in_the_UK'), string(items('Each_email_to_send')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z'))), 864000000000), 0), lessOrEquals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_email_to_send')?['dueIso'], ''))), outputs('Today_in_the_UK'), string(items('Each_email_to_send')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z'))), 864000000000), outputs('Cover_days')))",
+                          "expression": "@and(contains(createArray('ASG', 'EXT'), items('Each_email_to_send')?['type']), not(equals(items('Each_email_to_send')?['coOwner'], true)), greaterOrEquals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_email_to_send')?['dueIso'], ''))), outputs('Today_in_the_UK'), string(items('Each_email_to_send')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z'))), 864000000000), 0), lessOrEquals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_email_to_send')?['dueIso'], ''))), outputs('Today_in_the_UK'), string(items('Each_email_to_send')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z'))), 864000000000), outputs('Cover_days')))",
                           "actions": {
                             "Cover_fields": {
                               "type": "Compose",

@@ -789,7 +789,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['people']}')/items?$select=Id,Title,SiteUserId,Role,Status,IsAdministrator,Email,Person/Name,Person/EMail&$expand=Person&$filter=SiteUserId eq @{replace(string(coalesce(outputs('Sender_ID'), '')), '''', '''''')}",
+                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['people']}')/items?$select=Id,Title,KnownAs,SiteUserId,Role,Status,IsAdministrator,Email,Person/Name,Person/EMail&$expand=Person&$filter=SiteUserId eq @{replace(string(coalesce(outputs('Sender_ID'), '')), '''', '''''')}",
                   "parameters/headers": {
                     "Accept": "application/json;odata=nometadata"
                   }
@@ -3530,7 +3530,7 @@
                         },
                         "Does_this_email_make_a_reminder_unnecessary": {
                           "type": "If",
-                          "expression": "@and(contains(createArray('ASG', 'EXT'), items('Each_email_to_send')?['type']), greaterOrEquals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_email_to_send')?['dueIso'], ''))), outputs('Today_in_the_UK'), string(items('Each_email_to_send')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z'))), 864000000000), 0), lessOrEquals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_email_to_send')?['dueIso'], ''))), outputs('Today_in_the_UK'), string(items('Each_email_to_send')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z'))), 864000000000), outputs('Cover_days')))",
+                          "expression": "@and(contains(createArray('ASG', 'EXT'), items('Each_email_to_send')?['type']), not(equals(items('Each_email_to_send')?['coOwner'], true)), greaterOrEquals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_email_to_send')?['dueIso'], ''))), outputs('Today_in_the_UK'), string(items('Each_email_to_send')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z'))), 864000000000), 0), lessOrEquals(div(sub(ticks(concat(if(empty(string(coalesce(items('Each_email_to_send')?['dueIso'], ''))), outputs('Today_in_the_UK'), string(items('Each_email_to_send')?['dueIso'])), 'T00:00:00Z')), ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z'))), 864000000000), outputs('Cover_days')))",
                           "actions": {
                             "Cover_fields": {
                               "type": "Compose",

@@ -321,7 +321,7 @@ class Robustness(unittest.TestCase):
             out[key] = sorted(rows)
         return out
 
-    def interrupted_everywhere(self, rtype, payload, target=None, revision=None, sender=RACHEL):
+    def interrupted_everywhere(self, rtype, payload, target=None, revision=None, sender=RACHEL, settle=False):
         ref = site()
         r = submit(ref, sender, rtype, payload, target=target and ref.action, revision=revision)
         status, eng = run(ref, r)
@@ -333,14 +333,16 @@ class Robustness(unittest.TestCase):
                 r = submit(s, sender, rtype, payload, target=target and s.action, revision=revision)
                 s.fail_at = k
                 first, eng1 = run(s, r)
-                self.assertIn(first, ('Failed', 'Cancelled'))
                 s.fail_at = None
                 req = request(s, r)
                 if req['Status'] == 'Completed':   # interrupted only after the request was marked Completed
                     continue
+                self.assertIn(first, ('Failed', 'Cancelled'))
                 req['Status'] = 'Submitted'          # an administrator puts it back in the queue
                 second, eng2 = run(s, r, now=s.clock + timedelta(minutes=10))
                 self.assertEqual(request(s, r)['Status'], 'Completed', eng2.log)
+                if settle:   # emails queued by the stopped run are sent by the queue monitor within the hour
+                    run_monitor(s, s.clock + timedelta(minutes=45))
                 got = self.snapshot(s)
                 for key in ('actions', 'history', 'updates'):
                     self.assertEqual(got[key], expected[key], key)
@@ -351,6 +353,12 @@ class Robustness(unittest.TestCase):
 
     def test_known_as_survives_an_interruption_at_every_write(self):
         self.interrupted_everywhere('SetKnownAs', {'personId': RACHEL, 'knownAs': 'Rach'}, sender=JOE)
+
+    def test_raise_with_co_owners_survives_an_interruption_at_every_write(self):
+        self.interrupted_everywhere('RaiseAction', dict(RaiseAction.good, coOwnerIds=[JOE], requiresCloseOut=True, checkerId=KELLY), sender=KELLY, settle=True)
+
+    def test_reassign_with_co_owners_survives_an_interruption_at_every_write(self):
+        self.interrupted_everywhere('ReassignAction', {'ownerId': JOE, 'reason': 'Joe has the parts.', 'coOwnerIds': [RACHEL]}, target=True, revision=2, sender=KELLY, settle=True)
 
     def test_raise_survives_an_interruption_at_every_write(self):
         self.interrupted_everywhere('RaiseAction', RaiseAction.good)
@@ -788,7 +796,8 @@ class MoreChanges(unittest.TestCase):
 class Calls(unittest.TestCase):
     """Fewer SharePoint calls per request (plan K7.10): a first run skips every "already done?" look-up."""
     # SharePoint calls for the change itself; each email adds at most 3 (queue it, record the outcome, cover a reminder)
-    BUDGET = {'RaiseAction': 20, 'ExtendDeadline': 17, 'MarkComplete': 17}
+    # 1.9.0.0: raising reads the area's members and the active people, to check co-owners and the close-out check (+2)
+    BUDGET = {'RaiseAction': 22, 'ExtendDeadline': 17, 'MarkComplete': 17}
 
     def first_run(self, rtype, s=None):
         s = s or site()
@@ -1501,6 +1510,114 @@ class Settings(unittest.TestCase):
         res, _ = run_people(s, KELLY, 'UpdateSetting', {'name': 'OverdueReminderIntervalDays', 'value': '3'}, key='k-kelly')
         self.assertEqual(res['ResultMessage'], 'Only a Competency Hub administrator can do this.')
 
+
+
+
+class CoOwnersAndCheck(unittest.TestCase):
+    """One owner plus co-owners (who share it: they see it and add updates, and are told it is shared), and a named
+    person who does the close-out check (1.9.0.0)."""
+    def raise_(self, s, sender=KELLY, key=KEY, **extra):
+        r = submit(s, sender, 'RaiseAction', dict(RaiseAction.good, **extra), key=key)
+        _, eng = run(s, r)
+        return request(s, r), eng
+
+    def test_raised_with_co_owners_and_a_checker(self):
+        s = site()
+        res, eng = self.raise_(s, ownerId=RACHEL, coOwnerIds=[JOE], requiresCloseOut=True, checkerId=KELLY)
+        self.assertEqual(res['Status'], 'Completed', eng.log)
+        a = s.rows('actions', CreatedRequestKey='F|' + KEY)[0]['f']
+        self.assertEqual((json.loads(a['CoOwnerIds']), a['CloseOutById']), (['7'], KELLY))
+        subjects = sorted((m['to'], m['subject']) for m in s.sent)
+        self.assertEqual(subjects, [('joseph.pepper@example.test', 'Action shared with you: Order replacement smear papers'),
+                                    ('rachel.boulden@example.test', 'Action assigned to you: Order replacement smear papers')])
+        joe = [m for m in s.sent if m['to'] == 'joseph.pepper@example.test'][0]
+        self.assertIn('has made you a co-owner of an action', joe['body'])
+
+    def test_the_raiser_checks_it_unless_someone_else_is_named(self):
+        s = site()
+        res, eng = self.raise_(s, ownerId=RACHEL, requiresCloseOut=True)
+        self.assertEqual(res['Status'], 'Completed', eng.log)
+        self.assertEqual(s.rows('actions', CreatedRequestKey='F|' + KEY)[0]['f']['CloseOutById'], KELLY)
+        self.assertFalse(s.rows('actions', CreatedRequestKey='F|' + KEY)[0]['f'].get('CoOwnerIds'))
+
+    def test_refused_in_plain_words(self):
+        for sender, extra, message in (
+                (KELLY, {'coOwnerIds': [KAI]}, 'Choose co-owners from the members of this area, and the Team Leaders and Group Head, other than the owner.'),
+                (KELLY, {'coOwnerIds': [RACHEL]}, 'Choose co-owners from the members of this area, and the Team Leaders and Group Head, other than the owner.'),
+                (KELLY, {'coOwnerIds': [JOE, JOE, JOE, JOE, JOE, JOE]}, 'Choose up to 5 co-owners.'),
+                (RACHEL, {'coOwnerIds': [KELLY]}, flows.SELF_ONLY),
+                (KELLY, {'requiresCloseOut': True, 'checkerId': RACHEL}, 'Choose someone other than the owner to do the close-out check.'),
+                (RACHEL, {'requiresCloseOut': True}, 'Choose someone other than the owner to do the close-out check.'),
+                (KELLY, {'requiresCloseOut': True, 'checkerId': KAI}, 'Choose a member of this area or a Team Leader to do the close-out check.')):
+            with self.subTest(sender=sender, extra=extra):
+                s = site()
+                res, eng = self.raise_(s, sender=sender, ownerId=RACHEL, **extra)
+                self.assertEqual((res['Status'], res['ResultMessage']), ('Rejected', message), eng.log)
+                self.assertFalse(s.rows('actions', CreatedRequestKey='F|' + KEY))
+
+    def with_check(self, checker):
+        s = site()
+        a = s.item('actions', s.action)['f']
+        a.update({'RequiresCloseOut': True, 'CloseOutById': float(checker) if checker else None})
+        return s
+
+    def test_marked_done_asks_the_named_checker_and_only_they_or_a_team_leader_confirm(self):
+        s = self.with_check(JOE)
+        r = submit(s, RACHEL, 'MarkComplete', {'note': ''}, target=s.action, revision=2)
+        run(s, r)
+        self.assertEqual(request(s, r)['Status'], 'Completed')
+        self.assertEqual([(m['to'], m['subject']) for m in s.sent], [('joseph.pepper@example.test', 'Ready for your close-out check: Replace FH40 probe')])
+        # Kelly raised it and runs FLK's meetings, but Joe was named to check it
+        r2 = submit(s, KELLY, 'CloseAction', {'outcome': 'Completed', 'note': ''}, target=s.action, revision=3, key=KEY2)
+        run(s, r2)
+        self.assertEqual((request(s, r2)['Status'], request(s, r2)['ResultMessage']),
+                         ('Rejected', 'Only the person named to check it, or a Team Leader or the Group Head, can confirm the close-out.'))
+        r3 = submit(s, JOE, 'CloseAction', {'outcome': 'Completed', 'note': ''}, target=s.action, revision=3, key='k-joe-closes')
+        run(s, r3)
+        self.assertEqual(request(s, r3)['Status'], 'Completed')
+        self.assertEqual(s.item('actions', s.action)['f']['Status'], 'Closed')
+
+    def test_an_action_from_before_names_no_checker_and_works_as_before(self):
+        s = self.with_check(None)
+        r = submit(s, RACHEL, 'MarkComplete', {'note': ''}, target=s.action, revision=2)
+        run(s, r)
+        self.assertEqual([m['to'] for m in s.sent], ['kelly.bates@example.test'])
+        r2 = submit(s, KELLY, 'CloseAction', {'outcome': 'Completed', 'note': ''}, target=s.action, revision=3, key=KEY2)
+        run(s, r2)
+        self.assertEqual(request(s, r2)['Status'], 'Completed')
+
+    def test_reassign_changes_co_owners_and_tells_only_the_new_ones(self):
+        s = site()
+        s.item('actions', s.action)['f']['CoOwnerIds'] = json.dumps(['103'])
+        r = submit(s, KELLY, 'ReassignAction', {'ownerId': JOE, 'reason': 'Joe has the parts.', 'coOwnerIds': [RACHEL, KELLY]}, target=s.action, revision=2)
+        _, eng = run(s, r)
+        self.assertEqual(request(s, r)['Status'], 'Completed', eng.log)
+        a = s.item('actions', s.action)['f']
+        self.assertEqual((a['AssignedToId'], json.loads(a['CoOwnerIds'])), (JOE, ['112', '103']))
+        self.assertEqual(sorted((m['to'], m['subject'].split(':')[0]) for m in s.sent),
+                         [('joseph.pepper@example.test', 'Action assigned to you'), ('rachel.boulden@example.test', 'Action reassigned'),
+                          ('rachel.boulden@example.test', 'Action shared with you')])
+
+    def test_reassigning_to_a_co_owner_takes_them_off_the_co_owners(self):
+        s = site()
+        s.item('actions', s.action)['f']['CoOwnerIds'] = json.dumps(['7'])
+        r = submit(s, KELLY, 'ReassignAction', {'ownerId': JOE, 'reason': 'Joe has the parts.'}, target=s.action, revision=2)
+        run(s, r)
+        self.assertEqual(request(s, r)['Status'], 'Completed')
+        self.assertFalse(s.item('actions', s.action)['f']['CoOwnerIds'])
+
+    def test_edit_names_or_changes_the_checker(self):
+        s = site()
+        r = submit(s, KELLY, 'EditActionDetails', {'requiresCloseOut': True, 'checkerId': JOE}, target=s.action, revision=2)
+        _, eng = run(s, r)
+        self.assertEqual(request(s, r)['Status'], 'Completed', eng.log)
+        self.assertEqual((s.item('actions', s.action)['f']['RequiresCloseOut'], s.item('actions', s.action)['f']['CloseOutById']), (True, JOE))
+        r2 = submit(s, KELLY, 'EditActionDetails', {'checkerId': RACHEL}, target=s.action, revision=3, key=KEY2)
+        run(s, r2)
+        self.assertEqual(request(s, r2)['ResultMessage'], 'Choose someone other than the owner to do the close-out check.')
+        r3 = submit(s, KELLY, 'EditActionDetails', {'requiresCloseOut': False}, target=s.action, revision=3, key='k-off')
+        run(s, r3)
+        self.assertEqual((s.item('actions', s.action)['f']['RequiresCloseOut'], s.item('actions', s.action)['f'].get('CloseOutById')), (False, None))
 
 
 class KnownAs(unittest.TestCase):

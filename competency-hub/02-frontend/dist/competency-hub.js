@@ -672,6 +672,9 @@ window.ESGCompetencyHub = function (ctx) {
 
     function isOpen(status) { return OPEN_STATUSES.indexOf(status) >= 0; }
 
+    var CO_OWNERS = 'Choose co-owners from the members of this area, and the Team Leaders and Group Head, other than the owner.';
+    var CHECK_NOT_OWNER = 'Choose someone other than the owner to do the close-out check.';
+    var CHECK_ALLOWED = 'Choose a member of this area or a Team Leader to do the close-out check.';
     var SELF_ONLY = 'As a technician you can raise actions for yourself in this area. Ask an engineer, or someone who runs meetings in this area, to raise it for someone else.';
 
     // ctx: { today, maxYears, canWrite(areaKey), ownerAllowed(areaKey, ownerId), canRaiseFor(areaKey, ownerId) }
@@ -691,6 +694,19 @@ window.ESGCompetencyHub = function (ctx) {
       else if (v.dueIso < ctx.today) e.dueIso = 'The target date cannot be in the past.';
       else if (v.dueIso > addYears(ctx.today, ctx.maxYears)) e.dueIso = 'Choose a date within ' + ctx.maxYears + (ctx.maxYears === 1 ? ' year.' : ' years.');
       if (v.priority && PRIORITIES.indexOf(v.priority) < 0) e.priority = 'Choose a priority.';
+      // co-owners share the action: up to 5, each a member of the area or a Team Leader, never the owner. A technician who
+      // raises only for themselves adds none. The close-out check is someone other than the owner (the raiser by default).
+      var co = (v.coOwnerIds || []).map(Number);
+      if (!e.areaKey && !e.ownerId) {
+        if (co.length > 5) e.coOwnerIds = 'Choose up to 5 co-owners.';
+        else if (co.length && ctx.canRaiseFor && !ctx.canRaiseFor(v.areaKey, -1)) e.coOwnerIds = SELF_ONLY;
+        else if (co.some(function (id) { return id === Number(v.ownerId) || !ctx.ownerAllowed(v.areaKey, id); })) e.coOwnerIds = CO_OWNERS;
+        if (v.requiresCloseOut) {
+          var checker = Number(v.checkerId || ctx.me);
+          if (checker === Number(v.ownerId)) e.checkerId = CHECK_NOT_OWNER;
+          else if (!ctx.ownerAllowed(v.areaKey, checker)) e.checkerId = CHECK_ALLOWED;
+        }
+      }
       return e;
     }
 
@@ -747,6 +763,11 @@ window.ESGCompetencyHub = function (ctx) {
       if (!v.ownerId) e.ownerId = 'Choose who will do it.';
       else if (Number(v.ownerId) === Number(action.ownerId)) e.ownerId = 'Choose someone other than the current owner.';
       else if (!ctx.ownerAllowed(action.areaKey, Number(v.ownerId))) e.ownerId = 'Choose a member of this area or a Team Leader.';
+      if (v.coOwnerIds) {
+        var co = v.coOwnerIds.map(Number).filter(function (id) { return id !== Number(v.ownerId); });
+        if (co.length > 5) e.coOwnerIds = 'Choose up to 5 co-owners.';
+        else if (co.some(function (id) { return !ctx.ownerAllowed(action.areaKey, id); })) e.coOwnerIds = CO_OWNERS;
+      }
       var r = reasonError(v);
       if (r) e.reason = r;
       return e;
@@ -771,8 +792,9 @@ window.ESGCompetencyHub = function (ctx) {
       return e;
     }
 
-    // v: the fields being changed (title, description, priority, requiresCloseOut); anything not given stays.
-    function validateEdit(action, v) {
+    // v: the fields being changed (title, description, priority, requiresCloseOut, checkerId); anything not given stays.
+    // ctx: { ownerAllowed(areaKey, personId) }
+    function validateEdit(action, v, ctx) {
       var e = {};
       if (!isOpen(action.status)) e.action = 'This action is no longer open.';
       if ('title' in v) {
@@ -786,7 +808,13 @@ window.ESGCompetencyHub = function (ctx) {
         else if (d.length > 5000) e.description = 'Keep the description to 5,000 characters or fewer.';
       }
       if ('priority' in v && PRIORITIES.indexOf(v.priority) < 0) e.priority = 'Choose a priority.';
-      if (!['title', 'description', 'priority', 'requiresCloseOut'].some(function (k) { return k in v; })) e.action = 'Nothing has changed.';
+      var on = 'requiresCloseOut' in v ? !!v.requiresCloseOut : !!action.requiresCloseOut;
+      if (on && ctx) {
+        var checker = Number('checkerId' in v ? v.checkerId : (action.checkerId || action.raisedById));
+        if (checker === Number(action.ownerId)) e.checkerId = CHECK_NOT_OWNER;
+        else if (!ctx.ownerAllowed(action.areaKey, checker)) e.checkerId = CHECK_ALLOWED;
+      }
+      if (!['title', 'description', 'priority', 'requiresCloseOut', 'checkerId'].some(function (k) { return k in v; })) e.action = 'Nothing has changed.';
       return e;
     }
 
@@ -806,7 +834,11 @@ window.ESGCompetencyHub = function (ctx) {
     function roles(action, personId, access) {
       var k = action.areaKey;
       var owner = Number(action.ownerId) === Number(personId);
+      var coOwner = (action.coOwnerIds || []).indexOf(Number(personId)) >= 0;
       var raiser = Number(action.raisedById) === Number(personId);
+      // a close-out check waiting for a named person: they, or a Team Leader or the Group Head, confirm it (1.9.0.0)
+      var named = action.status === 'Completed' && !!action.checkerId;
+      var checker = named && Number(action.checkerId) === Number(personId);
       var lead = access.isManagement ? access.canWrite(k) : access.isEngineerIn(k);
       var chair = access.chairs(k);
       var open = isOpen(action.status);
@@ -814,13 +846,15 @@ window.ESGCompetencyHub = function (ctx) {
       var edits = lead || chair || raiser;
       return {
         owner: owner,
+        coOwner: coOwner,
+        checker: checker,
         manager: edits,
-        canUpdate: access.canWrite(k) || owner,
+        canUpdate: access.canWrite(k) || owner || coOwner,
         canExtend: open && (owner || edits),
         canComplete: open && (owner || edits),
         canStatus: open && (owner || edits),
         canReassign: open && (lead || chair || (raiser && !(access.isTechnician && !chair))),
-        canClose: (open || action.status === 'Completed') && edits,
+        canClose: named ? (checker || access.isManagement) : (open || action.status === 'Completed') && edits,
         canReopen: finished && (lead || raiser),
         canEdit: open && edits
       };
@@ -987,7 +1021,7 @@ window.ESGCompetencyHub = function (ctx) {
       validateEntry: validateEntry, validateEntryUpdate: validateEntryUpdate, managesEntry: managesEntry, noticeRoles: noticeRoles,
       validateNoticeEdit: validateNoticeEdit, validateComment: validateComment, ENTRY_TYPES: ENTRY_TYPES, IMPACTS: IMPACTS, ENTRY_STATUSES: ENTRY_STATUSES,
       NOTICE_CATEGORIES: NOTICE_CATEGORIES, validateMeeting: validateMeeting, validateCancelMeeting: validateCancelMeeting, nextMonths: nextMonths, MINUTE_OUTCOMES: MINUTE_OUTCOMES,
-      DISCUSSION_SECTIONS: DISCUSSION_SECTIONS, missingOutcomes: missingOutcomes, validateAmend: validateAmend, SELF_ONLY: SELF_ONLY, PRIORITIES: PRIORITIES, OPEN_STATUSES: OPEN_STATUSES, OUTCOMES: OUTCOMES
+      DISCUSSION_SECTIONS: DISCUSSION_SECTIONS, missingOutcomes: missingOutcomes, validateAmend: validateAmend, SELF_ONLY: SELF_ONLY, CO_OWNERS: CO_OWNERS, PRIORITIES: PRIORITIES, OPEN_STATUSES: OPEN_STATUSES, OUTCOMES: OUTCOMES
     };
   })();
 
@@ -1003,7 +1037,7 @@ window.ESGCompetencyHub = function (ctx) {
       members: "$select=Id,CompetencyId,PersonId,CanManageMeetings,Status&$filter=Status eq 'Active'",
       actions: '$select=Id,Title,Description,CompetencyId,LinkedCompetenciesId,AssignedToId,RaisedById,DateRaised,DueDay,OriginalDueDate,' +
         'Status,IsOpen,Priority,ExtensionCount,RequiresCloseOut,Revision,PendingRequestKey,LastRequestKey,CreatedRequestKey,FileDirRef,' +
-        'Blocker,CloseOutcome,ClosureNote,DateClosed,SourceType,SourceId&$filter=IsOpen eq 1 and FSObjType eq 0',
+        'Blocker,CloseOutcome,ClosureNote,DateClosed,SourceType,SourceId,CoOwnerIds,CloseOutById&$filter=IsOpen eq 1 and FSObjType eq 0',
       notices: "$select=Id,Title,Body,Category,IsImportant,ImportantUntil,Status,AuthorId,Created,FileDirRef,Revision,LastRequestKey&$filter=Status eq 'Active' and FSObjType eq 0",
       register: '$select=Id,Title,Description,EntryType,Impact,Status,Outcome,RaisedById,ResponsiblePersonId,DateRaised,DateResolved,Revision,' +
         'LastRequestKey,CompetencyId,FileDirRef,Created&$filter=FSObjType eq 0',
@@ -1014,12 +1048,15 @@ window.ESGCompetencyHub = function (ctx) {
       settings: '$select=Id,Title,Value'
     };
 
+    // Columns a later Setup adds: if the site does not have them yet, the list is read without them.
+    var OPTIONAL = { actions: ['CoOwnerIds', 'CloseOutById'] };
+
     // Reads each list independently; one failure does not hide the others.
     async function load(sp) {
       var raw = {};
       await Promise.all(Object.keys(QUERIES).map(async function (key) {
         try {
-          var res = await sp.items(CH.config.lists[key].title, QUERIES[key]);
+          var res = await sp.items(CH.config.lists[key].title, QUERIES[key], null, OPTIONAL[key]);
           raw[key] = { rows: res.rows, complete: res.complete };
         } catch (error) {
           raw[key] = { rows: [], complete: false, error: error.status || 0 };
@@ -1090,6 +1127,11 @@ window.ESGCompetencyHub = function (ctx) {
         return !!p && CH.config.managementRoles.indexOf(p.Role) >= 0;
       }
 
+      // CoOwnerIds is stored as a JSON list of ids ('["112","103"]'); anything else is no co-owners.
+      function idList(text) {
+        try { var v = JSON.parse(text || '[]'); return Array.isArray(v) ? v.map(Number).filter(function (n) { return n > 0; }) : []; } catch (_) { return []; }
+      }
+
       // One action row as the views use it; also used for finished actions read on demand (actionFrom).
       function actionFrom(r) {
         var primary = areaById[r.CompetencyId];
@@ -1102,6 +1144,8 @@ window.ESGCompetencyHub = function (ctx) {
           areaKey: primary ? primary.key : '', areaName: primary ? primary.name : 'Unknown area',
           linkedKeys: linked.map(function (a) { return a.key; }),
           ownerId: r.AssignedToId, ownerName: nameOf(r.AssignedToId), raisedById: r.RaisedById,
+          coOwnerIds: idList(r.CoOwnerIds), coOwnerNames: idList(r.CoOwnerIds).map(nameOf),
+          checkerId: r.CloseOutById ? Number(r.CloseOutById) : null, checkerName: r.CloseOutById ? nameOf(Number(r.CloseOutById)) : '',
           dueIso: dueIso, status: r.Status, extensions: r.ExtensionCount || 0,
           originalIso: r.OriginalDueDate ? D.localDate(r.OriginalDueDate) : dueIso,
           description: r.Description || '', priority: r.Priority || 'Normal', requiresCloseOut: !!r.RequiresCloseOut,
@@ -1253,6 +1297,12 @@ window.ESGCompetencyHub = function (ctx) {
       });
 
       // Who may own an action in an area (ACT-03): its active members, and Team Leaders and the Group Head.
+      // On someone's to-do list: what they own, what they share as a co-owner, and a close-out check waiting for them.
+      function isMine(a, personId) {
+        var me = Number(personId);
+        return Number(a.ownerId) === me || a.coOwnerIds.indexOf(me) >= 0 || (a.waitingCloseOut && Number(a.checkerId) === me);
+      }
+
       function ownersFor(key) {
         return people.filter(function (p) {
           return p.Status === 'Active' && ((membersByArea[key] || {})[p.SiteUserId] || CH.config.managementRoles.indexOf(p.Role) >= 0);
@@ -1265,7 +1315,7 @@ window.ESGCompetencyHub = function (ctx) {
       return {
         today: today, areas: areas, areaByKey: areaByKey, stats: stats, actions: actions, notices: notices, calendar: calendar,
         entries: entries, entryById: entryById, noticeById: noticeById, flags: flags, people: people, meetings: meetings, meetingById: meetingById,
-        inArea: inArea, nameOf: nameOf, ownersFor: ownersFor, actionById: actionById, actionFrom: actionFrom, membersByArea: membersByArea, chairsByArea: meetingAdmins,
+        inArea: inArea, nameOf: nameOf, ownersFor: ownersFor, isMine: isMine, actionById: actionById, actionFrom: actionFrom, membersByArea: membersByArea, chairsByArea: meetingAdmins,
         sections: {
           actions: section(raw.actions), notices: section(raw.notices), meetings: section(raw.meetings),
           calendar: section(raw.calendar), flags: section(raw.updates), members: section(raw.members), register: section(raw.register)
@@ -1998,7 +2048,7 @@ window.ESGCompetencyHub = function (ctx) {
       var unavailable = m.sections.actions === 'unavailable';
       ui.resetFits();
 
-      var mine = m.actions.filter(function (a) { return a.ownerId === app.person.SiteUserId; }).sort(byDue);
+      var mine = m.actions.filter(function (a) { return m.isMine(a, app.person.SiteUserId); }).sort(byDue);
       var late = mine.filter(function (a) { return a.group === 'late'; });
       var soon = mine.filter(function (a) { return a.group === 'soon' && !a.waitingCloseOut; });
       var later = mine.filter(function (a) { return a.group === 'later' || a.waitingCloseOut; });
@@ -2339,8 +2389,8 @@ window.ESGCompetencyHub = function (ctx) {
     var field = function (l, i, hint) { return CH.ui.dialog.field(l, i, hint); };
     var STEPS = [
       { title: 'What needs doing?', keys: ['title', 'description'] },
-      { title: 'Who will do it, and in which area?', keys: ['areaKey', 'ownerId'] },
-      { title: 'By when?', keys: ['dueIso', 'priority'] },
+      { title: 'Who will do it, and in which area?', keys: ['areaKey', 'ownerId', 'coOwnerIds'] },
+      { title: 'By when?', keys: ['dueIso', 'priority', 'checkerId'] },
       { title: 'Check and raise', keys: [] }
     ];
 
@@ -2370,7 +2420,38 @@ window.ESGCompetencyHub = function (ctx) {
       var closeOut = h('input', { id: 'ch-r-closeOut', type: 'checkbox' });
       var closeOutTouched = false;
       closeOut.addEventListener('change', function () { closeOutTouched = true; });
-      priority.addEventListener('change', function () { if (!closeOutTouched) closeOut.checked = priority.value === 'High'; });
+      priority.addEventListener('change', function () { if (!closeOutTouched) closeOut.checked = priority.value === 'High'; showChecker(); });
+      var me = Number(app.person.SiteUserId);
+      // co-owners share the action with the owner (up to 5); the close-out check is done by someone other than the owner
+      var coBox = h('div', { class: 'checks', id: 'ch-r-coOwnerIds' });
+      var coField = field('Co-owners (optional)', coBox, 'They see the action in their to-dos and can add updates.');
+      var checker = h('select', { id: 'ch-r-checkerId' });
+      var checkerField = field('Who checks it?', checker);
+      function eligible() { return m.ownersFor(area.value); }
+      function fillCo() {
+        var ticked = coIds();
+        CH.dom.clear(coBox);
+        eligible().filter(function (p) { return String(p.id) !== owner.value; }).forEach(function (p) {
+          coBox.appendChild(h('label', { class: 'check' }, h('input', { type: 'checkbox', value: String(p.id), checked: ticked.indexOf(Number(p.id)) >= 0 ? true : null }), ' ' + p.name));
+        });
+        coField.style.display = app.access.canRaiseFor(area.value, -1, me) && coBox.firstChild ? '' : 'none';
+      }
+      function coIds() {
+        return Array.prototype.filter.call(coBox.querySelectorAll('input'), function (x) { return x.checked; }).map(function (x) { return Number(x.value); });
+      }
+      // the raiser checks it unless someone else is chosen (and the raiser is not the owner)
+      var checkerChosen = false;
+      checker.addEventListener('change', function () { checkerChosen = true; });
+      function fillChecker() {
+        var current = checkerChosen ? checker.value : String(me);
+        CH.dom.clear(checker);
+        eligible().filter(function (p) { return String(p.id) !== owner.value; }).forEach(function (p) {
+          checker.appendChild(h('option', { value: String(p.id), selected: String(p.id) === current ? true : null, text: p.name + (Number(p.id) === me ? ' (you)' : '') }));
+        });
+      }
+      function showChecker() { checkerField.style.display = closeOut.checked ? '' : 'none'; }
+      closeOut.addEventListener('change', showChecker);
+      owner.addEventListener('change', function () { fillCo(); fillChecker(); });
 
       var selfNote = h('p', { class: 'explain', id: 'ch-r-self-only', text: 'As a technician you can raise actions for yourself in this area. An engineer, or someone who runs meetings in this area, can raise them for someone else.' });
       function fillOwners() {
@@ -2386,16 +2467,20 @@ window.ESGCompetencyHub = function (ctx) {
         selfNote.style.display = selfOnly ? '' : 'none';
         if (selfOnly) { owner.removeChild(owner.firstChild); owner.value = String(app.person.SiteUserId); }
       }
-      area.addEventListener('change', fillOwners);
+      area.addEventListener('change', function () { fillOwners(); fillCo(); fillChecker(); });
       fillOwners();
+      fillCo();
+      fillChecker();
+      showChecker();
 
       function values() {
         return { title: title.value, description: description.value, areaKey: area.value, ownerId: owner.value,
-          dueIso: due.value, priority: priority.value, requiresCloseOut: closeOut.checked };
+          dueIso: due.value, priority: priority.value, requiresCloseOut: closeOut.checked,
+          coOwnerIds: coField.style.display === 'none' ? [] : coIds(), checkerId: closeOut.checked ? Number(checker.value || me) : undefined };
       }
       function errorsFor(keys) {
         var all = R.validateRaise(values(), {
-          today: today, maxYears: maxYears, canWrite: app.access.canWrite,
+          today: today, maxYears: maxYears, canWrite: app.access.canWrite, me: me,
           canRaiseFor: function (k, id) { return app.access.canRaiseFor(k, id, app.person.SiteUserId); },
           ownerAllowed: function (k, id) { return m.ownersFor(k).some(function (p) { return Number(p.id) === id; }); }
         });
@@ -2415,10 +2500,10 @@ window.ESGCompetencyHub = function (ctx) {
 
       var panes = [
         [field('Title', title, 'A short summary, for example "Replace FH40 probe".'), field('Description', description, 'What needs doing and anything the owner should know.')],
-        [field('Area', area), field('Who will do it?', owner), selfNote],
+        [field('Area', area), field('Who will do it?', owner), selfNote, coField],
         [field('Target date', due, 'From today up to ' + maxYears + (maxYears === 1 ? ' year' : ' years') + ' ahead.'),
           h('details', { class: 'more' }, h('summary', { text: 'More options' }),
-            field('Priority', priority), h('label', { class: 'check' }, closeOut, ' Needs a close-out check before it is closed'))],
+            field('Priority', priority), h('label', { class: 'check' }, closeOut, ' Needs a close-out check before it is closed'), checkerField)],
         null
       ];
 
@@ -2427,9 +2512,10 @@ window.ESGCompetencyHub = function (ctx) {
         var ownerName = m.nameOf(Number(v.ownerId));
         return h('dl', { class: 'facts' },
           h('dt', { text: 'What' }), h('dd', null, h('b', { text: v.title.trim() }), h('br'), h('span', { class: 'notice-body', text: v.description.trim() })),
-          h('dt', { text: 'Who' }), h('dd', { text: ownerName + ', in ' + m.areaByKey[v.areaKey].name }),
+          h('dt', { text: 'Who' }), h('dd', { text: ownerName + ', in ' + m.areaByKey[v.areaKey].name +
+            (v.coOwnerIds.length ? ' – co-owners ' + v.coOwnerIds.map(function (id) { return m.nameOf(id); }).join(', ') : '') }),
           h('dt', { text: 'When' }), h('dd', { text: 'By ' + D.weekday(v.dueIso) + ' ' + D.long(v.dueIso) }),
-          h('dt', { text: 'Also' }), h('dd', { text: v.priority + ' priority' + (v.requiresCloseOut ? ', with a close-out check' : '') }),
+          h('dt', { text: 'Also' }), h('dd', { text: v.priority + ' priority' + (v.requiresCloseOut ? ', with a close-out check by ' + m.nameOf(v.checkerId) : '') }),
           entry ? [h('dt', { text: 'For' }), h('dd', { text: entry.ref + ' ' + entry.title })] : null);
       }
 
@@ -2455,7 +2541,7 @@ window.ESGCompetencyHub = function (ctx) {
           go(step + 1);
           return;
         }
-        var all = errorsFor(['title', 'description', 'areaKey', 'ownerId', 'dueIso', 'priority']);
+        var all = errorsFor(['title', 'description', 'areaKey', 'ownerId', 'coOwnerIds', 'dueIso', 'priority', 'checkerId']);
         if (Object.keys(all).length) { errorBox.textContent = 'Something needs changing: ' + all[Object.keys(all)[0]]; return; }
         var v = values();
         nextBtn.disabled = true;
@@ -2463,7 +2549,8 @@ window.ESGCompetencyHub = function (ctx) {
         try {
           await app.tracker.submit({ key: key, type: 'RaiseAction', label: 'Raise “' + v.title.trim() + '”', payload: {
             areaKey: v.areaKey, title: v.title.trim(), description: v.description.trim(), ownerId: Number(v.ownerId),
-            dueIso: v.dueIso, priority: v.priority, requiresCloseOut: v.requiresCloseOut, sourceEntryId: entry ? entry.id : undefined,
+            dueIso: v.dueIso, priority: v.priority, requiresCloseOut: v.requiresCloseOut,
+            coOwnerIds: v.coOwnerIds.length ? v.coOwnerIds : undefined, checkerId: v.checkerId, sourceEntryId: entry ? entry.id : undefined,
             sourceMeetingId: meeting ? meeting.id : undefined }, meetingId: meeting ? meeting.id : undefined });
           dlg.close();
           CH.ui.toast(app.root, 'Your action has been sent. It will appear in a few minutes.', 'ok');
@@ -2596,7 +2683,9 @@ window.ESGCompetencyHub = function (ctx) {
           h('dl', { class: 'facts' },
             h('dt', { text: 'When' }), h('dd', null, ui.chip(a.waitingCloseOut ? 'later' : a.group, a.dueText), ' ', whenText(a)),
             a.blocker ? [h('dt', { text: 'Waiting on' }), h('dd', { class: 'notice-body', text: a.blocker })] : null,
-            h('dt', { text: 'Who' }), h('dd', { text: 'Owner: ' + a.ownerName + ' · Raised by: ' + a.raisedByName + (a.raisedIso ? ', ' + D.shortYear(a.raisedIso) : '') }),
+            h('dt', { text: 'Who' }), h('dd', { text: 'Owner: ' + a.ownerName + (a.coOwnerNames.length ? ' · Co-owners: ' + a.coOwnerNames.join(', ') : '') +
+              ' · Raised by: ' + a.raisedByName + (a.raisedIso ? ', ' + D.shortYear(a.raisedIso) : '') +
+              (a.requiresCloseOut ? ' · Checked by: ' + (a.checkerName || a.raisedByName) : '') }),
             h('dt', { text: 'What' }), h('dd', { class: 'notice-body', text: a.description || 'No description.' })),
           extensions && extensions.length ? h('details', { class: 'ext-list' }, h('summary', { text: 'Show all deadline changes (' + extensions.length + ')' }),
             h('ul', { class: 'plain' }, extensions.map(function (x) {
@@ -2731,7 +2820,7 @@ window.ESGCompetencyHub = function (ctx) {
         var note = h('textarea', { id: 'ch-c-note', rows: '3', maxlength: '1000' });
         formShell('Mark as done', [
           h('p', { class: 'explain', text: a.requiresCloseOut
-            ? 'It will then wait for a close-out check by ' + a.raisedByName + ' before it is closed.'
+            ? 'It will then wait for a close-out check by ' + (a.checkerName || a.raisedByName) + ' before it is closed.'
             : 'The action will be closed. It stays in the history of ' + a.areaName + '.' }),
           field('Anything to add? (optional)', note)], 'Mark as done',
           async function (form) {
@@ -2777,14 +2866,19 @@ window.ESGCompetencyHub = function (ctx) {
           return h('option', { value: String(o.id), text: o.name + (CH.config.managementRoles.indexOf(o.role) >= 0 ? ' – ' + o.role : '') });
         })));
         var reason = h('textarea', { id: 'ch-g-reason', rows: '3', maxlength: '1000' });
+        // co-owners: everyone eligible, the current ones ticked; the new owner is never also a co-owner
+        var coBox = h('div', { class: 'checks', id: 'ch-g-coOwnerIds' }, app.model.ownersFor(a.areaKey).map(function (o) {
+          return h('label', { class: 'check' }, h('input', { type: 'checkbox', value: String(o.id), checked: a.coOwnerIds.indexOf(Number(o.id)) >= 0 ? true : null }), ' ' + o.name);
+        }));
         formShell('Reassign', [h('p', { class: 'muted', text: 'Now: ' + a.ownerName + '. Both people get an email.' }),
-          field('New owner', owner, 'Members of ' + a.areaName + ', and Team Leaders and the Group Head.'), field('Why?', reason, 'At least 10 characters.')], 'Reassign',
+          field('New owner', owner), field('Co-owners (optional)', coBox), field('Why?', reason, 'At least 10 characters.')], 'Reassign',
           function (form) {
-            var v = { ownerId: owner.value ? Number(owner.value) : '', reason: reason.value };
+            var v = { ownerId: owner.value ? Number(owner.value) : '', reason: reason.value,
+              coOwnerIds: Array.prototype.filter.call(coBox.querySelectorAll('input'), function (x) { return x.checked && Number(x.value) !== Number(owner.value); }).map(function (x) { return Number(x.value); }) };
             var allowed = { ownerAllowed: function (key, pid) { return app.model.ownersFor(key).some(function (o) { return Number(o.id) === pid; }); } };
             var name = (owners.filter(function (o) { return Number(o.id) === v.ownerId; })[0] || {}).name;
-            return send(form, 'ReassignAction', { ownerId: v.ownerId, reason: v.reason.trim() }, 'Reassign to ' + name,
-              R.validateReassign(a, v, allowed), ['ownerId', 'reason'], 'ch-g-');
+            return send(form, 'ReassignAction', { ownerId: v.ownerId, reason: v.reason.trim(), coOwnerIds: v.coOwnerIds }, 'Reassign to ' + name,
+              R.validateReassign(a, v, allowed), ['ownerId', 'coOwnerIds', 'reason'], 'ch-g-');
           });
       }
 
@@ -2820,15 +2914,25 @@ window.ESGCompetencyHub = function (ctx) {
         var priority = h('select', { id: 'ch-e-priority' }, R.PRIORITIES.map(function (p) { return h('option', p === a.priority ? { value: p, selected: true, text: p } : { value: p, text: p }); }));
         var closeOut = h('input', { id: 'ch-e-closeout', type: 'checkbox' });
         closeOut.checked = a.requiresCloseOut;
+        var current = Number(a.checkerId || a.raisedById);
+        var checker = h('select', { id: 'ch-e-checkerId' }, app.model.ownersFor(a.areaKey).filter(function (o) { return Number(o.id) !== Number(a.ownerId); }).map(function (o) {
+          return h('option', { value: String(o.id), selected: Number(o.id) === current ? true : null, text: o.name });
+        }));
+        var checkerField = field('Who checks it?', checker);
+        function showChecker() { checkerField.style.display = closeOut.checked ? '' : 'none'; }
+        closeOut.addEventListener('change', showChecker);
+        showChecker();
         formShell('Edit details', [field('What needs doing', title), field('Description', description), field('Priority', priority),
-          h('label', { class: 'check' }, closeOut, ' Needs a close-out check by the raiser before it is closed')], 'Save changes',
+          h('label', { class: 'check' }, closeOut, ' Needs a close-out check before it is closed'), checkerField], 'Save changes',
           function (form) {
             var v = {};
             if (title.value.trim() !== a.title) v.title = title.value.trim();
             if (description.value.trim() !== a.description) v.description = description.value.trim();
             if (priority.value !== a.priority) v.priority = priority.value;
             if (closeOut.checked !== a.requiresCloseOut) v.requiresCloseOut = closeOut.checked;
-            return send(form, 'EditActionDetails', v, 'Edit details', R.validateEdit(a, v), ['title', 'description', 'priority'], 'ch-e-');
+            if (closeOut.checked && checker.value && Number(checker.value) !== current) v.checkerId = Number(checker.value);
+            var allowed = { ownerAllowed: function (key, pid) { return app.model.ownersFor(key).some(function (o) { return Number(o.id) === pid; }); } };
+            return send(form, 'EditActionDetails', v, 'Edit details', R.validateEdit(a, v, allowed), ['title', 'description', 'priority', 'checkerId'], 'ch-e-');
           });
       }
 
@@ -2864,7 +2968,7 @@ window.ESGCompetencyHub = function (ctx) {
     function tabsFor(app) {
       var me = app.person.SiteUserId;
       var tabs = [
-        { label: 'Mine', who: 'AssignedToId', pick: function (a) { return Number(a.ownerId) === Number(me); } },
+        { label: 'Mine', who: 'AssignedToId', pick: function (a) { return app.model.isMine(a, me); } },
         { label: 'Raised by me', who: 'RaisedById', pick: function (a) { return Number(a.raisedById) === Number(me); } }
       ];
       var managed = app.model.areas.filter(function (a) { return app.access.canManage(a.key); }).map(function (a) { return a.key; });

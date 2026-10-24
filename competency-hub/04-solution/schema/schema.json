@@ -103,6 +103,8 @@
         { "name": "IsOpen", "title": "Open", "type": "Boolean", "default": "1", "indexed": true },
         { "name": "Priority", "title": "Priority", "type": "Choice", "choices": ["Low", "Normal", "High"], "required": true, "default": "Normal" },
         { "name": "RequiresCloseOut", "title": "Requires Close-Out", "type": "Boolean", "default": "0" },
+        { "name": "CoOwnerIds", "title": "Co-Owner IDs", "type": "Text", "max": 255 },
+        { "name": "CloseOutById", "title": "Close-Out By ID", "type": "Number" },
         { "name": "ExtensionCount", "title": "Extension Count", "type": "Number", "default": "0", "indexed": true },
         { "name": "LastExtendedOn", "title": "Last Extended", "type": "DateTime" },
         { "name": "Blocker", "title": "Blocker", "type": "Note" },

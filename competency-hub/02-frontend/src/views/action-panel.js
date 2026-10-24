@@ -113,7 +113,9 @@ CH.views.actionPanel = (function () {
         h('dl', { class: 'facts' },
           h('dt', { text: 'When' }), h('dd', null, ui.chip(a.waitingCloseOut ? 'later' : a.group, a.dueText), ' ', whenText(a)),
           a.blocker ? [h('dt', { text: 'Waiting on' }), h('dd', { class: 'notice-body', text: a.blocker })] : null,
-          h('dt', { text: 'Who' }), h('dd', { text: 'Owner: ' + a.ownerName + ' · Raised by: ' + a.raisedByName + (a.raisedIso ? ', ' + D.shortYear(a.raisedIso) : '') }),
+          h('dt', { text: 'Who' }), h('dd', { text: 'Owner: ' + a.ownerName + (a.coOwnerNames.length ? ' · Co-owners: ' + a.coOwnerNames.join(', ') : '') +
+            ' · Raised by: ' + a.raisedByName + (a.raisedIso ? ', ' + D.shortYear(a.raisedIso) : '') +
+            (a.requiresCloseOut ? ' · Checked by: ' + (a.checkerName || a.raisedByName) : '') }),
           h('dt', { text: 'What' }), h('dd', { class: 'notice-body', text: a.description || 'No description.' })),
         extensions && extensions.length ? h('details', { class: 'ext-list' }, h('summary', { text: 'Show all deadline changes (' + extensions.length + ')' }),
           h('ul', { class: 'plain' }, extensions.map(function (x) {
@@ -248,7 +250,7 @@ CH.views.actionPanel = (function () {
       var note = h('textarea', { id: 'ch-c-note', rows: '3', maxlength: '1000' });
       formShell('Mark as done', [
         h('p', { class: 'explain', text: a.requiresCloseOut
-          ? 'It will then wait for a close-out check by ' + a.raisedByName + ' before it is closed.'
+          ? 'It will then wait for a close-out check by ' + (a.checkerName || a.raisedByName) + ' before it is closed.'
           : 'The action will be closed. It stays in the history of ' + a.areaName + '.' }),
         field('Anything to add? (optional)', note)], 'Mark as done',
         async function (form) {
@@ -294,14 +296,19 @@ CH.views.actionPanel = (function () {
         return h('option', { value: String(o.id), text: o.name + (CH.config.managementRoles.indexOf(o.role) >= 0 ? ' – ' + o.role : '') });
       })));
       var reason = h('textarea', { id: 'ch-g-reason', rows: '3', maxlength: '1000' });
+      // co-owners: everyone eligible, the current ones ticked; the new owner is never also a co-owner
+      var coBox = h('div', { class: 'checks', id: 'ch-g-coOwnerIds' }, app.model.ownersFor(a.areaKey).map(function (o) {
+        return h('label', { class: 'check' }, h('input', { type: 'checkbox', value: String(o.id), checked: a.coOwnerIds.indexOf(Number(o.id)) >= 0 ? true : null }), ' ' + o.name);
+      }));
       formShell('Reassign', [h('p', { class: 'muted', text: 'Now: ' + a.ownerName + '. Both people get an email.' }),
-        field('New owner', owner, 'Members of ' + a.areaName + ', and Team Leaders and the Group Head.'), field('Why?', reason, 'At least 10 characters.')], 'Reassign',
+        field('New owner', owner), field('Co-owners (optional)', coBox), field('Why?', reason, 'At least 10 characters.')], 'Reassign',
         function (form) {
-          var v = { ownerId: owner.value ? Number(owner.value) : '', reason: reason.value };
+          var v = { ownerId: owner.value ? Number(owner.value) : '', reason: reason.value,
+            coOwnerIds: Array.prototype.filter.call(coBox.querySelectorAll('input'), function (x) { return x.checked && Number(x.value) !== Number(owner.value); }).map(function (x) { return Number(x.value); }) };
           var allowed = { ownerAllowed: function (key, pid) { return app.model.ownersFor(key).some(function (o) { return Number(o.id) === pid; }); } };
           var name = (owners.filter(function (o) { return Number(o.id) === v.ownerId; })[0] || {}).name;
-          return send(form, 'ReassignAction', { ownerId: v.ownerId, reason: v.reason.trim() }, 'Reassign to ' + name,
-            R.validateReassign(a, v, allowed), ['ownerId', 'reason'], 'ch-g-');
+          return send(form, 'ReassignAction', { ownerId: v.ownerId, reason: v.reason.trim(), coOwnerIds: v.coOwnerIds }, 'Reassign to ' + name,
+            R.validateReassign(a, v, allowed), ['ownerId', 'coOwnerIds', 'reason'], 'ch-g-');
         });
     }
 
@@ -337,15 +344,25 @@ CH.views.actionPanel = (function () {
       var priority = h('select', { id: 'ch-e-priority' }, R.PRIORITIES.map(function (p) { return h('option', p === a.priority ? { value: p, selected: true, text: p } : { value: p, text: p }); }));
       var closeOut = h('input', { id: 'ch-e-closeout', type: 'checkbox' });
       closeOut.checked = a.requiresCloseOut;
+      var current = Number(a.checkerId || a.raisedById);
+      var checker = h('select', { id: 'ch-e-checkerId' }, app.model.ownersFor(a.areaKey).filter(function (o) { return Number(o.id) !== Number(a.ownerId); }).map(function (o) {
+        return h('option', { value: String(o.id), selected: Number(o.id) === current ? true : null, text: o.name });
+      }));
+      var checkerField = field('Who checks it?', checker);
+      function showChecker() { checkerField.style.display = closeOut.checked ? '' : 'none'; }
+      closeOut.addEventListener('change', showChecker);
+      showChecker();
       formShell('Edit details', [field('What needs doing', title), field('Description', description), field('Priority', priority),
-        h('label', { class: 'check' }, closeOut, ' Needs a close-out check by the raiser before it is closed')], 'Save changes',
+        h('label', { class: 'check' }, closeOut, ' Needs a close-out check before it is closed'), checkerField], 'Save changes',
         function (form) {
           var v = {};
           if (title.value.trim() !== a.title) v.title = title.value.trim();
           if (description.value.trim() !== a.description) v.description = description.value.trim();
           if (priority.value !== a.priority) v.priority = priority.value;
           if (closeOut.checked !== a.requiresCloseOut) v.requiresCloseOut = closeOut.checked;
-          return send(form, 'EditActionDetails', v, 'Edit details', R.validateEdit(a, v), ['title', 'description', 'priority'], 'ch-e-');
+          if (closeOut.checked && checker.value && Number(checker.value) !== current) v.checkerId = Number(checker.value);
+          var allowed = { ownerAllowed: function (key, pid) { return app.model.ownersFor(key).some(function (o) { return Number(o.id) === pid; }); } };
+          return send(form, 'EditActionDetails', v, 'Edit details', R.validateEdit(a, v, allowed), ['title', 'description', 'priority', 'checkerId'], 'ch-e-');
         });
     }
 

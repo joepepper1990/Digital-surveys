@@ -185,3 +185,51 @@ test('an amendment says what and why, within limits', () => {
   assert.deepEqual(plain(R.validateAmend({ what: 'Nick attended the second half.', reason: 'Recorded before he arrived.' })), {});
   assert.match(R.validateAmend({ what: 'x'.repeat(2001), reason: 'A good enough reason.' }).what, /2,000/);
 });
+
+// Co-owners and the person who does the close-out check (solution 1.9.0.0); the flow sends the same messages.
+test('raise: up to 5 co-owners, each allowed in the area and not the owner; none for a technician raising for themselves', () => {
+  const big = { ownerAllowed: (k, id) => k === 'FLK' && id >= 100, canRaiseFor: () => true };
+  const c = Object.assign({}, ctx, big);
+  assert.deepEqual(plain(R.validateRaise(Object.assign({}, good, { coOwnerIds: [126] }), c)), {});
+  assert.equal(R.validateRaise(Object.assign({}, good, { coOwnerIds: [101, 102, 103, 104, 105, 106] }), c).coOwnerIds, 'Choose up to 5 co-owners.');
+  assert.equal(R.validateRaise(Object.assign({}, good, { coOwnerIds: [112] }), c).coOwnerIds, R.CO_OWNERS);
+  assert.equal(R.validateRaise(Object.assign({}, good, { coOwnerIds: [7] }), c).coOwnerIds, R.CO_OWNERS);
+  const tech = Object.assign({}, c, { canRaiseFor: (k, id) => id === 112 });
+  assert.equal(R.validateRaise(Object.assign({}, good, { coOwnerIds: [126] }), tech).coOwnerIds, R.SELF_ONLY);
+});
+
+test('raise: the close-out check is done by the raiser by default, never by the owner, and by someone allowed in the area', () => {
+  const c = Object.assign({}, ctx, { me: 126 });
+  assert.deepEqual(plain(R.validateRaise(Object.assign({}, good, { requiresCloseOut: true }), c)), {});
+  assert.match(R.validateRaise(Object.assign({}, good, { requiresCloseOut: true, checkerId: 112 }), c).checkerId, /other than the owner/);
+  assert.match(R.validateRaise(Object.assign({}, good, { requiresCloseOut: true, checkerId: 107 }), c).checkerId, /member of this area or a Team Leader/);
+  assert.match(R.validateRaise(Object.assign({}, good, { requiresCloseOut: true }), Object.assign({}, ctx, { me: 112 })).checkerId, /other than the owner/);
+});
+
+test('reassign keeps co-owners within the rules; the new owner drops out of them', () => {
+  const allowed = { ownerAllowed: (k, id) => k === 'FLK' && [112, 126, 103].includes(id) };
+  assert.deepEqual(plain(R.validateReassign(open, { ownerId: 126, coOwnerIds: [126, 103], reason: 'Joe has the parts.' }, allowed)), {});
+  assert.equal(R.validateReassign(open, { ownerId: 126, coOwnerIds: [107], reason: 'Joe has the parts.' }, allowed).coOwnerIds, R.CO_OWNERS);
+});
+
+test('edit: a new checker is someone other than the owner; nothing else counts as a change on its own', () => {
+  const allowed = { ownerAllowed: (k, id) => k === 'FLK' && [112, 126, 103].includes(id) };
+  const checked = Object.assign({}, open, { requiresCloseOut: true, checkerId: 103 });
+  assert.deepEqual(plain(R.validateEdit(checked, { checkerId: 126 }, allowed)), {});
+  assert.match(R.validateEdit(checked, { checkerId: 112 }, allowed).checkerId, /other than the owner/);
+  assert.match(R.validateEdit(checked, { checkerId: 107 }, allowed).checkerId, /member of this area/);
+  assert.match(R.validateEdit(checked, {}, allowed).action, /Nothing has changed/);
+});
+
+test('co-owners can add updates but not move the deadline; only the named checker, or management, confirms the close-out', () => {
+  const a = Object.assign({}, open, { coOwnerIds: [120] });
+  const co = R.roles(a, 120, who('Technician', ['FLK']));
+  assert.equal(co.coOwner, true);
+  assert.equal(co.canUpdate, true);
+  assert.equal(co.canExtend, false);
+  assert.equal(co.canComplete, false);
+  const waiting = Object.assign({}, open, { status: 'Completed', checkerId: 126 });
+  assert.equal(R.roles(waiting, 126, who('Technician', ['FLK'])).canClose, true, 'the named checker');
+  assert.equal(R.roles(waiting, 103, who('Engineer', ['FLK'])).canClose, false, 'the raiser, when someone else is named');
+  assert.equal(R.roles(waiting, 1, who('Team Leader', [])).canClose, true, 'a Team Leader');
+});

@@ -8,8 +8,8 @@ CH.views.raiseForm = (function () {
   var field = function (l, i, hint) { return CH.ui.dialog.field(l, i, hint); };
   var STEPS = [
     { title: 'What needs doing?', keys: ['title', 'description'] },
-    { title: 'Who will do it, and in which area?', keys: ['areaKey', 'ownerId'] },
-    { title: 'By when?', keys: ['dueIso', 'priority'] },
+    { title: 'Who will do it, and in which area?', keys: ['areaKey', 'ownerId', 'coOwnerIds'] },
+    { title: 'By when?', keys: ['dueIso', 'priority', 'checkerId'] },
     { title: 'Check and raise', keys: [] }
   ];
 
@@ -39,7 +39,38 @@ CH.views.raiseForm = (function () {
     var closeOut = h('input', { id: 'ch-r-closeOut', type: 'checkbox' });
     var closeOutTouched = false;
     closeOut.addEventListener('change', function () { closeOutTouched = true; });
-    priority.addEventListener('change', function () { if (!closeOutTouched) closeOut.checked = priority.value === 'High'; });
+    priority.addEventListener('change', function () { if (!closeOutTouched) closeOut.checked = priority.value === 'High'; showChecker(); });
+    var me = Number(app.person.SiteUserId);
+    // co-owners share the action with the owner (up to 5); the close-out check is done by someone other than the owner
+    var coBox = h('div', { class: 'checks', id: 'ch-r-coOwnerIds' });
+    var coField = field('Co-owners (optional)', coBox, 'They see the action in their to-dos and can add updates.');
+    var checker = h('select', { id: 'ch-r-checkerId' });
+    var checkerField = field('Who checks it?', checker);
+    function eligible() { return m.ownersFor(area.value); }
+    function fillCo() {
+      var ticked = coIds();
+      CH.dom.clear(coBox);
+      eligible().filter(function (p) { return String(p.id) !== owner.value; }).forEach(function (p) {
+        coBox.appendChild(h('label', { class: 'check' }, h('input', { type: 'checkbox', value: String(p.id), checked: ticked.indexOf(Number(p.id)) >= 0 ? true : null }), ' ' + p.name));
+      });
+      coField.style.display = app.access.canRaiseFor(area.value, -1, me) && coBox.firstChild ? '' : 'none';
+    }
+    function coIds() {
+      return Array.prototype.filter.call(coBox.querySelectorAll('input'), function (x) { return x.checked; }).map(function (x) { return Number(x.value); });
+    }
+    // the raiser checks it unless someone else is chosen (and the raiser is not the owner)
+    var checkerChosen = false;
+    checker.addEventListener('change', function () { checkerChosen = true; });
+    function fillChecker() {
+      var current = checkerChosen ? checker.value : String(me);
+      CH.dom.clear(checker);
+      eligible().filter(function (p) { return String(p.id) !== owner.value; }).forEach(function (p) {
+        checker.appendChild(h('option', { value: String(p.id), selected: String(p.id) === current ? true : null, text: p.name + (Number(p.id) === me ? ' (you)' : '') }));
+      });
+    }
+    function showChecker() { checkerField.style.display = closeOut.checked ? '' : 'none'; }
+    closeOut.addEventListener('change', showChecker);
+    owner.addEventListener('change', function () { fillCo(); fillChecker(); });
 
     var selfNote = h('p', { class: 'explain', id: 'ch-r-self-only', text: 'As a technician you can raise actions for yourself in this area. An engineer, or someone who runs meetings in this area, can raise them for someone else.' });
     function fillOwners() {
@@ -55,16 +86,20 @@ CH.views.raiseForm = (function () {
       selfNote.style.display = selfOnly ? '' : 'none';
       if (selfOnly) { owner.removeChild(owner.firstChild); owner.value = String(app.person.SiteUserId); }
     }
-    area.addEventListener('change', fillOwners);
+    area.addEventListener('change', function () { fillOwners(); fillCo(); fillChecker(); });
     fillOwners();
+    fillCo();
+    fillChecker();
+    showChecker();
 
     function values() {
       return { title: title.value, description: description.value, areaKey: area.value, ownerId: owner.value,
-        dueIso: due.value, priority: priority.value, requiresCloseOut: closeOut.checked };
+        dueIso: due.value, priority: priority.value, requiresCloseOut: closeOut.checked,
+        coOwnerIds: coField.style.display === 'none' ? [] : coIds(), checkerId: closeOut.checked ? Number(checker.value || me) : undefined };
     }
     function errorsFor(keys) {
       var all = R.validateRaise(values(), {
-        today: today, maxYears: maxYears, canWrite: app.access.canWrite,
+        today: today, maxYears: maxYears, canWrite: app.access.canWrite, me: me,
         canRaiseFor: function (k, id) { return app.access.canRaiseFor(k, id, app.person.SiteUserId); },
         ownerAllowed: function (k, id) { return m.ownersFor(k).some(function (p) { return Number(p.id) === id; }); }
       });
@@ -84,10 +119,10 @@ CH.views.raiseForm = (function () {
 
     var panes = [
       [field('Title', title, 'A short summary, for example "Replace FH40 probe".'), field('Description', description, 'What needs doing and anything the owner should know.')],
-      [field('Area', area), field('Who will do it?', owner), selfNote],
+      [field('Area', area), field('Who will do it?', owner), selfNote, coField],
       [field('Target date', due, 'From today up to ' + maxYears + (maxYears === 1 ? ' year' : ' years') + ' ahead.'),
         h('details', { class: 'more' }, h('summary', { text: 'More options' }),
-          field('Priority', priority), h('label', { class: 'check' }, closeOut, ' Needs a close-out check before it is closed'))],
+          field('Priority', priority), h('label', { class: 'check' }, closeOut, ' Needs a close-out check before it is closed'), checkerField)],
       null
     ];
 
@@ -96,9 +131,10 @@ CH.views.raiseForm = (function () {
       var ownerName = m.nameOf(Number(v.ownerId));
       return h('dl', { class: 'facts' },
         h('dt', { text: 'What' }), h('dd', null, h('b', { text: v.title.trim() }), h('br'), h('span', { class: 'notice-body', text: v.description.trim() })),
-        h('dt', { text: 'Who' }), h('dd', { text: ownerName + ', in ' + m.areaByKey[v.areaKey].name }),
+        h('dt', { text: 'Who' }), h('dd', { text: ownerName + ', in ' + m.areaByKey[v.areaKey].name +
+          (v.coOwnerIds.length ? ' – co-owners ' + v.coOwnerIds.map(function (id) { return m.nameOf(id); }).join(', ') : '') }),
         h('dt', { text: 'When' }), h('dd', { text: 'By ' + D.weekday(v.dueIso) + ' ' + D.long(v.dueIso) }),
-        h('dt', { text: 'Also' }), h('dd', { text: v.priority + ' priority' + (v.requiresCloseOut ? ', with a close-out check' : '') }),
+        h('dt', { text: 'Also' }), h('dd', { text: v.priority + ' priority' + (v.requiresCloseOut ? ', with a close-out check by ' + m.nameOf(v.checkerId) : '') }),
         entry ? [h('dt', { text: 'For' }), h('dd', { text: entry.ref + ' ' + entry.title })] : null);
     }
 
@@ -124,7 +160,7 @@ CH.views.raiseForm = (function () {
         go(step + 1);
         return;
       }
-      var all = errorsFor(['title', 'description', 'areaKey', 'ownerId', 'dueIso', 'priority']);
+      var all = errorsFor(['title', 'description', 'areaKey', 'ownerId', 'coOwnerIds', 'dueIso', 'priority', 'checkerId']);
       if (Object.keys(all).length) { errorBox.textContent = 'Something needs changing: ' + all[Object.keys(all)[0]]; return; }
       var v = values();
       nextBtn.disabled = true;
@@ -132,7 +168,8 @@ CH.views.raiseForm = (function () {
       try {
         await app.tracker.submit({ key: key, type: 'RaiseAction', label: 'Raise “' + v.title.trim() + '”', payload: {
           areaKey: v.areaKey, title: v.title.trim(), description: v.description.trim(), ownerId: Number(v.ownerId),
-          dueIso: v.dueIso, priority: v.priority, requiresCloseOut: v.requiresCloseOut, sourceEntryId: entry ? entry.id : undefined,
+          dueIso: v.dueIso, priority: v.priority, requiresCloseOut: v.requiresCloseOut,
+          coOwnerIds: v.coOwnerIds.length ? v.coOwnerIds : undefined, checkerId: v.checkerId, sourceEntryId: entry ? entry.id : undefined,
           sourceMeetingId: meeting ? meeting.id : undefined }, meetingId: meeting ? meeting.id : undefined });
         dlg.close();
         CH.ui.toast(app.root, 'Your action has been sent. It will appear in a few minutes.', 'ok');

@@ -633,6 +633,61 @@ window.MockDrivers = (function () {
       var row = MockSharePoint.data.People.filter(function (x) { return x.SiteUserId === 126; })[0];
       return { boxEnabled: !box.disabled, roleLocked: disabledElsewhere, who: q('.who').textContent, stored: row.KnownAs, note: (q('#ch-pp .ok-note') || q('#ch-pp .section-note[role="status"]')).textContent };
     },
+    // A co-owner sees the shared action in their to-dos and can add updates, but not move the deadline;
+    // the person named to check a done action is offered "Confirm close-out".
+    shared: async function () {
+      var t40 = MockSharePoint.data.Actions.filter(function (x) { return x.Id === 40; })[0].Title;
+      var t53 = MockSharePoint.data.Actions.filter(function (x) { return x.Id === 53; })[0].Title;
+      await until(function () { return q('.hm-tile'); });
+      await wait(300);
+      byText('.pills button', 'My to-dos').click();
+      await until(function () { return q('.subtabs'); });
+      await wait(300);
+      var listed = all('.items .t').map(function (n) { return n.textContent; });
+      var item = all('.items .item-open').filter(function (b) { return b.textContent.indexOf(t40) >= 0; })[0];
+      if (item) item.click();
+      await until(function () { return q('#ch-a .facts'); });
+      var who = q('#ch-a .facts').textContent;
+      var buttons = all('#ch-a button').map(function (b) { return b.textContent.trim(); });
+      q('#ch-a .dialog-close, #ch-a [aria-label="Close"]') && q('#ch-a .dialog-close, #ch-a [aria-label="Close"]').click();
+      await wait(200);
+      return { shared: listed.indexOf(t40) >= 0, check: listed.indexOf(t53) >= 0, who: who, buttons: buttons };
+    },
+    // Raise with a co-owner and a named close-out check: both reach the request and the stored action.
+    raiseShared: async function () {
+      (await until(function () { return byText('button', 'Raise an action'); })).click();
+      await until(function () { return q('#ch-r-title'); });
+      var form = q('#ch-r form');
+      type(q('#ch-r-title'), 'Calibrate the dose-rate meters');
+      type(q('#ch-r-description'), 'Two are past their date.');
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      var owner = await until(function () { return q('#ch-r-ownerId'); });
+      owner.value = '112'; owner.dispatchEvent(new Event('change', { bubbles: true }));
+      var coOffered = all('#ch-r-coOwnerIds input').map(function (x) { return Number(x.value); });
+      all('#ch-r-coOwnerIds input').filter(function (x) { return x.value === '102'; })[0].checked = true;
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      var due = await until(function () { return q('#ch-r-dueIso'); });
+      due.value = q('#ch-r-dueIso').min.slice(0, 4) * 1 + 1 + q('#ch-r-dueIso').min.slice(4);
+      var hiddenBefore = q('#ch-r-checkerId').closest('.field').style.display === 'none';
+      var box = q('#ch-r-closeOut'); box.checked = true; box.dispatchEvent(new Event('change', { bubbles: true }));
+      var checkerDefault = q('#ch-r-checkerId').value;
+      var checkerOffered = all('#ch-r-checkerId option').map(function (o) { return Number(o.value); });
+      q('#ch-r-checkerId').value = '102';
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return text().indexOf('Check and raise') >= 0; });
+      var summary = q('#ch-r .facts').textContent;
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return !q('#ch-r'); });
+      await until(function () { return MockSharePoint.data.Actions.filter(function (x) { return x.Title === 'Calibrate the dose-rate meters'; })[0]; }, 120000);
+      var a = MockSharePoint.data.Actions.filter(function (x) { return x.Title === 'Calibrate the dose-rate meters'; })[0];
+      var payload = JSON.parse(MockSharePoint.data.Requests[0].Payload);
+      return { coOffered: coOffered, hiddenBefore: hiddenBefore, checkerDefault: checkerDefault, checkerOffered: checkerOffered, summary: summary,
+        payload: { co: payload.coOwnerIds, checker: payload.checkerId }, stored: { co: a.CoOwnerIds, checker: a.CloseOutById } };
+    },
+    sharedCheck: async function () {
+      await until(function () { return q('#ch-a .facts'); });
+      return { who: q('#ch-a .facts').textContent, buttons: all('#ch-a button').map(function (b) { return b.textContent.trim(); }) };
+    },
     // Every page fits the window: the page itself never scrolls (a long list scrolls inside the page instead).
     pagesFit: async function () {
       await until(function () { return q('.hm-tile'); });

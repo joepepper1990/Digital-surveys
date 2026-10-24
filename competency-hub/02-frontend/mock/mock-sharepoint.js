@@ -27,6 +27,13 @@ window.MockSharePoint = (function () {
       data[list].forEach(function (row) { TEXT.forEach(function (f) { if (typeof row[f] === 'string' && row[f]) row[f] += ATTACK; }); });
     });
   }
+  // Co-owners and a named close-out check (1.9.0.0): Adam (a technician) shares action 40, and is named to check action 53, which is done.
+  if (mode === 'shared') {
+    data.Actions.forEach(function (x) {
+      if (x.Id === 40) x.CoOwnerIds = '["124"]';
+      if (x.Id === 53) { x.Status = 'Completed'; x.RequiresCloseOut = true; x.CloseOutById = 124; x.DateCompleted = new Date().toISOString(); }
+    });
+  }
   if (mode === 'left') data.People.forEach(function (p) { if (p.SiteUserId === asId) p.Status = 'Left'; });
   // Limited mode: the queue monitor reports that changes are not being picked up.
   if (mode === 'limited') {

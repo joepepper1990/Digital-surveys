@@ -209,6 +209,23 @@ res = drive('as=' + JOE + '&drive=knownAs', SLOW);
 check('known as: an administrator sets their own name; it shows in the bar, and their access stays locked', res.ok && res.result.boxEnabled && res.result.roleLocked === true &&
   res.result.stored === 'Joe' && res.result.who.indexOf('Joe · Team Leader') === 0, JSON.stringify(res));
 
+// Co-owners and the named close-out check (solution 1.9.0.0)
+res = drive('as=' + RICHARD + '&drive=raiseShared', SLOW);
+check('raise: co-owners exclude the owner; the checker appears with the close-out box, defaults to the raiser and excludes the owner', res.ok &&
+  res.result.coOffered.indexOf(112) < 0 && res.result.hiddenBefore && res.result.checkerDefault === String(RICHARD) && res.result.checkerOffered.indexOf(112) < 0, JSON.stringify(res));
+check('raise: the co-owner and checker are in the summary, the request and the stored action', res.ok && /co-owners Kelly/.test(res.result.summary) && /check by Kelly/.test(res.result.summary) &&
+  res.result.payload.co.join() === '102' && res.result.payload.checker === 102 && res.result.stored.co === '["102"]' && res.result.stored.checker === 102, JSON.stringify(res));
+const ADAM = 124;
+res = drive('as=' + ADAM + '&mode=shared&drive=shared', SLOW);
+check('co-owner: the shared action and the close-out check waiting for them are in their to-dos', res.ok && res.result.shared && res.result.check, JSON.stringify(res));
+check('co-owner: the action names the co-owners; they can add an update but not move the deadline or mark it done', res.ok && /Co-owners: Adam/.test(res.result.who) &&
+  res.result.buttons.indexOf('Add an update') >= 0 && res.result.buttons.indexOf('I need more time') < 0 && res.result.buttons.indexOf('Mark as done') < 0, JSON.stringify(res));
+res = drive('as=' + ADAM + '&mode=shared&action=53&drive=sharedCheck', SLOW);
+check('named checker: the action says who checks it, and they are offered "Confirm close-out"', res.ok && /Checked by: Adam/.test(res.result.who) &&
+  res.result.buttons.indexOf('Confirm close-out') >= 0, JSON.stringify(res));
+res = drive('as=' + RACHEL + '&mode=shared&action=53&drive=sharedCheck', SLOW);
+check('named checker: the owner is not offered "Confirm close-out"', res.ok && res.result.buttons.indexOf('Confirm close-out') < 0, JSON.stringify(res));
+
 // No page scrolls, for a Team Leader who sees every page, at the WebView size and on a laptop
 [['1920,960', '1920 × 960'], ['1366,768', '1366 × 768']].forEach(([size, label]) => {
   const d = open('as=' + JOE + '&drive=pagesFit', ['--window-size=' + size, '--dump-dom'], 40000);

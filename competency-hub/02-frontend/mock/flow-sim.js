@@ -297,7 +297,7 @@ window.MockFlow = (function () {
       var access = accessFor(requester);
 
       if (req.RequestType === 'RaiseAction') {
-        var errors = R.validateRaise(payload, { today: today, maxYears: C.maxDeadlineYears, canWrite: access.canWrite, canRaiseFor: access.canRaiseFor,
+        var errors = R.validateRaise(payload, { today: today, maxYears: C.maxDeadlineYears, canWrite: access.canWrite, canRaiseFor: access.canRaiseFor, me: requester.SiteUserId,
           ownerAllowed: function (key, id) { var o = person(id); return !!o && o.Status === 'Active' && (management(o) || !!membership(id, key)); } });
         var keys = Object.keys(errors);
         if (keys.length) return finish(req, 'Rejected', errors[keys[0]]);
@@ -320,6 +320,8 @@ window.MockFlow = (function () {
           AssignedToId: payload.ownerId, RaisedById: requester.SiteUserId, DateRaised: new Date().toISOString(),
           DueDay: D.toDueDay(payload.dueIso), OriginalDueDate: ukMidnight(payload.dueIso), Status: 'Open', IsOpen: true,
           Priority: payload.priority || 'Normal', RequiresCloseOut: !!payload.requiresCloseOut, ExtensionCount: 0, Revision: 1,
+          CoOwnerIds: (payload.coOwnerIds || []).length ? JSON.stringify(payload.coOwnerIds.map(String)) : '',
+          CloseOutById: payload.requiresCloseOut ? Number(payload.checkerId || requester.SiteUserId) : null,
           PendingRequestKey: '', LastRequestKey: req.RequestKey, CreatedRequestKey: 'F|' + req.RequestKey,
           FileDirRef: ROOT + 'Actions/' + payload.areaKey, SourceType: source ? 'Register' : fromMtg ? 'Meeting' : 'None', SourceId: source ? source.Id : fromMtg ? fromMtg.Id : null };
         data.Actions.push(action);
@@ -449,8 +451,11 @@ window.MockFlow = (function () {
       if (target.PendingRequestKey) return finish(req, 'Rejected', 'This action is being updated. Try again in a minute.');
       if (Number(req.ExpectedRevision) !== Number(target.Revision)) return finish(req, 'Rejected', STALE);
       var shape = { ownerId: target.AssignedToId, raisedById: target.RaisedById, areaKey: areaKeyOf(target.CompetencyId), status: target.Status,
-        dueIso: D.fromDueDay(target.DueDay) };
+        dueIso: D.fromDueDay(target.DueDay), requiresCloseOut: !!target.RequiresCloseOut,
+        coOwnerIds: (function () { try { return JSON.parse(target.CoOwnerIds || '[]').map(Number); } catch (_) { return []; } })(),
+        checkerId: target.CloseOutById ? Number(target.CloseOutById) : null };
       var roles = R.roles(shape, requester.SiteUserId, access);
+      var allowedOwner = { ownerAllowed: function (key, id) { var o = person(id); return !!o && o.Status === 'Active' && (management(o) || !!membership(id, key)); } };
 
       if (req.RequestType === 'ExtendDeadline') {
         if (!roles.canExtend) return finish(req, 'Rejected', 'Only the owner or the people who manage this action can move its deadline.');
@@ -497,10 +502,12 @@ window.MockFlow = (function () {
         var allowed = { ownerAllowed: function (key, id) { var o = person(id); return !!o && o.Status === 'Active' && (management(o) || !!membership(id, key)); } };
         if ((err = first(R.validateReassign(shape, payload, allowed)))) return finish(req, 'Rejected', err);
         var newOwner = person(Number(payload.ownerId));
-        return change({ AssignedToId: newOwner.SiteUserId }, { EventType: 'Reassigned', Note: payload.reason },
+        var co = (payload.coOwnerIds || shape.coOwnerIds).map(Number).filter(function (x) { return x !== newOwner.SiteUserId; });
+        return change({ AssignedToId: newOwner.SiteUserId, CoOwnerIds: co.length ? JSON.stringify(co.map(String)) : '' }, { EventType: 'Reassigned', Note: payload.reason },
           'Reassigned to ' + newOwner.Title + '.');
       }
       if (req.RequestType === 'CloseAction') {
+        if (shape.status === 'Completed' && shape.checkerId && !roles.canClose) return finish(req, 'Rejected', 'Only the person named to check it, or a Team Leader or the Group Head, can confirm the close-out.');
         if (!roles.canClose && (R.isOpen(shape.status) || shape.status === 'Completed')) return finish(req, 'Rejected', 'Only the people who manage this action can close it.');
         if ((err = first(R.validateClose(shape, payload)))) return finish(req, 'Rejected', err);
         return change({ Status: 'Closed', IsOpen: false, DateClosed: new Date().toISOString(), ClosedById: requester.SiteUserId,
@@ -514,12 +521,14 @@ window.MockFlow = (function () {
       }
       if (req.RequestType === 'EditActionDetails') {
         if (R.isOpen(shape.status) && !roles.canEdit) return finish(req, 'Rejected', 'Only the people who manage this action can change its details.');
-        if ((err = first(R.validateEdit(shape, payload)))) return finish(req, 'Rejected', err);
+        if ((err = first(R.validateEdit(shape, payload, allowedOwner)))) return finish(req, 'Rejected', err);
         var f = {};
         if ('title' in payload) f.Title = payload.title.trim();
         if ('description' in payload) f.Description = payload.description.trim();
         if ('priority' in payload) f.Priority = payload.priority;
         if ('requiresCloseOut' in payload) f.RequiresCloseOut = !!payload.requiresCloseOut;
+        var checkOn = 'requiresCloseOut' in payload ? !!payload.requiresCloseOut : shape.requiresCloseOut;
+        f.CloseOutById = checkOn ? Number('checkerId' in payload ? payload.checkerId : (shape.checkerId || shape.raisedById)) : null;
         return change(f, { EventType: 'Details Edited' }, 'Details saved.');
       }
       return finish(req, 'Rejected', 'This kind of request is not handled yet.');

@@ -9,7 +9,7 @@ CH.views.myActions = (function () {
   function tabsFor(app) {
     var me = app.person.SiteUserId;
     var tabs = [
-      { label: 'Mine', who: 'AssignedToId', pick: function (a) { return Number(a.ownerId) === Number(me); } },
+      { label: 'Mine', who: 'AssignedToId', pick: function (a) { return app.model.isMine(a, me); } },
       { label: 'Raised by me', who: 'RaisedById', pick: function (a) { return Number(a.raisedById) === Number(me); } }
     ];
     var managed = app.model.areas.filter(function (a) { return app.access.canManage(a.key); }).map(function (a) { return a.key; });

@@ -233,7 +233,7 @@ CH.views.home = (function () {
     var unavailable = m.sections.actions === 'unavailable';
     ui.resetFits();
 
-    var mine = m.actions.filter(function (a) { return a.ownerId === app.person.SiteUserId; }).sort(byDue);
+    var mine = m.actions.filter(function (a) { return m.isMine(a, app.person.SiteUserId); }).sort(byDue);
     var late = mine.filter(function (a) { return a.group === 'late'; });
     var soon = mine.filter(function (a) { return a.group === 'soon' && !a.waitingCloseOut; });
     var later = mine.filter(function (a) { return a.group === 'later' || a.waitingCloseOut; });

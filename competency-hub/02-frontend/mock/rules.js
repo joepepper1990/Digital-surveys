@@ -147,6 +147,9 @@ window.MockRules = (function () {
 
     function isOpen(status) { return OPEN_STATUSES.indexOf(status) >= 0; }
 
+    var CO_OWNERS = 'Choose co-owners from the members of this area, and the Team Leaders and Group Head, other than the owner.';
+    var CHECK_NOT_OWNER = 'Choose someone other than the owner to do the close-out check.';
+    var CHECK_ALLOWED = 'Choose a member of this area or a Team Leader to do the close-out check.';
     var SELF_ONLY = 'As a technician you can raise actions for yourself in this area. Ask an engineer, or someone who runs meetings in this area, to raise it for someone else.';
 
     // ctx: { today, maxYears, canWrite(areaKey), ownerAllowed(areaKey, ownerId), canRaiseFor(areaKey, ownerId) }
@@ -166,6 +169,19 @@ window.MockRules = (function () {
       else if (v.dueIso < ctx.today) e.dueIso = 'The target date cannot be in the past.';
       else if (v.dueIso > addYears(ctx.today, ctx.maxYears)) e.dueIso = 'Choose a date within ' + ctx.maxYears + (ctx.maxYears === 1 ? ' year.' : ' years.');
       if (v.priority && PRIORITIES.indexOf(v.priority) < 0) e.priority = 'Choose a priority.';
+      // co-owners share the action: up to 5, each a member of the area or a Team Leader, never the owner. A technician who
+      // raises only for themselves adds none. The close-out check is someone other than the owner (the raiser by default).
+      var co = (v.coOwnerIds || []).map(Number);
+      if (!e.areaKey && !e.ownerId) {
+        if (co.length > 5) e.coOwnerIds = 'Choose up to 5 co-owners.';
+        else if (co.length && ctx.canRaiseFor && !ctx.canRaiseFor(v.areaKey, -1)) e.coOwnerIds = SELF_ONLY;
+        else if (co.some(function (id) { return id === Number(v.ownerId) || !ctx.ownerAllowed(v.areaKey, id); })) e.coOwnerIds = CO_OWNERS;
+        if (v.requiresCloseOut) {
+          var checker = Number(v.checkerId || ctx.me);
+          if (checker === Number(v.ownerId)) e.checkerId = CHECK_NOT_OWNER;
+          else if (!ctx.ownerAllowed(v.areaKey, checker)) e.checkerId = CHECK_ALLOWED;
+        }
+      }
       return e;
     }
 
@@ -222,6 +238,11 @@ window.MockRules = (function () {
       if (!v.ownerId) e.ownerId = 'Choose who will do it.';
       else if (Number(v.ownerId) === Number(action.ownerId)) e.ownerId = 'Choose someone other than the current owner.';
       else if (!ctx.ownerAllowed(action.areaKey, Number(v.ownerId))) e.ownerId = 'Choose a member of this area or a Team Leader.';
+      if (v.coOwnerIds) {
+        var co = v.coOwnerIds.map(Number).filter(function (id) { return id !== Number(v.ownerId); });
+        if (co.length > 5) e.coOwnerIds = 'Choose up to 5 co-owners.';
+        else if (co.some(function (id) { return !ctx.ownerAllowed(action.areaKey, id); })) e.coOwnerIds = CO_OWNERS;
+      }
       var r = reasonError(v);
       if (r) e.reason = r;
       return e;
@@ -246,8 +267,9 @@ window.MockRules = (function () {
       return e;
     }
 
-    // v: the fields being changed (title, description, priority, requiresCloseOut); anything not given stays.
-    function validateEdit(action, v) {
+    // v: the fields being changed (title, description, priority, requiresCloseOut, checkerId); anything not given stays.
+    // ctx: { ownerAllowed(areaKey, personId) }
+    function validateEdit(action, v, ctx) {
       var e = {};
       if (!isOpen(action.status)) e.action = 'This action is no longer open.';
       if ('title' in v) {
@@ -261,7 +283,13 @@ window.MockRules = (function () {
         else if (d.length > 5000) e.description = 'Keep the description to 5,000 characters or fewer.';
       }
       if ('priority' in v && PRIORITIES.indexOf(v.priority) < 0) e.priority = 'Choose a priority.';
-      if (!['title', 'description', 'priority', 'requiresCloseOut'].some(function (k) { return k in v; })) e.action = 'Nothing has changed.';
+      var on = 'requiresCloseOut' in v ? !!v.requiresCloseOut : !!action.requiresCloseOut;
+      if (on && ctx) {
+        var checker = Number('checkerId' in v ? v.checkerId : (action.checkerId || action.raisedById));
+        if (checker === Number(action.ownerId)) e.checkerId = CHECK_NOT_OWNER;
+        else if (!ctx.ownerAllowed(action.areaKey, checker)) e.checkerId = CHECK_ALLOWED;
+      }
+      if (!['title', 'description', 'priority', 'requiresCloseOut', 'checkerId'].some(function (k) { return k in v; })) e.action = 'Nothing has changed.';
       return e;
     }
 
@@ -281,7 +309,11 @@ window.MockRules = (function () {
     function roles(action, personId, access) {
       var k = action.areaKey;
       var owner = Number(action.ownerId) === Number(personId);
+      var coOwner = (action.coOwnerIds || []).indexOf(Number(personId)) >= 0;
       var raiser = Number(action.raisedById) === Number(personId);
+      // a close-out check waiting for a named person: they, or a Team Leader or the Group Head, confirm it (1.9.0.0)
+      var named = action.status === 'Completed' && !!action.checkerId;
+      var checker = named && Number(action.checkerId) === Number(personId);
       var lead = access.isManagement ? access.canWrite(k) : access.isEngineerIn(k);
       var chair = access.chairs(k);
       var open = isOpen(action.status);
@@ -289,13 +321,15 @@ window.MockRules = (function () {
       var edits = lead || chair || raiser;
       return {
         owner: owner,
+        coOwner: coOwner,
+        checker: checker,
         manager: edits,
-        canUpdate: access.canWrite(k) || owner,
+        canUpdate: access.canWrite(k) || owner || coOwner,
         canExtend: open && (owner || edits),
         canComplete: open && (owner || edits),
         canStatus: open && (owner || edits),
         canReassign: open && (lead || chair || (raiser && !(access.isTechnician && !chair))),
-        canClose: (open || action.status === 'Completed') && edits,
+        canClose: named ? (checker || access.isManagement) : (open || action.status === 'Completed') && edits,
         canReopen: finished && (lead || raiser),
         canEdit: open && edits
       };
@@ -462,7 +496,7 @@ window.MockRules = (function () {
       validateEntry: validateEntry, validateEntryUpdate: validateEntryUpdate, managesEntry: managesEntry, noticeRoles: noticeRoles,
       validateNoticeEdit: validateNoticeEdit, validateComment: validateComment, ENTRY_TYPES: ENTRY_TYPES, IMPACTS: IMPACTS, ENTRY_STATUSES: ENTRY_STATUSES,
       NOTICE_CATEGORIES: NOTICE_CATEGORIES, validateMeeting: validateMeeting, validateCancelMeeting: validateCancelMeeting, nextMonths: nextMonths, MINUTE_OUTCOMES: MINUTE_OUTCOMES,
-      DISCUSSION_SECTIONS: DISCUSSION_SECTIONS, missingOutcomes: missingOutcomes, validateAmend: validateAmend, SELF_ONLY: SELF_ONLY, PRIORITIES: PRIORITIES, OPEN_STATUSES: OPEN_STATUSES, OUTCOMES: OUTCOMES
+      DISCUSSION_SECTIONS: DISCUSSION_SECTIONS, missingOutcomes: missingOutcomes, validateAmend: validateAmend, SELF_ONLY: SELF_ONLY, CO_OWNERS: CO_OWNERS, PRIORITIES: PRIORITIES, OPEN_STATUSES: OPEN_STATUSES, OUTCOMES: OUTCOMES
     };
   })();
 

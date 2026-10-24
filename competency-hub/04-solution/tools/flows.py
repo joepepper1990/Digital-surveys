@@ -41,7 +41,8 @@ STALE = 'This action was updated by someone else. Review the latest details and 
 SELF_ONLY = 'As a technician you can raise actions for yourself in this area. Ask an engineer, or someone who runs meetings in this area, to raise it for someone else.'
 # the action values a queued change may write, kept in its plan so that an administrator can write them back
 REVERTABLE = ['Status', 'IsOpen', 'Blocker', 'AssignedToId', 'DueDay', 'CurrentDueDate', 'ExtensionCount', 'LastExtendedOn', 'DateCompleted',
-              'DateClosed', 'ClosedById', 'CloseOutcome', 'ClosureNote', 'Title', 'Description', 'Priority', 'RequiresCloseOut', 'Revision']
+              'DateClosed', 'ClosedById', 'CloseOutcome', 'ClosureNote', 'Title', 'Description', 'Priority', 'RequiresCloseOut', 'Revision',
+              'CoOwnerIds', 'CloseOutById']
 DAY_TICKS = 864000000000
 
 
@@ -234,14 +235,15 @@ def days_until(iso_expr):
             "ticks(concat(outputs('Today'), 'T00:00:00Z'))), " + str(DAY_TICKS) + ")")
 
 
-def notice(send, ntype, key, person, actor_name, action_id, title, area, due_iso, original_iso=None, previous_iso="''", ext_count='0', note="''"):
+def notice(send, ntype, key, person, actor_name, action_id, title, area, due_iso, original_iso=None, previous_iso="''", ext_count='0', note="''",
+           co_owner=False):
     """One email to queue, as plain values; `person` is a People row read with Person/Name and Person/EMail."""
     return {'send': '@and(' + send + ", equals(string(" + person + "?['Status']), 'Active'))", 'type': ntype, 'key': '@{' + key + '}',
             'recipientId': '@{' + idstr(person + "?['SiteUserId']") + '}', 'login': '@{' + person + "?['Person']?['Name']}",
             'email': "@{coalesce(" + person + "?['Person']?['EMail'], " + person + "?['Email'])}",
             'actor': '@{' + actor_name + '}', 'actionId': '@{' + action_id + '}', 'title': '@{' + title + '}', 'area': '@{' + area + '}',
             'dueIso': '@{' + due_iso + '}', 'originalIso': '@{' + (original_iso or due_iso) + '}', 'previousIso': '@{' + previous_iso + '}',
-            'extCount': '@int(' + ext_count + ')', 'note': '@{' + note + '}'}
+            'extCount': '@int(' + ext_count + ')', 'note': '@{' + note + '}', 'coOwner': co_owner}
 
 
 def reminder_words(type_expr, title_expr, due_expr):
@@ -272,7 +274,8 @@ def outbox_create(sfx, items_expr):
     late = "sub(0, " + days + ")"
     plural = lambda n, one, many: "if(equals(" + n + ", 1), " + q(one) + ", " + q(many) + ")"
     ref = "concat('ACT-', substring(concat('0000', " + T('actionId') + "), sub(length(concat('0000', " + T('actionId') + ")), 5), 5))"
-    subject = ("@if(" + is_('ASG') + ", concat('Action assigned to you: ', " + T('title') + "), "
+    co = "equals(" + T('coOwner') + ", true)"
+    subject = ("@if(" + is_('ASG') + ", concat(if(" + co + ", 'Action shared with you: ', 'Action assigned to you: '), " + T('title') + "), "
                "if(" + is_('EXT') + ", concat('Deadline moved: ', " + T('title') + "), "
                "if(" + is_('RDY') + ", concat('Ready for your close-out check: ', " + T('title') + "), "
                "if(" + is_('CLS') + ", concat('Action closed: ', " + T('title') + "), "
@@ -282,7 +285,8 @@ def outbox_create(sfx, items_expr):
                "if(" + is_('ALR') + ", concat('Competency Hub needs attention: ', " + T('title') + "), "
                "concat(" + T('title') + ", ' is ', string(" + late + "), " + plural(late, ' day late', ' days late') + ")))))))))")
     actor = html_text(T('actor'))
-    intro = ("if(" + is_('ASG') + ", concat(" + actor + ", ' has given you an action in the ESG Competency Hub.'), "
+    intro = ("if(" + is_('ASG') + ", concat(" + actor + ", if(" + co + ", ' has made you a co-owner of an action in the ESG Competency Hub.', "
+             "' has given you an action in the ESG Competency Hub.')), "
              "if(" + is_('EXT') + ", concat(" + actor + ", ' has moved the deadline of your action.'), "
              "if(" + is_('RDY') + ", concat(" + actor + ", ' has marked this action as done. It is waiting for your close-out check.'), "
              "if(" + is_('CLS') + ", concat(" + actor + ", ' has closed this action.'), "
@@ -318,7 +322,7 @@ def outbox_create(sfx, items_expr):
     mail = {'to': '@{' + T('email') + '}', 'subject': "@{outputs('Subject" + sfx + "')}", 'html': "@{outputs('Html" + sfx + "')}",
             'type': '@{' + T('type') + '}', 'dueIso': '@{' + T('dueIso') + '}', 'actionId': '@{' + T('actionId') + '}',
             'recipientId': '@{' + T('recipientId') + '}', 'login': '@{' + T('login') + '}', 'attempts': '1',
-            'title': '@{' + T('title') + '}', 'phrase': '@{' + intro + '}'}
+            'title': '@{' + T('title') + '}', 'phrase': '@{' + intro + '}', 'coOwner': "@equals(" + T('coOwner') + ", true)"}
     values, call = create_in_folder('notif', "@{outputs('Ids')?['notifRoot']}", 'Notice_values' + sfx, 'Notice_body' + sfx)
     find = L('notif', "/items?$select=Id&$filter=NotificationKey eq '@{" + esc(T('key')) + "}'")
     created = "and(equals(actions('Create_notice" + sfx + "')?['status'], 'Succeeded'), empty(body('Notice_refused" + sfx + "')))"
@@ -386,8 +390,9 @@ def send_outbox(sfx):
         ('Mail_sent' + sfx, after(cond("@equals(actions('Send_mail" + sfx + "')?['status'], 'Succeeded')", seq(
             ('Sent_body' + sfx, compose({'State': 'Sent', 'SentAt': '@{utcNow()}', 'LastError': ''})),
             ('Mark_sent' + sfx, merge(item, 'Sent_body' + sfx)),
-            # an assignment or new deadline 0-7 days away has told the owner already: that reminder is not needed
-            ('Covers' + sfx, cond("@and(contains(createArray('ASG', 'EXT'), " + T('type') + "), greaterOrEquals(" + days + ", 0), lessOrEquals(" + days + ", outputs('Cover_days" + sfx + "')))", seq(
+            # an assignment or new deadline 0-7 days away has told the owner already: that reminder is not needed (a
+            # co-owner gets no reminders, so there is nothing to cover)
+            ('Covers' + sfx, cond("@and(contains(createArray('ASG', 'EXT'), " + T('type') + "), not(equals(" + T('coOwner') + ", true)), greaterOrEquals(" + days + ", 0), lessOrEquals(" + days + ", outputs('Cover_days" + sfx + "')))", seq(
                 ('Cover_values' + sfx, form({'Title': 'Covered by an earlier email', 'NotificationKey': '@{' + cover_key + '}',
                                              'NotificationType': "@{if(equals(" + days + ", 0), 'DUE', 'R7')}",
                                              'Recipient': "@{concat('[{\"Key\":\"', " + T('login') + ", '\"}]')}", 'RecipientEmail': '@{' + T('to') + '}',
@@ -485,7 +490,7 @@ def retry_emails():
     retry_mail = {'id': "@" + RI + "?['Id']", 'to': "@{" + RD + "?['to']}", 'subject': "@{if(" + REWORD + ", " + new_subject + ", string(" + RD + "?['subject']))}",
                   'html': "@{if(contains(createArray('Unknown', 'Sending'), string(" + RI + "?['State'])), concat(" + q(again) + ", " + html_now + "), " + html_now + ")}",
                   'type': "@{" + RD + "?['type']}", 'dueIso': "@{" + RD + "?['dueIso']}", 'actionId': "@{" + RD + "?['actionId']}",
-                  'recipientId': "@{" + RD + "?['recipientId']}", 'login': "@{" + RD + "?['login']}",
+                  'recipientId': "@{" + RD + "?['recipientId']}", 'login': "@{" + RD + "?['login']}", 'coOwner': "@equals(" + RD + "?['coOwner'], true)",
                   'attempts': "@{add(int(" + idq(RI + "?['Attempts']") + "), 1)}"}
     row_item = L('notif', "/items(@{" + RI + "?['Id']})")
     states = lambda st: ('Get_' + st.lower(), http('GET', L('notif', "/items?$select=Id,NotificationKey,NotificationType,State,Attempts,DueDay,NextAttemptAfter,"
@@ -973,6 +978,19 @@ def flow_request_queue(domain='actions'):
                  "if(less(" + day_num(DUE_SAFE) + ", " + day_num(TODAY) + "), 'The target date cannot be in the past.', "
                  "if(greater(" + day_num(DUE_SAFE) + ", " + day_num(MAX_DAY) + "), concat('Choose a date within ', string(outputs('Years_R')), if(equals(outputs('Years_R'), 1), ' year.', ' years.')), "
                  "if(not(contains(createArray('Low', 'Normal', 'High'), " + PRIO + ")), 'Choose a priority.', ''))))))))))))))")
+    # co-owners (up to 5) and the person who does the close-out check: each a member of the area or a Team Leader, and
+    # never the owner. A technician who may raise only for themselves adds no co-owners (spec §4.2).
+    CO_RAW = P + "?['coOwnerIds']"
+    CO_IDS_R = "body('Co_ids_R')"
+    ELIG_R = "body('Eligible_ids_R')"
+    CHECKER_R = "if(equals(" + idq(P + "?['checkerId']") + ", '0'), " + SENDER + ", " + idq(P + "?['checkerId']") + ")"
+    CLOSE_OUT_R = "equals(" + P + "?['requiresCloseOut'], true)"
+    TECH_SELF_R = ("and(equals(string(" + ME + "?['Role']), 'Technician'), not(equals(first(body('My_member_R'))?['CanManageMeetings'], true)))")
+    co_verdict_r = ("@if(greater(length(" + CO_IDS_R + "), 5), 'Choose up to 5 co-owners.', "
+                    "if(and(" + TECH_SELF_R + ", not(empty(" + CO_IDS_R + "))), " + q(SELF_ONLY) + ", "
+                    "if(not(empty(body('Co_bad_R'))), 'Choose co-owners from the members of this area, and the Team Leaders and Group Head, other than the owner.', "
+                    "if(and(" + CLOSE_OUT_R + ", equals(" + CHECKER_R + ", " + idstr(OWNER_R + "?['SiteUserId']") + ")), 'Choose someone other than the owner to do the close-out check.', "
+                    "if(and(" + CLOSE_OUT_R + ", not(contains(" + ELIG_R + ", " + CHECKER_R + "))), 'Choose a member of this area or a Team Leader to do the close-out check.', '')))))")
     action_path = "@{outputs('Ids')?['actRoot']}/@{" + AREA_R + "?['CompetencyKey']}"
     act_values, act_call = create_in_folder('act', action_path, 'Action_values_R', 'Action_body_R')
     claims = lambda person: "@{concat('[{\"Key\":\"', " + person + "?['Person']?['Name'], '\"}]')}"
@@ -1007,7 +1025,21 @@ def flow_request_queue(domain='actions'):
         ('Testing_R', query("@body('Get_settings_R')?['value']", "@and(equals(item()?['Title'], 'PreGoLiveTesting'), equals(item()?['Value'], 'Yes'))")),
         ('Max_due_R', after(compose("@formatDateTime(addToTime(concat(" + TODAY + ", 'T00:00:00Z'), mul(outputs('Years_R'), 12), 'Month'), 'yyyy-MM-dd')"),
                             {'Testing_R': OK})),
-        ('Verdict_R', compose(verdict_r)),
+        # who may share it: the area's members and the Team Leaders and Group Head (for co-owners and the close-out check)
+        ('Area_members_R', http('GET', L('members', "/items?$select=PersonId&$filter=CompetencyId eq @{" + idq(AREA_R + "?['Id']") + "} and Status eq 'Active'&$top=5000"))),
+        ('Active_people_R', http('GET', L('people', "/items?$select=Id,Title,KnownAs,SiteUserId,Role,Status,Email,Person/Name,Person/EMail&$expand=Person"
+                                                    "&$filter=Status eq 'Active'&$top=5000"))),
+        ('Member_ids_R', {'type': 'Select', 'inputs': {'from': "@body('Area_members_R')?['value']", 'select': "@" + idstr("item()?['PersonId']")}}),
+        ('Eligible_R', query("@body('Active_people_R')?['value']", "@or(contains(" + MANAGEMENT + ", string(item()?['Role'])), contains(body('Member_ids_R'), "
+                                                                    + idstr("item()?['SiteUserId']") + "))")),
+        ('Eligible_ids_R', {'type': 'Select', 'inputs': {'from': "@body('Eligible_R')", 'select': "@" + idstr("item()?['SiteUserId']")}}),
+        ('Co_ids_R', {'type': 'Select', 'inputs': {'from': "@json(if(startsWith(string(coalesce(" + CO_RAW + ", '')), '['), string(" + CO_RAW + "), '[]'))",
+                                                   'select': "@" + idstr('item()')}}),
+        ('Co_bad_R', query("@" + CO_IDS_R, "@or(not(contains(" + ELIG_R + ", item())), equals(item(), " + idstr(OWNER_R + "?['SiteUserId']") + "))")),
+        ('Co_people_R', query("@body('Eligible_R')", "@contains(" + CO_IDS_R + ", " + idstr("item()?['SiteUserId']") + ")")),
+        ('Co_verdict_R', compose(co_verdict_r)),
+        ('Verdict_base_R', compose(verdict_r)),
+        ('Verdict_R', compose("@if(empty(outputs('Verdict_base_R')), outputs('Co_verdict_R'), outputs('Verdict_base_R'))")),
         ('Allowed_R', cond("@empty(outputs('Verdict_R'))", seq(
             ('Is_new_R', cond("@equals(variables('varExistingId'), 0)", seq(
                 ('Action_values_R', form({
@@ -1018,6 +1050,8 @@ def flow_request_queue(domain='actions'):
                     'OriginalDueDate': '@{' + uk_form_date(DUE) + '}', 'CurrentDueDate': '@{' + uk_form_date(DUE) + '}',
                     'DueDay': '@{' + day_num(DUE) + '}', 'Status': 'Open', 'IsOpen': '1', 'Priority': '@{' + PRIO + '}',
                     'RequiresCloseOut': "@{if(equals(" + P + "?['requiresCloseOut'], true), '1', '0')}", 'ExtensionCount': '0', 'Revision': '1',
+                    'CoOwnerIds': "@{if(empty(" + CO_IDS_R + "), '', string(" + CO_IDS_R + "))}",
+                    'CloseOutById': "@{if(" + CLOSE_OUT_R + ", " + CHECKER_R + ", '')}",
                     'SourceType': "@{if(" + LINKED + ", 'Register', if(" + FROM_MTG + ", 'Meeting', 'None'))}", 'SourceId': "@{if(" + LINKED + ", " + ENTRY_ID + ", if(" + FROM_MTG + ", " + MTG_ID + ", ''))}", 'IsCrossCompetency': '0', 'PendingRequestKey': '@{' + KEY + '}', 'CreatedRequestKey': 'F|@{' + KEY + '}',
                     'IsTestRecord': "@{if(empty(body('Testing_R')), '0', '1')}"})),
                 ('Action_body_R', act_values),
@@ -1036,12 +1070,17 @@ def flow_request_queue(domain='actions'):
                 ('Set_existing_id_R', set_var('varActionId', "@variables('varExistingId')")),
             ))),
             *ensure_folder('_U_R', 'upd', 'updRoot', AREA_R + "?['CompetencyKey']", "concat('A', " + ACT_ID_R + ")"),
+            # the owner is told the action is theirs; each co-owner that they share it (never the person who raised it)
+            ('Owner_notice_R', compose([notice("not(equals(" + OWNER_ID_R + ", " + SENDER + "))", 'ASG', "concat('ASG|', " + KEY + ", '|', " + OWNER_ID_R + ")",
+                                               OWNER_R, ME_NAME, ACT_ID_R, TITLE, "string(" + AREA_R + "?['Title'])", DUE)])),
+            ('Co_notices_R', {'type': 'Select', 'inputs': {'from': "@body('Co_people_R')", 'select': notice(
+                "not(equals(" + idstr("item()?['SiteUserId']") + ", " + SENDER + "))", 'ASG', "concat('ASG|', " + KEY + ", '|', " + idstr("item()?['SiteUserId']") + ")",
+                'item()', ME_NAME, ACT_ID_R, TITLE, "string(" + AREA_R + "?['Title'])", DUE, co_owner=True)}}),
             *commit('_R', ACT_ID_R, AREA_R + "?['CompetencyKey']", idstr(AREA_R + "?['Id']"),
                     {'title': "concat('Action raised: ', " + TITLE + ")", 'type': 'Action Raised',
                      'json': {'NewDueDate': '@{' + uk_midnight(DUE) + '}', 'OwnerId': '@int(' + OWNER_ID_R + ')', 'DueDayAtEvent': '@' + day_num(DUE)}},
                     "concat('ACT-', substring(concat('0000', " + ACT_ID_R + "), sub(length(concat('0000', " + ACT_ID_R + ")), 5), 5), ' raised.')",
-                    notices=[notice("not(equals(" + OWNER_ID_R + ", " + SENDER + "))", 'ASG', "concat('ASG|', " + KEY + ", '|', " + OWNER_ID_R + ")",
-                                    OWNER_R, ME_NAME, ACT_ID_R, TITLE, "string(" + AREA_R + "?['Title'])", DUE)]),
+                    notices="union(outputs('Owner_notice_R'), body('Co_notices_R'))"),
         ), reject('_R', "outputs('Verdict_R')"))),
     )
 
@@ -1050,6 +1089,13 @@ def flow_request_queue(domain='actions'):
         """One kind of change to an existing action, as data: the shared steps are built once, in change_all()."""
         return {'code': sfx, 'verdict': verdict_tail, 'plan': plan_fields, 'values': values_fields, 'event': event_fields,
                 'result': result_expr, 'notices': notices, 'reads': reads}
+
+    def notices_steps(code, notices):
+        """A change's emails: a list, or {'list': [...], 'extra': expr} when some come from a Select made earlier."""
+        if isinstance(notices, dict):
+            return [('Notices_list' + code, compose(notices['list'])),
+                    ('Notices_set' + code, set_var('varNoticeList', "@union(outputs('Notices_list" + code + "'), " + notices['extra'] + ")"))]
+        return [('Notices_set' + code, set_var('varNoticeList', notices))]
 
     def change_all(specs):
         """Every change to an existing action (plan F.1.3): read it, check it (each kind its own rules), lock it and
@@ -1071,7 +1117,12 @@ def flow_request_queue(domain='actions'):
         CHAIR = "and(not(empty(" + MEMBER + ")), equals(" + MEMBER + "?['CanManageMeetings'], true))"
         TECH_ONLY = "and(equals(string(" + ME + "?['Role']), 'Technician'), not(" + CHAIR + "))"
         EDITS = "or(" + LEAD + ", " + CHAIR + ", " + RAISER + ")"
-        ctx = {'A': A, 'OWNER': OWNER, 'ALLOWED': "or(" + OWNER + ", " + EDITS + ")", 'EDIT': EDITS, 'CLOSE': EDITS,
+        # a completed action waiting for its close-out check is confirmed by the person named to check it, or by a Team
+        # Leader or the Group Head; one from before 1.9.0.0 (no one named) by the people who manage it, as before
+        CHECKER_ID = idstr(A + "?['CloseOutById']")
+        WAITING_CHECK = "and(equals(string(" + A + "?['Status']), 'Completed'), not(empty(" + CHECKER_ID + ")))"
+        CLOSE = "if(" + WAITING_CHECK + ", or(equals(" + CHECKER_ID + ", " + SENDER + "), " + IS_MGMT + "), " + EDITS + ")"
+        ctx = {'A': A, 'OWNER': OWNER, 'ALLOWED': "or(" + OWNER + ", " + EDITS + ")", 'EDIT': EDITS, 'CLOSE': CLOSE,
                'REASSIGN': "or(" + LEAD + ", " + CHAIR + ", and(" + RAISER + ", not(" + TECH_ONLY + ")))",
                'REOPEN': "or(" + LEAD + ", " + RAISER + ")",
                'OPEN': "contains(" + OPEN + ", string(" + A + "?['Status']))", 'DUE': due_iso(A + "?['DueDay']"),
@@ -1079,12 +1130,15 @@ def flow_request_queue(domain='actions'):
                'OWNER_P': "first(body('Owner_p" + sfx + "'))", 'RAISER_P': "first(body('Raiser_p" + sfx + "'))",
                'NEW_P': "first(body('New_p" + sfx + "'))", 'PREV_P': "first(body('Prev_p" + sfx + "'))",
                'OWNER_ID': idstr(A + "?['AssignedToId']"), 'RAISER_ID': idstr(A + "?['RaisedById']"),
+               'CHECKER_ID': "if(empty(" + CHECKER_ID + "), " + idstr(A + "?['RaisedById']") + ", " + CHECKER_ID + ")",
+               'CHECKER_P': "first(body('Checker_p" + sfx + "'))",
+               'CO_NOW': "json(if(startsWith(string(coalesce(" + A + "?['CoOwnerIds'], '')), '['), string(" + A + "?['CoOwnerIds']), '[]'))",
                'AREA_NAME': "string(" + A + "?['Competency']?['Title'])", 'ACT_ID': idstr(A + "?['Id']"),
                'ORIGINAL': "if(empty(string(coalesce(" + A + "?['OriginalDueDate'], ''))), '', convertFromUtc(string(coalesce(" + A + "?['OriginalDueDate'], '2000-01-01T00:00:00Z')), 'GMT Standard Time', 'yyyy-MM-dd'))"}
         action_item = L('act', "/items(@{" + idstr(TX + "?['RecordId']") + "})")
         sel = ('?$select=Id,Title,CompetencyId,AssignedToId,RaisedById,Status,IsOpen,DueDay,CurrentDueDate,OriginalDueDate,ExtensionCount,'
                'LastExtendedOn,RequiresCloseOut,Revision,PendingRequestKey,LastRequestKey,CreatedRequestKey,Description,Priority,Blocker,'
-               'DateCompleted,DateClosed,ClosedById,CloseOutcome,ClosureNote,Competency/CompetencyKey,Competency/Title&$expand=Competency')
+               'DateCompleted,DateClosed,ClosedById,CloseOutcome,ClosureNote,CoOwnerIds,CloseOutById,Competency/CompetencyKey,Competency/Title&$expand=Competency')
         # every value a change can write, as it was before: an administrator's Revert writes these back (spec REL-3)
         PREV = {f: '@' + A + "?['" + f + "']" for f in REVERTABLE}
         # what every History event records for later statistics (spec H-1); a kind of change may say more
@@ -1131,7 +1185,7 @@ def flow_request_queue(domain='actions'):
                 # who may be emailed: the owner, the raiser, and for a reassignment the new and the previous owner
                 ('Get_people' + sfx, http('GET', L('people', "/items?$select=Id,Title,SiteUserId,Role,Status,Email,Person/Name,Person/EMail&$expand=Person&$top=5000"))),
                 person('Owner_p', ctx['OWNER_ID']), person('Raiser_p', ctx['RAISER_ID']), person('New_p', idq(P + "?['ownerId']")),
-                person('Prev_p', "string(" + ctx['PLAN'] + "?['owner'])"),
+                person('Prev_p', "string(" + ctx['PLAN'] + "?['owner'])"), person('Checker_p', ctx['CHECKER_ID']),
                 # a resumed run already has the stored plan from the transaction row (Set_tx_plan)
                 by_type('Record', lambda code, sp: [
                     ('Event_title' + code, set_var('varEventTitle', "@{take(" + sp['event'](ctx)['title'] + ", 255)}")),
@@ -1139,7 +1193,7 @@ def flow_request_queue(domain='actions'):
                     ('Event_form' + code, set_var('varEventForm', [{'FieldName': k, 'FieldValue': v} for k, v in sp['event'](ctx).get('form', {}).items()])),
                     ('Event_json' + code, set_var('varEventJson', dict(EVENT_DEFAULTS, **sp['event'](ctx).get('json', {})))),
                     ('Result' + code, set_var('varResult', "@{" + sp['result'](ctx) + "}")),
-                    ('Notices_set' + code, set_var('varNoticeList', sp['notices'](ctx)))]),
+                    *notices_steps(code, sp['notices'](ctx))]),
                 *commit(sfx, idstr(A + "?['Id']"), AREA_KEY, idstr(A + "?['CompetencyId']"),
                         {'title': "variables('varEventTitle')", 'type': "@{variables('varEventType')}", 'dynamic': True},
                         "variables('varResult')", ensure_hist=False, notices="variables('varNoticeList')"),
@@ -1209,9 +1263,10 @@ def flow_request_queue(domain='actions'):
         lambda c: {'title': "if(" + CLOSES + ", 'Action closed', 'Action marked as done')", 'type': '@{if(' + CLOSES + ", 'Closed', 'Completed')}",
                    'form': {'Note': '@{' + NOTE + '}'}, 'json': {'CompletionKind': 'MarkedDone'}},
         lambda c: "if(" + CLOSES + ", 'Action closed.', 'Marked as done; waiting for a close-out check.')",
-        # the raiser is asked for the close-out check; a closed action is reported to its owner only
-        lambda c: [notice("and(not(" + CLOSES + "), not(equals(" + c['RAISER_ID'] + ", " + SENDER + ")))", 'RDY',
-                          "concat('RDY|', " + KEY + ", '|', " + c['RAISER_ID'] + ")", c['RAISER_P'], *complete_common(c), note=NOTE),
+        # the person named to check it (the raiser, for an action from before 1.9.0.0) is asked for the close-out check;
+        # a closed action is reported to its owner only
+        lambda c: [notice("and(not(" + CLOSES + "), not(equals(" + c['CHECKER_ID'] + ", " + SENDER + ")))", 'RDY',
+                          "concat('RDY|', " + KEY + ", '|', " + c['CHECKER_ID'] + ")", c['CHECKER_P'], *complete_common(c), note=NOTE),
                    notice("and(" + CLOSES + ", not(equals(" + c['OWNER_ID'] + ", " + SENDER + ")))", 'CLS',
                           "concat('CLS|', " + KEY + ", '|', " + c['OWNER_ID'] + ")", c['OWNER_P'], *complete_common(c), note=NOTE)])
 
@@ -1255,6 +1310,17 @@ def flow_request_queue(domain='actions'):
         lambda c: "concat('Status changed to ', toLower(" + LABEL(STATUS_NEW) + "), '.')",
         lambda c: [])
 
+    def eligible_reads(code, area_id_expr):
+        """The area's members and the Team Leaders and Group Head, as whole-number text (body('Eligible_ids' + code))."""
+        return [('Area_members' + code, http('GET', L('members', "/items?$select=PersonId&$filter=CompetencyId eq @{" + idq(area_id_expr) + "} and Status eq 'Active'&$top=5000"))),
+                ('Active_people' + code, http('GET', L('people', "/items?$select=Id,Title,KnownAs,SiteUserId,Role,Status,Email,Person/Name,Person/EMail&$expand=Person"
+                                                               "&$filter=Status eq 'Active'&$top=5000"))),
+                ('Member_ids' + code, {'type': 'Select', 'inputs': {'from': "@body('Area_members" + code + "')?['value']", 'select': "@" + idstr("item()?['PersonId']")}}),
+                ('Eligible' + code, query("@body('Active_people" + code + "')?['value']", "@or(contains(" + MANAGEMENT + ", string(item()?['Role'])), contains(body('Member_ids"
+                                          + code + "'), " + idstr("item()?['SiteUserId']") + "))")),
+                ('Eligible_ids' + code, {'type': 'Select', 'inputs': {'from': "@body('Eligible" + code + "')", 'select': "@" + idstr("item()?['SiteUserId']")}})]
+
+    HAS_A = lambda f: "contains(" + P + ", '" + f + "')"
     NEW_OWNER = "first(body('Get_new_owner_A')?['value'])"
     NEW_OWNER_ID = idq(P + "?['ownerId']")
     owner_ok = ("and(not(empty(" + NEW_OWNER + ")), equals(string(" + NEW_OWNER + "?['Status']), 'Active'), "
@@ -1267,33 +1333,49 @@ def flow_request_queue(domain='actions'):
                         ("equals(" + NEW_OWNER_ID + ", '0')", 'Choose who will do it.'),
                         ("equals(" + NEW_OWNER_ID + ", " + c['OWNER_ID'] + ")", 'Choose someone other than the current owner.'),
                         ("not(" + owner_ok + ")", 'Choose a member of this area or a Team Leader.'),
+                        ("greater(length(body('Co_final_A')), 5)", 'Choose up to 5 co-owners.'),
+                        ("not(empty(body('Co_bad_A')))", 'Choose co-owners from the members of this area, and the Team Leaders and Group Head, other than the owner.'),
                         *REASON_RULES),
         lambda c: {'owner': '@{' + c['OWNER_ID'] + '}', 'ownerName': "@{first(body('Get_owner_now_A')?['value'])?['Title']}"},
-        lambda c: {'AssignedToId': '@int(' + NEW_OWNER_ID + ')'},
+        lambda c: {'AssignedToId': '@int(' + NEW_OWNER_ID + ')', 'CoOwnerIds': "@{if(empty(body('Co_final_A')), '', string(body('Co_final_A')))}"},
         lambda c: {'title': "concat('Reassigned to ', string(" + NEW_OWNER + "?['Title']))", 'type': 'Reassigned',
                    'form': {'Note': '@{' + REASON + '}', 'PreviousValue': "@{" + c['PLAN'] + "?['ownerName']}", 'NewValue': "@{" + NEW_OWNER + "?['Title']}"},
                    'json': {'OwnerId': '@int(' + NEW_OWNER_ID + ')', 'PreviousOwnerId': '@int(' + PREV_OWNER_ID + ')'}},
         lambda c: "concat('Reassigned to ', string(" + NEW_OWNER + "?['Title']), '.')",
-        # the new owner is told it is theirs, the previous owner that it no longer is
-        lambda c: [notice("not(equals(" + NEW_OWNER_ID + ", " + SENDER + "))", 'ASG', "concat('ASG|', " + KEY + ", '|', " + NEW_OWNER_ID + ")",
-                          c['NEW_P'], ME_NAME, c['ACT_ID'], "string(" + c['A'] + "?['Title'])", c['AREA_NAME'],
-                          c['DUE'], note=REASON),
-                   notice("not(equals(" + PREV_OWNER_ID + ", " + SENDER + "))", 'RAW', "concat('RAW|', " + KEY + ", '|', " + PREV_OWNER_ID + ")",
-                          c['PREV_P'], ME_NAME, c['ACT_ID'], "string(" + c['A'] + "?['Title'])", c['AREA_NAME'],
-                          c['DUE'], note=REASON)],
+        # the new owner is told it is theirs, the previous owner that it no longer is, and anyone newly sharing it that they do
+        lambda c: {'list': [notice("not(equals(" + NEW_OWNER_ID + ", " + SENDER + "))", 'ASG', "concat('ASG|', " + KEY + ", '|', " + NEW_OWNER_ID + ")",
+                                   c['NEW_P'], ME_NAME, c['ACT_ID'], "string(" + c['A'] + "?['Title'])", c['AREA_NAME'], c['DUE'], note=REASON),
+                            notice("not(equals(" + PREV_OWNER_ID + ", " + SENDER + "))", 'RAW', "concat('RAW|', " + KEY + ", '|', " + PREV_OWNER_ID + ")",
+                                   c['PREV_P'], ME_NAME, c['ACT_ID'], "string(" + c['A'] + "?['Title'])", c['AREA_NAME'], c['DUE'], note=REASON)],
+                   'extra': "body('Co_notices_A')"},
         reads=lambda c: [
             # the current and the new owner, for the checks and the record (the plan keeps the current one)
             ('Get_owner_now_A', http('GET', L('people', "/items?$select=Id,Title,SiteUserId&$filter=SiteUserId eq @{" + idq(c['A'] + "?['AssignedToId']") + "}"))),
             ('Get_new_owner_A', http('GET', L('people', "/items?$select=Id,Title,SiteUserId,Role,Status&$filter=SiteUserId eq @{" + NEW_OWNER_ID + "}"))),
             ('New_owner_member_A', http('GET', L('members', "/items?$select=Id&$filter=PersonId eq @{" + NEW_OWNER_ID + "} and CompetencyId eq @{"
-                                                             + idq(c['A'] + "?['CompetencyId']") + "} and Status eq 'Active'")))])
+                                                             + idq(c['A'] + "?['CompetencyId']") + "} and Status eq 'Active'"))),
+            # co-owners: the ones given, or the current ones when none are given; never the new owner
+            *eligible_reads('_A', c['A'] + "?['CompetencyId']"),
+            ('Co_given_A', {'type': 'Select', 'inputs': {
+                'from': "@if(" + HAS_A('coOwnerIds') + ", json(if(startsWith(string(coalesce(" + P + "?['coOwnerIds'], '')), '['), string(" + P + "?['coOwnerIds']), '[]')), " + c['CO_NOW'] + ")",
+                'select': "@" + idstr('item()')}}),
+            ('Co_final_A', query("@body('Co_given_A')", "@not(equals(item(), " + NEW_OWNER_ID + "))")),
+            ('Co_bad_A', query("@body('Co_final_A')", "@not(contains(body('Eligible_ids_A'), item()))")),
+            ('Co_before_A', {'type': 'Select', 'inputs': {'from': "@json(if(startsWith(string(coalesce(if(empty(string(coalesce(variables('varTxPlan'), ''))), "
+                                                                   + c['A'] + "?['CoOwnerIds'], " + c['PLAN'] + "?['prev']?['CoOwnerIds']), '')), '['), string(if(empty(string(coalesce(variables('varTxPlan'), ''))), "
+                                                                   + c['A'] + "?['CoOwnerIds'], " + c['PLAN'] + "?['prev']?['CoOwnerIds'])), '[]'))", 'select': "@" + idstr('item()')}}),
+            ('Co_added_A', query("@body('Eligible_A')", "@and(contains(body('Co_final_A'), " + idstr("item()?['SiteUserId']") + "), not(contains(body('Co_before_A'), "
+                                 + idstr("item()?['SiteUserId']") + ")))")),
+            ('Co_notices_A', {'type': 'Select', 'inputs': {'from': "@body('Co_added_A')", 'select': notice(
+                "not(equals(" + idstr("item()?['SiteUserId']") + ", " + SENDER + "))", 'ASG', "concat('ASG|', " + KEY + ", '|', " + idstr("item()?['SiteUserId']") + ")",
+                'item()', ME_NAME, c['ACT_ID'], "string(" + c['A'] + "?['Title'])", c['AREA_NAME'], c['DUE'], co_owner=True)}})])
 
     OUTCOME = "string(coalesce(" + P + "?['outcome'], ''))"
     NOTE_LEN = text_len('note')
     close_case = change_case(
         '_L',
         lambda c: chain(*guard(c, "or(" + c['OPEN'] + ", equals(string(" + c['A'] + "?['Status']), 'Completed'))", 'This action is already closed.',
-                               c['CLOSE'], 'Only the people who manage this action can close it.'),
+                               c['CLOSE'], "@if(equals(string(" + c['A'] + "?['Status']), 'Completed'), 'Only the person named to check it, or a Team Leader or the Group Head, can confirm the close-out.', 'Only the people who manage this action can close it.')"),
                         ("not(contains(createArray('Completed', 'No longer required', 'Superseded', 'Other'), " + OUTCOME + "))", 'Choose an outcome.'),
                         ("and(not(equals(" + OUTCOME + ", 'Completed')), less(" + NOTE_LEN + ", 10))", 'Explain the outcome in at least 10 characters.'),
                         ("greater(" + NOTE_LEN + ", 1000)", 'Keep the note to 1,000 characters or fewer.')),
@@ -1324,12 +1406,18 @@ def flow_request_queue(domain='actions'):
 
     HAS = lambda f: "contains(" + P + ", '" + f + "')"
     EDIT = {'title': 'Title', 'description': 'Description', 'priority': 'Priority'}
+    # the close-out check after the edit: on or off, and who does it (the one given, else the one named, else the raiser)
+    CO_ON_E = lambda c: "if(" + HAS('requiresCloseOut') + ", equals(" + P + "?['requiresCloseOut'], true), equals(" + c['A'] + "?['RequiresCloseOut'], true))"
+    CHECKER_E = lambda c: ("if(" + HAS('checkerId') + ", " + idq(P + "?['checkerId']") + ", if(empty(" + idstr(c['A'] + "?['CloseOutById']") + "), "
+                           + idstr(c['A'] + "?['RaisedById']") + ", " + idstr(c['A'] + "?['CloseOutById']") + "))")
     edit_case = change_case(
         '_E',
         lambda c: chain(*guard(c, c['OPEN'], 'This action is no longer open.', c['EDIT'], 'Only the people who manage this action can change its details.'),
                         # the owner changes only by Reassign, which has its own rule (spec §4.2)
                         ("or(" + HAS('ownerId') + ", " + HAS('AssignedTo') + ", " + HAS('AssignedToId') + ")", 'The owner is changed with Reassign.'),
-                        ("not(or(" + ", ".join(HAS(f) for f in ('title', 'description', 'priority', 'requiresCloseOut')) + "))", 'Nothing has changed.'),
+                        ("not(or(" + ", ".join(HAS(f) for f in ('title', 'description', 'priority', 'requiresCloseOut', 'checkerId')) + "))", 'Nothing has changed.'),
+                        ("and(" + CO_ON_E(c) + ", equals(" + CHECKER_E(c) + ", " + c['OWNER_ID'] + "))", 'Choose someone other than the owner to do the close-out check.'),
+                        ("and(" + CO_ON_E(c) + ", not(contains(body('Eligible_ids_E'), " + CHECKER_E(c) + ")))", 'Choose a member of this area or a Team Leader to do the close-out check.'),
                         ("and(" + HAS('title') + ", equals(" + text_len('title') + ", 0))", 'Enter what needs doing.'),
                         ("and(" + HAS('title') + ", greater(" + text_len('title') + ", 255))", 'Keep the title to 255 characters or fewer.'),
                         ("and(" + HAS('description') + ", equals(" + text_len('description') + ", 0))", 'Add a short description.'),
@@ -1337,14 +1425,17 @@ def flow_request_queue(domain='actions'):
                         ("and(" + HAS('priority') + ", not(contains(createArray('Low', 'Normal', 'High'), string(coalesce(" + P + "?['priority'], '')))))",
                          'Choose a priority.')),
         lambda c: {'title': "@{" + c['A'] + "?['Title']}", 'description': "@{" + c['A'] + "?['Description']}",
-                   'priority': "@{" + c['A'] + "?['Priority']}", 'closeOut': "@equals(" + c['A'] + "?['RequiresCloseOut'], true)"},
+                   'priority': "@{" + c['A'] + "?['Priority']}", 'closeOut': "@equals(" + c['A'] + "?['RequiresCloseOut'], true)",
+                   'checker': "@{" + c['A'] + "?['CloseOutById']}"},
         # a field not given keeps its value (it is written back unchanged)
         lambda c: dict({col: "@{if(" + HAS(f) + ", " + TEXT(f) + ", string(coalesce(" + c['A'] + "?['" + col + "'], '')))}" for f, col in EDIT.items()},
-                       RequiresCloseOut="@if(" + HAS('requiresCloseOut') + ", equals(" + P + "?['requiresCloseOut'], true), equals(" + c['A'] + "?['RequiresCloseOut'], true))"),
+                       RequiresCloseOut="@if(" + HAS('requiresCloseOut') + ", equals(" + P + "?['requiresCloseOut'], true), equals(" + c['A'] + "?['RequiresCloseOut'], true))",
+                       CloseOutById="@if(" + CO_ON_E(c) + ", int(" + CHECKER_E(c) + "), null)"),
         lambda c: {'title': "'Details edited'", 'type': 'Details Edited',
                    'form': {'PreviousValue': "@{string(" + c['PLAN'] + ")}", 'NewValue': "@{string(" + P + ")}"}},
         lambda c: "'Details saved.'",
-        lambda c: [])
+        lambda c: [],
+        reads=lambda c: eligible_reads('_E', c['A'] + "?['CompetencyId']"))
 
     # ---------------------------------------------------------------- administrators: Retry, Cancel, Revert (spec REL-3)
     def known_as_switch():
