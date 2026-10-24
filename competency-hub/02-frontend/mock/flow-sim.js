@@ -87,12 +87,12 @@ window.MockFlow = (function () {
         var nr = R.noticeRoles(nshape, me, access);
         if (rec.Status !== 'Active') return finish(req, 'Rejected', 'This notice has been archived.');
         if (req.RequestType === 'PinNotice') {
-          if (!nr.canPin) return finish(req, 'Rejected', 'Only the engineers of the area and management can pin notices.');
+          if (!nr.canPin) return finish(req, 'Rejected', 'Only the engineers of the area, and the Team Leaders and Group Head can pin notices.');
           rec.IsImportant = !!payload.pinned; rec.ImportantUntil = null; bump();
           recordEvent(req, key, 'Notice', rec.Id, payload.pinned ? 'Notice Pinned' : 'Notice Unpinned');
           return finish(req, 'Completed', payload.pinned ? 'Notice pinned.' : 'Notice unpinned.', rec.Id);
         }
-        if (!nr.canEdit) return finish(req, 'Rejected', 'Only the person who posted it, or the engineers of the area and management, can change this notice.');
+        if (!nr.canEdit) return finish(req, 'Rejected', 'Only the person who posted it, or the engineers of the area, and the Team Leaders and Group Head, can change this notice.');
         if (req.RequestType === 'ArchiveNotice') {
           rec.Status = 'Archived'; rec.IsImportant = false; bump();
           recordEvent(req, key, 'Notice', rec.Id, 'Notice Archived');
@@ -109,13 +109,13 @@ window.MockFlow = (function () {
       }
       if (req.RequestType === 'HideComment') {
         if (rec.EntryType !== 'Comment') return finish(req, 'Rejected', 'Only comments can be hidden.');
-        if (!access.canModerate(key)) return finish(req, 'Rejected', 'Only the engineers of the area and management can hide comments.');
+        if (!access.canModerate(key)) return finish(req, 'Rejected', 'Only the engineers of the area, and the Team Leaders and Group Head can hide comments.');
         rec.IsHidden = true;
         recordEvent(req, key, rec.ParentType === 'Register Entry' ? 'Register Entry' : 'Notice', rec.ParentId, 'Comment Hidden');
         return finish(req, 'Completed', 'Comment hidden.', rec.Id);
       }
       var eshape = { areaKey: key, raisedById: rec.RaisedById, responsibleId: rec.ResponsiblePersonId };
-      if (!R.managesEntry(eshape, me, access)) return finish(req, 'Rejected', 'Only the person who raised it, the person responsible, the engineers and meeting runners of the area, and management can change this entry.');
+      if (!R.managesEntry(eshape, me, access)) return finish(req, 'Rejected', 'Only the person who raised it, the person responsible, the engineers and meeting runners of the area, and the Team Leaders and Group Head can change this entry.');
       if (req.RequestType === 'UpdateRegisterEntry') {
         if ((err = firstError(R.validateEntryUpdate(eshape, payload, { ownerAllowed: ownerAllowed })))) return finish(req, 'Rejected', err);
         if ('title' in payload) rec.Title = payload.title;
@@ -177,7 +177,7 @@ window.MockFlow = (function () {
       var mt2 = data.Meetings.filter(function (x) { return x.Id === Number(req.TargetId); })[0];
       if (!mt2) return finish(req, 'Rejected', 'That meeting could not be found.');
       var key = areaKeyOf(mt2.CompetencyId);
-      if (!runs(key)) return finish(req, 'Rejected', 'Only the people who run meetings in this area, and management, can do this.');
+      if (!runs(key)) return finish(req, 'Rejected', 'Only the people who run meetings in this area, and the Team Leaders and Group Head, can do this.');
       if (Number(req.ExpectedRevision) > 0 && Number(req.ExpectedRevision) !== Number(mt2.Revision)) return finish(req, 'Rejected', 'This meeting was changed by someone else. Review the latest details and try again.');
       var bump = function () { mt2.Revision = (mt2.Revision || 1) + 1; mt2.LastRequestKey = req.RequestKey; };
       if (req.RequestType === 'UpdateMeeting') {

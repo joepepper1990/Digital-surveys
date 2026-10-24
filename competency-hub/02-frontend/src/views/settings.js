@@ -6,7 +6,7 @@ CH.views.settings = (function () {
   var ui = CH.ui;
   var D = CH.dates;
   var ITEMS = [
-    { name: 'ReminderDaysBefore', label: 'First reminder', unit: 'days before the deadline', min: 1, max: 30, fallback: '7',
+    { name: 'ReminderDaysBefore', label: 'First reminder', unit: 'days before an action\'s deadline', min: 1, max: 30, fallback: '7',
       hint: 'When the owner gets the first reminder email.' },
     { name: 'DueSoonDays', label: 'Due soon', unit: 'days', min: 1, max: 30, fallback: '7',
       hint: 'How far ahead an action counts as due soon on the screens.' },

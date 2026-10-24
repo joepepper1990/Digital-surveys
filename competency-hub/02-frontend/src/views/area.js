@@ -111,7 +111,7 @@ CH.views.area = (function () {
     var out = [];
 
     out.push(h('nav', { class: 'areastrip', 'aria-label': 'Areas' },
-      h('button', { type: 'button', class: 'back', onclick: app.goHome, text: '‹ Overview' }),
+      h('button', { type: 'button', class: 'back', onclick: app.goHome, text: '‹ My week' }),
       m.areas.filter(function (a) { return a.status === 'Active' || a.key === key; }).map(function (a) {
         var mine = acc.canWrite(a.key);
         return h('button', { type: 'button', class: mine ? '' : 'other', 'aria-current': a.key === key ? 'page' : null,

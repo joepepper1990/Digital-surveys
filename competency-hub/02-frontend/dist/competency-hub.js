@@ -29,6 +29,8 @@ window.ESGCompetencyHub = function (ctx) {
     dueSoonDays: 7,
     meetingOverdueDays: 35,
     noticeImportantMaxDays: 30,
+      // Shorter names for the compact strip of area tiles; the full name shows on hover and in the open panel.
+      shortNames: { RP: 'Rad Prot', ALS: 'Active Lab' },
     managementRoles: ['Team Leader', 'Group Head'],
     maxDeadlineYears: 2
   };
@@ -891,7 +893,7 @@ window.ESGCompetencyHub = function (ctx) {
     // ctx: { today, runsMeetings(areaKey), chairAllowed(areaKey, id), attendeeAllowed(areaKey, id) }
     function validateMeeting(v, ctx) {
       var e = {};
-      if (!v.areaKey || !ctx.runsMeetings(v.areaKey)) e.areaKey = 'Only the people who run meetings in this area, and management, can do this.';
+      if (!v.areaKey || !ctx.runsMeetings(v.areaKey)) e.areaKey = 'Only the people who run meetings in this area, and the Team Leaders and Group Head, can do this.';
       var hhmm = /^([01]\d|2[0-3]):[0-5]\d$/;
       if (!D.isIso(v.dateIso || '') || isNaN(Date.parse(v.dateIso + 'T00:00:00Z')) || D.addDays(v.dateIso, 0) !== v.dateIso) e.dateIso = 'Choose a date, and a start and end time.';
       else if (v.dateIso < ctx.today) e.dateIso = 'Choose a date from today onwards.';
@@ -904,7 +906,7 @@ window.ESGCompetencyHub = function (ctx) {
       if (!e.areaKey && !ctx.chairAllowed(v.areaKey, Number(v.chairId))) e.chairId = 'Choose a chair who runs meetings in this area, or a Team Leader.';
       var ids = (v.attendeeIds || []).map(Number);
       if (!e.areaKey && (!ids.length || ids.length > 60 || ids.some(function (id) { return !ctx.attendeeAllowed(v.areaKey, id); }))) {
-        e.attendeeIds = 'Choose the attendees from the members of the area and management (up to 60).';
+        e.attendeeIds = 'Choose the attendees from the members of the area, and the Team Leaders and Group Head (up to 60).';
       }
       return e;
     }
@@ -1868,7 +1870,7 @@ window.ESGCompetencyHub = function (ctx) {
       }
       var due = mine.filter(function (a) { return !a.waitingCloseOut && D.daysBetween(m.today, a.dueIso) < 7; }).length;
       var meets = keys.filter(function (k) { var n = m.stats[k].nextMeeting; return n && D.daysBetween(m.today, n) < 7; }).length;
-      return { el: h('div', { class: 'hm-week' }, days), summary: due + ' due · ' + meets + (meets === 1 ? ' meeting' : ' meetings') };
+      return { el: h('div', { class: 'hm-week' }, days), summary: due + (due === 1 ? ' to-do' : ' to-dos') + ' · ' + (meets ? meets + (meets === 1 ? ' meeting' : ' meetings') : 'no meetings') };
     }
 
     function tileFor(app, a) {
@@ -1879,9 +1881,10 @@ window.ESGCompetencyHub = function (ctx) {
       var open = app.state.homeArea === a.key;
       return h('button', { type: 'button', class: 'tile hm-tile' + (viewOnly ? ' view-only' : ''), 'data-area': a.key, 'aria-pressed': String(open),
         'aria-label': a.name + (viewOnly ? ', view only' : ''), onclick: function () { app.openAreaHere(open ? null : a.key); } },
-        h('b', null, a.name),
+        h('b', { title: a.name, text: app.state.homeArea ? CH.config.shortNames[a.key] || a.name : a.name }),
         h('span', { class: 'hm-tr' }, unavailable ? h('span', { class: 'when w-soon', text: 'Action figures unavailable' })
-          : h('span', { class: 'when w-' + (s.late ? 'late' : 'ok'), text: s.late ? s.late + ' late' : s.open + ' open' }),
+          : h('span', { class: 'when w-' + (s.late ? 'late' : 'ok'), title: s.late ? s.late + ' late' : s.open + ' open' },
+            h('span', { class: 'hm-n', text: String(s.late || s.open) }), h('span', { class: 'hm-w', text: s.late ? ' late' : ' open' })),
           viewOnly ? h('span', { class: 'vo', text: 'View only' }) : null),
         h('span', { class: 'hm-tm' + (s.meetingStale ? ' txt-soon' : ''), text: s.nextMeeting ? 'Meets ' + D.weekdayShort(s.nextMeeting)
           : s.meetingStale ? (s.lastMeeting ? 'No meeting since ' + D.short(s.lastMeeting) : 'No meeting booked') : 'No meeting booked' }));
@@ -2026,10 +2029,10 @@ window.ESGCompetencyHub = function (ctx) {
       var tiles = h('div', { class: 'hm-tiles' + (openKey ? ' compact' : '') }, active.map(function (a) { return tileFor(app, a); }));
 
       var stack = h('div', { class: 'hm-stack' + (openKey ? ' area-open' : '') + (actsClosed ? ' acts-closed' : '') },
-        ui.panel('week', 'This week', week.summary, week.el, { closed: weekClosed, onToggle: toggle('week') }),
-        ui.panel('actions', acc.isManagement ? 'Your work' : 'Your actions', actsSummary, actionsBody,
-          { closed: actsClosed, onToggle: toggle('actions'), link: ['All my actions', function () { app.showMine(0); }] }),
-        ui.panel('areas', 'Areas', active.length + ' areas' + (unavailable ? '' : ' · ' + lateAreas + ' with late actions') + (openKey ? '' : ' · choose one to open it'), tiles,
+        ui.panel('week', 'Coming up this week', week.summary, week.el, { closed: weekClosed, onToggle: toggle('week') }),
+        ui.panel('actions', 'Your to-dos', actsSummary, actionsBody,
+          { closed: actsClosed, onToggle: toggle('actions'), link: ['See all my to-dos', function () { app.showMine(0); }] }),
+        ui.panel('areas', 'Areas', (unavailable ? active.length + ' areas' : lateAreas ? lateAreas + (lateAreas === 1 ? ' area has' : ' areas have') + ' late to-dos' : 'all on track') + (openKey ? '' : ' · pick one to look inside'), tiles,
           { closed: areasClosed, onToggle: toggle('areas') }),
         openKey ? areaPanel(app, openKey) : null);
       out.push(stack);
@@ -2153,7 +2156,7 @@ window.ESGCompetencyHub = function (ctx) {
       var out = [];
 
       out.push(h('nav', { class: 'areastrip', 'aria-label': 'Areas' },
-        h('button', { type: 'button', class: 'back', onclick: app.goHome, text: '‹ Overview' }),
+        h('button', { type: 'button', class: 'back', onclick: app.goHome, text: '‹ My week' }),
         m.areas.filter(function (a) { return a.status === 'Active' || a.key === key; }).map(function (a) {
           var mine = acc.canWrite(a.key);
           return h('button', { type: 'button', class: mine ? '' : 'other', 'aria-current': a.key === key ? 'page' : null,
@@ -2393,7 +2396,7 @@ window.ESGCompetencyHub = function (ctx) {
 
       var panes = [
         [field('Title', title, 'A short summary, for example "Replace FH40 probe".'), field('Description', description, 'What needs doing and anything the owner should know.')],
-        [field('Area', area), field('Who will do it?', owner, 'Members of the area, and Team Leaders and the Group Head.'), selfNote],
+        [field('Area', area), field('Who will do it?', owner), selfNote],
         [field('Target date', due, 'From today up to ' + maxYears + (maxYears === 1 ? ' year' : ' years') + ' ahead.'),
           h('details', { class: 'more' }, h('summary', { text: 'More options' }),
             field('Priority', priority), h('label', { class: 'check' }, closeOut, ' Needs a close-out check before it is closed'))],
@@ -2574,7 +2577,7 @@ window.ESGCompetencyHub = function (ctx) {
           h('dl', { class: 'facts' },
             h('dt', { text: 'When' }), h('dd', null, ui.chip(a.waitingCloseOut ? 'later' : a.group, a.dueText), ' ', whenText(a)),
             a.blocker ? [h('dt', { text: 'Waiting on' }), h('dd', { class: 'notice-body', text: a.blocker })] : null,
-            h('dt', { text: 'Who' }), h('dd', { text: a.ownerName + ' is doing it. Raised by ' + a.raisedByName + (a.raisedIso ? ' on ' + D.long(a.raisedIso) : '') + '.' }),
+            h('dt', { text: 'Who' }), h('dd', { text: 'Owner: ' + a.ownerName + ' · Raised by: ' + a.raisedByName + (a.raisedIso ? ', ' + D.shortYear(a.raisedIso) : '') }),
             h('dt', { text: 'What' }), h('dd', { class: 'notice-body', text: a.description || 'No description.' })),
           extensions && extensions.length ? h('details', { class: 'ext-list' }, h('summary', { text: 'Show all deadline changes (' + extensions.length + ')' }),
             h('ul', { class: 'plain' }, extensions.map(function (x) {
@@ -2872,7 +2875,7 @@ window.ESGCompetencyHub = function (ctx) {
       var tab = Math.min(st.tab || 0, tabs.length - 1);
       var areaKey = st.areaFilter || '';
       var list = app.model.actions.filter(tabs[tab].pick).filter(function (a) { return !areaKey || app.model.inArea(a, areaKey); });
-      var bar = h('div', { class: 'subtabs', role: 'tablist', 'aria-label': 'My actions' }, tabs.map(function (t, i) {
+      var bar = h('div', { class: 'subtabs', role: 'tablist', 'aria-label': 'My to-dos' }, tabs.map(function (t, i) {
         return h('button', { type: 'button', role: 'tab', 'aria-selected': String(i === tab), tabindex: i === tab ? '0' : '-1', text: t.label,
           onclick: function () { app.showMine(i, areaKey); },
           onkeydown: function (e) {
@@ -2901,8 +2904,7 @@ window.ESGCompetencyHub = function (ctx) {
         }));
       }
       return [
-        h('div', { class: 'row' }, ui.linkButton('‹ Overview', app.goHome)),
-        h('h1', { text: 'My actions' }),
+        h('h1', { text: 'My to-dos' }),
         h('div', { class: 'row' }, h('label', { for: 'ch-m-area', text: 'Area ' }), filter),
         bar,
         h('div', { class: 'panel', role: 'tabpanel' },
@@ -2943,7 +2945,7 @@ window.ESGCompetencyHub = function (ctx) {
         oninput: function (e) { app.peopleFilter = e.target.value; var box = app.root.querySelector('.people-list'); if (box) { CH.dom.clear(box); CH.dom.append(box, items(app)); } } });
       return [
         h('div', { class: 'row' }, search, ui.button('Add people', function () { addDialog(app); }, 'main')),
-        h('ul', { class: 'plain people-list' }, items(app))
+        h('ul', { class: 'items people-list' }, items(app))
       ];
     }
 
@@ -3204,7 +3206,7 @@ window.ESGCompetencyHub = function (ctx) {
       }
 
       function commentBox(r) {
-        if (!app.access.canWrite(r.areaKey)) return h('p', { class: 'muted small', text: 'Members of ' + app.model.areaByKey[r.areaKey].name + ' and management can comment here.' });
+        if (!app.access.canWrite(r.areaKey)) return h('p', { class: 'muted small', text: 'Members of ' + app.model.areaByKey[r.areaKey].name + ', and the Team Leaders and Group Head, can comment here.' });
         var box = h('textarea', { id: 'ch-rec-body', rows: '3', maxlength: '2000' });
         var err = h('p', { class: 'form-error', role: 'alert' });
         var btn = h('button', { type: 'submit', class: 'btn', text: 'Add comment' });
@@ -3433,7 +3435,7 @@ window.ESGCompetencyHub = function (ctx) {
         },
         buttons: function (e, ctl) {
           var can = R.managesEntry(e, app.person.SiteUserId, app.access);
-          if (!can) return h('p', { class: 'muted small', text: 'The person who raised it, the person responsible, the area\'s engineers and meeting runners, and management can change this entry.' });
+          if (!can) return h('p', { class: 'muted small', text: 'The person who raised it, the person responsible, the area\'s engineers and meeting runners, and the Team Leaders and Group Head can change this entry.' });
           if (ctl.busy(e)) return h('p', { class: 'muted small', text: app.recordsBlocked() ? 'Changes to the register are paused for the moment.' : '' });
           return h('div', { class: 'row actions-row' },
             ui.button('Change status', function () { ctl.show('status'); }, 'main'),
@@ -3753,7 +3755,7 @@ window.ESGCompetencyHub = function (ctx) {
     var ui = CH.ui;
     var D = CH.dates;
     var ITEMS = [
-      { name: 'ReminderDaysBefore', label: 'First reminder', unit: 'days before the deadline', min: 1, max: 30, fallback: '7',
+      { name: 'ReminderDaysBefore', label: 'First reminder', unit: 'days before an action\'s deadline', min: 1, max: 30, fallback: '7',
         hint: 'When the owner gets the first reminder email.' },
       { name: 'DueSoonDays', label: 'Due soon', unit: 'days', min: 1, max: 30, fallback: '7',
         hint: 'How far ahead an action counts as due soon on the screens.' },
@@ -3947,7 +3949,7 @@ window.ESGCompetencyHub = function (ctx) {
 
     function render(app) {
       if (!app.access.isManagement) {
-        return [h('h1', { text: 'Management' }), h('p', { text: 'This page is for Team Leaders and the Group Head.' })];
+        return [h('h1', { text: 'Overview of all areas' }), h('p', { text: 'This page is for Team Leaders and the Group Head.' })];
       }
       var m = app.model;
       var st = app.dash;
@@ -3970,19 +3972,17 @@ window.ESGCompetencyHub = function (ctx) {
             h('td', { class: s.meetingStale ? 'txt-soon' : '', text: s.nextMeeting ? D.weekdayShort(s.nextMeeting) : s.lastMeeting ? 'None since ' + D.short(s.lastMeeting) : 'None booked' }));
         })));
       return [
-        h('div', { class: 'row' }, ui.linkButton('‹ Overview', app.goHome)),
-        h('h1', { text: 'Management' }),
-        h('p', { class: 'sentence' }, 'Across the group: ' + all.open.list.length + ' open actions, ',
+        h('h1', { text: 'Overview of all areas' }),
+        h('div', { class: 'row filters dash-head' }, h('p', { class: 'sentence' }, 'Across the group: ' + all.open.list.length + ' open actions, ',
           all.late.list.length ? h('b', { class: 'txt-late', text: all.late.list.length + ' late' }) : 'none late',
           degr ? ', and ' + degr + ' unresolved degradation' + (degr === 1 ? '' : 's') + '.' : '.'),
+          h('label', null, 'Completed and closed in ', period)),
         ui.sectionNote(m.sections.actions, 'actions'),
         st.error ? h('p', { class: 'section-note', text: 'Closed actions could not be read just now, so the completed figures are missing. ' }, ui.linkButton('Try again', function () { refresh(app); })) : null,
         st.closedComplete === false ? h('p', { class: 'section-note', text: 'Only the first 5,000 closed actions were read; the completed figures may be low.' }) : null,
-        h('div', { class: 'row filters' }, h('label', null, 'Completed and closed in ', period)),
         h('div', { class: 'dash-figs' }, names.map(function (n) { return figure(app, '', n, all[n]); })),
         drill(app),
-        ui.card('By area', [h('p', { class: 'muted small', text: 'Choose any number to see the actions it counts. An action shared with another area counts in both areas, and once in the group figures.' }), table]),
-        h('p', { class: 'muted small', text: 'Everyone in the Hub can read every area\'s actions; this page gathers them in one place.' })
+        ui.card('By area', [h('p', { class: 'muted small', text: 'An action shared with another area counts in both areas, and once in the group figures.' }), table])
       ];
     }
 
@@ -4026,7 +4026,7 @@ window.ESGCompetencyHub = function (ctx) {
       var m = app.model;
       var key = meeting ? meeting.areaKey : areaKey;
       var mine = m.areas.filter(function (a) { return app.access.runsMeetings(a.key); });
-      if (!meeting && !mine.length) { CH.ui.toast(app.root, 'Only the people who run meetings in an area, and management, can book meetings.', 'info'); return; }
+      if (!meeting && !mine.length) { CH.ui.toast(app.root, 'Only the people who run meetings in an area, and the Team Leaders and Group Head, can book meetings.', 'info'); return; }
       if (!meeting && !app.access.runsMeetings(key)) key = mine[0].key;
       var field = CH.ui.dialog.field;
       var area = h('select', { id: 'ch-m-areaKey', disabled: meeting ? true : null }, (meeting ? [m.areaByKey[key]] : mine).map(function (a) {
@@ -4067,14 +4067,13 @@ window.ESGCompetencyHub = function (ctx) {
         field('Area', area),
         !meeting && stats.lastMeeting ? h('p', { class: 'muted small', text: 'The last ' + m.areaByKey[key].name + ' meeting was on ' + D.long(stats.lastMeeting) + '.' }) : null,
         h('div', { class: 'row three' }, field('Date', date), field('Starts', start), field('Ends', end)),
-        field('Place', place, 'A room, or leave empty for an online meeting.'),
-        field('Online link', link, 'Optional, for example a Teams meeting link.'),
-        field('Chair', chair),
-        h('div', { class: 'field' }, h('span', { class: 'label', text: 'Attendees' }), h('span', { class: 'hint', text: 'The members of the area are ticked. Management can be added.' }),
+        h('div', { class: 'row two' }, field('Place', place, 'A room, or empty if online.'), field('Online link', link, 'Optional, e.g. a Teams link.')),
+        meeting ? field('Chair', chair) : h('div', { class: 'row two' }, field('Chair', chair), field('Repeat', repeat)),
+        h('div', { class: 'field' }, h('span', { class: 'label', text: 'Attendees' }),
           attendees, h('span', { class: 'field-error', id: 'ch-m-attendeeIds-err' })),
-        meeting ? null : field('Repeat', repeat, 'Each month is its own meeting, on the same weekday of the month, and can be changed or cancelled on its own.'),
+
         h('p', { class: 'explain', text: invites
-          ? (meeting ? 'An Outlook update goes to the attendees once the change is recorded.' : 'An Outlook invitation goes to the attendees from the Hub\'s calendar once the meeting is recorded.')
+          ? (meeting ? 'An Outlook update goes to the attendees once the change is recorded.' : 'An Outlook invitation goes to the attendees from your calendar once the meeting is recorded.')
           : 'Outlook invitations are switched off: attendees can add the meeting to their calendar from the Hub.' }),
         errorBox,
         h('div', { class: 'row' }, submit, h('button', { type: 'button', class: 'btn', text: 'Cancel', onclick: dlg.close })));
@@ -4354,7 +4353,7 @@ window.ESGCompetencyHub = function (ctx) {
         return app.sp.addToFolder('meetingItems', x.areaKey + '/MTG-' + x.id + '/Record', Object.assign({ RowKey: 'U|' + clientKey, MeetingId: x.id }, values))
           .then(function () { status.textContent = 'Saved'; if (agenda && agenda !== 'error') agenda.live.push(Object.assign({ Id: Infinity, AuthorId: app.person.SiteUserId }, values)); })
           .catch(function (error) {
-            status.textContent = error.status === 403 ? 'Only the people who run this area\'s meetings, and management, can record this.' : 'Not saved – try again in a moment.';
+            status.textContent = error.status === 403 ? 'Only the people who run this area\'s meetings, and the Team Leaders and Group Head, can record this.' : 'Not saved – try again in a moment.';
             throw error;
           });
       }
@@ -4464,7 +4463,7 @@ window.ESGCompetencyHub = function (ctx) {
             CH.ui.toast(app.root, 'Added to the agenda.', 'ok');
           } catch (error) {
             btn.disabled = false; btn.textContent = 'Try again';
-            err.textContent = error.status === 403 ? 'Only the people who run this area\'s meetings, and management, can add items.' : 'The item could not be added just now. Your text has been kept.';
+            err.textContent = error.status === 403 ? 'Only the people who run this area\'s meetings, and the Team Leaders and Group Head, can add items.' : 'The item could not be added just now. Your text has been kept.';
           }
         });
         return f;
@@ -4895,7 +4894,6 @@ window.ESGCompetencyHub = function (ctx) {
           h('div', { class: 'row' }, ui.linkButton('Check again', function () { refresh(app); })),
           changeList(app)])];
       return [
-        h('div', { class: 'row' }, ui.linkButton('‹ Overview', app.goHome)),
         h('h1', { text: 'Administration' }),
         bar,
         h('div', { class: 'panel', role: 'tabpanel' }, panel)
@@ -4952,8 +4950,7 @@ window.ESGCompetencyHub = function (ctx) {
             C.ENVIRONMENT !== 'PRODUCTION' ? h('span', { class: 'env', text: C.ENVIRONMENT + ' – not live data' }) : null,
             app.person && app.model ? nav() : null,
             app.person && app.model && app.state.view === 'home' ? homeButtons() : null,
-            app.person ? h('span', { class: 'who', text: CH.names.display(app.person.Title, app.person.Email) + ' · ' + app.person.Role }) : null,
-            textSizeControl())),
+            app.person ? h('span', { class: 'who', text: CH.names.display(app.person.Title, app.person.Email) + ' · ' + app.person.Role }) : null)),
           h('main', { id: 'ch-main', tabindex: '-1' }, content),
           h('p', { class: 'toast', 'data-ch-live': true, role: 'status', 'aria-live': 'polite' }),
           // the feedback button sits in its own place in the footer, so it never covers anything (spec FB-1)
@@ -4965,8 +4962,8 @@ window.ESGCompetencyHub = function (ctx) {
       // Main pages, as pills in the bar. Only pages that exist are listed.
       function nav() {
         var v = app.state.view;
-        var items = [['My week', v === 'home', app.goHome], ['My actions', v === 'mine', function () { app.showMine(0); }]];
-        if (app.access && app.access.isManagement) items.push(['Management', v === 'manage', app.showDashboard]);
+        var items = [['My week', v === 'home', app.goHome], ['My to-dos', v === 'mine', function () { app.showMine(0); }]];
+        if (app.access && app.access.isManagement) items.push(['Overview of all areas', v === 'manage', app.showDashboard]);
         if (app.access && app.access.isAdministrator) items.push(['Administration', v === 'admin', app.showAdmin]);
         return h('nav', { class: 'pills', 'aria-label': 'Main' }, items.map(function (x) {
           return h('button', { type: 'button', 'aria-current': x[1] ? 'page' : null, onclick: x[2], text: x[0] });
@@ -4985,8 +4982,10 @@ window.ESGCompetencyHub = function (ctx) {
       // (phones, or very short windows) keep ordinary scrolling.
       function fitToWindow() {
         if (!app.root || !app.root.style || !app.root.classList) return;
-        var fit = app.state.view === 'home' && !!app.model && window.innerWidth > 900 && window.innerHeight > 560;
+        // Every page fits the window on a desktop: the home page by its own layout, the others by scrolling inside.
+        var fit = !!app.model && window.innerWidth > 900 && window.innerHeight > 560;
         app.root.classList.toggle('ch-fit', fit);
+        app.root.classList.toggle('ch-page', fit && app.state.view !== 'home');
         if (!fit) { app.root.style.height = ''; return; }
         var top = app.root.getBoundingClientRect().top + (window.scrollY || 0);
         app.root.style.height = Math.max(window.innerHeight - top, 480) + 'px';
@@ -5002,7 +5001,7 @@ window.ESGCompetencyHub = function (ctx) {
       function applySize() {
         if (!app.root || !app.root.style) return;
         app.root.style.setProperty('--scale', String(CH.ui.scaleFor(app.root.clientWidth || 0)));
-        app.root.style.setProperty('--text', String(CH.ui.textFactor(CH.ui.textSize())));
+        app.root.style.setProperty('--text', '1');
       }
 
       // Follows the width Welcome gives the app; nothing else is observed.
@@ -5014,17 +5013,6 @@ window.ESGCompetencyHub = function (ctx) {
         } else {
           window.addEventListener('resize', applySize);
         }
-      }
-
-      function textSizeControl() {
-        var current = CH.ui.textSize();
-        return h('label', { class: 'textsize' }, 'Text size ',
-          h('select', {
-            'aria-label': 'Text size',
-            onchange: function (e) { CH.ui.saveTextSize(e.target.value); applySize(); }
-          }, CH.ui.TEXT_SIZES.map(function (t) {
-            return h('option', t[0] === current ? { value: t[0], selected: 'selected' } : { value: t[0] }, t[0]);
-          })));
       }
 
       // The page is repainted inside app.shell; dialogs live in app.layer, so an open dialog keeps its focus.

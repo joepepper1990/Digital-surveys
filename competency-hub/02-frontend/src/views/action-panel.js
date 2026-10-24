@@ -113,7 +113,7 @@ CH.views.actionPanel = (function () {
         h('dl', { class: 'facts' },
           h('dt', { text: 'When' }), h('dd', null, ui.chip(a.waitingCloseOut ? 'later' : a.group, a.dueText), ' ', whenText(a)),
           a.blocker ? [h('dt', { text: 'Waiting on' }), h('dd', { class: 'notice-body', text: a.blocker })] : null,
-          h('dt', { text: 'Who' }), h('dd', { text: a.ownerName + ' is doing it. Raised by ' + a.raisedByName + (a.raisedIso ? ' on ' + D.long(a.raisedIso) : '') + '.' }),
+          h('dt', { text: 'Who' }), h('dd', { text: 'Owner: ' + a.ownerName + ' · Raised by: ' + a.raisedByName + (a.raisedIso ? ', ' + D.shortYear(a.raisedIso) : '') }),
           h('dt', { text: 'What' }), h('dd', { class: 'notice-body', text: a.description || 'No description.' })),
         extensions && extensions.length ? h('details', { class: 'ext-list' }, h('summary', { text: 'Show all deadline changes (' + extensions.length + ')' }),
           h('ul', { class: 'plain' }, extensions.map(function (x) {

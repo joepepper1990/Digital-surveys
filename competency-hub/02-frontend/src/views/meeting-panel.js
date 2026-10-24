@@ -224,7 +224,7 @@ CH.views.meetingPanel = (function () {
       return app.sp.addToFolder('meetingItems', x.areaKey + '/MTG-' + x.id + '/Record', Object.assign({ RowKey: 'U|' + clientKey, MeetingId: x.id }, values))
         .then(function () { status.textContent = 'Saved'; if (agenda && agenda !== 'error') agenda.live.push(Object.assign({ Id: Infinity, AuthorId: app.person.SiteUserId }, values)); })
         .catch(function (error) {
-          status.textContent = error.status === 403 ? 'Only the people who run this area\'s meetings, and management, can record this.' : 'Not saved – try again in a moment.';
+          status.textContent = error.status === 403 ? 'Only the people who run this area\'s meetings, and the Team Leaders and Group Head, can record this.' : 'Not saved – try again in a moment.';
           throw error;
         });
     }
@@ -334,7 +334,7 @@ CH.views.meetingPanel = (function () {
           CH.ui.toast(app.root, 'Added to the agenda.', 'ok');
         } catch (error) {
           btn.disabled = false; btn.textContent = 'Try again';
-          err.textContent = error.status === 403 ? 'Only the people who run this area\'s meetings, and management, can add items.' : 'The item could not be added just now. Your text has been kept.';
+          err.textContent = error.status === 403 ? 'Only the people who run this area\'s meetings, and the Team Leaders and Group Head, can add items.' : 'The item could not be added just now. Your text has been kept.';
         }
       });
       return f;

@@ -43,7 +43,7 @@ const RACHEL = 112, RICHARD = 107, JOE = 126, ROBERT = 129;
 let r = dump('as=' + RACHEL);
 let t = text(r.dom);
 check('technician home: no script errors', r.errors.length === 0, r.errors.join(' | '));
-check('technician home: this week, actions and all ten areas, other areas marked view only', t.includes('This week') && t.includes('Your actions') && t.includes('10 areas') && t.includes('View only'));
+check('technician home: this week, actions and all ten areas, other areas marked view only', t.includes('Coming up this week') && t.includes('Your to-dos') && (r.dom.match(/class="tile hm-tile/g) || []).length === 10 && t.includes('View only'));
 check('technician home: own late action shown in plain words', t.includes('Replace FH40 probe') && t.includes('2 days late'));
 check('technician home: uncommitted action never shown', !t.includes('Half-created'));
 check('technician home: no management or engineer panels', !t.includes('Needs your attention') && !t.includes('For you to manage'));
@@ -55,7 +55,7 @@ check('engineer home: "For you to manage" lists late work in their areas, with o
 
 r = dump('as=' + ROBERT);
 t = text(r.dom);
-check('group head home: all areas, attention list, totals count shared actions once', r.errors.length === 0 && t.includes('10 areas') &&
+check('group head home: all areas, attention list, totals count shared actions once', r.errors.length === 0 && (r.dom.match(/class="tile hm-tile/g) || []).length === 10 &&
   t.includes('Needs your attention') && t.includes('26 open actions') && !t.includes('View only'));
 r = dump('as=' + JOE);
 check('team leader home: same overview as group head', text(r.dom).includes('Needs your attention'));
@@ -105,7 +105,7 @@ const states = [
 ];
 states.forEach(([name, q, expect]) => {
   const d = text(dump('as=' + RACHEL + '&' + q).dom);
-  check('fails closed – ' + name + ': message shown, no operational data', d.includes(expect) && !d.includes('This week') && !d.includes('Replace FH40 probe'));
+  check('fails closed – ' + name + ': message shown, no operational data', d.includes(expect) && !d.includes('Coming up this week') && !d.includes('Replace FH40 probe'));
 });
 t = text(dump('as=' + RACHEL + '&mode=actions404').dom);
 check('missing Actions list: explained, not shown as "no actions"', t.includes('Could not load actions') && !t.includes('You have no open actions') && !t.includes('Nothing late') && t.includes('Action figures unavailable'));
@@ -114,7 +114,7 @@ check('missing Actions list: management sees no false totals', t.includes('Actio
 t = text(dump('as=' + ROBERT + '&mode=actionsPartial').dom);
 check('read limit reached: marked as not complete', t.includes('This list is not complete'));
 t = text(dump('as=' + RACHEL + '&mode=slow').dom);
-check('slow responses: page still completes', t.includes('This week'));
+check('slow responses: page still completes', t.includes('Coming up this week'));
 
 // Scripted interactions
 function drive(query, budget) {
@@ -150,7 +150,7 @@ check('raise: the only write is a request in the user\'s own folder', res.ok && 
   res.result.writes[0].folder === 'u' + RICHARD && res.result.request.type === 'RaiseAction', JSON.stringify(res && res.result && res.result.writes));
 res = drive('as=' + RACHEL + '&action=40&drive=updateAndExtend', SLOW);
 check('action panel: what, who and when in plain words, with the original deadline', res.ok && /2 days late/.test(res.result.before) && /Was due/.test(res.result.before) &&
-  /Rachel Boulden is doing it/.test(res.result.before) && /Deadline moved once \(was/.test(res.result.before), JSON.stringify(res && res.result && res.result.before));
+  /Owner: Rachel Boulden/.test(res.result.before) && /Deadline moved once \(was/.test(res.result.before), JSON.stringify(res && res.result && res.result.before));
 check('update: saved instantly into the action\'s own folder and listed', res.ok && res.result.writes[0].list === 'Updates' && res.result.writes[0].folder === 'FLK/A40', JSON.stringify(res));
 check('extend: a short reason is refused; the effect is explained', res.ok && /10 characters/.test(res.result.reasonError) && /The new deadline will be/.test(res.result.effect), JSON.stringify(res));
 check('extend: pending while recorded, buttons disabled, then the history shows both changes', res.ok && /(being|to be) recorded/.test(res.result.pending) &&
@@ -203,8 +203,16 @@ const s1366 = sized(1366), s2560 = sized(2560);
 check('text and tiles are larger on a wide screen', s1366.ok && s2560.ok && s2560.result.tile > s1366.result.tile * 1.3 && s2560.result.h1 > s1366.result.h1,
   JSON.stringify([s1366, s2560]));
 check('no sideways scrolling at 1366 or 2560 px', s1366.ok && s2560.ok && !s1366.result.scrollsSideways && !s2560.result.scrollsSideways, JSON.stringify([s1366, s2560]));
-check('"Larger" text size enlarges the text and is remembered', s1366.ok && s1366.result.larger > s1366.result.tile * 1.2 && s1366.result.saved === 'Larger',
-  JSON.stringify(s1366));
+check('there is no text size control in the bar', s1366.ok && s1366.result.hasControl === false, JSON.stringify(s1366));
+
+// No page scrolls, for a Team Leader who sees every page, at the WebView size and on a laptop
+[['1920,960', '1920 × 960'], ['1366,768', '1366 × 768']].forEach(([size, label]) => {
+  const d = open('as=' + JOE + '&drive=pagesFit', ['--window-size=' + size, '--dump-dom'], 40000);
+  const m = /<pre id="drive-result">([\s\S]*?)<\/pre>/.exec(d.dom);
+  const res = m ? JSON.parse(m[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&')) : { ok: false };
+  check('no page scrolls at ' + label + ', and every dropdown has the form style', res.ok && res.result.anyScroll.length === 0 && res.result.plainSelects === 0 &&
+    Object.keys(res.result.pages).length >= 8, JSON.stringify(res));
+});
 
 // Screenshots: three roles at three widths, plus a view-only area
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -261,7 +269,7 @@ check('notice: a technician who did not post it gets no edit, pin or archive, an
 check('notice: a comment is saved at once, in the area\'s Updates folder', res.ok && res.result.saved &&
   JSON.stringify(res.result.update) === '[{"folder":"FLK","type":"Comment","parent":"Notice:1","flag":false}]', JSON.stringify(res));
 check('notice: the author may edit and archive their own notice in another area, but not comment there', res.ok &&
-  JSON.stringify(res.result.own.buttons) === '["Edit","Archive"]' && !res.result.own.canComment && /Members of DSL and management can comment/.test(res.result.own.note), JSON.stringify(res));
+  JSON.stringify(res.result.own.buttons) === '["Edit","Archive"]' && !res.result.own.canComment && /Members of DSL, and the Team Leaders and Group Head, can comment/.test(res.result.own.note), JSON.stringify(res));
 res = drive('as=' + KELLY + '&area=FLK&notice=2&drive=noticeModerate', SLOW);
 check('notice: pinning is shown as being recorded, then confirmed', res.ok && /Pin “Spare probe stock levels”/.test(res.result.pending) && res.result.pinned, JSON.stringify(res));
 check('notice: an edit is checked against its revision and saved', res.ok && res.result.title === 'Spare probes: two left in stores' && res.result.revision === 3, JSON.stringify(res));
@@ -306,7 +314,7 @@ check('management: group figures, and each opens exactly the actions it counts',
   /All areas – late/.test(res.result.lateTitle) && res.result.completedRows === res.result.figs.Completed && res.result.figs.Completed === 1, JSON.stringify(res));
 check('management: the area table drills down by the same rule, and the page writes nothing', res.ok && res.result.areaRows === 10 && res.result.rwDrill === res.result.rwLate &&
   res.result.posts === 0, JSON.stringify(res));
-check('staff see no Management page', !/<button[^>]*>Management<\/button>/.test(dump('as=' + RACHEL).dom) && /<button[^>]*>Management<\/button>/.test(dump('as=' + ROBERT).dom));
+check('staff see no overview of all areas page', !/<button[^>]*>Overview of all areas<\/button>/.test(dump('as=' + RACHEL).dom) && /<button[^>]*>Overview of all areas<\/button>/.test(dump('as=' + ROBERT).dom));
 res = drive('as=' + RACHEL + '&view=area&area=FLK&drive=areaRegister');
 check('area page: Notices & issues lists the noticeboard (pinned first) and the open register entries, with a filter', res.ok &&
   res.result.notices[0] === 'Calibration rig out of service' && JSON.stringify(res.result.entries) === '["REG-00002 Shared probe sign-out sheet","REG-00001 Calibration rig drift"]' &&

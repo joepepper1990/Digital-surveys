@@ -24,6 +24,8 @@ CH.config = {
   dueSoonDays: 7,
   meetingOverdueDays: 35,
   noticeImportantMaxDays: 30,
+    // Shorter names for the compact strip of area tiles; the full name shows on hover and in the open panel.
+    shortNames: { RP: 'Rad Prot', ALS: 'Active Lab' },
   managementRoles: ['Team Leader', 'Group Head'],
   maxDeadlineYears: 2
 };

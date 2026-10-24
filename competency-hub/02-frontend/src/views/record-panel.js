@@ -84,7 +84,7 @@ CH.views.recordPanel = (function () {
     }
 
     function commentBox(r) {
-      if (!app.access.canWrite(r.areaKey)) return h('p', { class: 'muted small', text: 'Members of ' + app.model.areaByKey[r.areaKey].name + ' and management can comment here.' });
+      if (!app.access.canWrite(r.areaKey)) return h('p', { class: 'muted small', text: 'Members of ' + app.model.areaByKey[r.areaKey].name + ', and the Team Leaders and Group Head, can comment here.' });
       var box = h('textarea', { id: 'ch-rec-body', rows: '3', maxlength: '2000' });
       var err = h('p', { class: 'form-error', role: 'alert' });
       var btn = h('button', { type: 'submit', class: 'btn', text: 'Add comment' });
@@ -313,7 +313,7 @@ CH.views.recordPanel = (function () {
       },
       buttons: function (e, ctl) {
         var can = R.managesEntry(e, app.person.SiteUserId, app.access);
-        if (!can) return h('p', { class: 'muted small', text: 'The person who raised it, the person responsible, the area\'s engineers and meeting runners, and management can change this entry.' });
+        if (!can) return h('p', { class: 'muted small', text: 'The person who raised it, the person responsible, the area\'s engineers and meeting runners, and the Team Leaders and Group Head can change this entry.' });
         if (ctl.busy(e)) return h('p', { class: 'muted small', text: app.recordsBlocked() ? 'Changes to the register are paused for the moment.' : '' });
         return h('div', { class: 'row actions-row' },
           ui.button('Change status', function () { ctl.show('status'); }, 'main'),

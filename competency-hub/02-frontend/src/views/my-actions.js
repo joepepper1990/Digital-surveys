@@ -39,7 +39,7 @@ CH.views.myActions = (function () {
     var tab = Math.min(st.tab || 0, tabs.length - 1);
     var areaKey = st.areaFilter || '';
     var list = app.model.actions.filter(tabs[tab].pick).filter(function (a) { return !areaKey || app.model.inArea(a, areaKey); });
-    var bar = h('div', { class: 'subtabs', role: 'tablist', 'aria-label': 'My actions' }, tabs.map(function (t, i) {
+    var bar = h('div', { class: 'subtabs', role: 'tablist', 'aria-label': 'My to-dos' }, tabs.map(function (t, i) {
       return h('button', { type: 'button', role: 'tab', 'aria-selected': String(i === tab), tabindex: i === tab ? '0' : '-1', text: t.label,
         onclick: function () { app.showMine(i, areaKey); },
         onkeydown: function (e) {
@@ -68,8 +68,7 @@ CH.views.myActions = (function () {
       }));
     }
     return [
-      h('div', { class: 'row' }, ui.linkButton('‹ Overview', app.goHome)),
-      h('h1', { text: 'My actions' }),
+      h('h1', { text: 'My to-dos' }),
       h('div', { class: 'row' }, h('label', { for: 'ch-m-area', text: 'Area ' }), filter),
       bar,
       h('div', { class: 'panel', role: 'tabpanel' },

@@ -72,7 +72,7 @@ class Book(unittest.TestCase):
         self.assertIn(f['InviteToken'], ev['body'])
         self.assertEqual(sorted(ev['requiredAttendees'].split(';')), ['joseph.pepper@example.test', 'kelly.bates@example.test', 'rachel.boulden@example.test'])
         self.assertEqual((f['InviteState'], f['OutlookEventId'], f['InviteAttempts']), ('Sent', ev['id'], 0.0))
-        # the record folder: its own permissions, meeting runners of the area and management may write
+        # the record folder: its own permissions, meeting runners of the area, and the Team Leaders and Group Head may write
         rec = s.folder_item('meetingItems', 'FLK/MTG-{0}/Record'.format(m['id']))
         self.assertTrue(rec and rec['unique'])
         self.assertIn(CONTRIBUTE, rec['ra'].get(KELLY, set()))
@@ -84,17 +84,17 @@ class Book(unittest.TestCase):
 
     def test_refusals_in_plain_words_and_nothing_made(self):
         cases = [
-            (RACHEL, {}, 'Only the people who run meetings in this area, and management, can do this.'),
+            (RACHEL, {}, 'Only the people who run meetings in this area, and the Team Leaders and Group Head, can do this.'),
             (KELLY, {'dateIso': '2026-10-20'}, 'Choose a date from today onwards.'),
             (KELLY, {'dateIso': '2029-01-01'}, 'Choose a date within two years.'),
             (KELLY, {'end': '09:00'}, 'The meeting must end after it starts.'),
             (KELLY, {'start': 'ten'}, 'Choose a date, and a start and end time.'),
             (KELLY, {'dateIso': '2026-13-45'}, 'Choose a date, and a start and end time.'),
             (KELLY, {'chairId': RACHEL}, 'Choose a chair who runs meetings in this area, or a Team Leader.'),
-            (KELLY, {'attendeeIds': [RACHEL, KAI]}, 'Choose the attendees from the members of the area and management (up to 60).'),
-            (KELLY, {'attendeeIds': []}, 'Choose the attendees from the members of the area and management (up to 60).'),
+            (KELLY, {'attendeeIds': [RACHEL, KAI]}, 'Choose the attendees from the members of the area, and the Team Leaders and Group Head (up to 60).'),
+            (KELLY, {'attendeeIds': []}, 'Choose the attendees from the members of the area, and the Team Leaders and Group Head (up to 60).'),
             (KELLY, {'onlineLink': 'http://example.test/x'}, 'Give a secure online link: it starts with https.'),
-            (KAI, {}, 'Only the people who run meetings in this area, and management, can do this.'),
+            (KAI, {}, 'Only the people who run meetings in this area, and the Team Leaders and Group Head, can do this.'),
             (KELLY, {'areaKey': 'XYZ'}, 'Choose an active area.'),
         ]
         for who, payload, message in cases:
@@ -336,7 +336,7 @@ class Start(unittest.TestCase):
         book(s2)
         r2 = submit(s2, RACHEL, 'StartMeeting', {}, target=meeting(s2)['id'], revision=1, key=KEY2)
         run(s2, r2)
-        self.assertEqual(request(s2, r2)['ResultMessage'], 'Only the people who run meetings in this area, and management, can do this.')
+        self.assertEqual(request(s2, r2)['ResultMessage'], 'Only the people who run meetings in this area, and the Team Leaders and Group Head, can do this.')
 
 
 class Robustness(unittest.TestCase):
@@ -516,7 +516,7 @@ class Finalise(unittest.TestCase):
         self.assertEqual(request(s, r)['ResultMessage'], 'Only a meeting in progress can be finalised.')
         s2 = started()
         r2, eng = finalise(s2, sender=RACHEL)
-        self.assertEqual(request(s2, r2)['ResultMessage'], 'Only the people who run meetings in this area, and management, can do this.')
+        self.assertEqual(request(s2, r2)['ResultMessage'], 'Only the people who run meetings in this area, and the Team Leaders and Group Head, can do this.')
 
     def test_with_pdf_minutes_switched_off_no_pdf_is_made(self):
         s = started()

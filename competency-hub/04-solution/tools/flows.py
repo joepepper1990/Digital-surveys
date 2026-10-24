@@ -1978,7 +1978,7 @@ def flow_request_queue(domain='actions'):
         edit_notice = change(
             '_NE', 'notices', notice_sel, 'Notice',
             lambda c: chain(("not(equals(string(" + c['T'] + "?['Status']), 'Active'))", 'This notice has been archived.'),
-                            ("not(or(" + c['AUTHOR'] + ", " + c['MOD'] + "))", 'Only the person who posted it, or the engineers of the area and management, can change this notice.'),
+                            ("not(or(" + c['AUTHOR'] + ", " + c['MOD'] + "))", 'Only the person who posted it, or the engineers of the area, and the Team Leaders and Group Head, can change this notice.'),
                             ("and(" + HAS('title') + ", equals(" + text_len('title') + ", 0))", 'Give the notice a title.'),
                             ("and(" + HAS('title') + ", greater(" + text_len('title') + ", 255))", 'Keep the title to 255 characters or fewer.'),
                             ("and(" + HAS('body') + ", equals(" + text_len('body') + ", 0))", 'Write the notice.'),
@@ -1996,14 +1996,14 @@ def flow_request_queue(domain='actions'):
         archive_notice = change(
             '_NA', 'notices', notice_sel, 'Notice',
             lambda c: chain(("not(equals(string(" + c['T'] + "?['Status']), 'Active'))", 'This notice is already archived.'),
-                            ("not(or(" + c['AUTHOR'] + ", " + c['MOD'] + "))", 'Only the person who posted it, or the engineers of the area and management, can archive this notice.')),
+                            ("not(or(" + c['AUTHOR'] + ", " + c['MOD'] + "))", 'Only the person who posted it, or the engineers of the area, and the Team Leaders and Group Head, can archive this notice.')),
             lambda c: {'Status': 'Archived', 'IsImportant': False},
             lambda c: "concat('Notice archived: ', string(" + c['T'] + "?['Title']))", 'Notice Archived', lambda c: "'Notice archived.'")
         PIN = "equals(" + P + "?['pinned'], true)"
         pin_notice = change(
             '_NP', 'notices', notice_sel, 'Notice',
             lambda c: chain(("not(equals(string(" + c['T'] + "?['Status']), 'Active'))", 'This notice has been archived.'),
-                            ("not(" + c['MOD'] + ")", 'Only the engineers of the area and management can pin notices.')),
+                            ("not(" + c['MOD'] + ")", 'Only the engineers of the area, and the Team Leaders and Group Head can pin notices.')),
             # pinned stays important with no end date; unpinned is no longer important
             lambda c: {'IsImportant': "@" + PIN, 'ImportantUntil': None},
             lambda c: "concat(if(" + PIN + ", 'Notice pinned: ', 'Notice unpinned: '), string(" + c['T'] + "?['Title']))",
@@ -2011,7 +2011,7 @@ def flow_request_queue(domain='actions'):
         hide_comment = change(
             '_NH', 'upd', '?$select=Id,Body,EntryType,ParentType,ParentId,IsHidden,AuthorId,FileDirRef', 'Notice',
             lambda c: chain(("not(equals(string(" + c['T'] + "?['EntryType']), 'Comment'))", 'Only comments can be hidden.'),
-                            ("not(" + c['MOD'] + ")", 'Only the engineers of the area and management can hide comments.')),
+                            ("not(" + c['MOD'] + ")", 'Only the engineers of the area, and the Team Leaders and Group Head can hide comments.')),
             lambda c: {'IsHidden': True},
             lambda c: "concat('Comment hidden by a moderator: ', take(string(" + c['T'] + "?['Body']), 120))", 'Comment Hidden', lambda c: "'Comment hidden.'",
             standard=False, already=lambda c: "equals(" + c['T'] + "?['IsHidden'], true)",
@@ -2040,7 +2040,7 @@ def flow_request_queue(domain='actions'):
         DONE_STATUS = "contains(createArray('Resolved', 'Closed'), " + NEW_STATUS + ")"
         update_entry = change(
             '_RU', 'reg', reg_sel, 'Register Entry',
-            lambda c: chain(("not(" + manages(c) + ")", 'Only the person who raised it, the person responsible, the engineers and meeting runners of the area, and management can change this entry.'),
+            lambda c: chain(("not(" + manages(c) + ")", 'Only the person who raised it, the person responsible, the engineers and meeting runners of the area, and the Team Leaders and Group Head can change this entry.'),
                             ("and(" + HAS('title') + ", equals(" + text_len('title') + ", 0))", 'Give the entry a title.'),
                             ("and(" + HAS('title') + ", greater(" + text_len('title') + ", 255))", 'Keep the title to 255 characters or fewer.'),
                             ("and(" + HAS('description') + ", greater(" + text_len('description') + ", 5000))", 'Keep the description to 5,000 characters or fewer.'),
@@ -2271,10 +2271,10 @@ def flow_request_queue(domain='actions'):
             ("and(not(empty(" + ONLINE + ")), or(not(startsWith(toLower(" + ONLINE + "), 'https://')), greater(length(" + ONLINE + "), 1000)))", 'Give a secure online link: it starts with https.'),
             ("empty(body('Chair_M'))", 'Choose a chair who runs meetings in this area, or a Team Leader.'),
             ("or(empty(body('Att_ids_M')), greater(length(body('Att_ids_M')), 60), not(equals(length(body('Att_ok_M')), length(union(body('Att_ids_M'), body('Att_ids_M'))))))",
-             'Choose the attendees from the members of the area and management (up to 60).')]
+             'Choose the attendees from the members of the area, and the Team Leaders and Group Head (up to 60).')]
         common_rules = [
             ("or(empty(" + AREA + "), not(equals(string(" + AREA + "?['Status']), 'Active')))", 'Choose an active area.'),
-            ("not(" + RUNS + ")", 'Only the people who run meetings in this area, and management, can do this.')]
+            ("not(" + RUNS + ")", 'Only the people who run meetings in this area, and the Team Leaders and Group Head, can do this.')]
         STATUS = "string(coalesce(" + M + "?['Status'], ''))"
         stale = ("and(greater(int(" + idq(TX + "?['ExpectedRevision']") + "), 0), not(equals(" + idstr(M + "?['Revision']") + ", " + idstr(TX + "?['ExpectedRevision']") + ")))")
         COMMON = "outputs('Verdict_common_M')"

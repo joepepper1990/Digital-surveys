@@ -44,8 +44,7 @@ CH.app = (function () {
           C.ENVIRONMENT !== 'PRODUCTION' ? h('span', { class: 'env', text: C.ENVIRONMENT + ' – not live data' }) : null,
           app.person && app.model ? nav() : null,
           app.person && app.model && app.state.view === 'home' ? homeButtons() : null,
-          app.person ? h('span', { class: 'who', text: CH.names.display(app.person.Title, app.person.Email) + ' · ' + app.person.Role }) : null,
-          textSizeControl())),
+          app.person ? h('span', { class: 'who', text: CH.names.display(app.person.Title, app.person.Email) + ' · ' + app.person.Role }) : null)),
         h('main', { id: 'ch-main', tabindex: '-1' }, content),
         h('p', { class: 'toast', 'data-ch-live': true, role: 'status', 'aria-live': 'polite' }),
         // the feedback button sits in its own place in the footer, so it never covers anything (spec FB-1)
@@ -57,8 +56,8 @@ CH.app = (function () {
     // Main pages, as pills in the bar. Only pages that exist are listed.
     function nav() {
       var v = app.state.view;
-      var items = [['My week', v === 'home', app.goHome], ['My actions', v === 'mine', function () { app.showMine(0); }]];
-      if (app.access && app.access.isManagement) items.push(['Management', v === 'manage', app.showDashboard]);
+      var items = [['My week', v === 'home', app.goHome], ['My to-dos', v === 'mine', function () { app.showMine(0); }]];
+      if (app.access && app.access.isManagement) items.push(['Overview of all areas', v === 'manage', app.showDashboard]);
       if (app.access && app.access.isAdministrator) items.push(['Administration', v === 'admin', app.showAdmin]);
       return h('nav', { class: 'pills', 'aria-label': 'Main' }, items.map(function (x) {
         return h('button', { type: 'button', 'aria-current': x[1] ? 'page' : null, onclick: x[2], text: x[0] });
@@ -77,8 +76,10 @@ CH.app = (function () {
     // (phones, or very short windows) keep ordinary scrolling.
     function fitToWindow() {
       if (!app.root || !app.root.style || !app.root.classList) return;
-      var fit = app.state.view === 'home' && !!app.model && window.innerWidth > 900 && window.innerHeight > 560;
+      // Every page fits the window on a desktop: the home page by its own layout, the others by scrolling inside.
+      var fit = !!app.model && window.innerWidth > 900 && window.innerHeight > 560;
       app.root.classList.toggle('ch-fit', fit);
+      app.root.classList.toggle('ch-page', fit && app.state.view !== 'home');
       if (!fit) { app.root.style.height = ''; return; }
       var top = app.root.getBoundingClientRect().top + (window.scrollY || 0);
       app.root.style.height = Math.max(window.innerHeight - top, 480) + 'px';
@@ -94,7 +95,7 @@ CH.app = (function () {
     function applySize() {
       if (!app.root || !app.root.style) return;
       app.root.style.setProperty('--scale', String(CH.ui.scaleFor(app.root.clientWidth || 0)));
-      app.root.style.setProperty('--text', String(CH.ui.textFactor(CH.ui.textSize())));
+      app.root.style.setProperty('--text', '1');
     }
 
     // Follows the width Welcome gives the app; nothing else is observed.
@@ -106,17 +107,6 @@ CH.app = (function () {
       } else {
         window.addEventListener('resize', applySize);
       }
-    }
-
-    function textSizeControl() {
-      var current = CH.ui.textSize();
-      return h('label', { class: 'textsize' }, 'Text size ',
-        h('select', {
-          'aria-label': 'Text size',
-          onchange: function (e) { CH.ui.saveTextSize(e.target.value); applySize(); }
-        }, CH.ui.TEXT_SIZES.map(function (t) {
-          return h('option', t[0] === current ? { value: t[0], selected: 'selected' } : { value: t[0] }, t[0]);
-        })));
     }
 
     // The page is repainted inside app.shell; dialogs live in app.layer, so an open dialog keeps its focus.

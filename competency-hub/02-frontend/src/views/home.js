@@ -123,7 +123,7 @@ CH.views.home = (function () {
     }
     var due = mine.filter(function (a) { return !a.waitingCloseOut && D.daysBetween(m.today, a.dueIso) < 7; }).length;
     var meets = keys.filter(function (k) { var n = m.stats[k].nextMeeting; return n && D.daysBetween(m.today, n) < 7; }).length;
-    return { el: h('div', { class: 'hm-week' }, days), summary: due + ' due · ' + meets + (meets === 1 ? ' meeting' : ' meetings') };
+    return { el: h('div', { class: 'hm-week' }, days), summary: due + (due === 1 ? ' to-do' : ' to-dos') + ' · ' + (meets ? meets + (meets === 1 ? ' meeting' : ' meetings') : 'no meetings') };
   }
 
   function tileFor(app, a) {
@@ -134,9 +134,10 @@ CH.views.home = (function () {
     var open = app.state.homeArea === a.key;
     return h('button', { type: 'button', class: 'tile hm-tile' + (viewOnly ? ' view-only' : ''), 'data-area': a.key, 'aria-pressed': String(open),
       'aria-label': a.name + (viewOnly ? ', view only' : ''), onclick: function () { app.openAreaHere(open ? null : a.key); } },
-      h('b', null, a.name),
+      h('b', { title: a.name, text: app.state.homeArea ? CH.config.shortNames[a.key] || a.name : a.name }),
       h('span', { class: 'hm-tr' }, unavailable ? h('span', { class: 'when w-soon', text: 'Action figures unavailable' })
-        : h('span', { class: 'when w-' + (s.late ? 'late' : 'ok'), text: s.late ? s.late + ' late' : s.open + ' open' }),
+        : h('span', { class: 'when w-' + (s.late ? 'late' : 'ok'), title: s.late ? s.late + ' late' : s.open + ' open' },
+          h('span', { class: 'hm-n', text: String(s.late || s.open) }), h('span', { class: 'hm-w', text: s.late ? ' late' : ' open' })),
         viewOnly ? h('span', { class: 'vo', text: 'View only' }) : null),
       h('span', { class: 'hm-tm' + (s.meetingStale ? ' txt-soon' : ''), text: s.nextMeeting ? 'Meets ' + D.weekdayShort(s.nextMeeting)
         : s.meetingStale ? (s.lastMeeting ? 'No meeting since ' + D.short(s.lastMeeting) : 'No meeting booked') : 'No meeting booked' }));
@@ -281,10 +282,10 @@ CH.views.home = (function () {
     var tiles = h('div', { class: 'hm-tiles' + (openKey ? ' compact' : '') }, active.map(function (a) { return tileFor(app, a); }));
 
     var stack = h('div', { class: 'hm-stack' + (openKey ? ' area-open' : '') + (actsClosed ? ' acts-closed' : '') },
-      ui.panel('week', 'This week', week.summary, week.el, { closed: weekClosed, onToggle: toggle('week') }),
-      ui.panel('actions', acc.isManagement ? 'Your work' : 'Your actions', actsSummary, actionsBody,
-        { closed: actsClosed, onToggle: toggle('actions'), link: ['All my actions', function () { app.showMine(0); }] }),
-      ui.panel('areas', 'Areas', active.length + ' areas' + (unavailable ? '' : ' · ' + lateAreas + ' with late actions') + (openKey ? '' : ' · choose one to open it'), tiles,
+      ui.panel('week', 'Coming up this week', week.summary, week.el, { closed: weekClosed, onToggle: toggle('week') }),
+      ui.panel('actions', 'Your to-dos', actsSummary, actionsBody,
+        { closed: actsClosed, onToggle: toggle('actions'), link: ['See all my to-dos', function () { app.showMine(0); }] }),
+      ui.panel('areas', 'Areas', (unavailable ? active.length + ' areas' : lateAreas ? lateAreas + (lateAreas === 1 ? ' area has' : ' areas have') + ' late to-dos' : 'all on track') + (openKey ? '' : ' · pick one to look inside'), tiles,
         { closed: areasClosed, onToggle: toggle('areas') }),
       openKey ? areaPanel(app, openKey) : null);
     out.push(stack);

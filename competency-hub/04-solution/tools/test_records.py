@@ -71,7 +71,7 @@ class Notices(unittest.TestCase):
         s = site()
         r = submit(s, RACHEL, 'PinNotice', {'pinned': True}, target=s.notice)
         run(s, r)
-        self.assertEqual(request(s, r)['ResultMessage'], 'Only the engineers of the area and management can pin notices.')
+        self.assertEqual(request(s, r)['ResultMessage'], 'Only the engineers of the area, and the Team Leaders and Group Head can pin notices.')
         r = submit(s, KELLY, 'PinNotice', {'pinned': True}, target=s.notice, key=KEY2)
         run(s, r)
         n = s.item('notices', s.notice)['f']

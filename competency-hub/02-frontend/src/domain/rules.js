@@ -257,7 +257,7 @@ CH.rules = (function () {
   // ctx: { today, runsMeetings(areaKey), chairAllowed(areaKey, id), attendeeAllowed(areaKey, id) }
   function validateMeeting(v, ctx) {
     var e = {};
-    if (!v.areaKey || !ctx.runsMeetings(v.areaKey)) e.areaKey = 'Only the people who run meetings in this area, and management, can do this.';
+    if (!v.areaKey || !ctx.runsMeetings(v.areaKey)) e.areaKey = 'Only the people who run meetings in this area, and the Team Leaders and Group Head, can do this.';
     var hhmm = /^([01]\d|2[0-3]):[0-5]\d$/;
     if (!D.isIso(v.dateIso || '') || isNaN(Date.parse(v.dateIso + 'T00:00:00Z')) || D.addDays(v.dateIso, 0) !== v.dateIso) e.dateIso = 'Choose a date, and a start and end time.';
     else if (v.dateIso < ctx.today) e.dateIso = 'Choose a date from today onwards.';
@@ -270,7 +270,7 @@ CH.rules = (function () {
     if (!e.areaKey && !ctx.chairAllowed(v.areaKey, Number(v.chairId))) e.chairId = 'Choose a chair who runs meetings in this area, or a Team Leader.';
     var ids = (v.attendeeIds || []).map(Number);
     if (!e.areaKey && (!ids.length || ids.length > 60 || ids.some(function (id) { return !ctx.attendeeAllowed(v.areaKey, id); }))) {
-      e.attendeeIds = 'Choose the attendees from the members of the area and management (up to 60).';
+      e.attendeeIds = 'Choose the attendees from the members of the area, and the Team Leaders and Group Head (up to 60).';
     }
     return e;
   }

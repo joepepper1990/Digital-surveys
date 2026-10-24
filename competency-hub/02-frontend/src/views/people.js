@@ -24,7 +24,7 @@ CH.views.people = (function () {
       oninput: function (e) { app.peopleFilter = e.target.value; var box = app.root.querySelector('.people-list'); if (box) { CH.dom.clear(box); CH.dom.append(box, items(app)); } } });
     return [
       h('div', { class: 'row' }, search, ui.button('Add people', function () { addDialog(app); }, 'main')),
-      h('ul', { class: 'plain people-list' }, items(app))
+      h('ul', { class: 'items people-list' }, items(app))
     ];
   }
 

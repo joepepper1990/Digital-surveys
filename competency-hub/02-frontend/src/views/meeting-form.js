@@ -34,7 +34,7 @@ CH.views.meetingForm = (function () {
     var m = app.model;
     var key = meeting ? meeting.areaKey : areaKey;
     var mine = m.areas.filter(function (a) { return app.access.runsMeetings(a.key); });
-    if (!meeting && !mine.length) { CH.ui.toast(app.root, 'Only the people who run meetings in an area, and management, can book meetings.', 'info'); return; }
+    if (!meeting && !mine.length) { CH.ui.toast(app.root, 'Only the people who run meetings in an area, and the Team Leaders and Group Head, can book meetings.', 'info'); return; }
     if (!meeting && !app.access.runsMeetings(key)) key = mine[0].key;
     var field = CH.ui.dialog.field;
     var area = h('select', { id: 'ch-m-areaKey', disabled: meeting ? true : null }, (meeting ? [m.areaByKey[key]] : mine).map(function (a) {
@@ -75,14 +75,13 @@ CH.views.meetingForm = (function () {
       field('Area', area),
       !meeting && stats.lastMeeting ? h('p', { class: 'muted small', text: 'The last ' + m.areaByKey[key].name + ' meeting was on ' + D.long(stats.lastMeeting) + '.' }) : null,
       h('div', { class: 'row three' }, field('Date', date), field('Starts', start), field('Ends', end)),
-      field('Place', place, 'A room, or leave empty for an online meeting.'),
-      field('Online link', link, 'Optional, for example a Teams meeting link.'),
-      field('Chair', chair),
-      h('div', { class: 'field' }, h('span', { class: 'label', text: 'Attendees' }), h('span', { class: 'hint', text: 'The members of the area are ticked. Management can be added.' }),
+      h('div', { class: 'row two' }, field('Place', place, 'A room, or empty if online.'), field('Online link', link, 'Optional, e.g. a Teams link.')),
+      meeting ? field('Chair', chair) : h('div', { class: 'row two' }, field('Chair', chair), field('Repeat', repeat)),
+      h('div', { class: 'field' }, h('span', { class: 'label', text: 'Attendees' }),
         attendees, h('span', { class: 'field-error', id: 'ch-m-attendeeIds-err' })),
-      meeting ? null : field('Repeat', repeat, 'Each month is its own meeting, on the same weekday of the month, and can be changed or cancelled on its own.'),
+
       h('p', { class: 'explain', text: invites
-        ? (meeting ? 'An Outlook update goes to the attendees once the change is recorded.' : 'An Outlook invitation goes to the attendees from the Hub\'s calendar once the meeting is recorded.')
+        ? (meeting ? 'An Outlook update goes to the attendees once the change is recorded.' : 'An Outlook invitation goes to the attendees from your calendar once the meeting is recorded.')
         : 'Outlook invitations are switched off: attendees can add the meeting to their calendar from the Hub.' }),
       errorBox,
       h('div', { class: 'row' }, submit, h('button', { type: 'button', class: 'btn', text: 'Cancel', onclick: dlg.close })));

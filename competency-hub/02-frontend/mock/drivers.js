@@ -32,17 +32,10 @@ window.MockDrivers = (function () {
       await until(function () { return q('.tile b'); });
       await wait(200);
       var before = { tile: px('.tile b'), h1: px('h1'), scale: document.querySelector('[data-ch-root]').style.getPropertyValue('--scale') };
-      var select = q('.textsize select');
-      select.value = 'Larger';
-      select.dispatchEvent(new Event('change', { bubbles: true }));
-      await wait(100);
-      var larger = px('.tile b');
-      var saved = window.localStorage.getItem('esg-competency-hub-text-size');
-      select.value = 'Normal';
-      select.dispatchEvent(new Event('change', { bubbles: true }));
+      var hasControl = !!q('.textsize');
       return {
         width: document.querySelector('[data-ch-root]').clientWidth, tile: before.tile, h1: before.h1, scale: before.scale,
-        larger: larger, saved: saved, scrollsSideways: document.documentElement.scrollWidth > window.innerWidth + 1
+        hasControl: hasControl, scrollsSideways: document.documentElement.scrollWidth > window.innerWidth + 1
       };
     },
     // A technician posts on another area's noticeboard (K4.1): allowed, labelled, and the only write.
@@ -183,7 +176,7 @@ window.MockDrivers = (function () {
       type(q('#ch-g-reason'), 'Joe has the replacement probe.');
       q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
       await until(function () { return text().indexOf('Reassigned to Joe Pepper.') >= 0; }, 120000);
-      await until(function () { return q('#ch-a') && q('#ch-a').textContent.indexOf('Joe Pepper is doing it') >= 0; });
+      await until(function () { return q('#ch-a') && q('#ch-a').textContent.indexOf('Owner: Joe Pepper') >= 0; });
       return { options: options, owner: MockSharePoint.data.Actions.filter(function (a) { return a.Id === 40; })[0].AssignedToId };
     },
     // Close with an outcome (a note is needed), then reopen the closed action from the same panel.
@@ -625,6 +618,25 @@ window.MockDrivers = (function () {
       return { emptyError: emptyError, toast: toast, row: row && { type: row.FeedbackType, status: row.Status, author: row.AuthorId, folder: row.FileDirRef.split('/Lists/')[1] },
         visible: mine, writes: MockSharePoint.writes.map(function (w) { return w.list + '/' + w.folder; }) };
     },
+    // Every page fits the window: the page itself never scrolls (a long list scrolls inside the page instead).
+    pagesFit: async function () {
+      await until(function () { return q('.hm-tile'); });
+      await wait(300);
+      var scrolls = function () { return document.documentElement.scrollHeight > window.innerHeight + 1 || document.documentElement.scrollWidth > window.innerWidth + 1; };
+      var out = { home: scrolls() };
+      var pills = ['My to-dos', 'Overview of all areas', 'Administration'];
+      for (var i = 0; i < pills.length; i++) {
+        var b = byText('.pills button', pills[i]);
+        if (!b) continue;
+        b.click(); await wait(500);
+        out[pills[i]] = scrolls();
+        if (pills[i] === 'Administration') {
+          for (var k = 0; k < all('.subtabs button').length; k++) { all('.subtabs button')[k].click(); await wait(400); out['Administration – ' + all('.subtabs button')[k].textContent] = scrolls(); }
+        }
+      }
+      var selects = all('select').filter(function (x) { return x.offsetParent; }).map(function (x) { return getComputedStyle(x).borderTopLeftRadius; });
+      return { pages: out, anyScroll: Object.keys(out).filter(function (k) { return out[k]; }), plainSelects: selects.filter(function (r) { return r === '0px'; }).length };
+    },
     // The feedback button never covers another control, on the fitted home page and on a long page.
     bubblePlace: async function () {
       var b = await until(function () { return q('footer .fb-bubble'); });
@@ -638,7 +650,7 @@ window.MockDrivers = (function () {
         }).map(function (n) { return n.textContent.trim().slice(0, 30); });
       }
       var home = { overlaps: overlaps(), inView: b.getBoundingClientRect().bottom <= window.innerHeight + 1 };
-      byText('.pills button', 'My actions').click();
+      byText('.pills button', 'My to-dos').click();
       await until(function () { return q('.subtabs'); });
       await wait(200);
       return { home: home, mine: overlaps() };
@@ -686,7 +698,7 @@ window.MockDrivers = (function () {
     },
     // Management overview: every figure opens exactly the actions it counts.
     dashboard: async function () {
-      (await until(function () { return byText('.pills button', 'Management'); })).click();
+      (await until(function () { return byText('.pills button', 'Overview of all areas'); })).click();
       await until(function () { return q('.dash-figs .dash-fig:not([disabled])') && !all('.dash-figs .dash-fig').some(function (b) { return b.disabled; }); });
       var figs = {};
       all('.dash-figs .dash-fig').forEach(function (b) { figs[b.querySelector('span').textContent] = Number(b.querySelector('b').textContent); });
@@ -958,15 +970,15 @@ window.MockDrivers = (function () {
         (byText('.hm-area .btn-link', 'Full page') || {}).click && byText('.hm-area .btn-link', 'Full page').click();
         await until(function () { return q('.subtabs'); });
         for (var t = 0; t < all('.subtabs button').length; t++) { all('.subtabs button')[t].click(); await wait(100); }
-        byText('button', '‹ Overview').click();
+        byText('button', '‹ My week').click();
         await until(function () { return q('.hm-stack'); });
       }
       var views = [];
-      for (var v of ['My actions', 'Management', 'Administration']) {
+      for (var v of ['My to-dos', 'Overview of all areas', 'Administration']) {
         if (await visit(v)) {
           views.push(v);
           for (var k = 0; k < all('.subtabs button').length; k++) { all('.subtabs button')[k].click(); await wait(400); }
-          var back = byText('button', '‹ Overview'); if (back) { back.click(); await wait(200); }
+          var back = byText('button', '‹ My week'); if (back) { back.click(); await wait(200); }
         }
       }
       return { areas: seen.length, views: views, hits: MockSharePoint.thresholdHits.slice(), gets: MockSharePoint.requests.filter(function (r) { return r.indexOf('GET') === 0; }).length };
@@ -1071,12 +1083,12 @@ window.MockDrivers = (function () {
       var names = all('.tile b').map(function (b) { return b.firstChild.textContent; });
       for (var i = 0; i < names.length; i++) {
         var tile = all('.tile').filter(function (t) { return t.querySelector('b').firstChild.textContent === names[i]; })[0];
-        if (!tile) { byText('button', '‹ Overview').click(); await wait(50); tile = all('.tile').filter(function (t) { return t.querySelector('b').firstChild.textContent === names[i]; })[0]; }
+        if (!tile) { byText('button', '‹ My week').click(); await wait(50); tile = all('.tile').filter(function (t) { return t.querySelector('b').firstChild.textContent === names[i]; })[0]; }
         tile.click();
         (await until(function () { return byText('.hm-area .btn-link', 'Full page'); })).click();
         await until(function () { return q('.subtabs'); });
         for (var t = 0; t < 4; t++) { all('.subtabs button')[t].click(); await wait(20); }
-        byText('button', '‹ Overview').click();
+        byText('button', '‹ My week').click();
         await wait(50);
       }
       return { areasVisited: names.length, writes: MockSharePoint.writes.length,

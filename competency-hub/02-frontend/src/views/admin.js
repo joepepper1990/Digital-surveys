@@ -206,7 +206,6 @@ CH.views.admin = (function () {
         h('div', { class: 'row' }, ui.linkButton('Check again', function () { refresh(app); })),
         changeList(app)])];
     return [
-      h('div', { class: 'row' }, ui.linkButton('‹ Overview', app.goHome)),
       h('h1', { text: 'Administration' }),
       bar,
       h('div', { class: 'panel', role: 'tabpanel' }, panel)

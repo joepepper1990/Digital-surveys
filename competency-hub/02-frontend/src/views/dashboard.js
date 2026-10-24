@@ -76,7 +76,7 @@ CH.views.dashboard = (function () {
 
   function render(app) {
     if (!app.access.isManagement) {
-      return [h('h1', { text: 'Management' }), h('p', { text: 'This page is for Team Leaders and the Group Head.' })];
+      return [h('h1', { text: 'Overview of all areas' }), h('p', { text: 'This page is for Team Leaders and the Group Head.' })];
     }
     var m = app.model;
     var st = app.dash;
@@ -99,19 +99,17 @@ CH.views.dashboard = (function () {
           h('td', { class: s.meetingStale ? 'txt-soon' : '', text: s.nextMeeting ? D.weekdayShort(s.nextMeeting) : s.lastMeeting ? 'None since ' + D.short(s.lastMeeting) : 'None booked' }));
       })));
     return [
-      h('div', { class: 'row' }, ui.linkButton('‹ Overview', app.goHome)),
-      h('h1', { text: 'Management' }),
-      h('p', { class: 'sentence' }, 'Across the group: ' + all.open.list.length + ' open actions, ',
+      h('h1', { text: 'Overview of all areas' }),
+      h('div', { class: 'row filters dash-head' }, h('p', { class: 'sentence' }, 'Across the group: ' + all.open.list.length + ' open actions, ',
         all.late.list.length ? h('b', { class: 'txt-late', text: all.late.list.length + ' late' }) : 'none late',
         degr ? ', and ' + degr + ' unresolved degradation' + (degr === 1 ? '' : 's') + '.' : '.'),
+        h('label', null, 'Completed and closed in ', period)),
       ui.sectionNote(m.sections.actions, 'actions'),
       st.error ? h('p', { class: 'section-note', text: 'Closed actions could not be read just now, so the completed figures are missing. ' }, ui.linkButton('Try again', function () { refresh(app); })) : null,
       st.closedComplete === false ? h('p', { class: 'section-note', text: 'Only the first 5,000 closed actions were read; the completed figures may be low.' }) : null,
-      h('div', { class: 'row filters' }, h('label', null, 'Completed and closed in ', period)),
       h('div', { class: 'dash-figs' }, names.map(function (n) { return figure(app, '', n, all[n]); })),
       drill(app),
-      ui.card('By area', [h('p', { class: 'muted small', text: 'Choose any number to see the actions it counts. An action shared with another area counts in both areas, and once in the group figures.' }), table]),
-      h('p', { class: 'muted small', text: 'Everyone in the Hub can read every area\'s actions; this page gathers them in one place.' })
+      ui.card('By area', [h('p', { class: 'muted small', text: 'An action shared with another area counts in both areas, and once in the group figures.' }), table])
     ];
   }
 

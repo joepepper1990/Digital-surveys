@@ -84,7 +84,7 @@ CH.views.raiseForm = (function () {
 
     var panes = [
       [field('Title', title, 'A short summary, for example "Replace FH40 probe".'), field('Description', description, 'What needs doing and anything the owner should know.')],
-      [field('Area', area), field('Who will do it?', owner, 'Members of the area, and Team Leaders and the Group Head.'), selfNote],
+      [field('Area', area), field('Who will do it?', owner), selfNote],
       [field('Target date', due, 'From today up to ' + maxYears + (maxYears === 1 ? ' year' : ' years') + ' ahead.'),
         h('details', { class: 'more' }, h('summary', { text: 'More options' }),
           field('Priority', priority), h('label', { class: 'check' }, closeOut, ' Needs a close-out check before it is closed'))],
