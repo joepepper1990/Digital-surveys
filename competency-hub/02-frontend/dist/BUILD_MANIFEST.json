@@ -1,12 +1,12 @@
 {
   "product": "ESG Competency Hub",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "outputs": {
-    "competency-hub.js": "9cfa38250547f4cb8fd97513d4b65ece360734a5bba81ab3c8023ebc72659602",
-    "competency-hub.html": "a1735a43ae702efba6a8bfc6efcab91cdd767c046d8542fa6715fbe7e027f060"
+    "competency-hub.js": "4481cf7596bc7f1c60553acad56e98bdab12726842b9ff7df29c19d672542fa9",
+    "competency-hub.html": "c737e93841644342ebf055f1f548a28c21edb6334e1ae5a0e8be1a433e4b1dfb"
   },
   "sources": {
-    "src/core/config.js": "7d2471f479268406b93a04eda9075d4facc74102bc1eb916da4ff6bd97414154",
+    "src/core/config.js": "0a7867915f5a5afa0943e526a9bea0972226a387c449a2791fdb9747d10d62e4",
     "src/core/dom.js": "313c1dd6467a0fb4065977850370a95aa80ecd39dd030197bc6d1538b210ff7a",
     "src/core/names.js": "798f186ead8942049882d70990c78b4f8808ba56c7a8bf0f0e20f6220600da8a",
     "src/core/dates.js": "5c44797862f7df6d5183febe10f467ca7a130d66e1e347ff0fe23d234aba0fed",

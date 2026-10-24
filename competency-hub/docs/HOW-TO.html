@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ESG Competency Hub – setup steps</title>
+<title>ESG Competency Hub – update steps</title>
 <style>
   body { font-family: Segoe UI, Arial, sans-serif; font-size: 16px; line-height: 1.5; color: #16222c; background: #fff; max-width: 860px; margin: 0 auto; padding: 24px 16px; }
   h1 { color: #13516b; font-size: 26px; margin-bottom: 4px; }
@@ -19,56 +19,58 @@
 </style>
 </head>
 <body>
-<h1>ESG Competency Hub – Releases 1 to 6</h1>
-<p>This package brings the Hub from app 0.3.0 and solution 1.2.0.0 (what you have now) to <strong>app 1.0.0</strong>, <strong>solution 1.8.0.2</strong> and <strong>Setup 1.3.2</strong>. Each release includes the ones before it, so you can install this package directly. Updated 23 October 2026.</p>
+<h1>ESG Competency Hub – update after your first review</h1>
+<p>You have <strong>Setup 1.3.2</strong>, <strong>solution 1.8.0.2</strong> and <strong>app 1.0.0</strong> installed. This package brings them to <strong>Setup 1.4</strong>, <strong>solution 1.9.0.0</strong> and <strong>app 1.1.0</strong>, with everything you asked for in your first review. Do the three parts <strong>in this order</strong>: Setup adds the new columns, the flows use them, and the app shows them. Updated 24 October 2026.</p>
 <ul>
-  <li><strong>Release 1, safety net:</strong> a queue monitor that recovers stalled changes and retries emails; clear messages while a change is waiting, being recorded, being retried or needs an administrator; an <em>Administration</em> page; and a reduced mode in which the buttons that send changes are paused while changes can't be processed.</li>
-  <li><strong>Release 2, administration and permissions:</strong> add people, choose their areas, meeting rights, access end dates and notice posting from the app; the corrected technician and meeting rights; Feedback list and Meeting Minutes library ready for later releases.</li>
-  <li><strong>Release 3, noticeboard, register, feedback, settings and dashboard:</strong> read a notice in full, comment, flag it for the next meeting; edit, pin and archive notices; improvements and degradations with linked actions; a <em>Feedback</em> button on every page with a review tab for administrators; a <em>Settings</em> tab; and a <em>Management</em> page for Team Leaders and the Group Head.</li>
-  <li><strong>Release 4, meetings I:</strong> book monthly meetings, with an Outlook invitation from your calendar, an update when the meeting changes and a cancellation when it is cancelled; <em>Add to my calendar</em> for everyone; the agenda, previewed before the meeting and fixed when it starts; items added by hand; and a probe flow to prove the invitations first.</li>
-  <li><strong>Release 5, meetings II:</strong> run the meeting in the Hub – attendance, each item's outcome and notes, decisions, raising or changing actions from an item; finalise, which makes the record read-only; minutes with a PDF to open, download or print; amendments by Team Leaders and the Group Head; flags cleared once an item is discussed; and a probe flow to prove the PDF conversion first.</li>
-  <li><strong>Release 6, checks and go-live:</strong> <em>Administration → Remove test data</em>, with a flow of its own; what you post directly is marked as a test record until then; and the checks before go-live (security, list size, accessibility). The steps for the day itself are in <code>GO-LIVE.html</code>, and the one-page guide for staff in <code>STAFF-GUIDE.html</code>.</li>
+  <li><strong>Wording and layout:</strong> no Text size control. <em>Your to-dos</em> and <em>See all my to-dos</em>. <em>Coming up this week</em>. <em>Owner: … · Raised by: …</em>. The page for Team Leaders and the Group Head is now <em>Overview of all areas</em>, and the word "Management" no longer appears on screen. The help lines you listed are gone. Every dropdown uses the Hub's style. Dialogs never grow taller than the window. No page scrolls at 1920 × 960 or 1366 × 768.</li>
+  <li><strong>Known as:</strong> each person can have a short name (for example <em>Joe</em>) that the Hub and its emails use everywhere.</li>
+  <li><strong>Owner and co-owners:</strong> an action can have up to 5 co-owners as well as its owner. They see it in their to-dos, can add updates and get the "assigned to you" email. The owner alone moves the deadline, marks it done and gets the reminders.</li>
+  <li><strong>Who checks it:</strong> when an action needs a close-out check, you choose who does it (the person who raised it, unless you choose someone else, and never the owner). Only they, or a Team Leader or the Group Head, can confirm the close-out, and the "ready for your check" email goes to them.</li>
+  <li><strong>Notices:</strong> post to several noticeboards, or to all of them, in one go. The notice is kept once, so an edit or archive applies everywhere. <em>Important for</em> 1 week, 2 weeks, 1 month or 3 months.</li>
+  <li><strong>Improvements and degradations:</strong> no "Who is responsible" (the person who raised it is shown), no type hints, and a new type <em>Other</em>.</li>
+  <li><strong>Turn into an action:</strong> on a notice or an improvement or degradation, for the area's engineers, its meeting leads, the Team Leaders and the Group Head. The action keeps a link back, and the notice lists the actions made from it.</li>
 </ul>
-<p class="note">Everything here was built and tested on a simulated SharePoint site only. Each part below changes your Competency Hub site or your Power Automate environment, so do it only when you are ready. Nobody else gets access until you add them.</p>
+<p class="note">Everything here was built and tested on a simulated SharePoint site only. Each part below changes your Competency Hub site or your Power Automate environment.</p>
 
 <table>
   <tr><th>Folder</th><th>Files</th><th>When</th></tr>
   <tr><td><code>1-Setup</code></td><td><code>CH_Setup.html</code>, <code>CH_Setup.js</code></td><td>Part A</td></tr>
-  <tr><td><code>2-Power-Automate</code></td><td><code>ESGCompetencyHub_1_8_0_2_unmanaged.zip</code></td><td>Part B – import as it is. <strong>Don't unzip it.</strong></td></tr>
+  <tr><td><code>2-Power-Automate</code></td><td><code>ESGCompetencyHub_1_9_0_0_unmanaged.zip</code></td><td>Part B – import as it is. <strong>Don't unzip it.</strong></td></tr>
   <tr><td><code>3-App</code></td><td><code>competency-hub.html</code>, <code>competency-hub.js</code></td><td>Part C</td></tr>
-  <tr><td><code>4-Permission-probe</code></td><td><code>CH_Probe_P2.html</code>, <code>CH_Probe_P2.js</code></td><td>Part E, with the test account</td></tr>
 </table>
 
-<h2>Part A – Setup 1.3.2 (about 15 minutes)</h2>
-<p>Setup only adds things; it removes no data. It adds the <em>Feedback</em> list, the <em>Meeting Minutes</em> library, a few new columns and settings, the group <em>Competency Hub – Notice Posters</em>, the meetings' end time, and two switches under Settings (<em>Outlook invitations</em> and <em>PDF minutes</em>, both on). It makes <strong>one permission change</strong>: the Noticeboard goes from "All Users can add" to "All Users can read, Notice Posters can add", so an administrator can stop one person posting. You are the only user, so nobody else is affected.</p>
+<h2>Part A – Setup 1.4 (about 10 minutes)</h2>
+<p>Setup 1.4 only adds things. It adds five columns: <em>Known As</em> on People; <em>CoOwnerIds</em> and <em>Close-Out By ID</em> on Actions; and <em>Important Days</em> and <em>Shown In</em> on the Noticeboard. It also adds the choice <em>Other</em> to the type of an improvement or degradation. It changes no permissions and no data.</p>
 <ol>
   <li>Upload both files from <code>1-Setup</code> to <em>Welcome Web Part - Custom Layouts</em> (<em>Replace</em>).</li>
   <li>Create the <code>HubSetup</code> page again with a Welcome web part, choose the layout <em>Competency Hub Setup</em>, and publish it.</li>
-  <li>Click <strong>Check</strong>. It writes nothing. Send me the log.</li>
-  <li>When I have looked at it, click <strong>Apply</strong>, type <code>SETUP</code> and wait for it to finish. Send me the log.</li>
+  <li>Click <strong>Check</strong>. It writes nothing. Expect "Would add 1 column to People", "Would add 2 columns to Actions", "Would add 2 columns to Noticeboard" and the new choice. Send me the log.</li>
+  <li>Click <strong>Apply</strong>, type <code>SETUP</code> and wait for it to finish. Then click <strong>Check</strong> once more: it should report no changes. Send me both logs.</li>
   <li>Delete the two Setup files and the HubSetup page again.</li>
 </ol>
 
-<h2>Part B – solution 1.8.0.2 (about 10 minutes)</h2>
+<h2>Part B – solution 1.9.0.0 (about 10 minutes)</h2>
 <ol>
-  <li>In Power Automate, same environment: <strong>Solutions → Import solution → Browse</strong>, choose <code>ESGCompetencyHub_1_8_0_2_unmanaged.zip</code>, <em>Next</em>. It should say <strong>upgrade</strong>. Leave <em>Enable Plugin steps and flows included within the solution</em> <strong>unticked</strong>: you turn on the right flows yourself below.</li>
-  <li>Keep the SharePoint and Outlook connections and the site address. For the new <strong>OneDrive for Business</strong> connection, choose (or create) one with your own account. Then <em>Import</em>. If the import says the OneDrive connector is not allowed with the others, that is the data policy: send me the message, and in the meantime set <em>PDF minutes</em> to No (Part H).</li>
-  <li>Open the solution. There are now <strong>ten</strong> flows. Make sure these five are <strong>On</strong>:
-    <ul class="sub">
-      <li><em>ESG Competency Hub | 1 Daily tasks</em> and <em>2 Request queue</em> (check they are still on – an upgrade can switch them off);</li>
-      <li><em>ESG Competency Hub | 3 Queue monitor</em>, <em>4 Records</em> and <em>6 Administration</em> (new: turn them on).</li>
-    </ul>
-    Leave <em>5 Meetings</em>, <em>7 Minutes</em>, <em>8 Clean-up</em> and the two probes <strong>Off</strong> for now: Parts G, H and the go-live note turn them on when they are needed.</li>
+  <li>In Power Automate, same environment: <strong>Solutions → Import solution → Browse</strong>, choose <code>ESGCompetencyHub_1_9_0_0_unmanaged.zip</code>, <em>Next</em>. It should say <strong>upgrade</strong>. Leave <em>Enable Plugin steps and flows included within the solution</em> <strong>unticked</strong>, as before.</li>
+  <li>Keep the same connections and site address, then <em>Import</em>.</li>
+  <li>Open the solution and make sure these five flows are <strong>On</strong> (an upgrade can switch them off): <em>1 Daily tasks</em>, <em>2 Request queue</em>, <em>3 Queue monitor</em>, <em>4 Records</em> and <em>6 Administration</em>. Leave the others as they were.</li>
+  <li>If any flow refuses to turn on, send me its error.</li>
 </ol>
 
-<h2>Part C – app 1.0.0</h2>
+<h2>Part C – app 1.1.0</h2>
 <ol>
   <li>Upload both files from <code>3-App</code> to <em>Welcome Web Part - Custom Layouts</em> (<em>Replace</em>).</li>
-  <li>On the Hub page, edit the web part, <strong>Reset layout cache</strong>, <em>Republish</em>, and reload with <strong>Ctrl+F5</strong>. The footer should say <strong>1.0.0</strong>.</li>
-  <li>The home page is the new <em>My week</em> design. Open it with your WebView link (ending <code>?env=WebView</code>) and check that it fits the window with no scrolling.</li>
-  <li>Click the arrow on a section header: it folds to one line and stays folded after a reload. Click an area tile: it opens in place; <strong>✕</strong> or <strong>Esc</strong> closes it.</li>
-  <li>Your name at the top should read <em>Joseph Pepper</em>, first name first.</li>
+  <li>On the Hub page, edit the web part, <strong>Reset layout cache</strong>, <em>Republish</em>, and reload with <strong>Ctrl+F5</strong>. The footer should say <strong>1.1.0</strong>.</li>
+  <li><strong>Known as:</strong> <em>Administration → People</em>, open yourself, type <code>Joe</code> in <em>Known as</em> and click <em>Save name</em>. A minute or two later the top bar says <em>Joe · Team Leader</em>.</li>
+  <li><strong>Co-owners and the check:</strong> raise a TEST action and choose a co-owner. Under <em>More options</em>, tick <em>Needs a close-out check</em> and look at <em>Who checks it?</em>. Once it is recorded, the action's Who line lists the co-owners and who checks it.</li>
+  <li><strong>Notices:</strong> post a TEST notice, tick two noticeboards and choose <em>Important for 1 week</em>. It shows on both. Open it: <em>Turn into an action</em> fills in the title for you.</li>
+  <li><strong>Register:</strong> raise a TEST improvement and check that there is no "Who is responsible" and that <em>Other</em> is in the type list.</li>
+  <li>Check a few pages with your WebView link: none should scroll, and every dropdown should look the same.</li>
 </ol>
+<p class="note">Please send me the <strong>Known as</strong> name for everyone (for example "Joseph Pepper – Joe"). I'll put them in the people list, or you can type them on the People page.</p>
+
+<h2>Earlier steps, for reference</h2>
+<p>Parts D to I below are from the first install. They still describe how to try each part of the Hub.</p>
 
 <h2>Part D – try the safety net (Release 1)</h2>
 <ol>
@@ -114,8 +116,8 @@
 </ol>
 <h3>Improvements and degradations</h3>
 <ol>
-  <li>In the Flask panel, click <strong>Raise an issue</strong>. Choose <em>Degradation</em>, give a TEST title and description, choose who is responsible, and send it. It appears in the list within two minutes as <em>REG-0000n</em>.</li>
-  <li>Open it. Click <strong>Raise a linked action</strong> and raise a TEST action: it is listed under <em>Linked actions</em>. Or click <strong>Link an existing action</strong>.</li>
+  <li>In the Flask panel, click <strong>Raise an issue</strong>. Choose <em>Degradation</em>, give a TEST title and description, and send it. It appears in the list within two minutes as <em>REG-0000n</em>.</li>
+  <li>Open it. Click <strong>Turn into an action</strong> and raise a TEST action: it is listed under <em>Linked actions</em>. Or click <strong>Link an existing action</strong>.</li>
   <li>Click <strong>Change status</strong>, choose <em>Resolved</em>: it asks for an outcome. Enter one and save.</li>
   <li>The full area page has the same lists under <em>Notices &amp; issues</em>, with a filter for the register.</li>
 </ol>
@@ -124,8 +126,8 @@
   <li>Click <strong>Feedback</strong> at the bottom right of any page, send a TEST question, and wait for <em>Thanks – your feedback has been sent</em>.</li>
   <li><strong>Administration → Feedback</strong>: your item is listed. Open it, write a response, set it to <em>Answered</em>.</li>
   <li><strong>Administration → Settings</strong>: change <em>Due soon</em> from 7 to 10 days and back. Each change is recorded within a few minutes; try 40 to see it refused.</li>
-  <li><strong>Management</strong> (in the top bar): click any number. The list underneath is exactly the actions that number counts.</li>
-  <li>Send me screenshots of the notice, the entry and the Management page.</li>
+  <li><strong>Overview of all areas</strong> (in the top bar): click any number. The list underneath is exactly the actions that number counts.</li>
+  <li>Send me screenshots of the notice, the entry and the Overview of all areas page.</li>
 </ol>
 <p class="note">If <em>4 Records</em> is off, actions carry on as normal; changes to notices and the register are paused and the Administration page says so. Comments and flags still work, because they don't go through a flow.</p>
 
@@ -185,7 +187,7 @@
 <h2>Already done</h2>
 <div class="done">
   <ul>
-    <li>Site, Setup and the app shell; raising and updating actions, extensions, done, status, edit, close and reopen; My actions; emails and 06:00 reminders.</li>
+    <li>Site, Setup and the app shell; raising and updating actions, extensions, done, status, edit, close and reopen; My to-dos; emails and 06:00 reminders.</li>
   </ul>
 </div>
 </body>

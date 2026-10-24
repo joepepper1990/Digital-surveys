@@ -1,11 +1,11 @@
-/* ESG Competency Hub 1.0.0 – built from src/ by tools/build.js. Do not edit. */
+/* ESG Competency Hub 1.1.0 – built from src/ by tools/build.js. Do not edit. */
 window.ESGCompetencyHub = function (ctx) {
   'use strict';
   var CH = {};
   /* src/core/config.js */
   // Fixed names and limits. Lists are addressed by display title; folders by list URL name.
   CH.config = {
-    VERSION: '1.0.0',
+    VERSION: '1.1.0',
     ENVIRONMENT: 'TEST',
     lists: {
       competencies: { title: 'Competencies', url: 'Competencies' },

@@ -28,6 +28,8 @@ choices on existing columns. **Version 1.3** (Release 4) adds the meeting end ti
 Built and tested locally. Releases 5 and 6 need no change to Setup.
 **Version 1.3.1** (24 October 2026) fixes Check on a site made by Setup 1.1: it read the new
 `People.CanPostNotices` column before Apply had added it, and stopped. Check now plans that step instead.
+**Version 1.4** (schema 1.4.0, 24 October 2026) adds `People.KnownAs`, `Actions.CoOwnerIds` and `Actions.CloseOutById`,
+`Noticeboard.ImportantDays` and `Noticeboard.ShownIn`, and the choice *Other* on the register's type. All additive.
 **Version 1.3.2** (24 October 2026) fixes Apply stopping on the Feedback list: SharePoint does not allow a
 unique column on a list where people read only their own items, so `Feedback.ClientKey` is now indexed but not
 unique (the app already looks for its own item before offering a retry). Column updates are now logged.

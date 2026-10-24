@@ -2,6 +2,17 @@
 
 Plain HTML, CSS and JavaScript, delivered as a Welcome by Accelerator 365 custom layout. Same-origin SharePoint REST runs as the signed-in user. There are no libraries and no external calls.
 
+## Version 1.1.0: your first review on the site (24 October 2026)
+
+- Wording and layout: no Text size control; *My to-dos*, *Coming up this week*, *Owner: … · Raised by: …*;
+  *Overview of all areas* (never "Management" on screen); themed dropdowns; dialogs within the window; no page scroll.
+- *Known as* (`core/names.js`): the short name a person is shown by, set on the People page.
+- Co-owners (up to 5) and a named close-out checker on raise, reassign and edit (`domain/rules.js`, `views/raise-form.js`,
+  `views/action-panel.js`); co-owners and the checker see the action in their to-dos (`model.isMine`).
+- Notices on several noticeboards or all (`ShownIn`), *Important for* 1 week to 3 months (`ImportantDays`); the register
+  without a responsible person and with the type *Other*; *Turn into an action* from a notice or an issue.
+- Reads tolerate the new columns being missing until Setup 1.4 has run.
+
 ## Version 1.0.0: Release 6 – checks and go-live
 
 - **Administration → Remove test data** (`views/cleanup.js`), used once before go-live: every record marked as a test
