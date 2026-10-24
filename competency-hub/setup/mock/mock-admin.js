@@ -237,6 +237,11 @@ window.MockAdmin = (function () {
       if ((m = /^\/_api\/web\/lists\(guid'([^']+)'\)\/items$/.exec(p))) {
         var l3 = listByGuid(m[1]);
         if (!l3) return fail(404, 'List not found');
+        // Like SharePoint, naming a column the list does not have refuses the whole read.
+        var unknown = (q.$select || '').split(',').filter(function (n) {
+          return n && ['Id', 'ID', 'FileLeafRef', 'FileRef', 'FSObjType'].indexOf(n) < 0 && !l3.fields.some(function (x) { return x.InternalName === n; });
+        })[0];
+        if (unknown) return fail(400, "The field or property '" + unknown + "' does not exist.");
         var rows = l3.items.filter(parseFilter(q.$filter));
         return respond(200, { value: rows.slice(0, Number(q.$top || 100)) });
       }

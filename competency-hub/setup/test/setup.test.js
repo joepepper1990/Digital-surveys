@@ -466,6 +466,32 @@ test('An upgrade on a site made by an earlier schema adds the new columns and ch
 });
 
 
+test('Check on a site set up before People.CanPostNotices existed finishes without stopping, and Apply then completes', async () => {
+  const { site, run, ctx } = newSite();
+  const old = plain(schema);
+  const people = old.lists.filter((l) => l.key === 'people')[0];
+  people.fields = people.fields.filter((f) => f.name !== 'CanPostNotices');
+  const rest = ctx.CHS.rest.create(site.ctx.getWebPart());
+  const first = await ctx.CHS.engine.create(rest, old, { log: () => {}, confirmGroupOwnersOnly: true, today: TODAY }).run('apply');
+  assert.equal(first.ok, true);
+  assert.ok(!listByUrl(site, 'People').fields.some((f) => f.InternalName === 'CanPostNotices'));
+  site.writes.length = 0;
+  const check = await run('check');
+  deq(check.stops, []);
+  assert.equal(check.result.ok, true);
+  deq(site.writes, []);
+  const planned = check.entries.filter((e) => e.level === 'create').map((e) => e.text).join(' | ');
+  assert.match(planned, /Would add 1 column to "People"/);
+  assert.match(planned, /Notice posters \(after the new People column is added\)/);
+  const apply = await run('apply');
+  assert.equal(apply.result.ok, true, apply.stops.join(' | '));
+  assert.ok(listByUrl(site, 'People').fields.some((f) => f.InternalName === 'CanPostNotices'));
+  site.writes.length = 0;
+  const again = await run('check');
+  assert.equal(again.result.created, 0, again.entries.filter((e) => e.level === 'create').map((e) => e.text).join(' | '));
+  deq(site.writes, []);
+});
+
 test('The Noticeboard regrant: All Users keep Read, only Notice posters may add, and the people on the site are Notice posters', async () => {
   const { site, run, ctx } = newSite();
   // The site as release 1 left it: All Users could add notices; there was no Notice posters group.

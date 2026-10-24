@@ -26,6 +26,8 @@ the History reporting columns, the test-record markers, new settings and the new
 choices on existing columns. **Version 1.3** (Release 4) adds the meeting end time
 (`Meetings.EndTime`) and two settings, `InvitesEnabled` and `PdfEnabled` (both Yes).
 Built and tested locally. Releases 5 and 6 need no change to Setup.
+**Version 1.3.1** (24 October 2026) fixes Check on a site made by Setup 1.1: it read the new
+`People.CanPostNotices` column before Apply had added it, and stopped. Check now plans that step instead.
 
 **Check** changes nothing and lists what Apply would do. **Apply** needs `SETUP`
 typed first. It only adds what is missing and reads every change back, and can

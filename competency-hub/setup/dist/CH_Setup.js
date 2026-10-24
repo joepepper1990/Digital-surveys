@@ -144,7 +144,7 @@ window.ESGCompetencyHubSetup = function (ctx) {
       opts = opts || {};
       var log = opts.log || function () {};
       var mode = 'check';
-      var S = { lists: {}, groups: {}, roles: {}, stops: 0, created: 0, unchanged: 0 };
+      var S = { lists: {}, groups: {}, roles: {}, pendingFields: {}, stops: 0, created: 0, unchanged: 0 };
       var areas = schema.areas;
 
       function note(level, step, text) {
@@ -355,7 +355,7 @@ window.ESGCompetencyHubSetup = function (ctx) {
           }
           if (!cur) {
             made++;
-            if (!applying()) continue;
+            if (!applying()) { S.pendingFields[l.key + '.' + f.name] = true; continue; }
             var lookupId = f.lookup ? S.lists[f.lookup] && S.lists[f.lookup].id : null;
             if (f.lookup && !lookupId) throw new StopError('Lookup target "' + f.lookup + '" is missing');
             await write(listPath(l.key) + '/fields/createfieldasxml', {
@@ -884,7 +884,10 @@ window.ESGCompetencyHubSetup = function (ctx) {
       // Spec §4.4: the active people allowed to post notices are members of Notice posters.
       async function noticePosters() {
         var step = 'Notice posters';
+        var peopleDef = schema.lists.filter(function (l) { return l.key === 'people'; })[0];
+        if (!peopleDef.fields.some(function (f) { return f.name === 'CanPostNotices'; })) return;
         if (S.lists.people.planned) { note('create', step, 'Would add everyone allowed to post notices to Notice posters.'); return; }
+        if (S.pendingFields['people.CanPostNotices']) { note('create', step, 'Would add everyone allowed to post notices to Notice posters (after the new People column is added).'); return; }
         var people = await rest.getRows(listPath('people') + "/items?$select=Id,Title,SiteUserId,CanPostNotices,Status&$filter=Status eq 'Active'");
         var gid = S.groups.NoticePosters;
         var inGroup = gid ? (await rest.getRows('/_api/web/sitegroups(' + gid + ')/users?$select=Id,LoginName')) : [];
@@ -901,7 +904,7 @@ window.ESGCompetencyHubSetup = function (ctx) {
 
       async function run(runMode) {
         mode = runMode === 'apply' ? 'apply' : 'check';
-        S = { lists: {}, groups: {}, roles: {}, stops: 0, created: 0, unchanged: 0, writeBase: rest.writeCount() };
+        S = { lists: {}, groups: {}, roles: {}, pendingFields: {}, stops: 0, created: 0, unchanged: 0, writeBase: rest.writeCount() };
         try {
           await STEPS[0]();
           if (S.stops) {
