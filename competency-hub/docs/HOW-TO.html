@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ESG Competency Hub – update steps</title>
+<title>ESG Competency Hub – next steps</title>
 <style>
   body { font-family: Segoe UI, Arial, sans-serif; font-size: 16px; line-height: 1.5; color: #16222c; background: #fff; max-width: 860px; margin: 0 auto; padding: 24px 16px; }
   h1 { color: #13516b; font-size: 26px; margin-bottom: 4px; }
@@ -19,71 +19,49 @@
 </style>
 </head>
 <body>
-<h1>ESG Competency Hub – update after your first review</h1>
-<p>You have <strong>Setup 1.3.2</strong>, <strong>solution 1.8.0.2</strong> and <strong>app 1.0.0</strong> installed. This package brings them to <strong>Setup 1.4.2</strong>, <strong>solution 1.9.0.1</strong> and <strong>app 1.1.1</strong>, with everything you asked for in your first review. Do the three parts <strong>in this order</strong>: Setup adds the new columns, the flows use them, and the app shows them. Updated 24 October 2026.</p>
-<ul>
-  <li><strong>Wording and layout:</strong> no Text size control. <em>Your to-dos</em> and <em>See all my to-dos</em>. <em>Coming up this week</em>. <em>Owner: … · Raised by: …</em>. The page for Team Leaders and the Group Head is now <em>Overview of all areas</em>, and the word "Management" no longer appears on screen. The help lines you listed are gone. Every dropdown uses the Hub's style. Dialogs never grow taller than the window. No page scrolls at 1920 × 960 or 1366 × 768.</li>
-  <li><strong>Known as:</strong> each person can have a short name (for example <em>Joe</em>) that the Hub and its emails use everywhere.</li>
-  <li><strong>Owner and co-owners:</strong> an action can have up to 5 co-owners as well as its owner. They see it in their to-dos, can add updates and get the "assigned to you" email. The owner alone moves the deadline, marks it done and gets the reminders.</li>
-  <li><strong>Who checks it:</strong> when an action needs a close-out check, you choose who does it (the person who raised it, unless you choose someone else, and never the owner). Only they, or a Team Leader or the Group Head, can confirm the close-out, and the "ready for your check" email goes to them.</li>
-  <li><strong>Notices:</strong> post to several noticeboards, or to all of them, in one go. The notice is kept once, so an edit or archive applies everywhere. <em>Important for</em> 1 week, 2 weeks, 1 month or 3 months.</li>
-  <li><strong>Improvements and degradations:</strong> no "Who is responsible" (the person who raised it is shown), no type hints, and a new type <em>Other</em>.</li>
-  <li><strong>Turn into an action:</strong> on a notice or an improvement or degradation, for the area's engineers, its meeting leads, the Team Leaders and the Group Head. The action keeps a link back, and the notice lists the actions made from it.</li>
-</ul>
-<p class="note">Everything here was built and tested on a simulated SharePoint site only. Each part below changes your Competency Hub site or your Power Automate environment.</p>
+<h1>ESG Competency Hub – where you are, and what's next</h1>
+<p>Updated 24 October 2026, afternoon. This starts from where you are now and lists only what is left to do, in order.</p>
+
+<h2>Where you are</h2>
+<div class="done">
+  <ul>
+    <li><strong>Setup 1.4.2</strong> applied: the new columns, the type <em>Other</em>, and your Known as name (<em>Joe</em>).</li>
+    <li><strong>Solution 1.9.0.1</strong> imported. It fixes the queue monitor failing at <em>Inv_retry</em>.</li>
+    <li><strong>App 1.1.1</strong> installed: the footer says <em>version 1.1.1</em> and the top bar <em>Joe · Team Leader</em>.</li>
+    <li>Tried and working: raising, updating, extending, completing, status, edit, close and reopen; emails and 06:00 reminders; notices on two noticeboards with <em>Important for</em>; <em>Turn into an action</em>.</li>
+  </ul>
+</div>
+<p class="note">Co-owners and <em>Who checks it?</em> need a second person to choose, so they wait until the test account is added in Step 3.</p>
 
 <table>
-  <tr><th>Folder</th><th>Files</th><th>When</th></tr>
-  <tr><td><code>1-Setup</code></td><td><code>CH_Setup.html</code>, <code>CH_Setup.js</code>, <code>known-as.txt</code></td><td>Part A</td></tr>
-  <tr><td><code>2-Power-Automate</code></td><td><code>ESGCompetencyHub_1_9_0_1_unmanaged.zip</code></td><td>Part B – import as it is. <strong>Don't unzip it.</strong></td></tr>
-  <tr><td><code>3-App</code></td><td><code>competency-hub.html</code>, <code>competency-hub.js</code></td><td>Part C</td></tr>
+  <tr><th>In this zip</th><th>When</th></tr>
+  <tr><td><code>4-Permission-probe</code>: <code>CH_Probe_P2.html</code>, <code>CH_Probe_P2.js</code></td><td>Step 3</td></tr>
+  <tr><td><code>known-as.txt</code>, <code>GO-LIVE.html</code>, <code>STAFF-GUIDE.html</code></td><td>At go-live</td></tr>
 </table>
 
-<h2>Part A – Setup 1.4.2 (about 10 minutes)</h2>
-<p>Setup 1.4.2 only adds things. It adds five columns: <em>Known As</em> on People; <em>CoOwnerIds</em> and <em>Close-Out By ID</em> on Actions; and <em>Important Days</em> and <em>Shown In</em> on the Noticeboard. It also adds the choice <em>Other</em> to the type of an improvement or degradation. It changes no permissions and no data.</p>
+<h2>Step 1 – turn the flows back on (5 minutes)</h2>
+<p>An upgrade leaves the replaced flows <strong>Off</strong>: that is the "deactivated and replaced" message.</p>
 <ol>
-  <li>Upload both files from <code>1-Setup</code> to <em>Welcome Web Part - Custom Layouts</em> (<em>Replace</em>).</li>
-  <li>Create the <code>HubSetup</code> page again with a Welcome web part, choose the layout <em>Competency Hub Setup</em>, and publish it. If the page is still there, edit the web part, click <strong>Reset layout cache</strong>, Republish and reload with <strong>Ctrl+F5</strong>.</li>
-  <li>The heading must say <strong>Competency Hub Setup 1.4.2</strong>. If it says only "Competency Hub Setup", the browser is still using the old file: repeat the step above.</li>
-  <li>Leave <em>Optional: add other people now</em> empty. Open <em>Optional: the name each person is shown by (Known as)</em> and paste everything from <code>known-as.txt</code>.</li>
-  <li>Click <strong>Check</strong>. It writes nothing. Expect "Would add 1 column to People", "Would add 2 columns to Actions", "Would add 2 columns to Noticeboard" and the new choice. Send me the log.</li>
-  <li>Click <strong>Apply</strong>, type <code>SETUP</code> and wait for it to finish. Then click <strong>Check</strong> once more: it should report no changes, apart from "Not in the Hub yet" for anyone you have not added – their name goes in when you add them (the People page's paste list takes it as a fourth part). Send me both logs.</li>
-  <li>Delete the two Setup files and the HubSetup page again.</li>
+  <li>In Power Automate open <strong>Solutions → ESG Competency Hub</strong> and turn <strong>On</strong>: <em>1 Daily tasks</em>, <em>2 Request queue</em>, <em>3 Queue monitor</em>, <em>4 Records</em> and <em>6 Administration</em>.</li>
+  <li>Leave <strong>Off</strong> for now: <em>5 Meetings</em> and <em>7 Minutes</em> (Steps 5 and 6 turn them on), <em>8 Clean-up</em> (go-live), and the two probes.</li>
+  <li>If one refuses to turn on, send me its error.</li>
 </ol>
 
-<h2>Part B – solution 1.9.0.1 (about 10 minutes)</h2>
+<h2>Step 2 – check the safety net</h2>
+<p><strong>When the monitor works.</strong> <em>3 Queue monitor</em> runs every 15 minutes. On weekdays 07:00–19:45 (the <em>Monitor hours</em> setting) every run does the work. At other times only the run just after the hour does it, for example 15:00–15:14; the others end at once and still show <em>Succeeded</em>. Clicking <strong>Run</strong> by hand follows the same rule.</p>
 <ol>
-  <li>In Power Automate, same environment: <strong>Solutions → Import solution → Browse</strong>, choose <code>ESGCompetencyHub_1_9_0_1_unmanaged.zip</code>, <em>Next</em>. It should say <strong>upgrade</strong>. Leave <em>Enable Plugin steps and flows included within the solution</em> <strong>unticked</strong>, as before.</li>
-  <li>Keep the same connections and site address, then <em>Import</em>.</li>
-  <li>Open the solution and make sure these five flows are <strong>On</strong> (an upgrade can switch them off): <em>1 Daily tasks</em>, <em>2 Request queue</em>, <em>3 Queue monitor</em>, <em>4 Records</em> and <em>6 Administration</em>. Leave the others as they were.</li>
-  <li>If any flow refuses to turn on, send me its error.</li>
+  <li>After the next run that does the work, open <em>3 Queue monitor → Run history</em>: it should be <strong>Succeeded</strong>. If it failed, send me the failed step and its error.</li>
+  <li>In the Hub, open <strong>Administration</strong>: the first card should now say <em>Automatic processing is working</em>, and the yellow "has not reported yet" banner on the home page goes. Your earlier TEST action <em>TEST 2 Queue request OFF</em> should now be recorded.</li>
+  <li><strong>The stopped-queue test</strong> (optional; quicker on a weekday): turn <em>2 Request queue</em> <strong>Off</strong> and raise a TEST action. It shows <em>waiting to be recorded</em>.
+    <ul class="sub">
+      <li>At the first run that does the work (at least 10 minutes after you raised it), the monitor puts the request back in the queue. If it is still not picked up at the next such run, the monitor reports that changes aren't being processed: the app shows a banner and pauses the buttons that send changes. That is what staff would see. On a weekday this takes about 25–40 minutes; at a weekend about 2 hours.</li>
+      <li>Turn <em>2 Request queue</em> back <strong>On</strong>. The action is recorded without you doing anything else, and the banner goes at the next run that does the work.</li>
+    </ul></li>
+  <li>Send me a screenshot of the Administration page and the monitor's run history.</li>
 </ol>
+<p class="note">Reading and adding updates always keep working. If only <em>6 Administration</em> is off, staff carry on as normal and the Administration page says so.</p>
 
-<h2>Part C – app 1.1.1</h2>
-<ol>
-  <li>Upload both files from <code>3-App</code> to <em>Welcome Web Part - Custom Layouts</em> (<em>Replace</em>).</li>
-  <li>On the Hub page, edit the web part, <strong>Reset layout cache</strong>, <em>Republish</em>, and reload with <strong>Ctrl+F5</strong>. The footer should say <strong>1.1.1</strong>.</li>
-  <li><strong>Known as:</strong> the top bar says <em>Joe · Team Leader</em> (set by Setup in Part A). To change a name later: <em>Administration → People</em>, open the person, edit <em>Known as</em> and click <em>Save name</em>.</li>
-  <li><strong>Co-owners and the check:</strong> raise a TEST action and choose a co-owner. Under <em>More options</em>, tick <em>Needs a close-out check</em> and look at <em>Who checks it?</em>. Once it is recorded, the action's Who line lists the co-owners and who checks it.</li>
-  <li><strong>Notices:</strong> post a TEST notice, tick two noticeboards and choose <em>Important for 1 week</em>. It shows on both. Open it: <em>Turn into an action</em> fills in the title for you.</li>
-  <li><strong>Register:</strong> raise a TEST improvement and check that there is no "Who is responsible" and that <em>Other</em> is in the type list.</li>
-  <li>Check a few pages with your WebView link: none should scroll, and every dropdown should look the same.</li>
-</ol>
-
-<h2>Earlier steps, for reference</h2>
-<p>Parts D to I below are from the first install. They still describe how to try each part of the Hub.</p>
-
-<h2>Part D – try the safety net (Release 1)</h2>
-<ol>
-  <li>On the home page, click <strong>Open Administration</strong>. The first card should say <em>Automatic processing is working</em> once the queue monitor has run: within 15 minutes on weekdays 07:00–19:45 (the <em>Monitor hours</em> setting), otherwise within the hour – outside those hours the monitor does its work once an hour, in the run just after the hour.</li>
-  <li>Turn <em>2 Request queue</em> <strong>Off</strong>. Raise a <strong>TEST</strong> action. It shows <em>waiting to be recorded</em>.</li>
-  <li>Within about 25 minutes the monitor notices that nothing is being picked up. The app then shows a banner saying changes can't be processed, and pauses the buttons that send changes. That is expected: it is what staff would see.</li>
-  <li>Turn <em>2 Request queue</em> back <strong>On</strong>. Within 15 minutes on weekdays 07:00–19:45, otherwise within the hour, the monitor sends the request again, the action appears without you doing anything else, and the banner goes at the next check.</li>
-  <li>Send me a screenshot of the Administration page and the run history of <em>3 Queue monitor</em>.</li>
-</ol>
-<p class="note">The same banner appears if the monitor itself stops. Reading and adding updates always keep working. If only <em>6 Administration</em> is off, staff carry on as normal and the Administration page says so.</p>
-
-<h2>Part E – administration and the permission probe (Release 2)</h2>
+<h2>Step 3 – administration and the permission probe</h2>
 <p>This needs <strong>one ordinary account</strong> that is not a site owner, for example a test account from IT or a colleague for one session. A site owner can't be used: owners bypass permissions, so every check would pass without proving anything.</p>
 <h3>Add the test account</h3>
 <ol>
@@ -105,19 +83,20 @@
   <li>Keep the test account until we've read the results. Then, in People, open it and choose <strong>Mark as left</strong>.</li>
 </ol>
 
-<h2>Part F – notices, the register, feedback, settings and the dashboard (Release 3)</h2>
-<p>All of this can be tried as yourself. Use <strong>TEST</strong> in titles so the clean-up in Release 6 can find them.</p>
+<h2>Step 4 – notices, the register, feedback, settings and the overview</h2>
+<p>All of this can be tried as yourself. Use <strong>TEST</strong> in titles so the clean-up in go-live clean-up can find them.</p>
 <h3>Notices and comments</h3>
 <ol>
   <li>On the home page, open <strong>Flask</strong>. The middle column, <em>Notices &amp; issues</em>, now lists notices and open improvements and degradations. Click a notice: it opens in full.</li>
   <li>Add a comment. It appears at once.</li>
+  <li><em>(Done 24 Oct.)</em> A TEST notice on <strong>two</strong> noticeboards with <em>Important for 1 week</em> shows on both, and <strong>Turn into an action</strong> fills in the title; once recorded, the notice lists the action under <em>Actions from this notice</em>.</li>
   <li>Click <strong>Flag for the next meeting</strong>, then <strong>Withdraw the flag</strong>. Both are immediate; <em>Discussion history</em> lists them.</li>
   <li>Click <strong>Pin</strong>, then <strong>Edit</strong> and change the title. Each shows <em>being recorded</em> and then the change, usually within two minutes.</li>
   <li>On a comment, click <strong>Hide</strong>. It disappears once recorded.</li>
 </ol>
 <h3>Improvements and degradations</h3>
 <ol>
-  <li>In the Flask panel, click <strong>Raise an issue</strong>. Choose <em>Degradation</em>, give a TEST title and description, and send it. It appears in the list within two minutes as <em>REG-0000n</em>.</li>
+  <li>In the Flask panel, click <strong>Raise an issue</strong>. Choose <em>Degradation</em> (the list also has <em>Other</em>), give a TEST title and description, and send it. There is no "Who is responsible": the person who raised it is shown. It appears in the list within two minutes as <em>REG-0000n</em>.</li>
   <li>Open it. Click <strong>Turn into an action</strong> and raise a TEST action: it is listed under <em>Linked actions</em>. Or click <strong>Link an existing action</strong>.</li>
   <li>Click <strong>Change status</strong>, choose <em>Resolved</em>: it asks for an outcome. Enter one and save.</li>
   <li>The full area page has the same lists under <em>Notices &amp; issues</em>, with a filter for the register.</li>
@@ -132,8 +111,8 @@
 </ol>
 <p class="note">If <em>4 Records</em> is off, actions carry on as normal; changes to notices and the register are paused and the Administration page says so. Comments and flags still work, because they don't go through a flow.</p>
 
-<h2>Part G – meetings, invitations and the agenda (Release 4)</h2>
-<p>Invitations come from <strong>your calendar</strong>, with you as the organiser, so replies and acceptances come to you. You need the test colleague from Part E (or any colleague willing to receive three TEST emails).</p>
+<h2>Step 5 – meetings, invitations and the agenda</h2>
+<p>Invitations come from <strong>your calendar</strong>, with you as the organiser, so replies and acceptances come to you. You need the test colleague from Step 3 (or any colleague willing to receive three TEST emails).</p>
 <h3>First: the invitations probe</h3>
 <ol>
   <li>In the solution, turn <em>ESG Competency Hub | P-INV Invitations probe</em> <strong>On</strong>, open it and click <strong>Run</strong>. Enter the colleague's email address and run it.</li>
@@ -155,7 +134,7 @@
 </ol>
 <p class="note">If <em>5 Meetings</em> is off, booking pauses and the Administration page says so; everything else carries on.</p>
 
-<h2>Part H – run a meeting, finalise it, and the PDF minutes (Release 5)</h2>
+<h2>Step 6 – run a meeting, finalise it, and the PDF minutes</h2>
 <h3>First: the PDF probe</h3>
 <ol>
   <li>In the solution, turn <em>ESG Competency Hub | P-PDF PDF probe</em> <strong>On</strong>, open it and click <strong>Run</strong>. It asks for nothing.</li>
@@ -167,7 +146,7 @@
 <h3>Then: a whole TEST meeting</h3>
 <ol>
   <li>Turn <em>ESG Competency Hub | 7 Minutes</em> <strong>On</strong>.</li>
-  <li>Open the TEST meeting you started in Part G (or book and start a new one). As someone who runs Flask's meetings you now see the meeting <strong>one item at a time</strong>: choose an outcome, add notes, <strong>Save and next</strong>. Items for discussion are marked <em>Needs an outcome</em>.</li>
+  <li>Open the TEST meeting you started in Step 5 (or book and start a new one). As someone who runs Flask's meetings you now see the meeting <strong>one item at a time</strong>: choose an outcome, add notes, <strong>Save and next</strong>. Items for discussion are marked <em>Needs an outcome</em>.</li>
   <li>Under <em>Attendance</em>, mark yourself Present and your colleague Apologies. Under <em>Decisions</em>, record a TEST decision.</li>
   <li>On one item, click <strong>Raise an action</strong> and raise a TEST action. On an action item, click <strong>Open the action</strong> and close a TEST action. Both show <em>being recorded</em>.</li>
   <li>Click <strong>Review and finalise</strong>. It lists anything still needing an outcome and any change still being recorded; once there is nothing, <strong>Finalise the minutes</strong>.</li>
@@ -178,17 +157,26 @@
 </ol>
 <p class="note">The PDF is made after the minutes are finalised, separately: if it fails, the minutes stand and can be read and printed, the queue monitor tries again, and after three failures the administrators get an email. If <em>7 Minutes</em> is off, finalising and amending pause; everything else carries on.</p>
 
-<h2>Part I – before go-live (Release 6)</h2>
+<h2>Step 7 – before go-live</h2>
 <ol>
   <li>Post a TEST notice: until go-live it is marked as a test record, like everything the flows make.</li>
   <li>Open <strong>Administration → Remove test data</strong> and look: it lists every record marked as a test, and underneath, the records made before marking existed, to tick. <strong>Don't confirm yet</strong> – that is a go-live step.</li>
   <li>Follow <code>GO-LIVE.html</code> when you are ready to go live.</li>
 </ol>
 
+<h2>With the test account: co-owners and the close-out check</h2>
+<p>Any time after Step 3, while the test account is still in the Hub.</p>
+<ol>
+  <li>Raise a TEST action owned by yourself, choose the test account as a <strong>co-owner</strong>, and under <em>More options</em> tick <em>Needs a close-out check</em>: <em>Who checks it?</em> appears. Choose the test account: it can't be you here, because the owner never checks their own action.</li>
+  <li>Once recorded, the action's Who line lists the co-owner and who checks it.</li>
+  <li>As the test account: the action is in <em>My to-dos</em>; they can add an update, but are not offered <em>I need more time</em> or <em>Mark as done</em>.</li>
+  <li>As yourself, mark it done. The test account gets the "ready for your check" email and is offered <em>Confirm close-out</em>; so are Team Leaders and the Group Head.</li>
+</ol>
+
 <h2>Already done</h2>
 <div class="done">
   <ul>
-    <li>Site, Setup and the app shell; raising and updating actions, extensions, done, status, edit, close and reopen; My to-dos; emails and 06:00 reminders.</li>
+    <li>Site, Setup 1.4.2 and the app shell; actions from raising to reopening; My to-dos; emails and 06:00 reminders; Known as; notices on several noticeboards; turn into an action.</li>
   </ul>
 </div>
 </body>
