@@ -72,7 +72,10 @@ window.ESGCompetencyHub = function (ctx) {
   // People's names for display. The directory stores names surname first ("Pepper Joseph"); addresses are
   // firstname.lastname@, so the first name from the address tells us which word to move to the front.
   CH.names = (function () {
-    function display(title, email) {
+    // The name a person is known by (People.KnownAs, set by an administrator) comes first; otherwise their full
+    // name, first name first.
+    function display(title, email, knownAs) {
+      if (String(knownAs || '').trim()) return String(knownAs).trim();
       var name = String(title || '').trim();
       var local = String(email || '').split('@')[0].toLowerCase();
       var first = /^[a-z][a-z'-]*[.]/.test(local) ? local.split('.')[0] : '';
@@ -82,7 +85,11 @@ window.ESGCompetencyHub = function (ctx) {
       if (words[words.length - 1].toLowerCase() === first) return [words[words.length - 1]].concat(words.slice(0, -1)).join(' ');
       return name;
     }
-    return { display: display };
+    // A People row's name for display.
+    function of(p) { return p ? display(p.Title, p.Email, p.KnownAs) : ''; }
+    // "Joe's", "James'"
+    function possessive(name) { return /s$/i.test(name) ? name + '\'' : name + '\'s'; }
+    return { display: display, of: of, possessive: possessive };
   })();
 
   /* src/core/dates.js */
@@ -240,7 +247,18 @@ window.ESGCompetencyHub = function (ctx) {
       function listPath(title) { return siteUrl + "/_api/web/lists/getbytitle('" + escapeOData(title) + "')"; }
 
       // Reads every page up to maxRows. Follows nextLink only when it stays on this site.
-      async function items(title, query, maxRows) {
+      // optional: columns added by a later Setup. If SharePoint says one is missing (Setup not yet run), the read is
+      // made again without them, so the app still works and the new detail is simply absent.
+      async function items(title, query, maxRows, optional) {
+        if (optional && optional.length) {
+          try { return await items(title, query, maxRows); } catch (error) {
+            if (error.status !== 400) throw error;
+            var q = query.replace(/(\$select=)([^&]*)/, function (_, k, v) {
+              return k + v.split(',').filter(function (f) { return optional.indexOf(f) < 0 && optional.indexOf(f.split('/')[0]) < 0; }).join(',');
+            });
+            return items(title, q, maxRows);
+          }
+        }
         var limit = maxRows || CH.config.maxRows;
         var url = listPath(title) + '/items?' + query + '&$top=' + CH.config.pageSize;
         var rows = [];
@@ -328,7 +346,7 @@ window.ESGCompetencyHub = function (ctx) {
     // Still on its way: waiting, being processed, or failed and being retried by the queue monitor (spec REL-2).
     var OPEN_STATUSES = ['Submitted', 'Processing', 'Failed'];
     // An administrator's decision about another change: it is confirmed by its own request alone.
-    var ADMIN_TYPES = ['RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting', 'RemoveTestRecords'];
+    var ADMIN_TYPES = ['RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting', 'RemoveTestRecords', 'SetKnownAs'];
     // Notices, comments and the register (4 Records): confirmed by their History event, which is written before Completed.
     var RECORD_TYPES = ['EditNotice', 'ArchiveNotice', 'PinNotice', 'HideComment', 'RaiseRegisterEntry', 'UpdateRegisterEntry', 'LinkActionToEntry', 'UnlinkActionFromEntry'];
     // Meetings (5 Meetings): also confirmed by their History event.
@@ -1057,7 +1075,7 @@ window.ESGCompetencyHub = function (ctx) {
 
       var personBySiteId = {};
       people.forEach(function (p) { personBySiteId[p.SiteUserId] = p; });
-      function nameOf(id) { var p = personBySiteId[id]; return p ? CH.names.display(p.Title, p.Email) : 'Unknown person'; }
+      function nameOf(id) { var p = personBySiteId[id]; return p ? CH.names.of(p) : 'Unknown person'; }
 
       var membersByArea = {};
       var meetingAdmins = {};
@@ -1238,7 +1256,7 @@ window.ESGCompetencyHub = function (ctx) {
       function ownersFor(key) {
         return people.filter(function (p) {
           return p.Status === 'Active' && ((membersByArea[key] || {})[p.SiteUserId] || CH.config.managementRoles.indexOf(p.Role) >= 0);
-        }).map(function (p) { return { id: p.SiteUserId, name: CH.names.display(p.Title, p.Email), role: p.Role }; })
+        }).map(function (p) { return { id: p.SiteUserId, name: CH.names.of(p), role: p.Role }; })
           .sort(function (a, b) { return a.name.localeCompare(b.name); });
       }
       var actionById = {};
@@ -1762,6 +1780,7 @@ window.ESGCompetencyHub = function (ctx) {
     // Profile first name; otherwise the part of firstname.lastname@ addresses before the dot. Display names at
     // EDF are "Surname Firstname", so the display name is the last resort.
     function firstName(app) {
+      if (String(app.person.KnownAs || '').trim()) return String(app.person.KnownAs).trim();
       if (app.firstName) return app.firstName;
       var local = String(app.person.Email || '').split('@')[0];
       if (/^[a-z]+[.]/i.test(local)) {
@@ -2932,7 +2951,7 @@ window.ESGCompetencyHub = function (ctx) {
 
     function rowsFor(app) {
       var q = String((app.peopleFilter || '')).trim().toLowerCase();
-      return (app.people || []).filter(function (p) { return !q || String(p.Title).toLowerCase().indexOf(q) >= 0 || String(p.Email || '').toLowerCase().indexOf(q) >= 0; })
+      return (app.people || []).filter(function (p) { return !q || String(p.Title).toLowerCase().indexOf(q) >= 0 || String(p.KnownAs || '').toLowerCase().indexOf(q) >= 0 || String(p.Email || '').toLowerCase().indexOf(q) >= 0; })
         .sort(function (a, b) { return (a.Status === b.Status ? 0 : a.Status === 'Active' ? -1 : 1) || String(a.Title).localeCompare(String(b.Title)); });
     }
 
@@ -2958,7 +2977,7 @@ window.ESGCompetencyHub = function (ctx) {
         if (p.IsAdministrator) notes.push('administrator');
         if (p.CanPostNotices === false) notes.push('cannot post notices');
         return h('li', null, h('button', { type: 'button', class: 'item-open', onclick: function () { personDialog(app, p); } },
-          h('span', null, h('span', { class: 't', text: p.Title }), h('span', { class: 's', text: notes.join(' · ') })),
+          h('span', null, h('span', { class: 't', text: CH.names.of(p) }), h('span', { class: 's', text: (p.KnownAs ? p.Title + ' · ' : '') + notes.join(' · ') })),
           p.Status === 'Active' ? null : ui.chip('later', 'Left')));
       });
     }
@@ -3006,25 +3025,26 @@ window.ESGCompetencyHub = function (ctx) {
       var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-pa', title: 'Add people', wide: true });
       var email = h('input', { id: 'ch-pa-email', type: 'email', autocomplete: 'off' });
       var role = h('select', { id: 'ch-pa-role' }, ROLES.map(function (r) { return h('option', { value: r, text: r }); }));
+      var known = h('input', { id: 'ch-pa-known', type: 'text', maxlength: '40', autocomplete: 'off' });
       var posts = h('input', { id: 'ch-pa-posts', type: 'checkbox', checked: true });
       var areas = areaTable(app, 'ch-pa-', {}, function () { return role.value; });
       var result = h('div', { class: 'result' });
-      var paste = h('textarea', { id: 'ch-pa-list', rows: '8', placeholder: 'firstname.lastname@edf-energy.com, Technician, GRS RP' });
+      var paste = h('textarea', { id: 'ch-pa-list', rows: '8', placeholder: 'firstname.lastname@edf-energy.com, Technician, GRS RP, Jo' });
       var pasteResult = h('ul', { class: 'plain result' });
       CH.dom.append(dlg.body, [
         h('h3', { text: 'One person' }),
         CH.ui.dialog.field('Email address', email, 'Their work email, as in Outlook.'),
-        CH.ui.dialog.field('Role', role),
+        h('div', { class: 'row two' }, CH.ui.dialog.field('Known as', known, 'How their name shows in the Hub, e.g. Joe. Optional.'), CH.ui.dialog.field('Role', role)),
         areas.node,
         h('label', { class: 'check' }, posts, ' Can post notices'),
         h('div', { class: 'row' }, ui.button('Add this person', function () {
           var v = email.value.trim();
           if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { CH.dom.clear(result); result.appendChild(h('p', { class: 'field-error', text: 'Enter their email address.' })); email.focus(); return; }
-          sendAndShow(app, result, { type: 'AddPerson', payload: { email: v, role: role.value, areas: areas.value(), canPostNotices: posts.checked }, label: 'Add ' + v });
+          sendAndShow(app, result, { type: 'AddPerson', payload: { email: v, role: role.value, areas: areas.value(), canPostNotices: posts.checked, knownAs: known.value.trim() }, label: 'Add ' + v });
         }, 'main')),
         result,
         h('h3', { text: 'Or paste a list' }),
-        h('p', { class: 'muted small', text: 'One person a line: email, role, then the area keys separated by spaces (for example FLK GRS RP). Engineers run their areas\' meetings; change that afterwards on their page.' }),
+        h('p', { class: 'muted small', text: 'One person a line: email, role, the area keys separated by spaces (for example FLK GRS RP), and optionally the name they are known by. Engineers run their areas\' meetings; change that afterwards on their page.' }),
         CH.ui.dialog.field('People', paste),
         h('div', { class: 'row' }, ui.button('Add everyone in the list', function () {
           CH.dom.clear(pasteResult);
@@ -3035,7 +3055,7 @@ window.ESGCompetencyHub = function (ctx) {
             pasteResult.appendChild(li);
             if (line.error) { box.appendChild(h('span', { class: 'field-error', text: line.error })); return; }
             sendAndShow(app, box, { type: 'AddPerson', label: 'Add ' + line.email,
-              payload: { email: line.email, role: line.role, canPostNotices: true, areas: line.keys.map(function (k) { return { key: k, chair: line.role === 'Engineer', expires: '' }; }) } });
+              payload: { email: line.email, role: line.role, canPostNotices: true, knownAs: line.knownAs, areas: line.keys.map(function (k) { return { key: k, chair: line.role === 'Engineer', expires: '' }; }) } });
           });
         })),
         pasteResult
@@ -3048,7 +3068,7 @@ window.ESGCompetencyHub = function (ctx) {
       var keys = app.model.areas.map(function (a) { return a.key; });
       return String(text || '').split(/\r?\n/).map(function (l) { return l.trim(); }).filter(function (l) { return l && l.charAt(0) !== '#'; }).map(function (l) {
         var parts = l.split(',').map(function (p) { return p.trim(); });
-        var out = { text: l, email: (parts[0] || '').toLowerCase(), role: parts[1] || '', keys: (parts[2] || '').split(/\s+/).filter(Boolean).map(function (k) { return k.toUpperCase(); }) };
+        var out = { text: l, email: (parts[0] || '').toLowerCase(), role: parts[1] || '', keys: (parts[2] || '').split(/\s+/).filter(Boolean).map(function (k) { return k.toUpperCase(); }), knownAs: (parts[3] || '').slice(0, 40) };
         if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(out.email)) out.error = 'Not an email address.';
         else if (ROLES.indexOf(out.role) < 0) out.error = 'The role must be Technician, Engineer, Team Leader or Group Head.';
         else if (out.keys.some(function (k) { return keys.indexOf(k) < 0; })) out.error = 'Unknown area: ' + out.keys.filter(function (k) { return keys.indexOf(k) < 0; }).join(', ') + '.';
@@ -3057,7 +3077,7 @@ window.ESGCompetencyHub = function (ctx) {
     }
 
     async function personDialog(app, p) {
-      var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-pp', title: p.Title, wide: true });
+      var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-pp', title: CH.names.of(p), wide: true });
       dlg.body.appendChild(h('p', { class: 'muted', text: 'Loading…' }));
       var memberships = [], history = [];
       try {
@@ -3077,10 +3097,20 @@ window.ESGCompetencyHub = function (ctx) {
       var posts = h('input', { id: 'ch-pp-posts', type: 'checkbox', checked: p.CanPostNotices === false ? null : true });
       var admin = h('input', { id: 'ch-pp-admin', type: 'checkbox', checked: p.IsAdministrator ? true : null });
       var result = h('div', { class: 'result' });
+      var known = h('input', { id: 'ch-pp-known', type: 'text', maxlength: '40', autocomplete: 'off', value: p.KnownAs || '' });
+      var nameResult = h('div', { class: 'result' });
+      // the name someone is known by changes nobody's access, so an administrator may set it for anyone, themselves too
+      var nameRow = left ? null : [
+        h('div', { class: 'row known-row' }, CH.ui.dialog.field('Known as', known, 'How their name shows in the Hub, e.g. Joe. Leave empty to show ' + p.Title + '.'),
+          ui.button('Save name', function () {
+            sendAndShow(app, nameResult, { type: 'SetKnownAs', label: 'Known as for ' + p.Title, payload: { personId: p.SiteUserId, knownAs: known.value.trim() } });
+          })),
+        nameResult];
       var note = self ? h('p', { class: 'section-note', text: 'You can\'t change your own access. Ask another administrator.' })
         : left ? h('p', { class: 'section-note', text: p.Title + ' is marked as having left. Reactivate them to give them access again, then choose their areas.' }) : null;
       CH.dom.append(dlg.body, [
-        h('p', { class: 'muted small', text: (p.Email || '') + (CH.config.managementRoles.indexOf(p.Role) >= 0 ? ' · Team Leaders and the Group Head work in every area through their role.' : '') }),
+        h('p', { class: 'muted small', text: p.Title + ' · ' + (p.Email || '') + (CH.config.managementRoles.indexOf(p.Role) >= 0 ? ' · Team Leaders and the Group Head work in every area through their role.' : '') }),
+        nameRow,
         note,
         left ? null : [
           CH.ui.dialog.field('Role', role),
@@ -3112,7 +3142,7 @@ window.ESGCompetencyHub = function (ctx) {
             h('span', { class: 'muted small', text: app.model.nameOf(e.ActorId) + ' · ' + D.short(D.localDate(e.EventTime || e.Created)) + ' ' + D.ukTime(e.EventTime || e.Created) })));
         })) : h('p', { class: 'muted', text: 'No changes recorded yet.' })
       ]);
-      if (self) Array.prototype.forEach.call(dlg.body.querySelectorAll('input, select, .actions-row .btn'), function (n) { n.disabled = true; });
+      if (self) Array.prototype.forEach.call(dlg.body.querySelectorAll('input, select, .actions-row .btn'), function (n) { if (n !== known) n.disabled = true; });
       dlg.focusFirst();
     }
 
@@ -4702,7 +4732,7 @@ window.ESGCompetencyHub = function (ctx) {
       RaiseAction: 'Raise an action', ExtendDeadline: 'Move a deadline', MarkComplete: 'Mark an action as done', ChangeStatus: 'Change the status of an action',
       ReassignAction: 'Reassign an action', CloseAction: 'Close an action', ReopenAction: 'Reopen an action', EditActionDetails: 'Edit the details of an action',
       AddPerson: 'Add a person', UpdatePerson: 'Change a person\'s access', PersonLeft: 'Mark a person as left', ReactivatePerson: 'Reactivate a person',
-      UpdateSetting: 'Change a setting', RetryTransaction: 'Try a change again', CancelTransaction: 'Cancel a change', RevertTransaction: 'Revert a change',
+      UpdateSetting: 'Change a setting', SetKnownAs: 'Change the name someone is known by', RetryTransaction: 'Try a change again', CancelTransaction: 'Cancel a change', RevertTransaction: 'Revert a change',
       EditNotice: 'Edit a notice', ArchiveNotice: 'Archive a notice', PinNotice: 'Pin or unpin a notice', HideComment: 'Hide a comment',
       RaiseRegisterEntry: 'Raise an improvement or degradation', UpdateRegisterEntry: 'Change an improvement or degradation',
       LinkActionToEntry: 'Link an action to an entry', UnlinkActionFromEntry: 'Unlink an action from an entry',
@@ -4950,7 +4980,7 @@ window.ESGCompetencyHub = function (ctx) {
             C.ENVIRONMENT !== 'PRODUCTION' ? h('span', { class: 'env', text: C.ENVIRONMENT + ' – not live data' }) : null,
             app.person && app.model ? nav() : null,
             app.person && app.model && app.state.view === 'home' ? homeButtons() : null,
-            app.person ? h('span', { class: 'who', text: CH.names.display(app.person.Title, app.person.Email) + ' · ' + app.person.Role }) : null)),
+            app.person ? h('span', { class: 'who', text: CH.names.of(app.person) + ' · ' + app.person.Role }) : null)),
           h('main', { id: 'ch-main', tabindex: '-1' }, content),
           h('p', { class: 'toast', 'data-ch-live': true, role: 'status', 'aria-live': 'polite' }),
           // the feedback button sits in its own place in the footer, so it never covers anything (spec FB-1)
@@ -5072,6 +5102,10 @@ window.ESGCompetencyHub = function (ctx) {
         if (CH.requests.ADMIN_TYPES.indexOf(entry.type) >= 0) {
           // a saved setting is read again, so the page shows the new value and uses it (DueSoonDays, MaxDeadlineYears)
           if (entry.type === 'UpdateSetting' && entry.state === 'done') { reload().then(function () { render(false); }).catch(function () { render(false); }); return; }
+          if (['SetKnownAs', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson'].indexOf(entry.type) >= 0 && entry.state === 'done') {
+            reloadPeople().then(function () { render(false); }).catch(function () { render(false); });
+            return;
+          }
           render(false);
           if (entry.state === 'done' && app.state.view === 'admin') setTimeout(function () { CH.views.admin.refresh(app); }, 1500);
           return;
@@ -5173,6 +5207,20 @@ window.ESGCompetencyHub = function (ctx) {
         }
       }
 
+      function readPeople() {
+        return app.sp.items(CH.config.lists.people.title, '$select=Id,Title,SiteUserId,Email,Role,IsAdministrator,CanPostNotices,Status,KnownAs', null, ['KnownAs'])
+          .then(function (res) { return res.rows; });
+      }
+
+      // People are read again after a change to them (a new name shows at once), then everything else.
+      async function reloadPeople() {
+        var people = await readPeople();
+        var me = people.filter(function (p) { return Number(p.SiteUserId) === Number(app.person.SiteUserId); })[0];
+        app.people = people;
+        if (me) app.person = me;
+        await reload();
+      }
+
       async function reload() {
         var raw = await CH.model.load(app.sp);
         var now = new Date();
@@ -5211,7 +5259,7 @@ window.ESGCompetencyHub = function (ctx) {
         var user, people;
         try {
           user = await app.sp.currentUser();
-          people = (await app.sp.items(CH.config.lists.people.title, '$select=Id,Title,SiteUserId,Email,Role,IsAdministrator,CanPostNotices,Status')).rows;
+          people = await readPeople();
         } catch (error) {
           stateScreen('We could not confirm your access', CH.access.MESSAGES.UNAVAILABLE + ' Please reload the page. If this keeps happening, contact a Competency Hub administrator.',
             'Details for the administrator: ' + (error.status ? 'HTTP ' + error.status : error.message));
@@ -5219,7 +5267,7 @@ window.ESGCompetencyHub = function (ctx) {
         }
         var identity = CH.access.resolveIdentity(user, people);
         if (!identity.ok) {
-          var admins = people.filter(function (p) { return p.IsAdministrator && p.Status === 'Active'; }).map(function (p) { return p.Title; });
+          var admins = people.filter(function (p) { return p.IsAdministrator && p.Status === 'Active'; }).map(function (p) { return CH.names.of(p); });
           stateScreen('You do not have access yet', CH.access.MESSAGES[identity.reason] + ' ' +
             (admins.length ? 'Please contact ' + admins.join(' or ') + '.' : 'Please contact a Competency Hub administrator.'));
           return;

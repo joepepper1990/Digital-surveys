@@ -47,6 +47,7 @@ def cases(s):
         ('AddPerson', None, {'email': 'new.person@example.test', 'role': 'Engineer', 'areas': {'FLK': True}}),
         ('UpdatePerson', 1, {'role': 'Team Leader', 'administrator': True}), ('PersonLeft', 1, {}), ('ReactivatePerson', 1, {}),
         ('UpdateSetting', None, {'name': 'DueSoonDays', 'value': '9'}),
+        ('SetKnownAs', None, {'personId': RACHEL, 'knownAs': 'Rach'}),
         ('RemoveTestRecords', None, {'confirm': 'REMOVE TEST DATA', 'include': {}}),
     ]
 
@@ -61,7 +62,7 @@ def business(s):
 
 class Refusals(unittest.TestCase):
     def test_every_kind_of_request_from_someone_not_allowed_is_refused_and_changes_nothing(self):
-        all_types = set(flows.ACTION_TYPES) | {t for types in flows.DOMAIN_TYPES.values() for t in types}
+        all_types = set(flows.ACTION_TYPES) | {t for types in flows.DOMAIN_TYPES.values() for t in types} | {'SetKnownAs'}
         covered = set()
         for t, target, payload in cases(site()):
             covered.add(t)

@@ -205,6 +205,10 @@ check('text and tiles are larger on a wide screen', s1366.ok && s2560.ok && s256
 check('no sideways scrolling at 1366 or 2560 px', s1366.ok && s2560.ok && !s1366.result.scrollsSideways && !s2560.result.scrollsSideways, JSON.stringify([s1366, s2560]));
 check('there is no text size control in the bar', s1366.ok && s1366.result.hasControl === false, JSON.stringify(s1366));
 
+res = drive('as=' + JOE + '&drive=knownAs', SLOW);
+check('known as: an administrator sets their own name; it shows in the bar, and their access stays locked', res.ok && res.result.boxEnabled && res.result.roleLocked === true &&
+  res.result.stored === 'Joe' && res.result.who.indexOf('Joe · Team Leader') === 0, JSON.stringify(res));
+
 // No page scrolls, for a Team Leader who sees every page, at the WebView size and on a laptop
 [['1920,960', '1920 × 960'], ['1366,768', '1366 × 768']].forEach(([size, label]) => {
   const d = open('as=' + JOE + '&drive=pagesFit', ['--window-size=' + size, '--dump-dom'], 40000);

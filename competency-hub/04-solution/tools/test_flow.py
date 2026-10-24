@@ -349,6 +349,9 @@ class Robustness(unittest.TestCase):
                 self.assertEqual(keys, sorted(it['f']['NotificationKey'] for it in ref.by_key['notifications']['items'].values()))
                 self.assertLessEqual(len(s.sent), len(ref.sent))
 
+    def test_known_as_survives_an_interruption_at_every_write(self):
+        self.interrupted_everywhere('SetKnownAs', {'personId': RACHEL, 'knownAs': 'Rach'}, sender=JOE)
+
     def test_raise_survives_an_interruption_at_every_write(self):
         self.interrupted_everywhere('RaiseAction', RaiseAction.good)
 
@@ -1188,7 +1191,7 @@ class Routing(unittest.TestCase):
         flows_by_name = {f['name']: f['json']['properties']['definition'] for f in flows.build_all()}
         takers = {n: d for n, d in flows_by_name.items() if 'When_a_request_is_submitted' in d['triggers']}
         s = site()
-        for rtype in flows.ACTION_TYPES + flows.DOMAIN_TYPES['admin'] + ['SomethingNew']:
+        for rtype in flows.ACTION_TYPES + flows.DOMAIN_TYPES['admin'] + ['SetKnownAs', 'SomethingNew']:
             r = submit(s, RACHEL, rtype, {}, key='k-' + rtype)
             body = s.trigger_item('requests', r)
             hits = []
@@ -1497,6 +1500,38 @@ class Settings(unittest.TestCase):
         self.assertEqual((ev['PreviousValue'], ev['NewValue'], ev['ActorId']), ('7', '14', JOE))
         res, _ = run_people(s, KELLY, 'UpdateSetting', {'name': 'OverdueReminderIntervalDays', 'value': '3'}, key='k-kelly')
         self.assertEqual(res['ResultMessage'], 'Only a Competency Hub administrator can do this.')
+
+
+
+class KnownAs(unittest.TestCase):
+    """The name a person is known by: set by an administrator for anyone, themselves included, and audited. It is
+    handled by the Request queue flow (Administration is at Power Automate's step limit)."""
+    def test_set_for_yourself_and_others_cleared_and_refused(self):
+        s = site()
+        for sender, who, name, want, message in ((JOE, JOE, '  Joe ', 'Completed', None), (JOE, RACHEL, 'Rach', 'Completed', None),
+                                                   (JOE, RACHEL, '', 'Completed', None), (KELLY, RACHEL, 'R', 'Rejected', 'Only a Competency Hub administrator can do this.'),
+                                                   (JOE, RACHEL, 'x' * 41, 'Rejected', 'Keep the name to 40 characters or fewer.'),
+                                                   (JOE, 999, 'Nobody', 'Rejected', 'This person is not in the Hub.')):
+            with self.subTest(sender=sender, who=who, name=name):
+                key = 'kn-{0}-{1}-{2}'.format(sender, who, len(name))
+                r = submit(s, sender, 'SetKnownAs', {'personId': who, 'knownAs': name}, key=key)
+                _, eng = run(s, r)
+                res = request(s, r)
+                self.assertEqual(res['Status'], want, (res.get('ResultMessage'), eng.log))
+                if message:
+                    self.assertEqual(res['ResultMessage'], message)
+                else:
+                    self.assertEqual(s.rows('people', SiteUserId=float(who))[0]['f'].get('KnownAs') or '', name.strip())
+                    ev = s.rows('history', RequestKey=key + '|1')[0]
+                    self.assertEqual((ev['dir'], ev['f']['RecordType'], ev['f']['NewValue'] or '', ev['f']['ActorId']), ('Administration', 'Person', name.strip(), JOE))
+        self.assertEqual(request(s, s.rows('requests', RequestKey='kn-7-112-4')[0]['id'])['ResultMessage'].endswith(' is now shown as Rach.'), True)
+
+    def test_emails_use_the_known_as_name(self):
+        s = site()
+        s.rows('people', SiteUserId=float(KELLY))[0]['f']['KnownAs'] = 'Kel'
+        r = submit(s, KELLY, 'RaiseAction', dict(RaiseAction.good, ownerId=RACHEL, dueIso='2026-10-25'))
+        run(s, r)
+        self.assertIn('Kel has given you an action', s.sent[0]['body'])
 
 
 class TemporaryAccess(unittest.TestCase):

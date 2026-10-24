@@ -44,7 +44,7 @@ CH.app = (function () {
           C.ENVIRONMENT !== 'PRODUCTION' ? h('span', { class: 'env', text: C.ENVIRONMENT + ' – not live data' }) : null,
           app.person && app.model ? nav() : null,
           app.person && app.model && app.state.view === 'home' ? homeButtons() : null,
-          app.person ? h('span', { class: 'who', text: CH.names.display(app.person.Title, app.person.Email) + ' · ' + app.person.Role }) : null)),
+          app.person ? h('span', { class: 'who', text: CH.names.of(app.person) + ' · ' + app.person.Role }) : null)),
         h('main', { id: 'ch-main', tabindex: '-1' }, content),
         h('p', { class: 'toast', 'data-ch-live': true, role: 'status', 'aria-live': 'polite' }),
         // the feedback button sits in its own place in the footer, so it never covers anything (spec FB-1)
@@ -166,6 +166,10 @@ CH.app = (function () {
       if (CH.requests.ADMIN_TYPES.indexOf(entry.type) >= 0) {
         // a saved setting is read again, so the page shows the new value and uses it (DueSoonDays, MaxDeadlineYears)
         if (entry.type === 'UpdateSetting' && entry.state === 'done') { reload().then(function () { render(false); }).catch(function () { render(false); }); return; }
+        if (['SetKnownAs', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson'].indexOf(entry.type) >= 0 && entry.state === 'done') {
+          reloadPeople().then(function () { render(false); }).catch(function () { render(false); });
+          return;
+        }
         render(false);
         if (entry.state === 'done' && app.state.view === 'admin') setTimeout(function () { CH.views.admin.refresh(app); }, 1500);
         return;
@@ -267,6 +271,20 @@ CH.app = (function () {
       }
     }
 
+    function readPeople() {
+      return app.sp.items(CH.config.lists.people.title, '$select=Id,Title,SiteUserId,Email,Role,IsAdministrator,CanPostNotices,Status,KnownAs', null, ['KnownAs'])
+        .then(function (res) { return res.rows; });
+    }
+
+    // People are read again after a change to them (a new name shows at once), then everything else.
+    async function reloadPeople() {
+      var people = await readPeople();
+      var me = people.filter(function (p) { return Number(p.SiteUserId) === Number(app.person.SiteUserId); })[0];
+      app.people = people;
+      if (me) app.person = me;
+      await reload();
+    }
+
     async function reload() {
       var raw = await CH.model.load(app.sp);
       var now = new Date();
@@ -305,7 +323,7 @@ CH.app = (function () {
       var user, people;
       try {
         user = await app.sp.currentUser();
-        people = (await app.sp.items(CH.config.lists.people.title, '$select=Id,Title,SiteUserId,Email,Role,IsAdministrator,CanPostNotices,Status')).rows;
+        people = await readPeople();
       } catch (error) {
         stateScreen('We could not confirm your access', CH.access.MESSAGES.UNAVAILABLE + ' Please reload the page. If this keeps happening, contact a Competency Hub administrator.',
           'Details for the administrator: ' + (error.status ? 'HTTP ' + error.status : error.message));
@@ -313,7 +331,7 @@ CH.app = (function () {
       }
       var identity = CH.access.resolveIdentity(user, people);
       if (!identity.ok) {
-        var admins = people.filter(function (p) { return p.IsAdministrator && p.Status === 'Active'; }).map(function (p) { return p.Title; });
+        var admins = people.filter(function (p) { return p.IsAdministrator && p.Status === 'Active'; }).map(function (p) { return CH.names.of(p); });
         stateScreen('You do not have access yet', CH.access.MESSAGES[identity.reason] + ' ' +
           (admins.length ? 'Please contact ' + admins.join(' or ') + '.' : 'Please contact a Competency Hub administrator.'));
         return;

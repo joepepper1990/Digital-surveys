@@ -618,6 +618,21 @@ window.MockDrivers = (function () {
       return { emptyError: emptyError, toast: toast, row: row && { type: row.FeedbackType, status: row.Status, author: row.AuthorId, folder: row.FileDirRef.split('/Lists/')[1] },
         visible: mine, writes: MockSharePoint.writes.map(function (w) { return w.list + '/' + w.folder; }) };
     },
+    // An administrator sets the name they are known by on their own page: it changes nobody's access, so it is allowed.
+    knownAs: async function () {
+      (await until(function () { return byText('.pills button', 'Administration'); })).click();
+      (await until(function () { return byText('.subtabs button', 'People'); })).click();
+      var me = await until(function () { return all('.people-list .item-open').filter(function (b) { return b.textContent.indexOf('Joe Pepper') >= 0; })[0]; });
+      me.click();
+      var box = await until(function () { return q('#ch-pp-known'); });
+      var disabledElsewhere = q('#ch-pp-role') ? q('#ch-pp-role').disabled : null;
+      box.value = 'Joe';
+      byText('#ch-pp button', 'Save name').click();
+      await until(function () { return q('#ch-pp .ok-note') || q('#ch-pp .section-note[role="status"]'); }, 60000);
+      await until(function () { return q('.who') && q('.who').textContent.indexOf('Joe · ') === 0; }, 20000);
+      var row = MockSharePoint.data.People.filter(function (x) { return x.SiteUserId === 126; })[0];
+      return { boxEnabled: !box.disabled, roleLocked: disabledElsewhere, who: q('.who').textContent, stored: row.KnownAs, note: (q('#ch-pp .ok-note') || q('#ch-pp .section-note[role="status"]')).textContent };
+    },
     // Every page fits the window: the page itself never scrolls (a long list scrolls inside the page instead).
     pagesFit: async function () {
       await until(function () { return q('.hm-tile'); });

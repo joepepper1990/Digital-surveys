@@ -17,3 +17,12 @@ test('names already first name first, or that cannot be matched, are left as the
   assert.equal(CH.names.display('Starbuck', 'robert.starbuck@example.test'), 'Starbuck');
   assert.equal(CH.names.display('', 'a.b@example.test'), '');
 });
+
+test('the name a person is known by comes first, and possessives read naturally', () => {
+  assert.equal(CH.names.display('Pepper Joseph', 'joseph.pepper@example.test', 'Joe'), 'Joe');
+  assert.equal(CH.names.display('Pepper Joseph', 'joseph.pepper@example.test', '  '), 'Joseph Pepper');
+  assert.equal(CH.names.of({ Title: 'Pepper Joseph', Email: 'joseph.pepper@example.test', KnownAs: ' Joe ' }), 'Joe');
+  assert.equal(CH.names.of(null), '');
+  assert.equal(CH.names.possessive('Joe'), 'Joe\'s');
+  assert.equal(CH.names.possessive('James'), 'James\'');
+});

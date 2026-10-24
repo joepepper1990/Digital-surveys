@@ -15,6 +15,7 @@ CH.views.home = (function () {
   // Profile first name; otherwise the part of firstname.lastname@ addresses before the dot. Display names at
   // EDF are "Surname Firstname", so the display name is the last resort.
   function firstName(app) {
+    if (String(app.person.KnownAs || '').trim()) return String(app.person.KnownAs).trim();
     if (app.firstName) return app.firstName;
     var local = String(app.person.Email || '').split('@')[0];
     if (/^[a-z]+[.]/i.test(local)) {

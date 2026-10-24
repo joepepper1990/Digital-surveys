@@ -36,6 +36,8 @@ h2 { font-size: calc(18 * var(--u)); font-weight: 600; margin: 0 0 calc(12 * var
 .row { display: flex; gap: calc(12 * var(--u)); flex-wrap: wrap; align-items: center; }
 .row.two { align-items: flex-start; }
 .row.two > .field { flex: 1 1 calc(240 * var(--u)); min-width: 0; }
+.known-row { align-items: flex-end; }
+.known-row .field { flex: 1 1 calc(300 * var(--u)); margin-bottom: 0; }
 .actions-row { margin-bottom: calc(24 * var(--u)); }
 .tab-actions { margin-bottom: calc(12 * var(--u)); }
 .txt-late { color: var(--late); font-weight: 600; }

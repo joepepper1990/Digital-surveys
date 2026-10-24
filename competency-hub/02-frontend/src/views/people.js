@@ -11,7 +11,7 @@ CH.views.people = (function () {
 
   function rowsFor(app) {
     var q = String((app.peopleFilter || '')).trim().toLowerCase();
-    return (app.people || []).filter(function (p) { return !q || String(p.Title).toLowerCase().indexOf(q) >= 0 || String(p.Email || '').toLowerCase().indexOf(q) >= 0; })
+    return (app.people || []).filter(function (p) { return !q || String(p.Title).toLowerCase().indexOf(q) >= 0 || String(p.KnownAs || '').toLowerCase().indexOf(q) >= 0 || String(p.Email || '').toLowerCase().indexOf(q) >= 0; })
       .sort(function (a, b) { return (a.Status === b.Status ? 0 : a.Status === 'Active' ? -1 : 1) || String(a.Title).localeCompare(String(b.Title)); });
   }
 
@@ -37,7 +37,7 @@ CH.views.people = (function () {
       if (p.IsAdministrator) notes.push('administrator');
       if (p.CanPostNotices === false) notes.push('cannot post notices');
       return h('li', null, h('button', { type: 'button', class: 'item-open', onclick: function () { personDialog(app, p); } },
-        h('span', null, h('span', { class: 't', text: p.Title }), h('span', { class: 's', text: notes.join(' · ') })),
+        h('span', null, h('span', { class: 't', text: CH.names.of(p) }), h('span', { class: 's', text: (p.KnownAs ? p.Title + ' · ' : '') + notes.join(' · ') })),
         p.Status === 'Active' ? null : ui.chip('later', 'Left')));
     });
   }
@@ -85,25 +85,26 @@ CH.views.people = (function () {
     var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-pa', title: 'Add people', wide: true });
     var email = h('input', { id: 'ch-pa-email', type: 'email', autocomplete: 'off' });
     var role = h('select', { id: 'ch-pa-role' }, ROLES.map(function (r) { return h('option', { value: r, text: r }); }));
+    var known = h('input', { id: 'ch-pa-known', type: 'text', maxlength: '40', autocomplete: 'off' });
     var posts = h('input', { id: 'ch-pa-posts', type: 'checkbox', checked: true });
     var areas = areaTable(app, 'ch-pa-', {}, function () { return role.value; });
     var result = h('div', { class: 'result' });
-    var paste = h('textarea', { id: 'ch-pa-list', rows: '8', placeholder: 'firstname.lastname@edf-energy.com, Technician, GRS RP' });
+    var paste = h('textarea', { id: 'ch-pa-list', rows: '8', placeholder: 'firstname.lastname@edf-energy.com, Technician, GRS RP, Jo' });
     var pasteResult = h('ul', { class: 'plain result' });
     CH.dom.append(dlg.body, [
       h('h3', { text: 'One person' }),
       CH.ui.dialog.field('Email address', email, 'Their work email, as in Outlook.'),
-      CH.ui.dialog.field('Role', role),
+      h('div', { class: 'row two' }, CH.ui.dialog.field('Known as', known, 'How their name shows in the Hub, e.g. Joe. Optional.'), CH.ui.dialog.field('Role', role)),
       areas.node,
       h('label', { class: 'check' }, posts, ' Can post notices'),
       h('div', { class: 'row' }, ui.button('Add this person', function () {
         var v = email.value.trim();
         if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { CH.dom.clear(result); result.appendChild(h('p', { class: 'field-error', text: 'Enter their email address.' })); email.focus(); return; }
-        sendAndShow(app, result, { type: 'AddPerson', payload: { email: v, role: role.value, areas: areas.value(), canPostNotices: posts.checked }, label: 'Add ' + v });
+        sendAndShow(app, result, { type: 'AddPerson', payload: { email: v, role: role.value, areas: areas.value(), canPostNotices: posts.checked, knownAs: known.value.trim() }, label: 'Add ' + v });
       }, 'main')),
       result,
       h('h3', { text: 'Or paste a list' }),
-      h('p', { class: 'muted small', text: 'One person a line: email, role, then the area keys separated by spaces (for example FLK GRS RP). Engineers run their areas\' meetings; change that afterwards on their page.' }),
+      h('p', { class: 'muted small', text: 'One person a line: email, role, the area keys separated by spaces (for example FLK GRS RP), and optionally the name they are known by. Engineers run their areas\' meetings; change that afterwards on their page.' }),
       CH.ui.dialog.field('People', paste),
       h('div', { class: 'row' }, ui.button('Add everyone in the list', function () {
         CH.dom.clear(pasteResult);
@@ -114,7 +115,7 @@ CH.views.people = (function () {
           pasteResult.appendChild(li);
           if (line.error) { box.appendChild(h('span', { class: 'field-error', text: line.error })); return; }
           sendAndShow(app, box, { type: 'AddPerson', label: 'Add ' + line.email,
-            payload: { email: line.email, role: line.role, canPostNotices: true, areas: line.keys.map(function (k) { return { key: k, chair: line.role === 'Engineer', expires: '' }; }) } });
+            payload: { email: line.email, role: line.role, canPostNotices: true, knownAs: line.knownAs, areas: line.keys.map(function (k) { return { key: k, chair: line.role === 'Engineer', expires: '' }; }) } });
         });
       })),
       pasteResult
@@ -127,7 +128,7 @@ CH.views.people = (function () {
     var keys = app.model.areas.map(function (a) { return a.key; });
     return String(text || '').split(/\r?\n/).map(function (l) { return l.trim(); }).filter(function (l) { return l && l.charAt(0) !== '#'; }).map(function (l) {
       var parts = l.split(',').map(function (p) { return p.trim(); });
-      var out = { text: l, email: (parts[0] || '').toLowerCase(), role: parts[1] || '', keys: (parts[2] || '').split(/\s+/).filter(Boolean).map(function (k) { return k.toUpperCase(); }) };
+      var out = { text: l, email: (parts[0] || '').toLowerCase(), role: parts[1] || '', keys: (parts[2] || '').split(/\s+/).filter(Boolean).map(function (k) { return k.toUpperCase(); }), knownAs: (parts[3] || '').slice(0, 40) };
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(out.email)) out.error = 'Not an email address.';
       else if (ROLES.indexOf(out.role) < 0) out.error = 'The role must be Technician, Engineer, Team Leader or Group Head.';
       else if (out.keys.some(function (k) { return keys.indexOf(k) < 0; })) out.error = 'Unknown area: ' + out.keys.filter(function (k) { return keys.indexOf(k) < 0; }).join(', ') + '.';
@@ -136,7 +137,7 @@ CH.views.people = (function () {
   }
 
   async function personDialog(app, p) {
-    var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-pp', title: p.Title, wide: true });
+    var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-pp', title: CH.names.of(p), wide: true });
     dlg.body.appendChild(h('p', { class: 'muted', text: 'Loading…' }));
     var memberships = [], history = [];
     try {
@@ -156,10 +157,20 @@ CH.views.people = (function () {
     var posts = h('input', { id: 'ch-pp-posts', type: 'checkbox', checked: p.CanPostNotices === false ? null : true });
     var admin = h('input', { id: 'ch-pp-admin', type: 'checkbox', checked: p.IsAdministrator ? true : null });
     var result = h('div', { class: 'result' });
+    var known = h('input', { id: 'ch-pp-known', type: 'text', maxlength: '40', autocomplete: 'off', value: p.KnownAs || '' });
+    var nameResult = h('div', { class: 'result' });
+    // the name someone is known by changes nobody's access, so an administrator may set it for anyone, themselves too
+    var nameRow = left ? null : [
+      h('div', { class: 'row known-row' }, CH.ui.dialog.field('Known as', known, 'How their name shows in the Hub, e.g. Joe. Leave empty to show ' + p.Title + '.'),
+        ui.button('Save name', function () {
+          sendAndShow(app, nameResult, { type: 'SetKnownAs', label: 'Known as for ' + p.Title, payload: { personId: p.SiteUserId, knownAs: known.value.trim() } });
+        })),
+      nameResult];
     var note = self ? h('p', { class: 'section-note', text: 'You can\'t change your own access. Ask another administrator.' })
       : left ? h('p', { class: 'section-note', text: p.Title + ' is marked as having left. Reactivate them to give them access again, then choose their areas.' }) : null;
     CH.dom.append(dlg.body, [
-      h('p', { class: 'muted small', text: (p.Email || '') + (CH.config.managementRoles.indexOf(p.Role) >= 0 ? ' · Team Leaders and the Group Head work in every area through their role.' : '') }),
+      h('p', { class: 'muted small', text: p.Title + ' · ' + (p.Email || '') + (CH.config.managementRoles.indexOf(p.Role) >= 0 ? ' · Team Leaders and the Group Head work in every area through their role.' : '') }),
+      nameRow,
       note,
       left ? null : [
         CH.ui.dialog.field('Role', role),
@@ -191,7 +202,7 @@ CH.views.people = (function () {
           h('span', { class: 'muted small', text: app.model.nameOf(e.ActorId) + ' · ' + D.short(D.localDate(e.EventTime || e.Created)) + ' ' + D.ukTime(e.EventTime || e.Created) })));
       })) : h('p', { class: 'muted', text: 'No changes recorded yet.' })
     ]);
-    if (self) Array.prototype.forEach.call(dlg.body.querySelectorAll('input, select, .actions-row .btn'), function (n) { n.disabled = true; });
+    if (self) Array.prototype.forEach.call(dlg.body.querySelectorAll('input, select, .actions-row .btn'), function (n) { if (n !== known) n.disabled = true; });
     dlg.focusFirst();
   }
 

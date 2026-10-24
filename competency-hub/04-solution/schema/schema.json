@@ -58,7 +58,8 @@
         { "name": "Status", "title": "Status", "type": "Choice", "choices": ["Active", "Left"], "required": true, "default": "Active", "indexed": true },
         { "name": "DateLeft", "title": "Date Left", "type": "DateOnly" },
         { "name": "AccessVerifiedOn", "title": "Access Verified", "type": "DateTime" },
-        { "name": "CanPostNotices", "title": "Can Post Notices", "type": "Boolean", "default": "1" }
+        { "name": "CanPostNotices", "title": "Can Post Notices", "type": "Boolean", "default": "1" },
+        { "name": "KnownAs", "title": "Known As", "type": "Text", "max": 40 }
       ]
     },
     {

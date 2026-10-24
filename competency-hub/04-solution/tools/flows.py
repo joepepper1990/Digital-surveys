@@ -812,6 +812,8 @@ def flow_request_queue(domain='actions'):
     KEY = "string(" + TX + "?['RequestKey'])"
     SENDER = "outputs('Sender_id')"
     ME = "outputs('Requester')"
+    # the requester as people know them in the Hub: their Known as name, else their full name
+    ME_NAME = "if(empty(trim(string(coalesce(" + ME + "?['KnownAs'], '')))), string(" + ME + "?['Title']), trim(string(" + ME + "?['KnownAs'])))"
     IS_MGMT = "contains(" + MANAGEMENT + ", string(" + ME + "?['Role']))"
     TODAY = "outputs('Today')"
     EVENT_TIME = "outputs('Event_time')"
@@ -1039,7 +1041,7 @@ def flow_request_queue(domain='actions'):
                      'json': {'NewDueDate': '@{' + uk_midnight(DUE) + '}', 'OwnerId': '@int(' + OWNER_ID_R + ')', 'DueDayAtEvent': '@' + day_num(DUE)}},
                     "concat('ACT-', substring(concat('0000', " + ACT_ID_R + "), sub(length(concat('0000', " + ACT_ID_R + ")), 5), 5), ' raised.')",
                     notices=[notice("not(equals(" + OWNER_ID_R + ", " + SENDER + "))", 'ASG', "concat('ASG|', " + KEY + ", '|', " + OWNER_ID_R + ")",
-                                    OWNER_R, "string(" + ME + "?['Title'])", ACT_ID_R, TITLE, "string(" + AREA_R + "?['Title'])", DUE)]),
+                                    OWNER_R, ME_NAME, ACT_ID_R, TITLE, "string(" + AREA_R + "?['Title'])", DUE)]),
         ), reject('_R', "outputs('Verdict_R')"))),
     )
 
@@ -1184,7 +1186,7 @@ def flow_request_queue(domain='actions'):
         lambda c: "concat('Deadline moved to ', " + long_date(NEW) + ", '.')",
         # the owner hears about a deadline someone else moved
         lambda c: [notice("not(" + c['OWNER'] + ")", 'EXT', "concat('EXT|', " + KEY + ", '|', " + c['OWNER_ID'] + ")", c['OWNER_P'],
-                          "string(" + ME + "?['Title'])", c['ACT_ID'], "string(" + c['A'] + "?['Title'])", c['AREA_NAME'], NEW,
+                          ME_NAME, c['ACT_ID'], "string(" + c['A'] + "?['Title'])", c['AREA_NAME'], NEW,
                           original_iso="if(empty(" + c['ORIGINAL'] + "), " + NEW + ", " + c['ORIGINAL'] + ")", previous_iso=PREV_DUE,
                           ext_count=EXT_N, note=REASON)])
 
@@ -1193,7 +1195,7 @@ def flow_request_queue(domain='actions'):
                 "if(greater(length(" + NOTE + "), 1000), 'Keep the note to 1,000 characters or fewer.', '')))))")
 
     def complete_common(c):
-        return ["string(" + ME + "?['Title'])", c['ACT_ID'], "string(" + c['A'] + "?['Title'])", c['AREA_NAME'], c['DUE']]
+        return [ME_NAME, c['ACT_ID'], "string(" + c['A'] + "?['Title'])", c['AREA_NAME'], c['DUE']]
 
     CLOSES = "not(equals(" + "json(string(coalesce(variables('varTxPlan'), '{}')))?['closeOut'], true))"
     complete_case = change_case(
@@ -1274,10 +1276,10 @@ def flow_request_queue(domain='actions'):
         lambda c: "concat('Reassigned to ', string(" + NEW_OWNER + "?['Title']), '.')",
         # the new owner is told it is theirs, the previous owner that it no longer is
         lambda c: [notice("not(equals(" + NEW_OWNER_ID + ", " + SENDER + "))", 'ASG', "concat('ASG|', " + KEY + ", '|', " + NEW_OWNER_ID + ")",
-                          c['NEW_P'], "string(" + ME + "?['Title'])", c['ACT_ID'], "string(" + c['A'] + "?['Title'])", c['AREA_NAME'],
+                          c['NEW_P'], ME_NAME, c['ACT_ID'], "string(" + c['A'] + "?['Title'])", c['AREA_NAME'],
                           c['DUE'], note=REASON),
                    notice("not(equals(" + PREV_OWNER_ID + ", " + SENDER + "))", 'RAW', "concat('RAW|', " + KEY + ", '|', " + PREV_OWNER_ID + ")",
-                          c['PREV_P'], "string(" + ME + "?['Title'])", c['ACT_ID'], "string(" + c['A'] + "?['Title'])", c['AREA_NAME'],
+                          c['PREV_P'], ME_NAME, c['ACT_ID'], "string(" + c['A'] + "?['Title'])", c['AREA_NAME'],
                           c['DUE'], note=REASON)],
         reads=lambda c: [
             # the current and the new owner, for the checks and the record (the plan keeps the current one)
@@ -1345,6 +1347,50 @@ def flow_request_queue(domain='actions'):
         lambda c: [])
 
     # ---------------------------------------------------------------- administrators: Retry, Cancel, Revert (spec REL-3)
+    def known_as_switch():
+        """The name a person is known by in the Hub (People.KnownAs). It changes nobody's access, so an administrator
+        may set it for anyone, themselves included; an empty name goes back to their full name."""
+        sfx = '_N'
+        WHO = "int(" + idq(P + "?['personId']") + ")"
+        ROW = "first(body('Get_named" + sfx + "')?['value'])"
+        VALUE = "outputs('New_name" + sfx + "')"
+        IS_ADMIN = "and(equals(" + ME + "?['IsAdministrator'], true), equals(string(" + ME + "?['Status']), 'Active'))"
+        ev_key = "concat(" + KEY + ", '|1')"
+        ev_values, ev_call = create_in_folder('hist', "@{outputs('Ids')?['histRoot']}/Administration", 'N_event_values' + sfx, 'N_event_body' + sfx)
+        verdict = chain(
+            ("not(" + IS_ADMIN + ")", 'Only a Competency Hub administrator can do this.'),
+            ("empty(" + ROW + ")", 'This person is not in the Hub.'),
+            ("greater(length(" + VALUE + "), 40)", 'Keep the name to 40 characters or fewer.'))
+        return seq(
+            ('Get_named' + sfx, http('GET', L('people', "/items?$select=Id,Title,KnownAs,Status&$filter=SiteUserId eq @{" + WHO + "}"))),
+            ('New_name' + sfx, compose("@trim(string(coalesce(" + P + "?['knownAs'], '')))")),
+            ('Decide' + sfx, cond('@' + UNDECIDED, seq(
+                ('Verdict' + sfx, compose('@' + verdict)),
+                ('Decided' + sfx, cond("@empty(outputs('Verdict" + sfx + "'))",
+                                       seq(*tx_update('planned' + sfx, {'State': 'Planned', 'StepsDone': 'DECIDED', 'PreviousValue': "@{string(coalesce(" + ROW + "?['KnownAs'], ''))}"})),
+                                       reject(sfx, "outputs('Verdict" + sfx + "')"))),
+            ))),
+            ('Name_value' + sfx, compose({'KnownAs': '@{' + VALUE + '}'})),
+            ('Save_name' + sfx, merge(L('people', "/items(@{" + ROW + "?['Id']})"), 'Name_value' + sfx)),
+            ('Find_n_event' + sfx, http('GET', L('hist', "/items?$select=Id&$filter=RequestKey eq '@{" + esc(ev_key) + "}'"))),
+            ('Need_n_event' + sfx, cond("@empty(body('Find_n_event" + sfx + "')?['value'])", seq(
+                ('N_event_values' + sfx, form({'Title': "@{take(concat('Known as changed for ', string(" + ROW + "?['Title'])), 255)}", 'RowKind': 'Event',
+                                               'RequestKey': '@{' + ev_key + '}', 'RecordType': 'Person', 'RecordId': "@{" + ROW + "?['Id']}",
+                                               'EventType': 'Access Changed', 'RequestType': 'SetKnownAs',
+                                               'PreviousValue': "@{coalesce(" + TX + "?['PreviousValue'], '')}", 'NewValue': '@{' + VALUE + '}', 'OwnerId': '@{' + WHO + '}'})),
+                ('N_event_body' + sfx, ev_values),
+                ('N_event' + sfx, ev_call),
+                *created_ok('N_event' + sfx, 'N_event_made' + sfx, 'The History event could not be created. See N_event' + sfx + '.'),
+            ))),
+            # filled in every time, so a run stopped just after the event was made completes it
+            ('Get_n_event' + sfx, http('GET', L('hist', "/items?$select=Id&$filter=RequestKey eq '@{" + esc(ev_key) + "}'"))),
+            ('N_event_details' + sfx, compose({'ActorId': '@int(' + SENDER + ')', 'EventTime': '@{' + EVENT_TIME + '}', 'ProcessedAt': '@{utcNow()}'})),
+            ('Save_n_event' + sfx, merge(L('hist', "/items(@{first(body('Get_n_event" + sfx + "')?['value'])?['Id']})"), 'N_event_details' + sfx)),
+            *tx_update('applied' + sfx, {'State': 'Applied', 'ProcessedAt': '@{utcNow()}'}),
+            *finish_request(sfx, 'Completed', "if(empty(" + VALUE + "), concat(string(" + ROW + "?['Title']), ' is shown by their full name.'), "
+                            "concat(string(" + ROW + "?['Title']), ' is now shown as ', " + VALUE + ", '.'))", "int(" + WHO + ")"),
+        )
+
     def admin_switch():
         """An administrator's decision about a change that needs attention. The target is another request's
         transaction row; its request is put back in the queue (Retry), closed before anything was changed (Cancel),
@@ -1696,6 +1742,7 @@ def flow_request_queue(domain='actions'):
                         'Title': "@{variables('varName')}", 'Person': "@{concat('[{\"Key\":\"', " + LOGIN + ", '\"}]')}",
                         'Email': "@{toLower(trim(string(" + P + "?['email'])))}", 'SiteUserId': '@{' + UID + '}', 'Role': '@{' + ROLE + '}',
                         'IsAdministrator': '0', 'Status': 'Active', 'CanPostNotices': "@{if(" + POSTS + ", '1', '0')}", 'Revision': '1',
+                        'KnownAs': "@{take(trim(string(coalesce(" + P + "?['knownAs'], ''))), 40)}",
                         'CreatedRequestKey': "F|@{" + KEY + "}"})),
                     ('Person_body' + sfx, person_values),
                     ('Create_person' + sfx, person_call),
@@ -1794,10 +1841,11 @@ def flow_request_queue(domain='actions'):
                 ('P_event_body' + sfx, ev_values),
                 ('P_event' + sfx, ev_call),
                 *created_ok('P_event' + sfx, 'P_event_made' + sfx, 'The History event could not be created. See P_event' + sfx + '.'),
-                ('Get_p_event' + sfx, http('GET', L('hist', "/items?$select=Id&$filter=RequestKey eq '@{" + esc(ev_key) + "}'"))),
-                ('P_event_details' + sfx, compose({'ActorId': '@int(' + SENDER + ')', 'EventTime': '@{' + EVENT_TIME + '}', 'ProcessedAt': '@{utcNow()}'})),
-                ('Save_p_event' + sfx, merge(L('hist', "/items(@{first(body('Get_p_event" + sfx + "')?['value'])?['Id']})"), 'P_event_details' + sfx)),
             ))),
+            # filled in every time, so a run stopped just after the event was made completes it
+            ('Get_p_event' + sfx, http('GET', L('hist', "/items?$select=Id&$filter=RequestKey eq '@{" + esc(ev_key) + "}'"))),
+            ('P_event_details' + sfx, compose({'ActorId': '@int(' + SENDER + ')', 'EventTime': '@{' + EVENT_TIME + '}', 'ProcessedAt': '@{utcNow()}'})),
+            ('Save_p_event' + sfx, merge(L('hist', "/items(@{first(body('Get_p_event" + sfx + "')?['value'])?['Id']})"), 'P_event_details' + sfx)),
             record_rights('Rec_in' + sfx, True),
             *tx_update('applied' + sfx, {'State': 'Applied', 'ProcessedAt': '@{utcNow()}'}),
             *finish_request(sfx, 'Completed', "concat(if(" + TYPE_IS('AddPerson') + ", 'Added ', if(" + LEAVING + ", 'Marked as left: ', if(" + TYPE_IS('ReactivatePerson') + ", "
@@ -1873,10 +1921,11 @@ def flow_request_queue(domain='actions'):
                 ('S_event_body' + sfx, ev_values),
                 ('S_event' + sfx, ev_call),
                 *created_ok('S_event' + sfx, 'S_event_made' + sfx, 'The History event could not be created. See S_event' + sfx + '.'),
-                ('Get_s_event' + sfx, http('GET', L('hist', "/items?$select=Id&$filter=RequestKey eq '@{" + esc(ev_key) + "}'"))),
-                ('S_event_details' + sfx, compose({'ActorId': '@int(' + SENDER + ')', 'EventTime': '@{' + EVENT_TIME + '}', 'ProcessedAt': '@{utcNow()}'})),
-                ('Save_s_event' + sfx, merge(L('hist', "/items(@{first(body('Get_s_event" + sfx + "')?['value'])?['Id']})"), 'S_event_details' + sfx)),
             ))),
+            # filled in every time, so a run stopped just after the event was made completes it
+            ('Get_s_event' + sfx, http('GET', L('hist', "/items?$select=Id&$filter=RequestKey eq '@{" + esc(ev_key) + "}'"))),
+            ('S_event_details' + sfx, compose({'ActorId': '@int(' + SENDER + ')', 'EventTime': '@{' + EVENT_TIME + '}', 'ProcessedAt': '@{utcNow()}'})),
+            ('Save_s_event' + sfx, merge(L('hist', "/items(@{first(body('Get_s_event" + sfx + "')?['value'])?['Id']})"), 'S_event_details' + sfx)),
             *tx_update('applied' + sfx, {'State': 'Applied', 'ProcessedAt': '@{utcNow()}'}),
             *finish_request(sfx, 'Completed', "'Setting saved.'"),
         )
@@ -2887,7 +2936,7 @@ def flow_request_queue(domain='actions'):
         ('Find_folder', after(http('GET', "_api/web/GetFolderByServerRelativePath(decodedurl='@{outputs('Ids')?['reqRoot']}/@{" + esc("outputs('Folder_name')") + "}')/ListItemAllFields?$select=Id,AuthorId,FileSystemObjectType"),
                               {'Sender_id': OK})),
         ('Folder_item', after(compose("@if(equals(actions('Find_folder')?['status'], 'Succeeded'), body('Find_folder'), null)"), {'Find_folder': TOLERANT})),
-        ('Get_requester', http('GET', L('people', "/items?$select=Id,Title,SiteUserId,Role,Status,IsAdministrator,Email,Person/Name,Person/EMail&$expand=Person&$filter=SiteUserId eq @{" + esc(SENDER) + "}"))),
+        ('Get_requester', http('GET', L('people', "/items?$select=Id,Title,KnownAs,SiteUserId,Role,Status,IsAdministrator,Email,Person/Name,Person/EMail&$expand=Person&$filter=SiteUserId eq @{" + esc(SENDER) + "}"))),
         ('Requester', compose("@first(body('Get_requester')?['value'])")),
         # the requester comes from the folder; a request anywhere else is refused without a transaction (plan F.1.2 step 1)
         ('Trusted', cond(TRUSTED, None, seq(
@@ -2962,7 +3011,10 @@ def flow_request_queue(domain='actions'):
                              change_all({'ExtendDeadline': extend_case, 'MarkComplete': complete_case, 'ChangeStatus': status_case,
                                          'ReassignAction': reassign_case, 'CloseAction': close_case, 'ReopenAction': reopen_case,
                                          'EditActionDetails': edit_case})))),
-                         reject('_K', "'This kind of change is not recognised.'"))
+                         # the name a person is known by: an administrator's change that alters nobody's access, handled here
+                         # because Administration is at Power Automate's limit of 500 steps
+                         seq(('Known_as', cond("@equals(string(" + TX + "?['RequestType']), 'SetKnownAs')", known_as_switch(),
+                                               reject('_K', "'This kind of change is not recognised.'")))))
          if domain == 'actions' else scope(records_switch()) if domain == 'records' else scope(meetings_switch()) if domain in ('meetings', 'minutes') else
          scope(cleanup_switch()) if domain == 'cleanup' else
          cond("@contains(createArray('RetryTransaction', 'CancelTransaction', 'RevertTransaction'), string(" + TX + "?['RequestType']))",

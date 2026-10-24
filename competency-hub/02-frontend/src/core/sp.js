@@ -58,7 +58,18 @@ CH.sp = (function () {
     function listPath(title) { return siteUrl + "/_api/web/lists/getbytitle('" + escapeOData(title) + "')"; }
 
     // Reads every page up to maxRows. Follows nextLink only when it stays on this site.
-    async function items(title, query, maxRows) {
+    // optional: columns added by a later Setup. If SharePoint says one is missing (Setup not yet run), the read is
+    // made again without them, so the app still works and the new detail is simply absent.
+    async function items(title, query, maxRows, optional) {
+      if (optional && optional.length) {
+        try { return await items(title, query, maxRows); } catch (error) {
+          if (error.status !== 400) throw error;
+          var q = query.replace(/(\$select=)([^&]*)/, function (_, k, v) {
+            return k + v.split(',').filter(function (f) { return optional.indexOf(f) < 0 && optional.indexOf(f.split('/')[0]) < 0; }).join(',');
+          });
+          return items(title, q, maxRows);
+        }
+      }
       var limit = maxRows || CH.config.maxRows;
       var url = listPath(title) + '/items?' + query + '&$top=' + CH.config.pageSize;
       var rows = [];

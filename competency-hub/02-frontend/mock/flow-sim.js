@@ -328,6 +328,17 @@ window.MockFlow = (function () {
       }
 
       // People administration (spec §3.2), much simplified: the same refusals, and the records as the flow leaves them.
+      if (req.RequestType === 'SetKnownAs') {
+        if (!requester.IsAdministrator) return finish(req, 'Rejected', 'Only a Competency Hub administrator can do this.');
+        var named = person(Number(payload.personId));
+        if (!named) return finish(req, 'Rejected', 'This person is not in the Hub.');
+        var known = String(payload.knownAs || '').trim();
+        if (known.length > 40) return finish(req, 'Rejected', 'Keep the name to 40 characters or fewer.');
+        named.KnownAs = known;
+        data.History.push({ Id: nextId(data.History), RowKind: 'Event', RequestKey: req.RequestKey + '|1', RecordType: 'Person', EventType: 'Access Changed',
+          Title: 'Known as changed for ' + named.Title, ActorId: req.AuthorId, EventTime: new Date().toISOString(), FileDirRef: ROOT + 'History/Administration', RecordId: named.Id });
+        return finish(req, 'Completed', known ? named.Title + ' is now shown as ' + known + '.' : named.Title + ' is shown by their full name.', named.SiteUserId);
+      }
       if (['AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson'].indexOf(req.RequestType) >= 0) {
         if (!requester.IsAdministrator) return finish(req, 'Rejected', 'Only a Competency Hub administrator can do this.');
         var target = req.RequestType === 'AddPerson' ? null : person(Number(payload.personId));
@@ -337,7 +348,7 @@ window.MockFlow = (function () {
           var newId = data.People.reduce(function (m, x) { return Math.max(m, x.SiteUserId); }, 0) + 1;
           var name = payload.email.split('@')[0].split('.').map(function (s) { return s.charAt(0).toUpperCase() + s.slice(1); }).join(' ');
           target = { Id: nextId(data.People), Title: name, SiteUserId: newId, Role: payload.role, Status: 'Active', IsAdministrator: false, Email: payload.email,
-            CanPostNotices: payload.canPostNotices !== false };
+            CanPostNotices: payload.canPostNotices !== false, KnownAs: String(payload.knownAs || '').trim().slice(0, 40) };
           data.People.push(target);
         }
         var uid = target.SiteUserId;
