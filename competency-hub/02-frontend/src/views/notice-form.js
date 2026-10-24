@@ -91,13 +91,13 @@ CH.views.noticeForm = (function () {
           ClientKey: clientKey, CreatedRequestKey: 'U|' + clientKey, Status: 'Active'
         }, app.testMark()));
         dlg.close();
-        app.noticePosted(key);
+        app.noticePosted(key, values.areas);
       } catch (error) {
         // An unclear failure may still have saved the notice: look for it by its client key first.
         try {
           var found = await app.sp.items(CH.config.lists.notices.title,
             "$select=Id&$filter=ClientKey eq '" + CH.sp.escapeOData(clientKey) + "'", 1);
-          if (found.rows.length) { dlg.close(); app.noticePosted(key); return; }
+          if (found.rows.length) { dlg.close(); app.noticePosted(key, values.areas); return; }
         } catch (_) { /* fall through to the message */ }
         submit.disabled = false;
         submit.textContent = 'Try again';

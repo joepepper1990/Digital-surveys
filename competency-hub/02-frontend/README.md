@@ -2,6 +2,10 @@
 
 Plain HTML, CSS and JavaScript, delivered as a Welcome by Accelerator 365 custom layout. Same-origin SharePoint REST runs as the signed-in user. There are no libraries and no external calls.
 
+## Version 1.1.1 (24 October 2026)
+
+- After posting a notice on several noticeboards, the message names all of them (it named only the first).
+
 ## Version 1.1.0: your first review on the site (24 October 2026)
 
 - Wording and layout: no Text size control; *My to-dos*, *Coming up this week*, *Owner: … · Raised by: …*;

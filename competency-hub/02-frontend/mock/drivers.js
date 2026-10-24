@@ -70,10 +70,11 @@ window.MockDrivers = (function () {
       type(q('#ch-n-body'), 'Flask and Instruments now share the probe stock.');
       q('form').dispatchEvent(new Event('submit', { cancelable: true }));
       await until(function () { return !q('#ch-n'); });
+      var toast = await until(function () { return q('.toast') && q('.toast').textContent; });
       var n = MockSharePoint.data.Noticeboard.filter(function (x) { return x.Title === 'Shared probe stock'; })[0];
       var allBox = q('#ch-n-all');
       return { ticked: ticked, durations: durations, stored: n && { folder: n.FileDirRef.split('/').pop(), shown: n.ShownIn, days: n.ImportantDays, important: n.IsImportant },
-        writes: MockSharePoint.writes.length, allGone: !allBox };
+        writes: MockSharePoint.writes.length, allGone: !allBox, toast: toast };
     },
     // The notice shows on the other noticeboard too, and an engineer there turns it into an action.
     noticeConvert: async function () {

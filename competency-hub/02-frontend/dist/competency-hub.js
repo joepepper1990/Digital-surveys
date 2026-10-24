@@ -1,11 +1,11 @@
-/* ESG Competency Hub 1.1.0 – built from src/ by tools/build.js. Do not edit. */
+/* ESG Competency Hub 1.1.1 – built from src/ by tools/build.js. Do not edit. */
 window.ESGCompetencyHub = function (ctx) {
   'use strict';
   var CH = {};
   /* src/core/config.js */
   // Fixed names and limits. Lists are addressed by display title; folders by list URL name.
   CH.config = {
-    VERSION: '1.1.0',
+    VERSION: '1.1.1',
     ENVIRONMENT: 'TEST',
     lists: {
       competencies: { title: 'Competencies', url: 'Competencies' },
@@ -2384,13 +2384,13 @@ window.ESGCompetencyHub = function (ctx) {
             ClientKey: clientKey, CreatedRequestKey: 'U|' + clientKey, Status: 'Active'
           }, app.testMark()));
           dlg.close();
-          app.noticePosted(key);
+          app.noticePosted(key, values.areas);
         } catch (error) {
           // An unclear failure may still have saved the notice: look for it by its client key first.
           try {
             var found = await app.sp.items(CH.config.lists.notices.title,
               "$select=Id&$filter=ClientKey eq '" + CH.sp.escapeOData(clientKey) + "'", 1);
-            if (found.rows.length) { dlg.close(); app.noticePosted(key); return; }
+            if (found.rows.length) { dlg.close(); app.noticePosted(key, values.areas); return; }
           } catch (_) { /* fall through to the message */ }
           submit.disabled = false;
           submit.textContent = 'Try again';
@@ -5315,11 +5315,17 @@ window.ESGCompetencyHub = function (ctx) {
         if (e && e.state === 'attention') return 'change not recorded';
         return a.locked ? 'being updated' : '';
       };
-      app.noticePosted = async function (key) {
+      // keys: every noticeboard it was posted to (the first is where it is kept); all of them reads "every noticeboard"
+      app.noticePosted = async function (key, keys) {
         await reload();
-        if (app.state.view === 'area' && app.state.area === key) app.state.tab = 1;
+        keys = keys && keys.length ? keys : [key];
+        if (app.state.view === 'area' && keys.indexOf(app.state.area) >= 0) app.state.tab = 1;
         render(false);
-        CH.ui.toast(app.root, 'Your notice has been posted on the ' + app.model.areaByKey[key].name + ' noticeboard.', 'ok');
+        var names = keys.map(function (k) { return app.model.areaByKey[k].name; });
+        var where = keys.length > 1 && keys.length === app.model.areas.length ? 'every noticeboard'
+          : names.length === 1 ? 'the ' + names[0] + ' noticeboard'
+          : 'the ' + names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] + ' noticeboards';
+        CH.ui.toast(app.root, 'Your notice has been posted on ' + where + '.', 'ok');
       };
 
       function render(moveFocus) {

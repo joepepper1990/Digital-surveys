@@ -249,11 +249,17 @@ CH.app = (function () {
       if (e && e.state === 'attention') return 'change not recorded';
       return a.locked ? 'being updated' : '';
     };
-    app.noticePosted = async function (key) {
+    // keys: every noticeboard it was posted to (the first is where it is kept); all of them reads "every noticeboard"
+    app.noticePosted = async function (key, keys) {
       await reload();
-      if (app.state.view === 'area' && app.state.area === key) app.state.tab = 1;
+      keys = keys && keys.length ? keys : [key];
+      if (app.state.view === 'area' && keys.indexOf(app.state.area) >= 0) app.state.tab = 1;
       render(false);
-      CH.ui.toast(app.root, 'Your notice has been posted on the ' + app.model.areaByKey[key].name + ' noticeboard.', 'ok');
+      var names = keys.map(function (k) { return app.model.areaByKey[k].name; });
+      var where = keys.length > 1 && keys.length === app.model.areas.length ? 'every noticeboard'
+        : names.length === 1 ? 'the ' + names[0] + ' noticeboard'
+        : 'the ' + names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] + ' noticeboards';
+      CH.ui.toast(app.root, 'Your notice has been posted on ' + where + '.', 'ok');
     };
 
     function render(moveFocus) {

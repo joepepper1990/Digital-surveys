@@ -131,7 +131,8 @@ check('the notice is the only write, to the Noticeboard Radwaste folder', res.ok
 res = drive('as=' + RACHEL + '&view=area&area=FLK&drive=noticeMany');
 check('notice on several noticeboards: stored once in the first, shown in both, important for the chosen 2 weeks', res.ok &&
   JSON.stringify(res.result.ticked) === '["FLK"]' && res.result.durations.join('|') === 'Not important|1 week|2 weeks|1 month|3 months' &&
-  res.result.stored && res.result.stored.folder === 'FLK' && res.result.stored.shown === 'FLK;INS' && res.result.stored.days === 14 && res.result.writes === 1, JSON.stringify(res));
+  res.result.stored && res.result.stored.folder === 'FLK' && res.result.stored.shown === 'FLK;INS' && res.result.stored.days === 14 && res.result.writes === 1 &&
+  /posted on the Flask and Instruments noticeboards\./.test(res.result.toast), JSON.stringify(res));
 res = drive('as=' + RACHEL + '&view=area&area=FLK&drive=noticeValidation');
 check('empty notice: errors shown, focus on title, nothing sent', res.ok && res.result.titleError && res.result.bodyError &&
   res.result.focused === 'ch-n-title' && res.result.writes === 0, JSON.stringify(res));
