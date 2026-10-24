@@ -3437,10 +3437,10 @@ def flow_queue_monitor():
                                            + " or ".join(["InviteState eq '" + st + "'" for st in ('Creating', 'Updating', 'Cancelling', 'Unknown', 'Failed')]
                                                          + ["PdfState eq '" + st + "'" for st in ('Pending', 'Failed')]) + "&$top=5000"))),
         ('Inv_all', query("@body('Get_inv')?['value']", "@contains(" + INVITE_PENDING + ", string(coalesce(item()?['InviteState'], 'None')))")),
-        ('Inv_retry', query("@outputs('Inv_all')", "@and(less(int(" + idq("item()?['InviteAttempts']") + "), 3), " + older('Modified', 10) + ")")),
+        ('Inv_retry', query("@body('Inv_all')", "@and(less(int(" + idq("item()?['InviteAttempts']") + "), 3), " + older('Modified', 10) + ")")),
         ('Each_invite', {'type': 'Foreach', 'foreach': "@body('Inv_retry')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}},
                          'actions': seq(*invite_steps('_v', "items('Each_invite')?['Id']"))}),
-        ('Inv_given_up', query("@outputs('Inv_all')", "@greaterOrEquals(int(" + idq("item()?['InviteAttempts']") + "), 3)")),
+        ('Inv_given_up', query("@body('Inv_all')", "@greaterOrEquals(int(" + idq("item()?['InviteAttempts']") + "), 3)")),
         ('Each_invite_failed', {'type': 'Foreach', 'foreach': "@body('Inv_given_up')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
             alert_if('Invite_alert', 'true', "concat('invite|', string(items('Each_invite_failed')?['Id']))",
                      "concat('A meeting invitation could not be sent: ', string(items('Each_invite_failed')?['Title']))",

@@ -1067,7 +1067,7 @@
             "Inv_retry": {
               "type": "Query",
               "inputs": {
-                "from": "@outputs('Inv_all')",
+                "from": "@body('Inv_all')",
                 "where": "@and(less(int(if(empty(first(split(string(coalesce(item()?['InviteAttempts'], '')), '.'))), '0', first(split(string(coalesce(item()?['InviteAttempts'], '')), '.')))), 3), less(ticks(string(coalesce(item()?['Modified'], '2000-01-01T00:00:00Z'))), ticks(addMinutes(utcNow(), -10))))"
               },
               "runAfter": {
@@ -1692,7 +1692,7 @@
             "Inv_given_up": {
               "type": "Query",
               "inputs": {
-                "from": "@outputs('Inv_all')",
+                "from": "@body('Inv_all')",
                 "where": "@greaterOrEquals(int(if(empty(first(split(string(coalesce(item()?['InviteAttempts'], '')), '.'))), '0', first(split(string(coalesce(item()?['InviteAttempts'], '')), '.')))), 3)"
               },
               "runAfter": {

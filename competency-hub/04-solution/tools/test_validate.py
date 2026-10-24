@@ -85,6 +85,15 @@ class BrokenFlowsAreRejected(unittest.TestCase):
             d['actions']['Self_ref']['inputs']['value'] = "@variables('" + name + "')"
         self.expect(change, 'Self reference is not supported')
 
+    def test_outputs_of_a_filter_step_used_as_a_list(self):
+        # Power Automate: outputs() of a Filter array step is {"body": [...]}; a Filter array 'from' it fails at run time
+        fl = copy.deepcopy(GOOD)
+        hit = [one for one in fl if find(one['json']['properties']['definition'], 'Pdf_retry')]
+        self.assertTrue(hit)
+        find(hit[0]['json']['properties']['definition'], 'Pdf_retry')['inputs']['from'] = "@outputs('Pdf_all')"
+        probs = validate.validate_all(fl)
+        self.assertTrue(any('is an object, not a list' in p for p in probs), probs)
+
     def test_windows_time_zone_on_an_outlook_event(self):
         # The Outlook V4 event actions take the connector's display names, not 'GMT Standard Time'
         fl = copy.deepcopy(GOOD)

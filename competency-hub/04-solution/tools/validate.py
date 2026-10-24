@@ -332,6 +332,24 @@ def check_platform(f):
     return probs
 
 
+def check_array_outputs(f):
+    """outputs() of a Filter array, Select or Join step is an object; a step that needs the list must use body()."""
+    kinds = {}
+    def walk(actions):
+        for n, a in (actions or {}).items():
+            kinds[n] = a.get('type')
+            walk(a.get('actions'))
+            walk((a.get('else') or {}).get('actions'))
+            for c in (a.get('cases') or {}).values():
+                walk(c.get('actions'))
+            walk((a.get('default') or {}).get('actions'))
+    walk(f['json']['properties']['definition'].get('actions'))
+    text = json.dumps(f['json']['properties']['definition'])
+    bad = sorted({n for n in re.findall(r"outputs\('([^']+)'\)", text) if kinds.get(n) in ('Query', 'Select', 'Join')})
+    return ['[{0}] outputs(\'{1}\') is an object, not a list ("The \'from\' property value ... is of type \'Object\'"); use body(\'{1}\')'
+            .format(f['name'], n) for n in bad]
+
+
 MAX_NESTING = 8      # Power Automate: an action may be nested at most 8 levels deep (top-level actions are level 0)
 MAX_ACTIONS = 500    # Power Automate: actions per workflow
 
@@ -409,6 +427,7 @@ def validate_all(flows, raw=None):
             probs += check_rest_columns(f)
             probs += check_email_escaping(f)
         probs += check_platform(f)
+        probs += check_array_outputs(f)
         probs += check_nesting(f['name'], f['json']['properties']['definition'])
         refs = f['json']['properties']['connectionReferences']
         used = set(re.findall(r'"connectionName": "([^"]+)"', json.dumps(f['json'])))

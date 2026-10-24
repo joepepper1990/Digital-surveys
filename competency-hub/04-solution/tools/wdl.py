@@ -223,7 +223,8 @@ def call(name, a, ctx):
     if name in ('outputs', 'body', 'actions'):
         res = eng.result(a[0])
         if name == 'outputs':
-            return res.get('outputs')
+            # a Filter array, Select or Join step's outputs is an object {"body": [...]}; only body() is the list
+            return {'body': res.get('outputs')} if res.get('kind') == 'array' else res.get('outputs')
         if name == 'body':
             out = res.get('outputs')
             return out.get('body') if isinstance(out, dict) and 'body' in out and res.get('kind') == 'api' else out
@@ -536,7 +537,7 @@ class Engine:
                 return st
             if t == 'Terminate':
                 raise Terminated(act['inputs']['runStatus'], act['inputs'].get('runError', {}).get('message', ''))
-            out, kind = self.simple(name, act, t, ctx), 'plain'
+            out, kind = self.simple(name, act, t, ctx), ('array' if t in ('Query', 'Select', 'Join') else 'plain')
             if t == 'OpenApiConnection':
                 kind = 'api'
             self.results[name] = {'status': 'Succeeded', 'outputs': out, 'kind': kind}
