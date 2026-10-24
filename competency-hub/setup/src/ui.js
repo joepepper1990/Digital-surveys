@@ -44,6 +44,14 @@ CHS.ui = (function () {
     details.appendChild(people);
     root.appendChild(details);
 
+    var named = el('details');
+    named.appendChild(el('summary', {}, 'Optional: the name each person is shown by (Known as)'));
+    named.appendChild(el('p', {}, 'One person per line: full name, a dash, then the name the Hub should use. For example: Joseph Pepper – Joe. ' +
+      'People who are not in the Hub yet are listed and skipped.'));
+    var knownBox = el('textarea', { id: 'chs-known', rows: '8', 'aria-label': 'Known as names' });
+    named.appendChild(knownBox);
+    root.appendChild(named);
+
     var checkBtn = el('button', { type: 'button', class: 'btn' }, 'Check (changes nothing)');
     var applyBtn = el('button', { type: 'button', class: 'btn primary' }, 'Apply');
     var typed = el('input', { type: 'text', id: 'chs-typed', placeholder: 'Type SETUP to enable Apply', 'aria-label': 'Type SETUP to enable Apply' });
@@ -81,7 +89,7 @@ CHS.ui = (function () {
       entries = [];
       status.textContent = mode === 'apply' ? 'Applying… keep this page open.' : 'Checking… nothing will be changed.';
       var engine = CHS.engine.create(rest, schema, {
-        log: log, confirmGroupOwnersOnly: confirmBox.checked, bootstrapRole: roleSelect.value, peopleText: people.value
+        log: log, confirmGroupOwnersOnly: confirmBox.checked, bootstrapRole: roleSelect.value, peopleText: people.value, knownAsText: knownBox.value
       });
       var result = await engine.run(mode);
       busy = false;

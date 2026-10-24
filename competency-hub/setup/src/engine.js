@@ -766,6 +766,52 @@ CHS.engine = (function () {
       }
     }
 
+    // The name each person is shown by (Setup 1.4.1): "Full name – Known as" per line. A name matches a People row by
+    // its words in any order (so "Pepper, Joseph" too), or by a firstname.lastname@ address; only an exact single match is set.
+    function words(text) { return String(text || '').toLowerCase().replace(/[,.]/g, ' ').split(/\s+/).filter(Boolean).sort().join(' '); }
+    function parseKnownAs(text) {
+      var out = [];
+      var problems = [];
+      String(text || '').split(/\r?\n/).forEach(function (line, n) {
+        var t = line.trim();
+        if (!t || t.charAt(0) === '#') return;
+        // a dash first, so "Pepper, Joseph – Joe" splits at the dash; a comma only when there is no dash
+        var m = /^(.+?)\s*(?:\u2013|\u2014|\s-\s)\s*(.+)$/.exec(t) || /^(.+?)\s*,\s*(.+)$/.exec(t);
+        if (!m) { problems.push('Line ' + (n + 1) + ': write it as "Full name – Known as".'); return; }
+        out.push({ name: m[1].trim(), knownAs: m[2].trim().slice(0, 40) });
+      });
+      return { names: out, problems: problems };
+    }
+    async function knownAs() {
+      var step = 'Known as';
+      if (!opts.knownAsText || !String(opts.knownAsText).trim()) return;
+      var parsed = parseKnownAs(opts.knownAsText);
+      parsed.problems.forEach(function (p) { note('warn', step, p + ' Skipped.'); });
+      if (S.lists.people.planned || S.pendingFields['people.KnownAs']) {
+        note('create', step, 'Would set the Known as name for ' + parsed.names.length + ' people (after the new People column is added).');
+        return;
+      }
+      var people = await rest.getRows(listPath('people') + '/items?$select=Id,Title,Email,KnownAs&$top=5000');
+      for (var i = 0; i < parsed.names.length; i++) {
+        var want = parsed.names[i];
+        var key = words(want.name);
+        var found = people.filter(function (p) { return words(p.Title) === key; });
+        if (!found.length) {
+          var local = want.name.toLowerCase().replace(/\s+/g, '.');
+          found = people.filter(function (p) { return String(p.Email || '').toLowerCase().split('@')[0] === local; });
+        }
+        if (found.length > 1) { note('warn', step, 'More than one person matches "' + want.name + '". Skipped – set it on the People page.'); continue; }
+        if (!found.length) { note('warn', step, 'Not in the Hub yet: ' + want.name + '. Their Known as name goes in when they are added.'); continue; }
+        var row = found[0];
+        if (String(row.KnownAs || '') === want.knownAs) { note('ok', step, row.Title + ' is already known as ' + want.knownAs + '.'); continue; }
+        if (!applying()) { note('create', step, 'Would set the Known as name for ' + row.Title + ' to ' + want.knownAs + '.'); continue; }
+        await updateItem('people', row.Id, { KnownAs: want.knownAs });
+        var back = await rest.getRows(listPath('people') + '/items?$select=Id,KnownAs&$filter=Id eq ' + row.Id);
+        if (!back.length || String(back[0].KnownAs || '') !== want.knownAs) throw new StopError('The Known as name for ' + row.Title + ' did not keep its new value.');
+        note('create', step, 'Set the Known as name for ' + row.Title + ' to ' + want.knownAs + '.');
+      }
+    }
+
     // ---------- 10. Page, layouts library and Welcome errors list ----------
     async function pageAccess() {
       var step = 'App page access';
@@ -806,7 +852,7 @@ CHS.engine = (function () {
       }
     }
 
-    var STEPS = [prechecks, permissionLevels, groups, lists, folders, permissions, data, bootstrap, importPeople, noticePosters, pageAccess];
+    var STEPS = [prechecks, permissionLevels, groups, lists, folders, permissions, data, bootstrap, importPeople, knownAs, noticePosters, pageAccess];
 
     async function run(runMode) {
       mode = runMode === 'apply' ? 'apply' : 'check';

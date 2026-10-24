@@ -519,6 +519,49 @@ test('Setup 1.4 on a site set up by 1.3.2: adds Known as, co-owners, the checker
   deq(site.writes, []);
 });
 
+test('Known as (1.4.1): names are matched in any word order and set once; unknown and unclear names are reported', async () => {
+  const { site, run } = newSite();
+  const peopleText = 'andrea.medlicott@example.test, Engineer, FLK\nrachel.boulden@example.test, Technician, GRS';
+  await run('apply', { peopleText });
+  const knownAsText = [
+    '# full name – known as',
+    'Joseph Pepper – Joe',
+    'Pepper, Joseph – Joe',
+    'Andrea Medlicott - Andrea',
+    'Rachel Boulden – ' + 'R'.repeat(50),
+    'Kai Todd – Kai',
+    'no separator here'
+  ].join('\n');
+  site.writes.length = 0;
+  const check = await run('check', { knownAsText });
+  deq(site.writes, []);
+  const planned = check.entries.filter((e) => e.step === 'Known as').map((e) => e.text).join('\n');
+  assert.match(planned, /Would set the Known as name for Pepper Joseph to Joe/);
+  assert.match(planned, /Would set the Known as name for Medlicott Andrea to Andrea/);
+  assert.match(planned, /Not in the Hub yet: Kai Todd/);
+  assert.match(planned, /Line 7: write it as/);
+  const apply = await run('apply', { knownAsText });
+  assert.equal(apply.result.ok, true, apply.stops.join(' | '));
+  const known = Object.fromEntries(rows(listByUrl(site, 'People')).map((p) => [p.Title, p.KnownAs]));
+  assert.equal(known['Pepper Joseph'], 'Joe');
+  assert.equal(known['Medlicott Andrea'], 'Andrea');
+  assert.equal(known['Boulden Rachel'], 'R'.repeat(40), 'cut to 40 characters');
+  site.writes.length = 0;
+  const again = await run('apply', { knownAsText });
+  assert.equal(again.result.ok, true);
+  assert.ok(again.entries.some((e) => /Pepper Joseph is already known as Joe/.test(e.text)));
+  assert.ok(!again.entries.some((e) => e.step === 'Known as' && e.level === 'create'));
+});
+
+test('Known as: a name that matches two people is skipped', async () => {
+  const { site, run } = newSite();
+  await run('apply', { peopleText: 'mark.buckley@example.test, Technician, GRS\nmark.wellstead@example.test, Team Leader,' });
+  rows(listByUrl(site, 'People')).forEach((p) => { if (/Mark/.test(p.Title)) p.Title = 'Mark Smith'; });
+  const r = await run('apply', { knownAsText: 'Mark Smith – Mark' });
+  assert.ok(r.entries.some((e) => /More than one person matches "Mark Smith"/.test(e.text)));
+  assert.ok(rows(listByUrl(site, 'People')).every((p) => !p.KnownAs || p.KnownAs !== 'Mark'));
+});
+
 test('No list where people read only their own items has a column that must be unique (SharePoint refuses it)', () => {
   schema.lists.filter((l) => l.readSecurity === 2).forEach((l) => {
     const unique = (l.standard ? schema.standardColumns : []).concat(l.fields).filter((f) => f.unique).map((f) => f.name);
