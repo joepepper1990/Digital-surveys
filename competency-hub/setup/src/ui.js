@@ -21,7 +21,7 @@ CHS.ui = (function () {
     var busy = false;
     root.textContent = '';
 
-    root.appendChild(el('h1', {}, 'Competency Hub Setup'));
+    root.appendChild(el('h1', {}, 'Competency Hub Setup ' + CHS.version));
     root.appendChild(el('p', {}, 'This page creates the Competency Hub lists, groups, folders and permissions on this site, and makes you the first administrator. ' +
       'Run Check first: it changes nothing and lists what Apply would do. Apply only adds what is missing, never deletes anything, and can be run again safely.'));
     root.appendChild(el('p', { class: 'warn' }, 'Only site owners can use this page. Delete its two files from the Welcome layouts library when Setup is finished.'));
@@ -106,7 +106,7 @@ CHS.ui = (function () {
     checkBtn.addEventListener('click', function () { go('check'); });
     applyBtn.addEventListener('click', function () { go('apply'); });
     saveBtn.addEventListener('click', function () {
-      var text = ['Competency Hub Setup log – ' + new Date().toISOString()].concat(entries.map(function (e) {
+      var text = ['Competency Hub Setup ' + CHS.version + ' (schema ' + schema.schemaVersion + ') log – ' + new Date().toISOString()].concat(entries.map(function (e) {
         return [e.mode, e.step, LABELS[e.level], e.text].join(' | ');
       })).join('\r\n');
       var a = el('a', { href: 'data:text/plain;charset=utf-8,' + encodeURIComponent(text), download: 'competency-hub-setup-log.txt' });

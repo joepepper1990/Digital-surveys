@@ -553,6 +553,23 @@ test('Known as (1.4.1): names are matched in any word order and set once; unknow
   assert.ok(!again.entries.some((e) => e.step === 'Known as' && e.level === 'create'));
 });
 
+test('Known as lines pasted into the people box get one plain note, and nobody is added', async () => {
+  const { site, run } = newSite();
+  const r = await run('check', { peopleText: 'Joseph Pepper – Joe\nMark Wellstead – Mark Wellstead\nDoti Cange-Ainsworth – Doti' });
+  const warns = r.entries.filter((e) => e.step === 'People import' && e.level === 'warn').map((e) => e.text);
+  assert.equal(warns.length, 1, warns.join(' | '));
+  assert.match(warns[0], /3 lines look like Known as names .* Paste them into the Known as box instead/);
+  deq(site.writes, []);
+});
+
+test('The Setup version is shown on the page and in the log, so an old copy is plain to see', () => {
+  const built = require('fs').readFileSync(require('path').join(__dirname, '..', 'dist', 'CH_Setup.js'), 'utf8');
+  const version = /var CHS = \{ version: "([0-9.]+)" \}/.exec(built);
+  assert.ok(version, 'the built script carries its version');
+  assert.match(built, /'Competency Hub Setup ' \+ CHS\.version/);
+  assert.match(built, /'Setup ' \+ \(CHS\.version/);
+});
+
 test('Known as: a name that matches two people is skipped', async () => {
   const { site, run } = newSite();
   await run('apply', { peopleText: 'mark.buckley@example.test, Technician, GRS\nmark.wellstead@example.test, Team Leader,' });

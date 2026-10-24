@@ -9,16 +9,18 @@ const crypto = require('crypto');
 const ROOT = path.join(__dirname, '..');
 const SCHEMA = path.join(ROOT, '..', '04-solution', 'schema', 'schema.json');
 const MODULES = ['src/rest.js', 'src/engine.js', 'src/ui.js'];
+// The Setup version, shown on the page and in the log, so an old copy left in the browser is plain to see.
+const SETUP_VERSION = '1.4.2';
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 const sha256 = (t) => crypto.createHash('sha256').update(t).digest('hex');
 
 function build() {
   const schema = JSON.parse(fs.readFileSync(SCHEMA, 'utf8'));
   const js = [
-    '/* ESG Competency Hub Setup, schema ' + schema.schemaVersion + ' – built by setup/tools/build.js. Do not edit. */',
+    '/* ESG Competency Hub Setup ' + SETUP_VERSION + ', schema ' + schema.schemaVersion + ' – built by setup/tools/build.js. Do not edit. */',
     'window.ESGCompetencyHubSetup = function (ctx) {',
     "  'use strict';",
-    '  var CHS = {};',
+    '  var CHS = { version: ' + JSON.stringify(SETUP_VERSION) + ' };',
     '  CHS.schema = ' + JSON.stringify(schema) + ';',
     MODULES.map((m) => '  /* ' + m + ' */\n' + read(m).split('\n').map((l) => l ? '  ' + l : l).join('\n')).join('\n'),
     '  var started = false;',
@@ -52,7 +54,7 @@ function build() {
     '  var typed = document.getElementById("chs-typed"); typed.value = "SETUP"; typed.dispatchEvent(new Event("input")); buttons[1].click();',
     '}, 300); })();</script>',
     '</body></html>', ''].join('\n');
-  const manifest = JSON.stringify({ product: 'ESG Competency Hub Setup', schemaVersion: schema.schemaVersion,
+  const manifest = JSON.stringify({ product: 'ESG Competency Hub Setup', version: SETUP_VERSION, schemaVersion: schema.schemaVersion,
     outputs: { 'CH_Setup.js': sha256(js), 'CH_Setup.html': sha256(layout) } }, null, 2) + '\n';
   return { 'dist/CH_Setup.js': js, 'dist/CH_Setup.html': layout, 'dist/BUILD_MANIFEST.json': manifest, 'mock/index.html': mock };
 }

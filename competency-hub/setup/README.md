@@ -28,6 +28,8 @@ choices on existing columns. **Version 1.3** (Release 4) adds the meeting end ti
 Built and tested locally. Releases 5 and 6 need no change to Setup.
 **Version 1.3.1** (24 October 2026) fixes Check on a site made by Setup 1.1: it read the new
 `People.CanPostNotices` column before Apply had added it, and stopped. Check now plans that step instead.
+**Version 1.4.2** (24 October 2026) shows the Setup version in the page heading and the log, so an old copy left in the
+browser is plain to see, and says so when Known as lines are pasted into the people box.
 **Version 1.4.1** (24 October 2026) adds an optional *Known as* box: one line per person, "Full name – Known as". Each
 name is matched to a People row by its words in any order (or a firstname.lastname@ address) and only that column is set;
 people not in the Hub yet, and names matching two people, are listed and skipped. The list is in `docs/known-as.txt`.

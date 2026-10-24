@@ -73,6 +73,7 @@ CHS.engine = (function () {
       var step = 'Pre-checks';
       var me = await rest.get('/_api/web/currentuser?$select=Id,Title,Email,LoginName');
       S.me = me;
+      note('info', step, 'Setup ' + (CHS.version || '') + ', schema ' + schema.schemaVersion + '.');
       note('info', step, 'Signed in as ' + me.Title + ' (' + (me.Email || me.LoginName) + ').');
       var perms = await rest.get('/_api/web/effectiveBasePermissions');
       var low = Number(perms.Low !== undefined ? perms.Low : perms.EffectiveBasePermissions && perms.EffectiveBasePermissions.Low);
@@ -722,9 +723,12 @@ CHS.engine = (function () {
     function parsePeople(text) {
       var out = [];
       var problems = [];
+      var named = 0;
       String(text || '').split(/\r?\n/).forEach(function (line, n) {
         var t = line.trim();
         if (!t || t.charAt(0) === '#') return;
+        // "Joseph Pepper – Joe" belongs in the Known as box, not here
+        if (t.indexOf('@') < 0 && /\s(\u2013|\u2014|-)\s/.test(t)) { named++; return; }
         var parts = t.split(',').map(function (p) { return p.trim(); });
         var email = (parts[0] || '').toLowerCase();
         var role = parts[1] || '';
@@ -737,6 +741,7 @@ CHS.engine = (function () {
           else out.push({ email: email, role: role, keys: keys });
         }
       });
+      if (named) problems.push(named + (named === 1 ? ' line looks' : ' lines look') + ' like Known as names ("Full name – Known as"). Paste them into the Known as box instead.');
       return { people: out, problems: problems };
     }
 

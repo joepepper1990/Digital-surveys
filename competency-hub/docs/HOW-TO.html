@@ -20,7 +20,7 @@
 </head>
 <body>
 <h1>ESG Competency Hub – update after your first review</h1>
-<p>You have <strong>Setup 1.3.2</strong>, <strong>solution 1.8.0.2</strong> and <strong>app 1.0.0</strong> installed. This package brings them to <strong>Setup 1.4.1</strong>, <strong>solution 1.9.0.0</strong> and <strong>app 1.1.0</strong>, with everything you asked for in your first review. Do the three parts <strong>in this order</strong>: Setup adds the new columns, the flows use them, and the app shows them. Updated 24 October 2026.</p>
+<p>You have <strong>Setup 1.3.2</strong>, <strong>solution 1.8.0.2</strong> and <strong>app 1.0.0</strong> installed. This package brings them to <strong>Setup 1.4.2</strong>, <strong>solution 1.9.0.0</strong> and <strong>app 1.1.0</strong>, with everything you asked for in your first review. Do the three parts <strong>in this order</strong>: Setup adds the new columns, the flows use them, and the app shows them. Updated 24 October 2026.</p>
 <ul>
   <li><strong>Wording and layout:</strong> no Text size control. <em>Your to-dos</em> and <em>See all my to-dos</em>. <em>Coming up this week</em>. <em>Owner: … · Raised by: …</em>. The page for Team Leaders and the Group Head is now <em>Overview of all areas</em>, and the word "Management" no longer appears on screen. The help lines you listed are gone. Every dropdown uses the Hub's style. Dialogs never grow taller than the window. No page scrolls at 1920 × 960 or 1366 × 768.</li>
   <li><strong>Known as:</strong> each person can have a short name (for example <em>Joe</em>) that the Hub and its emails use everywhere.</li>
@@ -39,12 +39,13 @@
   <tr><td><code>3-App</code></td><td><code>competency-hub.html</code>, <code>competency-hub.js</code></td><td>Part C</td></tr>
 </table>
 
-<h2>Part A – Setup 1.4.1 (about 10 minutes)</h2>
-<p>Setup 1.4.1 only adds things. It adds five columns: <em>Known As</em> on People; <em>CoOwnerIds</em> and <em>Close-Out By ID</em> on Actions; and <em>Important Days</em> and <em>Shown In</em> on the Noticeboard. It also adds the choice <em>Other</em> to the type of an improvement or degradation. It changes no permissions and no data.</p>
+<h2>Part A – Setup 1.4.2 (about 10 minutes)</h2>
+<p>Setup 1.4.2 only adds things. It adds five columns: <em>Known As</em> on People; <em>CoOwnerIds</em> and <em>Close-Out By ID</em> on Actions; and <em>Important Days</em> and <em>Shown In</em> on the Noticeboard. It also adds the choice <em>Other</em> to the type of an improvement or degradation. It changes no permissions and no data.</p>
 <ol>
   <li>Upload both files from <code>1-Setup</code> to <em>Welcome Web Part - Custom Layouts</em> (<em>Replace</em>).</li>
-  <li>Create the <code>HubSetup</code> page again with a Welcome web part, choose the layout <em>Competency Hub Setup</em>, and publish it.</li>
-  <li>Open <em>Optional: the name each person is shown by (Known as)</em> and paste everything from <code>known-as.txt</code>.</li>
+  <li>Create the <code>HubSetup</code> page again with a Welcome web part, choose the layout <em>Competency Hub Setup</em>, and publish it. If the page is still there, edit the web part, click <strong>Reset layout cache</strong>, Republish and reload with <strong>Ctrl+F5</strong>.</li>
+  <li>The heading must say <strong>Competency Hub Setup 1.4.2</strong>. If it says only "Competency Hub Setup", the browser is still using the old file: repeat the step above.</li>
+  <li>Leave <em>Optional: add other people now</em> empty. Open <em>Optional: the name each person is shown by (Known as)</em> and paste everything from <code>known-as.txt</code>.</li>
   <li>Click <strong>Check</strong>. It writes nothing. Expect "Would add 1 column to People", "Would add 2 columns to Actions", "Would add 2 columns to Noticeboard" and the new choice. Send me the log.</li>
   <li>Click <strong>Apply</strong>, type <code>SETUP</code> and wait for it to finish. Then click <strong>Check</strong> once more: it should report no changes, apart from "Not in the Hub yet" for anyone you have not added – their name goes in when you add them (the People page's paste list takes it as a fourth part). Send me both logs.</li>
   <li>Delete the two Setup files and the HubSetup page again.</li>
