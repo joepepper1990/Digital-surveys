@@ -24,6 +24,8 @@ CH.ui.dialog = (function () {
       if (opts.onClose) opts.onClose();
     }
     function onKey(e) {
+      // only the dialog on top answers: one opened over another (an action from a meeting) closes on its own
+      if (scrim.parentNode && scrim.parentNode.lastElementChild !== scrim) return;
       if (e.key === 'Escape') { e.preventDefault(); close(); return; }
       if (e.key !== 'Tab') return;
       var focusable = Array.prototype.filter.call(dialog.querySelectorAll(FOCUSABLE), function (n) { return n.offsetParent !== null; });

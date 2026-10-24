@@ -13,11 +13,14 @@ CH.views.raiseForm = (function () {
     { title: 'Check and raise', keys: [] }
   ];
 
-  // opts: { entry } raises an action linked to an improvement or degradation, in that entry's area (spec REG-3).
+  // opts: { entry } raises an action linked to an improvement or degradation, in that entry's area (spec REG-3);
+  // { meeting, title } raises one from a meeting in progress, in its area (spec MTG-3).
   function open(app, areaKey, opts) {
     var m = app.model;
     var entry = opts && opts.entry;
-    var mine = m.areas.filter(function (a) { return app.access.canWrite(a.key) && (!entry || a.key === entry.areaKey); });
+    var meeting = opts && opts.meeting;
+    var fixedArea = entry ? entry.areaKey : meeting ? meeting.areaKey : null;
+    var mine = m.areas.filter(function (a) { return app.access.canWrite(a.key) && (!fixedArea || a.key === fixedArea); });
     if (!mine.length) { CH.ui.toast(app.root, 'You are not a member of any area yet, so you cannot raise actions.', 'info'); return; }
     var today = m.today;
     // the limit an administrator sets (MaxDeadlineYears), the same one the flow checks
@@ -25,7 +28,7 @@ CH.views.raiseForm = (function () {
     var step = 0;
     var key = CH.requests.newKey();
 
-    var title = h('input', { id: 'ch-r-title', type: 'text', maxlength: '255', autocomplete: 'off' });
+    var title = h('input', { id: 'ch-r-title', type: 'text', maxlength: '255', autocomplete: 'off', value: (opts && opts.title) || '' });
     var description = h('textarea', { id: 'ch-r-description', rows: '5', maxlength: '5000' });
     var area = h('select', { id: 'ch-r-areaKey' }, mine.map(function (a) {
       return h('option', { value: a.key, selected: a.key === areaKey ? true : null, text: a.name });
@@ -70,7 +73,7 @@ CH.views.raiseForm = (function () {
       return out;
     }
 
-    var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-r', title: entry ? 'Raise an action for ' + entry.ref : 'Raise an action' });
+    var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-r', title: entry ? 'Raise an action for ' + entry.ref : meeting ? 'Raise an action from the meeting' : 'Raise an action' });
     var progress = h('p', { class: 'muted small', 'aria-live': 'polite' });
     var errorBox = h('p', { class: 'form-error', role: 'alert' });
     var stepBox = h('div');
@@ -129,7 +132,8 @@ CH.views.raiseForm = (function () {
       try {
         await app.tracker.submit({ key: key, type: 'RaiseAction', label: 'Raise “' + v.title.trim() + '”', payload: {
           areaKey: v.areaKey, title: v.title.trim(), description: v.description.trim(), ownerId: Number(v.ownerId),
-          dueIso: v.dueIso, priority: v.priority, requiresCloseOut: v.requiresCloseOut, sourceEntryId: entry ? entry.id : undefined } });
+          dueIso: v.dueIso, priority: v.priority, requiresCloseOut: v.requiresCloseOut, sourceEntryId: entry ? entry.id : undefined,
+          sourceMeetingId: meeting ? meeting.id : undefined }, meetingId: meeting ? meeting.id : undefined });
         dlg.close();
         CH.ui.toast(app.root, 'Your action has been sent. It will appear in a few minutes.', 'ok');
       } catch (error) {

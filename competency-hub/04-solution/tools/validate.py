@@ -28,6 +28,7 @@ toUpper trigger triggerBody triggerOutputs trim union uriComponent uriPath utcNo
 REQUIRED = {
     'HttpRequest': ['dataset', 'parameters/method', 'parameters/uri'], 'GetOnUpdatedItems': ['dataset', 'table'],
     'SendEmailV2': ['emailMessage/To', 'emailMessage/Subject', 'emailMessage/Body'],
+    'CreateFile': ['folderPath', 'name', 'body'], 'ConvertFile': ['id', 'type'], 'DeleteFile': ['id'],
 }
 
 
@@ -297,7 +298,7 @@ def secured_inputs(a):
     return 'inputs' in (a.get('runtimeConfiguration') or {}).get('secureData', {}).get('properties', [])
 
 
-STANDARD_APIS = {'shared_sharepointonline', 'shared_office365'}
+STANDARD_APIS = {'shared_sharepointonline', 'shared_office365', 'shared_onedriveforbusiness'}
 # Secure inputs/outputs aren't available on these (a secureData setting on Set variable stopped Flow 1 importing: 1.3.0.1)
 NO_SECURE_TYPES = {'SetVariable', 'InitializeVariable', 'AppendToArrayVariable', 'AppendToStringVariable', 'IncrementVariable',
                    'DecrementVariable', 'If', 'Foreach', 'Scope', 'Terminate', 'Switch', 'Until'}

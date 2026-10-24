@@ -47,6 +47,9 @@ class HubFake:
         self.events = {}                  # the flow account's Outlook calendar: id -> event
         self.cal_fail = []                # outcomes for the next calendar calls, in order: 400, 500, 'timeout' (made, then times out)
         self.invites = []                 # every invitation, update and cancellation sent: (kind, subject, attendees)
+        self.files = {}                   # files in document libraries: server-relative path -> content
+        self.onedrive = {}                # the flow account's OneDrive: id -> {'name', 'body'}
+        self.pdf_fail = []                # outcomes for the next OneDrive conversions, in order: 400 (refused), 'timeout'
         self.clock = datetime(2026, 10, 21, 9, 30, tzinfo=timezone.utc)
         self.groups = {}                  # id -> {'Title', 'users': set of user ids}
         self.tenant = {}                  # email -> display name: people in Microsoft 365 who may not be site users yet
@@ -180,9 +183,23 @@ class HubFake:
     def __call__(self, api, op, p):
         if api == 'shared_office365':
             return self.calendar(op, p) if op != 'SendEmailV2' else self.send_email(op, p)
+        if api == 'shared_onedriveforbusiness':
+            return self.one_drive(op, p)
         assert api == 'shared_sharepointonline', api
         if p.get('dataset') != SITE:
             fail(400, 'wrong site ' + str(p.get('dataset')))
+        if op == 'CreateFile':
+            # SharePoint Create file: into a library folder that exists; an existing name is refused
+            folder = SITE_REL + p['folderPath']
+            if not any(folder == l['root'] or (folder.startswith(l['root'] + '/') and self._folder_exists(l, folder[len(l['root']) + 1:]))
+                       for l in self.lists.values() if l['root'].startswith(SITE_REL + '/') and '/Lists/' not in l['root']):
+                fail(404, 'Folder not found: ' + p['folderPath'])
+            path = folder + '/' + p['name']
+            if path in self.files:
+                fail(400, 'A file with the name ' + p['name'] + ' already exists.')
+            self._write('POST', path)
+            self.files[path] = p['body']
+            return {'Id': path, 'Name': p['name'], 'Path': p['folderPath'] + '/' + p['name']}
         assert op == 'HttpRequest', op
         return self.rest(p['parameters/method'], p['parameters/uri'], p.get('parameters/headers') or {}, p.get('parameters/body'))
 
@@ -250,6 +267,33 @@ class HubFake:
             return {}
         fail(400, 'not simulated: ' + op)
 
+    def one_drive(self, op, p):
+        """OneDrive for Business, the flow account's own: a scratch space for turning HTML into a PDF."""
+        if op == 'CreateFile':
+            for k in ('folderPath', 'name'):
+                if not p.get(k):
+                    fail(400, 'Missing ' + k)
+            fid = 'OD' + str(len(self.onedrive) + 1)
+            self.onedrive[fid] = {'name': p['name'], 'body': p.get('body') or ''}
+            return {'Id': fid, 'Name': p['name']}
+        if op == 'ConvertFile':
+            f = self.onedrive.get(p.get('id'))
+            if not f:
+                fail(404, 'Item not found.')
+            if p.get('type') != 'PDF':
+                fail(400, 'Unsupported format.')
+            outcome = self.pdf_fail.pop(0) if self.pdf_fail else None
+            if outcome == 'timeout':
+                raise ActionFailed('The operation timed out.')
+            if outcome:
+                fail(outcome, 'The conversion was refused.')
+            return '%PDF-1.7 converted from ' + f['name'] + '\n' + f['body']
+        if op == 'DeleteFile':
+            if not self.onedrive.pop(p.get('id'), None):
+                fail(404, 'Item not found.')
+            return {}
+        fail(400, 'not simulated: ' + op)
+
     def _write(self, method, path, where=''):
         self.writes.append((method, path))
         if self.fail_if and self.fail_if(method, path, where):
@@ -290,6 +334,12 @@ class HubFake:
                     if fold:
                         return {'Exists': True}
             fail(404, 'File Not Found.')
+        m = re.match(r"^_api/web/GetFileByServerRelativePath\(decodedurl='((?:[^']|'')*)'\)$", path)
+        if method == 'GET' and m:
+            url = m.group(1).replace("''", "'")
+            if url not in self.files:
+                fail(404, 'File Not Found.')
+            return {'Name': url.rpartition('/')[2]}
         # groups, users and permissions (spec §4: the Administration flow)
         if method == 'GET' and path == '_api/web/sitegroups':
             return {'value': [{'Id': gid, 'Title': g['Title']} for gid, g in sorted(self.groups.items())]}

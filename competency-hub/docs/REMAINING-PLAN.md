@@ -8,12 +8,12 @@ specification (`PLAN.md`, Revision 5) and the decisions made since. Where the tw
 | Part | Built and tested here | On the site |
 |---|---|---|
 | Site, lists, groups, Setup | Setup 1.3 | Setup 1.1 |
-| App | 0.8.0: actions, safety net, Administration (People, Settings, Feedback), the *My week* home page, notices, register, Management page, meetings and the agenda | 0.3.0 |
-| Flows | 1.6.0.0: 1 Daily tasks, 2 Request queue, 3 Queue monitor, 4 Records, 5 Meetings, 6 Administration, and the P-INV probe | 1.2.0.0 |
+| App | 0.9.0: actions, safety net, Administration (People, Settings, Feedback), the *My week* home page, notices, register, Management page, meetings, the live meeting and minutes | 0.3.0 |
+| Flows | 1.7.0.0: 1 Daily tasks, 2 Request queue, 3 Queue monitor, 4 Records, 5 Meetings, 6 Administration, 7 Minutes, and the P-INV and P-PDF probes | 1.2.0.0 |
 | Permission probe | Built | Not run |
 
-**Built so far:** Releases 1 to 4, and the home-page design. That is about 132 of the ~194 Phase 1 hours.
-**Left to build:** about 62 hours, in two releases (5 and 6).
+**Built so far:** Releases 1 to 5, and the home-page design. That is about 167 of the ~194 Phase 1 hours.
+**Left to build:** about 27 hours, in Release 6.
 
 **Decisions settled since Revision 5:**
 - Everything runs on your account, and no service account is used. That covers:
@@ -223,7 +223,19 @@ Run a complete TEST meeting with the test colleague:
 3. Finalise, then open, print and download the PDF.
 4. Amend it, and check that version 2 of the PDF appears.
 
-**Delivered:** solution 1.7.0.0 and app 0.9.0.
+**Delivered:** solution 1.7.0.0 and app 0.9.0 (built and tested locally, 24 October 2026).
+
+**As built, compared with the above:**
+- Finalising, amending and the PDF are a flow of their own, *7 Minutes*. With them, *5 Meetings* would have been over
+  Power Automate's 500 steps per flow. The monitor and the app treat the two as one "meetings" part.
+- Finalising freezes the record into the meeting's own folder (only the flow writes there): each item takes the last
+  outcome and notes recorded, with attendance, decisions, new business and the actions raised. The minutes, the PDF,
+  the next agenda's carried-forward items and flag clearing all read only that frozen record.
+- Each PDF version is its own file (`MTG-{id}-v{n}.pdf`) rather than a new version of one file: the original is never
+  replaced, and a retry finds a version already saved instead of making a second.
+- Items for discussion (carried forward, noticeboard, new register entries, new business) each need an outcome before
+  finalising; other items may be left as *No change*.
+- No Setup change is needed.
 
 ---
 

@@ -189,7 +189,7 @@ window.MockSharePoint = (function () {
       row: function (v, id, path) {
         return { Id: id, Title: v.Title, RequestKey: v.RequestKey, RequestType: v.RequestType, TargetType: v.TargetType,
           TargetId: v.TargetId ? Number(v.TargetId) : null, ExpectedRevision: v.ExpectedRevision ? Number(v.ExpectedRevision) : null,
-          Payload: v.Payload, Status: 'Submitted', AuthorId: asId, Created: new Date().toISOString(), FileDirRef: path };
+          MeetingId: v.MeetingId ? Number(v.MeetingId) : null, Payload: v.Payload, Status: 'Submitted', AuthorId: asId, Created: new Date().toISOString(), FileDirRef: path };
       }
     },
     // Members and management add, in the area's folder (comments and flags on notices and entries) or in an action's
@@ -223,7 +223,8 @@ window.MockSharePoint = (function () {
       },
       row: function (v, id, path) {
         return { Id: id, Title: v.Title, RowKey: v.RowKey, RecordKey: v.RecordKey, MeetingId: Number(v.MeetingId), RowType: v.RowType, SourceType: v.SourceType,
-          Section: v.Section, Notes: v.Notes, AuthorId: asId, Created: new Date().toISOString(), FileDirRef: path };
+          Section: v.Section, Notes: v.Notes, SourceId: v.SourceId ? Number(v.SourceId) : null, Outcome: v.Outcome || '', Attendance: v.Attendance || '',
+          AuthorId: asId, Created: new Date().toISOString(), FileDirRef: path };
       }
     },
     // Anyone active may add feedback, at the list's root only.

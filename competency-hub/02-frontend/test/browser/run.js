@@ -329,5 +329,23 @@ check('meeting: cancelling needs a reason, then shows as cancelled', res.ok && /
 res = drive('as=' + RACHEL + '&area=FLK&meeting=2&drive=meetingAsTechnician', SLOW);
 check('meeting: someone who does not run meetings can read it and add it to their calendar, nothing else', res.ok && JSON.stringify(res.result.buttons) === '["Add to my calendar"]' &&
   !res.result.canAdd && !res.result.bookButton && /BEGIN:VCALENDAR/.test(res.result.ics) && /SUMMARY:Flask monthly meeting/.test(res.result.ics), JSON.stringify(res));
+
+// Release 5: running a meeting, finalising, the minutes and amendments
+res = drive('as=' + KELLY + '&area=FLK&meeting=2&drive=runMeeting', 400000);
+check('live meeting: finalising is held back while items for discussion have no outcome', res.ok && res.result.early.disabled && /still need an outcome: Spare probe stock levels/.test(res.result.early.missing), JSON.stringify(res));
+check('live meeting: an action raised from the meeting is in its area and carries the meeting', res.ok && res.result.heading === 'Raise an action from the meeting' &&
+  JSON.stringify(res.result.areas) === '["FLK"]' && res.result.requestMeeting === 2 && JSON.stringify(res.result.source) === '["Meeting",2]', JSON.stringify(res));
+check('live meeting: attendance, outcomes and decisions go only to the meeting\'s record folder', res.ok && res.result.writesInRecord && res.result.items >= 5, JSON.stringify(res));
+check('finalised: the minutes show attendance, outcomes, the decision and the action raised, with the PDF', res.ok && res.result.frozenNotes === 1 &&
+  /Rachel Boulden: Apologies/.test(res.result.minutes) && /Probe checks stay monthly/.test(res.result.minutes) && /Order spare probes/.test(res.result.minutes) &&
+  res.result.pdf === '/sites/ESGCompetencyHub/MeetingMinutes/FLK/MTG-2-v1.pdf', JSON.stringify(res));
+res = drive('as=' + RACHEL + '&area=FLK&meeting=1&drive=minutesAsTechnician', SLOW);
+check('minutes: everyone can read them, open, download or print the PDF; only management amends', res.ok && JSON.stringify(res.result.buttons) === '["Open the PDF","Download PDF","Print"]' &&
+  /Deferred: Waiting for the stores count/.test(res.result.minutes), JSON.stringify(res));
+res = drive('as=' + RACHEL + '&area=FLK&notice=2&drive=noticeHistory', SLOW);
+check('notice: its discussion history lists the meeting that took it up, and the outcome', res.ok && /Flask meeting, \d+ \w+ 2026: Deferred – Waiting for the stores count/.test(res.result.history), JSON.stringify(res));
+res = drive('as=' + ROBERT + '&meeting=1&drive=amendMinutes', 300000);
+check('amend: what and why are needed; the amendment is added beside the original, and a second PDF version follows', res.ok && /at least 10 characters/.test(res.result.errors[0]) &&
+  /Amendment 1 by Robert Starbuck: Nick Pearce attended/.test(res.result.minutes) && /Kelly Bates: Present/.test(res.result.minutes) && /MTG-1-v2\.pdf$/.test(res.result.pdf), JSON.stringify(res));
 console.log(failures ? failures + ' browser check(s) failed' : 'All browser checks passed');
 process.exit(failures ? 1 : 0);

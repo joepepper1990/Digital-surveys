@@ -42,6 +42,7 @@ CH.views.recordPanel = (function () {
     var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-rec', title: cfg.title, wide: true, onClose: function () { app.panel = null; } });
     var view = 'main';
     var comments = null;
+    var discussed = [];
     var sending = false;
 
     function rec() { return cfg.get(); }
@@ -50,7 +51,21 @@ CH.views.recordPanel = (function () {
       var r = rec();
       if (!r) return;
       try { comments = await loadComments(app, cfg.parentType, r); } catch (_) { comments = 'error'; }
+      try { discussed = await loadDiscussed(r); } catch (_) { discussed = []; }
       if (view === 'main' && dlg.isOpen()) fill();
+    }
+
+    // Finalised meetings that took this up (spec NB-6): their frozen agenda rows, by the (indexed) source id.
+    async function loadDiscussed(r) {
+      var res = await app.sp.items(CH.config.lists.meetingItems.title, '$select=MeetingId,SourceType,Outcome,Notes,FileDirRef&$filter=SourceId eq ' + Number(r.id) +
+        " and RowType eq 'Agenda Item'", 500);
+      return res.rows.filter(function (x) {
+        var m = app.model.meetingById[x.MeetingId];
+        return x.SourceType === cfg.parentType && m && m.status === 'Finalised' && CH.sp.folderOf(x.FileDirRef) === 'MTG-' + m.id && x.Outcome;
+      }).map(function (x) {
+        var m = app.model.meetingById[x.MeetingId];
+        return { iso: m.dateIso, text: m.areaName + ' meeting, ' + D.long(m.dateIso) + ': ' + x.Outcome + (x.Notes ? ' – ' + x.Notes : '') };
+      });
     }
 
     // Instant writes: a comment, a flag or a flag withdrawn, in the record's area folder (plan F.5).
@@ -139,10 +154,11 @@ CH.views.recordPanel = (function () {
         h('p', null, slot.flagged ? ui.chip('soon', 'Flagged for the next ' + area.name + ' meeting') : h('span', { class: 'muted small', text: 'Not flagged for a meeting.' }), ' ',
           canFlag ? ui.button('Flag for the next meeting', function () { act('Flagged', 'Flagged for the next ' + area.name + ' meeting.'); }) : null,
           canWithdraw ? ui.button('Withdraw the flag', function () { act('Flag Withdrawn', 'Flag withdrawn.'); }) : null),
-        slot.history.length ? h('details', { class: 'ext-list' }, h('summary', { text: 'Discussion history (' + slot.history.length + ')' }),
-          h('ul', { class: 'plain' }, slot.history.map(function (x) {
-            return h('li', null, h('span', { text: x.kind + ' by ' + x.by + ' · ' + D.short(x.iso) }));
-          }))) : null
+        slot.history.length || discussed.length ? h('details', { class: 'ext-list' }, h('summary', { text: 'Discussion history (' + (slot.history.length + discussed.length) + ')' }),
+          h('ul', { class: 'plain' }, slot.history.map(function (x) { return { iso: x.iso, text: x.kind + (x.by ? ' by ' + x.by : '') + ' · ' + D.short(x.iso) }; })
+            .concat(discussed).sort(function (a, b) { return String(a.iso).localeCompare(String(b.iso)); }).map(function (x) {
+              return h('li', null, h('span', { text: x.text }));
+            }))) : null
       ];
     }
 

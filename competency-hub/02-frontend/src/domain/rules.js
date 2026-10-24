@@ -282,6 +282,26 @@ CH.rules = (function () {
     return {};
   }
 
+  // The live meeting and its minutes (spec MTG-3 to MTG-5), the same as the Minutes flow. Items for discussion – carried
+  // forward, flagged notices, new register entries and new business – each need one of these outcomes to finalise.
+  var MINUTE_OUTCOMES = ['Discussed', 'Deferred', 'Not reached', 'Action raised', 'Discarded'];
+  var DISCUSSION_SECTIONS = ['Carried forward', 'Noticeboard', 'New improvements and degradations', 'New business'];
+  // items: [{ key, section, title }]; outcomes: { key: outcome } (the last one recorded). Returns the titles still missing one.
+  function missingOutcomes(items, outcomes) {
+    return items.filter(function (it) { return DISCUSSION_SECTIONS.indexOf(it.section) >= 0 && MINUTE_OUTCOMES.indexOf(outcomes[it.key]) < 0; })
+      .map(function (it) { return it.title; });
+  }
+  function validateAmend(v) {
+    var e = {};
+    var what = String(v.what || '').trim();
+    var reason = String(v.reason || '').trim();
+    if (what.length < 10) e.what = 'Say what the amendment is, in at least 10 characters.';
+    else if (what.length > 2000) e.what = 'Keep the amendment to 2,000 characters or fewer.';
+    if (reason.length < 10) e.reason = 'Give a reason of at least 10 characters.';
+    else if (reason.length > 1000) e.reason = 'Keep the reason to 1,000 characters or fewer.';
+    return e;
+  }
+
   // The same date in the following months, on the same weekday of the month (the second Wednesday stays the second
   // Wednesday); a fifth weekday that a month does not have becomes the last one.
   function nextMonths(iso, count) {
@@ -312,6 +332,7 @@ CH.rules = (function () {
     roles: roles, completionStatus: completionStatus,
     validateEntry: validateEntry, validateEntryUpdate: validateEntryUpdate, managesEntry: managesEntry, noticeRoles: noticeRoles,
     validateNoticeEdit: validateNoticeEdit, validateComment: validateComment, ENTRY_TYPES: ENTRY_TYPES, IMPACTS: IMPACTS, ENTRY_STATUSES: ENTRY_STATUSES,
-    NOTICE_CATEGORIES: NOTICE_CATEGORIES, validateMeeting: validateMeeting, validateCancelMeeting: validateCancelMeeting, nextMonths: nextMonths, SELF_ONLY: SELF_ONLY, PRIORITIES: PRIORITIES, OPEN_STATUSES: OPEN_STATUSES, OUTCOMES: OUTCOMES
+    NOTICE_CATEGORIES: NOTICE_CATEGORIES, validateMeeting: validateMeeting, validateCancelMeeting: validateCancelMeeting, nextMonths: nextMonths, MINUTE_OUTCOMES: MINUTE_OUTCOMES,
+    DISCUSSION_SECTIONS: DISCUSSION_SECTIONS, missingOutcomes: missingOutcomes, validateAmend: validateAmend, SELF_ONLY: SELF_ONLY, PRIORITIES: PRIORITIES, OPEN_STATUSES: OPEN_STATUSES, OUTCOMES: OUTCOMES
   };
 })();

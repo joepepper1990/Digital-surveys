@@ -12,15 +12,15 @@ This project is separate from the other applications in this repository.
 | Part | State |
 |---|---|
 | Site and Setup (`setup/`) | Setup 1.1 applied on the site. **Setup 1.3** (1.2: Feedback list, Meeting Minutes library, Notice Posters group, new columns and settings; 1.3: the meeting end time and the *Outlook invitations* and *PDF minutes* switches) built and tested locally |
-| App (`02-frontend/`) | 0.3.0 running on the site. **0.8.0** (safety net, Administration with People, Settings and Feedback, *My week* home page, notices, register, Management page, booking meetings and the agenda) built and tested locally |
-| Flows (`04-solution/`) | 1.2.0.0 running on the site. **1.6.0.0** (six flows: Daily tasks, Request queue, Queue monitor, Records, Meetings, Administration; plus the invitations probe *P-INV*, run by hand) built and tested locally |
+| App (`02-frontend/`) | 0.3.0 running on the site. **0.9.0** (safety net, Administration with People, Settings and Feedback, *My week* home page, notices, register, Management page, booking and running meetings, minutes) built and tested locally |
+| Flows (`04-solution/`) | 1.2.0.0 running on the site. **1.7.0.0** (seven flows: Daily tasks, Request queue, Queue monitor, Records, Meetings, Administration, Minutes; plus the probes *P-INV* and *P-PDF*, run by hand) built and tested locally |
 | Permission probe (`probe/CH_Probe_P2.*`) | Built and tested locally; to be run on the site with an ordinary test account |
 
 The plan for everything left to go-live is in `docs/REMAINING-PLAN.md`.
 
 Phase 1 is delivered in six releases; Releases 1 (safety net), 2 (administration and permissions), 3 (noticeboard,
-register, feedback, settings, dashboard) and 4 (booking meetings with Outlook invitations, the agenda) are built.
-Release 5 (the live meeting and minutes) and Release 6 (go-live checks) follow. The steps for installing are in `docs/HOW-TO.html`.
+register, feedback, settings, dashboard), 4 (booking meetings with Outlook invitations, the agenda) and 5 (the live
+meeting, finalised minutes, amendments and PDF minutes) are built. Release 6 (go-live checks) follows. The steps for installing are in `docs/HOW-TO.html`.
 
 **Site layout (23 October 2026):** site navigation is turned off (Change the look → Navigation), and staff are to be
 given the Hub page address ending `?env=WebView`, which hides SharePoint's own bars so the Hub fills the window.

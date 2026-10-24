@@ -282,9 +282,27 @@
 .SCOPE .ch .fb-bubble .fb-label {display: none;}
 .SCOPE .ch .fb-bubble {padding: calc(4 * var(--u));}
 }
+.SCOPE .ch .live-block {border-top: 1px solid var(--line); margin-top: calc(14 * var(--u)); padding-top: calc(6 * var(--u));}
+.SCOPE .ch .live-item {background: var(--bg); border-radius: calc(8 * var(--u)); padding: calc(12 * var(--u)) calc(14 * var(--u));}
+.SCOPE .ch .live-item h4 {margin: 0 0 calc(4 * var(--u)); font-size: calc(17 * var(--u));}
+.SCOPE .ch .live-item select, .SCOPE .ch .live-item textarea {width: 100%;}
+.SCOPE .ch .attendance {display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(320 * var(--u)), 1fr)); column-gap: calc(24 * var(--u));}
+.SCOPE .ch .attendance li {display: flex; justify-content: space-between; align-items: center; gap: calc(12 * var(--u)); padding: calc(4 * var(--u)) 0; border-bottom: 1px solid var(--line);}
+.SCOPE .ch details.live-block > summary {cursor: pointer; padding: calc(6 * var(--u)) 0;}
+.SCOPE .ch .agenda-index {margin: calc(4 * var(--u)) 0 0; padding-left: calc(22 * var(--u));}
+.SCOPE .ch .agenda-index li {padding: calc(2 * var(--u)) 0;}
+.SCOPE .ch .agenda-index li.current {font-weight: 700;}
+.SCOPE .ch .agenda-index .when {margin-left: calc(8 * var(--u));}
+.SCOPE .ch .minutes .actions-row a.btn {text-decoration: none;}
+@media print {
+.SCOPE .ch * {visibility: hidden;}
+.SCOPE .ch .print-area, .SCOPE .ch .print-area * {visibility: visible;}
+.SCOPE .ch .print-area {position: absolute; left: 0; top: 0; width: 100%;}
+.SCOPE .ch .no-print {display: none;}
+}
 
         </style>
-        <div class="ch" data-ch-root data-ch-version="0.8.0"><p>Loading the ESG Competency Hub…</p></div>
+        <div class="ch" data-ch-root data-ch-version="0.9.0"><p>Loading the ESG Competency Hub…</p></div>
         <script
             src="competency-hub.js"
             data-layout

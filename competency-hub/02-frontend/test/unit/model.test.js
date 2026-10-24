@@ -88,3 +88,14 @@ test('the greeting uses the profile first name, then the email address, then the
   assert.equal(first({ person: { Title: 'Pepper Joseph', Email: 'JOSEPH.PEPPER@example.test' } }), 'Joseph');
   assert.equal(first({ person: { Title: 'Rachel Boulden', Email: 'rboulden@example.test' } }), 'Rachel');
 });
+
+test('a finalised meeting that discussed an item clears flags raised up to its cut-off, not after', () => {
+  const flag2 = seed.Updates.filter((u) => u.ParentType === 'Notice' && u.ParentId === 2 && u.EntryType === 'Flagged').map((u) => u.Id);
+  const upto = Math.max(...flag2);
+  const before = build();
+  const cleared = build(raw({ discussed: [{ competencyId: 1, source: 'Notice:2', upto: upto, iso: '2026-10-16' }] }));
+  assert.equal(cleared.stats.FLK.flagged, before.stats.FLK.flagged - 1);
+  assert.equal(cleared.flags['Notice:2'].flagged, false);
+  const earlier = build(raw({ discussed: [{ competencyId: 1, source: 'Notice:2', upto: upto - 1000, iso: '2026-10-16' }] }));
+  assert.equal(earlier.stats.FLK.flagged, before.stats.FLK.flagged, 'a flag raised after the cut-off still counts');
+});

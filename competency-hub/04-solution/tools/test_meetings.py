@@ -10,27 +10,32 @@ from datetime import datetime, timedelta, timezone
 import flows
 from hub_fake import SITE
 from wdl import Engine
-from test_flow import site as base_site, submit, request, FLOWS, JOE, RACHEL, KELLY, KAI, KEY, KEY2, AREAS, run_monitor, run_admin
+from test_flow import site as base_site, submit, request, FLOWS, JOE, RACHEL, KELLY, KAI, KEY, KEY2, AREAS, run_monitor, run_admin, RaiseAction
 
 MEETINGS = FLOWS['ESG Competency Hub | 5 Meetings']
+MINUTES = FLOWS['ESG Competency Hub | 7 Minutes']
+PDF_PROBE = FLOWS['ESG Competency Hub | P-PDF PDF probe']
 MONITOR = FLOWS['ESG Competency Hub | 3 Queue monitor']
 CONTRIBUTE = 2003
 KEY3 = '1c2d3e4f-5a6b-4c7d-8e9f-a0b1c2d3e4f5'
+KEY4 = '2d3e4f5a-6b7c-4d8e-9f0a-b1c2d3e4f5a6'
+KEY5 = '3e4f5a6b-7c8d-4e9f-8a1b-c2d3e4f5a6b7'
 
 
 def site():
     s = base_site()
     for k in AREAS:
-        for lst in ('meetings', 'meetingItems', 'notices', 'register', 'calendar'):
+        for lst in ('meetings', 'meetingItems', 'notices', 'register', 'calendar', 'minutes'):
             s.folder(lst, k)
-    for title, value in (('InvitesEnabled', 'Yes'), ('AgendaLookaheadDays', '60')):
+    for title, value in (('InvitesEnabled', 'Yes'), ('PdfEnabled', 'Yes'), ('AgendaLookaheadDays', '60')):
         s.add('settings', '', {'Title': title, 'Value': value})
     return s
 
 
 def run(s, req_id, now=None):
     s.clock = now or s.clock
-    eng = Engine(MEETINGS, s, {flows.ENV_SITE: SITE, '$authentication': {}}, s.clock, trigger_body=s.trigger_item('requests', req_id))
+    flow = MINUTES if s.item('requests', req_id)['f']['RequestType'] in flows.DOMAIN_TYPES['minutes'] else MEETINGS
+    eng = Engine(flow, s, {flows.ENV_SITE: SITE, '$authentication': {}}, s.clock, trigger_body=s.trigger_item('requests', req_id))
     return eng.run(), eng
 
 
@@ -218,10 +223,23 @@ def agenda_site():
     flag(s.n4, 'Flagged', KAI)
     flag(s.n5, 'Flagged', RACHEL)
     flag(s.n5, 'Flag Withdrawn', RACHEL)
-    s.add('meetingItems', 'FLK/MTG-{0}'.format(s.prev), {'RowKey': 'U|o1', 'RecordKey': '{0}|O|Notice|{1}'.format(s.prev, s.n2), 'MeetingId': float(s.prev), 'RowType': 'Outcome',
-                                                        'SourceType': 'Notice', 'SourceId': float(s.n2), 'Outcome': 'Deferred', 'Title': 'Deferred last time'})
-    s.add('meetingItems', 'FLK/MTG-{0}'.format(s.prev), {'RowKey': 'U|o2', 'RecordKey': '{0}|N|x'.format(s.prev), 'MeetingId': float(s.prev), 'RowType': 'Outcome',
-                                                        'SourceType': 'New Business', 'SourceId': 77.0, 'Outcome': 'Not reached', 'Title': 'Spare cable order'})
+    # what the last meeting froze when it was finalised: one notice deferred, one item of new business not reached
+    s.add('meetingItems', 'FLK/MTG-{0}'.format(s.prev), {'RowKey': 'F|{0}|A|Notice|{1}'.format(s.prev, s.n2), 'MeetingId': float(s.prev), 'RowType': 'Agenda Item',
+                                                        'Section': 'Noticeboard', 'SourceType': 'Notice', 'SourceId': float(s.n2), 'Outcome': 'Deferred', 'Title': 'Deferred last time'})
+    s.add('meetingItems', 'FLK/MTG-{0}'.format(s.prev), {'RowKey': 'F|{0}|A|New Business|77'.format(s.prev), 'MeetingId': float(s.prev), 'RowType': 'Agenda Item',
+                                                        'Section': 'New business', 'SourceType': 'New Business', 'SourceId': 77.0, 'Outcome': 'Not reached', 'Title': 'Spare cable order'})
+    # a live-screen row in the old meeting's Record folder never counts: only the frozen rows do
+    s.add('meetingItems', 'FLK/MTG-{0}/Record'.format(s.prev), {'RowKey': 'U|x', 'RecordKey': '{0}|O|Notice|{1}'.format(s.prev, s.n1), 'MeetingId': float(s.prev),
+                                                               'RowType': 'Agenda Item', 'SourceType': 'Notice', 'SourceId': float(s.n1), 'Outcome': 'Deferred', 'Title': 'Planted'})
+    # discussed at the last meeting: a flag raised before its cut-off is cleared, one raised after it still counts
+    s.n6, s.n7 = notice('Discussed last time', KELLY), notice('Discussed, then flagged again', KELLY)
+    flag(s.n6, 'Flagged', RACHEL)
+    f7a = flag(s.n7, 'Flagged', RACHEL)
+    s.item('meetings', s.prev)['f']['CutoffUpdatesId'] = float(f7a)
+    flag(s.n7, 'Flagged', KELLY)
+    for n in (s.n6, s.n7):
+        s.add('meetingItems', 'FLK/MTG-{0}'.format(s.prev), {'RowKey': 'F|{0}|A|Notice|{1}'.format(s.prev, n), 'MeetingId': float(s.prev), 'RowType': 'Agenda Item',
+                                                            'Section': 'Noticeboard', 'SourceType': 'Notice', 'SourceId': float(n), 'Outcome': 'Discussed', 'Title': 'Discussed'})
     entry = lambda title, kind, raised, status='Open': s.add('register', 'FLK', {'Title': title, 'CompetencyId': 1, 'EntryType': kind, 'Impact': 'High', 'Status': status,
                                                                                'RaisedById': RACHEL, 'DateRaised': raised, 'Revision': 1.0, 'CreatedRequestKey': 'IMPORT-' + title})
     s.e_old = entry('Old degradation', 'Degradation', '2026-09-01T09:00:00Z')
@@ -254,7 +272,12 @@ def app_agenda(s, m):
             'entries': rest_rows(s, 'register', '$select=Id,Title,EntryType,Impact,Status,RaisedById,DateRaised,FileDirRef&$filter=CompetencyId eq 1'),
             'flags': rest_rows(s, 'updates', '$select=Id,EntryType,ParentType,ParentId,AuthorId,FileDirRef,IsHidden&$filter=IsFlagEvent eq 1'),
             'dates': rest_rows(s, 'calendar', "$select=Id,Title,StartTime,FileDirRef&$filter=IsImportant eq 1 and Status eq 'Scheduled'"),
-            'carried': rest_rows(s, 'meetingItems', "$select=Title,SourceType,SourceId,Outcome&$filter=MeetingId eq {0} and RowType eq 'Outcome'".format(int(f['PreviousMeetingId']))),
+            'carried': [r for r in rest_rows(s, 'meetingItems', "$select=Title,SourceType,SourceId,Outcome,FileDirRef&$filter=MeetingId eq {0} and RowType eq 'Agenda Item'".format(int(f['PreviousMeetingId'])))
+                        if r['FileDirRef'].endswith('/MTG-{0}'.format(int(f['PreviousMeetingId'])))],
+            'cleared': [{'key': r['SourceType'] + ':' + str(int(r['SourceId'])), 'upto': f2['CutoffUpdatesId']}
+                        for f2 in rest_rows(s, 'meetings', "$select=Id,CutoffUpdatesId&$filter=CompetencyId eq 1 and Status eq 'Finalised'")
+                        for r in rest_rows(s, 'meetingItems', "$select=SourceType,SourceId,Outcome,FileDirRef&$filter=MeetingId eq {0} and RowType eq 'Agenda Item'".format(int(f2['Id'])))
+                        if r['Outcome'] == 'Discussed' and r['FileDirRef'].endswith('/MTG-{0}'.format(int(f2['Id'])))],
             'memberIds': [str(int(x['PersonId'])) for x in members], 'chairIds': [str(int(x['PersonId'])) for x in members if x['CanManageMeetings']],
             'mgmtIds': [str(int(p['SiteUserId'])) for p in people if p['Role'] in ('Team Leader', 'Group Head')], 'lookaheadDays': 60}
     out = subprocess.run(['node', __import__('os').path.join(FRONTEND, 'test', 'agenda-cli.js')], input=json.dumps(data), capture_output=True, text=True, check=True)
@@ -286,7 +309,7 @@ class Start(unittest.TestCase):
             ('Open actions', 'Shared from Radiological Protection', 'Still open'),
             ('Closed since last meeting', 'Closed since', None),
             ('Carried forward', 'Deferred last time', 'Carried forward'), ('Carried forward', 'Spare cable order', 'Carried forward'),
-            ('Noticeboard', 'Flagged by a member', None),
+            ('Noticeboard', 'Flagged by a member', None), ('Noticeboard', 'Discussed, then flagged again', None),
             ('New improvements and degradations', 'New improvement', None), ('New improvements and degradations', 'New degradation', None),
             ('Unresolved degradations', 'Old degradation', None),
             ('Important dates', 'Audit', None)})
@@ -294,7 +317,7 @@ class Start(unittest.TestCase):
         self.assertEqual((row['SnapshotOwner'], row['SnapshotStatus'], row['SnapshotDueDate'], row['SnapshotExtensionCount'], row['RowKey']),
                          (str(RACHEL), 'In Progress', '2026-10-19T00:00:00Z' if False else row['SnapshotDueDate'], 1.0, 'F|{0}|A|Action|{1}'.format(m['id'], s.action)))
         self.assertTrue(row['SnapshotDueDate'].startswith('2026-10-1'))
-        self.assertEqual(request(s, r)['ResultMessage'], 'Meeting started. The agenda is fixed with 11 items.')
+        self.assertEqual(request(s, r)['ResultMessage'], 'Meeting started. The agenda is fixed with 12 items.')
 
     def test_the_app_preview_and_the_flow_agree(self):
         s = agenda_site()
@@ -323,7 +346,7 @@ class Robustness(unittest.TestCase):
             rows = []
             for it in s.by_key[key]['items'].values():
                 f = {k: v for k, v in it['f'].items() if k not in ('ProcessedAt', 'FirstClaimedAt', 'Attempts', 'LastError', 'StepsDone', 'NextAttemptAfter',
-                                                                   'CutoffTime', 'InviteError', 'InviteState', 'InviteAttempts', 'OutlookEventId', 'PreviousValue')}
+                                                                   'CutoffTime', 'InviteError', 'InviteState', 'InviteAttempts', 'OutlookEventId', 'PreviousValue', 'PdfAttempts')}
                 rows.append((it['dir'], it['fsobj'], json.dumps(f, sort_keys=True, default=str)))
             out[key] = sorted(rows)
         return out
@@ -371,6 +394,297 @@ class Robustness(unittest.TestCase):
     def test_starting_survives_an_interruption_at_every_write(self):
         self.interrupted_everywhere(self.booked, 'StartMeeting', {})
 
+
+
+# ------------------------------------------------------------------ Release 5: finalising, amending and the PDF minutes
+def started(s=None):
+    """A Flask meeting with an agenda (agenda_site), started, and recorded live: attendance, outcomes, a decision, an item
+    of new business, and an action raised from the meeting."""
+    s = s or agenda_site()
+    book(s)
+    m = meeting(s)
+    run(s, submit(s, KELLY, 'StartMeeting', {}, target=m['id'], revision=1, key=KEY2))
+    mid = m['id']
+    rec = 'FLK/MTG-{0}/Record'.format(mid)
+    s.mid, s.rec = mid, rec
+    live = lambda key, f: s.add('meetingItems', rec, dict({'RowKey': 'U|' + key, 'MeetingId': float(mid)}, **f), author=KELLY)
+    s.live = live
+    live('a1', {'RecordKey': '{0}|P|{1}'.format(mid, RACHEL), 'RowType': 'Attendee', 'Section': 'Attendance', 'SourceId': float(RACHEL), 'Attendance': 'Apologies', 'Title': 'Rachel'})
+    live('a2', {'RecordKey': '{0}|P|{1}'.format(mid, KELLY), 'RowType': 'Attendee', 'Section': 'Attendance', 'SourceId': float(KELLY), 'Attendance': 'Present', 'Title': 'Kelly'})
+    agenda = [it for it in s.by_key['meetingItems']['items'].values() if it['f'].get('MeetingId') == float(mid) and it['f']['RowType'] == 'Agenda Item']
+    for it in agenda:
+        f = it['f']
+        if f['Section'] in ('Carried forward', 'Noticeboard', 'New improvements and degradations') or f['Title'] in ('Replace FH40 probe', 'Old degradation'):
+            live('o' + str(it['id']), {'RecordKey': '{0}|O|{1}|{2}'.format(mid, f['SourceType'], int(f['SourceId'])), 'RowType': 'Outcome', 'SourceType': f['SourceType'],
+                                       'SourceId': f['SourceId'], 'Outcome': 'Deferred' if f['Title'] == 'Old degradation' else 'Discussed',
+                                       'Notes': 'Notes on <' + f['Title'] + '>', 'Title': f['Title']})
+    nb = live('n1', {'RecordKey': '{0}|N|n1'.format(mid), 'RowType': 'New Business', 'SourceType': 'New Business', 'Section': 'New business',
+                     'Title': 'Loan pool audit', 'Notes': 'Raised by Kelly'})
+    live('o-nb', {'RecordKey': '{0}|O|New Business|{1}'.format(mid, nb), 'RowType': 'Outcome', 'SourceType': 'New Business', 'SourceId': float(nb),
+                  'Outcome': 'Not reached', 'Title': 'Loan pool audit'})
+    live('d1', {'RecordKey': '{0}|D|d1'.format(mid), 'RowType': 'Decision', 'Section': 'Decisions and additional actions', 'Title': 'Swap to quarterly checks', 'Notes': 'Agreed by all'})
+    s.raised = s.add('actions', 'FLK', {'Title': 'Order spare probes', 'CompetencyId': 1, 'AssignedToId': RACHEL, 'RaisedById': KELLY, 'DateRaised': '2026-10-21T10:00:00Z',
+                                        'DueDay': 20261120.0, 'Status': 'Open', 'IsOpen': True, 'SourceType': 'Meeting', 'SourceId': float(mid), 'Revision': 1.0,
+                                        'CreatedRequestKey': 'F|raised'})
+    return s
+
+
+def finalise(s, sender=KELLY, key=KEY3):
+    r = submit(s, sender, 'FinaliseMeeting', {}, target=s.mid, revision=s.item('meetings', s.mid)['f']['Revision'], key=key)
+    status, eng = run(s, r)
+    return r, eng
+
+
+def frozen(s, mid=None):
+    mid = mid or s.mid
+    return [it['f'] for it in s.by_key['meetingItems']['items'].values() if it['fsobj'] == 0 and it['dir'] == 'FLK/MTG-{0}'.format(mid)]
+
+
+def pdf_path(mid, v):
+    return '/sites/ESGCompetencyHub/MeetingMinutes/FLK/MTG-{0}-v{1}.pdf'.format(mid, v)
+
+
+class Finalise(unittest.TestCase):
+    def test_finalising_freezes_the_record_and_makes_the_pdf(self):
+        s = started()
+        r, eng = finalise(s)
+        self.assertEqual(request(s, r)['Status'], 'Completed', eng.log)
+        self.assertEqual(request(s, r)['ResultMessage'], 'Minutes finalised. The record is now read-only, and the PDF is being made.')
+        m = s.item('meetings', s.mid)['f']
+        self.assertEqual((m['Status'], m['FinalisedById'], m['PdfState'], m['PdfVersion']), ('Finalised', KELLY, 'Ready', 1.0))
+        # the Record folder is read-only again (the area's own permissions)
+        self.assertFalse(s.folder_item('meetingItems', s.rec)['unique'])
+        rows = frozen(s)
+        by = {(f['RowType'], f.get('Section'), f['Title']): f for f in rows}
+        self.assertEqual(by[('Agenda Item', 'Noticeboard', 'Flagged by a member')]['Outcome'], 'Discussed')
+        self.assertEqual(by[('Agenda Item', 'Unresolved degradations', 'Old degradation')]['Outcome'], 'Deferred')
+        self.assertEqual(by[('Agenda Item', 'Open actions', 'Replace FH40 probe')]['Notes'], 'Notes on <Replace FH40 probe>')
+        self.assertEqual(by[('Agenda Item', 'New business', 'Loan pool audit')]['Outcome'], 'Not reached')
+        self.assertEqual(by[('Decision', 'Decisions and additional actions', 'Swap to quarterly checks')]['Notes'], 'Agreed by all')
+        self.assertEqual(by[('Agenda Item', 'Decisions and additional actions', 'Order spare probes')]['SourceId'], float(s.raised))
+        att = sorted((f['Title'], f.get('Attendance') or '') for f in rows if f['RowType'] == 'Attendee')
+        self.assertEqual(att, [('Bates Kelly', 'Present'), ('Boulden Rachel', 'Apologies'), ('Pepper Joseph', '')])
+        # the PDF: in the area's folder, from the frozen rows, every value escaped; the OneDrive working file removed
+        pdf = s.files[pdf_path(s.mid, 1)]
+        self.assertTrue(pdf.startswith('%PDF'))
+        for text in ('FLK monthly meeting', 'Notes on &lt;Replace FH40 probe&gt;', 'Swap to quarterly checks', 'Boulden Rachel', 'Apologies', 'Not recorded', 'Order spare probes'):
+            self.assertIn(text, pdf)
+        self.assertEqual(s.onedrive, {})
+        ev = s.rows('history', RequestKey=KEY3 + '|1')[0]['f']
+        self.assertEqual((ev['EventType'], ev['RecordType']), ('Meeting Finalised', 'Meeting'))
+
+    def test_items_without_an_outcome_are_named_and_nothing_changes(self):
+        s = started()
+        for it in list(s.by_key['meetingItems']['items'].values()):
+            if it['f'].get('RowType') == 'Outcome' and it['f'].get('Title') in ('New improvement', 'Loan pool audit'):
+                del s.by_key['meetingItems']['items'][it['id']]
+        r, eng = finalise(s)
+        self.assertEqual(request(s, r)['Status'], 'Rejected', eng.log)
+        self.assertEqual(request(s, r)['ResultMessage'], 'These items still need an outcome: New improvement; Loan pool audit.')
+        self.assertEqual(s.item('meetings', s.mid)['f']['Status'], 'In Progress')
+        self.assertTrue(s.folder_item('meetingItems', s.rec)['unique'])
+
+    def test_changes_still_being_recorded_hold_it_back(self):
+        s = started()
+        s.add('requests', 'u{0}'.format(KELLY), {'Title': 'CloseAction', 'RequestKey': KEY5, 'RequestType': 'CloseAction', 'TargetId': float(s.action),
+                                                 'MeetingId': float(s.mid), 'Payload': '{}', 'Status': 'Submitted'}, author=KELLY)
+        r, eng = finalise(s)
+        self.assertEqual(request(s, r)['ResultMessage'], 'Some changes made in this meeting are still being recorded. Finalise once they show as saved.')
+        self.assertEqual(s.item('meetings', s.mid)['f']['Status'], 'In Progress')
+
+    def test_a_change_made_while_locking_puts_the_meeting_back_in_progress(self):
+        # the check saw an outcome; the last one recorded (what counts once the folder is locked) is not one
+        s = started()
+        nb = next(it for it in s.by_key['meetingItems']['items'].values() if it['f'].get('Title') == 'Loan pool audit' and it['f']['RowType'] == 'New Business')
+        s.live('o-nb2', {'RecordKey': '{0}|O|New Business|{1}'.format(s.mid, nb['id']), 'RowType': 'Outcome', 'SourceType': 'New Business',
+                         'SourceId': float(nb['id']), 'Outcome': 'No change', 'Title': 'Loan pool audit'})
+        r, eng = finalise(s)
+        self.assertEqual(request(s, r)['Status'], 'Rejected', eng.log)
+        self.assertEqual(request(s, r)['ResultMessage'], 'These items still need an outcome: Loan pool audit. The meeting is still in progress.')
+        self.assertEqual(s.item('meetings', s.mid)['f']['Status'], 'In Progress')
+        rec = s.folder_item('meetingItems', s.rec)
+        self.assertTrue(rec['unique'])
+        self.assertIn(CONTRIBUTE, rec['ra'].get(KELLY, set()))
+        tx = [it['f'] for it in s.by_key['history']['items'].values() if it['f'].get('RequestKey') == KEY3 and it['f'].get('RowKind') == 'Transaction'][0]
+        self.assertEqual(tx['State'], 'Rolled Back')
+
+    def test_only_a_meeting_in_progress_and_only_its_runners(self):
+        s = agenda_site()
+        book(s)
+        s.mid = meeting(s)['id']
+        r, eng = finalise(s)
+        self.assertEqual(request(s, r)['ResultMessage'], 'Only a meeting in progress can be finalised.')
+        s2 = started()
+        r2, eng = finalise(s2, sender=RACHEL)
+        self.assertEqual(request(s2, r2)['ResultMessage'], 'Only the people who run meetings in this area, and management, can do this.')
+
+    def test_with_pdf_minutes_switched_off_no_pdf_is_made(self):
+        s = started()
+        s.rows('settings', Title='PdfEnabled')[0]['f']['Value'] = 'No'
+        r, eng = finalise(s)
+        self.assertEqual(request(s, r)['ResultMessage'], 'Minutes finalised. The record is now read-only.')
+        self.assertEqual(s.item('meetings', s.mid)['f']['PdfState'], 'None')
+        self.assertEqual(s.files, {})
+
+    def test_a_discussed_flag_is_cleared_for_the_next_meeting(self):
+        s = started()
+        finalise(s)
+        b = book(s, {'dateIso': '2026-12-09'}, key=KEY4)
+        nxt = meeting(s)
+        run(s, submit(s, KELLY, 'StartMeeting', {}, target=nxt['id'], revision=1, key=KEY5))
+        titles = {(f['Section'], f['Title']) for f in frozen(s, nxt['id']) if f['RowType'] == 'Agenda Item'}
+        self.assertNotIn(('Noticeboard', 'Flagged by a member'), titles)
+        self.assertIn(('Carried forward', 'Old degradation'), titles)
+        self.assertIn(('Carried forward', 'Loan pool audit'), titles)
+
+
+class Amend(unittest.TestCase):
+    def test_management_amends_and_a_second_pdf_version_is_kept_beside_the_first(self):
+        s = started()
+        finalise(s)
+        rev = s.item('meetings', s.mid)['f']['Revision']
+        r = submit(s, JOE, 'AmendMeeting', {'what': 'The decision applies from January.', 'reason': 'The date was missed.'}, target=s.mid, revision=rev, key=KEY4)
+        status, eng = run(s, r)
+        self.assertEqual(request(s, r)['Status'], 'Completed', eng.log)
+        m = s.item('meetings', s.mid)['f']
+        self.assertEqual((m['AmendmentCount'], m['PdfState'], m['PdfVersion']), (1.0, 'Ready', 2.0))
+        am = [f for f in frozen(s) if f['RowType'] == 'Amendment'][0]
+        self.assertEqual((am['Title'], am['Notes'], am['AmendmentReason']), ('Amendment 1 by Pepper Joseph', 'The decision applies from January.', 'The date was missed.'))
+        self.assertIn(pdf_path(s.mid, 1), s.files)
+        self.assertIn('The date was missed.', s.files[pdf_path(s.mid, 2)])
+        self.assertNotIn('Amendments', s.files[pdf_path(s.mid, 1)])
+
+    def test_only_management_amends_and_only_finalised_minutes(self):
+        s = started()
+        r = submit(s, JOE, 'AmendMeeting', {'what': 'Something else entirely.', 'reason': 'A good reason.'}, target=s.mid, key=KEY4)
+        run(s, r)
+        self.assertEqual(request(s, r)['ResultMessage'], 'Only finalised minutes can be amended.')
+        finalise(s)
+        r = submit(s, KELLY, 'AmendMeeting', {'what': 'Something else entirely.', 'reason': 'A good reason.'}, target=s.mid, key=KEY5)
+        run(s, r)
+        self.assertEqual(request(s, r)['ResultMessage'], 'Only Team Leaders and the Group Head can amend finalised minutes.')
+
+
+class PdfMinutes(unittest.TestCase):
+    def test_a_failed_conversion_is_tried_again_by_the_monitor_then_the_administrators_are_told(self):
+        s = started()
+        s.pdf_fail = [400]
+        r, eng = finalise(s)
+        self.assertEqual(request(s, r)['Status'], 'Completed', 'the minutes stand whatever the PDF does')
+        m = s.item('meetings', s.mid)['f']
+        self.assertEqual((m['Status'], m['PdfState'], m['PdfAttempts']), ('Finalised', 'Failed', 1.0))
+        self.assertEqual(s.onedrive, {}, 'the working file is removed even when conversion fails')
+        run_monitor(s, s.clock + timedelta(minutes=20))
+        self.assertEqual(s.item('meetings', s.mid)['f']['PdfState'], 'Ready')
+        self.assertIn(pdf_path(s.mid, 1), s.files)
+        s2 = started()
+        s2.pdf_fail = [400, 'timeout', 400]
+        finalise(s2)
+        for k in (1, 2):
+            run_monitor(s2, s2.clock + timedelta(minutes=20 * k))
+        self.assertEqual((s2.item('meetings', s2.mid)['f']['PdfState'], s2.item('meetings', s2.mid)['f']['PdfAttempts']), ('Failed', 3.0))
+        run_monitor(s2, s2.clock + timedelta(minutes=20))
+        self.assertTrue(any('PDF minutes could not be made' in m['subject'] for m in s2.sent), [m['subject'] for m in s2.sent])
+
+    def test_a_pdf_already_saved_is_not_made_again(self):
+        s = started()
+        s.fail_if = lambda method, path, where: method == 'POST' and 'Lists/Meetings/items' in path and 'PdfState' in where
+        finalise(s)
+        s.fail_if = None
+        self.assertIn(pdf_path(s.mid, 1), s.files)
+        made = len(s.files)
+        run_monitor(s, s.clock + timedelta(minutes=20))
+        self.assertEqual(len(s.files), made)
+
+
+class MinutesRobustness(Robustness):
+    def prepared(self, s):
+        started(s)
+        s.writes.clear()
+        return s.mid
+
+    def interrupted_everywhere(self, prepare, rtype, payload):
+        ref = agenda_site()
+        target = prepare(ref)
+        r = submit(ref, KELLY if rtype == 'FinaliseMeeting' else JOE, rtype, payload, target=target, revision=ref.item('meetings', target)['f']['Revision'], key=KEY4)
+        run(ref, r)
+        self.assertEqual(request(ref, r)['Status'], 'Completed')
+        expected, total = self.snapshot(ref), len(ref.writes)
+        for k in range(1, total + 1):
+            with self.subTest(write=k, of=total, at=ref.writes[k - 1]):
+                s = agenda_site()
+                target = prepare(s)
+                r = submit(s, KELLY if rtype == 'FinaliseMeeting' else JOE, rtype, payload, target=target, revision=s.item('meetings', target)['f']['Revision'], key=KEY4)
+                s.writes = []
+                s.fail_at = k
+                run(s, r)
+                s.fail_at = None
+                if request(s, r)['Status'] != 'Completed':
+                    request(s, r)['Status'] = 'Submitted'
+                    status, eng = run(s, r, now=s.clock + timedelta(minutes=10))
+                    self.assertEqual(request(s, r)['Status'], 'Completed', eng.log)
+                run_monitor(s, s.clock + timedelta(minutes=20))
+                got = self.snapshot(s)
+                for key in ('meetings', 'meetingItems', 'history'):
+                    self.assertEqual([x for x in got[key] if 'Transaction' not in x[2]], [x for x in expected[key] if 'Transaction' not in x[2]], key)
+                self.assertEqual(sorted(s.files), sorted(ref.files))
+
+    def finalised(self, s):
+        self.prepared(s)
+        r = submit(s, KELLY, 'FinaliseMeeting', {}, target=s.mid, revision=s.item('meetings', s.mid)['f']['Revision'], key=KEY3)
+        run(s, r)
+        s.writes.clear()
+        return s.mid
+
+    def test_finalising_survives_an_interruption_at_every_write(self):
+        self.interrupted_everywhere(self.prepared, 'FinaliseMeeting', {})
+
+    def test_amending_survives_an_interruption_at_every_write(self):
+        self.interrupted_everywhere(self.finalised, 'AmendMeeting', {'what': 'The decision applies from January.', 'reason': 'The date was missed.'})
+
+    # the meetings flow's own cases are covered by Robustness
+    test_booking_survives_an_interruption_at_every_write = None
+    test_a_change_survives_an_interruption_at_every_write = None
+    test_cancelling_survives_an_interruption_at_every_write = None
+    test_starting_survives_an_interruption_at_every_write = None
+
+
+class PdfProbe(unittest.TestCase):
+    def test_the_pdf_probe_converts_saves_and_tidies_up(self):
+        s = site()
+        eng = Engine(PDF_PROBE, s, {flows.ENV_SITE: SITE, '$authentication': {}}, s.clock, trigger_body={})
+        self.assertEqual(eng.run(), 'Succeeded', eng.log)
+        res = next(v['outputs'] for k, v in eng.results.items() if k.endswith('results') or 'result' in k.lower() and isinstance(v.get('outputs'), dict) and 'convert' in v['outputs'])
+        self.assertEqual((res['workingFile'], res['convert'], res['saveToMeetingMinutes'], res['removeWorkingFile']), ('Succeeded',) * 4)
+        self.assertEqual(len(s.files), 1)
+        self.assertTrue(list(s.files)[0].startswith('/sites/ESGCompetencyHub/MeetingMinutes/TEST-PDF-probe-'))
+        self.assertEqual(s.onedrive, {})
+
+
+class RaiseFromMeeting(unittest.TestCase):
+    def raise_(self, s, sender, key):
+        r = submit(s, sender, 'RaiseAction', dict(RaiseAction.good, ownerId=RACHEL, sourceMeetingId=s.mid), key=key)
+        s.item('requests', r)['f']['MeetingId'] = float(s.mid)
+        st, eng = Engine(FLOWS['ESG Competency Hub | 2 Request queue'], s, {flows.ENV_SITE: SITE, '$authentication': {}}, s.clock,
+                         trigger_body=s.trigger_item('requests', r)).run(), None
+        return r
+
+    def test_an_action_raised_in_the_meeting_carries_it_and_appears_in_the_minutes(self):
+        s = started()
+        r = self.raise_(s, KELLY, KEY4)
+        self.assertEqual(request(s, r)['Status'], 'Completed')
+        act = s.rows('actions', Title=RaiseAction.good['title'])[0]['f']
+        self.assertEqual((act['SourceType'], act['SourceId']), ('Meeting', float(s.mid)))
+        finalise(s)
+        self.assertIn(RaiseAction.good['title'], {f['Title'] for f in frozen(s) if f.get('Section') == 'Decisions and additional actions'})
+
+    def test_only_while_in_progress_and_only_by_its_runners(self):
+        s = started()
+        r = self.raise_(s, RACHEL, KEY4)
+        self.assertEqual(request(s, r)['ResultMessage'], 'Actions are raised from a meeting only while it is in progress, by the people who run it.')
+        finalise(s)
+        r = self.raise_(s, KELLY, KEY5)
+        self.assertEqual(request(s, r)['ResultMessage'], 'Actions are raised from a meeting only while it is in progress, by the people who run it.')
 
 class MeetingRights(unittest.TestCase):
     def test_meeting_rights_reach_the_open_meetings_record_folder_and_are_taken_away(self):

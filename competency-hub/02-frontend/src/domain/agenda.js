@@ -12,7 +12,8 @@ CH.agenda = (function () {
 
   // Which notices and entries are flagged at the cut-off (plan F.5): events in the area's folder up to the cut-off,
   // oldest first. A member or management raises a flag; the flagger, management, a meeting runner of the area or the
-  // source's author or raiser withdraws it.
+  // source's author or raiser withdraws it. A finalised meeting that recorded the item as Discussed clears every flag
+  // raised up to that meeting's cut-off (input.cleared: [{ key, upto }]); a flag raised after it still counts.
   function flagged(input) {
     var sources = {};
     var authors = {};
@@ -23,20 +24,22 @@ CH.agenda = (function () {
       sources['Register Entry:' + id(e.Id)] = true; authors['Register Entry:' + id(e.Id)] = id(e.RaisedById);
     });
     var on = {};
+    var at = {};
     input.flags.filter(function (f) { return folder(f) === input.areaKey && f.IsHidden !== true && Number(f.Id) <= Number(input.cutUpdatesId); })
       .sort(function (a, b) { return a.Id - b.Id; })
       .forEach(function (f) {
         var key = f.ParentType + ':' + id(f.ParentId);
         var who = id(f.AuthorId);
-        if (f.EntryType === 'Flagged' && sources[key] && (input.memberIds.indexOf(who) >= 0 || input.mgmtIds.indexOf(who) >= 0)) on[key] = who;
+        if (f.EntryType === 'Flagged' && sources[key] && (input.memberIds.indexOf(who) >= 0 || input.mgmtIds.indexOf(who) >= 0)) { on[key] = who; at[key] = Number(f.Id); }
         else if (f.EntryType === 'Flag Withdrawn' && on[key] !== undefined &&
-          (on[key] === who || input.mgmtIds.indexOf(who) >= 0 || input.chairIds.indexOf(who) >= 0 || authors[key] === who)) delete on[key];
+          (on[key] === who || input.mgmtIds.indexOf(who) >= 0 || input.chairIds.indexOf(who) >= 0 || authors[key] === who)) { delete on[key]; delete at[key]; }
       });
+    (input.cleared || []).forEach(function (c) { if (at[c.key] !== undefined && at[c.key] <= Number(c.upto)) { delete on[c.key]; delete at[c.key]; } });
     return on;
   }
 
   // input: { areaId, areaKey, sinceIso, cutIso, cutUpdatesId, actionsOpen, actionsClosed, notices, entries, flags,
-  //          memberIds, chairIds, mgmtIds, carried, dates, lookaheadDays } – ids as text.
+  //          memberIds, chairIds, mgmtIds, carried, cleared, dates, lookaheadDays } – ids as text.
   // Returns [{ section, order, sourceType, sourceId, marker, row }], in section order.
   function build(input) {
     var since = ms(input.sinceIso);
@@ -76,13 +79,38 @@ CH.agenda = (function () {
     return out;
   }
 
+  // Discussed items of finalised meetings clear the flags raised up to their cut-off. Only meetings whose cut-off could
+  // cover a flag still raised are read, each by its own (indexed) meeting id. Rows count only from the meeting's own
+  // MTG folder, which only the flow writes, and only once the meeting is finalised.
+  async function cleared(sp, areaId, flags) {
+    var L = CH.config.lists;
+    var first = flags.filter(function (f) { return f.EntryType === 'Flagged'; }).reduce(function (m, f) { return Math.min(m, Number(f.Id)); }, Infinity);
+    if (first === Infinity) return [];
+    var mtgs = (await sp.items(L.meetings.title, '$select=Id,CutoffUpdatesId&$filter=CompetencyId eq ' + areaId + " and Status eq 'Finalised'")).rows
+      .filter(function (m) { return Number(m.CutoffUpdatesId) >= first; });
+    var res = await Promise.all(mtgs.map(function (m) {
+      return sp.items(L.meetingItems.title, '$select=SourceType,SourceId,Outcome,FileDirRef&$filter=MeetingId eq ' + m.Id + " and RowType eq 'Agenda Item'");
+    }));
+    var out = [];
+    mtgs.forEach(function (m, i) {
+      res[i].rows.filter(function (r) { return r.Outcome === 'Discussed' && folder(r) === 'MTG-' + m.Id && (r.SourceType === 'Notice' || r.SourceType === 'Register Entry'); })
+        .forEach(function (r) { out.push({ key: r.SourceType + ':' + id(r.SourceId), upto: Number(m.CutoffUpdatesId) }); });
+    });
+    return out;
+  }
+
   // Reads what build() needs, the same way the flow does, for a meeting that has not started (the cut-off is now).
   async function preview(sp, model, meeting, settings) {
     var L = CH.config.lists;
     var area = model.areaByKey[meeting.areaKey];
     var act = 'Id,Title,AssignedToId,Status,DueDay,OriginalDueDate,ExtensionCount,Blocker,DateRaised,DateClosed,CloseOutcome,CompetencyId,' +
       'LinkedCompetenciesId,PendingRequestKey,CreatedRequestKey';
-    var since = meeting.intervalStart || (meeting.previous && meeting.previous.cutoff) || (area.trackingStart ? area.trackingStart + 'T00:00:00Z' : '2000-01-01T00:00:00Z');
+    // the area's last finalised meeting, as the flow finds it when the meeting starts
+    var previous = meeting.previousId ? model.meetingById[meeting.previousId] : model.meetings.filter(function (m) {
+      return m.areaKey === meeting.areaKey && m.status === 'Finalised';
+    }).sort(function (a, b) { return String(b.startUtc).localeCompare(String(a.startUtc)); })[0];
+    var previousId = previous ? previous.id : meeting.previousId;
+    var since = meeting.intervalStart || (previous && previous.cutoff) || (area.trackingStart ? area.trackingStart + 'T00:00:00Z' : '2000-01-01T00:00:00Z');
     var res = await Promise.all([
       sp.items(L.actions.title, '$select=' + act + '&$filter=IsOpen eq 1'),
       sp.items(L.actions.title, '$select=' + act + "&$filter=IsOpen eq 0 and DateClosed ge datetime'" + new Date(since).toISOString().slice(0, 19) + "Z'"),
@@ -90,19 +118,22 @@ CH.agenda = (function () {
       sp.items(L.register.title, '$select=Id,Title,EntryType,Impact,Status,RaisedById,DateRaised,FileDirRef&$filter=CompetencyId eq ' + area.id),
       sp.items(L.updates.title, '$select=Id,EntryType,ParentType,ParentId,AuthorId,FileDirRef,IsHidden&$filter=IsFlagEvent eq 1'),
       sp.items(L.calendar.title, "$select=Id,Title,StartTime,FileDirRef&$filter=IsImportant eq 1 and Status eq 'Scheduled'"),
-      meeting.previousId ? sp.items(L.meetingItems.title, '$select=Title,SourceType,SourceId,Outcome&$filter=MeetingId eq ' + meeting.previousId + " and RowType eq 'Outcome'")
+      // what the last finalised meeting deferred or did not reach: its frozen agenda rows, in its own MTG folder
+      previousId ? sp.items(L.meetingItems.title, '$select=Title,SourceType,SourceId,Outcome,FileDirRef&$filter=MeetingId eq ' + previousId + " and RowType eq 'Agenda Item'")
         : Promise.resolve({ rows: [] })
     ]);
+    var flags = res[4].rows.filter(function (f) { return folder(f) === area.key; });
     var members = model.membersByArea[meeting.areaKey] || {};
     var look = (settings || []).filter(function (r) { return r.Title === 'AgendaLookaheadDays'; })[0];
     return build({
       areaId: area.id, areaKey: area.key, sinceIso: since, cutIso: new Date().toISOString(), cutUpdatesId: Number.MAX_SAFE_INTEGER,
-      actionsOpen: res[0].rows, actionsClosed: res[1].rows, notices: res[2].rows, entries: res[3].rows, flags: res[4].rows, dates: res[5].rows, carried: res[6].rows,
+      actionsOpen: res[0].rows, actionsClosed: res[1].rows, notices: res[2].rows, entries: res[3].rows, flags: res[4].rows, dates: res[5].rows,
+      carried: res[6].rows.filter(function (r) { return folder(r) === 'MTG-' + previousId; }), cleared: await cleared(sp, area.id, flags),
       memberIds: Object.keys(members).map(id), chairIds: Object.keys(model.chairsByArea[meeting.areaKey] || {}).map(id),
       mgmtIds: model.people.filter(function (p) { return CH.config.managementRoles.indexOf(p.Role) >= 0; }).map(function (p) { return id(p.SiteUserId); }),
       lookaheadDays: look ? look.Value : 60
     });
   }
 
-  return { build: build, preview: preview, flagged: flagged, SECTIONS: SECTIONS };
+  return { build: build, preview: preview, flagged: flagged, cleared: cleared, SECTIONS: SECTIONS };
 })();

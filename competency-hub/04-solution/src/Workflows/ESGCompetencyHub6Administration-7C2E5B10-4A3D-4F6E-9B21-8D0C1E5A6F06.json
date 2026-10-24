@@ -286,6 +286,23 @@
             ]
           }
         },
+        "Initialise_src_mtg": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varSrcMtg",
+                "type": "object",
+                "value": {}
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_entry": [
+              "Succeeded"
+            ]
+          }
+        },
         "Initialise_user_id": {
           "type": "InitializeVariable",
           "inputs": {
@@ -298,7 +315,7 @@
             ]
           },
           "runAfter": {
-            "Initialise_entry": [
+            "Initialise_src_mtg": [
               "Succeeded"
             ]
           }
@@ -551,7 +568,8 @@
                 "regRoot": "@{outputs('Site_path')}/Lists/ImprovementRegister",
                 "noticesRoot": "@{outputs('Site_path')}/Lists/Noticeboard",
                 "mtgRoot": "@{outputs('Site_path')}/Lists/Meetings",
-                "itemsRoot": "@{outputs('Site_path')}/Lists/MeetingItems"
+                "itemsRoot": "@{outputs('Site_path')}/Lists/MeetingItems",
+                "minutesRoot": "@{outputs('Site_path')}/MeetingMinutes"
               },
               "runAfter": {
                 "Site_address": [

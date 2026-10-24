@@ -188,6 +188,22 @@ window.MockSeed = function (todayIso) {
       InviteState: 'Sent', InviteToken: 'ESGMseed' + meetings.length, OutlookEventId: 'AAMkseed' + meetings.length }, base));
   });
 
+  // Flask's last finalised meeting has its frozen record (what the Minutes flow writes): attendance, a notice that was
+  // deferred (it comes back as carried forward), a decision, and its PDF.
+  var items = [];
+  var flkDone = meetings.filter(function (m) { return m.CompetencyId === area('FLK') && m.Status === 'Finalised'; })[0];
+  if (flkDone) {
+    var dir = '/sites/ESGCompetencyHub/Lists/MeetingItems/FLK/MTG-' + flkDone.Id;
+    var addItem = function (v) { items.push(Object.assign({ Id: items.length + 1, MeetingId: flkDone.Id, FileDirRef: dir }, v)); };
+    Object.assign(flkDone, { FinalisedAt: flkDone.CutoffTime, FinalisedById: idOf['Kelly Bates'], PdfState: 'Ready', PdfVersion: 1, CutoffUpdatesId: 0, AmendmentCount: 0 });
+    [['Kelly Bates', 'Present'], ['Rachel Boulden', 'Present'], ['Nick Pearce', 'Apologies']].forEach(function (a) {
+      addItem({ RowKey: 'F|' + flkDone.Id + '|P|' + idOf[a[0]], Title: a[0], RowType: 'Attendee', Section: 'Attendance', SourceId: idOf[a[0]], Attendance: a[1] });
+    });
+    addItem({ RowKey: 'F|' + flkDone.Id + '|A|Notice|2', Title: 'Spare probe stock levels', RowType: 'Agenda Item', Section: 'Noticeboard', SortOrder: 4, SourceType: 'Notice', SourceId: 2,
+      Outcome: 'Deferred', Notes: 'Waiting for the stores count.' });
+    addItem({ RowKey: 'F|' + flkDone.Id + '|D|1', Title: 'Probe checks move to quarterly', RowType: 'Decision', Section: 'Decisions and additional actions', SortOrder: 9, Notes: 'Agreed by all present.' });
+  }
+
   var calendar = [
     { Id: 1, Title: 'Flask audit preparation', StartTime: at(9), AllDay: true, IsImportant: true, Status: 'Scheduled', FileDirRef: '/sites/ESGCompetencyHub/Lists/CalendarEvents/FLK' },
     { Id: 2, Title: 'Probe calibration window', StartTime: at(15), AllDay: false, IsImportant: false, Status: 'Scheduled', FileDirRef: '/sites/ESGCompetencyHub/Lists/CalendarEvents/FLK' },
@@ -198,7 +214,7 @@ window.MockSeed = function (todayIso) {
   return {
     'Competencies': competencies, 'People': people, 'Competency Members': members, 'Actions': actions,
     'Noticeboard': notices, 'Updates': updates, 'Meetings': meetings, 'Calendar Events': calendar,
-    'Requests': [], 'History': history, 'Improvements and Degradations': register, 'Meeting Items': [],
+    'Requests': [], 'History': history, 'Improvements and Degradations': register, 'Meeting Items': items,
     'Feedback': [
       { Id: 1, Title: 'Report a bug: dates', FeedbackType: 'Report a bug', Description: 'The calendar shows the wrong day for all-day events.', Status: 'New',
         AuthorId: idOf['Rachel Boulden'], Created: at(-2, '09:12:00'), ClientKey: 'seed-fb-1', PageView: 'area' },

@@ -2,6 +2,27 @@
 
 Plain HTML, CSS and JavaScript, delivered as a Welcome by Accelerator 365 custom layout. Same-origin SharePoint REST runs as the signed-in user. There are no libraries and no external calls.
 
+## Version 0.9.0: Release 5 – running the meeting, finalising, minutes and amendments
+
+- **The meeting in progress** (`views/meeting-panel.js`), for the people who run the area's meetings and management:
+  the agenda one item at a time (outcome, notes and decisions, *Save and next*, a list of every item to jump to),
+  attendance, decisions, and items added by hand. Each is an instant write to the meeting's Record folder; the last
+  one recorded for an item counts. *Open the action* and *Raise an action* work from the item: those changes are queued
+  and carry the meeting (`MeetingId` on the request), so the meeting can only be finalised once they are recorded.
+- **Review and finalise**: lists the items for discussion still without an outcome (carried forward, noticeboard, new
+  register entries, new business – `CH.rules.missingOutcomes`, the same rule as the flow) and any change still being
+  recorded; only then can it be sent. The *7 Minutes* flow freezes the record.
+- **Minutes** of a finalised meeting are read only from the frozen record: attendance, every item with its outcome and
+  notes, decisions, actions raised, amendments. *Open the PDF*, *Download PDF* (each version is its own file, so the
+  original is never replaced) and *Print* (a print style that prints only the minutes). With *PDF minutes* off,
+  *Print* is the way to a PDF.
+- **Amend the minutes** (Team Leaders and the Group Head): what and why; it is added beside the original.
+- **Flags clear** when a finalised meeting recorded the item as *Discussed*, for flags raised up to its cut-off (the
+  home counts, the agenda preview and the flow agree). Notices and entries show the meetings that took them up, with
+  the outcome, in their *Discussion history*.
+- Fixed: a dialog opened over another (an action from a meeting) no longer closes both on Escape; the agenda preview
+  now finds the previous finalised meeting before the meeting starts, so carried-forward items show in the preview.
+
 ## Version 0.8.0: Release 4 – booking meetings, invitations and the agenda
 
 - **Book a meeting** (`views/meeting-form.js`), for meeting runners and management, from the home area panel, the

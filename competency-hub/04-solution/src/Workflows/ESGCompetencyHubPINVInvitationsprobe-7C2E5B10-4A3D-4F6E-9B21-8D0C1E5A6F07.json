@@ -106,7 +106,8 @@
             "regRoot": "@{outputs('Site_path')}/Lists/ImprovementRegister",
             "noticesRoot": "@{outputs('Site_path')}/Lists/Noticeboard",
             "mtgRoot": "@{outputs('Site_path')}/Lists/Meetings",
-            "itemsRoot": "@{outputs('Site_path')}/Lists/MeetingItems"
+            "itemsRoot": "@{outputs('Site_path')}/Lists/MeetingItems",
+            "minutesRoot": "@{outputs('Site_path')}/MeetingMinutes"
           },
           "runAfter": {
             "Site_address": [

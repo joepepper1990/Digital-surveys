@@ -19,20 +19,21 @@
 </style>
 </head>
 <body>
-<h1>ESG Competency Hub – Releases 1 to 4</h1>
-<p>This package brings the Hub from app 0.3.0 and solution 1.2.0.0 (what you have now) to <strong>app 0.8.0</strong>, <strong>solution 1.6.0.0</strong> and <strong>Setup 1.3</strong>. Each release includes the ones before it, so you can install this package directly. Updated 23 October 2026.</p>
+<h1>ESG Competency Hub – Releases 1 to 5</h1>
+<p>This package brings the Hub from app 0.3.0 and solution 1.2.0.0 (what you have now) to <strong>app 0.9.0</strong>, <strong>solution 1.7.0.0</strong> and <strong>Setup 1.3</strong>. Each release includes the ones before it, so you can install this package directly. Updated 23 October 2026.</p>
 <ul>
   <li><strong>Release 1, safety net:</strong> a queue monitor that recovers stalled changes and retries emails; clear messages while a change is waiting, being recorded, being retried or needs an administrator; an <em>Administration</em> page; and a reduced mode in which the buttons that send changes are paused while changes can't be processed.</li>
   <li><strong>Release 2, administration and permissions:</strong> add people, choose their areas, meeting rights, access end dates and notice posting from the app; the corrected technician and meeting rights; Feedback list and Meeting Minutes library ready for later releases.</li>
   <li><strong>Release 3, noticeboard, register, feedback, settings and dashboard:</strong> read a notice in full, comment, flag it for the next meeting; edit, pin and archive notices; improvements and degradations with linked actions; a <em>Feedback</em> button on every page with a review tab for administrators; a <em>Settings</em> tab; and a <em>Management</em> page for Team Leaders and the Group Head.</li>
   <li><strong>Release 4, meetings I:</strong> book monthly meetings, with an Outlook invitation from your calendar, an update when the meeting changes and a cancellation when it is cancelled; <em>Add to my calendar</em> for everyone; the agenda, previewed before the meeting and fixed when it starts; items added by hand; and a probe flow to prove the invitations first.</li>
+  <li><strong>Release 5, meetings II:</strong> run the meeting in the Hub – attendance, each item's outcome and notes, decisions, raising or changing actions from an item; finalise, which makes the record read-only; minutes with a PDF to open, download or print; amendments by Team Leaders and the Group Head; flags cleared once an item is discussed; and a probe flow to prove the PDF conversion first.</li>
 </ul>
 <p class="note">Everything here was built and tested on a simulated SharePoint site only. Each part below changes your Competency Hub site or your Power Automate environment, so do it only when you are ready. Nobody else gets access until you add them.</p>
 
 <table>
   <tr><th>Folder</th><th>Files</th><th>When</th></tr>
   <tr><td><code>1-Setup</code></td><td><code>CH_Setup.html</code>, <code>CH_Setup.js</code></td><td>Part A</td></tr>
-  <tr><td><code>2-Power-Automate</code></td><td><code>ESGCompetencyHub_1_6_0_0_unmanaged.zip</code></td><td>Part B – import as it is. <strong>Don't unzip it.</strong></td></tr>
+  <tr><td><code>2-Power-Automate</code></td><td><code>ESGCompetencyHub_1_7_0_0_unmanaged.zip</code></td><td>Part B – import as it is. <strong>Don't unzip it.</strong></td></tr>
   <tr><td><code>3-App</code></td><td><code>competency-hub.html</code>, <code>competency-hub.js</code></td><td>Part C</td></tr>
   <tr><td><code>4-Permission-probe</code></td><td><code>CH_Probe_P2.html</code>, <code>CH_Probe_P2.js</code></td><td>Part E, with the test account</td></tr>
 </table>
@@ -47,22 +48,22 @@
   <li>Delete the two Setup files and the HubSetup page again.</li>
 </ol>
 
-<h2>Part B – solution 1.6.0.0 (about 10 minutes)</h2>
+<h2>Part B – solution 1.7.0.0 (about 10 minutes)</h2>
 <ol>
-  <li>In Power Automate, same environment: <strong>Solutions → Import solution → Browse</strong>, choose <code>ESGCompetencyHub_1_6_0_0_unmanaged.zip</code>, <em>Next</em>. It should say <strong>upgrade</strong>.</li>
-  <li>Keep the SharePoint and Outlook connections and the site address, then <em>Import</em>.</li>
-  <li>Open the solution. There are now <strong>seven</strong> flows. Make sure these five are <strong>On</strong>:
+  <li>In Power Automate, same environment: <strong>Solutions → Import solution → Browse</strong>, choose <code>ESGCompetencyHub_1_7_0_0_unmanaged.zip</code>, <em>Next</em>. It should say <strong>upgrade</strong>.</li>
+  <li>Keep the SharePoint and Outlook connections and the site address. For the new <strong>OneDrive for Business</strong> connection, choose (or create) one with your own account. Then <em>Import</em>. If the import says the OneDrive connector is not allowed with the others, that is the data policy: send me the message, and in the meantime set <em>PDF minutes</em> to No (Part H).</li>
+  <li>Open the solution. There are now <strong>nine</strong> flows. Make sure these five are <strong>On</strong>:
     <ul class="sub">
       <li><em>ESG Competency Hub | 1 Daily tasks</em> and <em>2 Request queue</em> (already on);</li>
       <li><em>ESG Competency Hub | 3 Queue monitor</em>, <em>4 Records</em> and <em>6 Administration</em> (new: turn them on).</li>
     </ul>
-    Leave <em>5 Meetings</em> and <em>P-INV Invitations probe</em> <strong>Off</strong> for now: Part G turns them on in the right order.</li>
+    Leave <em>5 Meetings</em>, <em>7 Minutes</em> and the two probes <strong>Off</strong> for now: Parts G and H turn them on in the right order.</li>
 </ol>
 
-<h2>Part C – app 0.8.0</h2>
+<h2>Part C – app 0.9.0</h2>
 <ol>
   <li>Upload both files from <code>3-App</code> to <em>Welcome Web Part - Custom Layouts</em> (<em>Replace</em>).</li>
-  <li>On the Hub page, edit the web part, <strong>Reset layout cache</strong>, <em>Republish</em>, and reload with <strong>Ctrl+F5</strong>. The footer should say <strong>0.8.0</strong>.</li>
+  <li>On the Hub page, edit the web part, <strong>Reset layout cache</strong>, <em>Republish</em>, and reload with <strong>Ctrl+F5</strong>. The footer should say <strong>0.9.0</strong>.</li>
   <li>The home page is the new <em>My week</em> design. Open it with your WebView link (ending <code>?env=WebView</code>) and check that it fits the window with no scrolling.</li>
   <li>Click the arrow on a section header: it folds to one line and stays folded after a reload. Click an area tile: it opens in place; <strong>✕</strong> or <strong>Esc</strong> closes it.</li>
   <li>Your name at the top should read <em>Joseph Pepper</em>, first name first.</li>
@@ -148,7 +149,30 @@
   <li>On the first meeting, click <strong>Add to my calendar</strong>: a calendar file downloads and opens in Outlook.</li>
   <li>Send me screenshots of the meeting before and after starting it.</li>
 </ol>
-<p class="note">The meeting started here stays <em>In progress</em> until Release 5, which adds the live meeting screen and finalising. That is expected. If <em>5 Meetings</em> is off, booking pauses and the Administration page says so; everything else carries on.</p>
+<p class="note">If <em>5 Meetings</em> is off, booking pauses and the Administration page says so; everything else carries on.</p>
+
+<h2>Part H – run a meeting, finalise it, and the PDF minutes (Release 5)</h2>
+<h3>First: the PDF probe</h3>
+<ol>
+  <li>In the solution, turn <em>ESG Competency Hub | P-PDF PDF probe</em> <strong>On</strong>, open it and click <strong>Run</strong>. It asks for nothing.</li>
+  <li>It writes a sample page to your OneDrive, turns it into a PDF, saves it in the <em>Meeting Minutes</em> library as <code>TEST-PDF-probe-…pdf</code>, and removes the working file.</li>
+  <li>Open the run's last step, <em>Probe results</em>, and send me what it shows. Open the TEST PDF in Meeting Minutes and check it looks right, then delete it.</li>
+  <li>Turn the probe <strong>Off</strong> again.</li>
+</ol>
+<p class="note">If the probe fails (for example the data policy blocks OneDrive), go to <strong>Administration → Settings</strong> and set <em>PDF minutes</em> to <strong>No</strong>. Finalised minutes then have a <em>Print</em> button, and the browser's <em>Save as PDF</em> makes the PDF. Nothing needs rebuilding.</p>
+<h3>Then: a whole TEST meeting</h3>
+<ol>
+  <li>Turn <em>ESG Competency Hub | 7 Minutes</em> <strong>On</strong>.</li>
+  <li>Open the TEST meeting you started in Part G (or book and start a new one). As someone who runs Flask's meetings you now see the meeting <strong>one item at a time</strong>: choose an outcome, add notes, <strong>Save and next</strong>. Items for discussion are marked <em>Needs an outcome</em>.</li>
+  <li>Under <em>Attendance</em>, mark yourself Present and your colleague Apologies. Under <em>Decisions</em>, record a TEST decision.</li>
+  <li>On one item, click <strong>Raise an action</strong> and raise a TEST action. On an action item, click <strong>Open the action</strong> and close a TEST action. Both show <em>being recorded</em>.</li>
+  <li>Click <strong>Review and finalise</strong>. It lists anything still needing an outcome and any change still being recorded; once there is nothing, <strong>Finalise the minutes</strong>.</li>
+  <li>Within about two minutes the meeting shows <em>Minutes finalised</em>, with the minutes. Within a few more, <strong>Open the PDF</strong> and <strong>Download PDF</strong> appear. Check the PDF, and try <strong>Print</strong>.</li>
+  <li>As yourself (a Team Leader), click <strong>Amend the minutes</strong>, say what and why, and send it. The amendment appears with the minutes, and a second PDF (<code>-v2</code>) appears beside the first.</li>
+  <li>Open a notice that was discussed: its <em>Discussion history</em> lists the meeting and the outcome, and its flag is gone.</li>
+  <li>Send me screenshots of the live meeting, the review, and the minutes.</li>
+</ol>
+<p class="note">The PDF is made after the minutes are finalised, separately: if it fails, the minutes stand and can be read and printed, the queue monitor tries again, and after three failures the administrators get an email. If <em>7 Minutes</em> is off, finalising and amending pause; everything else carries on.</p>
 
 <h2>Already done</h2>
 <div class="done">

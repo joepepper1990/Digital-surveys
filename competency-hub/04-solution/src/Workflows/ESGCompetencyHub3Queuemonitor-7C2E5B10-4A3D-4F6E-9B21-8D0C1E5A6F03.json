@@ -18,6 +18,15 @@
         "api": {
           "name": "shared_office365"
         }
+      },
+      "shared_onedriveforbusiness": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "esghub_sharedonedriveforbusiness_hub"
+        },
+        "api": {
+          "name": "shared_onedriveforbusiness"
+        }
       }
     },
     "definition": {
@@ -224,6 +233,40 @@
             ]
           }
         },
+        "Initialise_pdf_result": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varPdfResult",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_inv_look": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_pdf_email_text": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varPdfHtml",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_pdf_result": [
+              "Succeeded"
+            ]
+          }
+        },
         "Try": {
           "type": "Scope",
           "actions": {
@@ -268,7 +311,8 @@
                 "regRoot": "@{outputs('Site_path')}/Lists/ImprovementRegister",
                 "noticesRoot": "@{outputs('Site_path')}/Lists/Noticeboard",
                 "mtgRoot": "@{outputs('Site_path')}/Lists/Meetings",
-                "itemsRoot": "@{outputs('Site_path')}/Lists/MeetingItems"
+                "itemsRoot": "@{outputs('Site_path')}/Lists/MeetingItems",
+                "minutesRoot": "@{outputs('Site_path')}/MeetingMinutes"
               },
               "runAfter": {
                 "Site_address": [
@@ -566,7 +610,7 @@
                               "actions": {
                                 "Meetings_or_actions": {
                                   "type": "If",
-                                  "expression": "@contains(createArray('ScheduleMeeting', 'UpdateMeeting', 'CancelMeeting', 'StartMeeting'), string(items('Each_stalled_change')?['RequestType']))",
+                                  "expression": "@contains(createArray('ScheduleMeeting', 'UpdateMeeting', 'CancelMeeting', 'StartMeeting', 'FinaliseMeeting', 'AmendMeeting'), string(items('Each_stalled_change')?['RequestType']))",
                                   "actions": {
                                     "Mark_the_request_meetings_down": {
                                       "type": "SetVariable",
@@ -984,7 +1028,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['mtg']}')/items?$select=Id,Title,InviteState,InviteAttempts,InviteError,Modified,MeetingDate&$filter=InviteState eq 'Creating' or InviteState eq 'Updating' or InviteState eq 'Cancelling' or InviteState eq 'Unknown' or InviteState eq 'Failed'&$top=5000",
+                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['mtg']}')/items?$select=Id,Title,InviteState,InviteAttempts,InviteError,PdfState,PdfAttempts,Modified,MeetingDate&$filter=InviteState eq 'Creating' or InviteState eq 'Updating' or InviteState eq 'Cancelling' or InviteState eq 'Unknown' or InviteState eq 'Failed' or PdfState eq 'Pending' or PdfState eq 'Failed'&$top=5000",
                   "parameters/headers": {
                     "Accept": "application/json;odata=nometadata"
                   }
@@ -998,8 +1042,11 @@
               }
             },
             "Inv_all": {
-              "type": "Compose",
-              "inputs": "@body('Get_inv')?['value']",
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Get_inv')?['value']",
+                "where": "@contains(createArray('Creating', 'Updating', 'Cancelling', 'Unknown', 'Failed'), string(coalesce(item()?['InviteState'], 'None')))"
+              },
               "runAfter": {
                 "Get_inv": [
                   "Succeeded"
@@ -1705,6 +1752,1004 @@
                 ]
               }
             },
+            "PDF_all": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Get_inv')?['value']",
+                "where": "@contains(createArray('Pending', 'Failed'), string(coalesce(item()?['PdfState'], 'None')))"
+              },
+              "runAfter": {
+                "Each_invite_failed": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "PDF_retry": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('PDF_all')",
+                "where": "@and(less(int(if(empty(first(split(string(coalesce(item()?['PdfAttempts'], '')), '.'))), '0', first(split(string(coalesce(item()?['PdfAttempts'], '')), '.')))), 3), less(ticks(string(coalesce(item()?['Modified'], '2000-01-01T00:00:00Z'))), ticks(addMinutes(utcNow(), -10))))"
+              },
+              "runAfter": {
+                "PDF_all": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Each_PDF": {
+              "type": "Foreach",
+              "foreach": "@body('PDF_retry')",
+              "runtimeConfiguration": {
+                "concurrency": {
+                  "repetitions": 1
+                }
+              },
+              "actions": {
+                "PDF_get_(PDF_minutes)": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                      "parameters/method": "GET",
+                      "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['mtg']}')/items(@{items('Each_PDF')?['Id']})?$select=Id,Title,Status,MeetingDate,Location,ChairId,FinalisedAt,FinalisedById,CompetencyId,AmendmentCount,PdfState,PdfAttempts,PdfVersion",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=minimalmetadata"
+                      }
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {}
+                },
+                "PDF_due_(PDF_minutes)": {
+                  "type": "If",
+                  "expression": "@and(equals(string(body('PDF_get_(PDF_minutes)')?['Status']), 'Finalised'), contains(createArray('Pending', 'Failed'), string(coalesce(body('PDF_get_(PDF_minutes)')?['PdfState'], 'None'))), less(int(if(empty(first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['PdfAttempts'], '')), '.'))), '0', first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['PdfAttempts'], '')), '.')))), 3))",
+                  "actions": {
+                    "PDF_settings_(PDF_minutes)": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                          "parameters/method": "GET",
+                          "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['settings']}')/items?$select=Title,Value&$top=500",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata"
+                          }
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {}
+                    },
+                    "PDF_switch_(PDF_minutes)": {
+                      "type": "Query",
+                      "inputs": {
+                        "from": "@body('PDF_settings_(PDF_minutes)')?['value']",
+                        "where": "@equals(item()?['Title'], 'PdfEnabled')"
+                      },
+                      "runAfter": {
+                        "PDF_settings_(PDF_minutes)": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "PDF_on_(PDF_minutes)": {
+                      "type": "If",
+                      "expression": "@not(equals(string(coalesce(first(body('PDF_switch_(PDF_minutes)'))?['Value'], 'Yes')), 'No'))",
+                      "actions": {
+                        "PDF_claim_request_(PDF_minutes)": {
+                          "type": "Compose",
+                          "inputs": {
+                            "PdfAttempts": "@add(int(if(empty(first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['PdfAttempts'], '')), '.'))), '0', first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['PdfAttempts'], '')), '.')))), 1)"
+                          },
+                          "runAfter": {}
+                        },
+                        "PDF_claim_(PDF_minutes)": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                              "parameters/method": "POST",
+                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['mtg']}')/items(@{items('Each_PDF')?['Id']})",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata",
+                                "Content-Type": "application/json;odata=nometadata",
+                                "X-HTTP-Method": "MERGE",
+                                "IF-MATCH": "@{body('PDF_get_(PDF_minutes)')?['odata.etag']}"
+                              },
+                              "parameters/body": "@{string(outputs('PDF_claim_request_(PDF_minutes)'))}"
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runAfter": {
+                            "PDF_claim_request_(PDF_minutes)": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "PDF_start_(PDF_minutes)": {
+                          "type": "SetVariable",
+                          "inputs": {
+                            "name": "varPdfResult",
+                            "value": "failed"
+                          },
+                          "runAfter": {
+                            "PDF_claim_(PDF_minutes)": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "PDF_email_text_ID_(PDF_minutes)": {
+                          "type": "SetVariable",
+                          "inputs": {
+                            "name": "varPdfHtml",
+                            "value": ""
+                          },
+                          "runAfter": {
+                            "PDF_start_(PDF_minutes)": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "PDF_areas_(PDF_minutes)": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                              "parameters/method": "GET",
+                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['comps']}')/items?$select=Id,Title,CompetencyKey&$top=500",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata"
+                              }
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runAfter": {
+                            "PDF_email_text_ID_(PDF_minutes)": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "PDF_area_(PDF_minutes)": {
+                          "type": "Query",
+                          "inputs": {
+                            "from": "@body('PDF_areas_(PDF_minutes)')?['value']",
+                            "where": "@equals(first(split(string(coalesce(item()?['Id'], '')), '.')), first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['CompetencyId'], '')), '.')))"
+                          },
+                          "runAfter": {
+                            "PDF_areas_(PDF_minutes)": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "PDF_exists_(PDF_minutes)": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                              "parameters/method": "GET",
+                              "parameters/uri": "_api/web/GetFileByServerRelativePath(decodedurl='@{outputs('Site_path')}@{concat('/', 'MeetingMinutes', '/', string(first(body('PDF_area_(PDF_minutes)'))?['CompetencyKey']))}/@{concat('MTG-', first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['Id'], '')), '.')), '-v', string(add(int(if(empty(first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['AmendmentCount'], '')), '.'))), '0', first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['AmendmentCount'], '')), '.')))), 1)), '.pdf')}')?$select=Name",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata"
+                              }
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runAfter": {
+                            "PDF_area_(PDF_minutes)": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "PDF_make_(PDF_minutes)": {
+                          "type": "If",
+                          "expression": "@equals(actions('PDF_exists_(PDF_minutes)')?['status'], 'Succeeded')",
+                          "actions": {
+                            "PDF_already_(PDF_minutes)": {
+                              "type": "SetVariable",
+                              "inputs": {
+                                "name": "varPdfResult",
+                                "value": "ok"
+                              },
+                              "runAfter": {}
+                            }
+                          },
+                          "else": {
+                            "actions": {
+                              "PDF_rows_(PDF_minutes)": {
+                                "type": "OpenApiConnection",
+                                "inputs": {
+                                  "host": {
+                                    "connectionName": "shared_sharepointonline",
+                                    "operationId": "HttpRequest",
+                                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                  },
+                                  "parameters": {
+                                    "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                                    "parameters/method": "GET",
+                                    "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['items']}')/items?$select=Id,Title,RowType,Section,Outcome,Notes,Attendance,AmendmentReason,SortOrder,FileDirRef&$filter=MeetingId eq @{first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['Id'], '')), '.'))}&$top=5000",
+                                    "parameters/headers": {
+                                      "Accept": "application/json;odata=nometadata"
+                                    }
+                                  },
+                                  "authentication": "@parameters('$authentication')"
+                                },
+                                "runAfter": {}
+                              },
+                              "PDF_frozen_(PDF_minutes)": {
+                                "type": "Query",
+                                "inputs": {
+                                  "from": "@body('PDF_rows_(PDF_minutes)')?['value']",
+                                  "where": "@equals(last(split(string(item()?['FileDirRef']), '/')), concat('MTG-', first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['Id'], '')), '.'))))"
+                                },
+                                "runAfter": {
+                                  "PDF_rows_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_people_(PDF_minutes)": {
+                                "type": "OpenApiConnection",
+                                "inputs": {
+                                  "host": {
+                                    "connectionName": "shared_sharepointonline",
+                                    "operationId": "HttpRequest",
+                                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                  },
+                                  "parameters": {
+                                    "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                                    "parameters/method": "GET",
+                                    "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['people']}')/items?$select=SiteUserId,Title&$top=5000",
+                                    "parameters/headers": {
+                                      "Accept": "application/json;odata=nometadata"
+                                    }
+                                  },
+                                  "authentication": "@parameters('$authentication')"
+                                },
+                                "runAfter": {
+                                  "PDF_frozen_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_chair_(PDF_minutes)": {
+                                "type": "Query",
+                                "inputs": {
+                                  "from": "@body('PDF_people_(PDF_minutes)')?['value']",
+                                  "where": "@equals(first(split(string(coalesce(item()?['SiteUserId'], '')), '.')), first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['ChairId'], '')), '.')))"
+                                },
+                                "runAfter": {
+                                  "PDF_people_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_finaliser_(PDF_minutes)": {
+                                "type": "Query",
+                                "inputs": {
+                                  "from": "@body('PDF_people_(PDF_minutes)')?['value']",
+                                  "where": "@equals(first(split(string(coalesce(item()?['SiteUserId'], '')), '.')), first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['FinalisedById'], '')), '.')))"
+                                },
+                                "runAfter": {
+                                  "PDF_chair_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_attendance_rows_(PDF_minutes)": {
+                                "type": "Query",
+                                "inputs": {
+                                  "from": "@body('PDF_frozen_(PDF_minutes)')",
+                                  "where": "@equals(item()?['RowType'], 'Attendee')"
+                                },
+                                "runAfter": {
+                                  "PDF_finaliser_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_attendance_(PDF_minutes)": {
+                                "type": "Select",
+                                "inputs": {
+                                  "from": "@body('PDF_attendance_rows_(PDF_minutes)')",
+                                  "select": "@concat('<tr>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Title'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '<td>', replace(replace(replace(replace(replace(string(coalesce(if(empty(string(coalesce(item()?['Attendance'], ''))), 'Not recorded', item()?['Attendance']), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '</tr>')"
+                                },
+                                "runAfter": {
+                                  "PDF_attendance_rows_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_sec1_rows_(PDF_minutes)": {
+                                "type": "Query",
+                                "inputs": {
+                                  "from": "@body('PDF_frozen_(PDF_minutes)')",
+                                  "where": "@and(equals(item()?['RowType'], 'Agenda Item'), equals(string(item()?['Section']), 'Open actions'))"
+                                },
+                                "runAfter": {
+                                  "PDF_attendance_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_sec1_(PDF_minutes)": {
+                                "type": "Select",
+                                "inputs": {
+                                  "from": "@body('PDF_sec1_rows_(PDF_minutes)')",
+                                  "select": "@concat('<tr>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Title'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Outcome'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Notes'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '</tr>')"
+                                },
+                                "runAfter": {
+                                  "PDF_sec1_rows_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_sec2_rows_(PDF_minutes)": {
+                                "type": "Query",
+                                "inputs": {
+                                  "from": "@body('PDF_frozen_(PDF_minutes)')",
+                                  "where": "@and(equals(item()?['RowType'], 'Agenda Item'), equals(string(item()?['Section']), 'Closed since last meeting'))"
+                                },
+                                "runAfter": {
+                                  "PDF_sec1_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_sec2_(PDF_minutes)": {
+                                "type": "Select",
+                                "inputs": {
+                                  "from": "@body('PDF_sec2_rows_(PDF_minutes)')",
+                                  "select": "@concat('<tr>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Title'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Outcome'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Notes'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '</tr>')"
+                                },
+                                "runAfter": {
+                                  "PDF_sec2_rows_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_sec3_rows_(PDF_minutes)": {
+                                "type": "Query",
+                                "inputs": {
+                                  "from": "@body('PDF_frozen_(PDF_minutes)')",
+                                  "where": "@and(equals(item()?['RowType'], 'Agenda Item'), equals(string(item()?['Section']), 'Carried forward'))"
+                                },
+                                "runAfter": {
+                                  "PDF_sec2_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_sec3_(PDF_minutes)": {
+                                "type": "Select",
+                                "inputs": {
+                                  "from": "@body('PDF_sec3_rows_(PDF_minutes)')",
+                                  "select": "@concat('<tr>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Title'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Outcome'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Notes'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '</tr>')"
+                                },
+                                "runAfter": {
+                                  "PDF_sec3_rows_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_sec4_rows_(PDF_minutes)": {
+                                "type": "Query",
+                                "inputs": {
+                                  "from": "@body('PDF_frozen_(PDF_minutes)')",
+                                  "where": "@and(equals(item()?['RowType'], 'Agenda Item'), equals(string(item()?['Section']), 'Noticeboard'))"
+                                },
+                                "runAfter": {
+                                  "PDF_sec3_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_sec4_(PDF_minutes)": {
+                                "type": "Select",
+                                "inputs": {
+                                  "from": "@body('PDF_sec4_rows_(PDF_minutes)')",
+                                  "select": "@concat('<tr>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Title'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Outcome'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Notes'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '</tr>')"
+                                },
+                                "runAfter": {
+                                  "PDF_sec4_rows_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_sec5_rows_(PDF_minutes)": {
+                                "type": "Query",
+                                "inputs": {
+                                  "from": "@body('PDF_frozen_(PDF_minutes)')",
+                                  "where": "@and(equals(item()?['RowType'], 'Agenda Item'), equals(string(item()?['Section']), 'New improvements and degradations'))"
+                                },
+                                "runAfter": {
+                                  "PDF_sec4_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_sec5_(PDF_minutes)": {
+                                "type": "Select",
+                                "inputs": {
+                                  "from": "@body('PDF_sec5_rows_(PDF_minutes)')",
+                                  "select": "@concat('<tr>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Title'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Outcome'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Notes'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '</tr>')"
+                                },
+                                "runAfter": {
+                                  "PDF_sec5_rows_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_sec6_rows_(PDF_minutes)": {
+                                "type": "Query",
+                                "inputs": {
+                                  "from": "@body('PDF_frozen_(PDF_minutes)')",
+                                  "where": "@and(equals(item()?['RowType'], 'Agenda Item'), equals(string(item()?['Section']), 'Unresolved degradations'))"
+                                },
+                                "runAfter": {
+                                  "PDF_sec5_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_sec6_(PDF_minutes)": {
+                                "type": "Select",
+                                "inputs": {
+                                  "from": "@body('PDF_sec6_rows_(PDF_minutes)')",
+                                  "select": "@concat('<tr>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Title'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Outcome'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Notes'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '</tr>')"
+                                },
+                                "runAfter": {
+                                  "PDF_sec6_rows_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_sec7_rows_(PDF_minutes)": {
+                                "type": "Query",
+                                "inputs": {
+                                  "from": "@body('PDF_frozen_(PDF_minutes)')",
+                                  "where": "@and(equals(item()?['RowType'], 'Agenda Item'), equals(string(item()?['Section']), 'Important dates'))"
+                                },
+                                "runAfter": {
+                                  "PDF_sec6_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_sec7_(PDF_minutes)": {
+                                "type": "Select",
+                                "inputs": {
+                                  "from": "@body('PDF_sec7_rows_(PDF_minutes)')",
+                                  "select": "@concat('<tr>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Title'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Outcome'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Notes'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '</tr>')"
+                                },
+                                "runAfter": {
+                                  "PDF_sec7_rows_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_sec8_rows_(PDF_minutes)": {
+                                "type": "Query",
+                                "inputs": {
+                                  "from": "@body('PDF_frozen_(PDF_minutes)')",
+                                  "where": "@and(equals(item()?['RowType'], 'Agenda Item'), equals(string(item()?['Section']), 'New business'))"
+                                },
+                                "runAfter": {
+                                  "PDF_sec7_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_sec8_(PDF_minutes)": {
+                                "type": "Select",
+                                "inputs": {
+                                  "from": "@body('PDF_sec8_rows_(PDF_minutes)')",
+                                  "select": "@concat('<tr>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Title'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Outcome'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Notes'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '</tr>')"
+                                },
+                                "runAfter": {
+                                  "PDF_sec8_rows_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_sec9_rows_(PDF_minutes)": {
+                                "type": "Query",
+                                "inputs": {
+                                  "from": "@body('PDF_frozen_(PDF_minutes)')",
+                                  "where": "@and(equals(item()?['RowType'], 'Agenda Item'), equals(string(item()?['Section']), 'Decisions and additional actions'))"
+                                },
+                                "runAfter": {
+                                  "PDF_sec8_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_sec9_(PDF_minutes)": {
+                                "type": "Select",
+                                "inputs": {
+                                  "from": "@body('PDF_sec9_rows_(PDF_minutes)')",
+                                  "select": "@concat('<tr>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Title'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Outcome'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Notes'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '</tr>')"
+                                },
+                                "runAfter": {
+                                  "PDF_sec9_rows_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_decision_rows_(PDF_minutes)": {
+                                "type": "Query",
+                                "inputs": {
+                                  "from": "@body('PDF_frozen_(PDF_minutes)')",
+                                  "where": "@equals(item()?['RowType'], 'Decision')"
+                                },
+                                "runAfter": {
+                                  "PDF_sec9_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_decision_(PDF_minutes)": {
+                                "type": "Select",
+                                "inputs": {
+                                  "from": "@body('PDF_decision_rows_(PDF_minutes)')",
+                                  "select": "@concat('<tr>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Title'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Notes'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '</tr>')"
+                                },
+                                "runAfter": {
+                                  "PDF_decision_rows_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_amend_rows_(PDF_minutes)": {
+                                "type": "Query",
+                                "inputs": {
+                                  "from": "@body('PDF_frozen_(PDF_minutes)')",
+                                  "where": "@equals(item()?['RowType'], 'Amendment')"
+                                },
+                                "runAfter": {
+                                  "PDF_decision_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_amend_(PDF_minutes)": {
+                                "type": "Select",
+                                "inputs": {
+                                  "from": "@body('PDF_amend_rows_(PDF_minutes)')",
+                                  "select": "@concat('<tr>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Title'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Notes'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['AmendmentReason'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '</tr>')"
+                                },
+                                "runAfter": {
+                                  "PDF_amend_rows_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_email_text_(PDF_minutes)": {
+                                "type": "Compose",
+                                "inputs": "@concat('<!doctype html><html><head><meta charset=\"utf-8\"><title>Minutes</title><style>body{font-family:Segoe UI,Arial,sans-serif;font-size:11pt;color:#16222c}h1{color:#13516b;font-size:18pt;margin:0 0 4pt}h2{color:#13516b;font-size:13pt;border-bottom:2px solid #ef7d3a;padding-bottom:2pt;margin-top:16pt}table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid #d9dfe5;padding:4pt;text-align:left;vertical-align:top}th{background:#eef2f5}.muted{color:#5b6774}</style></head><body>', '<h1>', replace(replace(replace(replace(replace(string(coalesce(concat(string(first(body('PDF_area_(PDF_minutes)'))?['Title']), ' monthly meeting'), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</h1>', '<p>', replace(replace(replace(replace(replace(string(coalesce(convertFromUtc(string(coalesce(body('PDF_get_(PDF_minutes)')?['MeetingDate'], '2000-01-01T00:00:00Z')), 'GMT Standard Time', 'dddd d MMMM yyyy, HH:mm'), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), if(empty(string(coalesce(body('PDF_get_(PDF_minutes)')?['Location'], ''))), '', concat(' · ', replace(replace(replace(replace(replace(string(coalesce(body('PDF_get_(PDF_minutes)')?['Location'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'))), '</p>', '<p>Chair: ', replace(replace(replace(replace(replace(string(coalesce(string(coalesce(first(body('PDF_chair_(PDF_minutes)'))?['Title'], '')), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '. Finalised by ', replace(replace(replace(replace(replace(string(coalesce(string(coalesce(first(body('PDF_finaliser_(PDF_minutes)'))?['Title'], '')), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' on ', replace(replace(replace(replace(replace(string(coalesce(convertFromUtc(string(coalesce(body('PDF_get_(PDF_minutes)')?['FinalisedAt'], '2000-01-01T00:00:00Z')), 'GMT Standard Time', 'dddd d MMMM yyyy, HH:mm'), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '.</p>', '<p class=\"muted\">', replace(replace(replace(replace(replace(string(coalesce(concat('MTG-', first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['Id'], '')), '.')), ' · version ', string(add(int(if(empty(first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['AmendmentCount'], '')), '.'))), '0', first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['AmendmentCount'], '')), '.')))), 1))), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</p>', '<h2>Attendance</h2>', if(empty(body('PDF_attendance_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Person</th><th>Attendance</th></tr>', join(body('PDF_attendance_(PDF_minutes)'), ''), '</table>')), '<h2>1. Open actions</h2>', if(empty(body('PDF_sec1_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Item</th><th>Outcome</th><th>Notes</th></tr>', join(body('PDF_sec1_(PDF_minutes)'), ''), '</table>')), '<h2>2. Closed since last meeting</h2>', if(empty(body('PDF_sec2_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Item</th><th>Outcome</th><th>Notes</th></tr>', join(body('PDF_sec2_(PDF_minutes)'), ''), '</table>')), '<h2>3. Carried forward</h2>', if(empty(body('PDF_sec3_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Item</th><th>Outcome</th><th>Notes</th></tr>', join(body('PDF_sec3_(PDF_minutes)'), ''), '</table>')), '<h2>4. Noticeboard</h2>', if(empty(body('PDF_sec4_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Item</th><th>Outcome</th><th>Notes</th></tr>', join(body('PDF_sec4_(PDF_minutes)'), ''), '</table>')), '<h2>5. New improvements and degradations</h2>', if(empty(body('PDF_sec5_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Item</th><th>Outcome</th><th>Notes</th></tr>', join(body('PDF_sec5_(PDF_minutes)'), ''), '</table>')), '<h2>6. Unresolved degradations</h2>', if(empty(body('PDF_sec6_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Item</th><th>Outcome</th><th>Notes</th></tr>', join(body('PDF_sec6_(PDF_minutes)'), ''), '</table>')), '<h2>7. Important dates</h2>', if(empty(body('PDF_sec7_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Item</th><th>Outcome</th><th>Notes</th></tr>', join(body('PDF_sec7_(PDF_minutes)'), ''), '</table>')), '<h2>8. New business</h2>', if(empty(body('PDF_sec8_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Item</th><th>Outcome</th><th>Notes</th></tr>', join(body('PDF_sec8_(PDF_minutes)'), ''), '</table>')), '<h2>9. Decisions and additional actions</h2>', if(empty(body('PDF_sec9_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Item</th><th>Outcome</th><th>Notes</th></tr>', join(body('PDF_sec9_(PDF_minutes)'), ''), '</table>')), '<h2>Decisions</h2>', if(empty(body('PDF_decision_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Decision</th><th>Details</th></tr>', join(body('PDF_decision_(PDF_minutes)'), ''), '</table>')), if(empty(body('PDF_amend_(PDF_minutes)')), '', concat('<h2>Amendments</h2><table><tr><th>Amendment</th><th>What changed</th><th>Why</th></tr>', join(body('PDF_amend_(PDF_minutes)'), ''), '</table>')), '<p class=\"muted\">Produced by the ESG Competency Hub from the finalised record. The original minutes are not changed by amendments.</p></body></html>')",
+                                "runAfter": {
+                                  "PDF_amend_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_email_text_file_(PDF_minutes)": {
+                                "type": "OpenApiConnection",
+                                "inputs": {
+                                  "host": {
+                                    "connectionName": "shared_onedriveforbusiness",
+                                    "operationId": "CreateFile",
+                                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness"
+                                  },
+                                  "parameters": {
+                                    "folderPath": "/",
+                                    "name": "@{concat('ESG Competency Hub minutes ', replace(concat('MTG-', first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['Id'], '')), '.')), '-v', string(add(int(if(empty(first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['AmendmentCount'], '')), '.'))), '0', first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['AmendmentCount'], '')), '.')))), 1)), '.pdf'), '.pdf', ''), ' ', guid(), '.html')}",
+                                    "body": "@outputs('PDF_email_text_(PDF_minutes)')"
+                                  },
+                                  "authentication": "@parameters('$authentication')",
+                                  "retryPolicy": {
+                                    "type": "none"
+                                  }
+                                },
+                                "runtimeConfiguration": {
+                                  "secureData": {
+                                    "properties": [
+                                      "inputs",
+                                      "outputs"
+                                    ]
+                                  }
+                                },
+                                "runAfter": {
+                                  "PDF_email_text_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "Check_pDF_email_text_was_created_(PDF_minutes)": {
+                                "type": "SetVariable",
+                                "inputs": {
+                                  "name": "varPdfHtml",
+                                  "value": "@{body('PDF_email_text_file_(PDF_minutes)')?['Id']}"
+                                },
+                                "runAfter": {
+                                  "PDF_email_text_file_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_convert_(PDF_minutes)": {
+                                "type": "OpenApiConnection",
+                                "inputs": {
+                                  "host": {
+                                    "connectionName": "shared_onedriveforbusiness",
+                                    "operationId": "ConvertFile",
+                                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness"
+                                  },
+                                  "parameters": {
+                                    "id": "@variables('varPdfHtml')",
+                                    "type": "PDF"
+                                  },
+                                  "authentication": "@parameters('$authentication')",
+                                  "retryPolicy": {
+                                    "type": "none"
+                                  }
+                                },
+                                "runtimeConfiguration": {
+                                  "secureData": {
+                                    "properties": [
+                                      "inputs",
+                                      "outputs"
+                                    ]
+                                  }
+                                },
+                                "runAfter": {
+                                  "Check_pDF_email_text_was_created_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_save_(PDF_minutes)": {
+                                "type": "OpenApiConnection",
+                                "inputs": {
+                                  "host": {
+                                    "connectionName": "shared_sharepointonline",
+                                    "operationId": "CreateFile",
+                                    "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                  },
+                                  "parameters": {
+                                    "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                                    "folderPath": "@concat('/', 'MeetingMinutes', '/', string(first(body('PDF_area_(PDF_minutes)'))?['CompetencyKey']))",
+                                    "name": "@concat('MTG-', first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['Id'], '')), '.')), '-v', string(add(int(if(empty(first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['AmendmentCount'], '')), '.'))), '0', first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['AmendmentCount'], '')), '.')))), 1)), '.pdf')",
+                                    "body": "@body('PDF_convert_(PDF_minutes)')"
+                                  },
+                                  "authentication": "@parameters('$authentication')"
+                                },
+                                "runAfter": {
+                                  "PDF_convert_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_saved_(PDF_minutes)": {
+                                "type": "SetVariable",
+                                "inputs": {
+                                  "name": "varPdfResult",
+                                  "value": "ok"
+                                },
+                                "runAfter": {
+                                  "PDF_save_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              }
+                            }
+                          },
+                          "runAfter": {
+                            "PDF_exists_(PDF_minutes)": [
+                              "Succeeded",
+                              "Failed",
+                              "TimedOut"
+                            ]
+                          }
+                        },
+                        "PDF_cleanup_(PDF_minutes)": {
+                          "type": "If",
+                          "expression": "@not(empty(variables('varPdfHtml')))",
+                          "actions": {
+                            "PDF_delete_email_text_(PDF_minutes)": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "connectionName": "shared_onedriveforbusiness",
+                                  "operationId": "DeleteFile",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness"
+                                },
+                                "parameters": {
+                                  "id": "@variables('varPdfHtml')"
+                                },
+                                "authentication": "@parameters('$authentication')",
+                                "retryPolicy": {
+                                  "type": "none"
+                                }
+                              },
+                              "runtimeConfiguration": {
+                                "secureData": {
+                                  "properties": [
+                                    "inputs",
+                                    "outputs"
+                                  ]
+                                }
+                              },
+                              "runAfter": {}
+                            },
+                            "PDF_deleted_(PDF_minutes)": {
+                              "type": "Compose",
+                              "inputs": "done",
+                              "runAfter": {
+                                "PDF_delete_email_text_(PDF_minutes)": [
+                                  "Succeeded",
+                                  "Failed",
+                                  "TimedOut"
+                                ]
+                              }
+                            }
+                          },
+                          "else": {
+                            "actions": {}
+                          },
+                          "runAfter": {
+                            "PDF_make_(PDF_minutes)": [
+                              "Succeeded",
+                              "Failed",
+                              "TimedOut"
+                            ]
+                          }
+                        },
+                        "PDF_now_(PDF_minutes)": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                              "parameters/method": "GET",
+                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['mtg']}')/items(@{items('Each_PDF')?['Id']})?$select=Id,AmendmentCount",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=minimalmetadata"
+                              }
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runAfter": {
+                            "PDF_cleanup_(PDF_minutes)": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "PDF_outcome_(PDF_minutes)": {
+                          "type": "Compose",
+                          "inputs": {
+                            "PdfState": "@{if(equals(variables('varPdfResult'), 'ok'), 'Ready', 'Failed')}",
+                            "PdfVersion": "@if(equals(variables('varPdfResult'), 'ok'), add(int(if(empty(first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['AmendmentCount'], '')), '.'))), '0', first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['AmendmentCount'], '')), '.')))), 1), int(if(empty(first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['PdfVersion'], '')), '.'))), '0', first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['PdfVersion'], '')), '.')))))"
+                          },
+                          "runAfter": {
+                            "PDF_now_(PDF_minutes)": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "PDF_same_(PDF_minutes)": {
+                          "type": "If",
+                          "expression": "@equals(first(split(string(coalesce(body('PDF_now_(PDF_minutes)')?['AmendmentCount'], '')), '.')), first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['AmendmentCount'], '')), '.')))",
+                          "actions": {
+                            "Save_PDF_(PDF_minutes)": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "connectionName": "shared_sharepointonline",
+                                  "operationId": "HttpRequest",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                },
+                                "parameters": {
+                                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                                  "parameters/method": "POST",
+                                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['mtg']}')/items(@{items('Each_PDF')?['Id']})",
+                                  "parameters/headers": {
+                                    "Accept": "application/json;odata=nometadata",
+                                    "Content-Type": "application/json;odata=nometadata",
+                                    "X-HTTP-Method": "MERGE",
+                                    "IF-MATCH": "@{body('PDF_now_(PDF_minutes)')?['odata.etag']}"
+                                  },
+                                  "parameters/body": "@{string(outputs('PDF_outcome_(PDF_minutes)'))}"
+                                },
+                                "authentication": "@parameters('$authentication')"
+                              },
+                              "runAfter": {}
+                            },
+                            "PDF_recorded_(PDF_minutes)": {
+                              "type": "Compose",
+                              "inputs": "done",
+                              "runAfter": {
+                                "Save_PDF_(PDF_minutes)": [
+                                  "Succeeded",
+                                  "Failed",
+                                  "TimedOut"
+                                ]
+                              }
+                            }
+                          },
+                          "else": {
+                            "actions": {}
+                          },
+                          "runAfter": {
+                            "PDF_outcome_(PDF_minutes)": [
+                              "Succeeded"
+                            ]
+                          }
+                        }
+                      },
+                      "else": {
+                        "actions": {
+                          "PDF_none_(PDF_minutes)": {
+                            "type": "Compose",
+                            "inputs": {
+                              "PdfState": "None"
+                            },
+                            "runAfter": {}
+                          },
+                          "Save_PDF_none_(PDF_minutes)": {
+                            "type": "OpenApiConnection",
+                            "inputs": {
+                              "host": {
+                                "connectionName": "shared_sharepointonline",
+                                "operationId": "HttpRequest",
+                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                              },
+                              "parameters": {
+                                "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                                "parameters/method": "POST",
+                                "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['mtg']}')/items(@{items('Each_PDF')?['Id']})",
+                                "parameters/headers": {
+                                  "Accept": "application/json;odata=nometadata",
+                                  "Content-Type": "application/json;odata=nometadata",
+                                  "X-HTTP-Method": "MERGE",
+                                  "IF-MATCH": "@{body('PDF_get_(PDF_minutes)')?['odata.etag']}"
+                                },
+                                "parameters/body": "@{string(outputs('PDF_none_(PDF_minutes)'))}"
+                              },
+                              "authentication": "@parameters('$authentication')"
+                            },
+                            "runAfter": {
+                              "PDF_none_(PDF_minutes)": [
+                                "Succeeded"
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      "runAfter": {
+                        "PDF_switch_(PDF_minutes)": [
+                          "Succeeded"
+                        ]
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {}
+                  },
+                  "runAfter": {
+                    "PDF_get_(PDF_minutes)": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "runAfter": {
+                "PDF_retry": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "PDF_given_up": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('PDF_all')",
+                "where": "@and(equals(string(item()?['PdfState']), 'Failed'), greaterOrEquals(int(if(empty(first(split(string(coalesce(item()?['PdfAttempts'], '')), '.'))), '0', first(split(string(coalesce(item()?['PdfAttempts'], '')), '.')))), 3))"
+              },
+              "runAfter": {
+                "Each_PDF": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Each_PDF_failed": {
+              "type": "Foreach",
+              "foreach": "@body('PDF_given_up')",
+              "runtimeConfiguration": {
+                "concurrency": {
+                  "repetitions": 1
+                }
+              },
+              "actions": {
+                "PDF_alert": {
+                  "type": "If",
+                  "expression": "@true",
+                  "actions": {
+                    "PDF_alert_to": {
+                      "type": "Select",
+                      "inputs": {
+                        "from": "@body('Active_administrators')",
+                        "select": {
+                          "send": "@and(true, equals(string(item()?['Status']), 'Active'))",
+                          "type": "ALR",
+                          "key": "@{concat('ALR|', concat('pdf|', string(items('Each_PDF_failed')?['Id'])), '|', outputs('Today_in_the_UK'), '|', first(split(string(coalesce(item()?['SiteUserId'], '')), '.')))}",
+                          "recipientId": "@{first(split(string(coalesce(item()?['SiteUserId'], '')), '.'))}",
+                          "login": "@{item()?['Person']?['Name']}",
+                          "email": "@{coalesce(item()?['Person']?['EMail'], item()?['Email'])}",
+                          "actor": "@{''}",
+                          "actionId": "@{'0'}",
+                          "title": "@{concat('The PDF minutes could not be made: ', string(items('Each_PDF_failed')?['Title']))}",
+                          "area": "@{''}",
+                          "dueIso": "@{outputs('Today_in_the_UK')}",
+                          "originalIso": "@{outputs('Today_in_the_UK')}",
+                          "previousIso": "@{''}",
+                          "extCount": "@int(0)",
+                          "note": "@{concat('The PDF of these finalised minutes failed 3 times. The minutes themselves are finalised and can be read and printed in the Hub. ', 'In Power Automate, look at the run history of ESG Competency Hub | 5 Meetings or 3 Queue monitor, and check the OneDrive connection. ', 'If OneDrive conversion is not allowed, set PDF minutes to No under Administration, Settings.')}"
+                        }
+                      },
+                      "runAfter": {}
+                    },
+                    "PDF_alert_add": {
+                      "type": "SetVariable",
+                      "inputs": {
+                        "name": "varAlerts",
+                        "value": "@union(variables('varAlerts'), body('PDF_alert_to'))"
+                      },
+                      "runAfter": {
+                        "PDF_alert_to": [
+                          "Succeeded"
+                        ]
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {}
+                  },
+                  "runAfter": {}
+                }
+              },
+              "runAfter": {
+                "PDF_given_up": [
+                  "Succeeded"
+                ]
+              }
+            },
             "Read_changes_needing_attention": {
               "type": "OpenApiConnection",
               "inputs": {
@@ -1724,7 +2769,7 @@
                 "authentication": "@parameters('$authentication')"
               },
               "runAfter": {
-                "Each_invite_failed": [
+                "Each_PDF_failed": [
                   "Succeeded"
                 ]
               }
@@ -2530,7 +3575,7 @@
                 "records": "@{if(variables('varRecordsDown'), 'Down', 'Healthy')}",
                 "recordsReason": "@{if(variables('varRecordsDown'), 'Changes to notices and the register are not being picked up by ESG Competency Hub | 4 Records.', '')}",
                 "meetings": "@{if(variables('varMeetingsDown'), 'Down', 'Healthy')}",
-                "meetingsReason": "@{if(variables('varMeetingsDown'), 'Meeting bookings and changes are not being picked up by ESG Competency Hub | 5 Meetings.', '')}",
+                "meetingsReason": "@{if(variables('varMeetingsDown'), 'Meeting bookings, changes or minutes are not being picked up by ESG Competency Hub | 5 Meetings or 7 Minutes.', '')}",
                 "checkedAt": "@{utcNow()}",
                 "attention": "@length(body('Read_changes_needing_attention')?['value'])"
               },
@@ -2591,7 +3636,7 @@
             }
           },
           "runAfter": {
-            "Initialise_inv_look": [
+            "Initialise_pdf_email_text": [
               "Succeeded"
             ]
           }

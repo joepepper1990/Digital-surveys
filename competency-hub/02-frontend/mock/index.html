@@ -279,11 +279,29 @@
 .mock-scope .ch .fb-bubble .fb-label {display: none;}
 .mock-scope .ch .fb-bubble {padding: calc(4 * var(--u));}
 }
+.mock-scope .ch .live-block {border-top: 1px solid var(--line); margin-top: calc(14 * var(--u)); padding-top: calc(6 * var(--u));}
+.mock-scope .ch .live-item {background: var(--bg); border-radius: calc(8 * var(--u)); padding: calc(12 * var(--u)) calc(14 * var(--u));}
+.mock-scope .ch .live-item h4 {margin: 0 0 calc(4 * var(--u)); font-size: calc(17 * var(--u));}
+.mock-scope .ch .live-item select, .mock-scope .ch .live-item textarea {width: 100%;}
+.mock-scope .ch .attendance {display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(320 * var(--u)), 1fr)); column-gap: calc(24 * var(--u));}
+.mock-scope .ch .attendance li {display: flex; justify-content: space-between; align-items: center; gap: calc(12 * var(--u)); padding: calc(4 * var(--u)) 0; border-bottom: 1px solid var(--line);}
+.mock-scope .ch details.live-block > summary {cursor: pointer; padding: calc(6 * var(--u)) 0;}
+.mock-scope .ch .agenda-index {margin: calc(4 * var(--u)) 0 0; padding-left: calc(22 * var(--u));}
+.mock-scope .ch .agenda-index li {padding: calc(2 * var(--u)) 0;}
+.mock-scope .ch .agenda-index li.current {font-weight: 700;}
+.mock-scope .ch .agenda-index .when {margin-left: calc(8 * var(--u));}
+.mock-scope .ch .minutes .actions-row a.btn {text-decoration: none;}
+@media print {
+.mock-scope .ch * {visibility: hidden;}
+.mock-scope .ch .print-area, .mock-scope .ch .print-area * {visibility: visible;}
+.mock-scope .ch .print-area {position: absolute; left: 0; top: 0; width: 100%;}
+.mock-scope .ch .no-print {display: none;}
+}
 
 </style></head><body>
 <div class="mock-bar"><b>Local test with simulated SharePoint – synthetic data only</b><label>Sign in as <select id="mock-user"></select></label>
 <label>Simulate <select id="mock-mode"><option value="">Normal</option><option value="slow">Slow responses</option><option value="people403">People list denied (403)</option><option value="actions404">Actions list missing (404)</option><option value="actionsPartial">Actions over the read limit</option><option value="unknown">Unknown user</option><option value="duplicate">Duplicate person</option><option value="left">Person marked Left</option><option value="flowSlow">Request flow very slow</option><option value="flowFail">Request flow fails</option><option value="limited">Processing down (limited mode)</option><option value="attention">Changes needing attention</option></select></label></div>
-<div class="mock-scope"><div class="ch" data-ch-root data-ch-version="0.8.0"><p>Loading the ESG Competency Hub…</p></div></div>
+<div class="mock-scope"><div class="ch" data-ch-root data-ch-version="0.9.0"><p>Loading the ESG Competency Hub…</p></div></div>
 <script src="seed.js"></script>
 <script src="rules.js"></script>
 <script src="flow-sim.js"></script>

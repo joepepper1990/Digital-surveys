@@ -8,7 +8,7 @@
     <Descriptions>
       <Description description="ESG Competency Hub: the flows that record the changes sent from the Competency Hub page, send its emails and reminders, and watch that everything is processed." languagecode="1033" />
     </Descriptions>
-    <Version>1.6.0.0</Version>
+    <Version>1.7.0.0</Version>
     <Managed>0</Managed>
     <Publisher>
       <UniqueName>ESGCompetencyHub</UniqueName>
@@ -39,7 +39,9 @@
       <RootComponent type="29" id="{7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f03}" behavior="0" />
       <RootComponent type="29" id="{7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f04}" behavior="0" />
       <RootComponent type="29" id="{7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f05}" behavior="0" />
+      <RootComponent type="29" id="{7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f09}" behavior="0" />
       <RootComponent type="29" id="{7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f07}" behavior="0" />
+      <RootComponent type="29" id="{7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f08}" behavior="0" />
       <RootComponent type="29" id="{7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f06}" behavior="0" />
       <RootComponent type="380" schemaName="esghub_CompetencyHubSiteUrl" behavior="0" />
     </RootComponents>

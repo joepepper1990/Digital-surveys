@@ -14,7 +14,7 @@ CH.requests = (function () {
   // Notices, comments and the register (4 Records): confirmed by their History event, which is written before Completed.
   var RECORD_TYPES = ['EditNotice', 'ArchiveNotice', 'PinNotice', 'HideComment', 'RaiseRegisterEntry', 'UpdateRegisterEntry', 'LinkActionToEntry', 'UnlinkActionFromEntry'];
   // Meetings (5 Meetings): also confirmed by their History event.
-  var MEETING_TYPES = ['ScheduleMeeting', 'UpdateMeeting', 'CancelMeeting', 'StartMeeting'];
+  var MEETING_TYPES = ['ScheduleMeeting', 'UpdateMeeting', 'CancelMeeting', 'StartMeeting', 'FinaliseMeeting', 'AmendMeeting'];
 
   // Thrown instead of sending while automatic processing is down (limited mode).
   function LimitedError(message) { this.name = 'LimitedError'; this.message = message; this.friendly = message; }
@@ -49,7 +49,10 @@ CH.requests = (function () {
       return {
         Title: String(spec.label).slice(0, 255), RequestKey: spec.key, RequestType: spec.type,
         TargetType: spec.targetId ? spec.targetType || 'Action' : '', TargetId: spec.targetId || '', ExpectedRevision: spec.expectedRevision || '',
-        Payload: JSON.stringify(spec.payload), Status: 'Submitted'
+        Payload: JSON.stringify(spec.payload), Status: 'Submitted',
+        // a change to an action made during a meeting carries it: the meeting is finalised only once all are recorded
+        MeetingId: spec.meetingId || (app.liveMeetingId && MEETING_TYPES.indexOf(spec.type) < 0 && RECORD_TYPES.indexOf(spec.type) < 0 && ADMIN_TYPES.indexOf(spec.type) < 0
+          ? app.liveMeetingId : '')
       };
     }
 
@@ -82,7 +85,7 @@ CH.requests = (function () {
         }
       }
       writeUnsent(readUnsent().filter(function (u) { return u.key !== spec.key; }));
-      var entry = { key: spec.key, type: spec.type, targetId: spec.targetId || null, targetType: spec.targetId ? spec.targetType || 'Action' : '', label: spec.label, submittedAt: new Date(),
+      var entry = { key: spec.key, type: spec.type, targetId: spec.targetId || null, meetingId: values(spec).MeetingId || null, targetType: spec.targetId ? spec.targetType || 'Action' : '', label: spec.label, submittedAt: new Date(),
         state: 'submitted', message: '', resultId: null, polls: 0 };
       entries.push(entry);
       schedule(entry);
@@ -99,13 +102,13 @@ CH.requests = (function () {
       var since = new Date(Date.now() - 24 * 3600000).toISOString();
       for (var i = 0; i < statuses.length; i++) {
         var recent = statuses[i] === 'Cancelled' || statuses[i] === 'Reverted' ? " and Modified ge datetime'" + since + "'" : '';
-        var res = await app.sp.items(CH.config.lists.requests.title, '$select=Id,Title,RequestKey,RequestType,TargetType,TargetId,Created' +
+        var res = await app.sp.items(CH.config.lists.requests.title, '$select=Id,Title,RequestKey,RequestType,TargetType,TargetId,MeetingId,Created' +
           "&$filter=Status eq '" + statuses[i] + "' and AuthorId eq " + Number(app.person.SiteUserId) + recent, 100);
         found = found.concat(res.rows);
       }
       found.sort(function (a, b) { return a.Id - b.Id; }).forEach(function (row) {
         if (!row.RequestKey || entries.some(function (e) { return e.key === row.RequestKey; })) return;
-        var entry = { key: row.RequestKey, type: row.RequestType, targetId: row.TargetId || null, targetType: row.TargetType || (row.TargetId ? 'Action' : ''), label: row.Title || 'Your change',
+        var entry = { key: row.RequestKey, type: row.RequestType, targetId: row.TargetId || null, meetingId: row.MeetingId || null, targetType: row.TargetType || (row.TargetId ? 'Action' : ''), label: row.Title || 'Your change',
           submittedAt: row.Created ? new Date(row.Created) : new Date(), state: 'submitted', message: '', resultId: null, polls: 0 };
         entries.push(entry);
         schedule(entry);

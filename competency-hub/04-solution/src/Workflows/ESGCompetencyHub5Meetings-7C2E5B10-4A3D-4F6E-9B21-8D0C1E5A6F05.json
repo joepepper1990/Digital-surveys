@@ -286,6 +286,23 @@
             ]
           }
         },
+        "Initialise_src_mtg": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varSrcMtg",
+                "type": "object",
+                "value": {}
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_entry": [
+              "Succeeded"
+            ]
+          }
+        },
         "Initialise_user_id": {
           "type": "InitializeVariable",
           "inputs": {
@@ -298,7 +315,7 @@
             ]
           },
           "runAfter": {
-            "Initialise_entry": [
+            "Initialise_src_mtg": [
               "Succeeded"
             ]
           }
@@ -558,6 +575,91 @@
             ]
           }
         },
+        "Initialise_flag_at": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varFlagAt",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_flag_by": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_finalise_check": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varFinCheck",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_flag_at": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_finalise_missing": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varFinMissing",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_finalise_check": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_pdf_result": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varPdfResult",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_finalise_missing": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_pdf_email_text": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varPdfHtml",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_pdf_result": [
+              "Succeeded"
+            ]
+          }
+        },
         "Initialise_inv_result": {
           "type": "InitializeVariable",
           "inputs": {
@@ -570,7 +672,7 @@
             ]
           },
           "runAfter": {
-            "Initialise_flag_by": [
+            "Initialise_pdf_email_text": [
               "Succeeded"
             ]
           }
@@ -653,7 +755,8 @@
                 "regRoot": "@{outputs('Site_path')}/Lists/ImprovementRegister",
                 "noticesRoot": "@{outputs('Site_path')}/Lists/Noticeboard",
                 "mtgRoot": "@{outputs('Site_path')}/Lists/Meetings",
-                "itemsRoot": "@{outputs('Site_path')}/Lists/MeetingItems"
+                "itemsRoot": "@{outputs('Site_path')}/Lists/MeetingItems",
+                "minutesRoot": "@{outputs('Site_path')}/MeetingMinutes"
               },
               "runAfter": {
                 "Site_address": [
@@ -1685,7 +1788,7 @@
                           "parameters": {
                             "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                             "parameters/method": "GET",
-                            "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['mtg']}')/items(@{if(empty(first(split(string(coalesce(variables('varTx')?['RecordId'], '')), '.'))), '0', first(split(string(coalesce(variables('varTx')?['RecordId'], '')), '.')))})?$select=Id,Title,Status,MeetingDate,EndTime,Location,OnlineLink,ChairId,Attendees,Revision,LastRequestKey,FileDirRef,CompetencyId,OutlookEventId,InviteState,PreviousMeetingId,CutoffTime,CutoffUpdatesId,IntervalStart",
+                            "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['mtg']}')/items(@{if(empty(first(split(string(coalesce(variables('varTx')?['RecordId'], '')), '.'))), '0', first(split(string(coalesce(variables('varTx')?['RecordId'], '')), '.')))})?$select=Id,Title,Status,MeetingDate,EndTime,Location,OnlineLink,ChairId,Attendees,Revision,LastRequestKey,FileDirRef,CompetencyId,OutlookEventId,InviteState,PreviousMeetingId,CutoffTime,CutoffUpdatesId,IntervalStart,AmendmentCount,PdfState,PdfAttempts",
                             "parameters/headers": {
                               "Accept": "application/json;odata=minimalmetadata"
                             }
@@ -2064,11 +2167,20 @@
                         ]
                       }
                     },
-                    "Reason_to_refuse_if_any_(meeting)": {
+                    "Verdict_amend_(meeting)": {
                       "type": "Compose",
-                      "inputs": "@if(not(empty(outputs('Verdict_common_(meeting)'))), outputs('Verdict_common_(meeting)'), if(equals(string(variables('varTx')?['RequestType']), 'ScheduleMeeting'), outputs('Verdict_details_(meeting)'), if(equals(string(coalesce(variables('varMtg')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey'])), '', if(and(greater(int(if(empty(first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.'))), '0', first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 0), not(equals(first(split(string(coalesce(variables('varMtg')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.'))))), 'This meeting was changed by someone else. Review the latest details and try again.', if(equals(string(variables('varTx')?['RequestType']), 'UpdateMeeting'), if(not(equals(string(coalesce(variables('varMtg')?['Status'], '')), 'Scheduled')), 'Only a meeting that has not started can be changed.', outputs('Verdict_details_(meeting)')), if(equals(string(variables('varTx')?['RequestType']), 'CancelMeeting'), if(not(contains(createArray('Scheduled', 'In Progress'), string(coalesce(variables('varMtg')?['Status'], '')))), 'This meeting is already finished or cancelled.', if(less(length(trim(string(coalesce(outputs('Payload')?['reason'], '')))), 10), 'Give a reason of at least 10 characters.', if(greater(length(trim(string(coalesce(outputs('Payload')?['reason'], '')))), 1000), 'Keep the reason to 1,000 characters or fewer.', ''))), if(not(equals(string(coalesce(variables('varMtg')?['Status'], '')), 'Scheduled')), 'This meeting has already started, or is finished or cancelled.', '')))))))",
+                      "inputs": "@if(not(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role']))), 'Only Team Leaders and the Group Head can amend finalised minutes.', if(not(equals(string(coalesce(variables('varMtg')?['Status'], '')), 'Finalised')), 'Only finalised minutes can be amended.', if(less(length(trim(string(coalesce(outputs('Payload')?['what'], '')))), 10), 'Say what the amendment is, in at least 10 characters.', if(greater(length(trim(string(coalesce(outputs('Payload')?['what'], '')))), 2000), 'Keep the amendment to 2,000 characters or fewer.', if(less(length(trim(string(coalesce(outputs('Payload')?['reason'], '')))), 10), 'Give a reason of at least 10 characters.', if(greater(length(trim(string(coalesce(outputs('Payload')?['reason'], '')))), 1000), 'Keep the reason to 1,000 characters or fewer.', ''))))))",
                       "runAfter": {
                         "Verdict_details_(meeting)": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Reason_to_refuse_if_any_(meeting)": {
+                      "type": "Compose",
+                      "inputs": "@if(not(empty(outputs('Verdict_common_(meeting)'))), outputs('Verdict_common_(meeting)'), if(equals(string(variables('varTx')?['RequestType']), 'ScheduleMeeting'), outputs('Verdict_details_(meeting)'), if(equals(string(coalesce(variables('varMtg')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey'])), '', if(and(greater(int(if(empty(first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.'))), '0', first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 0), not(equals(first(split(string(coalesce(variables('varMtg')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.'))))), 'This meeting was changed by someone else. Review the latest details and try again.', if(equals(string(variables('varTx')?['RequestType']), 'UpdateMeeting'), if(not(equals(string(coalesce(variables('varMtg')?['Status'], '')), 'Scheduled')), 'Only a meeting that has not started can be changed.', outputs('Verdict_details_(meeting)')), if(equals(string(variables('varTx')?['RequestType']), 'FinaliseMeeting'), if(not(equals(string(coalesce(variables('varMtg')?['Status'], '')), 'In Progress')), 'Only a meeting in progress can be finalised.', variables('varFinCheck')), if(equals(string(variables('varTx')?['RequestType']), 'AmendMeeting'), outputs('Verdict_amend_(meeting)'), if(equals(string(variables('varTx')?['RequestType']), 'CancelMeeting'), if(not(contains(createArray('Scheduled', 'In Progress'), string(coalesce(variables('varMtg')?['Status'], '')))), 'This meeting is already finished or cancelled.', if(less(length(trim(string(coalesce(outputs('Payload')?['reason'], '')))), 10), 'Give a reason of at least 10 characters.', if(greater(length(trim(string(coalesce(outputs('Payload')?['reason'], '')))), 1000), 'Keep the reason to 1,000 characters or fewer.', ''))), if(not(equals(string(coalesce(variables('varMtg')?['Status'], '')), 'Scheduled')), 'This meeting has already started, or is finished or cancelled.', '')))))))))",
+                      "runAfter": {
+                        "Verdict_amend_(meeting)": [
                           "Succeeded"
                         ]
                       }
@@ -4611,6 +4723,30 @@
                                       "Succeeded"
                                     ]
                                   }
+                                },
+                                "Flag_at_rest_(meeting)": {
+                                  "type": "Query",
+                                  "inputs": {
+                                    "from": "@variables('varFlagAt')",
+                                    "where": "@not(startsWith(item(), concat(outputs('Flag_key_(meeting)'), '=')))"
+                                  },
+                                  "runAfter": {
+                                    "Flag_by_set_(meeting)": [
+                                      "Succeeded"
+                                    ]
+                                  }
+                                },
+                                "Flag_at_set_(meeting)": {
+                                  "type": "SetVariable",
+                                  "inputs": {
+                                    "name": "varFlagAt",
+                                    "value": "@union(body('Flag_at_rest_(meeting)'), createArray(concat(outputs('Flag_key_(meeting)'), '=', first(split(string(coalesce(items('Each_flag_(meeting)')?['Id'], '')), '.')))))"
+                                  },
+                                  "runAfter": {
+                                    "Flag_at_rest_(meeting)": [
+                                      "Succeeded"
+                                    ]
+                                  }
                                 }
                               },
                               "else": {
@@ -4662,6 +4798,30 @@
                                             "Succeeded"
                                           ]
                                         }
+                                      },
+                                      "Flag_off_at_(meeting)": {
+                                        "type": "Query",
+                                        "inputs": {
+                                          "from": "@variables('varFlagAt')",
+                                          "where": "@not(startsWith(item(), concat(outputs('Flag_key_(meeting)'), '=')))"
+                                        },
+                                        "runAfter": {
+                                          "Flag_off_by_set_(meeting)": [
+                                            "Succeeded"
+                                          ]
+                                        }
+                                      },
+                                      "Flag_off_at_set_(meeting)": {
+                                        "type": "SetVariable",
+                                        "inputs": {
+                                          "name": "varFlagAt",
+                                          "value": "@body('Flag_off_at_(meeting)')"
+                                        },
+                                        "runAfter": {
+                                          "Flag_off_at_(meeting)": [
+                                            "Succeeded"
+                                          ]
+                                        }
                                       }
                                     },
                                     "else": {
@@ -4684,6 +4844,186 @@
                             ]
                           }
                         },
+                        "Flag_ids_(meeting)": {
+                          "type": "Select",
+                          "inputs": {
+                            "from": "@variables('varFlagAt')",
+                            "select": "@int(last(split(item(), '=')))"
+                          },
+                          "runAfter": {
+                            "Each_flag_(meeting)": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Get_finalised_(meeting)": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                              "parameters/method": "GET",
+                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['mtg']}')/items?$select=Id,CutoffUpdatesId&$filter=CompetencyId eq @{if(empty(first(split(string(coalesce(first(body('Area_(meeting)'))?['Id'], '')), '.'))), '0', first(split(string(coalesce(first(body('Area_(meeting)'))?['Id'], '')), '.')))} and Status eq 'Finalised'&$top=5000",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata"
+                              }
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runAfter": {
+                            "Flag_ids_(meeting)": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Clearing_(meeting)": {
+                          "type": "Query",
+                          "inputs": {
+                            "from": "@body('Get_finalised_(meeting)')?['value']",
+                            "where": "@and(not(empty(body('Flag_ids_(meeting)'))), greaterOrEquals(int(if(empty(first(split(string(coalesce(item()?['CutoffUpdatesId'], '')), '.'))), '0', first(split(string(coalesce(item()?['CutoffUpdatesId'], '')), '.')))), min(union(body('Flag_ids_(meeting)'), createArray(2147483647)))))"
+                          },
+                          "runAfter": {
+                            "Get_finalised_(meeting)": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Each_clear_(meeting)": {
+                          "type": "Foreach",
+                          "foreach": "@body('Clearing_(meeting)')",
+                          "runtimeConfiguration": {
+                            "concurrency": {
+                              "repetitions": 1
+                            }
+                          },
+                          "actions": {
+                            "Get_discussed_(meeting)": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "connectionName": "shared_sharepointonline",
+                                  "operationId": "HttpRequest",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                },
+                                "parameters": {
+                                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                                  "parameters/method": "GET",
+                                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['items']}')/items?$select=SourceType,SourceId,Outcome,FileDirRef&$filter=MeetingId eq @{if(empty(first(split(string(coalesce(items('Each_clear_(meeting)')?['Id'], '')), '.'))), '0', first(split(string(coalesce(items('Each_clear_(meeting)')?['Id'], '')), '.')))} and RowType eq 'Agenda Item'&$top=5000",
+                                  "parameters/headers": {
+                                    "Accept": "application/json;odata=nometadata"
+                                  }
+                                },
+                                "authentication": "@parameters('$authentication')"
+                              },
+                              "runAfter": {}
+                            },
+                            "Discussed_(meeting)": {
+                              "type": "Query",
+                              "inputs": {
+                                "from": "@body('Get_discussed_(meeting)')?['value']",
+                                "where": "@and(equals(string(item()?['Outcome']), 'Discussed'), equals(last(split(string(item()?['FileDirRef']), '/')), concat('MTG-', first(split(string(coalesce(items('Each_clear_(meeting)')?['Id'], '')), '.')))))"
+                              },
+                              "runAfter": {
+                                "Get_discussed_(meeting)": [
+                                  "Succeeded"
+                                ]
+                              }
+                            },
+                            "Discussed_keys_(meeting)": {
+                              "type": "Select",
+                              "inputs": {
+                                "from": "@body('Discussed_(meeting)')",
+                                "select": "@concat(string(item()?['SourceType']), ':', first(split(string(coalesce(item()?['SourceId'], '')), '.')))"
+                              },
+                              "runAfter": {
+                                "Discussed_(meeting)": [
+                                  "Succeeded"
+                                ]
+                              }
+                            },
+                            "Cleared_(meeting)": {
+                              "type": "Query",
+                              "inputs": {
+                                "from": "@variables('varFlagAt')",
+                                "where": "@and(contains(body('Discussed_keys_(meeting)'), first(split(item(), '='))), lessOrEquals(int(last(split(item(), '='))), int(if(empty(first(split(string(coalesce(items('Each_clear_(meeting)')?['CutoffUpdatesId'], '')), '.'))), '0', first(split(string(coalesce(items('Each_clear_(meeting)')?['CutoffUpdatesId'], '')), '.'))))))"
+                              },
+                              "runAfter": {
+                                "Discussed_keys_(meeting)": [
+                                  "Succeeded"
+                                ]
+                              }
+                            },
+                            "Cleared_keys_(meeting)": {
+                              "type": "Select",
+                              "inputs": {
+                                "from": "@body('Cleared_(meeting)')",
+                                "select": "@first(split(item(), '='))"
+                              },
+                              "runAfter": {
+                                "Cleared_(meeting)": [
+                                  "Succeeded"
+                                ]
+                              }
+                            },
+                            "Still_on_(meeting)": {
+                              "type": "Query",
+                              "inputs": {
+                                "from": "@variables('varFlagOn')",
+                                "where": "@not(contains(body('Cleared_keys_(meeting)'), item()))"
+                              },
+                              "runAfter": {
+                                "Cleared_keys_(meeting)": [
+                                  "Succeeded"
+                                ]
+                              }
+                            },
+                            "Set_still_on_(meeting)": {
+                              "type": "SetVariable",
+                              "inputs": {
+                                "name": "varFlagOn",
+                                "value": "@body('Still_on_(meeting)')"
+                              },
+                              "runAfter": {
+                                "Still_on_(meeting)": [
+                                  "Succeeded"
+                                ]
+                              }
+                            },
+                            "Still_at_(meeting)": {
+                              "type": "Query",
+                              "inputs": {
+                                "from": "@variables('varFlagAt')",
+                                "where": "@not(contains(body('Cleared_keys_(meeting)'), first(split(item(), '='))))"
+                              },
+                              "runAfter": {
+                                "Set_still_on_(meeting)": [
+                                  "Succeeded"
+                                ]
+                              }
+                            },
+                            "Set_still_at_(meeting)": {
+                              "type": "SetVariable",
+                              "inputs": {
+                                "name": "varFlagAt",
+                                "value": "@body('Still_at_(meeting)')"
+                              },
+                              "runAfter": {
+                                "Still_at_(meeting)": [
+                                  "Succeeded"
+                                ]
+                              }
+                            }
+                          },
+                          "runAfter": {
+                            "Clearing_(meeting)": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
                         "Get_carried_(meeting)": {
                           "type": "OpenApiConnection",
                           "inputs": {
@@ -4695,7 +5035,7 @@
                             "parameters": {
                               "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                               "parameters/method": "GET",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['items']}')/items?$select=Title,SourceType,SourceId,Outcome&$filter=MeetingId eq @{if(empty(first(split(string(coalesce(body('Get_started_(meeting)')?['PreviousMeetingId'], '')), '.'))), '0', first(split(string(coalesce(body('Get_started_(meeting)')?['PreviousMeetingId'], '')), '.')))} and RowType eq 'Outcome'&$top=5000",
+                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['items']}')/items?$select=Title,SourceType,SourceId,Outcome,FileDirRef&$filter=MeetingId eq @{if(empty(first(split(string(coalesce(body('Get_started_(meeting)')?['PreviousMeetingId'], '')), '.'))), '0', first(split(string(coalesce(body('Get_started_(meeting)')?['PreviousMeetingId'], '')), '.')))} and RowType eq 'Agenda Item'&$top=5000",
                               "parameters/headers": {
                                 "Accept": "application/json;odata=nometadata"
                               }
@@ -4703,7 +5043,7 @@
                             "authentication": "@parameters('$authentication')"
                           },
                           "runAfter": {
-                            "Each_flag_(meeting)": [
+                            "Each_clear_(meeting)": [
                               "Succeeded"
                             ]
                           }
@@ -4712,7 +5052,7 @@
                           "type": "Query",
                           "inputs": {
                             "from": "@body('Get_carried_(meeting)')?['value']",
-                            "where": "@and(contains(createArray('Deferred', 'Not reached'), string(item()?['Outcome'])), contains(createArray('Notice', 'Register Entry', 'New Business'), string(item()?['SourceType'])))"
+                            "where": "@and(contains(createArray('Deferred', 'Not reached'), string(item()?['Outcome'])), contains(createArray('Notice', 'Register Entry', 'New Business'), string(item()?['SourceType'])), equals(last(split(string(item()?['FileDirRef']), '/')), concat('MTG-', first(split(string(coalesce(body('Get_started_(meeting)')?['PreviousMeetingId'], '')), '.')))))"
                           },
                           "runAfter": {
                             "Get_carried_(meeting)": [
@@ -6163,7 +6503,7 @@
           "actions": {
             "Invitation_due": {
               "type": "If",
-              "expression": "@and(greater(variables('varActionId'), 0), not(equals(string(variables('varTx')?['RequestType']), 'StartMeeting')))",
+              "expression": "@and(greater(variables('varActionId'), 0), contains(createArray('ScheduleMeeting', 'UpdateMeeting', 'CancelMeeting'), string(variables('varTx')?['RequestType'])))",
               "actions": {
                 "Inv_get": {
                   "type": "OpenApiConnection",

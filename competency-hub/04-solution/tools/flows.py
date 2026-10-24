@@ -14,8 +14,10 @@ Nothing tenant-specific is in here: the site address is an environment variable 
 from hub_schema import BY_KEY, SCHEMA
 
 SP_API = '/providers/Microsoft.PowerApps/apis/shared_sharepointonline'
-CONN = {'shared_sharepointonline': 'esghub_sharedsharepointonline_hub', 'shared_office365': 'esghub_sharedoffice365_hub'}
+CONN = {'shared_sharepointonline': 'esghub_sharedsharepointonline_hub', 'shared_office365': 'esghub_sharedoffice365_hub',
+        'shared_onedriveforbusiness': 'esghub_sharedonedriveforbusiness_hub'}
 OUTLOOK_API = '/providers/Microsoft.PowerApps/apis/shared_office365'
+ONEDRIVE_API = '/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness'
 ENV_SITE = 'ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)'
 ENV_VARS = [
     {'schema': 'esghub_CompetencyHubSiteUrl', 'param': ENV_SITE, 'display': 'ESG Competency Hub Site URL',
@@ -202,6 +204,8 @@ def site_and_ids():
         ids[key] = "@{outputs('Site_path')}/Lists/" + BY_KEY[LIST_URLS[key]]['url']
     for key in ('req', 'act', 'hist', 'upd', 'notif', 'members', 'people', 'reg', 'notices', 'mtg', 'items'):
         ids[key + 'Root'] = ids[key]
+    # a library sits directly under the site
+    ids['minutesRoot'] = "@{outputs('Site_path')}/" + BY_KEY['minutes']['url']
     return [('Site_path', compose("@if(endsWith(" + path + ", '/'), take(" + path + ", sub(length(" + path + "), 1)), " + path + ")")),
             ('Site_url', compose("@if(endsWith(" + SITE + ", '/'), take(" + SITE + ", sub(length(" + SITE + "), 1)), " + SITE + ")")),
             ('Ids', compose(ids))]
@@ -633,6 +637,135 @@ INVITE_VARS = [('Initialize_varInvResult', init_var('varInvResult', 'string', ''
                ('Initialize_varInvLook', init_var('varInvLook', 'string', 'ok'))]
 
 
+# --------------------------------------------------------------------------------------------- PDF minutes (spec MTG-6, §5.4)
+def onedrive(op, params):
+    """OneDrive for Business, used only as a scratch space to turn the minutes into a PDF."""
+    return {'type': 'OpenApiConnection',
+            'inputs': {'host': {'connectionName': 'shared_onedriveforbusiness', 'operationId': op, 'apiId': ONEDRIVE_API},
+                       'parameters': params, 'authentication': "@parameters('$authentication')", 'retryPolicy': {'type': 'none'}},
+            'runtimeConfiguration': SECURE}
+
+
+def sp_create_file(folder_expr, name_expr, body_expr):
+    """SharePoint Create file: the binary PDF goes into the Meeting Minutes library."""
+    return {'type': 'OpenApiConnection',
+            'inputs': {'host': {'connectionName': 'shared_sharepointonline', 'operationId': 'CreateFile', 'apiId': SP_API},
+                       'parameters': {'dataset': '@' + SITE, 'folderPath': folder_expr, 'name': name_expr, 'body': body_expr},
+                       'authentication': "@parameters('$authentication')"}}
+
+
+MINUTES_SECTIONS = ['Open actions', 'Closed since last meeting', 'Carried forward', 'Noticeboard', 'New improvements and degradations',
+                    'Unresolved degradations', 'Important dates', 'New business', 'Decisions and additional actions']
+PDF_STYLE = ('<style>body{font-family:Segoe UI,Arial,sans-serif;font-size:11pt;color:#16222c}h1{color:#13516b;font-size:18pt;margin:0 0 4pt}'
+             'h2{color:#13516b;font-size:13pt;border-bottom:2px solid #ef7d3a;padding-bottom:2pt;margin-top:16pt}'
+             'table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid #d9dfe5;padding:4pt;text-align:left;vertical-align:top}'
+             'th{background:#eef2f5}.muted{color:#5b6774}</style>')
+
+
+def pdf_steps(sfx, meeting_id_expr):
+    """The minutes as a PDF (spec MTG-6): built only from the frozen record in MTG-{id}, written to OneDrive as HTML,
+    converted there, saved as Meeting Minutes/{area}/MTG-{id}-v{n}.pdf, and the working file removed. Each version is
+    its own file, so an amendment never replaces the original. A PDF already saved for this version counts as done, so a
+    retry never makes a second one. Finalising has already been recorded: nothing here can touch the minutes."""
+    s = sfx
+    M = "body('Pdf_get" + s + "')"
+    MID = idstr(M + "?['Id']")
+    ATTEMPTS = "int(" + idq(M + "?['PdfAttempts']") + ")"
+    VERSION = "add(int(" + idq(M + "?['AmendmentCount']") + "), 1)"
+    AREA = "first(body('Pdf_area" + s + "'))"
+    NAME = "concat('MTG-', " + MID + ", '-v', string(" + VERSION + "), '.pdf')"
+    FOLDER = "concat('/', " + q(BY_KEY['minutes']['url']) + ", '/', string(" + AREA + "?['CompetencyKey']))"
+    ROWS = "body('Pdf_frozen" + s + "')"
+    ON = "not(equals(string(coalesce(first(body('Pdf_switch" + s + "'))?['Value'], 'Yes')), 'No'))"
+    IT = lambda col: "item()?['" + col + "']"
+    cell = lambda expr: "'<td>', " + html_text(expr) + ", '</td>'"
+    name_of = lambda step: "string(coalesce(first(body('" + step + "'))?['Title'], ''))"
+    uk = lambda col: "convertFromUtc(string(coalesce(" + M + "?['" + col + "'], '2000-01-01T00:00:00Z')), 'GMT Standard Time', 'dddd d MMMM yyyy, HH:mm')"
+    table = lambda step, head: ("if(empty(body('" + step + "')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr>" + head + "</tr>', join(body('" + step + "'), ''), '</table>'))")
+    sections, parts = [], []
+    for i, sec in enumerate(MINUTES_SECTIONS, 1):
+        f, sel = 'Pdf_sec{0}_rows{1}'.format(i, s), 'Pdf_sec{0}{1}'.format(i, s)
+        sections += [(f, query('@' + ROWS, "@and(equals(" + IT('RowType') + ", 'Agenda Item'), equals(string(" + IT('Section') + "), " + q(sec) + "))")),
+                     (sel, {'type': 'Select', 'inputs': {'from': "@body('" + f + "')", 'select': "@concat('<tr>', " + cell(IT('Title')) + ", " + cell(IT('Outcome')) + ", "
+                                                                                               + cell(IT('Notes')) + ", '</tr>')"}})]
+        parts.append("'<h2>{0}. {1}</h2>', ".format(i, sec) + table(sel, '<th>Item</th><th>Outcome</th><th>Notes</th>'))
+    html = ("concat('<!doctype html><html><head><meta charset=\"utf-8\"><title>Minutes</title>" + PDF_STYLE + "</head><body>', "
+            "'<h1>', " + html_text("concat(string(" + AREA + "?['Title']), ' monthly meeting')") + ", '</h1>', "
+            "'<p>', " + html_text(uk('MeetingDate')) + ", if(empty(string(coalesce(" + M + "?['Location'], ''))), '', concat(' · ', " + html_text(M + "?['Location']") + ")), '</p>', "
+            "'<p>Chair: ', " + html_text(name_of('Pdf_chair' + s)) + ", '. Finalised by ', " + html_text(name_of('Pdf_finaliser' + s)) + ", ' on ', " + html_text(uk('FinalisedAt')) + ", '.</p>', "
+            "'<p class=\"muted\">', " + html_text("concat('MTG-', " + MID + ", ' · version ', string(" + VERSION + "))") + ", '</p>', "
+            "'<h2>Attendance</h2>', " + table('Pdf_att' + s, '<th>Person</th><th>Attendance</th>') + ", "
+            + ", ".join(parts) + ", "
+            "'<h2>Decisions</h2>', " + table('Pdf_dec' + s, '<th>Decision</th><th>Details</th>') + ", "
+            "if(empty(body('Pdf_amend" + s + "')), '', concat('<h2>Amendments</h2><table><tr><th>Amendment</th><th>What changed</th><th>Why</th></tr>', join(body('Pdf_amend" + s + "'), ''), '</table>')), "
+            "'<p class=\"muted\">Produced by the ESG Competency Hub from the finalised record. The original minutes are not changed by amendments.</p></body></html>')")
+    return [
+        ('Pdf_get' + s, http('GET', L('mtg', "/items(@{" + meeting_id_expr + "})?$select=Id,Title,Status,MeetingDate,Location,ChairId,FinalisedAt,FinalisedById,"
+                                           "CompetencyId,AmendmentCount,PdfState,PdfAttempts,PdfVersion"), meta=True)),
+        ('Pdf_due' + s, cond("@and(equals(string(" + M + "?['Status']), 'Finalised'), contains(createArray('Pending', 'Failed'), string(coalesce(" + M + "?['PdfState'], 'None'))), "
+                             "less(" + ATTEMPTS + ", 3))", seq(
+            ('Pdf_settings' + s, http('GET', L('settings', "/items?$select=Title,Value&$top=500"))),
+            ('Pdf_switch' + s, query("@body('Pdf_settings" + s + "')?['value']", "@equals(item()?['Title'], 'PdfEnabled')")),
+            ('Pdf_on' + s, cond('@' + ON, seq(
+                # claimed with the meeting's ETag: a second run at the same time stops here
+                ('Pdf_claim_body' + s, compose({'PdfAttempts': "@add(" + ATTEMPTS + ", 1)"})),
+                ('Pdf_claim' + s, merge(L('mtg', "/items(@{" + meeting_id_expr + "})"), 'Pdf_claim_body' + s, if_match="@{" + M + "?['odata.etag']}")),
+                ('Pdf_start' + s, set_var('varPdfResult', 'failed')),
+                ('Pdf_html_id' + s, set_var('varPdfHtml', '')),
+                ('Pdf_comps' + s, http('GET', L('comps', "/items?$select=Id,Title,CompetencyKey&$top=500"))),
+                ('Pdf_area' + s, query("@body('Pdf_comps" + s + "')?['value']", "@equals(" + idstr(IT('Id')) + ", " + idstr(M + "?['CompetencyId']") + ")")),
+                ('Pdf_exists' + s, http('GET', "_api/web/GetFileByServerRelativePath(decodedurl='@{outputs('Site_path')}@{" + FOLDER + "}/@{" + NAME + "}')?$select=Name")),
+                ('Pdf_make' + s, after(cond("@equals(actions('Pdf_exists" + s + "')?['status'], 'Succeeded')", seq(
+                    ('Pdf_already' + s, set_var('varPdfResult', 'ok')),
+                ), seq(
+                    ('Pdf_rows' + s, http('GET', L('items', "/items?$select=Id,Title,RowType,Section,Outcome,Notes,Attendance,AmendmentReason,SortOrder,FileDirRef"
+                                                            "&$filter=MeetingId eq @{" + MID + "}&$top=5000"))),
+                    ('Pdf_frozen' + s, query("@body('Pdf_rows" + s + "')?['value']", "@equals(last(split(string(" + IT('FileDirRef') + "), '/')), concat('MTG-', " + MID + "))")),
+                    ('Pdf_people' + s, http('GET', L('people', "/items?$select=SiteUserId,Title&$top=5000"))),
+                    ('Pdf_chair' + s, query("@body('Pdf_people" + s + "')?['value']", "@equals(" + idstr(IT('SiteUserId')) + ", " + idstr(M + "?['ChairId']") + ")")),
+                    ('Pdf_finaliser' + s, query("@body('Pdf_people" + s + "')?['value']", "@equals(" + idstr(IT('SiteUserId')) + ", " + idstr(M + "?['FinalisedById']") + ")")),
+                    ('Pdf_att_rows' + s, query('@' + ROWS, "@equals(" + IT('RowType') + ", 'Attendee')")),
+                    ('Pdf_att' + s, {'type': 'Select', 'inputs': {'from': "@body('Pdf_att_rows" + s + "')", 'select':
+                                     "@concat('<tr>', " + cell(IT('Title')) + ", " + cell("if(empty(string(coalesce(" + IT('Attendance') + ", ''))), 'Not recorded', " + IT('Attendance') + ")") + ", '</tr>')"}}),
+                    *sections,
+                    ('Pdf_dec_rows' + s, query('@' + ROWS, "@equals(" + IT('RowType') + ", 'Decision')")),
+                    ('Pdf_dec' + s, {'type': 'Select', 'inputs': {'from': "@body('Pdf_dec_rows" + s + "')", 'select': "@concat('<tr>', " + cell(IT('Title')) + ", " + cell(IT('Notes')) + ", '</tr>')"}}),
+                    ('Pdf_amend_rows' + s, query('@' + ROWS, "@equals(" + IT('RowType') + ", 'Amendment')")),
+                    ('Pdf_amend' + s, {'type': 'Select', 'inputs': {'from': "@body('Pdf_amend_rows" + s + "')", 'select':
+                                       "@concat('<tr>', " + cell(IT('Title')) + ", " + cell(IT('Notes')) + ", " + cell(IT('AmendmentReason')) + ", '</tr>')"}}),
+                    ('Pdf_html' + s, compose('@' + html)),
+                    # OneDrive is only a scratch space: a uniquely named working file, removed afterwards
+                    ('Pdf_html_file' + s, onedrive('CreateFile', {'folderPath': '/', 'name': "@{concat('ESG Competency Hub minutes ', replace(" + NAME + ", '.pdf', ''), ' ', guid(), '.html')}",
+                                                                  'body': "@outputs('Pdf_html" + s + "')"})),
+                    ('Pdf_html_made' + s, set_var('varPdfHtml', "@{body('Pdf_html_file" + s + "')?['Id']}")),
+                    ('Pdf_convert' + s, onedrive('ConvertFile', {'id': "@variables('varPdfHtml')", 'type': 'PDF'})),
+                    ('Pdf_save' + s, sp_create_file('@' + FOLDER, '@' + NAME, "@body('Pdf_convert" + s + "')")),
+                    ('Pdf_saved' + s, set_var('varPdfResult', 'ok')),
+                )), {'Pdf_exists' + s: TOLERANT})),
+                ('Pdf_cleanup' + s, after(cond("@not(empty(variables('varPdfHtml')))", seq(
+                    ('Pdf_delete_html' + s, onedrive('DeleteFile', {'id': "@variables('varPdfHtml')"})),
+                    ('Pdf_deleted' + s, after(compose('done'), {'Pdf_delete_html' + s: TOLERANT})),
+                )), {'Pdf_make' + s: TOLERANT})),
+                # the outcome, with the meeting's current ETag: an amendment made meanwhile wins, and its PDF follows
+                ('Pdf_now' + s, after(http('GET', L('mtg', "/items(@{" + meeting_id_expr + "})?$select=Id,AmendmentCount"), meta=True), {'Pdf_cleanup' + s: OK})),
+                ('Pdf_outcome' + s, compose({'PdfState': "@{if(equals(variables('varPdfResult'), 'ok'), 'Ready', 'Failed')}",
+                                             'PdfVersion': "@if(equals(variables('varPdfResult'), 'ok'), " + VERSION + ", int(" + idq(M + "?['PdfVersion']") + "))"})),
+                ('Pdf_same' + s, cond("@equals(" + idstr("body('Pdf_now" + s + "')?['AmendmentCount']") + ", " + idstr(M + "?['AmendmentCount']") + ")", seq(
+                    ('Save_pdf' + s, merge(L('mtg', "/items(@{" + meeting_id_expr + "})"), 'Pdf_outcome' + s, if_match="@{body('Pdf_now" + s + "')?['odata.etag']}")),
+                    ('Pdf_recorded' + s, after(compose('done'), {'Save_pdf' + s: TOLERANT})),
+                ))),
+            ), seq(
+                # switched off (PdfEnabled No): the Hub offers its print page instead
+                ('Pdf_none' + s, compose({'PdfState': 'None'})),
+                ('Save_pdf_none' + s, merge(L('mtg', "/items(@{" + meeting_id_expr + "})"), 'Pdf_none' + s, if_match="@{" + M + "?['odata.etag']}")),
+            ))),
+        ))),
+    ]
+
+
+PDF_VARS = [('Initialize_varPdfResult', init_var('varPdfResult', 'string', '')), ('Initialize_varPdfHtml', init_var('varPdfHtml', 'string', ''))]
+
+
 # --------------------------------------------------------------------------------------------- the flow
 # Which flow applies which kind of request (spec §5.3): each flow's trigger takes only its own kinds, and the
 # Request queue takes everything else (so an unknown kind is still answered, with a refusal).
@@ -641,6 +774,7 @@ DOMAIN_TYPES = {
     'records': ['EditNotice', 'ArchiveNotice', 'PinNotice', 'HideComment', 'RaiseRegisterEntry', 'UpdateRegisterEntry', 'LinkActionToEntry',
                 'UnlinkActionFromEntry'],
     'meetings': ['ScheduleMeeting', 'UpdateMeeting', 'CancelMeeting', 'StartMeeting'],
+    'minutes': ['FinaliseMeeting', 'AmendMeeting'],
 }
 # Changes decided once and carried out step by step (StepsDone DECIDED): once decided they may be part-made, so they
 # can be finished but not cancelled. Only changes to actions hold a lock and can be reverted.
@@ -801,6 +935,12 @@ def flow_request_queue(domain='actions'):
     LINKED = "greater(int(" + ENTRY_ID + "), 0)"
     ENTRY_OK = ("and(not(empty(string(coalesce(" + ENTRY + "?['Id'], '')))), equals(" + idstr(ENTRY + "?['CompetencyId']") + ", "
                 + idstr(AREA_R + "?['Id']") + "), not(equals(string(" + ENTRY + "?['Status']), 'Closed')))")
+    # raised from a meeting in progress (spec MTG-3, §4.2): the meeting is in this area, and only its runners and management
+    MTG_ID = idq(P + "?['sourceMeetingId']")
+    SRC_MTG = "variables('varSrcMtg')"
+    FROM_MTG = "greater(int(" + MTG_ID + "), 0)"
+    MTG_OK = ("and(equals(" + idstr(SRC_MTG + "?['CompetencyId']") + ", " + idstr(AREA_R + "?['Id']") + "), equals(string(" + SRC_MTG + "?['Status']), 'In Progress'), "
+              "or(" + IS_MGMT + ", equals(first(body('My_member_R'))?['CanManageMeetings'], true)))")
     verdict_r = ("@if(greater(variables('varExistingId'), 0), '', "
                  "if(or(empty(" + AREA_R + "), not(or(" + IS_MGMT + ", not(empty(body('My_member_R')))))), 'Choose one of your areas.', "
                  "if(or(empty(" + OWNER_R + "), not(equals(string(" + OWNER_R + "?['Status']), 'Active')), "
@@ -810,6 +950,7 @@ def flow_request_queue(domain='actions'):
                  "if(and(equals(string(" + ME + "?['Role']), 'Technician'), not(equals(first(body('My_member_R'))?['CanManageMeetings'], true)), "
                  "not(equals(" + idstr(OWNER_R + "?['SiteUserId']") + ", " + SENDER + "))), " + q(SELF_ONLY) + ", "
                  "if(and(" + LINKED + ", not(" + ENTRY_OK + ")), 'That improvement or degradation could not be found in this area, or it is closed.', "
+                 "if(and(" + FROM_MTG + ", not(" + MTG_OK + ")), 'Actions are raised from a meeting only while it is in progress, by the people who run it.', "
                  "if(empty(" + TITLE + "), 'Enter what needs doing.', "
                  "if(greater(length(" + TITLE + "), 255), 'Keep the title to 255 characters or fewer.', "
                  "if(empty(" + DESC + "), 'Add a short description.', "
@@ -817,7 +958,7 @@ def flow_request_queue(domain='actions'):
                  "if(not(" + DUE_OK + "), 'Choose a target date.', "
                  "if(less(" + day_num(DUE_SAFE) + ", " + day_num(TODAY) + "), 'The target date cannot be in the past.', "
                  "if(greater(" + day_num(DUE_SAFE) + ", " + day_num(MAX_DAY) + "), concat('Choose a date within ', string(outputs('Years_R')), if(equals(outputs('Years_R'), 1), ' year.', ' years.')), "
-                 "if(not(contains(createArray('Low', 'Normal', 'High'), " + PRIO + ")), 'Choose a priority.', '')))))))))))))")
+                 "if(not(contains(createArray('Low', 'Normal', 'High'), " + PRIO + ")), 'Choose a priority.', ''))))))))))))))")
     action_path = "@{outputs('Ids')?['actRoot']}/@{" + AREA_R + "?['CompetencyKey']}"
     act_values, act_call = create_in_folder('act', action_path, 'Action_values_R', 'Action_body_R')
     claims = lambda person: "@{concat('[{\"Key\":\"', " + person + "?['Person']?['Name'], '\"}]')}"
@@ -839,6 +980,11 @@ def flow_request_queue(domain='actions'):
             ('Entry_read_R', after(set_var('varEntry', "@if(equals(actions('Get_entry_R')?['status'], 'Succeeded'), body('Get_entry_R'), json('{}'))"),
                                    {'Get_entry_R': TOLERANT})),
         ))),
+        ('Meeting_given_R', cond('@' + FROM_MTG, seq(
+            ('Get_src_mtg_R', http('GET', L('mtg', "/items(@{" + MTG_ID + "})?$select=Id,CompetencyId,Status"))),
+            ('Src_mtg_read_R', after(set_var('varSrcMtg', "@if(equals(actions('Get_src_mtg_R')?['status'], 'Succeeded'), body('Get_src_mtg_R'), json('{}'))"),
+                                     {'Get_src_mtg_R': TOLERANT})),
+        ))),
         ('Read_due_R', set_var('varDue', "@{formatDateTime(concat(" + DUE + ", 'T00:00:00Z'), 'yyyy-MM-dd')}")),
         # the furthest deadline (MaxDeadlineYears, set by an administrator), and whether this is still pre-go-live testing
         ('Get_settings_R', after(http('GET', L('settings', "/items?$select=Title,Value&$top=500")), {'Read_due_R': TOLERANT})),
@@ -858,7 +1004,7 @@ def flow_request_queue(domain='actions'):
                     'OriginalDueDate': '@{' + uk_form_date(DUE) + '}', 'CurrentDueDate': '@{' + uk_form_date(DUE) + '}',
                     'DueDay': '@{' + day_num(DUE) + '}', 'Status': 'Open', 'IsOpen': '1', 'Priority': '@{' + PRIO + '}',
                     'RequiresCloseOut': "@{if(equals(" + P + "?['requiresCloseOut'], true), '1', '0')}", 'ExtensionCount': '0', 'Revision': '1',
-                    'SourceType': "@{if(" + LINKED + ", 'Register', 'None')}", 'SourceId': "@{if(" + LINKED + ", " + ENTRY_ID + ", '')}", 'IsCrossCompetency': '0', 'PendingRequestKey': '@{' + KEY + '}', 'CreatedRequestKey': 'F|@{' + KEY + '}',
+                    'SourceType': "@{if(" + LINKED + ", 'Register', if(" + FROM_MTG + ", 'Meeting', 'None'))}", 'SourceId': "@{if(" + LINKED + ", " + ENTRY_ID + ", if(" + FROM_MTG + ", " + MTG_ID + ", ''))}", 'IsCrossCompetency': '0', 'PendingRequestKey': '@{' + KEY + '}', 'CreatedRequestKey': 'F|@{' + KEY + '}',
                     'IsTestRecord': "@{if(empty(body('Testing_R')), '0', '1')}"})),
                 ('Action_body_R', act_values),
                 ('Create_action_R', act_call),
@@ -2034,8 +2180,6 @@ def flow_request_queue(domain='actions'):
         SAFE_DATE = "if(" + T + "?['ok'], " + DATE + ", " + TODAY + ")"
         mtg_values, mtg_call = create_in_folder('mtg', "@{outputs('Ids')?['mtgRoot']}/@{" + AREA_KEY + "}", 'Mtg_values_M', 'Mtg_body_M')
         find_ev = L('hist', "/items?$select=Id&$filter=RequestKey eq '@{" + ev_key_uri + "}'")
-        role_id = "string(first(body('Contribute_M'))?['Id'])"
-        mgmt_gid = "string(first(body('Mgmt_group_M'))?['Id'])"
 
         # ---- reading: the area, who runs its meetings, the people, and (for a change) the meeting
         reads = [
@@ -2044,7 +2188,7 @@ def flow_request_queue(domain='actions'):
             ('Is_book_M', cond('@' + BOOK, seq(('Book_no_meeting_M', set_var('varMtg', {}))), seq(
                 ('Get_mtg_read_M', http('GET', L('mtg', "/items(@{" + idq(TX + "?['RecordId']") + "})?$select=Id,Title,Status,MeetingDate,EndTime,Location,OnlineLink,"
                                                         "ChairId,Attendees,Revision,LastRequestKey,FileDirRef,CompetencyId,OutlookEventId,InviteState,PreviousMeetingId,"
-                                                        "CutoffTime,CutoffUpdatesId,IntervalStart"), meta=True)),
+                                                        "CutoffTime,CutoffUpdatesId,IntervalStart,AmendmentCount,PdfState,PdfAttempts"), meta=True)),
                 ('Mtg_found_M', after(cond("@equals(actions('Get_mtg_read_M')?['status'], 'Succeeded')", None,
                                            reject('_M404', "'That meeting could not be found.'")), {'Get_mtg_read_M': TOLERANT})),
                 ('Set_mtg_id_M', set_var('varActionId', "@int(" + idq(TX + "?['RecordId']") + ")")),
@@ -2075,6 +2219,31 @@ def flow_request_queue(domain='actions'):
             ('Chair_M', query('@' + PEOPLE, "@and(equals(item()?['Status'], 'Active'), equals(" + idstr("item()?['SiteUserId']") + ", " + CHAIR + "), "
                                            "or(contains(" + MANAGEMENT + ", string(item()?['Role'])), contains(body('Chair_ids_M'), " + idstr("item()?['SiteUserId']") + ")))")),
         ]
+        # ---- finalising (spec MTG-4, plan F.7.4): what counts is in the meeting's own folders only. The agenda rows are in
+        # MTG-{id} (only the flow writes there); what people recorded live is in MTG-{id}/Record, keyed "{id}|…".
+        IT_ = lambda col: "item()?['" + col + "']"
+        IN_MTG = "equals(last(split(string(" + IT_('FileDirRef') + "), '/')), concat('MTG-', " + MID + "))"
+        IN_REC = ("and(endsWith(string(" + IT_('FileDirRef') + "), concat('/MTG-', " + MID + ", '/Record')), startsWith(string(coalesce(" + IT_('RecordKey') + ", '')), concat(" + MID + ", '|')))")
+        DISC = "createArray('Carried forward', 'Noticeboard', 'New improvements and degradations')"
+        ALLOWED = "createArray('Discussed', 'Deferred', 'Not reached', 'Action raised', 'Discarded')"
+        out_key = lambda typ, sid: "concat(" + MID + ", '|O|', " + typ + ", '|', " + sid + ")"
+        rows_sel = "/items?$select=Id,Title,RowType,Section,SourceType,SourceId,RecordKey,RowKey,Outcome,Notes,Attendance,FileDirRef,SortOrder&$filter=MeetingId eq @{" + MID + "}&$top=5000"
+        fin_check = [('Fin_check_M', cond("@and(" + TYPE_IS('FinaliseMeeting') + ", " + UNDECIDED + ")", seq(
+            # every change made from the meeting is recorded first (the app sends them with the meeting's id)
+            ('Get_pending_M', http('GET', L('req', "/items?$select=Id,Status&$filter=MeetingId eq @{" + MID + "}&$top=5000"))),
+            ('Pending_M', query("@body('Get_pending_M')?['value']", "@contains(createArray('Submitted', 'Processing', 'Failed'), string(" + IT_('Status') + "))")),
+            ('Get_rows_M', http('GET', L('items', rows_sel))),
+            ('Fin_need_a_M', query("@body('Get_rows_M')?['value']", "@and(" + IN_MTG + ", equals(" + IT_('RowType') + ", 'Agenda Item'), contains(" + DISC + ", string(" + IT_('Section') + ")))")),
+            ('Fin_need_n_M', query("@body('Get_rows_M')?['value']", "@and(" + IN_REC + ", equals(" + IT_('RowType') + ", 'New Business'), startsWith(string(" + IT_('RecordKey') + "), concat(" + MID + ", '|N|')))")),
+            ('Fin_out_M', query("@body('Get_rows_M')?['value']", "@and(" + IN_REC + ", equals(" + IT_('RowType') + ", 'Outcome'), contains(" + ALLOWED + ", string(" + IT_('Outcome') + ")))")),
+            ('Fin_keys_M', {'type': 'Select', 'inputs': {'from': "@body('Fin_out_M')", 'select': "@string(" + IT_('RecordKey') + ")"}}),
+            ('Fin_miss_a_M', query("@body('Fin_need_a_M')", "@not(contains(body('Fin_keys_M'), " + out_key("string(" + IT_('SourceType') + ")", idstr(IT_('SourceId'))) + "))")),
+            ('Fin_miss_n_M', query("@body('Fin_need_n_M')", "@not(contains(body('Fin_keys_M'), " + out_key("'New Business'", idstr(IT_('Id'))) + "))")),
+            ('Fin_titles_M', {'type': 'Select', 'inputs': {'from': "@union(body('Fin_miss_a_M'), body('Fin_miss_n_M'))", 'select': "@string(" + IT_('Title') + ")"}}),
+            ('Set_fin_check_M', set_var('varFinCheck', "@if(not(empty(body('Pending_M'))), " + q('Some changes made in this meeting are still being recorded. Finalise once they show as saved.') + ", "
+                                                      "if(empty(body('Fin_titles_M')), '', concat('These items still need an outcome: ', join(take(body('Fin_titles_M'), 10), '; '), "
+                                                      "if(greater(length(body('Fin_titles_M')), 10), ' and more', ''), '.')))")),
+        )))]
         # the rules the app applies too (views/meeting-form.js, CH.rules.validateMeeting)
         details_rules = [
             ("not(" + T + "?['ok'])", 'Choose a date, and a start and end time.'),
@@ -2098,57 +2267,70 @@ def flow_request_queue(domain='actions'):
                    "if(" + ALREADY + ", '', "
                    "if(" + stale + ", " + q('This meeting was changed by someone else. Review the latest details and try again.') + ", "
                    "if(" + TYPE_IS('UpdateMeeting') + ", if(not(equals(" + STATUS + ", 'Scheduled')), " + q('Only a meeting that has not started can be changed.') + ", " + DETAILS + "), "
+                   "if(" + TYPE_IS('FinaliseMeeting') + ", if(not(equals(" + STATUS + ", 'In Progress')), " + q('Only a meeting in progress can be finalised.') + ", variables('varFinCheck')), "
+                   "if(" + TYPE_IS('AmendMeeting') + ", outputs('Verdict_amend_M'), "
                    "if(" + TYPE_IS('CancelMeeting') + ", " + chain(
                        ("not(contains(createArray('Scheduled', 'In Progress'), " + STATUS + "))", 'This meeting is already finished or cancelled.'),
                        ("less(length(" + TEXT('reason') + "), 10)", 'Give a reason of at least 10 characters.'),
                        ("greater(length(" + TEXT('reason') + "), 1000)", 'Keep the reason to 1,000 characters or fewer.')) + ", "
-                   "if(not(equals(" + STATUS + ", 'Scheduled')), " + q('This meeting has already started, or is finished or cancelled.') + ", '')))))))")
-        decide = [('Decide_M', cond('@' + UNDECIDED, seq(
+                   "if(not(equals(" + STATUS + ", 'Scheduled')), " + q('This meeting has already started, or is finished or cancelled.') + ", '')))))))))")
+        decide = [*(fin_check if domain == 'minutes' else []), ('Decide_M', cond('@' + UNDECIDED, seq(
             ('Verdict_common_M', compose('@' + chain(*common_rules))),
             ('Verdict_details_M', compose('@' + chain(*details_rules))),
+            ('Verdict_amend_M', compose('@' + chain(
+                ("not(" + IS_MGMT + ")", 'Only Team Leaders and the Group Head can amend finalised minutes.'),
+                ("not(equals(" + STATUS + ", 'Finalised'))", 'Only finalised minutes can be amended.'),
+                ("less(length(" + TEXT('what') + "), 10)", 'Say what the amendment is, in at least 10 characters.'),
+                ("greater(length(" + TEXT('what') + "), 2000)", 'Keep the amendment to 2,000 characters or fewer.'),
+                ("less(length(" + TEXT('reason') + "), 10)", 'Give a reason of at least 10 characters.'),
+                ("greater(length(" + TEXT('reason') + "), 1000)", 'Keep the reason to 1,000 characters or fewer.')))),
             ('Verdict_M', compose('@' + verdict)),
             ('Decided_M', cond("@empty(outputs('Verdict_M'))", seq(*tx_update('planned_M', {'State': 'Planned', 'StepsDone': 'DECIDED'})),
                                reject('_M', "outputs('Verdict_M')"))),
         )))]
 
         # ---- the meeting's folders, and who may write in its Record folder while it is open (§4.3)
-        def wanted_principals():
-            # management as a group; each of the area's meeting runners by name
+        def grants(g='_M'):
+            """The Record folder's own permissions: management as a group, each of the area's meeting runners by name,
+            read back. g keeps the step names apart where a second place uses them (finalising puts them back)."""
+            role_id = "string(first(body('Contribute" + g + "'))?['Id'])"
+            mgmt_gid = "string(first(body('Mgmt_group" + g + "'))?['Id'])"
+            E = "items('Each_grant" + g + "')"
             return [
-                ('Contribute_all_M', http('GET', '_api/web/roledefinitions?$select=Id,Name')),
-                ('Contribute_M', query("@body('Contribute_all_M')?['value']", "@equals(item()?['Name'], 'Competency Hub Contribute')")),
-                ('Groups_all_M', http('GET', '_api/web/sitegroups?$select=Id,Title')),
-                ('Mgmt_group_M', query("@body('Groups_all_M')?['value']", "@equals(item()?['Title'], " + q(next(g['title'] for g in SCHEMA['groups'] if g['key'] == 'Management')) + ")")),
-                ('Wanted_M', compose("@union(createArray(" + mgmt_gid + "), body('Chair_ids_M'))")),
+                *(ensure_folder('_MF', 'items', 'itemsRoot', AREA_KEY, "concat('MTG-', " + MID + ")") if g == '_M' else []),
+                *(ensure_folder('_MR', 'items', 'itemsRoot', "concat(" + AREA_KEY + ", '/MTG-', " + MID + ")", "'Record'") if g == '_M' else []),
+                ('Contribute_all' + g, http('GET', '_api/web/roledefinitions?$select=Id,Name')),
+                ('Contribute' + g, query("@body('Contribute_all" + g + "')?['value']", "@equals(item()?['Name'], 'Competency Hub Contribute')")),
+                ('Groups_all' + g, http('GET', '_api/web/sitegroups?$select=Id,Title')),
+                ('Mgmt_group' + g, query("@body('Groups_all" + g + "')?['value']", "@equals(item()?['Title'], " + q(next(gr['title'] for gr in SCHEMA['groups'] if gr['key'] == 'Management')) + ")")),
+                ('Wanted' + g, compose("@union(createArray(" + mgmt_gid + "), body('Chair_ids_M'))")),
+                ('Break_record' + g, http('POST', REC_API + "/breakroleinheritance(copyRoleAssignments=true,clearSubscopes=true)")),
+                ('Each_grant' + g, {'type': 'Foreach', 'foreach': "@outputs('Wanted" + g + "')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
+                    ('Grant_now' + g, http('GET', REC_API + "/roleassignments?$filter=PrincipalId eq @{" + E + "}&$expand=RoleDefinitionBindings&$select=PrincipalId,RoleDefinitionBindings/Id")),
+                    ('Grant_levels' + g, {'type': 'Select', 'inputs': {'from': "@coalesce(first(body('Grant_now" + g + "')?['value'])?['RoleDefinitionBindings'], createArray())", 'select': "@string(item()?['Id'])"}}),
+                    ('Grant_needed' + g, cond("@not(contains(body('Grant_levels" + g + "'), " + role_id + "))", seq(
+                        ('Grant' + g, http('POST', REC_API + "/roleassignments/addroleassignment(principalid=@{" + E + "},roledefid=@{" + role_id + "})")),
+                    ))),
+                )}),
+                # read back: every wanted principal now has the level
+                ('Grants_back' + g, http('GET', REC_API + "/roleassignments?$expand=RoleDefinitionBindings&$select=PrincipalId,RoleDefinitionBindings/Id")),
+                ('Granted' + g, query("@body('Grants_back" + g + "')?['value']", "@contains(string(item()?['RoleDefinitionBindings']), concat(':', " + role_id + ", '}'))")),
+                ('Granted_ids' + g, {'type': 'Select', 'inputs': {'from': "@body('Granted" + g + "')", 'select': "@" + idstr("item()?['PrincipalId']")}}),
+                ('Missing' + g, query("@outputs('Wanted" + g + "')", "@not(contains(body('Granted_ids" + g + "'), item()))")),
+                ('Grants_ok' + g, cond("@empty(body('Missing" + g + "'))", None, seq(('Grants_stop' + g, fail_here('The meeting record folder permissions did not change as asked. See Each_grant' + g + '.'))))),
             ]
-        grants = [
-            *ensure_folder('_MF', 'items', 'itemsRoot', AREA_KEY, "concat('MTG-', " + MID + ")"),
-            *ensure_folder('_MR', 'items', 'itemsRoot', "concat(" + AREA_KEY + ", '/MTG-', " + MID + ")", "'Record'"),
-            *wanted_principals(),
-            ('Break_record_M', http('POST', REC_API + "/breakroleinheritance(copyRoleAssignments=true,clearSubscopes=true)")),
-            ('Each_grant_M', {'type': 'Foreach', 'foreach': "@outputs('Wanted_M')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
-                ('Grant_now_M', http('GET', REC_API + "/roleassignments?$filter=PrincipalId eq @{items('Each_grant_M')}&$expand=RoleDefinitionBindings&$select=PrincipalId,RoleDefinitionBindings/Id")),
-                ('Grant_levels_M', {'type': 'Select', 'inputs': {'from': "@coalesce(first(body('Grant_now_M')?['value'])?['RoleDefinitionBindings'], createArray())", 'select': "@string(item()?['Id'])"}}),
-                ('Grant_needed_M', cond("@not(contains(body('Grant_levels_M'), " + role_id + "))", seq(
-                    ('Grant_M', http('POST', REC_API + "/roleassignments/addroleassignment(principalid=@{items('Each_grant_M')},roledefid=@{" + role_id + "})")),
-                ))),
-            )}),
-            # read back: every wanted principal now has the level
-            ('Grants_back_M', http('GET', REC_API + "/roleassignments?$expand=RoleDefinitionBindings&$select=PrincipalId,RoleDefinitionBindings/Id")),
-            ('Granted_M', query("@body('Grants_back_M')?['value']", "@contains(string(item()?['RoleDefinitionBindings']), concat(':', " + role_id + ", '}'))")),
-            ('Granted_ids_M', {'type': 'Select', 'inputs': {'from': "@body('Granted_M')", 'select': "@" + idstr("item()?['PrincipalId']")}}),
-            ('Missing_M', query("@outputs('Wanted_M')", "@not(contains(body('Granted_ids_M'), item()))")),
-            ('Grants_ok_M', cond("@empty(body('Missing_M'))", None, seq(('Grants_stop_M', fail_here('The meeting record folder permissions did not change as asked. See Each_grant_M.'))))),
-        ]
-        reset_record = [
-            ('Find_record_M', http('GET', REC_API + "?$select=Id,HasUniqueRoleAssignments")),
-            ('Record_there_M', after(cond("@and(equals(actions('Find_record_M')?['status'], 'Succeeded'), equals(body('Find_record_M')?['HasUniqueRoleAssignments'], true))", seq(
-                ('Reset_record_M', http('POST', REC_API + "/resetroleinheritance")),
-                ('Record_back_M', http('GET', REC_API + "?$select=Id,HasUniqueRoleAssignments")),
-                ('Record_reset_M', cond("@equals(body('Record_back_M')?['HasUniqueRoleAssignments'], true)", seq(
-                    ('Record_stop_M', fail_here('The meeting record folder could not be made read-only. See Reset_record_M.'))))),
-            )), {'Find_record_M': TOLERANT})),
-        ]
+
+        def reset_record(g='_M'):
+            """The Record folder back to the area's read-only permissions, read back."""
+            return [
+                ('Find_record' + g, http('GET', REC_API + "?$select=Id,HasUniqueRoleAssignments")),
+                ('Record_there' + g, after(cond("@and(equals(actions('Find_record" + g + "')?['status'], 'Succeeded'), equals(body('Find_record" + g + "')?['HasUniqueRoleAssignments'], true))", seq(
+                    ('Reset_record' + g, http('POST', REC_API + "/resetroleinheritance")),
+                    ('Record_back' + g, http('GET', REC_API + "?$select=Id,HasUniqueRoleAssignments")),
+                    ('Record_reset' + g, cond("@equals(body('Record_back" + g + "')?['HasUniqueRoleAssignments'], true)", seq(
+                        ('Record_stop' + g, fail_here('The meeting record folder could not be made read-only. See Reset_record' + g + '.'))))),
+                )), {'Find_record' + g: TOLERANT})),
+            ]
 
         def event(c, title_expr, event_type, more=None):
             ev_values, ev_call = create_in_folder('hist', "@{outputs('Ids')?['histRoot']}/@{" + AREA_KEY + "}", 'Mtg_event_values' + c, 'Mtg_event_body' + c)
@@ -2197,7 +2379,7 @@ def flow_request_queue(domain='actions'):
             ), seq(
                 ('Set_found_mtg_M', set_var('varActionId', "@int(" + idstr("first(" + FOUND + ")?['Id']") + ")")),
             ))),
-            *grants,
+            *grants(),
             *event('_MB', "concat('Meeting booked: ', " + when_text + ")", 'Meeting Booked'),
             *done('_MB', "concat('Meeting booked for ', " + when_text + ", '.')"),
         )
@@ -2219,7 +2401,7 @@ def flow_request_queue(domain='actions'):
 
         # ---- cancel: the Record folder goes back to read-only first; then the meeting says so
         cancel = seq(
-            *reset_record,
+            *reset_record(),
             ('Apply_cancel_M', cond("@not(" + ALREADY + ")", seq(
                 ('Cancel_values_M', compose({'Status': 'Cancelled', 'CancellationReason': '@{' + TEXT('reason') + '}',
                                              'InviteState': "@{if(or(not(empty(string(coalesce(" + M + "?['OutlookEventId'], '')))), contains(createArray('Creating', 'Updating', 'Unknown', 'Failed'), "
@@ -2320,6 +2502,9 @@ def flow_request_queue(domain='actions'):
                         ('Flag_by_rest_M', query("@variables('varFlagBy')", "@not(startsWith(item(), concat(" + FKEY + ", '=')))")),
                         ('Flag_on_set_M', set_var('varFlagOn', "@union(body('Flag_on_rest_M'), createArray(" + FKEY + "))")),
                         ('Flag_by_set_M', set_var('varFlagBy', "@union(body('Flag_by_rest_M'), createArray(concat(" + FKEY + ", '=', " + FAUTH + ")))")),
+                        # and when: a meeting that discussed it clears it only if this flag was raised by that meeting's cut-off
+                        ('Flag_at_rest_M', query("@variables('varFlagAt')", "@not(startsWith(item(), concat(" + FKEY + ", '=')))")),
+                        ('Flag_at_set_M', set_var('varFlagAt', "@union(body('Flag_at_rest_M'), createArray(concat(" + FKEY + ", '=', " + idstr(F + "?['Id']") + ")))")),
                     ), seq(
                         ('Withdrawn_M', cond("@and(equals(string(" + F + "?['EntryType']), 'Flag Withdrawn'), contains(" + ON + ", " + FKEY + "), "
                                              "or(contains(variables('varFlagBy'), concat(" + FKEY + ", '=', " + FAUTH + ")), contains(body('Sn_mgmt_ids_M'), " + FAUTH + "), "
@@ -2328,14 +2513,37 @@ def flow_request_queue(domain='actions'):
                             ('Flag_off_by_M', query("@variables('varFlagBy')", "@not(startsWith(item(), concat(" + FKEY + ", '=')))")),
                             ('Flag_off_set_M', set_var('varFlagOn', "@body('Flag_off_rest_M')")),
                             ('Flag_off_by_set_M', set_var('varFlagBy', "@body('Flag_off_by_M')")),
+                            ('Flag_off_at_M', query("@variables('varFlagAt')", "@not(startsWith(item(), concat(" + FKEY + ", '=')))")),
+                            ('Flag_off_at_set_M', set_var('varFlagAt', "@body('Flag_off_at_M')")),
                         ))),
                     ))),
                 )}),
-                # items the last meeting deferred or did not reach come back first (outcomes are recorded from Release 5)
-                ('Get_carried_M', http('GET', L('items', "/items?$select=Title,SourceType,SourceId,Outcome&$filter=MeetingId eq @{" + idq(S + "?['PreviousMeetingId']")
-                                                        + "} and RowType eq 'Outcome'&$top=5000"))),
+                # discussed at a finalised meeting (spec NB-5): clears the flags raised up to that meeting's cut-off. Only meetings
+                # whose cut-off could cover a flag still raised are read, each by its own meeting id; only their frozen rows count.
+                ('Flag_ids_M', {'type': 'Select', 'inputs': {'from': "@variables('varFlagAt')", 'select': "@int(last(split(item(), '=')))"}}),
+                ('Get_finalised_M', http('GET', L('mtg', "/items?$select=Id,CutoffUpdatesId&$filter=CompetencyId eq @{" + idq(AREA + "?['Id']") + "} and Status eq 'Finalised'&$top=5000"))),
+                ('Clearing_M', query("@body('Get_finalised_M')?['value']", "@and(not(empty(body('Flag_ids_M'))), greaterOrEquals(int(" + idq(IT('CutoffUpdatesId')) + "), "
+                                                                         "min(union(body('Flag_ids_M'), createArray(2147483647)))))")),
+                ('Each_clear_M', {'type': 'Foreach', 'foreach': "@body('Clearing_M')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
+                    ('Get_discussed_M', http('GET', L('items', "/items?$select=SourceType,SourceId,Outcome,FileDirRef&$filter=MeetingId eq @{" + idq("items('Each_clear_M')?['Id']")
+                                                            + "} and RowType eq 'Agenda Item'&$top=5000"))),
+                    ('Discussed_M', query("@body('Get_discussed_M')?['value']", "@and(equals(string(" + IT('Outcome') + "), 'Discussed'), "
+                                                                               "equals(last(split(string(" + IT('FileDirRef') + "), '/')), concat('MTG-', " + idstr("items('Each_clear_M')?['Id']") + ")))")),
+                    ('Discussed_keys_M', {'type': 'Select', 'inputs': {'from': "@body('Discussed_M')", 'select': "@concat(string(" + IT('SourceType') + "), ':', " + idstr(IT('SourceId')) + ")"}}),
+                    ('Cleared_M', query("@variables('varFlagAt')", "@and(contains(body('Discussed_keys_M'), first(split(item(), '='))), "
+                                                                   "lessOrEquals(int(last(split(item(), '='))), int(" + idq("items('Each_clear_M')?['CutoffUpdatesId']") + ")))")),
+                    ('Cleared_keys_M', {'type': 'Select', 'inputs': {'from': "@body('Cleared_M')", 'select': "@first(split(item(), '='))"}}),
+                    ('Still_on_M', query('@' + ON, "@not(contains(body('Cleared_keys_M'), item()))")),
+                    ('Set_still_on_M', set_var('varFlagOn', "@body('Still_on_M')")),
+                    ('Still_at_M', query("@variables('varFlagAt')", "@not(contains(body('Cleared_keys_M'), first(split(item(), '='))))")),
+                    ('Set_still_at_M', set_var('varFlagAt', "@body('Still_at_M')")),
+                )}),
+                # what the last finalised meeting deferred or did not reach comes back first: its frozen agenda rows (Release 5)
+                ('Get_carried_M', http('GET', L('items', "/items?$select=Title,SourceType,SourceId,Outcome,FileDirRef&$filter=MeetingId eq @{" + idq(S + "?['PreviousMeetingId']")
+                                                        + "} and RowType eq 'Agenda Item'&$top=5000"))),
                 ('Carried_M', query("@body('Get_carried_M')?['value']", "@and(contains(createArray('Deferred', 'Not reached'), string(" + IT('Outcome') + ")), "
-                                                                       "contains(createArray('Notice', 'Register Entry', 'New Business'), string(" + IT('SourceType') + ")))")),
+                                                                       "contains(createArray('Notice', 'Register Entry', 'New Business'), string(" + IT('SourceType') + ")), "
+                                                                       "equals(last(split(string(" + IT('FileDirRef') + "), '/')), concat('MTG-', " + idstr(S + "?['PreviousMeetingId']") + ")))")),
                 ('Carried_keys_M', {'type': 'Select', 'inputs': {'from': "@body('Carried_M')", 'select': "@concat(string(" + IT('SourceType') + "), ':', " + idstr(IT('SourceId')) + ")"}}),
                 ('Sec4_src_M', query("@body('Sn_notices_here_M')", "@and(contains(" + ON + ", " + skey('Notice') + "), not(contains(" + CARRIED + ", " + skey('Notice') + ")))")),
                 ('Sec5_src_M', query("@body('Sn_entries_here_M')", "@and(not(contains(" + CARRIED + ", " + skey('Register Entry') + ")), "
@@ -2373,8 +2581,132 @@ def flow_request_queue(domain='actions'):
                 *done('_MS', "concat('Meeting started. The agenda is fixed with ', string(length(outputs('Rows_M'))), ' items.')"),
             )
 
-        return seq(*reads, *decide, ('Meeting_type', switch("@" + OWN, {
-            'ScheduleMeeting': book, 'UpdateMeeting': update, 'CancelMeeting': cancel, 'StartMeeting': start_steps()},
+        def frozen_row(c, key_expr, fields, keys_step):
+            """A row of the frozen record in MTG-{id}, made once: found by its key among the rows read after locking."""
+            values, call = create_in_folder('items', MTG_PATH, 'Frozen_values' + c, 'Frozen_body' + c)
+            f = dict({'RowKey': '@{' + key_expr + '}', 'MeetingId': '@{' + MID + '}'}, **fields)
+            return [('Need_frozen' + c, cond("@not(contains(body('" + keys_step + "'), " + key_expr + "))", seq(
+                ('Frozen_values' + c, form(f)),
+                ('Frozen_body' + c, values),
+                ('Frozen' + c, call),
+                *created_ok('Frozen' + c, 'Frozen_made' + c, 'A row of the finalised record could not be created. See Frozen' + c + '.'),
+            )))]
+
+        # ---- finalise (spec MTG-4, plan F.7.4): lock, make the record read-only, then freeze what was recorded. If anything
+        # is found missing once nothing can change any more, the meeting goes back to In progress and the folder reopens.
+        PDF_ON = "not(equals(string(coalesce(first(body('Pdf_switch_M'))?['Value'], 'Yes')), 'No'))"
+        ROWS = "body('Get_rows_MZ')?['value']"
+        FA = "items('Each_freeze_MZ')"
+        FN = "items('Each_nb_MZ')"
+        FP = "items('Each_att_MZ')"
+        FD = "items('Each_dec_MZ')"
+        FS = "items('Each_raised_MZ')"
+        LAST = lambda step: "last(body('" + step + "'))"
+        latest = lambda step, key: (step, query("@body('Live_out_MZ')", "@equals(string(" + IT_('RecordKey') + "), " + key + ")"))
+        finalise = seq(
+            ('Pdf_switch_M', query("@body('Get_settings_M')?['value']", "@equals(item()?['Title'], 'PdfEnabled')")),
+            ('Apply_lock_MZ', cond("@not(" + ALREADY + ")", seq(
+                ('Lock_values_MZ', compose({'Status': 'Finalising', 'Revision': "@add(int(" + idq(M + "?['Revision']") + "), 1)", 'LastRequestKey': '@{' + KEY + '}'})),
+                ('Save_lock_MZ', merge(L('mtg', "/items(@{" + MID + "})"), 'Lock_values_MZ', if_match="@{" + M + "?['odata.etag']}")),
+            ))),
+            *reset_record('_MZ'),
+            # from here nobody but the flow can change the record
+            ('Get_rows_MZ', http('GET', L('items', rows_sel))),
+            ('Row_keys_MZ', {'type': 'Select', 'inputs': {'from': '@' + ROWS, 'select': "@string(" + IT_('RowKey') + ")"}}),
+            ('Live_out_MZ', query('@' + ROWS, "@and(" + IN_REC + ", equals(" + IT_('RowType') + ", 'Outcome'))")),
+            ('Agenda_rows_MZ', query('@' + ROWS, "@and(" + IN_MTG + ", equals(" + IT_('RowType') + ", 'Agenda Item'), not(empty(string(coalesce(" + IT_('SourceType') + ", '')))))")),
+            ('Missing_start_MZ', set_var('varFinMissing', [])),
+            # each agenda item takes the last outcome and notes recorded for it
+            ('Each_freeze_MZ', {'type': 'Foreach', 'foreach': "@body('Agenda_rows_MZ')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
+                latest('Latest_MZ', out_key("string(" + FA + "?['SourceType'])", idstr(FA + "?['SourceId']"))),
+                ('Freeze_due_MZ', cond("@and(not(empty(body('Latest_MZ'))), or(not(equals(string(coalesce(" + FA + "?['Outcome'], '')), string(coalesce(" + LAST('Latest_MZ') + "?['Outcome'], '')))), "
+                                       "not(equals(string(coalesce(" + FA + "?['Notes'], '')), string(coalesce(" + LAST('Latest_MZ') + "?['Notes'], ''))))))", seq(
+                    ('Freeze_values_MZ', compose({'Outcome': "@{coalesce(" + LAST('Latest_MZ') + "?['Outcome'], '')}", 'Notes': "@{coalesce(" + LAST('Latest_MZ') + "?['Notes'], '')}"})),
+                    ('Save_freeze_MZ', merge(L('items', "/items(@{" + FA + "?['Id']})"), 'Freeze_values_MZ')),
+                ))),
+                ('Need_outcome_MZ', cond("@and(contains(" + DISC + ", string(" + FA + "?['Section'])), or(empty(body('Latest_MZ')), not(contains(" + ALLOWED + ", string(" + LAST('Latest_MZ') + "?['Outcome'])))))", seq(
+                    ('Missing_add_MZ', {'type': 'AppendToArrayVariable', 'inputs': {'name': 'varFinMissing', 'value': "@string(" + FA + "?['Title'])"}}),
+                ))),
+            )}),
+            # new business added during the meeting becomes part of the agenda record
+            ('Nb_rows_MZ', query('@' + ROWS, "@and(" + IN_REC + ", equals(" + IT_('RowType') + ", 'New Business'), startsWith(string(" + IT_('RecordKey') + "), concat(" + MID + ", '|N|')))")),
+            ('Each_nb_MZ', {'type': 'Foreach', 'foreach': "@body('Nb_rows_MZ')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
+                latest('Latest_nb_MZ', out_key("'New Business'", idstr(FN + "?['Id']"))),
+                ('Nb_outcome_MZ', compose("@if(empty(body('Latest_nb_MZ')), '', string(coalesce(" + LAST('Latest_nb_MZ') + "?['Outcome'], '')))")),
+                *frozen_row('_nb_MZ', "concat('F|', " + MID + ", '|A|New Business|', " + idstr(FN + "?['Id']") + ")", {
+                    'Title': "@{take(string(" + FN + "?['Title']), 255)}", 'RowType': 'Agenda Item', 'Section': 'New business', 'SortOrder': '8',
+                    'SourceType': 'New Business', 'SourceId': '@{' + idstr(FN + "?['Id']") + '}', 'Outcome': "@{outputs('Nb_outcome_MZ')}",
+                    'Notes': "@{if(empty(body('Latest_nb_MZ')), '', coalesce(" + LAST('Latest_nb_MZ') + "?['Notes'], ''))}", 'SnapshotDetails': "@{coalesce(" + FN + "?['Notes'], '')}"}, 'Row_keys_MZ'),
+                ('Nb_need_MZ', cond("@not(contains(" + ALLOWED + ", outputs('Nb_outcome_MZ')))", seq(
+                    ('Nb_missing_MZ', {'type': 'AppendToArrayVariable', 'inputs': {'name': 'varFinMissing', 'value': "@string(" + FN + "?['Title'])"}}),
+                ))),
+            )}),
+            # something changed between the check and the lock: back to In progress, the record folder open again
+            ('Fin_complete_MZ', cond("@empty(variables('varFinMissing'))", None, seq(
+                *grants('_MZ'),
+                ('Back_values_MZ', compose({'Status': 'In Progress'})),
+                ('Save_back_MZ', merge(L('mtg', "/items(@{" + MID + "})"), 'Back_values_MZ')),
+                *tx_update('rolled_MZ', {'State': 'Rolled Back', 'LastError': "@{concat('Items without an outcome: ', join(variables('varFinMissing'), '; '))}"}),
+                *finish_request('_MZ_back', 'Rejected', "concat('These items still need an outcome: ', join(take(variables('varFinMissing'), 10), '; '), '. The meeting is still in progress.')"),
+                ('Done_back_MZ', terminate('Succeeded')),
+            ))),
+            # attendance as it stood, one row per person invited
+            ('Each_att_MZ', {'type': 'Foreach', 'foreach': "@json(if(empty(string(coalesce(" + M + "?['Attendees'], ''))), '[]', string(" + M + "?['Attendees'])))",
+                             'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
+                ('Att_live_MZ', query('@' + ROWS, "@and(" + IN_REC + ", equals(" + IT_('RowType') + ", 'Attendee'), equals(string(" + IT_('RecordKey') + "), concat(" + MID + ", '|P|', " + idstr(FP) + ")))")),
+                ('Att_person_MZ', query('@' + PEOPLE, "@equals(" + idstr(IT_('SiteUserId')) + ", " + idstr(FP) + ")")),
+                *frozen_row('_att_MZ', "concat('F|', " + MID + ", '|P|', " + idstr(FP) + ")", {
+                    'Title': "@{take(string(coalesce(first(body('Att_person_MZ'))?['Title'], 'Someone no longer listed')), 255)}", 'RowType': 'Attendee', 'Section': 'Attendance',
+                    'SourceId': '@{' + idstr(FP) + '}', 'Attendance': "@{if(empty(body('Att_live_MZ')), '', coalesce(" + LAST('Att_live_MZ') + "?['Attendance'], ''))}"}, 'Row_keys_MZ'),
+            )}),
+            ('Dec_rows_MZ', query('@' + ROWS, "@and(" + IN_REC + ", equals(" + IT_('RowType') + ", 'Decision'), startsWith(string(" + IT_('RecordKey') + "), concat(" + MID + ", '|D|')))")),
+            ('Each_dec_MZ', {'type': 'Foreach', 'foreach': "@body('Dec_rows_MZ')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
+                *frozen_row('_dec_MZ', "concat('F|', " + MID + ", '|D|', " + idstr(FD + "?['Id']") + ")", {
+                    'Title': "@{take(string(" + FD + "?['Title']), 255)}", 'RowType': 'Decision', 'Section': 'Decisions and additional actions', 'SortOrder': '9',
+                    'Notes': "@{coalesce(" + FD + "?['Notes'], '')}"}, 'Row_keys_MZ'),
+            )}),
+            # section 9: the actions raised from this meeting, as they stand now (later changes do not alter the minutes)
+            ('Get_raised_MZ', http('GET', L('act', "/items?$select=Id,Title,AssignedToId,DueDay,Status,SourceType,SourceId,PendingRequestKey,CreatedRequestKey&$filter=SourceId eq @{" + MID + "}&$top=5000"))),
+            ('Raised_MZ', query("@body('Get_raised_MZ')?['value']", "@and(equals(string(" + IT_('SourceType') + "), 'Meeting'), not(and(not(empty(string(coalesce(" + IT_('PendingRequestKey') + ", '')))), "
+                                                                   "equals(string(" + IT_('CreatedRequestKey') + "), concat('F|', string(" + IT_('PendingRequestKey') + "))))))")),
+            ('Each_raised_MZ', {'type': 'Foreach', 'foreach': "@body('Raised_MZ')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
+                *frozen_row('_s_MZ', "concat('F|', " + MID + ", '|S|', " + idstr(FS + "?['Id']") + ")", {
+                    'Title': "@{take(string(" + FS + "?['Title']), 255)}", 'RowType': 'Agenda Item', 'Section': 'Decisions and additional actions', 'SortOrder': '9',
+                    'SourceType': 'Action', 'SourceId': '@{' + idstr(FS + "?['Id']") + '}', 'SnapshotOwner': '@{' + idstr(FS + "?['AssignedToId']") + '}',
+                    'SnapshotStatus': "@{" + FS + "?['Status']}", 'SnapshotDueDate': "@{if(empty(" + idstr(FS + "?['DueDay']") + "), '', " + uk_form_date(due_iso(FS + "?['DueDay']")) + ")}"}, 'Row_keys_MZ'),
+            )}),
+            ('Get_fin_now_MZ', http('GET', L('mtg', "/items(@{" + MID + "})?$select=Id,Status"))),
+            ('Apply_final_MZ', cond("@not(equals(string(body('Get_fin_now_MZ')?['Status']), 'Finalised'))", seq(
+                ('Final_values_MZ', compose({'Status': 'Finalised', 'FinalisedAt': '@{' + EVENT_TIME + '}', 'FinalisedById': '@int(' + SENDER + ')',
+                                             'PdfState': "@{if(" + PDF_ON + ", 'Pending', 'None')}", 'PdfAttempts': 0, 'PdfVersion': 0})),
+                ('Save_final_MZ', merge(L('mtg', "/items(@{" + MID + "})"), 'Final_values_MZ')),
+            ))),
+            *event('_MZ', "'Minutes finalised'", 'Meeting Finalised'),
+            *done('_MZ', "if(" + PDF_ON + ", 'Minutes finalised. The record is now read-only, and the PDF is being made.', 'Minutes finalised. The record is now read-only.')"),
+        )
+
+        # ---- amend (spec MTG-5): an amendment is added to the frozen record; the original stays as it was
+        AMEND_KEY = "concat('F|', " + MID + ", '|M|', " + KEY + ")"
+        amend = seq(
+            ('Pdf_switch_MA', query("@body('Get_settings_M')?['value']", "@equals(item()?['Title'], 'PdfEnabled')")),
+            ('Find_amend_MA', http('GET', L('items', "/items?$select=Id,RowKey&$filter=RowKey eq '@{" + esc("replace(" + AMEND_KEY + ", '|', '%7C')") + "}'"))),
+            ('Amend_keys_MA', {'type': 'Select', 'inputs': {'from': "@body('Find_amend_MA')?['value']", 'select': "@string(item()?['RowKey'])"}}),
+            *frozen_row('_MA', AMEND_KEY, {
+                'Title': "@{take(concat('Amendment ', string(add(int(" + idq(M + "?['AmendmentCount']") + "), 1)), ' by ', string(" + ME + "?['Title'])), 255)}", 'RowType': 'Amendment', 'SortOrder': '10',
+                'Notes': '@{' + TEXT('what') + '}', 'AmendmentReason': '@{' + TEXT('reason') + '}', 'AmendedBy': claims(ME)}, 'Amend_keys_MA'),
+            ('Apply_amend_MA', cond("@not(" + ALREADY + ")", seq(
+                ('Amend_values_MA', compose({'AmendmentCount': "@add(int(" + idq(M + "?['AmendmentCount']") + "), 1)",
+                                             'PdfState': "@{if(not(equals(string(coalesce(first(body('Pdf_switch_MA'))?['Value'], 'Yes')), 'No')), 'Pending', 'None')}", 'PdfAttempts': 0,
+                                             'Revision': "@add(int(" + idq(M + "?['Revision']") + "), 1)", 'LastRequestKey': '@{' + KEY + '}'})),
+                ('Save_amend_MA', merge(L('mtg', "/items(@{" + MID + "})"), 'Amend_values_MA', if_match="@{" + M + "?['odata.etag']}")),
+            ))),
+            *event('_MA', "concat('Minutes amended: ', " + TEXT('reason') + ")", 'Meeting Amended', {'Note': '@{take(' + TEXT('reason') + ', 1000)}'}),
+            *done('_MA', "'Amendment added. The original minutes are kept, and the amendment is shown with them.'"),
+        )
+
+        cases = ({'ScheduleMeeting': book, 'UpdateMeeting': update, 'CancelMeeting': cancel, 'StartMeeting': start_steps()} if domain == 'meetings'
+                 else {'FinaliseMeeting': finalise, 'AmendMeeting': amend})
+        return seq(*reads, *decide, ('Meeting_type', switch("@" + OWN, cases,
             reject('_MK', "'This kind of change is not recognised.'"))))
 
     # ---------------------------------------------------------------- common part
@@ -2486,7 +2818,7 @@ def flow_request_queue(domain='actions'):
                                          'ReassignAction': reassign_case, 'CloseAction': close_case, 'ReopenAction': reopen_case,
                                          'EditActionDetails': edit_case})))),
                          reject('_K', "'This kind of change is not recognised.'"))
-         if domain == 'actions' else scope(records_switch()) if domain == 'records' else scope(meetings_switch()) if domain == 'meetings' else
+         if domain == 'actions' else scope(records_switch()) if domain == 'records' else scope(meetings_switch()) if domain in ('meetings', 'minutes') else
          cond("@contains(createArray('RetryTransaction', 'CancelTransaction', 'RevertTransaction'), string(" + TX + "?['RequestType']))",
               admin_switch(),
               seq(('Settings_or_people', cond("@equals(string(" + TX + "?['RequestType']), 'UpdateSetting')", settings_switch(), people_switch()))))),
@@ -2514,6 +2846,7 @@ def flow_request_queue(domain='actions'):
                   ('Initialize_varLockedHere', init_var('varLockedHere', 'boolean', False)),
                   ('Initialize_varAct', init_var('varAct', 'object', {})),
                   ('Initialize_varEntry', init_var('varEntry', 'object', {})),
+                  ('Initialize_varSrcMtg', init_var('varSrcMtg', 'object', {})),
                   ('Initialize_varUid', init_var('varUid', 'integer', 0)),
                   ('Initialize_varLogin', init_var('varLogin', 'string', '')),
                   ('Initialize_varName', init_var('varName', 'string', '')),
@@ -2528,8 +2861,10 @@ def flow_request_queue(domain='actions'):
                   ('Initialize_varEventJson', init_var('varEventJson', 'object', {})),
                   ('Initialize_varResult', init_var('varResult', 'string', '')),
                   ('Initialize_varNoticeList', init_var('varNoticeList', 'array', [])),
-                  *([('Initialize_varMtg', init_var('varMtg', 'object', {})), ('Initialize_varFlagOn', init_var('varFlagOn', 'array', [])), ('Initialize_varFlagBy', init_var('varFlagBy', 'array', []))] + INVITE_VARS
-                    if domain == 'meetings' else []))
+                  *([('Initialize_varMtg', init_var('varMtg', 'object', {})), ('Initialize_varFlagOn', init_var('varFlagOn', 'array', [])), ('Initialize_varFlagBy', init_var('varFlagBy', 'array', [])),
+                      ('Initialize_varFlagAt', init_var('varFlagAt', 'array', [])),
+                      ('Initialize_varFinCheck', init_var('varFinCheck', 'string', '')), ('Initialize_varFinMissing', init_var('varFinMissing', 'array', []))] + PDF_VARS + INVITE_VARS
+                    if domain in ('meetings', 'minutes') else []))
     actions['Try'] = after(scope(try_actions), {list(actions)[-1]: OK})
     # emails for a change that is complete: a failure here never touches the request, and the daily run retries
     actions['Send_emails'] = after(scope(send_outbox_steps('')), {'Try': OK})
@@ -2537,8 +2872,14 @@ def flow_request_queue(domain='actions'):
         # the Outlook invitation, once the meeting change is recorded: a failure here never touches the meeting,
         # and the queue monitor tries again (spec §5.4)
         actions['Send_invitation'] = after(scope(seq(('Invitation_due', cond(
-            "@and(greater(variables('varActionId'), 0), not(equals(string(variables('varTx')?['RequestType']), 'StartMeeting')))",
+            "@and(greater(variables('varActionId'), 0), contains(createArray('ScheduleMeeting', 'UpdateMeeting', 'CancelMeeting'), string(variables('varTx')?['RequestType'])))",
             seq(*invite_steps('', "variables('varActionId')")))))), {'Try': OK})
+    if domain == 'minutes':
+        # the PDF minutes, once finalising or an amendment is recorded: a failure here never touches the minutes,
+        # and the queue monitor tries again (spec §5.4)
+        actions['Make_pdf'] = after(scope(seq(('Pdf_due_now', cond(
+            "@and(greater(variables('varActionId'), 0), contains(createArray('FinaliseMeeting', 'AmendMeeting'), string(variables('varTx')?['RequestType'])))",
+            seq(*pdf_steps('', "variables('varActionId')")))))), {'Try': OK})
     actions['Catch'] = catch
     others = [t for d, types in DOMAIN_TYPES.items() if d != domain for t in types]
     mine = ("@not(contains(createArray(" + ", ".join(q(x) for x in others) + "), string(triggerBody()?['RequestType'])))" if domain == 'actions'
@@ -2720,7 +3061,7 @@ def flow_queue_monitor():
     partly_admin = 'Not fully recorded – an administrator has been told and will finish it.'
     ADMIN_TYPE = "contains(createArray(" + ", ".join(q(x) for x in DOMAIN_TYPES['admin']) + "), string(" + S + "?['RequestType']))"
     RECORD_TYPE = "contains(createArray(" + ", ".join(q(x) for x in DOMAIN_TYPES['records']) + "), string(" + S + "?['RequestType']))"
-    MEETING_TYPE = "contains(createArray(" + ", ".join(q(x) for x in DOMAIN_TYPES['meetings']) + "), string(" + S + "?['RequestType']))"
+    MEETING_TYPE = "contains(createArray(" + ", ".join(q(x) for x in DOMAIN_TYPES['meetings'] + DOMAIN_TYPES['minutes']) + "), string(" + S + "?['RequestType']))"
     # decided once, then carried out step by step: part-made as soon as it was decided
     DECIDED_TYPE = "contains(createArray(" + ", ".join(q(x) for x in DECIDED_TYPES) + "), string(" + S + "?['RequestType']))"
     ASKER = "string(coalesce(first(body('Asker'))?['Title'], 'someone'))"
@@ -2794,9 +3135,11 @@ def flow_queue_monitor():
             ))),
         )}),
         # Outlook invitations left part-way (spec §5.4): tried again, at most 3 times, then the administrators are told
-        ('Get_inv', http('GET', L('mtg', "/items?$select=Id,Title,InviteState,InviteAttempts,InviteError,Modified,MeetingDate&$filter="
-                                           + " or ".join("InviteState eq '" + st + "'" for st in ('Creating', 'Updating', 'Cancelling', 'Unknown', 'Failed')) + "&$top=5000"))),
-        ('Inv_all', compose("@body('Get_inv')?['value']")),
+        # (one query for both: invitations left part-way and PDF minutes still to make)
+        ('Get_inv', http('GET', L('mtg', "/items?$select=Id,Title,InviteState,InviteAttempts,InviteError,PdfState,PdfAttempts,Modified,MeetingDate&$filter="
+                                           + " or ".join(["InviteState eq '" + st + "'" for st in ('Creating', 'Updating', 'Cancelling', 'Unknown', 'Failed')]
+                                                         + ["PdfState eq '" + st + "'" for st in ('Pending', 'Failed')]) + "&$top=5000"))),
+        ('Inv_all', query("@body('Get_inv')?['value']", "@contains(" + INVITE_PENDING + ", string(coalesce(item()?['InviteState'], 'None')))")),
         ('Inv_retry', query("@outputs('Inv_all')", "@and(less(int(" + idq("item()?['InviteAttempts']") + "), 3), " + older('Modified', 10) + ")")),
         ('Each_invite', {'type': 'Foreach', 'foreach': "@body('Inv_retry')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}},
                          'actions': seq(*invite_steps('_v', "items('Each_invite')?['Id']"))}),
@@ -2807,6 +3150,19 @@ def flow_queue_monitor():
                      "concat('The Outlook invitation for this meeting failed 3 times. The meeting itself stands, and people can add it to their calendar from the Hub. ', "
                      "'Last error: ', string(coalesce(items('Each_invite_failed')?['InviteError'], 'none recorded')), ' In Power Automate, check the Outlook connection of the ESG Competency Hub flows. ', "
                      "'To try again, change the meeting in the Hub.')"),
+        )}),
+        # PDF minutes still to make (spec §5.4): tried again, at most 3 times, then the administrators are told; the minutes stand
+        ('Pdf_all', query("@body('Get_inv')?['value']", "@contains(createArray('Pending', 'Failed'), string(coalesce(item()?['PdfState'], 'None')))")),
+        ('Pdf_retry', query("@body('Pdf_all')", "@and(less(int(" + idq("item()?['PdfAttempts']") + "), 3), " + older('Modified', 10) + ")")),
+        ('Each_pdf', {'type': 'Foreach', 'foreach': "@body('Pdf_retry')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}},
+                      'actions': seq(*pdf_steps('_p', "items('Each_pdf')?['Id']"))}),
+        ('Pdf_given_up', query("@body('Pdf_all')", "@and(equals(string(item()?['PdfState']), 'Failed'), greaterOrEquals(int(" + idq("item()?['PdfAttempts']") + "), 3))")),
+        ('Each_pdf_failed', {'type': 'Foreach', 'foreach': "@body('Pdf_given_up')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
+            alert_if('Pdf_alert', 'true', "concat('pdf|', string(items('Each_pdf_failed')?['Id']))",
+                     "concat('The PDF minutes could not be made: ', string(items('Each_pdf_failed')?['Title']))",
+                     "concat('The PDF of these finalised minutes failed 3 times. The minutes themselves are finalised and can be read and printed in the Hub. ', "
+                     "'In Power Automate, look at the run history of ESG Competency Hub | 5 Meetings or 3 Queue monitor, and check the OneDrive connection. ', "
+                     "'If OneDrive conversion is not allowed, set PDF minutes to No under Administration, Settings.')"),
         )}),
         ('Get_attention', http('GET', L('req', "/items?$select=Id&$filter=Status eq 'Needs attention'&$top=5000"))),
         # Daily tasks writes LastDailyRun every morning: 26 hours without it means reminders have stopped
@@ -2828,7 +3184,7 @@ def flow_queue_monitor():
                                   'records': "@{if(variables('varRecordsDown'), 'Down', 'Healthy')}",
                                   'recordsReason': "@{if(variables('varRecordsDown'), 'Changes to notices and the register are not being picked up by ESG Competency Hub | 4 Records.', '')}",
                                   'meetings': "@{if(variables('varMeetingsDown'), 'Down', 'Healthy')}",
-                                  'meetingsReason': "@{if(variables('varMeetingsDown'), 'Meeting bookings and changes are not being picked up by ESG Competency Hub | 5 Meetings.', '')}",
+                                  'meetingsReason': "@{if(variables('varMeetingsDown'), 'Meeting bookings, changes or minutes are not being picked up by ESG Competency Hub | 5 Meetings or 7 Minutes.', '')}",
                                   'checkedAt': '@{utcNow()}', 'attention': "@length(body('Get_attention')?['value'])"})),
         ('Health_body', compose({'Value': "@{string(outputs('Health_value'))}"})),
         ('Record_health', cond("@empty(body('Health_row'))", None, seq(
@@ -2842,7 +3198,7 @@ def flow_queue_monitor():
                   ('Initialize_varRecordsDown', init_var('varRecordsDown', 'boolean', False)),
                   ('Initialize_varMeetingsDown', init_var('varMeetingsDown', 'boolean', False)),
                   ('Initialize_varPart', init_var('varPart', 'boolean', False)),
-                  *INVITE_VARS)
+                  *INVITE_VARS, *PDF_VARS)
     actions['Try'] = after(scope(try_actions), {list(actions)[-1]: OK})
     actions['Send_emails'] = after(scope(send_outbox_steps('')), {'Try': OK})
     actions['Catch'] = after(scope(seq(('Terminate_failed', terminate('Failed', 'The queue monitor failed. See the failed action in the run history.')))),
@@ -2895,6 +3251,34 @@ def flow_probe_invitations():
     return definition(triggers, actions)
 
 
+def flow_probe_pdf():
+    """Probe P-PDF (spec §5.4), run by hand once, before PDF minutes are relied on. It writes a sample minutes page to the
+    flow account's OneDrive, converts it with Convert file (PDF), saves the PDF in the Meeting Minutes library and removes
+    the working file. Running at all also shows that the data policy allows OneDrive with SharePoint and Outlook. Each
+    step's result is recorded whatever the others do; the last step lists them all."""
+    NAME = "outputs('Probe_name')"
+    status = lambda step: "@{actions('" + step + "')?['status']}"
+    sample = ('<!doctype html><html><head><meta charset="utf-8"><title>Minutes</title>' + PDF_STYLE + '</head><body>'
+              '<h1>TEST – sample monthly meeting</h1><p>A test of the ESG Competency Hub PDF minutes. It can be deleted.</p>'
+              '<h2>1. Open actions</h2><table><tr><th>Item</th><th>Outcome</th><th>Notes</th></tr>'
+              '<tr><td>TEST action</td><td>Discussed</td><td>Sample notes &amp; a second line.</td></tr></table></body></html>')
+    actions = seq(
+        *site_and_ids(),
+        ('Probe_name', compose("@concat('TEST-PDF-probe-', formatDateTime(utcNow(), 'yyyyMMdd-HHmmss'))")),
+        ('Probe_html', onedrive('CreateFile', {'folderPath': '/', 'name': "@{concat(" + NAME + ", '.html')}", 'body': sample})),
+        ('Probe_convert', after(onedrive('ConvertFile', {'id': "@{body('Probe_html')?['Id']}", 'type': 'PDF'}), {'Probe_html': TOLERANT})),
+        ('Probe_save', after(sp_create_file('/' + BY_KEY['minutes']['url'], "@{concat(" + NAME + ", '.pdf')}", "@body('Probe_convert')"), {'Probe_convert': TOLERANT})),
+        ('Probe_cleanup', after(onedrive('DeleteFile', {'id': "@{body('Probe_html')?['Id']}"}), {'Probe_save': TOLERANT})),
+        ('Probe_results', after(compose({
+            'workingFile': status('Probe_html'), 'convert': status('Probe_convert'), 'saveToMeetingMinutes': status('Probe_save'), 'removeWorkingFile': status('Probe_cleanup'),
+            'file': "@{concat('Meeting Minutes/', " + NAME + ", '.pdf')}",
+            'next': 'Open the Meeting Minutes library, open the TEST PDF and check it looks right, then delete it. Send these results.'}),
+            {'Probe_cleanup': TOLERANT})),
+    )
+    triggers = {'manual': {'type': 'Request', 'kind': 'Button', 'inputs': {'schema': {'type': 'object', 'properties': {}, 'required': []}}}}
+    return definition(triggers, actions)
+
+
 def definition(triggers, actions):
     params = {'$connections': {'defaultValue': {}, 'type': 'Object'},
               '$authentication': {'defaultValue': {}, 'type': 'SecureObject'}}
@@ -2918,7 +3302,7 @@ FLOWS = [
      'description': 'Every morning at 06:00: the deadline reminders, another try for emails that were not sent, and the end of temporary access to an area.',
      'introduced': '1.1.0.0'},
     {'id': '7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f03', 'name': 'ESG Competency Hub | 3 Queue monitor', 'build': flow_queue_monitor,
-     'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': False,
+     'connectors': ['shared_sharepointonline', 'shared_office365', 'shared_onedriveforbusiness'], 'on': False,
      'description': 'Every 15 minutes in working hours and hourly outside them: puts stalled changes back in the queue, retries emails, '
                     'tells the administrators about anything that needs them, and records whether processing is healthy.',
      'introduced': '1.3.0.0'},
@@ -2932,10 +3316,18 @@ FLOWS = [
      'description': 'Books, changes, cancels and starts monthly meetings sent from the Competency Hub page, sends the Outlook invitations, '
                     'and writes each meeting\'s agenda when it starts.',
      'introduced': '1.6.0.0'},
+    {'id': '7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f09', 'name': 'ESG Competency Hub | 7 Minutes', 'build': lambda: flow_request_queue('minutes'),
+     'connectors': ['shared_sharepointonline', 'shared_office365', 'shared_onedriveforbusiness'], 'on': False,
+     'description': 'Finalises and amends the minutes of monthly meetings sent from the Competency Hub page, and makes the PDF minutes.',
+     'introduced': '1.7.0.0'},
     {'id': '7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f07', 'name': 'ESG Competency Hub | P-INV Invitations probe', 'build': flow_probe_invitations,
      'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': False,
      'description': 'Run once by hand before meeting invitations are relied on: makes a TEST event for tomorrow, moves it, finds it by its reference and cancels it.',
      'introduced': '1.6.0.0'},
+    {'id': '7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f08', 'name': 'ESG Competency Hub | P-PDF PDF probe', 'build': flow_probe_pdf,
+     'connectors': ['shared_sharepointonline', 'shared_onedriveforbusiness'], 'on': False,
+     'description': 'Run once by hand before PDF minutes are relied on: turns a sample page into a PDF with OneDrive and saves it in Meeting Minutes.',
+     'introduced': '1.7.0.0'},
     {'id': '7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f06', 'name': 'ESG Competency Hub | 6 Administration', 'build': lambda: flow_request_queue('admin'),
      'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': False,
      'description': "Records administrators' changes from the Competency Hub page: people, their areas and permissions, settings, and decisions on changes needing attention.",
@@ -2943,7 +3335,7 @@ FLOWS = [
 ]
 
 
-KIND = {'P': 'probe', '1': 'daily', '2': 'queue', '3': 'monitor', '4': 'records', '5': 'meetings', '6': 'admin'}
+KIND = {'P': 'probe', '1': 'daily', '2': 'queue', '3': 'monitor', '4': 'records', '5': 'meetings', '6': 'admin', '7': 'minutes'}
 
 
 def build_all(raw=False):

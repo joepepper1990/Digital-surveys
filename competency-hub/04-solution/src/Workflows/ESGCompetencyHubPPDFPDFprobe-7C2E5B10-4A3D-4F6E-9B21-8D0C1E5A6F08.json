@@ -1,0 +1,260 @@
+{
+  "properties": {
+    "connectionReferences": {
+      "shared_sharepointonline": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "esghub_sharedsharepointonline_hub"
+        },
+        "api": {
+          "name": "shared_sharepointonline"
+        }
+      },
+      "shared_onedriveforbusiness": {
+        "runtimeSource": "embedded",
+        "connection": {
+          "connectionReferenceLogicalName": "esghub_sharedonedriveforbusiness_hub"
+        },
+        "api": {
+          "name": "shared_onedriveforbusiness"
+        }
+      }
+    },
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        },
+        "ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)": {
+          "defaultValue": "",
+          "type": "String",
+          "metadata": {
+            "schemaName": "esghub_CompetencyHubSiteUrl",
+            "description": "Full address of the Competency Hub site, e.g. https://<tenant>.sharepoint.com/sites/ESGCompetencyHub (no trailing slash)."
+          }
+        }
+      },
+      "triggers": {
+        "manual": {
+          "type": "Request",
+          "kind": "Button",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {},
+              "required": []
+            }
+          }
+        }
+      },
+      "actions": {
+        "Site_path": {
+          "type": "Compose",
+          "inputs": "@if(endsWith(uriPath(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')), '/'), take(uriPath(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')), sub(length(uriPath(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)'))), 1)), uriPath(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')))",
+          "runAfter": {}
+        },
+        "Site_address": {
+          "type": "Compose",
+          "inputs": "@if(endsWith(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)'), '/'), take(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)'), sub(length(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')), 1)), parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)'))",
+          "runAfter": {
+            "Site_path": [
+              "Succeeded"
+            ]
+          }
+        },
+        "List_addresses": {
+          "type": "Compose",
+          "inputs": {
+            "req": "@{outputs('Site_path')}/Lists/Requests",
+            "act": "@{outputs('Site_path')}/Lists/Actions",
+            "hist": "@{outputs('Site_path')}/Lists/History",
+            "upd": "@{outputs('Site_path')}/Lists/Updates",
+            "people": "@{outputs('Site_path')}/Lists/People",
+            "members": "@{outputs('Site_path')}/Lists/CompetencyMembers",
+            "comps": "@{outputs('Site_path')}/Lists/Competencies",
+            "notif": "@{outputs('Site_path')}/Lists/NotificationLog",
+            "settings": "@{outputs('Site_path')}/Lists/Settings",
+            "notices": "@{outputs('Site_path')}/Lists/Noticeboard",
+            "reg": "@{outputs('Site_path')}/Lists/ImprovementRegister",
+            "mtg": "@{outputs('Site_path')}/Lists/Meetings",
+            "items": "@{outputs('Site_path')}/Lists/MeetingItems",
+            "cal": "@{outputs('Site_path')}/Lists/CalendarEvents",
+            "reqRoot": "@{outputs('Site_path')}/Lists/Requests",
+            "actRoot": "@{outputs('Site_path')}/Lists/Actions",
+            "histRoot": "@{outputs('Site_path')}/Lists/History",
+            "updRoot": "@{outputs('Site_path')}/Lists/Updates",
+            "notifRoot": "@{outputs('Site_path')}/Lists/NotificationLog",
+            "membersRoot": "@{outputs('Site_path')}/Lists/CompetencyMembers",
+            "peopleRoot": "@{outputs('Site_path')}/Lists/People",
+            "regRoot": "@{outputs('Site_path')}/Lists/ImprovementRegister",
+            "noticesRoot": "@{outputs('Site_path')}/Lists/Noticeboard",
+            "mtgRoot": "@{outputs('Site_path')}/Lists/Meetings",
+            "itemsRoot": "@{outputs('Site_path')}/Lists/MeetingItems",
+            "minutesRoot": "@{outputs('Site_path')}/MeetingMinutes"
+          },
+          "runAfter": {
+            "Site_address": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Probe_name": {
+          "type": "Compose",
+          "inputs": "@concat('TEST-PDF-probe-', formatDateTime(utcNow(), 'yyyyMMdd-HHmmss'))",
+          "runAfter": {
+            "List_addresses": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Probe_email_text": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_onedriveforbusiness",
+              "operationId": "CreateFile",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness"
+            },
+            "parameters": {
+              "folderPath": "/",
+              "name": "@{concat(outputs('Probe_name'), '.html')}",
+              "body": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Minutes</title><style>body{font-family:Segoe UI,Arial,sans-serif;font-size:11pt;color:#16222c}h1{color:#13516b;font-size:18pt;margin:0 0 4pt}h2{color:#13516b;font-size:13pt;border-bottom:2px solid #ef7d3a;padding-bottom:2pt;margin-top:16pt}table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid #d9dfe5;padding:4pt;text-align:left;vertical-align:top}th{background:#eef2f5}.muted{color:#5b6774}</style></head><body><h1>TEST – sample monthly meeting</h1><p>A test of the ESG Competency Hub PDF minutes. It can be deleted.</p><h2>1. Open actions</h2><table><tr><th>Item</th><th>Outcome</th><th>Notes</th></tr><tr><td>TEST action</td><td>Discussed</td><td>Sample notes &amp; a second line.</td></tr></table></body></html>"
+            },
+            "authentication": "@parameters('$authentication')",
+            "retryPolicy": {
+              "type": "none"
+            }
+          },
+          "runtimeConfiguration": {
+            "secureData": {
+              "properties": [
+                "inputs",
+                "outputs"
+              ]
+            }
+          },
+          "runAfter": {
+            "Probe_name": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Probe_convert": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_onedriveforbusiness",
+              "operationId": "ConvertFile",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness"
+            },
+            "parameters": {
+              "id": "@{body('Probe_email_text')?['Id']}",
+              "type": "PDF"
+            },
+            "authentication": "@parameters('$authentication')",
+            "retryPolicy": {
+              "type": "none"
+            }
+          },
+          "runtimeConfiguration": {
+            "secureData": {
+              "properties": [
+                "inputs",
+                "outputs"
+              ]
+            }
+          },
+          "runAfter": {
+            "Probe_email_text": [
+              "Succeeded",
+              "Failed",
+              "TimedOut"
+            ]
+          }
+        },
+        "Probe_save": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_sharepointonline",
+              "operationId": "CreateFile",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+            },
+            "parameters": {
+              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+              "folderPath": "/MeetingMinutes",
+              "name": "@{concat(outputs('Probe_name'), '.pdf')}",
+              "body": "@body('Probe_convert')"
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "Probe_convert": [
+              "Succeeded",
+              "Failed",
+              "TimedOut"
+            ]
+          }
+        },
+        "Probe_cleanup": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_onedriveforbusiness",
+              "operationId": "DeleteFile",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_onedriveforbusiness"
+            },
+            "parameters": {
+              "id": "@{body('Probe_email_text')?['Id']}"
+            },
+            "authentication": "@parameters('$authentication')",
+            "retryPolicy": {
+              "type": "none"
+            }
+          },
+          "runtimeConfiguration": {
+            "secureData": {
+              "properties": [
+                "inputs",
+                "outputs"
+              ]
+            }
+          },
+          "runAfter": {
+            "Probe_save": [
+              "Succeeded",
+              "Failed",
+              "TimedOut"
+            ]
+          }
+        },
+        "Probe_results": {
+          "type": "Compose",
+          "inputs": {
+            "workingFile": "@{actions('Probe_email_text')?['status']}",
+            "convert": "@{actions('Probe_convert')?['status']}",
+            "saveToMeetingMinutes": "@{actions('Probe_save')?['status']}",
+            "removeWorkingFile": "@{actions('Probe_cleanup')?['status']}",
+            "file": "@{concat('Meeting Minutes/', outputs('Probe_name'), '.pdf')}",
+            "next": "Open the Meeting Minutes library, open the TEST PDF and check it looks right, then delete it. Send these results."
+          },
+          "runAfter": {
+            "Probe_cleanup": [
+              "Succeeded",
+              "Failed",
+              "TimedOut"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "schemaVersion": "1.0.0.0"
+}

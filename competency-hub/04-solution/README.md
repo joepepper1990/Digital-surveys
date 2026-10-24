@@ -1,6 +1,6 @@
 # ESG Competency Hub – Power Automate solution
 
-`ESGCompetencyHub_1_6_0_0_unmanaged.zip` is the solution to import into Power Automate. It holds seven flows, which
+`ESGCompetencyHub_1_7_0_0_unmanaged.zip` is the solution to import into Power Automate. It holds nine flows, which
 all ship **Off** so nothing runs until you turn them on:
 
 | Flow | What it does |
@@ -11,12 +11,15 @@ all ship **Off** so nothing runs until you turn them on:
 | **ESG Competency Hub \| 4 Records** | Records changes to notices and the register: edit, pin, archive, hide a comment; raise and update improvements and degradations, and link actions to them |
 | **ESG Competency Hub \| 5 Meetings** | Books, changes, cancels and starts monthly meetings. It sends the Outlook invitation, update or cancellation from the Outlook connection's calendar, and fixes the agenda when the meeting starts |
 | **ESG Competency Hub \| 6 Administration** | Records administrators' changes: people, their areas, meeting rights and notice posting, settings, and the decisions on changes needing attention |
+| **ESG Competency Hub \| 7 Minutes** | Finalises and amends the minutes of monthly meetings. Finalising locks the meeting's record folder, then freezes what was recorded into the meeting's own folder (only this flow writes there); if anything turns out missing once it is locked, the meeting goes back to In progress and the folder reopens. Then it makes the PDF minutes |
 | **ESG Competency Hub \| P-INV Invitations probe** | Run by hand, once, before invitations are relied on: makes a TEST event with one attendee, moves it, finds it by its hidden reference and cancels it. Turn it off again afterwards |
+| **ESG Competency Hub \| P-PDF PDF probe** | Run by hand, once, before PDF minutes are relied on: turns a sample page into a PDF with OneDrive and saves it in Meeting Minutes as a TEST file. Turn it off again afterwards |
 
 | Part | Name |
 |---|---|
 | Connection reference | `esghub_sharedsharepointonline_hub` – ESG Competency Hub SharePoint |
 | Connection reference | `esghub_sharedoffice365_hub` – ESG Competency Hub Outlook (emails are sent from this connection's mailbox) |
+| Connection reference | `esghub_sharedonedriveforbusiness_hub` – ESG Competency Hub OneDrive (a scratch space for turning the minutes into a PDF; used by 3 Queue monitor, 7 Minutes and P-PDF) |
 | Environment variable | `esghub_CompetencyHubSiteUrl` – ESG Competency Hub Site URL (no trailing slash) |
 | Publisher | ESG Competency Hub, prefix `esghub` (its own, so nothing clashes with the ESG 1-to-1 solution in the same environment) |
 
@@ -25,6 +28,14 @@ event). Before every new attempt, and whenever a call's result was uncertain, *5
 reference and uses it rather than making another. A cancellation that finds no event counts as done. The queue monitor
 tries a failed invitation again, up to three times, then tells the administrators; the meeting itself stands. With the
 setting *Outlook invitations* off, no invitations are sent and people add meetings to their calendars from the Hub.
+
+**PDF minutes.** After finalising or an amendment is recorded, *7 Minutes* builds the minutes as HTML from the frozen
+record only, writes it to the OneDrive of the connection's account under a unique name, converts it there (*Convert
+file*, PDF), saves it as `Meeting Minutes/{area}/MTG-{id}-v{n}.pdf` and removes the working file. Each version is its
+own file, so an amendment never replaces the original, and a version already saved is never made twice. A PDF failure
+never touches the minutes: the queue monitor tries again, up to three times, then tells the administrators. With the
+setting *PDF minutes* off, no PDF is made and the Hub's *Print* is the way to one. The *P-PDF* probe, run once by hand,
+proves the conversion and the data policy first.
 
 `schema/schema.json` is the single description of the lists. Setup builds the site from it, and the flow tools check
 every column a flow uses against it.

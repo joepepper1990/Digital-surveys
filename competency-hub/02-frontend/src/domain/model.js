@@ -15,7 +15,7 @@ CH.model = (function () {
       'LastRequestKey,CompetencyId,FileDirRef,Created&$filter=FSObjType eq 0',
     updates: '$select=Id,EntryType,ParentType,ParentId,AuthorId,Created,FileDirRef,IsHidden&$filter=IsFlagEvent eq 1 and FSObjType eq 0',
     meetings: '$select=Id,Title,CompetencyId,MeetingDate,EndTime,Status,ChairId,Location,OnlineLink,Attendees,InviteState,InviteToken,OutlookEventId,' +
-      'InviteError,Revision,LastRequestKey,CreatedRequestKey,FileDirRef,CancellationReason,CutoffTime,IntervalStart,PreviousMeetingId,StartedById&$filter=FSObjType eq 0',
+      'InviteError,Revision,LastRequestKey,CreatedRequestKey,FileDirRef,CancellationReason,CutoffTime,CutoffUpdatesId,IntervalStart,PreviousMeetingId,StartedById,FinalisedAt,FinalisedById,AmendmentCount,PdfState,PdfVersion&$filter=FSObjType eq 0',
     calendar: "$select=Id,Title,StartTime,AllDay,IsImportant,Status,FileDirRef&$filter=Status eq 'Scheduled' and FSObjType eq 0",
     settings: '$select=Id,Title,Value'
   };
@@ -31,7 +31,29 @@ CH.model = (function () {
         raw[key] = { rows: [], complete: false, error: error.status || 0 };
       }
     }));
+    raw.discussed = await discussed(sp, raw);
     return raw;
+  }
+
+  // What finalised meetings recorded as Discussed (spec NB-5): it clears the flags raised up to that meeting's cut-off.
+  // Only meetings whose cut-off could cover a flag still in the list are read, each by its own (indexed) meeting id,
+  // and only the frozen rows in the meeting's MTG folder count (only the flow writes there).
+  async function discussed(sp, raw) {
+    try {
+      var first = (raw.updates.rows || []).filter(function (u) { return u.EntryType === 'Flagged'; })
+        .reduce(function (m, u) { return Math.min(m, Number(u.Id)); }, Infinity);
+      var mtgs = (raw.meetings.rows || []).filter(function (m) { return m.Status === 'Finalised' && Number(m.CutoffUpdatesId) >= first; });
+      var res = await Promise.all(mtgs.map(function (m) {
+        return sp.items(CH.config.lists.meetingItems.title, '$select=SourceType,SourceId,Outcome,FileDirRef&$filter=MeetingId eq ' + m.Id + " and RowType eq 'Agenda Item'");
+      }));
+      var out = [];
+      mtgs.forEach(function (m, i) {
+        res[i].rows.filter(function (r) { return r.Outcome === 'Discussed' && CH.sp.folderOf(r.FileDirRef) === 'MTG-' + m.Id; }).forEach(function (r) {
+          out.push({ competencyId: m.CompetencyId, source: r.SourceType + ':' + r.SourceId, upto: Number(m.CutoffUpdatesId), iso: D.localDate(m.MeetingDate) });
+        });
+      });
+      return out;
+    } catch (_) { return []; }
   }
 
   function section(r) {
@@ -153,7 +175,7 @@ CH.model = (function () {
       var slot = latest[key + '|' + source] = latest[key + '|' + source] || { key: key, source: source, flaggedBy: null, flagged: false, history: [] };
       if (u.EntryType === 'Flagged') {
         if (!(membersByArea[key] || {})[u.AuthorId] && !isManagementPerson(u.AuthorId)) return;
-        slot.flagged = true; slot.flaggedBy = u.AuthorId;
+        slot.flagged = true; slot.flaggedBy = u.AuthorId; slot.flagId = Number(u.Id);
         slot.history.push({ kind: 'Flagged for the next meeting', by: nameOf(u.AuthorId), iso: D.localDate(u.Created) });
       } else if (u.EntryType === 'Flag Withdrawn' && slot.flagged) {
         var notice = u.ParentType === 'Notice' ? noticeById[u.ParentId] : null;
@@ -161,6 +183,13 @@ CH.model = (function () {
         var allowed = u.AuthorId === slot.flaggedBy || isManagementPerson(u.AuthorId) ||
           (meetingAdmins[key] || {})[u.AuthorId] || (notice && notice.authorId === u.AuthorId) || (entry && entry.raisedById === u.AuthorId);
         if (allowed) { slot.flagged = false; slot.history.push({ kind: 'Flag withdrawn', by: nameOf(u.AuthorId), iso: D.localDate(u.Created) }); }
+      }
+    });
+    (raw.discussed || []).forEach(function (d) {
+      var area = areaById[d.competencyId];
+      var slot = area && latest[area.key + '|' + d.source];
+      if (slot && slot.flagged && slot.flagId <= d.upto) {
+        slot.flagged = false;
       }
     });
     var flags = {};
@@ -184,7 +213,9 @@ CH.model = (function () {
         chairId: m.ChairId, chairName: m.ChairId ? nameOf(m.ChairId) : '', attendeeIds: attendees.map(Number),
         inviteState: m.InviteState || 'None', inviteToken: m.InviteToken || '', inviteError: m.InviteError || '', revision: Number(m.Revision) || 1,
         cancellationReason: m.CancellationReason || '', cutoff: m.CutoffTime || '', intervalStart: m.IntervalStart || '',
-        previousId: m.PreviousMeetingId ? Number(m.PreviousMeetingId) : null, locked: isUncommitted(m)
+        previousId: m.PreviousMeetingId ? Number(m.PreviousMeetingId) : null, locked: isUncommitted(m), cutoffUpdatesId: Number(m.CutoffUpdatesId) || 0,
+        finalisedIso: m.FinalisedAt ? D.localDate(m.FinalisedAt) : '', finalisedByName: m.FinalisedById ? nameOf(m.FinalisedById) : '',
+        amendments: Number(m.AmendmentCount) || 0, pdfState: m.PdfState || 'None', pdfVersion: Number(m.PdfVersion) || 0
       };
     }
     var meetings = (raw.meetings.rows || []).filter(function (m) { return !isUncommitted(m); }).map(meetingFrom)

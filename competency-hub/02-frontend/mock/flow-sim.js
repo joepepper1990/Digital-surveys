@@ -146,7 +146,7 @@ window.MockFlow = (function () {
     }
 
     // ---- meetings (5 Meetings): the same checks; the invitation is taken as sent; starting writes the agenda
-    var MEETINGS = ['ScheduleMeeting', 'UpdateMeeting', 'CancelMeeting', 'StartMeeting'];
+    var MEETINGS = ['ScheduleMeeting', 'UpdateMeeting', 'CancelMeeting', 'StartMeeting', 'FinaliseMeeting', 'AmendMeeting'];
     var A = window.MockRules.agenda;
     function meetings(req, payload, requester, access) {
       var me = requester.SiteUserId;
@@ -202,6 +202,57 @@ window.MockFlow = (function () {
         mEvent(mt2, key, 'Meeting Cancelled');
         return finish(req, 'Completed', 'Meeting cancelled.', mt2.Id);
       }
+      // ---- finalise and amend (7 Minutes): the record is frozen into MTG-{id}; the PDF is taken as made
+      var pdfOn = (data['Competency Hub Settings'].filter(function (r) { return r.Title === 'PdfEnabled'; })[0] || {}).Value !== 'No';
+      var items = data['Meeting Items'];
+      var mtgDir = ROOT + 'MeetingItems/' + key + '/MTG-' + mt2.Id;
+      var frozenRow = function (v) { if (items.some(function (r) { return r.RowKey === v.RowKey; })) return; items.push(Object.assign({ Id: nextId(items), MeetingId: mt2.Id, FileDirRef: mtgDir }, v)); };
+      if (req.RequestType === 'FinaliseMeeting') {
+        if (mt2.Status !== 'In Progress') return finish(req, 'Rejected', 'Only a meeting in progress can be finalised.');
+        if (data.Requests.some(function (r) { return r.MeetingId === mt2.Id && ['Submitted', 'Processing', 'Failed'].indexOf(r.Status) >= 0 && r !== req; })) {
+          return finish(req, 'Rejected', 'Some changes made in this meeting are still being recorded. Finalise once they show as saved.');
+        }
+        var live = items.filter(function (r) { return r.FileDirRef === mtgDir + '/Record' && String(r.RecordKey || '').indexOf(mt2.Id + '|') === 0; }).sort(function (a, b) { return a.Id - b.Id; });
+        var last = {};
+        live.forEach(function (r) { last[r.RecordKey] = r; });
+        var agendaRows = items.filter(function (r) { return r.FileDirRef === mtgDir && r.RowType === 'Agenda Item' && r.SourceType; });
+        var nb = live.filter(function (r) { return r.RowType === 'New Business'; });
+        var okey = function (t, id) { return mt2.Id + '|O|' + t + '|' + Number(id); };
+        var list2 = agendaRows.map(function (r) { return { key: okey(r.SourceType, r.SourceId), section: r.Section, title: r.Title }; })
+          .concat(nb.map(function (r) { return { key: okey('New Business', r.Id), section: 'New business', title: r.Title }; }));
+        var outs = {};
+        list2.forEach(function (x) { outs[x.key] = last[x.key] ? last[x.key].Outcome : ''; });
+        var missing = R.missingOutcomes(list2, outs);
+        if (missing.length) return finish(req, 'Rejected', 'These items still need an outcome: ' + missing.slice(0, 10).join('; ') + (missing.length > 10 ? ' and more' : '') + '.');
+        agendaRows.forEach(function (r) { var o = last[okey(r.SourceType, r.SourceId)]; if (o) { r.Outcome = o.Outcome || ''; r.Notes = o.Notes || ''; } });
+        nb.forEach(function (r) { var o = last[okey('New Business', r.Id)] || {};
+          frozenRow({ RowKey: 'F|' + mt2.Id + '|A|New Business|' + r.Id, Title: r.Title, RowType: 'Agenda Item', Section: 'New business', SortOrder: 8, SourceType: 'New Business',
+            SourceId: r.Id, Outcome: o.Outcome || '', Notes: o.Notes || '', SnapshotDetails: r.Notes || '' }); });
+        JSON.parse(mt2.Attendees || '[]').forEach(function (pid) { var a = last[mt2.Id + '|P|' + pid] || {}; var p = person(pid) || {};
+          frozenRow({ RowKey: 'F|' + mt2.Id + '|P|' + pid, Title: p.Title || 'Someone no longer listed', RowType: 'Attendee', Section: 'Attendance', SourceId: pid, Attendance: a.Attendance || '' }); });
+        live.filter(function (r) { return r.RowType === 'Decision'; }).forEach(function (r) {
+          frozenRow({ RowKey: 'F|' + mt2.Id + '|D|' + r.Id, Title: r.Title, RowType: 'Decision', Section: 'Decisions and additional actions', SortOrder: 9, Notes: r.Notes || '' }); });
+        data.Actions.filter(function (a) { return a.SourceType === 'Meeting' && a.SourceId === mt2.Id; }).forEach(function (a) {
+          frozenRow({ RowKey: 'F|' + mt2.Id + '|S|' + a.Id, Title: a.Title, RowType: 'Agenda Item', Section: 'Decisions and additional actions', SortOrder: 9, SourceType: 'Action',
+            SourceId: a.Id, SnapshotOwner: String(a.AssignedToId), SnapshotStatus: a.Status }); });
+        Object.assign(mt2, { Status: 'Finalised', FinalisedAt: new Date().toISOString(), FinalisedById: me, PdfState: pdfOn ? 'Ready' : 'None', PdfVersion: pdfOn ? 1 : 0 });
+        bump();
+        mEvent(mt2, key, 'Meeting Finalised');
+        return finish(req, 'Completed', pdfOn ? 'Minutes finalised. The record is now read-only, and the PDF is being made.' : 'Minutes finalised. The record is now read-only.', mt2.Id);
+      }
+      if (req.RequestType === 'AmendMeeting') {
+        if (!management(requester)) return finish(req, 'Rejected', 'Only Team Leaders and the Group Head can amend finalised minutes.');
+        if (mt2.Status !== 'Finalised') return finish(req, 'Rejected', 'Only finalised minutes can be amended.');
+        var ae = R.validateAmend(payload);
+        if ((err = ae.what || ae.reason)) return finish(req, 'Rejected', err);
+        var n = (mt2.AmendmentCount || 0) + 1;
+        frozenRow({ RowKey: 'F|' + mt2.Id + '|M|' + req.RequestKey, Title: 'Amendment ' + n + ' by ' + requester.Title, RowType: 'Amendment', SortOrder: 10,
+          Notes: payload.what.trim(), AmendmentReason: payload.reason.trim() });
+        Object.assign(mt2, { AmendmentCount: n, PdfState: pdfOn ? 'Ready' : 'None', PdfVersion: pdfOn ? n + 1 : mt2.PdfVersion });
+        bump();
+        mEvent(mt2, key, 'Meeting Amended');
+        return finish(req, 'Completed', 'Amendment added. The original minutes are kept, and the amendment is shown with them.', mt2.Id);
+      }
       if (mt2.Status !== 'Scheduled') return finish(req, 'Rejected', 'This meeting has already started, or is finished or cancelled.');
       var prev = data.Meetings.filter(function (x) { return x.CompetencyId === mt2.CompetencyId && x.Status === 'Finalised'; })
         .sort(function (a, b) { return String(b.MeetingDate).localeCompare(String(a.MeetingDate)); })[0];
@@ -215,7 +266,11 @@ window.MockFlow = (function () {
         actionsOpen: data.Actions.filter(function (a) { return a.IsOpen; }), actionsClosed: data.Actions.filter(function (a) { return !a.IsOpen; }),
         notices: data.Noticeboard.filter(function (n) { return n.Status === 'Active'; }), entries: data['Improvements and Degradations'].filter(function (e) { return e.CompetencyId === mt2.CompetencyId; }),
         flags: data.Updates.filter(function (u) { return u.IsFlagEvent; }), dates: data['Calendar Events'].filter(function (c) { return c.IsImportant && c.Status === 'Scheduled'; }),
-        carried: data['Meeting Items'].filter(function (x) { return x.MeetingId === (prev && prev.Id) && x.RowType === 'Outcome'; }),
+        carried: data['Meeting Items'].filter(function (x) { return prev && x.MeetingId === prev.Id && x.RowType === 'Agenda Item' && x.FileDirRef === ROOT + 'MeetingItems/' + key + '/MTG-' + prev.Id; }),
+        cleared: [].concat.apply([], data.Meetings.filter(function (x) { return x.CompetencyId === mt2.CompetencyId && x.Status === 'Finalised'; }).map(function (x) {
+          return data['Meeting Items'].filter(function (r) { return r.MeetingId === x.Id && r.RowType === 'Agenda Item' && r.Outcome === 'Discussed' && r.FileDirRef === ROOT + 'MeetingItems/' + key + '/MTG-' + x.Id; })
+            .map(function (r) { return { key: r.SourceType + ':' + r.SourceId, upto: x.CutoffUpdatesId }; });
+        })),
         memberIds: ids(members.map(function (x) { return x.PersonId; })), chairIds: ids(members.filter(function (x) { return x.CanManageMeetings; }).map(function (x) { return x.PersonId; })),
         mgmtIds: ids(data.People.filter(management).map(function (p) { return p.SiteUserId; })), lookaheadDays: 60 });
       list.forEach(function (x) {
@@ -253,13 +308,20 @@ window.MockFlow = (function () {
             return finish(req, 'Rejected', 'That improvement or degradation could not be found in this area, or it is closed.');
           }
         }
+        var fromMtg = null;
+        if (payload.sourceMeetingId) {
+          fromMtg = data.Meetings.filter(function (x) { return x.Id === Number(payload.sourceMeetingId); })[0];
+          if (!fromMtg || fromMtg.CompetencyId !== areaId(payload.areaKey) || fromMtg.Status !== 'In Progress' || !(access.isManagement || access.chairs(payload.areaKey))) {
+            return finish(req, 'Rejected', 'Actions are raised from a meeting only while it is in progress, by the people who run it.');
+          }
+        }
         var id = nextId(data.Actions);
         var action = { Id: id, Title: payload.title, Description: payload.description, CompetencyId: areaId(payload.areaKey), LinkedCompetenciesId: [],
           AssignedToId: payload.ownerId, RaisedById: requester.SiteUserId, DateRaised: new Date().toISOString(),
           DueDay: D.toDueDay(payload.dueIso), OriginalDueDate: ukMidnight(payload.dueIso), Status: 'Open', IsOpen: true,
           Priority: payload.priority || 'Normal', RequiresCloseOut: !!payload.requiresCloseOut, ExtensionCount: 0, Revision: 1,
           PendingRequestKey: '', LastRequestKey: req.RequestKey, CreatedRequestKey: 'F|' + req.RequestKey,
-          FileDirRef: ROOT + 'Actions/' + payload.areaKey, SourceType: source ? 'Register' : 'None', SourceId: source ? source.Id : null };
+          FileDirRef: ROOT + 'Actions/' + payload.areaKey, SourceType: source ? 'Register' : fromMtg ? 'Meeting' : 'None', SourceId: source ? source.Id : fromMtg ? fromMtg.Id : null };
         data.Actions.push(action);
         event(req, action, { EventType: 'Action Raised', NewDueDate: ukMidnight(payload.dueIso) });
         return finish(req, 'Completed', 'ACT-' + ('0000' + id).slice(-5) + ' raised.', id);

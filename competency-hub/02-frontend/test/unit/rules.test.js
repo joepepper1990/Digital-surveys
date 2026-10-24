@@ -168,3 +168,20 @@ test('roles: managers reassign, close, reopen and edit; owners change status; no
   const other = R.roles(open, 999, access);
   assert.equal([other.canStatus, other.canReassign, other.canClose, other.canReopen, other.canEdit].some(Boolean), false);
 });
+
+test('minutes: items for discussion each need an outcome; others may be left as no change', () => {
+  const items = [
+    { key: 'a', section: 'Open actions', title: 'Probe' },
+    { key: 'b', section: 'Noticeboard', title: 'Rig' },
+    { key: 'c', section: 'New business', title: 'Loan pool' },
+    { key: 'd', section: 'Carried forward', title: 'Stock' }
+  ];
+  assert.deepEqual(plain(R.missingOutcomes(items, { a: '', b: 'Discussed', c: 'No change', d: '' })), ['Loan pool', 'Stock']);
+  assert.deepEqual(plain(R.missingOutcomes(items, { b: 'Deferred', c: 'Not reached', d: 'Action raised' })), []);
+});
+
+test('an amendment says what and why, within limits', () => {
+  assert.deepEqual(plain(Object.keys(R.validateAmend({ what: 'short', reason: '' }))), ['what', 'reason']);
+  assert.deepEqual(plain(R.validateAmend({ what: 'Nick attended the second half.', reason: 'Recorded before he arrived.' })), {});
+  assert.match(R.validateAmend({ what: 'x'.repeat(2001), reason: 'A good enough reason.' }).what, /2,000/);
+});
