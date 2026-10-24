@@ -303,7 +303,7 @@
         { "name": "RespondedBy", "title": "Responded By", "type": "User" },
         { "name": "RespondedOn", "title": "Responded On", "type": "DateTime" },
         { "name": "PageView", "title": "Page", "type": "Text", "max": 100 },
-        { "name": "ClientKey", "title": "Client Key", "type": "Text", "max": 36, "required": true, "indexed": true, "unique": true },
+        { "name": "ClientKey", "title": "Client Key", "type": "Text", "max": 36, "required": true, "indexed": true },
         { "name": "IsTestRecord", "title": "Test Record", "type": "Boolean", "default": "0", "indexed": true }
       ]
     },

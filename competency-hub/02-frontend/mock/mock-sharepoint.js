@@ -176,7 +176,7 @@ window.MockSharePoint = (function () {
     var store = WRITABLE[title];
     if (!store || !store.allowed(folder, me)) return respond(403, { error: 'Access denied' });
     var unique = store.unique;
-    if (data[title].some(function (n) { return n[unique] === values[unique]; })) {
+    if (unique && data[title].some(function (n) { return n[unique] === values[unique]; })) {
       return respond(200, { value: [{ FieldName: unique, HasException: true, ErrorMessage: 'This value must be unique.' }] });
     }
     var id = data[title].reduce(function (m, n) { return Math.max(m, n.Id); }, 0) + 1;
@@ -250,9 +250,9 @@ window.MockSharePoint = (function () {
           AuthorId: asId, Created: new Date().toISOString(), FileDirRef: path };
       }
     },
-    // Anyone active may add feedback, at the list's root only.
+    // Anyone active may add feedback, at the list's root only. People read only their own items here, so SharePoint
+    // cannot enforce a unique ClientKey; the app looks for its own item before offering a retry.
     Feedback: {
-      unique: 'ClientKey',
       allowed: function (folder) { return folder === ''; },
       row: function (v, id, path) {
         return { Id: id, Title: v.Title, FeedbackType: v.FeedbackType, Description: v.Description, Status: 'New', PageView: v.PageView, ClientKey: v.ClientKey,

@@ -321,6 +321,7 @@ window.MockAdmin = (function () {
         var fdl = listByGuid(m[1]);
         var fd = fdl.fields.filter(function (x) { return x.InternalName === m[2]; })[0];
         if (body.EnforceUniqueValues && !fd.Indexed && !body.Indexed) return fail(400, 'The field must be indexed to enforce unique values.');
+        if (body.EnforceUniqueValues && Number(fdl.settings.ReadSecurity) === 2) return fail(500, 'A list for which users can only view their own items cannot have fields that enforce unique values.');
         Object.keys(body).forEach(function (k) { if (k !== '__metadata') fd[k] = k === 'Choices' ? body[k].results.slice() : body[k]; });
         return respond(204);
       }

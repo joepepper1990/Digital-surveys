@@ -316,6 +316,8 @@ CHS.engine = (function () {
       var back = await rest.get(path + '?$select=Title,Indexed,EnforceUniqueValues,Required');
       if ((f.indexed && !back.Indexed) || (f.unique && !back.EnforceUniqueValues) || (!!f.required !== !!back.Required) || (f.title && back.Title !== f.title)) {
         note('stop', step, 'Column "' + f.name + '" on "' + l.title + '" did not keep its settings.');
+      } else {
+        note('create', step, 'Updated ' + Object.keys(Object.assign.apply(null, [{}].concat(changes))).join(', ') + ' on "' + l.title + '"/' + f.name + '.');
       }
     }
 

@@ -492,6 +492,14 @@ test('Check on a site set up before People.CanPostNotices existed finishes witho
   deq(site.writes, []);
 });
 
+test('No list where people read only their own items has a column that must be unique (SharePoint refuses it)', () => {
+  schema.lists.filter((l) => l.readSecurity === 2).forEach((l) => {
+    const unique = (l.standard ? schema.standardColumns : []).concat(l.fields).filter((f) => f.unique).map((f) => f.name);
+    deq(unique, [], l.title);
+    assert.ok(!l.titleUnique, l.title);
+  });
+});
+
 test('The Noticeboard regrant: All Users keep Read, only Notice posters may add, and the people on the site are Notice posters', async () => {
   const { site, run, ctx } = newSite();
   // The site as release 1 left it: All Users could add notices; there was no Notice posters group.
