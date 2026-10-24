@@ -303,6 +303,23 @@
             ]
           }
         },
+        "Initialise_src_email": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varSrcNotice",
+                "type": "object",
+                "value": {}
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_src_mtg": [
+              "Succeeded"
+            ]
+          }
+        },
         "Initialise_user_id": {
           "type": "InitializeVariable",
           "inputs": {
@@ -315,7 +332,7 @@
             ]
           },
           "runAfter": {
-            "Initialise_src_mtg": [
+            "Initialise_src_email": [
               "Succeeded"
             ]
           }
@@ -1570,7 +1587,7 @@
                             "parameters": {
                               "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                               "parameters/method": "GET",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notices']}')/items(@{if(empty(first(split(string(coalesce(variables('varTx')?['RecordId'], '')), '.'))), '0', first(split(string(coalesce(variables('varTx')?['RecordId'], '')), '.')))})?$select=Id,Title,Body,Category,IsImportant,ImportantUntil,Status,AuthorId,Revision,LastRequestKey,FileDirRef",
+                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notices']}')/items(@{if(empty(first(split(string(coalesce(variables('varTx')?['RecordId'], '')), '.'))), '0', first(split(string(coalesce(variables('varTx')?['RecordId'], '')), '.')))})?$select=Id,Title,Body,Category,IsImportant,ImportantUntil,ImportantDays,Status,AuthorId,Revision,LastRequestKey,FileDirRef",
                               "parameters/headers": {
                                 "Accept": "application/json;odata=minimalmetadata"
                               }
@@ -1893,7 +1910,8 @@
                                 "Body": "@{if(contains(outputs('Payload'), 'body'), trim(string(coalesce(outputs('Payload')?['body'], ''))), body('Get_rec_(edit_notice)')?['Body'])}",
                                 "Category": "@{if(contains(outputs('Payload'), 'category'), outputs('Payload')?['category'], coalesce(body('Get_rec_(edit_notice)')?['Category'], 'General'))}",
                                 "IsImportant": "@if(contains(outputs('Payload'), 'important'), equals(outputs('Payload')?['important'], true), equals(body('Get_rec_(edit_notice)')?['IsImportant'], true))",
-                                "ImportantUntil": "@if(contains(outputs('Payload'), 'important'), if(equals(outputs('Payload')?['important'], true), convertToUtc(concat(formatDateTime(addDays(concat(outputs('Today_in_the_UK'), 'T00:00:00Z'), 30), 'yyyy-MM-dd'), 'T00:00:00'), 'GMT Standard Time'), null), body('Get_rec_(edit_notice)')?['ImportantUntil'])"
+                                "ImportantUntil": "@if(contains(outputs('Payload'), 'important'), if(equals(outputs('Payload')?['important'], true), convertToUtc(concat(formatDateTime(addDays(concat(outputs('Today_in_the_UK'), 'T00:00:00Z'), if(contains(createArray(7, 14, 30, 90), int(coalesce(outputs('Payload')?['importantDays'], 30))), int(coalesce(outputs('Payload')?['importantDays'], 30)), 30)), 'yyyy-MM-dd'), 'T00:00:00'), 'GMT Standard Time'), null), body('Get_rec_(edit_notice)')?['ImportantUntil'])",
+                                "ImportantDays": "@if(contains(outputs('Payload'), 'important'), if(equals(outputs('Payload')?['important'], true), if(contains(createArray(7, 14, 30, 90), int(coalesce(outputs('Payload')?['importantDays'], 30))), int(coalesce(outputs('Payload')?['importantDays'], 30)), 30), null), body('Get_rec_(edit_notice)')?['ImportantDays'])"
                               },
                               "runAfter": {}
                             },
@@ -2275,7 +2293,7 @@
                             "parameters": {
                               "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                               "parameters/method": "GET",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notices']}')/items(@{if(empty(first(split(string(coalesce(variables('varTx')?['RecordId'], '')), '.'))), '0', first(split(string(coalesce(variables('varTx')?['RecordId'], '')), '.')))})?$select=Id,Title,Body,Category,IsImportant,ImportantUntil,Status,AuthorId,Revision,LastRequestKey,FileDirRef",
+                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notices']}')/items(@{if(empty(first(split(string(coalesce(variables('varTx')?['RecordId'], '')), '.'))), '0', first(split(string(coalesce(variables('varTx')?['RecordId'], '')), '.')))})?$select=Id,Title,Body,Category,IsImportant,ImportantUntil,ImportantDays,Status,AuthorId,Revision,LastRequestKey,FileDirRef",
                               "parameters/headers": {
                                 "Accept": "application/json;odata=minimalmetadata"
                               }
@@ -2969,7 +2987,7 @@
                             "parameters": {
                               "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                               "parameters/method": "GET",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notices']}')/items(@{if(empty(first(split(string(coalesce(variables('varTx')?['RecordId'], '')), '.'))), '0', first(split(string(coalesce(variables('varTx')?['RecordId'], '')), '.')))})?$select=Id,Title,Body,Category,IsImportant,ImportantUntil,Status,AuthorId,Revision,LastRequestKey,FileDirRef",
+                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notices']}')/items(@{if(empty(first(split(string(coalesce(variables('varTx')?['RecordId'], '')), '.'))), '0', first(split(string(coalesce(variables('varTx')?['RecordId'], '')), '.')))})?$select=Id,Title,Body,Category,IsImportant,ImportantUntil,ImportantDays,Status,AuthorId,Revision,LastRequestKey,FileDirRef",
                               "parameters/headers": {
                                 "Accept": "application/json;odata=minimalmetadata"
                               }
@@ -4362,54 +4380,6 @@
                             ]
                           }
                         },
-                        "Get_resp_(raise_entry)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "GET",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['people']}')/items?$select=Id,Title,SiteUserId,Role,Status,Person/Name&$expand=Person&$filter=SiteUserId eq @{if(empty(first(split(string(coalesce(outputs('Payload')?['responsibleId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['responsibleId'], '')), '.')))}",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata"
-                              }
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "My_member_(raise_entry)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Resp_member_(raise_entry)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "GET",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['members']}')/items?$select=Id&$filter=PersonId eq @{if(empty(first(split(string(coalesce(outputs('Payload')?['responsibleId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['responsibleId'], '')), '.')))} and CompetencyId eq @{if(empty(first(split(string(coalesce(first(body('Area_(raise_entry)'))?['Id'], '')), '.'))), '0', first(split(string(coalesce(first(body('Area_(raise_entry)'))?['Id'], '')), '.')))} and Status eq 'Active'",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata"
-                              }
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Get_resp_(raise_entry)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
                         "Find_entry_(raise_entry)": {
                           "type": "OpenApiConnection",
                           "inputs": {
@@ -4429,7 +4399,7 @@
                             "authentication": "@parameters('$authentication')"
                           },
                           "runAfter": {
-                            "Resp_member_(raise_entry)": [
+                            "My_member_(raise_entry)": [
                               "Succeeded"
                             ]
                           }
@@ -4476,7 +4446,7 @@
                           "actions": {
                             "Reason_to_refuse_if_any_(raise_entry)": {
                               "type": "Compose",
-                              "inputs": "@if(or(empty(first(body('Area_(raise_entry)'))), not(equals(string(first(body('Area_(raise_entry)'))?['Status']), 'Active')), not(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), not(empty(first(body('My_member_(raise_entry)'))))))), 'Choose one of your areas.', if(not(contains(createArray('Improvement', 'Degradation', 'Concern', 'Opportunity', 'Positive Observation'), string(coalesce(outputs('Payload')?['entryType'], '')))), 'Choose the type of entry.', if(not(contains(createArray('Low', 'Medium', 'High'), string(coalesce(outputs('Payload')?['impact'], '')))), 'Choose the impact.', if(equals(length(trim(string(coalesce(outputs('Payload')?['title'], '')))), 0), 'Give the entry a title.', if(greater(length(trim(string(coalesce(outputs('Payload')?['title'], '')))), 255), 'Keep the title to 255 characters or fewer.', if(equals(length(trim(string(coalesce(outputs('Payload')?['description'], '')))), 0), 'Describe it.', if(greater(length(trim(string(coalesce(outputs('Payload')?['description'], '')))), 5000), 'Keep the description to 5,000 characters or fewer.', if(not(and(not(empty(first(body('Get_resp_(raise_entry)')?['value']))), equals(string(first(body('Get_resp_(raise_entry)')?['value'])?['Status']), 'Active'), or(contains(createArray('Team Leader', 'Group Head'), string(first(body('Get_resp_(raise_entry)')?['value'])?['Role'])), not(empty(body('Resp_member_(raise_entry)')?['value']))))), 'Choose a member of this area or a Team Leader.', ''))))))))",
+                              "inputs": "@if(or(empty(first(body('Area_(raise_entry)'))), not(equals(string(first(body('Area_(raise_entry)'))?['Status']), 'Active')), not(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), not(empty(first(body('My_member_(raise_entry)'))))))), 'Choose one of your areas.', if(not(contains(createArray('Improvement', 'Degradation', 'Concern', 'Opportunity', 'Positive Observation', 'Other'), string(coalesce(outputs('Payload')?['entryType'], '')))), 'Choose the type of entry.', if(not(contains(createArray('Low', 'Medium', 'High'), string(coalesce(outputs('Payload')?['impact'], '')))), 'Choose the impact.', if(equals(length(trim(string(coalesce(outputs('Payload')?['title'], '')))), 0), 'Give the entry a title.', if(greater(length(trim(string(coalesce(outputs('Payload')?['title'], '')))), 255), 'Keep the title to 255 characters or fewer.', if(equals(length(trim(string(coalesce(outputs('Payload')?['description'], '')))), 0), 'Describe it.', if(greater(length(trim(string(coalesce(outputs('Payload')?['description'], '')))), 5000), 'Keep the description to 5,000 characters or fewer.', '')))))))",
                               "runAfter": {}
                             },
                             "Refused_or_allowed_(raise_entry)": {
@@ -4662,10 +4632,6 @@
                                 {
                                   "FieldName": "RaisedBy",
                                   "FieldValue": "@{concat('[{\"Key\":\"', outputs('Person_who_sent_it')?['Person']?['Name'], '\"}]')}"
-                                },
-                                {
-                                  "FieldName": "ResponsiblePerson",
-                                  "FieldValue": "@{concat('[{\"Key\":\"', first(body('Get_resp_(raise_entry)')?['value'])?['Person']?['Name'], '\"}]')}"
                                 },
                                 {
                                   "FieldName": "DateRaised",
@@ -5284,61 +5250,13 @@
                             ]
                           }
                         },
-                        "Get_resp_(update_entry)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "GET",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['people']}')/items?$select=Id,Title,SiteUserId,Role,Status,Person/Name&$expand=Person&$filter=SiteUserId eq @{if(empty(first(split(string(coalesce(outputs('Payload')?['responsibleId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['responsibleId'], '')), '.')))}",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata"
-                              }
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "My_member_(update_entry)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Resp_member_(update_entry)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "GET",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['members']}')/items?$select=Id&$filter=PersonId eq @{if(empty(first(split(string(coalesce(outputs('Payload')?['responsibleId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['responsibleId'], '')), '.')))} and CompetencyId eq @{if(empty(first(split(string(coalesce(first(body('Area_(update_entry)'))?['Id'], '')), '.'))), '0', first(split(string(coalesce(first(body('Area_(update_entry)'))?['Id'], '')), '.')))} and Status eq 'Active'",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata"
-                              }
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Get_resp_(update_entry)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
                         "Decide_once_(update_entry)": {
                           "type": "If",
                           "expression": "@not(contains(string(coalesce(variables('varTx')?['StepsDone'], '')), 'DECIDED'))",
                           "actions": {
                             "Reason_to_refuse_if_any_(update_entry)": {
                               "type": "Compose",
-                              "inputs": "@if(equals(string(coalesce(body('Get_rec_(update_entry)')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey'])), '', if(empty(first(body('Area_(update_entry)'))), 'That could not be found.', if(and(greater(int(if(empty(first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.'))), '0', first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 0), not(equals(first(split(string(coalesce(body('Get_rec_(update_entry)')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.'))))), 'This was changed by someone else. Review the latest details and try again.', if(not(or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), and(not(empty(first(body('My_member_(update_entry)')))), equals(string(outputs('Person_who_sent_it')?['Role']), 'Engineer'))), and(not(empty(first(body('My_member_(update_entry)')))), equals(first(body('My_member_(update_entry)'))?['CanManageMeetings'], true)), equals(first(split(string(coalesce(body('Get_rec_(update_entry)')?['RaisedById'], '')), '.')), outputs('Sender_ID')), equals(first(split(string(coalesce(body('Get_rec_(update_entry)')?['ResponsiblePersonId'], '')), '.')), outputs('Sender_ID')))), 'Only the person who raised it, the person responsible, the engineers and meeting runners of the area, and the Team Leaders and Group Head can change this entry.', if(and(contains(outputs('Payload'), 'title'), equals(length(trim(string(coalesce(outputs('Payload')?['title'], '')))), 0)), 'Give the entry a title.', if(and(contains(outputs('Payload'), 'title'), greater(length(trim(string(coalesce(outputs('Payload')?['title'], '')))), 255)), 'Keep the title to 255 characters or fewer.', if(and(contains(outputs('Payload'), 'description'), greater(length(trim(string(coalesce(outputs('Payload')?['description'], '')))), 5000)), 'Keep the description to 5,000 characters or fewer.', if(and(contains(outputs('Payload'), 'impact'), not(contains(createArray('Low', 'Medium', 'High'), string(coalesce(outputs('Payload')?['impact'], ''))))), 'Choose the impact.', if(and(contains(outputs('Payload'), 'status'), not(contains(createArray('Open', 'Under Review', 'Resolved', 'Closed'), string(coalesce(outputs('Payload')?['status'], ''))))), 'Choose a status.', if(and(contains(outputs('Payload'), 'status'), contains(createArray('Resolved', 'Closed'), string(coalesce(outputs('Payload')?['status'], ''))), less(length(trim(string(coalesce(outputs('Payload')?['outcome'], '')))), 10)), 'Record the outcome (at least 10 characters).', if(greater(length(trim(string(coalesce(outputs('Payload')?['outcome'], '')))), 2000), 'Keep the outcome to 2,000 characters or fewer.', if(and(contains(outputs('Payload'), 'responsibleId'), not(and(not(empty(first(body('Get_resp_(update_entry)')?['value']))), equals(string(first(body('Get_resp_(update_entry)')?['value'])?['Status']), 'Active'), or(contains(createArray('Team Leader', 'Group Head'), string(first(body('Get_resp_(update_entry)')?['value'])?['Role'])), not(empty(body('Resp_member_(update_entry)')?['value'])))))), 'Choose a member of this area or a Team Leader.', ''))))))))))))",
+                              "inputs": "@if(equals(string(coalesce(body('Get_rec_(update_entry)')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey'])), '', if(empty(first(body('Area_(update_entry)'))), 'That could not be found.', if(and(greater(int(if(empty(first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.'))), '0', first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 0), not(equals(first(split(string(coalesce(body('Get_rec_(update_entry)')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.'))))), 'This was changed by someone else. Review the latest details and try again.', if(not(or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), and(not(empty(first(body('My_member_(update_entry)')))), equals(string(outputs('Person_who_sent_it')?['Role']), 'Engineer'))), and(not(empty(first(body('My_member_(update_entry)')))), equals(first(body('My_member_(update_entry)'))?['CanManageMeetings'], true)), equals(first(split(string(coalesce(body('Get_rec_(update_entry)')?['RaisedById'], '')), '.')), outputs('Sender_ID')))), 'Only the person who raised it, the engineers and meeting runners of the area, and the Team Leaders and Group Head can change this entry.', if(and(contains(outputs('Payload'), 'title'), equals(length(trim(string(coalesce(outputs('Payload')?['title'], '')))), 0)), 'Give the entry a title.', if(and(contains(outputs('Payload'), 'title'), greater(length(trim(string(coalesce(outputs('Payload')?['title'], '')))), 255)), 'Keep the title to 255 characters or fewer.', if(and(contains(outputs('Payload'), 'description'), greater(length(trim(string(coalesce(outputs('Payload')?['description'], '')))), 5000)), 'Keep the description to 5,000 characters or fewer.', if(and(contains(outputs('Payload'), 'impact'), not(contains(createArray('Low', 'Medium', 'High'), string(coalesce(outputs('Payload')?['impact'], ''))))), 'Choose the impact.', if(and(contains(outputs('Payload'), 'status'), not(contains(createArray('Open', 'Under Review', 'Resolved', 'Closed'), string(coalesce(outputs('Payload')?['status'], ''))))), 'Choose a status.', if(and(contains(outputs('Payload'), 'status'), contains(createArray('Resolved', 'Closed'), string(coalesce(outputs('Payload')?['status'], ''))), less(length(trim(string(coalesce(outputs('Payload')?['outcome'], '')))), 10)), 'Record the outcome (at least 10 characters).', if(greater(length(trim(string(coalesce(outputs('Payload')?['outcome'], '')))), 2000), 'Keep the outcome to 2,000 characters or fewer.', '')))))))))))",
                               "runAfter": {}
                             },
                             "Refused_or_allowed_(update_entry)": {
@@ -5486,7 +5404,7 @@
                             "actions": {}
                           },
                           "runAfter": {
-                            "Resp_member_(update_entry)": [
+                            "My_member_(update_entry)": [
                               "Succeeded"
                             ]
                           }
@@ -5503,7 +5421,6 @@
                                 "Impact": "@{if(contains(outputs('Payload'), 'impact'), outputs('Payload')?['impact'], coalesce(body('Get_rec_(update_entry)')?['Impact'], 'Medium'))}",
                                 "Status": "@{if(contains(outputs('Payload'), 'status'), string(coalesce(outputs('Payload')?['status'], '')), body('Get_rec_(update_entry)')?['Status'])}",
                                 "Outcome": "@{if(contains(outputs('Payload'), 'outcome'), trim(string(coalesce(outputs('Payload')?['outcome'], ''))), coalesce(body('Get_rec_(update_entry)')?['Outcome'], ''))}",
-                                "ResponsiblePersonId": "@if(contains(outputs('Payload'), 'responsibleId'), int(if(empty(first(split(string(coalesce(outputs('Payload')?['responsibleId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['responsibleId'], '')), '.')))), body('Get_rec_(update_entry)')?['ResponsiblePersonId'])",
                                 "DateResolved": "@if(contains(outputs('Payload'), 'status'), if(contains(createArray('Resolved', 'Closed'), string(coalesce(outputs('Payload')?['status'], ''))), outputs('Time_of_the_change'), null), body('Get_rec_(update_entry)')?['DateResolved'])"
                               },
                               "runAfter": {}
@@ -6084,7 +6001,7 @@
                           "actions": {
                             "Reason_to_refuse_if_any_(link_action)": {
                               "type": "Compose",
-                              "inputs": "@if(equals(string(coalesce(body('Get_rec_(link_action)')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey'])), '', if(empty(first(body('Area_(link_action)'))), 'That could not be found.', if(and(greater(int(if(empty(first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.'))), '0', first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 0), not(equals(first(split(string(coalesce(body('Get_rec_(link_action)')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.'))))), 'This was changed by someone else. Review the latest details and try again.', if(not(or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), and(not(empty(first(body('My_member_(link_action)')))), equals(string(outputs('Person_who_sent_it')?['Role']), 'Engineer'))), and(not(empty(first(body('My_member_(link_action)')))), equals(first(body('My_member_(link_action)'))?['CanManageMeetings'], true)), equals(first(split(string(coalesce(body('Get_rec_(link_action)')?['RaisedById'], '')), '.')), outputs('Sender_ID')), equals(first(split(string(coalesce(body('Get_rec_(link_action)')?['ResponsiblePersonId'], '')), '.')), outputs('Sender_ID')))), 'Only the people who look after this entry can link actions to it.', if(empty(string(coalesce(outputs('Link_action_OK_(link_action)')?['Id'], ''))), 'That action could not be found.', if(not(equals(first(split(string(coalesce(outputs('Link_action_OK_(link_action)')?['CompetencyId'], '')), '.')), first(split(string(coalesce(body('Get_rec_(link_action)')?['CompetencyId'], '')), '.')))), 'Choose an action in the same area as this entry.', if(not(equals(outputs('Link_action_OK_(link_action)')?['IsOpen'], true)), 'Choose an open action.', if(and(equals(string(coalesce(outputs('Link_action_OK_(link_action)')?['SourceType'], '')), 'Register'), not(and(equals(string(coalesce(outputs('Link_action_OK_(link_action)')?['SourceType'], '')), 'Register'), equals(first(split(string(coalesce(outputs('Link_action_OK_(link_action)')?['SourceId'], '')), '.')), first(split(string(coalesce(body('Get_rec_(link_action)')?['Id'], '')), '.')))))), 'That action is already linked to another entry.', ''))))))))",
+                              "inputs": "@if(equals(string(coalesce(body('Get_rec_(link_action)')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey'])), '', if(empty(first(body('Area_(link_action)'))), 'That could not be found.', if(and(greater(int(if(empty(first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.'))), '0', first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 0), not(equals(first(split(string(coalesce(body('Get_rec_(link_action)')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.'))))), 'This was changed by someone else. Review the latest details and try again.', if(not(or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), and(not(empty(first(body('My_member_(link_action)')))), equals(string(outputs('Person_who_sent_it')?['Role']), 'Engineer'))), and(not(empty(first(body('My_member_(link_action)')))), equals(first(body('My_member_(link_action)'))?['CanManageMeetings'], true)), equals(first(split(string(coalesce(body('Get_rec_(link_action)')?['RaisedById'], '')), '.')), outputs('Sender_ID')))), 'Only the people who look after this entry can link actions to it.', if(empty(string(coalesce(outputs('Link_action_OK_(link_action)')?['Id'], ''))), 'That action could not be found.', if(not(equals(first(split(string(coalesce(outputs('Link_action_OK_(link_action)')?['CompetencyId'], '')), '.')), first(split(string(coalesce(body('Get_rec_(link_action)')?['CompetencyId'], '')), '.')))), 'Choose an action in the same area as this entry.', if(not(equals(outputs('Link_action_OK_(link_action)')?['IsOpen'], true)), 'Choose an open action.', if(and(equals(string(coalesce(outputs('Link_action_OK_(link_action)')?['SourceType'], '')), 'Register'), not(and(equals(string(coalesce(outputs('Link_action_OK_(link_action)')?['SourceType'], '')), 'Register'), equals(first(split(string(coalesce(outputs('Link_action_OK_(link_action)')?['SourceId'], '')), '.')), first(split(string(coalesce(body('Get_rec_(link_action)')?['Id'], '')), '.')))))), 'That action is already linked to another entry.', ''))))))))",
                               "runAfter": {}
                             },
                             "Refused_or_allowed_(link_action)": {
@@ -6864,7 +6781,7 @@
                           "actions": {
                             "Reason_to_refuse_if_any_(unlink_action)": {
                               "type": "Compose",
-                              "inputs": "@if(equals(string(coalesce(body('Get_rec_(unlink_action)')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey'])), '', if(empty(first(body('Area_(unlink_action)'))), 'That could not be found.', if(and(greater(int(if(empty(first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.'))), '0', first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 0), not(equals(first(split(string(coalesce(body('Get_rec_(unlink_action)')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.'))))), 'This was changed by someone else. Review the latest details and try again.', if(not(or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), and(not(empty(first(body('My_member_(unlink_action)')))), equals(string(outputs('Person_who_sent_it')?['Role']), 'Engineer'))), and(not(empty(first(body('My_member_(unlink_action)')))), equals(first(body('My_member_(unlink_action)'))?['CanManageMeetings'], true)), equals(first(split(string(coalesce(body('Get_rec_(unlink_action)')?['RaisedById'], '')), '.')), outputs('Sender_ID')), equals(first(split(string(coalesce(body('Get_rec_(unlink_action)')?['ResponsiblePersonId'], '')), '.')), outputs('Sender_ID')))), 'Only the people who look after this entry can link actions to it.', if(empty(string(coalesce(outputs('Link_action_OK_(unlink_action)')?['Id'], ''))), 'That action could not be found.', if(not(and(equals(string(coalesce(outputs('Link_action_OK_(unlink_action)')?['SourceType'], '')), 'Register'), equals(first(split(string(coalesce(outputs('Link_action_OK_(unlink_action)')?['SourceId'], '')), '.')), first(split(string(coalesce(body('Get_rec_(unlink_action)')?['Id'], '')), '.'))))), 'That action is not linked to this entry.', ''))))))",
+                              "inputs": "@if(equals(string(coalesce(body('Get_rec_(unlink_action)')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey'])), '', if(empty(first(body('Area_(unlink_action)'))), 'That could not be found.', if(and(greater(int(if(empty(first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.'))), '0', first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 0), not(equals(first(split(string(coalesce(body('Get_rec_(unlink_action)')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.'))))), 'This was changed by someone else. Review the latest details and try again.', if(not(or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), and(not(empty(first(body('My_member_(unlink_action)')))), equals(string(outputs('Person_who_sent_it')?['Role']), 'Engineer'))), and(not(empty(first(body('My_member_(unlink_action)')))), equals(first(body('My_member_(unlink_action)'))?['CanManageMeetings'], true)), equals(first(split(string(coalesce(body('Get_rec_(unlink_action)')?['RaisedById'], '')), '.')), outputs('Sender_ID')))), 'Only the people who look after this entry can link actions to it.', if(empty(string(coalesce(outputs('Link_action_OK_(unlink_action)')?['Id'], ''))), 'That action could not be found.', if(not(and(equals(string(coalesce(outputs('Link_action_OK_(unlink_action)')?['SourceType'], '')), 'Register'), equals(first(split(string(coalesce(outputs('Link_action_OK_(unlink_action)')?['SourceId'], '')), '.')), first(split(string(coalesce(body('Get_rec_(unlink_action)')?['Id'], '')), '.'))))), 'That action is not linked to this entry.', ''))))))",
                               "runAfter": {}
                             },
                             "Refused_or_allowed_(unlink_action)": {

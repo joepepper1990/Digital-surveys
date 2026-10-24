@@ -303,6 +303,23 @@
             ]
           }
         },
+        "Initialise_src_email": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varSrcNotice",
+                "type": "object",
+                "value": {}
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_src_mtg": [
+              "Succeeded"
+            ]
+          }
+        },
         "Initialise_user_id": {
           "type": "InitializeVariable",
           "inputs": {
@@ -315,7 +332,7 @@
             ]
           },
           "runAfter": {
-            "Initialise_src_mtg": [
+            "Initialise_src_email": [
               "Succeeded"
             ]
           }

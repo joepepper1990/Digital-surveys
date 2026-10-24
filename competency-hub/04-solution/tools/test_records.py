@@ -57,6 +57,18 @@ class Notices(unittest.TestCase):
         self.assertEqual((ev['dir'], ev['f']['RecordType'], ev['f']['EventType'], ev['f']['ActorId'], ev['f']['CompetencyId']),
                          ('FLK', 'Notice', 'Notice Edited', RACHEL, 1))
 
+    def test_important_for_a_chosen_time(self):
+        for days, expect in ((7, 7), (90, 90), (45, 30)):
+            with self.subTest(days=days):
+                s = site()
+                r = submit(s, RACHEL, 'EditNotice', {'important': True, 'importantDays': days}, target=s.notice, revision=1)
+                status, eng = run(s, r)
+                self.assertEqual(request(s, r)['Status'], 'Completed', eng.log)
+                n = s.item('notices', s.notice)['f']
+                self.assertEqual(n['ImportantDays'], expect)
+                until = date.fromisoformat(str(n['ImportantUntil'])[:10])
+                self.assertIn((until - s.clock.date()).days, (expect - 1, expect))
+
     def test_who_may_change_a_notice(self):
         for who, ok in ((KELLY, True), (JOE, True), (KAI, False)):
             with self.subTest(who=who):
@@ -106,26 +118,26 @@ class Notices(unittest.TestCase):
 
 class Register(unittest.TestCase):
     good = {'areaKey': 'FLK', 'entryType': 'Improvement', 'impact': 'Low', 'title': 'Shadow board for tools',
-            'description': 'Outline each tool so missing ones are obvious.', 'responsibleId': KELLY}
+            'description': 'Outline each tool so missing ones are obvious.'}
 
     def test_raised_with_every_record(self):
         s = site()
-        r = submit(s, RACHEL, 'RaiseRegisterEntry', self.good)
+        r = submit(s, RACHEL, 'RaiseRegisterEntry', dict(self.good, entryType='Other'))
         status, eng = run(s, r)
         req = request(s, r)
         self.assertEqual(req['Status'], 'Completed', eng.log)
         e = s.rows('register', CreatedRequestKey='F|' + KEY)
         self.assertEqual(len(e), 1)
         f = e[0]['f']
-        self.assertEqual((e[0]['dir'], f['EntryType'], f['Status'], f['RaisedById'], f['ResponsiblePersonId'], f['IsTestRecord']),
-                         ('FLK', 'Improvement', 'Open', RACHEL, KELLY, True))
+        # no responsible person from 1.9.0.0: the entry is from the person who raised it
+        self.assertEqual((e[0]['dir'], f['EntryType'], f['Status'], f['RaisedById'], f.get('ResponsiblePersonId'), f['IsTestRecord']),
+                         ('FLK', 'Other', 'Open', RACHEL, None, True))
         self.assertEqual(req['ResultMessage'], 'REG-{0:05d} raised.'.format(e[0]['id']))
         self.assertEqual(event(s)['f']['EventType'], 'Entry Raised')
 
     def test_raise_refusals(self):
         cases = [({'areaKey': 'RW'}, 'Choose one of your areas.'), ({'entryType': 'Rumour'}, 'Choose the type of entry.'),
-                 ({'impact': ''}, 'Choose the impact.'), ({'title': ' '}, 'Give the entry a title.'), ({'description': ''}, 'Describe it.'),
-                 ({'responsibleId': KAI}, 'Choose a member of this area or a Team Leader.')]
+                 ({'impact': ''}, 'Choose the impact.'), ({'title': ' '}, 'Give the entry a title.'), ({'description': ''}, 'Describe it.')]
         for change, message in cases:
             with self.subTest(change=change):
                 s = site()
@@ -191,6 +203,40 @@ class Register(unittest.TestCase):
         run(s, r, flow=QUEUE)
         self.assertEqual(request(s, r)['Status'], 'Rejected')
 
+
+    # 1.9.0.0: a notice or issue is turned into an action by the area's engineers, its meeting leads, the Team Leaders and Group Head
+    def raise_from_notice(self, s, sender, area, notice, key=KEY):
+        r = submit(s, sender, 'RaiseAction', {'areaKey': area, 'title': 'Restock the probe spares', 'description': 'Order two more.', 'ownerId': RACHEL,
+                                              'dueIso': '2026-10-30', 'priority': 'Normal', 'sourceNoticeId': notice}, key=key)
+        status, eng = run(s, r, flow=QUEUE)
+        return request(s, r), eng
+
+    def test_turn_a_notice_into_an_action(self):
+        s = site()
+        req, eng = self.raise_from_notice(s, KELLY, 'FLK', s.notice)
+        self.assertEqual(req['Status'], 'Completed', eng.log)
+        a = s.rows('actions', CreatedRequestKey='F|' + KEY)[0]['f']
+        self.assertEqual((a['SourceType'], a['SourceId']), ('Noticeboard', float(s.notice)))
+
+    def test_only_engineers_leads_and_management_turn_notices_into_actions(self):
+        for who, ok in ((RACHEL, False), (JOE, True)):
+            with self.subTest(who=who):
+                s = site()
+                req, _ = self.raise_from_notice(s, who, 'FLK', s.notice)
+                self.assertEqual(req['Status'], 'Completed' if ok else 'Rejected', req)
+                if not ok:
+                    self.assertIn('turn a notice shown here into an action', req['ResultMessage'])
+
+    def test_a_notice_counts_in_every_area_it_is_shown_in(self):
+        s = site()
+        shown = s.add('notices', 'INS', {'Title': 'Site-wide stand-down', 'Body': 'Friday.', 'Category': 'General', 'IsImportant': False,
+                                         'Status': 'Active', 'ClientKey': 'n2', 'Revision': 1.0, 'ShownIn': 'All'}, author=JOE)
+        only = s.add('notices', 'INS', {'Title': 'Instruments only', 'Body': 'Tuesday.', 'Category': 'General', 'IsImportant': False,
+                                        'Status': 'Active', 'ClientKey': 'n3', 'Revision': 1.0, 'ShownIn': 'INS;GRS'}, author=JOE)
+        req, eng = self.raise_from_notice(s, KELLY, 'FLK', shown)
+        self.assertEqual(req['Status'], 'Completed', eng.log)
+        req, _ = self.raise_from_notice(s, KELLY, 'FLK', only, key=KEY2)
+        self.assertEqual(req['Status'], 'Rejected')
 
 class Reminders(unittest.TestCase):
     """Two fixes made in 1.5.0.0."""

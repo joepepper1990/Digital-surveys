@@ -68,7 +68,7 @@ window.MockFlow = (function () {
         if ((err = firstError(R.validateEntry(payload, { canWrite: access.canWrite, ownerAllowed: ownerAllowed })))) return finish(req, 'Rejected', err);
         var id = nextId(reg);
         reg.push({ Id: id, Title: payload.title, Description: payload.description, EntryType: payload.entryType, Impact: payload.impact, Status: 'Open', Outcome: '',
-          RaisedById: me, ResponsiblePersonId: Number(payload.responsibleId), DateRaised: new Date().toISOString(), Created: new Date().toISOString(),
+          RaisedById: me, DateRaised: new Date().toISOString(), Created: new Date().toISOString(),
           Revision: 1, LastRequestKey: req.RequestKey, CreatedRequestKey: 'F|' + req.RequestKey, CompetencyId: areaId(payload.areaKey),
           FileDirRef: ROOT + 'ImprovementRegister/' + payload.areaKey });
         recordEvent(req, payload.areaKey, 'Register Entry', id, 'Entry Raised');
@@ -102,7 +102,11 @@ window.MockFlow = (function () {
         if ('title' in payload) rec.Title = payload.title;
         if ('body' in payload) rec.Body = payload.body;
         if ('category' in payload) rec.Category = payload.category;
-        if ('important' in payload) { rec.IsImportant = !!payload.important; rec.ImportantUntil = payload.important ? D.addDays(today, 30) + 'T00:00:00Z' : null; }
+        if ('important' in payload) {
+          var days = [7, 14, 30, 90].indexOf(Number(payload.importantDays)) >= 0 ? Number(payload.importantDays) : 30;
+          rec.IsImportant = !!payload.important; rec.ImportantDays = payload.important ? days : null;
+          rec.ImportantUntil = payload.important ? D.addDays(today, days) + 'T00:00:00Z' : null;
+        }
         bump();
         recordEvent(req, key, 'Notice', rec.Id, 'Notice Edited');
         return finish(req, 'Completed', 'Notice saved.', rec.Id);
@@ -114,15 +118,14 @@ window.MockFlow = (function () {
         recordEvent(req, key, rec.ParentType === 'Register Entry' ? 'Register Entry' : 'Notice', rec.ParentId, 'Comment Hidden');
         return finish(req, 'Completed', 'Comment hidden.', rec.Id);
       }
-      var eshape = { areaKey: key, raisedById: rec.RaisedById, responsibleId: rec.ResponsiblePersonId };
-      if (!R.managesEntry(eshape, me, access)) return finish(req, 'Rejected', 'Only the person who raised it, the person responsible, the engineers and meeting runners of the area, and the Team Leaders and Group Head can change this entry.');
+      var eshape = { areaKey: key, raisedById: rec.RaisedById };
+      if (!R.managesEntry(eshape, me, access)) return finish(req, 'Rejected', 'Only the person who raised it, the engineers and meeting runners of the area, and the Team Leaders and Group Head can change this entry.');
       if (req.RequestType === 'UpdateRegisterEntry') {
         if ((err = firstError(R.validateEntryUpdate(eshape, payload, { ownerAllowed: ownerAllowed })))) return finish(req, 'Rejected', err);
         if ('title' in payload) rec.Title = payload.title;
         if ('description' in payload) rec.Description = payload.description;
         if ('impact' in payload) rec.Impact = payload.impact;
         if ('outcome' in payload) rec.Outcome = payload.outcome;
-        if ('responsibleId' in payload) rec.ResponsiblePersonId = Number(payload.responsibleId);
         if ('status' in payload) { rec.Status = payload.status; rec.DateResolved = ['Resolved', 'Closed'].indexOf(payload.status) >= 0 ? new Date().toISOString() : null; }
         bump();
         recordEvent(req, key, 'Register Entry', rec.Id, 'status' in payload ? 'Entry Status Changed' : 'Entry Updated');
@@ -308,6 +311,16 @@ window.MockFlow = (function () {
             return finish(req, 'Rejected', 'That improvement or degradation could not be found in this area, or it is closed.');
           }
         }
+        // turned into an action from a notice (1.9.0.0): active, shown in this area, by the area's engineers, its leads or management
+        var fromNotice = null;
+        if (payload.sourceNoticeId) {
+          fromNotice = data.Noticeboard.filter(function (x) { return x.Id === Number(payload.sourceNoticeId); })[0];
+          var shownIn = fromNotice ? String(fromNotice.ShownIn || '') : '';
+          var shownHere = fromNotice && (fromNotice.FileDirRef.split('/').pop() === payload.areaKey || shownIn === 'All' || shownIn.split(';').indexOf(payload.areaKey) >= 0);
+          if (!fromNotice || fromNotice.Status !== 'Active' || !shownHere || !R.canConvert(payload.areaKey, access)) {
+            return finish(req, 'Rejected', 'Only the engineers of this area, its meeting leads, and the Team Leaders and Group Head can turn a notice shown here into an action.');
+          }
+        }
         var fromMtg = null;
         if (payload.sourceMeetingId) {
           fromMtg = data.Meetings.filter(function (x) { return x.Id === Number(payload.sourceMeetingId); })[0];
@@ -323,7 +336,7 @@ window.MockFlow = (function () {
           CoOwnerIds: (payload.coOwnerIds || []).length ? JSON.stringify(payload.coOwnerIds.map(String)) : '',
           CloseOutById: payload.requiresCloseOut ? Number(payload.checkerId || requester.SiteUserId) : null,
           PendingRequestKey: '', LastRequestKey: req.RequestKey, CreatedRequestKey: 'F|' + req.RequestKey,
-          FileDirRef: ROOT + 'Actions/' + payload.areaKey, SourceType: source ? 'Register' : fromMtg ? 'Meeting' : 'None', SourceId: source ? source.Id : fromMtg ? fromMtg.Id : null };
+          FileDirRef: ROOT + 'Actions/' + payload.areaKey, SourceType: source ? 'Register' : fromMtg ? 'Meeting' : fromNotice ? 'Noticeboard' : 'None', SourceId: source ? source.Id : fromMtg ? fromMtg.Id : fromNotice ? fromNotice.Id : null };
         data.Actions.push(action);
         event(req, action, { EventType: 'Action Raised', NewDueDate: ukMidnight(payload.dueIso) });
         return finish(req, 'Completed', 'ACT-' + ('0000' + id).slice(-5) + ' raised.', id);

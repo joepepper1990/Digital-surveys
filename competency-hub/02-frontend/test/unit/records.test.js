@@ -21,12 +21,11 @@ const ownerAllowed = (k, id) => k === 'FLK' && [102, 112, 126].includes(id);
 const entry = { areaKey: 'FLK', raisedById: 112, responsibleId: 114 };
 
 test('raising an entry: a complete entry passes; each missing field is named', () => {
-  const good = { areaKey: 'FLK', entryType: 'Degradation', impact: 'High', title: 'Rig drift', description: 'Drifting since Monday.', responsibleId: 102 };
+  const good = { areaKey: 'FLK', entryType: 'Degradation', impact: 'High', title: 'Rig drift', description: 'Drifting since Monday.' };
   assert.deepEqual(plain(R.validateEntry(good, { canWrite: (k) => k === 'FLK', ownerAllowed })), {});
+  assert.deepEqual(plain(R.validateEntry(Object.assign({}, good, { entryType: 'Other' }), { canWrite: (k) => k === 'FLK', ownerAllowed })), {}, '"Other" is a type (1.9.0.0)');
   assert.deepEqual(Object.keys(R.validateEntry({}, { canWrite: () => false, ownerAllowed })).sort(),
-    ['areaKey', 'description', 'entryType', 'impact', 'responsibleId', 'title']);
-  assert.equal(R.validateEntry(Object.assign({}, good, { responsibleId: 999 }), { canWrite: (k) => k === 'FLK', ownerAllowed }).responsibleId,
-    'Choose a member of this area or a Team Leader.');
+    ['areaKey', 'description', 'entryType', 'impact', 'title']);
   assert.equal(R.validateEntry(Object.assign({}, good, { areaKey: 'RW' }), { canWrite: (k) => k === 'FLK', ownerAllowed }).areaKey, 'Choose one of your areas.');
 });
 
@@ -37,12 +36,12 @@ test('changing an entry: an outcome is needed to resolve or close it; nothing ch
   assert.deepEqual(plain(R.validateEntryUpdate(entry, { status: 'Under Review' }, { ownerAllowed })), {});
   assert.equal(R.validateEntryUpdate(entry, { status: 'Done' }, { ownerAllowed }).status, 'Choose a status.');
   assert.equal(R.validateEntryUpdate(entry, {}, { ownerAllowed }).entry, 'Nothing has changed.');
-  assert.equal(R.validateEntryUpdate(entry, { responsibleId: 999 }, { ownerAllowed }).responsibleId, 'Choose a member of this area or a Team Leader.');
+  assert.equal(R.validateEntryUpdate(entry, { responsibleId: 999 }, { ownerAllowed }).entry, 'Nothing has changed.', 'there is no responsible person from 1.9.0.0');
 });
 
-test('who looks after an entry (REG-2): raiser, responsible person, engineers and meeting runners of the area, management', () => {
+test('who looks after an entry (REG-2): raiser, engineers and meeting runners of the area, management', () => {
   assert.ok(R.managesEntry(entry, 112, access()));
-  assert.ok(R.managesEntry(entry, 114, access()));
+  assert.ok(!R.managesEntry(entry, 114, access()), 'a responsible person no longer counts (1.9.0.0)');
   assert.ok(R.managesEntry(entry, 102, access({ engineerIn: ['FLK'] })));
   assert.ok(R.managesEntry(entry, 120, access({ chairs: ['FLK'] })));
   assert.ok(R.managesEntry(entry, 126, access({ management: true })));

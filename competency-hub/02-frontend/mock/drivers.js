@@ -57,6 +57,46 @@ window.MockDrivers = (function () {
         writes: MockSharePoint.writes.slice()
       };
     },
+    // One notice on two noticeboards, important for 2 weeks: stored once, in the first area, and shown in both (1.9.0.0).
+    noticeMany: async function () {
+      await until(function () { return byText('button', 'Post a notice'); });
+      byText('button', 'Post a notice').click();
+      await until(function () { return q('#ch-n-title'); });
+      var ticked = all('#ch-n-areas input:checked').map(function (x) { return x.value; });
+      all('#ch-n-areas input').filter(function (x) { return x.value === 'INS'; })[0].click();
+      var durations = all('#ch-n-imp option').map(function (o) { return o.textContent; });
+      q('#ch-n-imp').value = '14';
+      type(q('#ch-n-title'), 'Shared probe stock');
+      type(q('#ch-n-body'), 'Flask and Instruments now share the probe stock.');
+      q('form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return !q('#ch-n'); });
+      var n = MockSharePoint.data.Noticeboard.filter(function (x) { return x.Title === 'Shared probe stock'; })[0];
+      var allBox = q('#ch-n-all');
+      return { ticked: ticked, durations: durations, stored: n && { folder: n.FileDirRef.split('/').pop(), shown: n.ShownIn, days: n.ImportantDays, important: n.IsImportant },
+        writes: MockSharePoint.writes.length, allGone: !allBox };
+    },
+    // The notice shows on the other noticeboard too, and an engineer there turns it into an action.
+    noticeConvert: async function () {
+      await until(function () { return q('#ch-rec .facts, #ch-rec .notice-full'); });
+      var header = q('#ch-rec').textContent;
+      var btn = byText('#ch-rec button', 'Turn into an action');
+      if (!btn) return { header: header, button: false };
+      btn.click();
+      var form = await until(function () { return q('#ch-r form'); });
+      var prefilled = q('#ch-r-title').value;
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-r-ownerId'); });
+      var areas = all('#ch-r-areaKey option').map(function (o) { return o.value; });
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      var due = await until(function () { return q('#ch-r-dueIso'); });
+      due.value = q('#ch-r-dueIso').max.slice(0, 4) - 1 + q('#ch-r-dueIso').min.slice(4);
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return text().indexOf('Check and raise') >= 0; });
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return MockSharePoint.data.Actions.filter(function (x) { return x.Title === prefilled; })[0]; }, 120000);
+      var a = MockSharePoint.data.Actions.filter(function (x) { return x.Title === prefilled; })[0];
+      return { header: header, button: true, prefilled: prefilled, areas: areas, source: [a.SourceType, a.SourceId], area: a.CompetencyId };
+    },
     // Empty form: errors shown, focus moved, nothing sent.
     noticeValidation: async function () {
       await until(function () { return byText('button', 'Post a notice'); });
@@ -581,7 +621,7 @@ window.MockDrivers = (function () {
     // An action raised from an entry carries the link (one action, never a copy).
     raiseLinked: async function () {
       await until(function () { return q('#ch-rec .facts'); });
-      byText('#ch-rec button', 'Raise a linked action').click();
+      byText('#ch-rec button', 'Turn into an action').click();
       var form = await until(function () { return q('#ch-r form'); });
       var heading = q('#ch-r h2').textContent;
       type(q('#ch-r-title'), 'Design a sign-out sheet');

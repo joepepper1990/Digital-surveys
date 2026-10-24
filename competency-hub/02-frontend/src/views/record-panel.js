@@ -229,11 +229,27 @@ CH.views.recordPanel = (function () {
       ownerOf: function (n) { return n.authorId; },
       header: function (n) {
         var area = m().areaByKey[n.areaKey];
-        return h('p', { class: 'muted small', text: area.name + ' noticeboard · ' + n.category + ' · ' +
+        var where = n.shownAll ? 'Every noticeboard' : n.areaKeys.length > 1 ? n.areaKeys.map(function (k) { return m().areaByKey[k].name; }).join(', ') + ' noticeboards' : area.name + ' noticeboard';
+        return h('p', { class: 'muted small', text: where + ' · ' + n.category + ' · ' +
           (n.fromOutside ? 'from ' + n.authorName + ', outside ' + area.name : n.authorName) + ' · ' + D.long(n.createdIso) +
           (n.pinned ? ' · Pinned' : n.important ? ' · Important' : '') });
       },
       facts: function (n) { return h('p', { class: 'notice-body notice-full', text: n.body }); },
+      // actions made from this notice, and "Turn into an action" for the engineers, meeting leads and management of an area it is shown in
+      extra: function (n, ctl) {
+        var list = m().actions.filter(function (a) { return a.sourceType === 'Noticeboard' && Number(a.sourceId) === Number(n.id); });
+        var areas = n.areaKeys.filter(function (k) { return R.canConvert(k, app.access); });
+        if (!list.length && !areas.length) return null;
+        return [h('h3', { class: 'group-title', text: 'Actions from this notice' }),
+          list.length ? h('ul', { class: 'items linked' }, list.map(function (a) {
+            return h('li', null, h('button', { type: 'button', class: 'item-open', onclick: function () { ctl.dlg.close(); app.openAction(a); } },
+              h('span', null, h('span', { class: 't', text: a.ref + ' ' + a.title }), h('span', { class: 's', text: a.ownerName })), ui.chip(a.group, a.dueText)));
+          })) : h('p', { class: 'muted', text: 'No actions have been made from this notice yet.' }),
+          areas.length ? h('div', { class: 'row' }, ui.button('Turn into an action', function () {
+            ctl.dlg.close();
+            if (!app.queueBlocked()) CH.views.raiseForm.open(app, areas.indexOf(n.areaKey) >= 0 ? n.areaKey : areas[0], { notice: n, areas: areas });
+          })) : null];
+      },
       buttons: function (n, ctl) {
         var r = R.noticeRoles(n, app.person.SiteUserId, app.access);
         if (!r.canEdit && !r.canPin) return null;
@@ -251,16 +267,20 @@ CH.views.recordPanel = (function () {
           var body = h('textarea', { id: 'ch-ne-body', rows: '8', maxlength: '5000' });
           body.value = n.body;
           var cat = h('select', { id: 'ch-ne-category' }, R.NOTICE_CATEGORIES.map(function (c) { return h('option', { value: c, selected: c === n.category ? true : null, text: c }); }));
-          var imp = h('input', { id: 'ch-ne-important', type: 'checkbox' });
-          imp.checked = n.important && !n.pinned;
+          // "Important for": not important, or 1 week to 3 months from today
+          var imp = h('select', { id: 'ch-ne-important' }, [h('option', { value: '0', text: 'Not important' })].concat(R.IMPORTANT_FOR.map(function (o) {
+            return h('option', { value: String(o[0]), text: o[1] + ' from today' });
+          })));
+          if (n.important && !n.pinned) imp.value = String(n.importantDays || 30);
           return formShell('Edit the notice', [field('Title', title), field('Message', body), field('Category', cat),
-            r.canMarkImportant && !n.pinned ? h('label', { class: 'check' }, imp, ' Important for 30 days from today') : null],
+            r.canMarkImportant && !n.pinned ? field('Important for', imp) : null],
           'Save changes', function (form, errorBox) {
             var v = {};
             if (title.value.trim() !== n.title) v.title = title.value;
             if (body.value.trim() !== n.body.trim()) v.body = body.value;
             if (cat.value !== n.category) v.category = cat.value;
-            if (!n.pinned && imp.checked !== (n.important && !n.pinned)) v.important = imp.checked;
+            var was = n.important && !n.pinned ? String(n.importantDays || 30) : '0';
+            if (r.canMarkImportant && !n.pinned && imp.value !== was) { v.important = imp.value !== '0'; if (v.important) v.importantDays = Number(imp.value); }
             var errors = R.validateNoticeEdit(v);
             if (CH.ui.dialog.showErrors(form, 'ch-ne-', errors, ['title', 'body', 'category'])) return;
             if (errors.notice) { errorBox.textContent = errors.notice; return; }
@@ -308,12 +328,12 @@ CH.views.recordPanel = (function () {
       facts: function (e) {
         return h('dl', { class: 'facts' },
           h('dt', { text: 'What' }), h('dd', { class: 'notice-body', text: e.description || 'No description.' }),
-          h('dt', { text: 'Who' }), h('dd', { text: (e.responsibleName ? e.responsibleName + ' is responsible. ' : '') + 'Raised by ' + e.raisedByName + (e.raisedIso ? ' on ' + D.long(e.raisedIso) : '') + '.' }),
+          h('dt', { text: 'Who' }), h('dd', { text: 'Raised by ' + e.raisedByName + (e.raisedIso ? ' on ' + D.long(e.raisedIso) : '') + '.' }),
           e.outcome ? [h('dt', { text: 'Outcome' }), h('dd', { class: 'notice-body', text: e.outcome + (e.resolvedIso ? ' (' + D.long(e.resolvedIso) + ')' : '') })] : null);
       },
       buttons: function (e, ctl) {
         var can = R.managesEntry(e, app.person.SiteUserId, app.access);
-        if (!can) return h('p', { class: 'muted small', text: 'The person who raised it, the person responsible, the area\'s engineers and meeting runners, and the Team Leaders and Group Head can change this entry.' });
+        if (!can) return h('p', { class: 'muted small', text: 'The person who raised it, the area\'s engineers and meeting runners, and the Team Leaders and Group Head can change this entry.' });
         if (ctl.busy(e)) return h('p', { class: 'muted small', text: app.recordsBlocked() ? 'Changes to the register are paused for the moment.' : '' });
         return h('div', { class: 'row actions-row' },
           ui.button('Change status', function () { ctl.show('status'); }, 'main'),
@@ -322,15 +342,16 @@ CH.views.recordPanel = (function () {
       extra: function (e, ctl) {
         var list = linkedActions(e);
         var can = R.managesEntry(e, app.person.SiteUserId, app.access) && !ctl.busy(e);
+        var convert = R.canConvert(e.areaKey, app.access) && e.open && !ctl.busy(e);
         return [h('h3', { class: 'group-title', text: 'Linked actions' }),
           list.length ? h('ul', { class: 'items linked' }, list.map(function (a) {
             return h('li', null, h('button', { type: 'button', class: 'item-open', onclick: function () { ctl.dlg.close(); app.openAction(a); } },
               h('span', null, h('span', { class: 't', text: a.ref + ' ' + a.title }), h('span', { class: 's', text: a.ownerName })), ui.chip(a.group, a.dueText)),
               can ? ui.linkButton('Unlink', function () { ctl.show('unlink:' + a.id); }) : null);
           })) : h('p', { class: 'muted', text: 'No actions are linked to this entry yet.' }),
-          can && e.open ? h('div', { class: 'row' },
-            app.access.canWrite(e.areaKey) ? ui.button('Raise a linked action', function () { ctl.dlg.close(); if (!app.queueBlocked()) CH.views.raiseForm.open(app, e.areaKey, { entry: e }); }) : null,
-            ui.button('Link an existing action', function () { ctl.show('link'); })) : null];
+          (can || convert) && e.open ? h('div', { class: 'row' },
+            convert ? ui.button('Turn into an action', function () { ctl.dlg.close(); if (!app.queueBlocked()) CH.views.raiseForm.open(app, e.areaKey, { entry: e }); }) : null,
+            can ? ui.button('Link an existing action', function () { ctl.show('link'); }) : null) : null];
       },
       form: function (view, e, ctl) {
         var label = function (what) { return what + ' ' + e.ref; };
@@ -353,18 +374,14 @@ CH.views.recordPanel = (function () {
           var desc = h('textarea', { id: 'ch-re-description', rows: '5', maxlength: '5000' });
           desc.value = e.description;
           var impact = h('select', { id: 'ch-re-impact' }, R.IMPACTS.map(function (x) { return h('option', { value: x, selected: x === e.impact ? true : null, text: x }); }));
-          var resp = h('select', { id: 'ch-re-responsibleId' }, ownersFor(e.areaKey).map(function (p) {
-            return h('option', { value: String(p.id), selected: Number(p.id) === Number(e.responsibleId) ? true : null, text: p.name });
-          }));
-          return formShell('Edit the details', [field('Title', title), field('Description', desc), field('Impact', impact), field('Who is responsible?', resp)],
+          return formShell('Edit the details', [field('Title', title), field('Description', desc), field('Impact', impact)],
             'Save changes', function (form, errorBox) {
               var v = {};
               if (title.value.trim() !== e.title) v.title = title.value.trim();
               if (desc.value.trim() !== e.description.trim()) v.description = desc.value.trim();
               if (impact.value !== e.impact) v.impact = impact.value;
-              if (Number(resp.value) !== Number(e.responsibleId)) v.responsibleId = Number(resp.value);
               var errors = R.validateEntryUpdate(e, v, { ownerAllowed: allowed });
-              if (CH.ui.dialog.showErrors(form, 'ch-re-', errors, ['title', 'description', 'impact', 'responsibleId'])) return;
+              if (CH.ui.dialog.showErrors(form, 'ch-re-', errors, ['title', 'description', 'impact'])) return;
               if (errors.entry) { errorBox.textContent = errors.entry; return; }
               ctl.send(form, { type: 'UpdateRegisterEntry', targetId: e.id, targetType: 'Register Entry', expectedRevision: e.revision, payload: v, label: label('Edit') }, errorBox);
             }, ctl);

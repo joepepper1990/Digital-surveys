@@ -861,7 +861,7 @@ window.ESGCompetencyHub = function (ctx) {
     }
 
     // ---- notices, comments and the improvements and degradations register (spec NB-1 to NB-5, REG-1 to REG-5)
-    var ENTRY_TYPES = ['Improvement', 'Degradation', 'Concern', 'Opportunity', 'Positive Observation'];
+    var ENTRY_TYPES = ['Improvement', 'Degradation', 'Concern', 'Opportunity', 'Positive Observation', 'Other'];
     var IMPACTS = ['Low', 'Medium', 'High'];
     var ENTRY_STATUSES = ['Open', 'Under Review', 'Resolved', 'Closed'];
     var NOTICE_CATEGORIES = ['General', 'Request', 'Improvement idea', 'Safety', 'Equipment', 'Other'];
@@ -878,12 +878,10 @@ window.ESGCompetencyHub = function (ctx) {
       var d = String(v.description || '').trim();
       if (!d) e.description = 'Describe it.';
       else if (d.length > 5000) e.description = 'Keep the description to 5,000 characters or fewer.';
-      if (!v.responsibleId) e.responsibleId = 'Choose who is responsible.';
-      else if (!e.areaKey && !ctx.ownerAllowed(v.areaKey, Number(v.responsibleId))) e.responsibleId = 'Choose a member of this area or a Team Leader.';
       return e;
     }
 
-    // v: the fields being changed (title, description, impact, status, outcome, responsibleId). An outcome is needed to
+    // v: the fields being changed (title, description, impact, status, outcome). An outcome is needed to
     // resolve or close an entry. ctx: { ownerAllowed(areaKey, personId) }
     function validateEntryUpdate(entry, v, ctx) {
       var e = {};
@@ -898,16 +896,23 @@ window.ESGCompetencyHub = function (ctx) {
       var outcome = String(v.outcome || '').trim();
       if ('status' in v && (v.status === 'Resolved' || v.status === 'Closed') && outcome.length < 10) e.outcome = 'Record the outcome (at least 10 characters).';
       else if (outcome.length > 2000) e.outcome = 'Keep the outcome to 2,000 characters or fewer.';
-      if ('responsibleId' in v && !ctx.ownerAllowed(entry.areaKey, Number(v.responsibleId))) e.responsibleId = 'Choose a member of this area or a Team Leader.';
-      if (!['title', 'description', 'impact', 'status', 'outcome', 'responsibleId'].some(function (k) { return k in v; })) e.entry = 'Nothing has changed.';
+      if (!['title', 'description', 'impact', 'status', 'outcome'].some(function (k) { return k in v; })) e.entry = 'Nothing has changed.';
       return e;
     }
 
     // REG-2: the raiser, the person responsible, the area's engineers and meeting runners, and management.
     function managesEntry(entry, personId, access) {
       var k = entry.areaKey;
-      return access.canModerate(k) || access.chairs(k) || Number(entry.raisedById) === Number(personId) || Number(entry.responsibleId) === Number(personId);
+      return access.canModerate(k) || access.chairs(k) || Number(entry.raisedById) === Number(personId);
     }
+
+    // Turn a notice or an issue into an action (1.9.0.0): the area's engineers, its meeting leads, the Team Leaders and Group Head.
+    function canConvert(areaKey, access) {
+      return access.isManagement ? access.canWrite(areaKey) : access.isEngineerIn(areaKey) || access.chairs(areaKey);
+    }
+
+    // "Important for": 1 week, 2 weeks, 1 month or 3 months, in days (1.9.0.0)
+    var IMPORTANT_FOR = [[7, '1 week'], [14, '2 weeks'], [30, '1 month'], [90, '3 months']];
 
     // Edit a notice: its author or a moderator (spec §4.2 canModerate). Pin: moderators only.
     function noticeRoles(notice, personId, access) {
@@ -1018,7 +1023,7 @@ window.ESGCompetencyHub = function (ctx) {
       validateComplete: validateComplete, validateUpdate: validateUpdate, validateStatus: validateStatus,
       validateReassign: validateReassign, validateClose: validateClose, validateReopen: validateReopen, validateEdit: validateEdit,
       roles: roles, completionStatus: completionStatus,
-      validateEntry: validateEntry, validateEntryUpdate: validateEntryUpdate, managesEntry: managesEntry, noticeRoles: noticeRoles,
+      validateEntry: validateEntry, validateEntryUpdate: validateEntryUpdate, managesEntry: managesEntry, noticeRoles: noticeRoles, canConvert: canConvert, IMPORTANT_FOR: IMPORTANT_FOR,
       validateNoticeEdit: validateNoticeEdit, validateComment: validateComment, ENTRY_TYPES: ENTRY_TYPES, IMPACTS: IMPACTS, ENTRY_STATUSES: ENTRY_STATUSES,
       NOTICE_CATEGORIES: NOTICE_CATEGORIES, validateMeeting: validateMeeting, validateCancelMeeting: validateCancelMeeting, nextMonths: nextMonths, MINUTE_OUTCOMES: MINUTE_OUTCOMES,
       DISCUSSION_SECTIONS: DISCUSSION_SECTIONS, missingOutcomes: missingOutcomes, validateAmend: validateAmend, SELF_ONLY: SELF_ONLY, CO_OWNERS: CO_OWNERS, PRIORITIES: PRIORITIES, OPEN_STATUSES: OPEN_STATUSES, OUTCOMES: OUTCOMES
@@ -1038,7 +1043,7 @@ window.ESGCompetencyHub = function (ctx) {
       actions: '$select=Id,Title,Description,CompetencyId,LinkedCompetenciesId,AssignedToId,RaisedById,DateRaised,DueDay,OriginalDueDate,' +
         'Status,IsOpen,Priority,ExtensionCount,RequiresCloseOut,Revision,PendingRequestKey,LastRequestKey,CreatedRequestKey,FileDirRef,' +
         'Blocker,CloseOutcome,ClosureNote,DateClosed,SourceType,SourceId,CoOwnerIds,CloseOutById&$filter=IsOpen eq 1 and FSObjType eq 0',
-      notices: "$select=Id,Title,Body,Category,IsImportant,ImportantUntil,Status,AuthorId,Created,FileDirRef,Revision,LastRequestKey&$filter=Status eq 'Active' and FSObjType eq 0",
+      notices: "$select=Id,Title,Body,Category,IsImportant,ImportantUntil,ImportantDays,ShownIn,Status,AuthorId,Created,FileDirRef,Revision,LastRequestKey&$filter=Status eq 'Active' and FSObjType eq 0",
       register: '$select=Id,Title,Description,EntryType,Impact,Status,Outcome,RaisedById,ResponsiblePersonId,DateRaised,DateResolved,Revision,' +
         'LastRequestKey,CompetencyId,FileDirRef,Created&$filter=FSObjType eq 0',
       updates: '$select=Id,EntryType,ParentType,ParentId,AuthorId,Created,FileDirRef,IsHidden&$filter=IsFlagEvent eq 1 and FSObjType eq 0',
@@ -1049,7 +1054,7 @@ window.ESGCompetencyHub = function (ctx) {
     };
 
     // Columns a later Setup adds: if the site does not have them yet, the list is read without them.
-    var OPTIONAL = { actions: ['CoOwnerIds', 'CloseOutById'] };
+    var OPTIONAL = { actions: ['CoOwnerIds', 'CloseOutById'], notices: ['ImportantDays', 'ShownIn'] };
 
     // Reads each list independently; one failure does not hide the others.
     async function load(sp) {
@@ -1166,12 +1171,21 @@ window.ESGCompetencyHub = function (ctx) {
         var key = CH.sp.folderOf(n.FileDirRef);
         var createdIso = D.localDate(n.Created);
         var importantUntil = n.ImportantUntil ? D.localDate(n.ImportantUntil) : '';
-        var cap = D.addDays(createdIso, CH.config.noticeImportantMaxDays);
-        var important = !!n.IsImportant && (!importantUntil || (importantUntil >= today && today <= cap));
+        // important for the time its author chose (1 week to 3 months; a month before 1.9.0.0), never longer
+        var days = [7, 14, 30, 90].indexOf(Number(n.ImportantDays)) >= 0 ? Number(n.ImportantDays) : CH.config.noticeImportantMaxDays;
+        var cap = D.addDays(createdIso, days);
+        var pinned = !!n.IsImportant && !n.ImportantUntil && !n.ImportantDays;
+        var important = !!n.IsImportant && (pinned || (importantUntil ? importantUntil >= today : today <= cap));
+        // stored once, shown on every noticeboard it was posted to: "All", or a list of area keys (1.9.0.0)
+        var shown = String(n.ShownIn || '').trim();
+        var shownAll = shown === 'All';
+        var areaKeys = shownAll ? areas.map(function (a) { return a.key; })
+          : [key].concat(shown ? shown.split(';').filter(function (k) { return k && k !== key && areaByKey[k]; }) : []);
         return {
           id: n.Id, areaKey: key, title: n.Title, body: n.Body || '', category: n.Category || 'General',
           authorId: n.AuthorId, authorName: nameOf(n.AuthorId), fromOutside: !(membersByArea[key] || {})[n.AuthorId] && !isManagementPerson(n.AuthorId),
-          createdIso: createdIso, created: n.Created, important: important, pinned: !!n.IsImportant && !n.ImportantUntil,
+          createdIso: createdIso, created: n.Created, important: important, pinned: pinned,
+          importantDays: n.ImportantDays ? Number(n.ImportantDays) : null, areaKeys: areaKeys, shownAll: shownAll,
           // notices posted before the Revision column existed have none: they are then sent without a stale check
           revision: Number(n.Revision) || 0, lastRequestKey: n.LastRequestKey || ''
         };
@@ -1970,7 +1984,7 @@ window.ESGCompetencyHub = function (ctx) {
         .sort(function (a, b) { return (order[a.group] - order[b.group]) || byDue(a, b); })
         .map(function (a) { return actionCard(app, a, h('span', { class: 'hm-x', text: a.ownerName + (a.areaKey !== key ? ' · shared from ' + a.areaName : '') })); });
       // Pinned and important notices first; then the other notices and the open register entries, newest first.
-      var notices = m.notices.filter(function (n) { return n.areaKey === key; });
+      var notices = m.notices.filter(function (n) { return n.areaKeys.indexOf(key) >= 0; });
       var entries = m.entries.filter(function (e) { return e.areaKey === key && e.open; });
       var rest = notices.filter(function (n) { return !n.important; }).map(function (n) { return { n: n, at: n.createdIso }; })
         .concat(entries.map(function (e) { return { e: e, at: e.raisedIso }; }))
@@ -2142,7 +2156,7 @@ window.ESGCompetencyHub = function (ctx) {
     // Notices first (pinned and important at the top), then the improvements and degradations register (spec NB-1, REG-4).
     function noticesTab(app, area) {
       var m = app.model;
-      var list = m.notices.filter(function (n) { return n.areaKey === area.key; });
+      var list = m.notices.filter(function (n) { return n.areaKeys.indexOf(area.key) >= 0; });
       list = list.filter(function (n) { return n.important; }).concat(list.filter(function (n) { return !n.important; }));
       var filter = app.state.entryFilter || 'open';
       var entries = m.entries.filter(function (e) {
@@ -2277,8 +2291,8 @@ window.ESGCompetencyHub = function (ctx) {
   })();
 
   /* src/views/notice-form.js */
-  // "Post a notice": an instant write. Any active user may post on any active area's noticeboard (K4.1);
-  // only members may mark a notice as important.
+  // "Post a notice": an instant write. Any active user may post on any active area's noticeboard (K4.1), on one
+  // or several at once, or on all of them: the notice is stored once (1.9.0.0). Only members mark it important.
   CH.views = CH.views || {};
   CH.views.noticeForm = (function () {
     var h = CH.dom.h;
@@ -2287,6 +2301,7 @@ window.ESGCompetencyHub = function (ctx) {
     // Validation shared by the form and the tests.
     function validate(values) {
       var errors = {};
+      if (values.areas && !values.areas.length) errors.areas = 'Choose at least one noticeboard.';
       var title = (values.title || '').trim();
       var body = (values.body || '').trim();
       if (!title) errors.title = 'Enter a title.';
@@ -2302,32 +2317,45 @@ window.ESGCompetencyHub = function (ctx) {
       var clientKey = CH.requests.newKey();
       var field = CH.ui.dialog.field;
 
-      var areaSelect = h('select', { id: 'ch-n-area' }, areas.map(function (a) {
-        return h('option', { value: a.key, selected: a.key === areaKey ? true : null, text: a.name + (app.access.canWrite(a.key) ? '' : ' (not your area)') });
-      }));
+      var boxes = areas.map(function (a) {
+        return h('input', { type: 'checkbox', value: a.key, checked: a.key === areaKey || (!areaKey && a === areas[0]) ? true : null });
+      });
+      var everyBox = h('input', { type: 'checkbox', id: 'ch-n-all' });
+      var areaList = h('div', { class: 'checks', id: 'ch-n-areas' }, h('label', { class: 'check' }, everyBox, ' All noticeboards'),
+        areas.map(function (a, i) { return h('label', { class: 'check' }, boxes[i], ' ' + a.name + (app.access.canWrite(a.key) ? '' : ' (not your area)')); }));
+      function chosen() { return boxes.filter(function (b) { return b.checked; }).map(function (b) { return b.value; }); }
+      everyBox.addEventListener('change', function () { boxes.forEach(function (b) { b.checked = everyBox.checked; }); refreshArea(); });
+      boxes.forEach(function (b) { b.addEventListener('change', function () { everyBox.checked = chosen().length === boxes.length; refreshArea(); }); });
       var title = h('input', { id: 'ch-n-title', type: 'text', maxlength: '255', autocomplete: 'off' });
       var body = h('textarea', { id: 'ch-n-body', rows: '6', maxlength: '5000' });
       var category = h('select', { id: 'ch-n-cat' }, CATEGORIES.map(function (c) { return h('option', { value: c, text: c }); }));
-      var important = h('input', { id: 'ch-n-imp', type: 'checkbox' });
-      var importantRow = h('label', { class: 'check' }, important, ' Mark as important for 30 days');
+      var important = h('select', { id: 'ch-n-imp' }, [h('option', { value: '0', text: 'Not important' })].concat(CH.rules.IMPORTANT_FOR.map(function (o) {
+        return h('option', { value: String(o[0]), text: o[1] });
+      })));
+      var importantRow = CH.ui.dialog.field('Important for', important);
       var errorBox = h('p', { class: 'form-error', role: 'alert' });
       var outsideNote = h('p', { class: 'explain' });
       var submit = h('button', { type: 'submit', class: 'btn btn-main', text: 'Post notice' });
 
-      function refreshArea() {
-        var key = areaSelect.value;
-        var member = app.access.canWrite(key);
-        importantRow.style.display = member ? '' : 'none';
-        if (!member) important.checked = false;
-        outsideNote.textContent = member ? '' : 'You are not a member of ' + app.model.areaByKey[key].name +
-          '. Your notice will be shown as coming from outside the area, and its members will see it.';
-        outsideNote.style.display = member ? 'none' : '';
+      // the notice is kept in the first chosen area you belong to (or the first chosen): that area's moderators look after it
+      function home() {
+        var keys = chosen();
+        return keys.filter(function (k) { return app.access.canWrite(k); })[0] || keys[0];
       }
-      areaSelect.addEventListener('change', refreshArea);
+      function refreshArea() {
+        var key = home();
+        var member = !!key && app.access.canWrite(key);
+        importantRow.style.display = member ? '' : 'none';
+        if (!member) important.value = '0';
+        var outside = chosen().filter(function (k) { return !app.access.canWrite(k); });
+        outsideNote.textContent = outside.length && outside.length < 4 ? 'You are not a member of ' + outside.map(function (k) { return app.model.areaByKey[k].name; }).join(', ') +
+          '. Your notice will be shown there as coming from outside the area.' : outside.length ? 'Your notice will be shown as coming from outside the areas you are not a member of.' : '';
+        outsideNote.style.display = outside.length ? '' : 'none';
+      }
 
       var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-n', title: 'Post a notice' });
       var form = h('form', { class: 'dialog-body', novalidate: true },
-        field('Which noticeboard?', areaSelect),
+        field('Which noticeboards?', areaList),
         outsideNote,
         field('Title', title, 'A short summary people will recognise.'),
         field('Message', body),
@@ -2340,17 +2368,19 @@ window.ESGCompetencyHub = function (ctx) {
       form.addEventListener('submit', async function (e) {
         e.preventDefault();
         errorBox.textContent = '';
-        var values = { title: title.value, body: body.value, category: category.value };
+        var values = { title: title.value, body: body.value, category: category.value, areas: chosen() };
         var errors = validate(values);
-        if (CH.ui.dialog.showErrors(form, 'ch-n-', { title: errors.title, body: errors.body, cat: errors.category }, ['title', 'body', 'cat'])) return;
+        if (CH.ui.dialog.showErrors(form, 'ch-n-', { areas: errors.areas, title: errors.title, body: errors.body, cat: errors.category }, ['areas', 'title', 'body', 'cat'])) return;
 
-        var key = areaSelect.value;
+        var key = home();
+        var days = app.access.canWrite(key) ? Number(important.value) : 0;
+        var shownIn = values.areas.length === boxes.length && boxes.length > 1 ? 'All' : values.areas.length > 1 ? values.areas.join(';') : '';
         submit.disabled = true;
         submit.textContent = 'Posting…';
         try {
           await app.sp.addToFolder('notices', key, Object.assign({
             Title: values.title.trim(), Body: values.body.trim(), Category: values.category,
-            IsImportant: important.checked && app.access.canWrite(key) ? '1' : '0',
+            IsImportant: days ? '1' : '0', ImportantDays: days ? String(days) : '', ShownIn: shownIn,
             ClientKey: clientKey, CreatedRequestKey: 'U|' + clientKey, Status: 'Active'
           }, app.testMark()));
           dlg.close();
@@ -2395,13 +2425,15 @@ window.ESGCompetencyHub = function (ctx) {
     ];
 
     // opts: { entry } raises an action linked to an improvement or degradation, in that entry's area (spec REG-3);
-    // { meeting, title } raises one from a meeting in progress, in its area (spec MTG-3).
+    // { meeting, title } raises one from a meeting in progress, in its area (spec MTG-3);
+    // { notice, areas } turns a notice into an action, in one of the areas it is shown in that the person may do this for (1.9.0.0).
     function open(app, areaKey, opts) {
       var m = app.model;
       var entry = opts && opts.entry;
       var meeting = opts && opts.meeting;
+      var notice = opts && opts.notice;
       var fixedArea = entry ? entry.areaKey : meeting ? meeting.areaKey : null;
-      var mine = m.areas.filter(function (a) { return app.access.canWrite(a.key) && (!fixedArea || a.key === fixedArea); });
+      var mine = m.areas.filter(function (a) { return app.access.canWrite(a.key) && (!fixedArea || a.key === fixedArea) && (!notice || opts.areas.indexOf(a.key) >= 0); });
       if (!mine.length) { CH.ui.toast(app.root, 'You are not a member of any area yet, so you cannot raise actions.', 'info'); return; }
       var today = m.today;
       // the limit an administrator sets (MaxDeadlineYears), the same one the flow checks
@@ -2409,8 +2441,10 @@ window.ESGCompetencyHub = function (ctx) {
       var step = 0;
       var key = CH.requests.newKey();
 
-      var title = h('input', { id: 'ch-r-title', type: 'text', maxlength: '255', autocomplete: 'off', value: (opts && opts.title) || '' });
+      var source = notice || entry;
+      var title = h('input', { id: 'ch-r-title', type: 'text', maxlength: '255', autocomplete: 'off', value: (opts && opts.title) || (source ? source.title : '') });
       var description = h('textarea', { id: 'ch-r-description', rows: '5', maxlength: '5000' });
+      if (source) description.value = String(notice ? notice.body : entry.description || '').slice(0, 5000);
       var area = h('select', { id: 'ch-r-areaKey' }, mine.map(function (a) {
         return h('option', { value: a.key, selected: a.key === areaKey ? true : null, text: a.name });
       }));
@@ -2489,7 +2523,7 @@ window.ESGCompetencyHub = function (ctx) {
         return out;
       }
 
-      var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-r', title: entry ? 'Raise an action for ' + entry.ref : meeting ? 'Raise an action from the meeting' : 'Raise an action' });
+      var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-r', title: entry ? 'Turn ' + entry.ref + ' into an action' : notice ? 'Turn a notice into an action' : meeting ? 'Raise an action from the meeting' : 'Raise an action' });
       var progress = h('p', { class: 'muted small', 'aria-live': 'polite' });
       var errorBox = h('p', { class: 'form-error', role: 'alert' });
       var stepBox = h('div');
@@ -2516,7 +2550,8 @@ window.ESGCompetencyHub = function (ctx) {
             (v.coOwnerIds.length ? ' – co-owners ' + v.coOwnerIds.map(function (id) { return m.nameOf(id); }).join(', ') : '') }),
           h('dt', { text: 'When' }), h('dd', { text: 'By ' + D.weekday(v.dueIso) + ' ' + D.long(v.dueIso) }),
           h('dt', { text: 'Also' }), h('dd', { text: v.priority + ' priority' + (v.requiresCloseOut ? ', with a close-out check by ' + m.nameOf(v.checkerId) : '') }),
-          entry ? [h('dt', { text: 'For' }), h('dd', { text: entry.ref + ' ' + entry.title })] : null);
+          entry ? [h('dt', { text: 'For' }), h('dd', { text: entry.ref + ' ' + entry.title })] : null,
+          notice ? [h('dt', { text: 'From' }), h('dd', { text: 'The notice “' + notice.title + '”' })] : null);
       }
 
       function go(n) {
@@ -2550,7 +2585,7 @@ window.ESGCompetencyHub = function (ctx) {
           await app.tracker.submit({ key: key, type: 'RaiseAction', label: 'Raise “' + v.title.trim() + '”', payload: {
             areaKey: v.areaKey, title: v.title.trim(), description: v.description.trim(), ownerId: Number(v.ownerId),
             dueIso: v.dueIso, priority: v.priority, requiresCloseOut: v.requiresCloseOut,
-            coOwnerIds: v.coOwnerIds.length ? v.coOwnerIds : undefined, checkerId: v.checkerId, sourceEntryId: entry ? entry.id : undefined,
+            coOwnerIds: v.coOwnerIds.length ? v.coOwnerIds : undefined, checkerId: v.checkerId, sourceEntryId: entry ? entry.id : undefined, sourceNoticeId: notice ? notice.id : undefined,
             sourceMeetingId: meeting ? meeting.id : undefined }, meetingId: meeting ? meeting.id : undefined });
           dlg.close();
           CH.ui.toast(app.root, 'Your action has been sent. It will appear in a few minutes.', 'ok');
@@ -3485,11 +3520,27 @@ window.ESGCompetencyHub = function (ctx) {
         ownerOf: function (n) { return n.authorId; },
         header: function (n) {
           var area = m().areaByKey[n.areaKey];
-          return h('p', { class: 'muted small', text: area.name + ' noticeboard · ' + n.category + ' · ' +
+          var where = n.shownAll ? 'Every noticeboard' : n.areaKeys.length > 1 ? n.areaKeys.map(function (k) { return m().areaByKey[k].name; }).join(', ') + ' noticeboards' : area.name + ' noticeboard';
+          return h('p', { class: 'muted small', text: where + ' · ' + n.category + ' · ' +
             (n.fromOutside ? 'from ' + n.authorName + ', outside ' + area.name : n.authorName) + ' · ' + D.long(n.createdIso) +
             (n.pinned ? ' · Pinned' : n.important ? ' · Important' : '') });
         },
         facts: function (n) { return h('p', { class: 'notice-body notice-full', text: n.body }); },
+        // actions made from this notice, and "Turn into an action" for the engineers, meeting leads and management of an area it is shown in
+        extra: function (n, ctl) {
+          var list = m().actions.filter(function (a) { return a.sourceType === 'Noticeboard' && Number(a.sourceId) === Number(n.id); });
+          var areas = n.areaKeys.filter(function (k) { return R.canConvert(k, app.access); });
+          if (!list.length && !areas.length) return null;
+          return [h('h3', { class: 'group-title', text: 'Actions from this notice' }),
+            list.length ? h('ul', { class: 'items linked' }, list.map(function (a) {
+              return h('li', null, h('button', { type: 'button', class: 'item-open', onclick: function () { ctl.dlg.close(); app.openAction(a); } },
+                h('span', null, h('span', { class: 't', text: a.ref + ' ' + a.title }), h('span', { class: 's', text: a.ownerName })), ui.chip(a.group, a.dueText)));
+            })) : h('p', { class: 'muted', text: 'No actions have been made from this notice yet.' }),
+            areas.length ? h('div', { class: 'row' }, ui.button('Turn into an action', function () {
+              ctl.dlg.close();
+              if (!app.queueBlocked()) CH.views.raiseForm.open(app, areas.indexOf(n.areaKey) >= 0 ? n.areaKey : areas[0], { notice: n, areas: areas });
+            })) : null];
+        },
         buttons: function (n, ctl) {
           var r = R.noticeRoles(n, app.person.SiteUserId, app.access);
           if (!r.canEdit && !r.canPin) return null;
@@ -3507,16 +3558,20 @@ window.ESGCompetencyHub = function (ctx) {
             var body = h('textarea', { id: 'ch-ne-body', rows: '8', maxlength: '5000' });
             body.value = n.body;
             var cat = h('select', { id: 'ch-ne-category' }, R.NOTICE_CATEGORIES.map(function (c) { return h('option', { value: c, selected: c === n.category ? true : null, text: c }); }));
-            var imp = h('input', { id: 'ch-ne-important', type: 'checkbox' });
-            imp.checked = n.important && !n.pinned;
+            // "Important for": not important, or 1 week to 3 months from today
+            var imp = h('select', { id: 'ch-ne-important' }, [h('option', { value: '0', text: 'Not important' })].concat(R.IMPORTANT_FOR.map(function (o) {
+              return h('option', { value: String(o[0]), text: o[1] + ' from today' });
+            })));
+            if (n.important && !n.pinned) imp.value = String(n.importantDays || 30);
             return formShell('Edit the notice', [field('Title', title), field('Message', body), field('Category', cat),
-              r.canMarkImportant && !n.pinned ? h('label', { class: 'check' }, imp, ' Important for 30 days from today') : null],
+              r.canMarkImportant && !n.pinned ? field('Important for', imp) : null],
             'Save changes', function (form, errorBox) {
               var v = {};
               if (title.value.trim() !== n.title) v.title = title.value;
               if (body.value.trim() !== n.body.trim()) v.body = body.value;
               if (cat.value !== n.category) v.category = cat.value;
-              if (!n.pinned && imp.checked !== (n.important && !n.pinned)) v.important = imp.checked;
+              var was = n.important && !n.pinned ? String(n.importantDays || 30) : '0';
+              if (r.canMarkImportant && !n.pinned && imp.value !== was) { v.important = imp.value !== '0'; if (v.important) v.importantDays = Number(imp.value); }
               var errors = R.validateNoticeEdit(v);
               if (CH.ui.dialog.showErrors(form, 'ch-ne-', errors, ['title', 'body', 'category'])) return;
               if (errors.notice) { errorBox.textContent = errors.notice; return; }
@@ -3564,12 +3619,12 @@ window.ESGCompetencyHub = function (ctx) {
         facts: function (e) {
           return h('dl', { class: 'facts' },
             h('dt', { text: 'What' }), h('dd', { class: 'notice-body', text: e.description || 'No description.' }),
-            h('dt', { text: 'Who' }), h('dd', { text: (e.responsibleName ? e.responsibleName + ' is responsible. ' : '') + 'Raised by ' + e.raisedByName + (e.raisedIso ? ' on ' + D.long(e.raisedIso) : '') + '.' }),
+            h('dt', { text: 'Who' }), h('dd', { text: 'Raised by ' + e.raisedByName + (e.raisedIso ? ' on ' + D.long(e.raisedIso) : '') + '.' }),
             e.outcome ? [h('dt', { text: 'Outcome' }), h('dd', { class: 'notice-body', text: e.outcome + (e.resolvedIso ? ' (' + D.long(e.resolvedIso) + ')' : '') })] : null);
         },
         buttons: function (e, ctl) {
           var can = R.managesEntry(e, app.person.SiteUserId, app.access);
-          if (!can) return h('p', { class: 'muted small', text: 'The person who raised it, the person responsible, the area\'s engineers and meeting runners, and the Team Leaders and Group Head can change this entry.' });
+          if (!can) return h('p', { class: 'muted small', text: 'The person who raised it, the area\'s engineers and meeting runners, and the Team Leaders and Group Head can change this entry.' });
           if (ctl.busy(e)) return h('p', { class: 'muted small', text: app.recordsBlocked() ? 'Changes to the register are paused for the moment.' : '' });
           return h('div', { class: 'row actions-row' },
             ui.button('Change status', function () { ctl.show('status'); }, 'main'),
@@ -3578,15 +3633,16 @@ window.ESGCompetencyHub = function (ctx) {
         extra: function (e, ctl) {
           var list = linkedActions(e);
           var can = R.managesEntry(e, app.person.SiteUserId, app.access) && !ctl.busy(e);
+          var convert = R.canConvert(e.areaKey, app.access) && e.open && !ctl.busy(e);
           return [h('h3', { class: 'group-title', text: 'Linked actions' }),
             list.length ? h('ul', { class: 'items linked' }, list.map(function (a) {
               return h('li', null, h('button', { type: 'button', class: 'item-open', onclick: function () { ctl.dlg.close(); app.openAction(a); } },
                 h('span', null, h('span', { class: 't', text: a.ref + ' ' + a.title }), h('span', { class: 's', text: a.ownerName })), ui.chip(a.group, a.dueText)),
                 can ? ui.linkButton('Unlink', function () { ctl.show('unlink:' + a.id); }) : null);
             })) : h('p', { class: 'muted', text: 'No actions are linked to this entry yet.' }),
-            can && e.open ? h('div', { class: 'row' },
-              app.access.canWrite(e.areaKey) ? ui.button('Raise a linked action', function () { ctl.dlg.close(); if (!app.queueBlocked()) CH.views.raiseForm.open(app, e.areaKey, { entry: e }); }) : null,
-              ui.button('Link an existing action', function () { ctl.show('link'); })) : null];
+            (can || convert) && e.open ? h('div', { class: 'row' },
+              convert ? ui.button('Turn into an action', function () { ctl.dlg.close(); if (!app.queueBlocked()) CH.views.raiseForm.open(app, e.areaKey, { entry: e }); }) : null,
+              can ? ui.button('Link an existing action', function () { ctl.show('link'); }) : null) : null];
         },
         form: function (view, e, ctl) {
           var label = function (what) { return what + ' ' + e.ref; };
@@ -3609,18 +3665,14 @@ window.ESGCompetencyHub = function (ctx) {
             var desc = h('textarea', { id: 'ch-re-description', rows: '5', maxlength: '5000' });
             desc.value = e.description;
             var impact = h('select', { id: 'ch-re-impact' }, R.IMPACTS.map(function (x) { return h('option', { value: x, selected: x === e.impact ? true : null, text: x }); }));
-            var resp = h('select', { id: 'ch-re-responsibleId' }, ownersFor(e.areaKey).map(function (p) {
-              return h('option', { value: String(p.id), selected: Number(p.id) === Number(e.responsibleId) ? true : null, text: p.name });
-            }));
-            return formShell('Edit the details', [field('Title', title), field('Description', desc), field('Impact', impact), field('Who is responsible?', resp)],
+            return formShell('Edit the details', [field('Title', title), field('Description', desc), field('Impact', impact)],
               'Save changes', function (form, errorBox) {
                 var v = {};
                 if (title.value.trim() !== e.title) v.title = title.value.trim();
                 if (desc.value.trim() !== e.description.trim()) v.description = desc.value.trim();
                 if (impact.value !== e.impact) v.impact = impact.value;
-                if (Number(resp.value) !== Number(e.responsibleId)) v.responsibleId = Number(resp.value);
                 var errors = R.validateEntryUpdate(e, v, { ownerAllowed: allowed });
-                if (CH.ui.dialog.showErrors(form, 'ch-re-', errors, ['title', 'description', 'impact', 'responsibleId'])) return;
+                if (CH.ui.dialog.showErrors(form, 'ch-re-', errors, ['title', 'description', 'impact'])) return;
                 if (errors.entry) { errorBox.textContent = errors.entry; return; }
                 ctl.send(form, { type: 'UpdateRegisterEntry', targetId: e.id, targetType: 'Register Entry', expectedRevision: e.revision, payload: v, label: label('Edit') }, errorBox);
               }, ctl);
@@ -3658,14 +3710,6 @@ window.ESGCompetencyHub = function (ctx) {
   CH.views.entryForm = (function () {
     var h = CH.dom.h;
     var R = CH.rules;
-    var HINTS = {
-      'Improvement': 'Something that would make the work better or safer.',
-      'Degradation': 'Something that has got worse and needs watching or fixing.',
-      'Concern': 'Something that worries you but is not yet a degradation.',
-      'Opportunity': 'A chance to do something better.',
-      'Positive Observation': 'Something going well that others should know about.'
-    };
-
     function open(app, areaKey) {
       var m = app.model;
       var mine = m.areas.filter(function (a) { return app.access.canWrite(a.key); });
@@ -3676,47 +3720,29 @@ window.ESGCompetencyHub = function (ctx) {
 
       var area = h('select', { id: 'ch-e-areaKey' }, mine.map(function (a) { return h('option', { value: a.key, selected: a.key === areaKey ? true : null, text: a.name }); }));
       var type = h('select', { id: 'ch-e-entryType' }, R.ENTRY_TYPES.map(function (t) { return h('option', { value: t, text: t }); }));
-      var typeHint = h('p', { class: 'explain' });
       var impact = h('select', { id: 'ch-e-impact' }, R.IMPACTS.map(function (x) { return h('option', { value: x, selected: x === 'Medium' ? true : null, text: x }); }));
       var title = h('input', { id: 'ch-e-title', type: 'text', maxlength: '255', autocomplete: 'off' });
       var description = h('textarea', { id: 'ch-e-description', rows: '5', maxlength: '5000' });
-      var resp = h('select', { id: 'ch-e-responsibleId' });
-      function fillPeople() {
-        var current = resp.value || String(app.person.SiteUserId);
-        CH.dom.clear(resp);
-        m.ownersFor(area.value).forEach(function (p) {
-          resp.appendChild(h('option', { value: String(p.id), selected: String(p.id) === current ? true : null,
-            text: p.name + (Number(p.id) === Number(app.person.SiteUserId) ? ' (you)' : '') }));
-        });
-      }
-      function showHint() { typeHint.textContent = HINTS[type.value] || ''; }
-      area.addEventListener('change', fillPeople);
-      type.addEventListener('change', showHint);
-      fillPeople();
-      showHint();
-
       var errorBox = h('p', { class: 'form-error', role: 'alert' });
       var submit = h('button', { type: 'submit', class: 'btn btn-main', text: 'Raise entry' });
       var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-e', title: 'Raise an improvement or degradation' });
       var form = h('form', { class: 'dialog-body', novalidate: true },
-        field('Area', area), field('Type', type), typeHint, field('Impact', impact),
+        field('Area', area), field('Type', type), field('Impact', impact),
         field('Title', title, 'A short summary people will recognise.'), field('Description', description),
-        field('Who is responsible?', resp, 'Members of the area, and Team Leaders and the Group Head.'),
         errorBox, h('div', { class: 'row' }, submit, h('button', { type: 'button', class: 'btn', text: 'Cancel', onclick: dlg.close })));
       dlg.body.appendChild(form);
 
       form.addEventListener('submit', async function (e) {
         e.preventDefault();
         errorBox.textContent = '';
-        var v = { areaKey: area.value, entryType: type.value, impact: impact.value, title: title.value, description: description.value, responsibleId: Number(resp.value) };
-        var errors = R.validateEntry(v, { canWrite: app.access.canWrite,
-          ownerAllowed: function (k, id) { return m.ownersFor(k).some(function (p) { return Number(p.id) === id; }); } });
-        if (CH.ui.dialog.showErrors(form, 'ch-e-', errors, ['areaKey', 'entryType', 'impact', 'title', 'description', 'responsibleId'])) return;
+        var v = { areaKey: area.value, entryType: type.value, impact: impact.value, title: title.value, description: description.value };
+        var errors = R.validateEntry(v, { canWrite: app.access.canWrite });
+        if (CH.ui.dialog.showErrors(form, 'ch-e-', errors, ['areaKey', 'entryType', 'impact', 'title', 'description'])) return;
         submit.disabled = true;
         submit.textContent = 'Sending…';
         try {
           await app.tracker.submit({ key: key, type: 'RaiseRegisterEntry', label: 'Raise “' + v.title.trim() + '”', payload: {
-            areaKey: v.areaKey, entryType: v.entryType, impact: v.impact, title: v.title.trim(), description: v.description.trim(), responsibleId: v.responsibleId } });
+            areaKey: v.areaKey, entryType: v.entryType, impact: v.impact, title: v.title.trim(), description: v.description.trim() } });
           dlg.close();
           CH.ui.toast(app.root, 'Your entry has been sent. It will appear in a few minutes.', 'ok');
         } catch (error) {

@@ -155,7 +155,7 @@ CH.views.home = (function () {
       .sort(function (a, b) { return (order[a.group] - order[b.group]) || byDue(a, b); })
       .map(function (a) { return actionCard(app, a, h('span', { class: 'hm-x', text: a.ownerName + (a.areaKey !== key ? ' · shared from ' + a.areaName : '') })); });
     // Pinned and important notices first; then the other notices and the open register entries, newest first.
-    var notices = m.notices.filter(function (n) { return n.areaKey === key; });
+    var notices = m.notices.filter(function (n) { return n.areaKeys.indexOf(key) >= 0; });
     var entries = m.entries.filter(function (e) { return e.areaKey === key && e.open; });
     var rest = notices.filter(function (n) { return !n.important; }).map(function (n) { return { n: n, at: n.createdIso }; })
       .concat(entries.map(function (e) { return { e: e, at: e.raisedIso }; }))

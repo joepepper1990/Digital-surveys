@@ -303,6 +303,23 @@
             ]
           }
         },
+        "Initialise_src_email": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varSrcNotice",
+                "type": "object",
+                "value": {}
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_src_mtg": [
+              "Succeeded"
+            ]
+          }
+        },
         "Initialise_user_id": {
           "type": "InitializeVariable",
           "inputs": {
@@ -315,7 +332,7 @@
             ]
           },
           "runAfter": {
-            "Initialise_src_mtg": [
+            "Initialise_src_email": [
               "Succeeded"
             ]
           }
@@ -1762,6 +1779,54 @@
                             ]
                           }
                         },
+                        "Email_given_(raise)": {
+                          "type": "If",
+                          "expression": "@greater(int(if(empty(first(split(string(coalesce(outputs('Payload')?['sourceNoticeId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['sourceNoticeId'], '')), '.')))), 0)",
+                          "actions": {
+                            "Get_src_email_(raise)": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "connectionName": "shared_sharepointonline",
+                                  "operationId": "HttpRequest",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                },
+                                "parameters": {
+                                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                                  "parameters/method": "GET",
+                                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notices']}')/items(@{if(empty(first(split(string(coalesce(outputs('Payload')?['sourceNoticeId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['sourceNoticeId'], '')), '.')))})?$select=Id,Status,ShownIn,FileDirRef",
+                                  "parameters/headers": {
+                                    "Accept": "application/json;odata=nometadata"
+                                  }
+                                },
+                                "authentication": "@parameters('$authentication')"
+                              },
+                              "runAfter": {}
+                            },
+                            "Src_email_read_(raise)": {
+                              "type": "SetVariable",
+                              "inputs": {
+                                "name": "varSrcNotice",
+                                "value": "@if(equals(actions('Get_src_email_(raise)')?['status'], 'Succeeded'), body('Get_src_email_(raise)'), json('{}'))"
+                              },
+                              "runAfter": {
+                                "Get_src_email_(raise)": [
+                                  "Succeeded",
+                                  "Failed",
+                                  "TimedOut"
+                                ]
+                              }
+                            }
+                          },
+                          "else": {
+                            "actions": {}
+                          },
+                          "runAfter": {
+                            "Meeting_given_(raise)": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
                         "Read_due_(raise)": {
                           "type": "SetVariable",
                           "inputs": {
@@ -1769,7 +1834,7 @@
                             "value": "@{formatDateTime(concat(string(coalesce(outputs('Payload')?['dueIso'], '')), 'T00:00:00Z'), 'yyyy-MM-dd')}"
                           },
                           "runAfter": {
-                            "Meeting_given_(raise)": [
+                            "Email_given_(raise)": [
                               "Succeeded"
                             ]
                           }
@@ -1973,7 +2038,7 @@
                         },
                         "Verdict_base_(raise)": {
                           "type": "Compose",
-                          "inputs": "@if(greater(variables('varExistingId'), 0), '', if(or(empty(first(body('Get_area_(raise)')?['value'])), not(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), not(empty(body('My_member_(raise)')))))), 'Choose one of your areas.', if(or(empty(first(body('Get_owner_(raise)')?['value'])), not(equals(string(first(body('Get_owner_(raise)')?['value'])?['Status']), 'Active')), not(or(contains(createArray('Team Leader', 'Group Head'), string(first(body('Get_owner_(raise)')?['value'])?['Role'])), not(empty(body('Owner_member_(raise)')?['value']))))), 'Choose a member of this area or a Team Leader.', if(and(equals(string(outputs('Person_who_sent_it')?['Role']), 'Technician'), not(equals(first(body('My_member_(raise)'))?['CanManageMeetings'], true)), not(equals(first(split(string(coalesce(first(body('Get_owner_(raise)')?['value'])?['SiteUserId'], '')), '.')), outputs('Sender_ID')))), 'As a technician you can raise actions for yourself in this area. Ask an engineer, or someone who runs meetings in this area, to raise it for someone else.', if(and(greater(int(if(empty(first(split(string(coalesce(outputs('Payload')?['sourceEntryId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['sourceEntryId'], '')), '.')))), 0), not(and(not(empty(string(coalesce(variables('varEntry')?['Id'], '')))), equals(first(split(string(coalesce(variables('varEntry')?['CompetencyId'], '')), '.')), first(split(string(coalesce(first(body('Get_area_(raise)')?['value'])?['Id'], '')), '.'))), not(equals(string(variables('varEntry')?['Status']), 'Closed'))))), 'That improvement or degradation could not be found in this area, or it is closed.', if(and(greater(int(if(empty(first(split(string(coalesce(outputs('Payload')?['sourceMeetingId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['sourceMeetingId'], '')), '.')))), 0), not(and(equals(first(split(string(coalesce(variables('varSrcMtg')?['CompetencyId'], '')), '.')), first(split(string(coalesce(first(body('Get_area_(raise)')?['value'])?['Id'], '')), '.'))), equals(string(variables('varSrcMtg')?['Status']), 'In Progress'), or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), equals(first(body('My_member_(raise)'))?['CanManageMeetings'], true))))), 'Actions are raised from a meeting only while it is in progress, by the people who run it.', if(empty(trim(string(coalesce(outputs('Payload')?['title'], '')))), 'Enter what needs doing.', if(greater(length(trim(string(coalesce(outputs('Payload')?['title'], '')))), 255), 'Keep the title to 255 characters or fewer.', if(empty(trim(string(coalesce(outputs('Payload')?['description'], '')))), 'Add a short description.', if(greater(length(trim(string(coalesce(outputs('Payload')?['description'], '')))), 5000), 'Keep the description to 5,000 characters or fewer.', if(not(and(equals(variables('varDue'), string(coalesce(outputs('Payload')?['dueIso'], ''))), not(empty(string(coalesce(outputs('Payload')?['dueIso'], '')))))), 'Choose a target date.', if(less(int(replace(if(and(equals(variables('varDue'), string(coalesce(outputs('Payload')?['dueIso'], ''))), not(empty(string(coalesce(outputs('Payload')?['dueIso'], ''))))), string(coalesce(outputs('Payload')?['dueIso'], '')), '2000-01-01'), '-', '')), int(replace(outputs('Today_in_the_UK'), '-', ''))), 'The target date cannot be in the past.', if(greater(int(replace(if(and(equals(variables('varDue'), string(coalesce(outputs('Payload')?['dueIso'], ''))), not(empty(string(coalesce(outputs('Payload')?['dueIso'], ''))))), string(coalesce(outputs('Payload')?['dueIso'], '')), '2000-01-01'), '-', '')), int(replace(outputs('Max_due_(raise)'), '-', ''))), concat('Choose a date within ', string(outputs('Years_(raise)')), if(equals(outputs('Years_(raise)'), 1), ' year.', ' years.')), if(not(contains(createArray('Low', 'Normal', 'High'), string(coalesce(outputs('Payload')?['priority'], 'Normal')))), 'Choose a priority.', ''))))))))))))))",
+                          "inputs": "@if(greater(variables('varExistingId'), 0), '', if(or(empty(first(body('Get_area_(raise)')?['value'])), not(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), not(empty(body('My_member_(raise)')))))), 'Choose one of your areas.', if(or(empty(first(body('Get_owner_(raise)')?['value'])), not(equals(string(first(body('Get_owner_(raise)')?['value'])?['Status']), 'Active')), not(or(contains(createArray('Team Leader', 'Group Head'), string(first(body('Get_owner_(raise)')?['value'])?['Role'])), not(empty(body('Owner_member_(raise)')?['value']))))), 'Choose a member of this area or a Team Leader.', if(and(equals(string(outputs('Person_who_sent_it')?['Role']), 'Technician'), not(equals(first(body('My_member_(raise)'))?['CanManageMeetings'], true)), not(equals(first(split(string(coalesce(first(body('Get_owner_(raise)')?['value'])?['SiteUserId'], '')), '.')), outputs('Sender_ID')))), 'As a technician you can raise actions for yourself in this area. Ask an engineer, or someone who runs meetings in this area, to raise it for someone else.', if(and(greater(int(if(empty(first(split(string(coalesce(outputs('Payload')?['sourceEntryId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['sourceEntryId'], '')), '.')))), 0), not(and(not(empty(string(coalesce(variables('varEntry')?['Id'], '')))), equals(first(split(string(coalesce(variables('varEntry')?['CompetencyId'], '')), '.')), first(split(string(coalesce(first(body('Get_area_(raise)')?['value'])?['Id'], '')), '.'))), not(equals(string(variables('varEntry')?['Status']), 'Closed'))))), 'That improvement or degradation could not be found in this area, or it is closed.', if(and(greater(int(if(empty(first(split(string(coalesce(outputs('Payload')?['sourceMeetingId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['sourceMeetingId'], '')), '.')))), 0), not(and(equals(first(split(string(coalesce(variables('varSrcMtg')?['CompetencyId'], '')), '.')), first(split(string(coalesce(first(body('Get_area_(raise)')?['value'])?['Id'], '')), '.'))), equals(string(variables('varSrcMtg')?['Status']), 'In Progress'), or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), equals(first(body('My_member_(raise)'))?['CanManageMeetings'], true))))), 'Actions are raised from a meeting only while it is in progress, by the people who run it.', if(and(greater(int(if(empty(first(split(string(coalesce(outputs('Payload')?['sourceNoticeId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['sourceNoticeId'], '')), '.')))), 0), not(and(equals(string(variables('varSrcNotice')?['Status']), 'Active'), or(endsWith(string(coalesce(variables('varSrcNotice')?['FileDirRef'], '')), concat('/', string(first(body('Get_area_(raise)')?['value'])?['CompetencyKey']))), equals(string(coalesce(variables('varSrcNotice')?['ShownIn'], '')), 'All'), contains(concat(';', string(coalesce(variables('varSrcNotice')?['ShownIn'], '')), ';'), concat(';', string(first(body('Get_area_(raise)')?['value'])?['CompetencyKey']), ';'))), or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), equals(first(body('My_member_(raise)'))?['CanManageMeetings'], true), and(equals(string(outputs('Person_who_sent_it')?['Role']), 'Engineer'), not(empty(body('My_member_(raise)')))))))), 'Only the engineers of this area, its meeting leads, and the Team Leaders and Group Head can turn a notice shown here into an action.', if(empty(trim(string(coalesce(outputs('Payload')?['title'], '')))), 'Enter what needs doing.', if(greater(length(trim(string(coalesce(outputs('Payload')?['title'], '')))), 255), 'Keep the title to 255 characters or fewer.', if(empty(trim(string(coalesce(outputs('Payload')?['description'], '')))), 'Add a short description.', if(greater(length(trim(string(coalesce(outputs('Payload')?['description'], '')))), 5000), 'Keep the description to 5,000 characters or fewer.', if(not(and(equals(variables('varDue'), string(coalesce(outputs('Payload')?['dueIso'], ''))), not(empty(string(coalesce(outputs('Payload')?['dueIso'], '')))))), 'Choose a target date.', if(less(int(replace(if(and(equals(variables('varDue'), string(coalesce(outputs('Payload')?['dueIso'], ''))), not(empty(string(coalesce(outputs('Payload')?['dueIso'], ''))))), string(coalesce(outputs('Payload')?['dueIso'], '')), '2000-01-01'), '-', '')), int(replace(outputs('Today_in_the_UK'), '-', ''))), 'The target date cannot be in the past.', if(greater(int(replace(if(and(equals(variables('varDue'), string(coalesce(outputs('Payload')?['dueIso'], ''))), not(empty(string(coalesce(outputs('Payload')?['dueIso'], ''))))), string(coalesce(outputs('Payload')?['dueIso'], '')), '2000-01-01'), '-', '')), int(replace(outputs('Max_due_(raise)'), '-', ''))), concat('Choose a date within ', string(outputs('Years_(raise)')), if(equals(outputs('Years_(raise)'), 1), ' year.', ' years.')), if(not(contains(createArray('Low', 'Normal', 'High'), string(coalesce(outputs('Payload')?['priority'], 'Normal')))), 'Choose a priority.', '')))))))))))))))",
                           "runAfter": {
                             "Co_verdict_(raise)": [
                               "Succeeded"
@@ -2070,11 +2135,11 @@
                                     },
                                     {
                                       "FieldName": "SourceType",
-                                      "FieldValue": "@{if(greater(int(if(empty(first(split(string(coalesce(outputs('Payload')?['sourceEntryId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['sourceEntryId'], '')), '.')))), 0), 'Register', if(greater(int(if(empty(first(split(string(coalesce(outputs('Payload')?['sourceMeetingId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['sourceMeetingId'], '')), '.')))), 0), 'Meeting', 'None'))}"
+                                      "FieldValue": "@{if(greater(int(if(empty(first(split(string(coalesce(outputs('Payload')?['sourceEntryId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['sourceEntryId'], '')), '.')))), 0), 'Register', if(greater(int(if(empty(first(split(string(coalesce(outputs('Payload')?['sourceMeetingId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['sourceMeetingId'], '')), '.')))), 0), 'Meeting', if(greater(int(if(empty(first(split(string(coalesce(outputs('Payload')?['sourceNoticeId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['sourceNoticeId'], '')), '.')))), 0), 'Noticeboard', 'None')))}"
                                     },
                                     {
                                       "FieldName": "SourceId",
-                                      "FieldValue": "@{if(greater(int(if(empty(first(split(string(coalesce(outputs('Payload')?['sourceEntryId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['sourceEntryId'], '')), '.')))), 0), if(empty(first(split(string(coalesce(outputs('Payload')?['sourceEntryId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['sourceEntryId'], '')), '.'))), if(greater(int(if(empty(first(split(string(coalesce(outputs('Payload')?['sourceMeetingId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['sourceMeetingId'], '')), '.')))), 0), if(empty(first(split(string(coalesce(outputs('Payload')?['sourceMeetingId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['sourceMeetingId'], '')), '.'))), ''))}"
+                                      "FieldValue": "@{if(greater(int(if(empty(first(split(string(coalesce(outputs('Payload')?['sourceEntryId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['sourceEntryId'], '')), '.')))), 0), if(empty(first(split(string(coalesce(outputs('Payload')?['sourceEntryId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['sourceEntryId'], '')), '.'))), if(greater(int(if(empty(first(split(string(coalesce(outputs('Payload')?['sourceMeetingId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['sourceMeetingId'], '')), '.')))), 0), if(empty(first(split(string(coalesce(outputs('Payload')?['sourceMeetingId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['sourceMeetingId'], '')), '.'))), if(greater(int(if(empty(first(split(string(coalesce(outputs('Payload')?['sourceNoticeId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['sourceNoticeId'], '')), '.')))), 0), if(empty(first(split(string(coalesce(outputs('Payload')?['sourceNoticeId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['sourceNoticeId'], '')), '.'))), '')))}"
                                     },
                                     {
                                       "FieldName": "IsCrossCompetency",

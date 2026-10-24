@@ -10,7 +10,7 @@ CH.model = (function () {
     actions: '$select=Id,Title,Description,CompetencyId,LinkedCompetenciesId,AssignedToId,RaisedById,DateRaised,DueDay,OriginalDueDate,' +
       'Status,IsOpen,Priority,ExtensionCount,RequiresCloseOut,Revision,PendingRequestKey,LastRequestKey,CreatedRequestKey,FileDirRef,' +
       'Blocker,CloseOutcome,ClosureNote,DateClosed,SourceType,SourceId,CoOwnerIds,CloseOutById&$filter=IsOpen eq 1 and FSObjType eq 0',
-    notices: "$select=Id,Title,Body,Category,IsImportant,ImportantUntil,Status,AuthorId,Created,FileDirRef,Revision,LastRequestKey&$filter=Status eq 'Active' and FSObjType eq 0",
+    notices: "$select=Id,Title,Body,Category,IsImportant,ImportantUntil,ImportantDays,ShownIn,Status,AuthorId,Created,FileDirRef,Revision,LastRequestKey&$filter=Status eq 'Active' and FSObjType eq 0",
     register: '$select=Id,Title,Description,EntryType,Impact,Status,Outcome,RaisedById,ResponsiblePersonId,DateRaised,DateResolved,Revision,' +
       'LastRequestKey,CompetencyId,FileDirRef,Created&$filter=FSObjType eq 0',
     updates: '$select=Id,EntryType,ParentType,ParentId,AuthorId,Created,FileDirRef,IsHidden&$filter=IsFlagEvent eq 1 and FSObjType eq 0',
@@ -21,7 +21,7 @@ CH.model = (function () {
   };
 
   // Columns a later Setup adds: if the site does not have them yet, the list is read without them.
-  var OPTIONAL = { actions: ['CoOwnerIds', 'CloseOutById'] };
+  var OPTIONAL = { actions: ['CoOwnerIds', 'CloseOutById'], notices: ['ImportantDays', 'ShownIn'] };
 
   // Reads each list independently; one failure does not hide the others.
   async function load(sp) {
@@ -138,12 +138,21 @@ CH.model = (function () {
       var key = CH.sp.folderOf(n.FileDirRef);
       var createdIso = D.localDate(n.Created);
       var importantUntil = n.ImportantUntil ? D.localDate(n.ImportantUntil) : '';
-      var cap = D.addDays(createdIso, CH.config.noticeImportantMaxDays);
-      var important = !!n.IsImportant && (!importantUntil || (importantUntil >= today && today <= cap));
+      // important for the time its author chose (1 week to 3 months; a month before 1.9.0.0), never longer
+      var days = [7, 14, 30, 90].indexOf(Number(n.ImportantDays)) >= 0 ? Number(n.ImportantDays) : CH.config.noticeImportantMaxDays;
+      var cap = D.addDays(createdIso, days);
+      var pinned = !!n.IsImportant && !n.ImportantUntil && !n.ImportantDays;
+      var important = !!n.IsImportant && (pinned || (importantUntil ? importantUntil >= today : today <= cap));
+      // stored once, shown on every noticeboard it was posted to: "All", or a list of area keys (1.9.0.0)
+      var shown = String(n.ShownIn || '').trim();
+      var shownAll = shown === 'All';
+      var areaKeys = shownAll ? areas.map(function (a) { return a.key; })
+        : [key].concat(shown ? shown.split(';').filter(function (k) { return k && k !== key && areaByKey[k]; }) : []);
       return {
         id: n.Id, areaKey: key, title: n.Title, body: n.Body || '', category: n.Category || 'General',
         authorId: n.AuthorId, authorName: nameOf(n.AuthorId), fromOutside: !(membersByArea[key] || {})[n.AuthorId] && !isManagementPerson(n.AuthorId),
-        createdIso: createdIso, created: n.Created, important: important, pinned: !!n.IsImportant && !n.ImportantUntil,
+        createdIso: createdIso, created: n.Created, important: important, pinned: pinned,
+        importantDays: n.ImportantDays ? Number(n.ImportantDays) : null, areaKeys: areaKeys, shownAll: shownAll,
         // notices posted before the Revision column existed have none: they are then sent without a stale check
         revision: Number(n.Revision) || 0, lastRequestKey: n.LastRequestKey || ''
       };

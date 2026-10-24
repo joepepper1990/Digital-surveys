@@ -1,5 +1,5 @@
-// "Post a notice": an instant write. Any active user may post on any active area's noticeboard (K4.1);
-// only members may mark a notice as important.
+// "Post a notice": an instant write. Any active user may post on any active area's noticeboard (K4.1), on one
+// or several at once, or on all of them: the notice is stored once (1.9.0.0). Only members mark it important.
 CH.views = CH.views || {};
 CH.views.noticeForm = (function () {
   var h = CH.dom.h;
@@ -8,6 +8,7 @@ CH.views.noticeForm = (function () {
   // Validation shared by the form and the tests.
   function validate(values) {
     var errors = {};
+    if (values.areas && !values.areas.length) errors.areas = 'Choose at least one noticeboard.';
     var title = (values.title || '').trim();
     var body = (values.body || '').trim();
     if (!title) errors.title = 'Enter a title.';
@@ -23,32 +24,45 @@ CH.views.noticeForm = (function () {
     var clientKey = CH.requests.newKey();
     var field = CH.ui.dialog.field;
 
-    var areaSelect = h('select', { id: 'ch-n-area' }, areas.map(function (a) {
-      return h('option', { value: a.key, selected: a.key === areaKey ? true : null, text: a.name + (app.access.canWrite(a.key) ? '' : ' (not your area)') });
-    }));
+    var boxes = areas.map(function (a) {
+      return h('input', { type: 'checkbox', value: a.key, checked: a.key === areaKey || (!areaKey && a === areas[0]) ? true : null });
+    });
+    var everyBox = h('input', { type: 'checkbox', id: 'ch-n-all' });
+    var areaList = h('div', { class: 'checks', id: 'ch-n-areas' }, h('label', { class: 'check' }, everyBox, ' All noticeboards'),
+      areas.map(function (a, i) { return h('label', { class: 'check' }, boxes[i], ' ' + a.name + (app.access.canWrite(a.key) ? '' : ' (not your area)')); }));
+    function chosen() { return boxes.filter(function (b) { return b.checked; }).map(function (b) { return b.value; }); }
+    everyBox.addEventListener('change', function () { boxes.forEach(function (b) { b.checked = everyBox.checked; }); refreshArea(); });
+    boxes.forEach(function (b) { b.addEventListener('change', function () { everyBox.checked = chosen().length === boxes.length; refreshArea(); }); });
     var title = h('input', { id: 'ch-n-title', type: 'text', maxlength: '255', autocomplete: 'off' });
     var body = h('textarea', { id: 'ch-n-body', rows: '6', maxlength: '5000' });
     var category = h('select', { id: 'ch-n-cat' }, CATEGORIES.map(function (c) { return h('option', { value: c, text: c }); }));
-    var important = h('input', { id: 'ch-n-imp', type: 'checkbox' });
-    var importantRow = h('label', { class: 'check' }, important, ' Mark as important for 30 days');
+    var important = h('select', { id: 'ch-n-imp' }, [h('option', { value: '0', text: 'Not important' })].concat(CH.rules.IMPORTANT_FOR.map(function (o) {
+      return h('option', { value: String(o[0]), text: o[1] });
+    })));
+    var importantRow = CH.ui.dialog.field('Important for', important);
     var errorBox = h('p', { class: 'form-error', role: 'alert' });
     var outsideNote = h('p', { class: 'explain' });
     var submit = h('button', { type: 'submit', class: 'btn btn-main', text: 'Post notice' });
 
-    function refreshArea() {
-      var key = areaSelect.value;
-      var member = app.access.canWrite(key);
-      importantRow.style.display = member ? '' : 'none';
-      if (!member) important.checked = false;
-      outsideNote.textContent = member ? '' : 'You are not a member of ' + app.model.areaByKey[key].name +
-        '. Your notice will be shown as coming from outside the area, and its members will see it.';
-      outsideNote.style.display = member ? 'none' : '';
+    // the notice is kept in the first chosen area you belong to (or the first chosen): that area's moderators look after it
+    function home() {
+      var keys = chosen();
+      return keys.filter(function (k) { return app.access.canWrite(k); })[0] || keys[0];
     }
-    areaSelect.addEventListener('change', refreshArea);
+    function refreshArea() {
+      var key = home();
+      var member = !!key && app.access.canWrite(key);
+      importantRow.style.display = member ? '' : 'none';
+      if (!member) important.value = '0';
+      var outside = chosen().filter(function (k) { return !app.access.canWrite(k); });
+      outsideNote.textContent = outside.length && outside.length < 4 ? 'You are not a member of ' + outside.map(function (k) { return app.model.areaByKey[k].name; }).join(', ') +
+        '. Your notice will be shown there as coming from outside the area.' : outside.length ? 'Your notice will be shown as coming from outside the areas you are not a member of.' : '';
+      outsideNote.style.display = outside.length ? '' : 'none';
+    }
 
     var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-n', title: 'Post a notice' });
     var form = h('form', { class: 'dialog-body', novalidate: true },
-      field('Which noticeboard?', areaSelect),
+      field('Which noticeboards?', areaList),
       outsideNote,
       field('Title', title, 'A short summary people will recognise.'),
       field('Message', body),
@@ -61,17 +75,19 @@ CH.views.noticeForm = (function () {
     form.addEventListener('submit', async function (e) {
       e.preventDefault();
       errorBox.textContent = '';
-      var values = { title: title.value, body: body.value, category: category.value };
+      var values = { title: title.value, body: body.value, category: category.value, areas: chosen() };
       var errors = validate(values);
-      if (CH.ui.dialog.showErrors(form, 'ch-n-', { title: errors.title, body: errors.body, cat: errors.category }, ['title', 'body', 'cat'])) return;
+      if (CH.ui.dialog.showErrors(form, 'ch-n-', { areas: errors.areas, title: errors.title, body: errors.body, cat: errors.category }, ['areas', 'title', 'body', 'cat'])) return;
 
-      var key = areaSelect.value;
+      var key = home();
+      var days = app.access.canWrite(key) ? Number(important.value) : 0;
+      var shownIn = values.areas.length === boxes.length && boxes.length > 1 ? 'All' : values.areas.length > 1 ? values.areas.join(';') : '';
       submit.disabled = true;
       submit.textContent = 'Posting…';
       try {
         await app.sp.addToFolder('notices', key, Object.assign({
           Title: values.title.trim(), Body: values.body.trim(), Category: values.category,
-          IsImportant: important.checked && app.access.canWrite(key) ? '1' : '0',
+          IsImportant: days ? '1' : '0', ImportantDays: days ? String(days) : '', ShownIn: shownIn,
           ClientKey: clientKey, CreatedRequestKey: 'U|' + clientKey, Status: 'Active'
         }, app.testMark()));
         dlg.close();

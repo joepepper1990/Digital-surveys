@@ -28,7 +28,7 @@ CH.views.area = (function () {
   // Notices first (pinned and important at the top), then the improvements and degradations register (spec NB-1, REG-4).
   function noticesTab(app, area) {
     var m = app.model;
-    var list = m.notices.filter(function (n) { return n.areaKey === area.key; });
+    var list = m.notices.filter(function (n) { return n.areaKeys.indexOf(area.key) >= 0; });
     list = list.filter(function (n) { return n.important; }).concat(list.filter(function (n) { return !n.important; }));
     var filter = app.state.entryFilter || 'open';
     var entries = m.entries.filter(function (e) {

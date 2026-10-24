@@ -492,6 +492,33 @@ test('Check on a site set up before People.CanPostNotices existed finishes witho
   deq(site.writes, []);
 });
 
+test('Setup 1.4 on a site set up by 1.3.2: adds Known as, co-owners, the checker, the notice columns and the "Other" type', async () => {
+  const { site, run, ctx } = newSite();
+  const old = plain(schema);
+  const drop = { people: ['KnownAs'], actions: ['CoOwnerIds', 'CloseOutById'], notices: ['ImportantDays', 'ShownIn'] };
+  old.lists.forEach((l) => { if (drop[l.key]) l.fields = l.fields.filter((f) => drop[l.key].indexOf(f.name) < 0); });
+  const type = old.lists.filter((l) => l.key === 'register')[0].fields.filter((f) => f.name === 'EntryType')[0];
+  type.choices = type.choices.filter((c) => c !== 'Other');
+  const rest = ctx.CHS.rest.create(site.ctx.getWebPart());
+  const first = await ctx.CHS.engine.create(rest, old, { log: () => {}, confirmGroupOwnersOnly: true, today: TODAY }).run('apply');
+  assert.equal(first.ok, true);
+  site.writes.length = 0;
+  const check = await run('check');
+  deq(check.stops, []);
+  deq(site.writes, []);
+  const planned = check.entries.filter((e) => e.level === 'create').map((e) => e.text).join(' | ');
+  assert.match(planned, /Would add 1 column to "People"/);
+  assert.match(planned, /Would add 2 columns to "Actions"/);
+  assert.match(planned, /Would add 2 columns to "Noticeboard"/);
+  const apply = await run('apply');
+  assert.equal(apply.result.ok, true, apply.stops.join(' | '));
+  ['ImportantDays', 'ShownIn'].forEach((n) => assert.ok(listByUrl(site, 'Noticeboard').fields.some((f) => f.InternalName === n), n));
+  site.writes.length = 0;
+  const again = await run('check');
+  assert.equal(again.result.created, 0, again.entries.filter((e) => e.level === 'create').map((e) => e.text).join(' | '));
+  deq(site.writes, []);
+});
+
 test('No list where people read only their own items has a column that must be unique (SharePoint refuses it)', () => {
   schema.lists.filter((l) => l.readSecurity === 2).forEach((l) => {
     const unique = (l.standard ? schema.standardColumns : []).concat(l.fields).filter((f) => f.unique).map((f) => f.name);

@@ -34,6 +34,8 @@ window.MockSharePoint = (function () {
       if (x.Id === 53) { x.Status = 'Completed'; x.RequiresCloseOut = true; x.CloseOutById = 124; x.DateCompleted = new Date().toISOString(); }
     });
   }
+  // A notice shown on several noticeboards (1.9.0.0): notice 2 sits in Flask and is also shown in Instruments.
+  if (mode === 'shownIn') data.Noticeboard.forEach(function (n) { if (n.Id === 2) n.ShownIn = 'FLK;INS'; });
   if (mode === 'left') data.People.forEach(function (p) { if (p.SiteUserId === asId) p.Status = 'Left'; });
   // Limited mode: the queue monitor reports that changes are not being picked up.
   if (mode === 'limited') {
@@ -209,6 +211,7 @@ window.MockSharePoint = (function () {
       allowed: function (folder) { return data.Competencies.some(function (c) { return c.CompetencyKey === folder && c.Status === 'Active'; }); },
       row: function (v, id, path) {
         return { Id: id, Title: v.Title, Body: v.Body, Category: v.Category, IsImportant: v.IsImportant === '1', ImportantUntil: null, Status: 'Active',
+          ImportantDays: v.ImportantDays ? Number(v.ImportantDays) : null, ShownIn: v.ShownIn || '',
           AuthorId: asId, Created: new Date().toISOString(), FileDirRef: path, ClientKey: v.ClientKey };
       }
     },

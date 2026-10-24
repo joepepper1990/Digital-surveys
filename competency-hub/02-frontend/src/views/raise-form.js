@@ -14,13 +14,15 @@ CH.views.raiseForm = (function () {
   ];
 
   // opts: { entry } raises an action linked to an improvement or degradation, in that entry's area (spec REG-3);
-  // { meeting, title } raises one from a meeting in progress, in its area (spec MTG-3).
+  // { meeting, title } raises one from a meeting in progress, in its area (spec MTG-3);
+  // { notice, areas } turns a notice into an action, in one of the areas it is shown in that the person may do this for (1.9.0.0).
   function open(app, areaKey, opts) {
     var m = app.model;
     var entry = opts && opts.entry;
     var meeting = opts && opts.meeting;
+    var notice = opts && opts.notice;
     var fixedArea = entry ? entry.areaKey : meeting ? meeting.areaKey : null;
-    var mine = m.areas.filter(function (a) { return app.access.canWrite(a.key) && (!fixedArea || a.key === fixedArea); });
+    var mine = m.areas.filter(function (a) { return app.access.canWrite(a.key) && (!fixedArea || a.key === fixedArea) && (!notice || opts.areas.indexOf(a.key) >= 0); });
     if (!mine.length) { CH.ui.toast(app.root, 'You are not a member of any area yet, so you cannot raise actions.', 'info'); return; }
     var today = m.today;
     // the limit an administrator sets (MaxDeadlineYears), the same one the flow checks
@@ -28,8 +30,10 @@ CH.views.raiseForm = (function () {
     var step = 0;
     var key = CH.requests.newKey();
 
-    var title = h('input', { id: 'ch-r-title', type: 'text', maxlength: '255', autocomplete: 'off', value: (opts && opts.title) || '' });
+    var source = notice || entry;
+    var title = h('input', { id: 'ch-r-title', type: 'text', maxlength: '255', autocomplete: 'off', value: (opts && opts.title) || (source ? source.title : '') });
     var description = h('textarea', { id: 'ch-r-description', rows: '5', maxlength: '5000' });
+    if (source) description.value = String(notice ? notice.body : entry.description || '').slice(0, 5000);
     var area = h('select', { id: 'ch-r-areaKey' }, mine.map(function (a) {
       return h('option', { value: a.key, selected: a.key === areaKey ? true : null, text: a.name });
     }));
@@ -108,7 +112,7 @@ CH.views.raiseForm = (function () {
       return out;
     }
 
-    var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-r', title: entry ? 'Raise an action for ' + entry.ref : meeting ? 'Raise an action from the meeting' : 'Raise an action' });
+    var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-r', title: entry ? 'Turn ' + entry.ref + ' into an action' : notice ? 'Turn a notice into an action' : meeting ? 'Raise an action from the meeting' : 'Raise an action' });
     var progress = h('p', { class: 'muted small', 'aria-live': 'polite' });
     var errorBox = h('p', { class: 'form-error', role: 'alert' });
     var stepBox = h('div');
@@ -135,7 +139,8 @@ CH.views.raiseForm = (function () {
           (v.coOwnerIds.length ? ' – co-owners ' + v.coOwnerIds.map(function (id) { return m.nameOf(id); }).join(', ') : '') }),
         h('dt', { text: 'When' }), h('dd', { text: 'By ' + D.weekday(v.dueIso) + ' ' + D.long(v.dueIso) }),
         h('dt', { text: 'Also' }), h('dd', { text: v.priority + ' priority' + (v.requiresCloseOut ? ', with a close-out check by ' + m.nameOf(v.checkerId) : '') }),
-        entry ? [h('dt', { text: 'For' }), h('dd', { text: entry.ref + ' ' + entry.title })] : null);
+        entry ? [h('dt', { text: 'For' }), h('dd', { text: entry.ref + ' ' + entry.title })] : null,
+        notice ? [h('dt', { text: 'From' }), h('dd', { text: 'The notice “' + notice.title + '”' })] : null);
     }
 
     function go(n) {
@@ -169,7 +174,7 @@ CH.views.raiseForm = (function () {
         await app.tracker.submit({ key: key, type: 'RaiseAction', label: 'Raise “' + v.title.trim() + '”', payload: {
           areaKey: v.areaKey, title: v.title.trim(), description: v.description.trim(), ownerId: Number(v.ownerId),
           dueIso: v.dueIso, priority: v.priority, requiresCloseOut: v.requiresCloseOut,
-          coOwnerIds: v.coOwnerIds.length ? v.coOwnerIds : undefined, checkerId: v.checkerId, sourceEntryId: entry ? entry.id : undefined,
+          coOwnerIds: v.coOwnerIds.length ? v.coOwnerIds : undefined, checkerId: v.checkerId, sourceEntryId: entry ? entry.id : undefined, sourceNoticeId: notice ? notice.id : undefined,
           sourceMeetingId: meeting ? meeting.id : undefined }, meetingId: meeting ? meeting.id : undefined });
         dlg.close();
         CH.ui.toast(app.root, 'Your action has been sent. It will appear in a few minutes.', 'ok');

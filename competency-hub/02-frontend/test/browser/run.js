@@ -128,6 +128,10 @@ check('non-member posts a notice: outside note shown, "important" hidden', res.o
 check('non-member notice appears labelled as from outside the area', res.ok && res.result.labelled, JSON.stringify(res));
 check('the notice is the only write, to the Noticeboard Radwaste folder', res.ok && res.result.writes.length === 1 &&
   res.result.writes[0].list === 'Noticeboard' && res.result.writes[0].folder === 'RW', JSON.stringify(res));
+res = drive('as=' + RACHEL + '&view=area&area=FLK&drive=noticeMany');
+check('notice on several noticeboards: stored once in the first, shown in both, important for the chosen 2 weeks', res.ok &&
+  JSON.stringify(res.result.ticked) === '["FLK"]' && res.result.durations.join('|') === 'Not important|1 week|2 weeks|1 month|3 months' &&
+  res.result.stored && res.result.stored.folder === 'FLK' && res.result.stored.shown === 'FLK;INS' && res.result.stored.days === 14 && res.result.writes === 1, JSON.stringify(res));
 res = drive('as=' + RACHEL + '&view=area&area=FLK&drive=noticeValidation');
 check('empty notice: errors shown, focus on title, nothing sent', res.ok && res.result.titleError && res.result.bodyError &&
   res.result.focused === 'ch-n-title' && res.result.writes === 0, JSON.stringify(res));
@@ -208,6 +212,14 @@ check('there is no text size control in the bar', s1366.ok && s1366.result.hasCo
 res = drive('as=' + JOE + '&drive=knownAs', SLOW);
 check('known as: an administrator sets their own name; it shows in the bar, and their access stays locked', res.ok && res.result.boxEnabled && res.result.roleLocked === true &&
   res.result.stored === 'Joe' && res.result.who.indexOf('Joe · Team Leader') === 0, JSON.stringify(res));
+
+// A notice shown in another area: an engineer there turns it into an action; a technician is not offered it (1.9.0.0)
+res = drive('as=' + KELLY + '&mode=shownIn&notice=2&drive=noticeConvert', SLOW);
+check('turn a notice into an action: the notice says where it is shown; the title is filled in; one action carries the notice', res.ok && res.result.button &&
+  /Flask, Instruments noticeboards/.test(res.result.header) && res.result.prefilled === 'Spare probe stock levels' && res.result.areas.indexOf('INS') >= 0 &&
+  JSON.stringify(res.result.source) === '["Noticeboard",2]', JSON.stringify(res));
+res = drive('as=' + RACHEL + '&mode=shownIn&notice=2&drive=noticeConvert', SLOW);
+check('turn a notice into an action: a technician member is not offered it', res.ok && res.result.button === false, JSON.stringify(res));
 
 // Co-owners and the named close-out check (solution 1.9.0.0)
 res = drive('as=' + RICHARD + '&drive=raiseShared', SLOW);

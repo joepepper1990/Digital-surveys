@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.3.0",
+  "schemaVersion": "1.4.0",
   "areas": [
     { "key": "FLK", "title": "Flask", "sort": 10 },
     { "key": "INS", "title": "Instruments", "sort": 20 },
@@ -172,7 +172,7 @@
       "fields": [
         { "name": "Description", "title": "Description", "type": "Note" },
         { "name": "Competency", "title": "Competency", "type": "Lookup", "lookup": "competencies", "required": true, "indexed": true },
-        { "name": "EntryType", "title": "Entry Type", "type": "Choice", "choices": ["Improvement", "Degradation", "Concern", "Opportunity", "Positive Observation"], "required": true, "indexed": true },
+        { "name": "EntryType", "title": "Entry Type", "type": "Choice", "choices": ["Improvement", "Degradation", "Concern", "Opportunity", "Positive Observation", "Other"], "required": true, "indexed": true },
         { "name": "Impact", "title": "Impact", "type": "Choice", "choices": ["Low", "Medium", "High"] },
         { "name": "RaisedBy", "title": "Raised By", "type": "User" },
         { "name": "DateRaised", "title": "Date Raised", "type": "DateTime", "indexed": true },
@@ -192,6 +192,8 @@
         { "name": "Category", "title": "Category", "type": "Choice", "choices": ["General", "Request", "Improvement idea", "Safety", "Equipment", "Other"], "default": "General" },
         { "name": "IsImportant", "title": "Important", "type": "Boolean", "default": "0", "indexed": true },
         { "name": "ImportantUntil", "title": "Important Until", "type": "DateOnly" },
+        { "name": "ImportantDays", "title": "Important Days", "type": "Number" },
+        { "name": "ShownIn", "title": "Shown In", "type": "Text", "max": 255 },
         { "name": "Status", "title": "Status", "type": "Choice", "choices": ["Active", "Archived"], "required": true, "default": "Active", "indexed": true },
         { "name": "ClientKey", "title": "Client Key", "type": "Text", "max": 36, "required": true, "indexed": true, "unique": true },
         { "name": "IsTestRecord", "title": "Test Record", "type": "Boolean", "default": "0", "indexed": true }

@@ -336,7 +336,7 @@ window.MockRules = (function () {
     }
 
     // ---- notices, comments and the improvements and degradations register (spec NB-1 to NB-5, REG-1 to REG-5)
-    var ENTRY_TYPES = ['Improvement', 'Degradation', 'Concern', 'Opportunity', 'Positive Observation'];
+    var ENTRY_TYPES = ['Improvement', 'Degradation', 'Concern', 'Opportunity', 'Positive Observation', 'Other'];
     var IMPACTS = ['Low', 'Medium', 'High'];
     var ENTRY_STATUSES = ['Open', 'Under Review', 'Resolved', 'Closed'];
     var NOTICE_CATEGORIES = ['General', 'Request', 'Improvement idea', 'Safety', 'Equipment', 'Other'];
@@ -353,12 +353,10 @@ window.MockRules = (function () {
       var d = String(v.description || '').trim();
       if (!d) e.description = 'Describe it.';
       else if (d.length > 5000) e.description = 'Keep the description to 5,000 characters or fewer.';
-      if (!v.responsibleId) e.responsibleId = 'Choose who is responsible.';
-      else if (!e.areaKey && !ctx.ownerAllowed(v.areaKey, Number(v.responsibleId))) e.responsibleId = 'Choose a member of this area or a Team Leader.';
       return e;
     }
 
-    // v: the fields being changed (title, description, impact, status, outcome, responsibleId). An outcome is needed to
+    // v: the fields being changed (title, description, impact, status, outcome). An outcome is needed to
     // resolve or close an entry. ctx: { ownerAllowed(areaKey, personId) }
     function validateEntryUpdate(entry, v, ctx) {
       var e = {};
@@ -373,16 +371,23 @@ window.MockRules = (function () {
       var outcome = String(v.outcome || '').trim();
       if ('status' in v && (v.status === 'Resolved' || v.status === 'Closed') && outcome.length < 10) e.outcome = 'Record the outcome (at least 10 characters).';
       else if (outcome.length > 2000) e.outcome = 'Keep the outcome to 2,000 characters or fewer.';
-      if ('responsibleId' in v && !ctx.ownerAllowed(entry.areaKey, Number(v.responsibleId))) e.responsibleId = 'Choose a member of this area or a Team Leader.';
-      if (!['title', 'description', 'impact', 'status', 'outcome', 'responsibleId'].some(function (k) { return k in v; })) e.entry = 'Nothing has changed.';
+      if (!['title', 'description', 'impact', 'status', 'outcome'].some(function (k) { return k in v; })) e.entry = 'Nothing has changed.';
       return e;
     }
 
     // REG-2: the raiser, the person responsible, the area's engineers and meeting runners, and management.
     function managesEntry(entry, personId, access) {
       var k = entry.areaKey;
-      return access.canModerate(k) || access.chairs(k) || Number(entry.raisedById) === Number(personId) || Number(entry.responsibleId) === Number(personId);
+      return access.canModerate(k) || access.chairs(k) || Number(entry.raisedById) === Number(personId);
     }
+
+    // Turn a notice or an issue into an action (1.9.0.0): the area's engineers, its meeting leads, the Team Leaders and Group Head.
+    function canConvert(areaKey, access) {
+      return access.isManagement ? access.canWrite(areaKey) : access.isEngineerIn(areaKey) || access.chairs(areaKey);
+    }
+
+    // "Important for": 1 week, 2 weeks, 1 month or 3 months, in days (1.9.0.0)
+    var IMPORTANT_FOR = [[7, '1 week'], [14, '2 weeks'], [30, '1 month'], [90, '3 months']];
 
     // Edit a notice: its author or a moderator (spec §4.2 canModerate). Pin: moderators only.
     function noticeRoles(notice, personId, access) {
@@ -493,7 +498,7 @@ window.MockRules = (function () {
       validateComplete: validateComplete, validateUpdate: validateUpdate, validateStatus: validateStatus,
       validateReassign: validateReassign, validateClose: validateClose, validateReopen: validateReopen, validateEdit: validateEdit,
       roles: roles, completionStatus: completionStatus,
-      validateEntry: validateEntry, validateEntryUpdate: validateEntryUpdate, managesEntry: managesEntry, noticeRoles: noticeRoles,
+      validateEntry: validateEntry, validateEntryUpdate: validateEntryUpdate, managesEntry: managesEntry, noticeRoles: noticeRoles, canConvert: canConvert, IMPORTANT_FOR: IMPORTANT_FOR,
       validateNoticeEdit: validateNoticeEdit, validateComment: validateComment, ENTRY_TYPES: ENTRY_TYPES, IMPACTS: IMPACTS, ENTRY_STATUSES: ENTRY_STATUSES,
       NOTICE_CATEGORIES: NOTICE_CATEGORIES, validateMeeting: validateMeeting, validateCancelMeeting: validateCancelMeeting, nextMonths: nextMonths, MINUTE_OUTCOMES: MINUTE_OUTCOMES,
       DISCUSSION_SECTIONS: DISCUSSION_SECTIONS, missingOutcomes: missingOutcomes, validateAmend: validateAmend, SELF_ONLY: SELF_ONLY, CO_OWNERS: CO_OWNERS, PRIORITIES: PRIORITIES, OPEN_STATUSES: OPEN_STATUSES, OUTCOMES: OUTCOMES

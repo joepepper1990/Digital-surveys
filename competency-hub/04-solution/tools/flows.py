@@ -960,6 +960,17 @@ def flow_request_queue(domain='actions'):
     FROM_MTG = "greater(int(" + MTG_ID + "), 0)"
     MTG_OK = ("and(equals(" + idstr(SRC_MTG + "?['CompetencyId']") + ", " + idstr(AREA_R + "?['Id']") + "), equals(string(" + SRC_MTG + "?['Status']), 'In Progress'), "
               "or(" + IS_MGMT + ", equals(first(body('My_member_R'))?['CanManageMeetings'], true)))")
+    # turned into an action from a notice (1.9.0.0): the notice is active and shown in this area, and only the area's
+    # engineers, its meeting leads, and the Team Leaders and Group Head do this
+    NOTICE_ID = idq(P + "?['sourceNoticeId']")
+    SRC_NOTICE = "variables('varSrcNotice')"
+    FROM_NOTICE = "greater(int(" + NOTICE_ID + "), 0)"
+    AREA_KEY_R = "string(" + AREA_R + "?['CompetencyKey'])"
+    SHOWN_R = "string(coalesce(" + SRC_NOTICE + "?['ShownIn'], ''))"
+    NOTICE_OK = ("and(equals(string(" + SRC_NOTICE + "?['Status']), 'Active'), or(endsWith(string(coalesce(" + SRC_NOTICE + "?['FileDirRef'], '')), concat('/', " + AREA_KEY_R + ")), "
+                 "equals(" + SHOWN_R + ", 'All'), contains(concat(';', " + SHOWN_R + ", ';'), concat(';', " + AREA_KEY_R + ", ';'))), "
+                 "or(" + IS_MGMT + ", equals(first(body('My_member_R'))?['CanManageMeetings'], true), "
+                 "and(equals(string(" + ME + "?['Role']), 'Engineer'), not(empty(body('My_member_R'))))))")
     verdict_r = ("@if(greater(variables('varExistingId'), 0), '', "
                  "if(or(empty(" + AREA_R + "), not(or(" + IS_MGMT + ", not(empty(body('My_member_R')))))), 'Choose one of your areas.', "
                  "if(or(empty(" + OWNER_R + "), not(equals(string(" + OWNER_R + "?['Status']), 'Active')), "
@@ -970,6 +981,7 @@ def flow_request_queue(domain='actions'):
                  "not(equals(" + idstr(OWNER_R + "?['SiteUserId']") + ", " + SENDER + "))), " + q(SELF_ONLY) + ", "
                  "if(and(" + LINKED + ", not(" + ENTRY_OK + ")), 'That improvement or degradation could not be found in this area, or it is closed.', "
                  "if(and(" + FROM_MTG + ", not(" + MTG_OK + ")), 'Actions are raised from a meeting only while it is in progress, by the people who run it.', "
+                 "if(and(" + FROM_NOTICE + ", not(" + NOTICE_OK + ")), 'Only the engineers of this area, its meeting leads, and the Team Leaders and Group Head can turn a notice shown here into an action.', "
                  "if(empty(" + TITLE + "), 'Enter what needs doing.', "
                  "if(greater(length(" + TITLE + "), 255), 'Keep the title to 255 characters or fewer.', "
                  "if(empty(" + DESC + "), 'Add a short description.', "
@@ -977,7 +989,7 @@ def flow_request_queue(domain='actions'):
                  "if(not(" + DUE_OK + "), 'Choose a target date.', "
                  "if(less(" + day_num(DUE_SAFE) + ", " + day_num(TODAY) + "), 'The target date cannot be in the past.', "
                  "if(greater(" + day_num(DUE_SAFE) + ", " + day_num(MAX_DAY) + "), concat('Choose a date within ', string(outputs('Years_R')), if(equals(outputs('Years_R'), 1), ' year.', ' years.')), "
-                 "if(not(contains(createArray('Low', 'Normal', 'High'), " + PRIO + ")), 'Choose a priority.', ''))))))))))))))")
+                 "if(not(contains(createArray('Low', 'Normal', 'High'), " + PRIO + ")), 'Choose a priority.', '')))))))))))))))")
     # co-owners (up to 5) and the person who does the close-out check: each a member of the area or a Team Leader, and
     # never the owner. A technician who may raise only for themselves adds no co-owners (spec §4.2).
     CO_RAW = P + "?['coOwnerIds']"
@@ -1017,6 +1029,11 @@ def flow_request_queue(domain='actions'):
             ('Src_mtg_read_R', after(set_var('varSrcMtg', "@if(equals(actions('Get_src_mtg_R')?['status'], 'Succeeded'), body('Get_src_mtg_R'), json('{}'))"),
                                      {'Get_src_mtg_R': TOLERANT})),
         ))),
+        ('Notice_given_R', cond('@' + FROM_NOTICE, seq(
+            ('Get_src_notice_R', http('GET', L('notices', "/items(@{" + NOTICE_ID + "})?$select=Id,Status,ShownIn,FileDirRef"))),
+            ('Src_notice_read_R', after(set_var('varSrcNotice', "@if(equals(actions('Get_src_notice_R')?['status'], 'Succeeded'), body('Get_src_notice_R'), json('{}'))"),
+                                        {'Get_src_notice_R': TOLERANT})),
+        ))),
         ('Read_due_R', set_var('varDue', "@{formatDateTime(concat(" + DUE + ", 'T00:00:00Z'), 'yyyy-MM-dd')}")),
         # the furthest deadline (MaxDeadlineYears, set by an administrator), and whether this is still pre-go-live testing
         ('Get_settings_R', after(http('GET', L('settings', "/items?$select=Title,Value&$top=500")), {'Read_due_R': TOLERANT})),
@@ -1052,7 +1069,7 @@ def flow_request_queue(domain='actions'):
                     'RequiresCloseOut': "@{if(equals(" + P + "?['requiresCloseOut'], true), '1', '0')}", 'ExtensionCount': '0', 'Revision': '1',
                     'CoOwnerIds': "@{if(empty(" + CO_IDS_R + "), '', string(" + CO_IDS_R + "))}",
                     'CloseOutById': "@{if(" + CLOSE_OUT_R + ", " + CHECKER_R + ", '')}",
-                    'SourceType': "@{if(" + LINKED + ", 'Register', if(" + FROM_MTG + ", 'Meeting', 'None'))}", 'SourceId': "@{if(" + LINKED + ", " + ENTRY_ID + ", if(" + FROM_MTG + ", " + MTG_ID + ", ''))}", 'IsCrossCompetency': '0', 'PendingRequestKey': '@{' + KEY + '}', 'CreatedRequestKey': 'F|@{' + KEY + '}',
+                    'SourceType': "@{if(" + LINKED + ", 'Register', if(" + FROM_MTG + ", 'Meeting', if(" + FROM_NOTICE + ", 'Noticeboard', 'None')))}", 'SourceId': "@{if(" + LINKED + ", " + ENTRY_ID + ", if(" + FROM_MTG + ", " + MTG_ID + ", if(" + FROM_NOTICE + ", " + NOTICE_ID + ", '')))}", 'IsCrossCompetency': '0', 'PendingRequestKey': '@{' + KEY + '}', 'CreatedRequestKey': 'F|@{' + KEY + '}',
                     'IsTestRecord': "@{if(empty(body('Testing_R')), '0', '1')}"})),
                 ('Action_body_R', act_values),
                 ('Create_action_R', act_call),
@@ -2112,9 +2129,11 @@ def flow_request_queue(domain='actions'):
                 *finish_request(code, 'Completed', result(c), 'int(' + idq(T + "?['Id']") + ')'),
             )
 
-        notice_sel = '?$select=Id,Title,Body,Category,IsImportant,ImportantUntil,Status,AuthorId,Revision,LastRequestKey,FileDirRef'
+        notice_sel = '?$select=Id,Title,Body,Category,IsImportant,ImportantUntil,ImportantDays,Status,AuthorId,Revision,LastRequestKey,FileDirRef'
         CATS = "createArray('General', 'Request', 'Improvement idea', 'Safety', 'Equipment', 'Other')"
-        IMPORTANT_TO = "formatDateTime(addDays(concat(" + TODAY + ", 'T00:00:00Z'), 30), 'yyyy-MM-dd')"
+        # "Important for" 1 week, 2 weeks, 1 month or 3 months (1.9.0.0); anything else counts as a month
+        IMP_DAYS = "if(contains(createArray(7, 14, 30, 90), int(coalesce(" + P + "?['importantDays'], 30))), int(coalesce(" + P + "?['importantDays'], 30)), 30)"
+        IMPORTANT_TO = "formatDateTime(addDays(concat(" + TODAY + ", 'T00:00:00Z'), " + IMP_DAYS + "), 'yyyy-MM-dd')"
         edit_notice = change(
             '_NE', 'notices', notice_sel, 'Notice',
             lambda c: chain(("not(equals(string(" + c['T'] + "?['Status']), 'Active'))", 'This notice has been archived.'),
@@ -2124,13 +2143,14 @@ def flow_request_queue(domain='actions'):
                             ("and(" + HAS('body') + ", equals(" + text_len('body') + ", 0))", 'Write the notice.'),
                             ("and(" + HAS('body') + ", greater(" + text_len('body') + ", 5000))", 'Keep the notice to 5,000 characters or fewer.'),
                             ("and(" + HAS('category') + ", not(contains(" + CATS + ", string(coalesce(" + P + "?['category'], '')))))", 'Choose a category.'),
-                            # an author may mark their own notice important for up to 30 days; pinning is for moderators
+                            # an author may mark their own notice important for 1 week to 3 months; pinning is for moderators
                             ("and(" + HAS('important') + ", not(" + c['AUTHOR'] + "), not(" + c['MOD'] + "))", 'Only the person who posted it can mark it important.')),
             lambda c: {'Title': "@{if(" + HAS('title') + ", " + TEXT('title') + ", " + c['T'] + "?['Title'])}",
                        'Body': "@{if(" + HAS('body') + ", " + TEXT('body') + ", " + c['T'] + "?['Body'])}",
                        'Category': "@{if(" + HAS('category') + ", " + P + "?['category'], coalesce(" + c['T'] + "?['Category'], 'General'))}",
                        'IsImportant': "@if(" + HAS('important') + ", equals(" + P + "?['important'], true), equals(" + c['T'] + "?['IsImportant'], true))",
-                       'ImportantUntil': "@if(" + HAS('important') + ", if(equals(" + P + "?['important'], true), " + uk_midnight(IMPORTANT_TO) + ", null), " + c['T'] + "?['ImportantUntil'])"},
+                       'ImportantUntil': "@if(" + HAS('important') + ", if(equals(" + P + "?['important'], true), " + uk_midnight(IMPORTANT_TO) + ", null), " + c['T'] + "?['ImportantUntil'])",
+                       'ImportantDays': "@if(" + HAS('important') + ", if(equals(" + P + "?['important'], true), " + IMP_DAYS + ", null), " + c['T'] + "?['ImportantDays'])"},
             lambda c: "concat('Notice edited: ', string(" + c['T'] + "?['Title']))", 'Notice Edited', lambda c: "'Notice saved.'",
             event_more=lambda c: {'PreviousValue': "@{take(string(" + c['T'] + "?['Body']), 2000)}", 'NewValue': "@{take(" + TEXT('body') + ", 2000)}"})
         archive_notice = change(
@@ -2160,45 +2180,34 @@ def flow_request_queue(domain='actions'):
         # ---- the register (spec REG-1 to REG-5)
         reg_sel = ('?$select=Id,Title,Description,EntryType,Impact,Status,Outcome,RaisedById,ResponsiblePersonId,Revision,LastRequestKey,FileDirRef,'
                    'CompetencyId')
-        TYPES = "createArray('Improvement', 'Degradation', 'Concern', 'Opportunity', 'Positive Observation')"
+        TYPES = "createArray('Improvement', 'Degradation', 'Concern', 'Opportunity', 'Positive Observation', 'Other')"
         IMPACTS = "createArray('Low', 'Medium', 'High')"
         STATUSES = "createArray('Open', 'Under Review', 'Resolved', 'Closed')"
-        RESP = lambda code: "first(body('Get_resp" + code + "')?['value'])"
-        RESP_OK = lambda code: ("and(not(empty(" + RESP(code) + ")), equals(string(" + RESP(code) + "?['Status']), 'Active'), "
-                                "or(contains(" + MANAGEMENT + ", string(" + RESP(code) + "?['Role'])), not(empty(body('Resp_member" + code + "')?['value']))))")
         claims = lambda person: "@{concat('[{\"Key\":\"', " + person + "?['Person']?['Name'], '\"}]')}"
 
         def manages(c):
-            # raiser, responsible person, the area's engineers, its meeting runners, management (REG-2)
-            return ("or(" + c['MOD'] + ", " + c['CHAIR'] + ", equals(" + idstr(c['T'] + "?['RaisedById']") + ", " + SENDER + "), "
-                    "equals(" + idstr(c['T'] + "?['ResponsiblePersonId']") + ", " + SENDER + "))")
-        resp_reads = lambda code, area_id: [
-            ('Get_resp' + code, http('GET', L('people', "/items?$select=Id,Title,SiteUserId,Role,Status,Person/Name&$expand=Person&$filter=SiteUserId eq @{" + idq(P + "?['responsibleId']") + "}"))),
-            ('Resp_member' + code, http('GET', L('members', "/items?$select=Id&$filter=PersonId eq @{" + idq(P + "?['responsibleId']") + "} and CompetencyId eq @{"
-                                             + area_id + "} and Status eq 'Active'")))]
+            # the raiser, the area's engineers, its meeting runners, management (REG-2; no responsible person from 1.9.0.0)
+            return "or(" + c['MOD'] + ", " + c['CHAIR'] + ", equals(" + idstr(c['T'] + "?['RaisedById']") + ", " + SENDER + "))"
         NEW_STATUS = "string(coalesce(" + P + "?['status'], ''))"
         DONE_STATUS = "contains(createArray('Resolved', 'Closed'), " + NEW_STATUS + ")"
         update_entry = change(
             '_RU', 'reg', reg_sel, 'Register Entry',
-            lambda c: chain(("not(" + manages(c) + ")", 'Only the person who raised it, the person responsible, the engineers and meeting runners of the area, and the Team Leaders and Group Head can change this entry.'),
+            lambda c: chain(("not(" + manages(c) + ")", 'Only the person who raised it, the engineers and meeting runners of the area, and the Team Leaders and Group Head can change this entry.'),
                             ("and(" + HAS('title') + ", equals(" + text_len('title') + ", 0))", 'Give the entry a title.'),
                             ("and(" + HAS('title') + ", greater(" + text_len('title') + ", 255))", 'Keep the title to 255 characters or fewer.'),
                             ("and(" + HAS('description') + ", greater(" + text_len('description') + ", 5000))", 'Keep the description to 5,000 characters or fewer.'),
                             ("and(" + HAS('impact') + ", not(contains(" + IMPACTS + ", string(coalesce(" + P + "?['impact'], '')))))", 'Choose the impact.'),
                             ("and(" + HAS('status') + ", not(contains(" + STATUSES + ", " + NEW_STATUS + ")))", 'Choose a status.'),
                             ("and(" + HAS('status') + ", " + DONE_STATUS + ", less(" + text_len('outcome') + ", 10))", 'Record the outcome (at least 10 characters).'),
-                            ("greater(" + text_len('outcome') + ", 2000)", 'Keep the outcome to 2,000 characters or fewer.'),
-                            ("and(" + HAS('responsibleId') + ", not(" + RESP_OK('_RU') + "))", 'Choose a member of this area or a Team Leader.')),
+                            ("greater(" + text_len('outcome') + ", 2000)", 'Keep the outcome to 2,000 characters or fewer.')),
             lambda c: {'Title': "@{if(" + HAS('title') + ", " + TEXT('title') + ", " + c['T'] + "?['Title'])}",
                        'Description': "@{if(" + HAS('description') + ", " + TEXT('description') + ", coalesce(" + c['T'] + "?['Description'], ''))}",
                        'Impact': "@{if(" + HAS('impact') + ", " + P + "?['impact'], coalesce(" + c['T'] + "?['Impact'], 'Medium'))}",
                        'Status': "@{if(" + HAS('status') + ", " + NEW_STATUS + ", " + c['T'] + "?['Status'])}",
                        'Outcome': "@{if(" + HAS('outcome') + ", " + TEXT('outcome') + ", coalesce(" + c['T'] + "?['Outcome'], ''))}",
-                       'ResponsiblePersonId': "@if(" + HAS('responsibleId') + ", int(" + idq(P + "?['responsibleId']") + "), " + c['T'] + "?['ResponsiblePersonId'])",
                        'DateResolved': "@if(" + HAS('status') + ", if(" + DONE_STATUS + ", " + EVENT_TIME + ", null), " + c['T'] + "?['DateResolved'])"},
             lambda c: "concat(if(" + HAS('status') + ", concat('Status changed to ', " + NEW_STATUS + ", ': '), 'Entry updated: '), string(" + c['T'] + "?['Title']))",
             "@{if(" + HAS('status') + ", 'Entry Status Changed', 'Entry Updated')}", lambda c: "'Entry saved.'",
-            reads=lambda c: resp_reads('_RU', idq(c['AREA'] + "?['Id']")),
             event_more=lambda c: {'PreviousValue': "@{string(" + c['T'] + "?['Status'])}", 'NewValue': "@{if(" + HAS('status') + ", " + NEW_STATUS + ", '')}",
                                   'Note': "@{" + TEXT('outcome') + "}"})
 
@@ -2248,7 +2257,6 @@ def flow_request_queue(domain='actions'):
         reg_values, reg_call = create_in_folder('reg', "@{outputs('Ids')?['regRoot']}/@{" + AREA + "?['CompetencyKey']}", 'Entry_values' + code, 'Entry_body' + code)
         raise_entry = seq(
             *area_steps(code, AREA_KEY_IN),
-            *resp_reads(code, idq(AREA + "?['Id']")),
             ('Find_entry' + code, http('GET', L('reg', "/items?$select=Id&$filter=CreatedRequestKey eq 'F%7C@{" + esc(KEY) + "}'"))),
             ('Get_settings' + code, http('GET', L('settings', "/items?$select=Title,Value&$top=500"))),
             ('Testing' + code, query("@body('Get_settings" + code + "')?['value']", "@and(equals(item()?['Title'], 'PreGoLiveTesting'), equals(item()?['Value'], 'Yes'))")),
@@ -2260,8 +2268,7 @@ def flow_request_queue(domain='actions'):
                     ("equals(" + text_len('title') + ", 0)", 'Give the entry a title.'),
                     ("greater(" + text_len('title') + ", 255)", 'Keep the title to 255 characters or fewer.'),
                     ("equals(" + text_len('description') + ", 0)", 'Describe it.'),
-                    ("greater(" + text_len('description') + ", 5000)", 'Keep the description to 5,000 characters or fewer.'),
-                    ("not(" + RESP_OK(code) + ")", 'Choose a member of this area or a Team Leader.')))),
+                    ("greater(" + text_len('description') + ", 5000)", 'Keep the description to 5,000 characters or fewer.')))),
                 ('Decided' + code, cond("@empty(outputs('Verdict" + code + "'))",
                                         seq(*tx_update('planned' + code, {'State': 'Planned', 'StepsDone': 'DECIDED'})),
                                         reject(code, "outputs('Verdict" + code + "')"))),
@@ -2270,7 +2277,7 @@ def flow_request_queue(domain='actions'):
                 ('Entry_values' + code, form({
                     'Title': '@{' + TEXT('title') + '}', 'Description': '@{' + TEXT('description') + '}', 'Competency': '@{' + idstr(AREA + "?['Id']") + '}',
                     'EntryType': "@{" + P + "?['entryType']}", 'Impact': "@{" + P + "?['impact']}", 'Status': 'Open',
-                    'RaisedBy': claims(ME), 'ResponsiblePerson': claims(RESP(code)),
+                    'RaisedBy': claims(ME),
                     'DateRaised': "@{convertFromUtc(" + EVENT_TIME + ", 'GMT Standard Time', 'dd/MM/yyyy HH:mm')}",
                     'Revision': '1', 'LastRequestKey': '@{' + KEY + '}', 'CreatedRequestKey': 'F|@{' + KEY + '}',
                     'IsTestRecord': "@{if(empty(body('Testing" + code + "')), '0', '1')}"})),
@@ -3136,6 +3143,7 @@ def flow_request_queue(domain='actions'):
                   ('Initialize_varAct', init_var('varAct', 'object', {})),
                   ('Initialize_varEntry', init_var('varEntry', 'object', {})),
                   ('Initialize_varSrcMtg', init_var('varSrcMtg', 'object', {})),
+                  ('Initialize_varSrcNotice', init_var('varSrcNotice', 'object', {})),
                   ('Initialize_varUid', init_var('varUid', 'integer', 0)),
                   ('Initialize_varLogin', init_var('varLogin', 'string', '')),
                   ('Initialize_varName', init_var('varName', 'string', '')),
