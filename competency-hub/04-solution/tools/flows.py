@@ -437,11 +437,18 @@ def uk_when(expr):
     return "if(empty(" + s + "), 'an unknown time', concat(formatDateTime(" + safe + ", 'd MMMM yyyy'), ' at ', formatDateTime(" + safe + ", 'HH:mm')))"
 
 
+def add_alerts(name, body_expr):
+    """Adds alerts to varAlerts. Power Automate refuses a Set variable step whose value reads the same variable, so
+    the combined list is worked out in a Compose first."""
+    return [(name + '_all', compose("@union(variables('varAlerts'), " + body_expr + ")")),
+            (name, set_var('varAlerts', "@outputs('" + name + "_all')"))]
+
+
 def alert_if(name, condition, key_expr, title_expr, detail_expr):
     """Adds an alert for every active administrator to varAlerts when the condition holds."""
     return (name, cond('@' + condition, seq(
         alert_notices(name + '_to', "body('Admins')", key_expr, title_expr, detail_expr),
-        (name + '_add', set_var('varAlerts', "@union(variables('varAlerts'), body('" + name + "_to'))")),
+        *add_alerts(name + '_add', "body('" + name + "_to')"),
     )))
 
 
@@ -493,7 +500,7 @@ def retry_emails():
                 alert_notices('Abandon_alerts', "body('Admins')", "concat('email|', string(" + RI + "?['Id']))",
                               "concat('An email could not be sent: ', string(" + RD + "?['subject']))",
                               "concat('It failed three times and will not be tried again. It was for ', string(" + RD + "?['to']), '. ', string(coalesce(" + RI + "?['LastError'], '')))"),
-                ('Add_abandon_alerts', {'type': 'SetVariable', 'inputs': {'name': 'varAlerts', 'value': "@union(variables('varAlerts'), body('Abandon_alerts'))"}}),
+                *add_alerts('Add_abandon_alerts', "body('Abandon_alerts')"),
                 )), {'Abandon': TOLERANT})),
             ), seq(
                 ('Person_r', query('@' + PEOPLE, "@and(equals(" + idstr("item()?['SiteUserId']") + ", string(" + RD + "?['recipientId'])), equals(item()?['Status'], 'Active'))")),

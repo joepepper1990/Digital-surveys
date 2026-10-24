@@ -8,7 +8,7 @@
     <Descriptions>
       <Description description="ESG Competency Hub: the flows that record the changes sent from the Competency Hub page, send its emails and reminders, and watch that everything is processed." languagecode="1033" />
     </Descriptions>
-    <Version>1.8.0.0</Version>
+    <Version>1.8.0.1</Version>
     <Managed>0</Managed>
     <Publisher>
       <UniqueName>ESGCompetencyHub</UniqueName>

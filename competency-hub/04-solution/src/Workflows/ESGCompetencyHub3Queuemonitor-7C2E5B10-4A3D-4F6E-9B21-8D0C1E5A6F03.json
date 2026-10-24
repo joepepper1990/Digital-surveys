@@ -893,14 +893,23 @@
                           },
                           "runAfter": {}
                         },
+                        "Attention_alert_add_all": {
+                          "type": "Compose",
+                          "inputs": "@union(variables('varAlerts'), body('Attention_alert_to'))",
+                          "runAfter": {
+                            "Attention_alert_to": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
                         "Attention_alert_add": {
                           "type": "SetVariable",
                           "inputs": {
                             "name": "varAlerts",
-                            "value": "@union(variables('varAlerts'), body('Attention_alert_to'))"
+                            "value": "@outputs('Attention_alert_add_all')"
                           },
                           "runAfter": {
-                            "Attention_alert_to": [
+                            "Attention_alert_add_all": [
                               "Succeeded"
                             ]
                           }
@@ -1728,14 +1737,23 @@
                       },
                       "runAfter": {}
                     },
+                    "Invite_alert_add_all": {
+                      "type": "Compose",
+                      "inputs": "@union(variables('varAlerts'), body('Invite_alert_to'))",
+                      "runAfter": {
+                        "Invite_alert_to": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
                     "Invite_alert_add": {
                       "type": "SetVariable",
                       "inputs": {
                         "name": "varAlerts",
-                        "value": "@union(variables('varAlerts'), body('Invite_alert_to'))"
+                        "value": "@outputs('Invite_alert_add_all')"
                       },
                       "runAfter": {
-                        "Invite_alert_to": [
+                        "Invite_alert_add_all": [
                           "Succeeded"
                         ]
                       }
@@ -2726,14 +2744,23 @@
                       },
                       "runAfter": {}
                     },
+                    "PDF_alert_add_all": {
+                      "type": "Compose",
+                      "inputs": "@union(variables('varAlerts'), body('PDF_alert_to'))",
+                      "runAfter": {
+                        "PDF_alert_to": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
                     "PDF_alert_add": {
                       "type": "SetVariable",
                       "inputs": {
                         "name": "varAlerts",
-                        "value": "@union(variables('varAlerts'), body('PDF_alert_to'))"
+                        "value": "@outputs('PDF_alert_add_all')"
                       },
                       "runAfter": {
-                        "PDF_alert_to": [
+                        "PDF_alert_add_all": [
                           "Succeeded"
                         ]
                       }
@@ -2815,14 +2842,23 @@
                   },
                   "runAfter": {}
                 },
+                "Daily_stale_add_all": {
+                  "type": "Compose",
+                  "inputs": "@union(variables('varAlerts'), body('Daily_stale_to'))",
+                  "runAfter": {
+                    "Daily_stale_to": [
+                      "Succeeded"
+                    ]
+                  }
+                },
                 "Daily_stale_add": {
                   "type": "SetVariable",
                   "inputs": {
                     "name": "varAlerts",
-                    "value": "@union(variables('varAlerts'), body('Daily_stale_to'))"
+                    "value": "@outputs('Daily_stale_add_all')"
                   },
                   "runAfter": {
-                    "Daily_stale_to": [
+                    "Daily_stale_add_all": [
                       "Succeeded"
                     ]
                   }
@@ -3003,14 +3039,23 @@
                           },
                           "runAfter": {}
                         },
+                        "Add_abandon_alerts_all": {
+                          "type": "Compose",
+                          "inputs": "@union(variables('varAlerts'), body('Alert_for_each_administrator'))",
+                          "runAfter": {
+                            "Alert_for_each_administrator": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
                         "Add_abandon_alerts": {
                           "type": "SetVariable",
                           "inputs": {
                             "name": "varAlerts",
-                            "value": "@union(variables('varAlerts'), body('Alert_for_each_administrator'))"
+                            "value": "@outputs('Add_abandon_alerts_all')"
                           },
                           "runAfter": {
-                            "Alert_for_each_administrator": [
+                            "Add_abandon_alerts_all": [
                               "Succeeded"
                             ]
                           }

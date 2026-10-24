@@ -212,6 +212,9 @@ class Flow:
         for n, (a, path) in self.actions.items():
             if a.get('type') in ('SetVariable', 'AppendToArrayVariable') and a['inputs']['name'] not in self.vars:
                 self.p('{0} sets unknown variable {1}'.format(n, a['inputs']['name']))
+            if a.get('type') in ('SetVariable', 'AppendToArrayVariable', 'AppendToStringVariable') and \
+                    "variables('{0}')".format(a['inputs']['name']) in json.dumps(a['inputs'].get('value'), ensure_ascii=False):
+                self.p("{0}: Self reference is not supported when updating the value of variable '{1}'".format(n, a['inputs']['name']))
             body = {k: v for k, v in a.items() if k not in ('actions', 'else', 'cases', 'default')}
             if a.get('type') == 'Foreach':
                 self.check_strings(a['foreach'], path, n)

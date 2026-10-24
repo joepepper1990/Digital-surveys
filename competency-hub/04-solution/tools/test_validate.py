@@ -75,6 +75,16 @@ class BrokenFlowsAreRejected(unittest.TestCase):
     def test_uninitialised_variable(self):
         self.expect(lambda d, f: find(d, 'Set_tx').__setitem__('inputs', {'name': 'varNope', 'value': 1}), 'unknown variable varNope')
 
+    def test_set_variable_reading_itself(self):
+        # Power Automate refuses to save such a step ("Self reference is not supported"), so the flow cannot be turned on
+        def change(d, f):
+            d['actions']['Self_ref'] = {'type': 'SetVariable', 'runAfter': {}, 'inputs': {'name': next(iter(
+                v['name'] for a in d['actions'].values() if a.get('type') == 'InitializeVariable' for v in a['inputs']['variables'])),
+                'value': None}}
+            name = d['actions']['Self_ref']['inputs']['name']
+            d['actions']['Self_ref']['inputs']['value'] = "@variables('" + name + "')"
+        self.expect(change, 'Self reference is not supported')
+
     def test_secure_data_on_set_variable(self):
         self.expect(lambda d, f: find(d, 'Set_tx').__setitem__('runtimeConfiguration', {'secureData': {'properties': ['inputs']}}), 'not supported on a SetVariable')
 

@@ -348,14 +348,23 @@
                   },
                   "runAfter": {}
                 },
+                "Monitor_stale_add_all": {
+                  "type": "Compose",
+                  "inputs": "@union(variables('varAlerts'), body('Monitor_stale_to'))",
+                  "runAfter": {
+                    "Monitor_stale_to": [
+                      "Succeeded"
+                    ]
+                  }
+                },
                 "Monitor_stale_add": {
                   "type": "SetVariable",
                   "inputs": {
                     "name": "varAlerts",
-                    "value": "@union(variables('varAlerts'), body('Monitor_stale_to'))"
+                    "value": "@outputs('Monitor_stale_add_all')"
                   },
                   "runAfter": {
-                    "Monitor_stale_to": [
+                    "Monitor_stale_add_all": [
                       "Succeeded"
                     ]
                   }
@@ -1127,14 +1136,23 @@
                           },
                           "runAfter": {}
                         },
+                        "Add_abandon_alerts_all": {
+                          "type": "Compose",
+                          "inputs": "@union(variables('varAlerts'), body('Alert_for_each_administrator'))",
+                          "runAfter": {
+                            "Alert_for_each_administrator": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
                         "Add_abandon_alerts": {
                           "type": "SetVariable",
                           "inputs": {
                             "name": "varAlerts",
-                            "value": "@union(variables('varAlerts'), body('Alert_for_each_administrator'))"
+                            "value": "@outputs('Add_abandon_alerts_all')"
                           },
                           "runAfter": {
-                            "Alert_for_each_administrator": [
+                            "Add_abandon_alerts_all": [
                               "Succeeded"
                             ]
                           }
@@ -1700,14 +1718,23 @@
                                     },
                                     "runAfter": {}
                                   },
+                                  "Expiry_failed_add_all": {
+                                    "type": "Compose",
+                                    "inputs": "@union(variables('varAlerts'), body('Expiry_failed_to'))",
+                                    "runAfter": {
+                                      "Expiry_failed_to": [
+                                        "Succeeded"
+                                      ]
+                                    }
+                                  },
                                   "Expiry_failed_add": {
                                     "type": "SetVariable",
                                     "inputs": {
                                       "name": "varAlerts",
-                                      "value": "@union(variables('varAlerts'), body('Expiry_failed_to'))"
+                                      "value": "@outputs('Expiry_failed_add_all')"
                                     },
                                     "runAfter": {
-                                      "Expiry_failed_to": [
+                                      "Expiry_failed_add_all": [
                                         "Succeeded"
                                       ]
                                     }
@@ -1759,14 +1786,23 @@
                                 },
                                 "runAfter": {}
                               },
+                              "Expiry_alert_add_all": {
+                                "type": "Compose",
+                                "inputs": "@union(variables('varAlerts'), body('Expiry_alert_to'))",
+                                "runAfter": {
+                                  "Expiry_alert_to": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
                               "Expiry_alert_add": {
                                 "type": "SetVariable",
                                 "inputs": {
                                   "name": "varAlerts",
-                                  "value": "@union(variables('varAlerts'), body('Expiry_alert_to'))"
+                                  "value": "@outputs('Expiry_alert_add_all')"
                                 },
                                 "runAfter": {
-                                  "Expiry_alert_to": [
+                                  "Expiry_alert_add_all": [
                                     "Succeeded"
                                   ]
                                 }
