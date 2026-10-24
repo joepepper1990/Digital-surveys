@@ -31,6 +31,10 @@ def utc_iso(dt):
     return dt.astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
+# A few of the Outlook connector's time zone names (V4 calendar actions refuse any other value, e.g. 'GMT Standard Time').
+OUTLOOK_ZONES = {'(UTC) Coordinated Universal Time', '(UTC+00:00) Dublin, Edinburgh, Lisbon, London',
+                 '(UTC+01:00) Brussels, Copenhagen, Madrid, Paris'}
+
 class HubFake:
     def __init__(self, me=7):
         self.me = me                      # the flow's account (site owner)
@@ -235,6 +239,8 @@ class HubFake:
         outcome = self.cal_fail.pop(0) if self.cal_fail else None
         if outcome in (400, 403):
             fail(outcome, 'The request was refused.')
+        if op in ('V4CalendarPostItem', 'V4CalendarPatchItem') and p.get('item/timeZone') not in OUTLOOK_ZONES:
+            fail(400, "The property 'item/timeZone' must be one of the connector's time zone names.")
         if op == 'V4CalendarPostItem':
             for k in ('table', 'item/subject', 'item/start', 'item/end', 'item/timeZone'):
                 if not p.get(k):

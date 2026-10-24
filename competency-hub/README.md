@@ -13,7 +13,7 @@ This project is separate from the other applications in this repository.
 |---|---|
 | Site and Setup (`setup/`) | Setup 1.1 applied on the site. **Setup 1.3** (1.2: Feedback list, Meeting Minutes library, Notice Posters group, new columns and settings; 1.3: the meeting end time and the *Outlook invitations* and *PDF minutes* switches) built and tested locally. **1.3.2** fixes Check and Apply on a site made by Setup 1.1 |
 | App (`02-frontend/`) | 0.3.0 running on the site. **1.0.0** (safety net, Administration with People, Settings, Feedback and test-data removal, *My week* home page, notices, register, Management page, booking and running meetings, minutes) built and tested locally |
-| Flows (`04-solution/`) | 1.2.0.0 running on the site. **1.8.0.1** (1.8.0.1 lets flows 1 and 3 be turned on: Power Automate refused a step that set a variable from itself; eight flows: Daily tasks, Request queue, Queue monitor, Records, Meetings, Administration, Minutes, Clean-up; plus the probes *P-INV* and *P-PDF*, run by hand) built and tested locally |
+| Flows (`04-solution/`) | 1.2.0.0 running on the site. **1.8.0.2** (1.8.0.1 and 1.8.0.2 let the flows be turned on: a step set a variable from itself, and the Outlook event steps used the Windows time zone name; eight flows: Daily tasks, Request queue, Queue monitor, Records, Meetings, Administration, Minutes, Clean-up; plus the probes *P-INV* and *P-PDF*, run by hand) built and tested locally |
 | Permission probe (`probe/CH_Probe_P2.*`) | Built and tested locally; to be run on the site with an ordinary test account |
 
 The plan for everything left to go-live is in `docs/REMAINING-PLAN.md`.

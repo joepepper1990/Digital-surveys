@@ -85,6 +85,30 @@ class BrokenFlowsAreRejected(unittest.TestCase):
             d['actions']['Self_ref']['inputs']['value'] = "@variables('" + name + "')"
         self.expect(change, 'Self reference is not supported')
 
+    def test_windows_time_zone_on_an_outlook_event(self):
+        # The Outlook V4 event actions take the connector's display names, not 'GMT Standard Time'
+        fl = copy.deepcopy(GOOD)
+        hit = []
+        for one in fl:
+            def walk(actions):
+                for n, a in actions.items():
+                    if a.get('type') == 'OpenApiConnection' and a['inputs']['host']['operationId'] == 'V4CalendarPatchItem':
+                        a['inputs']['parameters']['item/timeZone'] = 'GMT Standard Time'
+                        hit.append(n)
+                    for k in ('actions',):
+                        if k in a:
+                            walk(a[k])
+                    if 'else' in a:
+                        walk(a['else']['actions'])
+                    for c in (a.get('cases') or {}).values():
+                        walk(c['actions'])
+                    if a.get('default'):
+                        walk(a['default']['actions'])
+            walk(one['json']['properties']['definition']['actions'])
+        self.assertTrue(hit)
+        probs = validate.validate_all(fl)
+        self.assertTrue(any('defined enum values' in p for p in probs), probs)
+
     def test_secure_data_on_set_variable(self):
         self.expect(lambda d, f: find(d, 'Set_tx').__setitem__('runtimeConfiguration', {'secureData': {'properties': ['inputs']}}), 'not supported on a SetVariable')
 

@@ -244,6 +244,10 @@ class Flow:
         if a['inputs'].get('authentication') != "@parameters('$authentication')":
             self.p(n + ': missing authentication')
         table = params.get('table')
+        tz = params.get('item/timeZone')
+        if op in ('V4CalendarPostItem', 'V4CalendarPatchItem') and isinstance(tz, str) and not tz.startswith('@') and not tz.startswith('(UTC'):
+            self.p("{0}: The API operation '{1}' requires the property 'item/timeZone' to be set to one of its defined enum values "
+                   "(e.g. '(UTC+00:00) Dublin, Edinburgh, Lisbon, London') but is set to '{2}'".format(n, op, tz))
         if op in ('GetItems', 'PatchItem', 'PostItem'):
             self.p('{0}: {1} – write and read lists by REST (1-to-1 lessons 1.3.0.2 and 1.5.0.1)'.format(n, op))
         if op == 'GetOnUpdatedItems':

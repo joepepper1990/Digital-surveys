@@ -9,7 +9,7 @@ specification (`PLAN.md`, Revision 5) and the decisions made since. Where the tw
 |---|---|---|
 | Site, lists, groups, Setup | Setup 1.3 | Setup 1.1 |
 | App | 1.0.0: actions, safety net, Administration (People, Settings, Feedback, Remove test data), the *My week* home page, notices, register, Management page, meetings, the live meeting and minutes | 0.3.0 |
-| Flows | 1.8.0.1: 1 Daily tasks, 2 Request queue, 3 Queue monitor, 4 Records, 5 Meetings, 6 Administration, 7 Minutes, 8 Clean-up, and the P-INV and P-PDF probes | 1.2.0.0 |
+| Flows | 1.8.0.2: 1 Daily tasks, 2 Request queue, 3 Queue monitor, 4 Records, 5 Meetings, 6 Administration, 7 Minutes, 8 Clean-up, and the P-INV and P-PDF probes | 1.2.0.0 |
 | Permission probe | Built | Not run |
 
 **Built so far:** all six releases and the home-page design: Phase 1 is built and tested locally (24 October 2026).

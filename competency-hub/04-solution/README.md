@@ -1,6 +1,6 @@
 # ESG Competency Hub – Power Automate solution
 
-`ESGCompetencyHub_1_8_0_1_unmanaged.zip` is the solution to import into Power Automate. It holds ten flows, which
+`ESGCompetencyHub_1_8_0_2_unmanaged.zip` is the solution to import into Power Automate. It holds ten flows, which
 all ship **Off** so nothing runs until you turn them on:
 
 | Flow | What it does |

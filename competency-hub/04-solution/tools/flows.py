@@ -96,6 +96,10 @@ def init_var(name, typ, value=None):
     return {'type': 'InitializeVariable', 'inputs': {'variables': [v]}}
 
 
+# The Outlook event steps take the connector's own name for a time zone, not the Windows one used elsewhere.
+OUTLOOK_TZ = '(UTC+00:00) Dublin, Edinburgh, Lisbon, London'
+
+
 def set_var(name, value):
     return {'type': 'SetVariable', 'inputs': {'name': name, 'value': value}}
 
@@ -564,7 +568,7 @@ def invite_steps(sfx, meeting_id_expr):
             "'<p>The agenda is in the Competency Hub: <a href=\"', " + html_text(link) + ", '\">open the meeting</a>.</p>', "
             "'<p style=\"color:#5b6774;font-size:12px\">Sent by the ESG Competency Hub. Reference ', " + TOKEN + ", '</p>')")
     item = lambda: {'table': 'Calendar', 'item/subject': '@' + subject, 'item/start': '@' + START, 'item/end': '@' + END,
-                    'item/timeZone': 'GMT Standard Time', 'item/requiredAttendees': "@join(body('Inv_emails" + s + "'), ';')",
+                    'item/timeZone': OUTLOOK_TZ, 'item/requiredAttendees': "@join(body('Inv_emails" + s + "'), ';')",
                     'item/body': '@' + body, 'item/location': "@{coalesce(" + M + "?['Location'], '')}", 'item/importance': 'normal',
                     'item/showAs': 'busy', 'item/responseRequested': True}
     result = lambda call: ("if(equals(actions('" + call + "')?['status'], 'Succeeded'), 'ok', if(and(greaterOrEquals(int(coalesce(outputs('" + call + "')?['statusCode'], 0)), 400), "
@@ -3362,7 +3366,7 @@ def flow_probe_invitations():
     attendees = "@concat(string(triggerBody()?['text']), ';', string(coalesce(body('Probe_me')?['Email'], '')))"
     item = lambda start, end: {'table': 'Calendar', 'item/subject': 'TEST – ESG Competency Hub invitation probe',
                                'item/start': "@concat(" + day + ", 'T" + start + ":00')", 'item/end': "@concat(" + day + ", 'T" + end + ":00')",
-                               'item/timeZone': 'GMT Standard Time', 'item/requiredAttendees': attendees,
+                               'item/timeZone': OUTLOOK_TZ, 'item/requiredAttendees': attendees,
                                'item/body': "@concat('<p>A test of the ESG Competency Hub meeting invitations. Please ignore it; it is cancelled straight away.</p><p>Reference ', " + TOKEN + ", '</p>')",
                                'item/importance': 'normal', 'item/showAs': 'free', 'item/responseRequested': False}
     status = lambda step: "@{actions('" + step + "')?['status']}"
