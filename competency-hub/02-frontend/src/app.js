@@ -215,6 +215,8 @@ CH.app = (function () {
     // Meetings have their own flow too (5 Meetings).
     app.meetingsBlocked = function () { return app.queueBlocked() || (!!app.health && app.health.meetings === 'down'); };
     app.openMeeting = function (mt) { CH.views.meetingPanel.open(app, mt.id); };
+    // before go-live, what people add directly is marked as a test record (spec §7.4), as the flows mark theirs
+    app.testMark = function () { return app.health && app.health.testing ? { IsTestRecord: '1' } : {}; };
     app.bookMeeting = function (key) { CH.views.meetingForm.open(app, key); };
     app.openArea = function (key) { app.state = { view: 'area', area: key, tab: 0 }; render(true); };
     app.showMine = function (tab, areaKey, keepFocus) {

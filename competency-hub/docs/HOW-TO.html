@@ -19,21 +19,22 @@
 </style>
 </head>
 <body>
-<h1>ESG Competency Hub – Releases 1 to 5</h1>
-<p>This package brings the Hub from app 0.3.0 and solution 1.2.0.0 (what you have now) to <strong>app 0.9.0</strong>, <strong>solution 1.7.0.0</strong> and <strong>Setup 1.3</strong>. Each release includes the ones before it, so you can install this package directly. Updated 23 October 2026.</p>
+<h1>ESG Competency Hub – Releases 1 to 6</h1>
+<p>This package brings the Hub from app 0.3.0 and solution 1.2.0.0 (what you have now) to <strong>app 1.0.0</strong>, <strong>solution 1.8.0.0</strong> and <strong>Setup 1.3</strong>. Each release includes the ones before it, so you can install this package directly. Updated 23 October 2026.</p>
 <ul>
   <li><strong>Release 1, safety net:</strong> a queue monitor that recovers stalled changes and retries emails; clear messages while a change is waiting, being recorded, being retried or needs an administrator; an <em>Administration</em> page; and a reduced mode in which the buttons that send changes are paused while changes can't be processed.</li>
   <li><strong>Release 2, administration and permissions:</strong> add people, choose their areas, meeting rights, access end dates and notice posting from the app; the corrected technician and meeting rights; Feedback list and Meeting Minutes library ready for later releases.</li>
   <li><strong>Release 3, noticeboard, register, feedback, settings and dashboard:</strong> read a notice in full, comment, flag it for the next meeting; edit, pin and archive notices; improvements and degradations with linked actions; a <em>Feedback</em> button on every page with a review tab for administrators; a <em>Settings</em> tab; and a <em>Management</em> page for Team Leaders and the Group Head.</li>
   <li><strong>Release 4, meetings I:</strong> book monthly meetings, with an Outlook invitation from your calendar, an update when the meeting changes and a cancellation when it is cancelled; <em>Add to my calendar</em> for everyone; the agenda, previewed before the meeting and fixed when it starts; items added by hand; and a probe flow to prove the invitations first.</li>
   <li><strong>Release 5, meetings II:</strong> run the meeting in the Hub – attendance, each item's outcome and notes, decisions, raising or changing actions from an item; finalise, which makes the record read-only; minutes with a PDF to open, download or print; amendments by Team Leaders and the Group Head; flags cleared once an item is discussed; and a probe flow to prove the PDF conversion first.</li>
+  <li><strong>Release 6, checks and go-live:</strong> <em>Administration → Remove test data</em>, with a flow of its own; what you post directly is marked as a test record until then; and the checks before go-live (security, list size, accessibility). The steps for the day itself are in <code>GO-LIVE.html</code>, and the one-page guide for staff in <code>STAFF-GUIDE.html</code>.</li>
 </ul>
 <p class="note">Everything here was built and tested on a simulated SharePoint site only. Each part below changes your Competency Hub site or your Power Automate environment, so do it only when you are ready. Nobody else gets access until you add them.</p>
 
 <table>
   <tr><th>Folder</th><th>Files</th><th>When</th></tr>
   <tr><td><code>1-Setup</code></td><td><code>CH_Setup.html</code>, <code>CH_Setup.js</code></td><td>Part A</td></tr>
-  <tr><td><code>2-Power-Automate</code></td><td><code>ESGCompetencyHub_1_7_0_0_unmanaged.zip</code></td><td>Part B – import as it is. <strong>Don't unzip it.</strong></td></tr>
+  <tr><td><code>2-Power-Automate</code></td><td><code>ESGCompetencyHub_1_8_0_0_unmanaged.zip</code></td><td>Part B – import as it is. <strong>Don't unzip it.</strong></td></tr>
   <tr><td><code>3-App</code></td><td><code>competency-hub.html</code>, <code>competency-hub.js</code></td><td>Part C</td></tr>
   <tr><td><code>4-Permission-probe</code></td><td><code>CH_Probe_P2.html</code>, <code>CH_Probe_P2.js</code></td><td>Part E, with the test account</td></tr>
 </table>
@@ -48,22 +49,22 @@
   <li>Delete the two Setup files and the HubSetup page again.</li>
 </ol>
 
-<h2>Part B – solution 1.7.0.0 (about 10 minutes)</h2>
+<h2>Part B – solution 1.8.0.0 (about 10 minutes)</h2>
 <ol>
-  <li>In Power Automate, same environment: <strong>Solutions → Import solution → Browse</strong>, choose <code>ESGCompetencyHub_1_7_0_0_unmanaged.zip</code>, <em>Next</em>. It should say <strong>upgrade</strong>.</li>
+  <li>In Power Automate, same environment: <strong>Solutions → Import solution → Browse</strong>, choose <code>ESGCompetencyHub_1_8_0_0_unmanaged.zip</code>, <em>Next</em>. It should say <strong>upgrade</strong>.</li>
   <li>Keep the SharePoint and Outlook connections and the site address. For the new <strong>OneDrive for Business</strong> connection, choose (or create) one with your own account. Then <em>Import</em>. If the import says the OneDrive connector is not allowed with the others, that is the data policy: send me the message, and in the meantime set <em>PDF minutes</em> to No (Part H).</li>
-  <li>Open the solution. There are now <strong>nine</strong> flows. Make sure these five are <strong>On</strong>:
+  <li>Open the solution. There are now <strong>ten</strong> flows. Make sure these five are <strong>On</strong>:
     <ul class="sub">
       <li><em>ESG Competency Hub | 1 Daily tasks</em> and <em>2 Request queue</em> (already on);</li>
       <li><em>ESG Competency Hub | 3 Queue monitor</em>, <em>4 Records</em> and <em>6 Administration</em> (new: turn them on).</li>
     </ul>
-    Leave <em>5 Meetings</em>, <em>7 Minutes</em> and the two probes <strong>Off</strong> for now: Parts G and H turn them on in the right order.</li>
+    Leave <em>5 Meetings</em>, <em>7 Minutes</em>, <em>8 Clean-up</em> and the two probes <strong>Off</strong> for now: Parts G, H and the go-live note turn them on when they are needed.</li>
 </ol>
 
-<h2>Part C – app 0.9.0</h2>
+<h2>Part C – app 1.0.0</h2>
 <ol>
   <li>Upload both files from <code>3-App</code> to <em>Welcome Web Part - Custom Layouts</em> (<em>Replace</em>).</li>
-  <li>On the Hub page, edit the web part, <strong>Reset layout cache</strong>, <em>Republish</em>, and reload with <strong>Ctrl+F5</strong>. The footer should say <strong>0.9.0</strong>.</li>
+  <li>On the Hub page, edit the web part, <strong>Reset layout cache</strong>, <em>Republish</em>, and reload with <strong>Ctrl+F5</strong>. The footer should say <strong>1.0.0</strong>.</li>
   <li>The home page is the new <em>My week</em> design. Open it with your WebView link (ending <code>?env=WebView</code>) and check that it fits the window with no scrolling.</li>
   <li>Click the arrow on a section header: it folds to one line and stays folded after a reload. Click an area tile: it opens in place; <strong>✕</strong> or <strong>Esc</strong> closes it.</li>
   <li>Your name at the top should read <em>Joseph Pepper</em>, first name first.</li>
@@ -173,6 +174,13 @@
   <li>Send me screenshots of the live meeting, the review, and the minutes.</li>
 </ol>
 <p class="note">The PDF is made after the minutes are finalised, separately: if it fails, the minutes stand and can be read and printed, the queue monitor tries again, and after three failures the administrators get an email. If <em>7 Minutes</em> is off, finalising and amending pause; everything else carries on.</p>
+
+<h2>Part I – before go-live (Release 6)</h2>
+<ol>
+  <li>Post a TEST notice: until go-live it is marked as a test record, like everything the flows make.</li>
+  <li>Open <strong>Administration → Remove test data</strong> and look: it lists every record marked as a test, and underneath, the records made before marking existed, to tick. <strong>Don't confirm yet</strong> – that is a go-live step.</li>
+  <li>Follow <code>GO-LIVE.html</code> when you are ready to go live.</li>
+</ol>
 
 <h2>Already done</h2>
 <div class="done">

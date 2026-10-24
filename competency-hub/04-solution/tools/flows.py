@@ -32,7 +32,7 @@ SECURE = {'secureData': {'properties': ['inputs', 'outputs']}}
 # The lists the flow uses, by the key it uses in outputs('Ids'), and their web address (RootFolder name).
 LIST_URLS = {'req': 'requests', 'act': 'actions', 'hist': 'history', 'upd': 'updates', 'people': 'people', 'members': 'members',
              'comps': 'competencies', 'notif': 'notifications', 'settings': 'settings', 'notices': 'notices', 'reg': 'register',
-             'mtg': 'meetings', 'items': 'meetingItems', 'cal': 'calendar'}
+             'mtg': 'meetings', 'items': 'meetingItems', 'cal': 'calendar', 'fb': 'feedback'}
 LIST_KEYS = {k: BY_KEY[v]['title'] for k, v in LIST_URLS.items()}
 REQUEST_LIST = BY_KEY['requests']['title']
 MANAGEMENT = "createArray('Team Leader', 'Group Head')"
@@ -775,6 +775,7 @@ DOMAIN_TYPES = {
                 'UnlinkActionFromEntry'],
     'meetings': ['ScheduleMeeting', 'UpdateMeeting', 'CancelMeeting', 'StartMeeting'],
     'minutes': ['FinaliseMeeting', 'AmendMeeting'],
+    'cleanup': ['RemoveTestRecords'],
 }
 # Changes decided once and carried out step by step (StepsDone DECIDED): once decided they may be part-made, so they
 # can be finished but not cancelled. Only changes to actions hold a lock and can be reverted.
@@ -1509,7 +1510,9 @@ def flow_request_queue(domain='actions'):
         ADMINW = "and(not(" + LEAVING + "), if(" + HAS('administrator') + ", equals(" + P + "?['administrator'], true), equals(" + PERSON + "?['IsAdministrator'], true)))"
         MGMTW = "and(not(" + LEAVING + "), contains(" + MANAGEMENT + ", " + ROLE + "))"
         # the areas wanted: given in the request; a leaver none; a reactivation keeps what the records say
-        AREAS = ("if(" + LEAVING + ", createArray(), if(" + HAS('areas') + ", " + P + "?['areas'], body('Active_areas" + sfx + "')))")
+        # a list given in any other shape counts as none, and is refused below (it must never stop the run)
+        AREAS_OK = "or(not(" + HAS('areas') + "), startsWith(string(" + P + "?['areas']), '['))"
+        AREAS = ("if(" + LEAVING + ", createArray(), if(" + HAS('areas') + ", if(" + AREAS_OK + ", " + P + "?['areas'], createArray()), body('Active_areas" + sfx + "')))")
         COMPS = "body('Get_comps" + sfx + "')?['value']"
         group = lambda name: "string(first(body('Groups" + sfx + "_" + name + "'))?['Id'])"
         GROUP_TITLES = {g['key']: g['title'] for g in SCHEMA['groups'] if not g.get('perArea')}
@@ -1585,7 +1588,7 @@ def flow_request_queue(domain='actions'):
              'This person is not active in the Hub.'),
             ("and(" + TYPE_IS('ReactivatePerson') + ", or(empty(" + PERSON + "), not(equals(string(" + PERSON + "?['Status']), 'Left'))))", 'This person is already active.'),
             ("not(contains(" + ROLES + ", " + ROLE + "))", 'Choose a role.'),
-            ("not(empty(body('Bad_areas" + sfx + "')))", 'Choose areas from the list.'),
+            ("or(not(" + AREAS_OK + "), not(empty(body('Bad_areas" + sfx + "'))))", 'Choose areas from the list.'),
             ("not(empty(body('Bad_dates" + sfx + "')))", 'An end date for access cannot be in the past.'),
             ("and(" + LEAVING + ", not(empty(body('Get_owned" + sfx + "')?['value'])))",
              "@concat(" + NAME + ", ' still has ', string(length(body('Get_owned" + sfx + "')?['value'])), if(equals(length(body('Get_owned" + sfx + "')?['value']), 1), "
@@ -1623,6 +1626,9 @@ def flow_request_queue(domain='actions'):
         ]
 
         return seq(
+            # a request from anyone but an administrator is refused before anything is looked up (Microsoft 365 included)
+            ('Admin_first' + sfx, cond("@and(" + UNDECIDED + ", not(and(equals(" + ME + "?['IsAdministrator'], true), equals(string(" + ME + "?['Status']), 'Active'))))",
+                                       reject(sfx + '_first', "'Only a Competency Hub administrator can do this.'"))),
             ('Get_groups' + sfx, http('GET', "_api/web/sitegroups?$select=Id,Title&$top=1000")),
             *[('Groups' + sfx + '_' + k, query("@body('Get_groups" + sfx + "')?['value']", "@equals(item()?['Title'], " + q(title) + ")")) for k, title in GROUP_TITLES.items()],
             ('Get_roles' + sfx, http('GET', "_api/web/roledefinitions?$select=Id,Name")),
@@ -2709,6 +2715,134 @@ def flow_request_queue(domain='actions'):
         return seq(*reads, *decide, ('Meeting_type', switch("@" + OWN, cases,
             reject('_MK', "'This kind of change is not recognised.'"))))
 
+    def cleanup_switch():
+        """Removing the test records before go-live (spec §7.4): every record marked as a test record, and any older
+        one an administrator ticked, with everything that depends on it – History, comments and flags, requests, email
+        rows, a meeting's folder and PDF minutes – goes to the recycle bin (recoverable for 93 days). An action that
+        depends on a record being removed (raised from it, or linked to it) must be removed with it, or nothing is.
+        What to remove is decided once and kept on the transaction, so a run that stops part-way finishes the same list.
+        One audit event lists everything; then test marking is switched off."""
+        sfx = '_X'
+        IS_ADMIN = "and(equals(" + ME + "?['IsAdministrator'], true), equals(string(" + ME + "?['Status']), 'Active'))"
+        TYPES = [('Action', 'act', ',SourceType,SourceId'), ('Notice', 'notices', ''), ('Register Entry', 'reg', ''), ('Meeting', 'mtg', ''), ('Feedback', 'fb', '')]
+        code = {'Action': 'A', 'Notice': 'N', 'Register Entry': 'E', 'Meeting': 'M', 'Feedback': 'F'}
+        INC = lambda t: "coalesce(" + P + "?['include']?['" + t + "'], createArray())"
+        IT = lambda col: "item()?['" + col + "']"
+        reads = []
+        for t, key, extra in TYPES:
+            c = code[t]
+            ids_filter = ("if(empty(" + INC(t) + "), 'Id eq 0', join(body('Inc_ids_" + c + sfx + "'), ' or '))")
+            reads += [
+                ('Marked_' + c + sfx, http('GET', L(key, "/items?$select=Id,Title,FileDirRef" + extra + "&$filter=IsTestRecord eq 1&$top=5000"))),
+                ('Inc_ids_' + c + sfx, {'type': 'Select', 'inputs': {'from': '@' + INC(t), 'select': "@concat('Id eq ', string(int(item())))"}}),
+                ('Ticked_' + c + sfx, http('GET', L(key, "/items?$select=Id,Title,FileDirRef" + extra + "&$filter=@{" + ids_filter + "}&$top=500"))),
+                ('Rows_' + c + sfx, compose("@union(body('Marked_" + c + sfx + "')?['value'], body('Ticked_" + c + sfx + "')?['value'])")),
+                ('Sel_' + c + sfx, {'type': 'Select', 'inputs': {'from': "@outputs('Rows_" + c + sfx + "')", 'select': {
+                    'type': t, 'id': "@int(" + idq(IT('Id')) + ")", 'title': "@string(coalesce(" + IT('Title') + ", ''))",
+                    'area': "@last(split(string(" + IT('FileDirRef') + "), '/'))"}}}),
+            ]
+        ALL = "union(" + ", ".join("body('Sel_" + code[t] + sfx + "')" for t, _, _ in TYPES) + ")"
+        KEYS = "body('Keys" + sfx + "')"
+        # actions that depend on an entry or a meeting being removed
+        SRC_IDS = "union(body('Src_e" + sfx + "'), body('Src_m" + sfx + "'))"
+        dep_filter = "if(empty(" + SRC_IDS + "), 'SourceId eq 0', join(" + SRC_IDS + ", ' or '))"
+        PLAN = "json(variables('varTxPlan'))?['records']"
+        R = "items('Each_remove" + sfx + "')"
+        T = "string(" + R + "?['type'])"
+        ID = "string(" + R + "?['id'])"
+        AREA = "string(" + R + "?['area'])"
+        LIST_OF = ("if(equals(" + T + ", 'Action'), 'act', if(equals(" + T + ", 'Notice'), 'notices', if(equals(" + T + ", 'Register Entry'), 'reg', "
+                   "if(equals(" + T + ", 'Meeting'), 'mtg', 'fb'))))")
+        def recycle(name, uri, what):
+            """Into the recycle bin; one already gone counts as done, anything else stops the run (it is tried again)."""
+            return [(name, http('POST', uri)),
+                    (name + '_ok', after(cond("@or(equals(actions('" + name + "')?['status'], 'Succeeded'), equals(outputs('" + name + "')?['statusCode'], 404))", None,
+                                              seq((name + '_stop', fail_here(what + ' could not be moved to the recycle bin. See ' + name + '.')))), {name: TOLERANT}))]
+        def each_dep(step, list_key, rows_expr):
+            E = "items('Each_" + step + sfx + "')"
+            return ('Each_' + step + sfx, {'type': 'Foreach', 'foreach': '@' + rows_expr, 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
+                *recycle('Bin_' + step + sfx, L(list_key, "/items(@{" + idq(E + "?['Id']") + "})/recycle"), 'A related row'))})
+        folder = lambda root, leaf: "_api/web/GetFolderByServerRelativePath(decodedurl='@{outputs('Ids')?['" + root + "']}/@{" + AREA + "}/" + leaf + "')/recycle"
+        LISTING = "@{concat(string(length(" + PLAN + ")), ' records')}"
+        lines = "body('Lines" + sfx + "')"
+        ev_key = "concat(" + KEY + ", '|1')"
+        ev_values, ev_call = create_in_folder('hist', "@{outputs('Ids')?['histRoot']}/Administration", 'X_event_values' + sfx, 'X_event_body' + sfx)
+        CONFIRM = "trim(string(coalesce(" + P + "?['confirm'], '')))"
+        TESTING = "first(body('Testing_row" + sfx + "'))"
+        return seq(
+            ('Get_settings' + sfx, http('GET', L('settings', "/items?$select=Id,Title,Value&$top=500"))),
+            ('Testing_row' + sfx, query("@body('Get_settings" + sfx + "')?['value']", "@equals(item()?['Title'], 'PreGoLiveTesting')")),
+            ('Decide' + sfx, cond('@' + UNDECIDED, seq(
+                *reads,
+                ('Keys' + sfx, {'type': 'Select', 'inputs': {'from': '@' + ALL, 'select': "@concat(string(" + IT('type') + "), ':', string(" + IT('id') + "))"}}),
+                ('Src_e' + sfx, {'type': 'Select', 'inputs': {'from': "@body('Sel_E" + sfx + "')", 'select': "@concat('SourceId eq ', string(" + IT('id') + "))"}}),
+                ('Src_m' + sfx, {'type': 'Select', 'inputs': {'from': "@body('Sel_M" + sfx + "')", 'select': "@concat('SourceId eq ', string(" + IT('id') + "))"}}),
+                ('Get_dependent' + sfx, http('GET', L('act', "/items?$select=Id,Title,SourceType,SourceId&$filter=@{" + dep_filter + "}&$top=5000"))),
+                ('Left_behind' + sfx, query("@body('Get_dependent" + sfx + "')?['value']", "@and(or(and(equals(" + IT('SourceType') + ", 'Register'), contains(" + KEYS + ", concat('Register Entry:', "
+                                                                                       + idstr(IT('SourceId')) + "))), and(equals(" + IT('SourceType') + ", 'Meeting'), contains(" + KEYS + ", concat('Meeting:', "
+                                                                                       + idstr(IT('SourceId')) + ")))), not(contains(" + KEYS + ", concat('Action:', " + idstr(IT('Id')) + "))))")),
+                ('Left_titles' + sfx, {'type': 'Select', 'inputs': {'from': "@body('Left_behind" + sfx + "')", 'select': "@concat('ACT-', string(" + idstr(IT('Id')) + "), ' ', string(" + IT('Title') + "))"}}),
+                ('Verdict_base' + sfx, compose('@' + chain(
+                    ("not(" + IS_ADMIN + ")", 'Only a Competency Hub administrator can do this.'),
+                    ("not(equals(" + CONFIRM + ", 'REMOVE TEST DATA'))", 'Type REMOVE TEST DATA to confirm.'),
+                    ("or(empty(" + TESTING + "), not(equals(string(" + TESTING + "?['Value']), 'Yes')))", 'Test marking is already off: the Hub is live, so nothing is removed this way.')))),
+                ('Verdict' + sfx, compose("@if(not(empty(outputs('Verdict_base" + sfx + "'))), outputs('Verdict_base" + sfx + "'), if(empty(body('Left_behind" + sfx + "')), '', "
+                                          "concat('These actions depend on records being removed. Include them too: ', join(take(body('Left_titles" + sfx + "'), 10), '; '), '.')))")),
+                ('Decided' + sfx, cond("@empty(outputs('Verdict" + sfx + "'))", seq(
+                    ('Plan' + sfx, compose({'records': '@' + ALL})),
+                    *tx_update('planned' + sfx, {'State': 'Planned', 'StepsDone': 'DECIDED', 'PreviousValue': "@{string(outputs('Plan" + sfx + "'))}"}),
+                    ('Plan_kept' + sfx, set_var('varTxPlan', "@{string(outputs('Plan" + sfx + "'))}")),
+                ), reject(sfx, "outputs('Verdict" + sfx + "')"))),
+            ))),
+            ('Each_remove' + sfx, {'type': 'Foreach', 'foreach': '@' + PLAN, 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
+                ('Dep_hist' + sfx, http('GET', L('hist', "/items?$select=Id,RecordType&$filter=RecordId eq @{" + ID + "}&$top=5000"))),
+                ('Dep_upd' + sfx, http('GET', L('upd', "/items?$select=Id,ParentType&$filter=ParentId eq @{" + ID + "}&$top=5000"))),
+                ('Dep_req' + sfx, http('GET', L('req', "/items?$select=Id,TargetType&$filter=TargetId eq @{" + ID + "}&$top=5000"))),
+                ('Dep_mail' + sfx, http('GET', L('notif', "/items?$select=Id,RecordType&$filter=RecordId eq @{" + ID + "}&$top=5000"))),
+                ('Rows_hist' + sfx, query("@body('Dep_hist" + sfx + "')?['value']", "@equals(string(" + IT('RecordType') + "), " + T + ")")),
+                ('Rows_upd' + sfx, query("@body('Dep_upd" + sfx + "')?['value']", "@equals(string(" + IT('ParentType') + "), " + T + ")")),
+                ('Rows_req' + sfx, query("@body('Dep_req" + sfx + "')?['value']", "@equals(string(" + IT('TargetType') + "), " + T + ")")),
+                ('Rows_mail' + sfx, query("@body('Dep_mail" + sfx + "')?['value']", "@equals(string(" + IT('RecordType') + "), " + T + ")")),
+                each_dep('hist', 'hist', "body('Rows_hist" + sfx + "')"),
+                each_dep('upd', 'upd', "body('Rows_upd" + sfx + "')"),
+                each_dep('req', 'req', "body('Rows_req" + sfx + "')"),
+                each_dep('mail', 'notif', "body('Rows_mail" + sfx + "')"),
+                ('Meeting_parts' + sfx, cond("@equals(" + T + ", 'Meeting')", seq(
+                    ('Dep_items' + sfx, http('GET', L('items', "/items?$select=Id&$filter=MeetingId eq @{" + ID + "}&$top=5000"))),
+                    each_dep('item', 'items', "body('Dep_items" + sfx + "')?['value']"),
+                    ('Dep_pdfs' + sfx, http('GET', "_api/web/GetFolderByServerRelativePath(decodedurl='@{outputs('Ids')?['minutesRoot']}/@{" + AREA + "}')/Files?$select=Name,ServerRelativeUrl")),
+                    ('Pdfs' + sfx, query("@coalesce(body('Dep_pdfs" + sfx + "')?['value'], createArray())", "@startsWith(string(" + IT('Name') + "), concat('MTG-', " + ID + ", '-v'))")),
+                    ('Each_pdf' + sfx, {'type': 'Foreach', 'foreach': "@body('Pdfs" + sfx + "')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
+                        *recycle('Bin_pdf' + sfx, "_api/web/GetFileByServerRelativePath(decodedurl='@{items('Each_pdf" + sfx + "')?['ServerRelativeUrl']}')/recycle", 'A PDF of the minutes'))}),
+                    *recycle('Bin_mtg_folder' + sfx, folder('itemsRoot', "MTG-@{" + ID + "}"), 'The meeting\'s folder'),
+                ))),
+                ('Action_folders' + sfx, cond("@equals(" + T + ", 'Action')", seq(
+                    *recycle('Bin_upd_folder' + sfx, folder('updRoot', "A@{" + ID + "}"), 'The action\'s updates folder'),
+                    *recycle('Bin_hist_folder' + sfx, folder('histRoot', "A@{" + ID + "}"), 'The action\'s history folder'),
+                ))),
+                *recycle('Bin_record' + sfx, "_api/web/GetList('@{outputs('Ids')?[" + LIST_OF + "]}')/items(@{" + ID + "})/recycle", 'The record'),
+            )}),
+            ('Lines' + sfx, {'type': 'Select', 'inputs': {'from': '@' + PLAN, 'select': "@concat(string(" + IT('type') + "), ' ', string(" + IT('id') + "), ': ', string(" + IT('title') + "))"}}),
+            ('Find_x_event' + sfx, http('GET', L('hist', "/items?$select=Id&$filter=RequestKey eq '@{" + esc(ev_key) + "}'"))),
+            ('Need_x_event' + sfx, cond("@empty(body('Find_x_event" + sfx + "')?['value'])", seq(
+                ('X_event_values' + sfx, form({'Title': "@{concat('Test records removed: ', string(length(" + PLAN + ")))}", 'RowKind': 'Event', 'RequestKey': '@{' + ev_key + '}',
+                                               'RecordType': 'System', 'RecordId': '0', 'EventType': 'Test Records Removed', 'RequestType': 'RemoveTestRecords',
+                                               'Note': "@{take(join(" + lines + ", '; '), 60000)}"})),
+                ('X_event_body' + sfx, ev_values),
+                ('X_event' + sfx, ev_call),
+                *created_ok('X_event' + sfx, 'X_event_made' + sfx, 'The audit event could not be created. See X_event' + sfx + '.'),
+            ))),
+            ('Get_x_event' + sfx, http('GET', L('hist', "/items?$select=Id&$filter=RequestKey eq '@{" + esc(ev_key) + "}'"))),
+            ('X_event_details' + sfx, compose({'ActorId': '@int(' + SENDER + ')', 'EventTime': '@{' + EVENT_TIME + '}', 'ProcessedAt': '@{utcNow()}'})),
+            ('Save_x_event' + sfx, merge(L('hist', "/items(@{first(body('Get_x_event" + sfx + "')?['value'])?['Id']})"), 'X_event_details' + sfx)),
+            ('Testing_off' + sfx, cond("@and(not(empty(" + TESTING + ")), not(equals(string(" + TESTING + "?['Value']), 'No')))", seq(
+                ('Testing_value' + sfx, compose({'Value': 'No'})),
+                ('Save_testing' + sfx, merge(L('settings', "/items(@{" + TESTING + "?['Id']})"), 'Testing_value' + sfx)),
+            ))),
+            *tx_update('applied' + sfx, {'State': 'Applied', 'ProcessedAt': '@{utcNow()}'}),
+            *finish_request(sfx, 'Completed', "concat(string(length(" + PLAN + ")), ' test records removed, with everything that depended on them. They stay in the recycle bin for 93 days. Test marking is now off.')"),
+        )
+
     # ---------------------------------------------------------------- common part
     IN_OWN = ("and(equals(string(" + R + "?['FileDirRef']), concat(outputs('Ids')?['reqRoot'], '/', outputs('Folder_name'))), "
               "startsWith(outputs('Folder_name'), 'u'))")
@@ -2819,6 +2953,7 @@ def flow_request_queue(domain='actions'):
                                          'EditActionDetails': edit_case})))),
                          reject('_K', "'This kind of change is not recognised.'"))
          if domain == 'actions' else scope(records_switch()) if domain == 'records' else scope(meetings_switch()) if domain in ('meetings', 'minutes') else
+         scope(cleanup_switch()) if domain == 'cleanup' else
          cond("@contains(createArray('RetryTransaction', 'CancelTransaction', 'RevertTransaction'), string(" + TX + "?['RequestType']))",
               admin_switch(),
               seq(('Settings_or_people', cond("@equals(string(" + TX + "?['RequestType']), 'UpdateSetting')", settings_switch(), people_switch()))))),
@@ -3059,7 +3194,7 @@ def flow_queue_monitor():
     nothing = 'Not recorded – an administrator has been told. Nothing was changed.'
     partly = 'Not fully recorded – an administrator has been told. The record is locked until it is resolved.'
     partly_admin = 'Not fully recorded – an administrator has been told and will finish it.'
-    ADMIN_TYPE = "contains(createArray(" + ", ".join(q(x) for x in DOMAIN_TYPES['admin']) + "), string(" + S + "?['RequestType']))"
+    ADMIN_TYPE = "contains(createArray(" + ", ".join(q(x) for x in DOMAIN_TYPES['admin'] + DOMAIN_TYPES['cleanup']) + "), string(" + S + "?['RequestType']))"
     RECORD_TYPE = "contains(createArray(" + ", ".join(q(x) for x in DOMAIN_TYPES['records']) + "), string(" + S + "?['RequestType']))"
     MEETING_TYPE = "contains(createArray(" + ", ".join(q(x) for x in DOMAIN_TYPES['meetings'] + DOMAIN_TYPES['minutes']) + "), string(" + S + "?['RequestType']))"
     # decided once, then carried out step by step: part-made as soon as it was decided
@@ -3320,6 +3455,10 @@ FLOWS = [
      'connectors': ['shared_sharepointonline', 'shared_office365', 'shared_onedriveforbusiness'], 'on': False,
      'description': 'Finalises and amends the minutes of monthly meetings sent from the Competency Hub page, and makes the PDF minutes.',
      'introduced': '1.7.0.0'},
+    {'id': '7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f0a', 'name': 'ESG Competency Hub | 8 Clean-up', 'build': lambda: flow_request_queue('cleanup'),
+     'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': False,
+     'description': 'Used once before go-live, by an administrator: moves the test records and everything that depends on them to the recycle bin, then switches test marking off.',
+     'introduced': '1.8.0.0'},
     {'id': '7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f07', 'name': 'ESG Competency Hub | P-INV Invitations probe', 'build': flow_probe_invitations,
      'connectors': ['shared_sharepointonline', 'shared_office365'], 'on': False,
      'description': 'Run once by hand before meeting invitations are relied on: makes a TEST event for tomorrow, moves it, finds it by its reference and cancels it.',
@@ -3335,7 +3474,7 @@ FLOWS = [
 ]
 
 
-KIND = {'P': 'probe', '1': 'daily', '2': 'queue', '3': 'monitor', '4': 'records', '5': 'meetings', '6': 'admin', '7': 'minutes'}
+KIND = {'P': 'probe', '1': 'daily', '2': 'queue', '3': 'monitor', '4': 'records', '5': 'meetings', '6': 'admin', '7': 'minutes', '8': 'cleanup'}
 
 
 def build_all(raw=False):

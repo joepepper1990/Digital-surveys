@@ -347,5 +347,36 @@ check('notice: its discussion history lists the meeting that took it up, and the
 res = drive('as=' + ROBERT + '&meeting=1&drive=amendMinutes', 300000);
 check('amend: what and why are needed; the amendment is added beside the original, and a second PDF version follows', res.ok && /at least 10 characters/.test(res.result.errors[0]) &&
   /Amendment 1 by Robert Starbuck: Nick Pearce attended/.test(res.result.minutes) && /Kelly Bates: Present/.test(res.result.minutes) && /MTG-1-v2\.pdf$/.test(res.result.pdf), JSON.stringify(res));
+
+// Release 6: test marking and removing the test records
+res = drive('as=' + RACHEL + '&drive=testMarkedNotice', SLOW);
+check('before go-live, a notice posted straight from the Hub is marked as a test record', res.ok && res.result.marked, JSON.stringify(res));
+res = drive('as=' + JOE + '&view=admin&drive=removeTestData', SLOW);
+check('remove test data: marked records are listed and always included; older ones only if ticked; the confirmation must match',
+  res.ok && res.result.marked === 2 && /exactly, in capitals/.test(res.result.wrong) && res.result.payload.include.Action.indexOf(res.result.ticked) >= 0, JSON.stringify(res));
+check('remove test data: the records go, and test marking is switched off', res.ok && res.result.gone && res.result.testing === 'No' && /3 test records removed/.test(res.result.result), JSON.stringify(res));
+res = drive('as=' + JOE + '&drive=queryAudit', 300000);
+check('query audit: every view reads the large lists only in ways SharePoint allows past 5,000 items', res.ok && res.result.areas === 10 && res.result.views.length === 3 &&
+  !res.result.hits.length, JSON.stringify(res));
+// XSS sweep: attack strings in every typed value; nothing runs, nothing is injected, they show as text
+res = drive('as=' + KELLY + '&mode=xss&drive=xssSweep', SLOW);
+check('XSS sweep: home, area panel, an action, the area page and a meeting show attack strings as text only', res.ok && !res.result.xss && !res.result.injectedImgs &&
+  !res.result.injectedScripts && !res.result.injectedBold && res.result.shownAsText, JSON.stringify(res));
+['notice=1', 'entry=1', 'meeting=1'].forEach((link) => {
+  res = drive('as=' + KELLY + '&area=FLK&mode=xss&' + link + '&drive=xssCheck', SLOW);
+  check('XSS sweep: ' + link.split('=')[0] + ' panel shows attack strings as text only', res.ok && !res.result.xss && !res.result.injectedImgs && !res.result.injectedScripts &&
+    !res.result.injectedBold && res.result.shownAsText, JSON.stringify(res));
+});
+// Accessibility (Q3): names for every control, labelled modal dialogs, unique ids; 200 % zoom on a 1366 px screen
+res = drive('as=' + KELLY + '&drive=a11yAudit', SLOW);
+check('accessibility: every control in ten views and forms has an accessible name, dialogs are modal and labelled, ids are unique',
+  res.ok && res.result.views.length >= 10 && !res.result.problems.length, JSON.stringify(res));
+[['engineer', KELLY], ['team leader', JOE]].forEach(([who, id]) => {
+  const d = open('as=' + id + '&drive=narrowFit', ['--window-size=683,800', '--dump-dom']);
+  const m = /<pre id="drive-result">([\s\S]*?)<\/pre>/.exec(d.dom);
+  const r = m ? JSON.parse(m[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&')) : { ok: false, error: d.errors.join(' | ') };
+  check('200 % zoom (683 px wide, ' + who + '): home, area panel and a dialog never scroll sideways', r.ok && !r.result.homeScrollsSideways &&
+    !r.result.areaScrollsSideways && !r.result.dialogScrollsSideways, JSON.stringify(r));
+});
 console.log(failures ? failures + ' browser check(s) failed' : 'All browser checks passed');
 process.exit(failures ? 1 : 0);

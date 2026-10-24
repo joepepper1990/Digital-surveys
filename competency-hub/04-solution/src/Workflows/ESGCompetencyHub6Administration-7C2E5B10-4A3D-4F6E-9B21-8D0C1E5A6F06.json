@@ -558,6 +558,7 @@
                 "mtg": "@{outputs('Site_path')}/Lists/Meetings",
                 "items": "@{outputs('Site_path')}/Lists/MeetingItems",
                 "cal": "@{outputs('Site_path')}/Lists/CalendarEvents",
+                "fb": "@{outputs('Site_path')}/Lists/Feedback",
                 "reqRoot": "@{outputs('Site_path')}/Lists/Requests",
                 "actRoot": "@{outputs('Site_path')}/Lists/Actions",
                 "histRoot": "@{outputs('Site_path')}/Lists/History",
@@ -3568,6 +3569,104 @@
                     },
                     "else": {
                       "actions": {
+                        "Administrator_first_(people)": {
+                          "type": "If",
+                          "expression": "@and(not(contains(string(coalesce(variables('varTx')?['StepsDone'], '')), 'DECIDED')), not(and(equals(outputs('Person_who_sent_it')?['IsAdministrator'], true), equals(string(outputs('Person_who_sent_it')?['Status']), 'Active'))))",
+                          "actions": {
+                            "Change_record_void_first_(people)": {
+                              "type": "Compose",
+                              "inputs": {
+                                "State": "Void",
+                                "LastError": "@{'Only a Competency Hub administrator can do this.'}"
+                              },
+                              "runAfter": {}
+                            },
+                            "Save_change_record_void_first_(people)": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "connectionName": "shared_sharepointonline",
+                                  "operationId": "HttpRequest",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                },
+                                "parameters": {
+                                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                                  "parameters/method": "POST",
+                                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items(@{first(split(string(coalesce(variables('varTx')?['Id'], '')), '.'))})",
+                                  "parameters/headers": {
+                                    "Accept": "application/json;odata=nometadata",
+                                    "Content-Type": "application/json;odata=nometadata",
+                                    "X-HTTP-Method": "MERGE",
+                                    "IF-MATCH": "*"
+                                  },
+                                  "parameters/body": "@{string(outputs('Change_record_void_first_(people)'))}"
+                                },
+                                "authentication": "@parameters('$authentication')"
+                              },
+                              "runAfter": {
+                                "Change_record_void_first_(people)": [
+                                  "Succeeded"
+                                ]
+                              }
+                            },
+                            "Request_rejected_first_(people)": {
+                              "type": "Compose",
+                              "inputs": {
+                                "Status": "Rejected",
+                                "ResultMessage": "@{'Only a Competency Hub administrator can do this.'}",
+                                "ProcessedAt": "@{utcNow()}"
+                              },
+                              "runAfter": {
+                                "Save_change_record_void_first_(people)": [
+                                  "Succeeded"
+                                ]
+                              }
+                            },
+                            "Mark_the_request_rejected_first_(people)": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "connectionName": "shared_sharepointonline",
+                                  "operationId": "HttpRequest",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                },
+                                "parameters": {
+                                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                                  "parameters/method": "POST",
+                                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{triggerBody()?['ID']})",
+                                  "parameters/headers": {
+                                    "Accept": "application/json;odata=nometadata",
+                                    "Content-Type": "application/json;odata=nometadata",
+                                    "X-HTTP-Method": "MERGE",
+                                    "IF-MATCH": "*"
+                                  },
+                                  "parameters/body": "@{string(outputs('Request_rejected_first_(people)'))}"
+                                },
+                                "authentication": "@parameters('$authentication')"
+                              },
+                              "runAfter": {
+                                "Request_rejected_first_(people)": [
+                                  "Succeeded"
+                                ]
+                              }
+                            },
+                            "Stop_first_(people)": {
+                              "type": "Terminate",
+                              "inputs": {
+                                "runStatus": "Succeeded"
+                              },
+                              "runAfter": {
+                                "Mark_the_request_rejected_first_(people)": [
+                                  "Succeeded"
+                                ]
+                              }
+                            }
+                          },
+                          "else": {
+                            "actions": {}
+                          },
+                          "runAfter": {}
+                        },
                         "Get_groups_(people)": {
                           "type": "OpenApiConnection",
                           "inputs": {
@@ -3586,7 +3685,11 @@
                             },
                             "authentication": "@parameters('$authentication')"
                           },
-                          "runAfter": {}
+                          "runAfter": {
+                            "Administrator_first_(people)": [
+                              "Succeeded"
+                            ]
+                          }
                         },
                         "Groups_All_Users_(people)": {
                           "type": "Query",
@@ -3959,7 +4062,7 @@
                         "Wanted_keys_(people)": {
                           "type": "Select",
                           "inputs": {
-                            "from": "@if(equals(string(variables('varTx')?['RequestType']), 'PersonLeft'), createArray(), if(contains(outputs('Payload'), 'areas'), outputs('Payload')?['areas'], body('Active_areas_(people)')))",
+                            "from": "@if(equals(string(variables('varTx')?['RequestType']), 'PersonLeft'), createArray(), if(contains(outputs('Payload'), 'areas'), if(or(not(contains(outputs('Payload'), 'areas')), startsWith(string(outputs('Payload')?['areas']), '[')), outputs('Payload')?['areas'], createArray()), body('Active_areas_(people)')))",
                             "select": "@string(item()?['key'])"
                           },
                           "runAfter": {
@@ -3995,7 +4098,7 @@
                         "Access_end_dates_in_the_past_(people)": {
                           "type": "Query",
                           "inputs": {
-                            "from": "@if(equals(string(variables('varTx')?['RequestType']), 'PersonLeft'), createArray(), if(contains(outputs('Payload'), 'areas'), outputs('Payload')?['areas'], body('Active_areas_(people)')))",
+                            "from": "@if(equals(string(variables('varTx')?['RequestType']), 'PersonLeft'), createArray(), if(contains(outputs('Payload'), 'areas'), if(or(not(contains(outputs('Payload'), 'areas')), startsWith(string(outputs('Payload')?['areas']), '[')), outputs('Payload')?['areas'], createArray()), body('Active_areas_(people)')))",
                             "where": "@and(not(empty(string(coalesce(item()?['expires'], '')))), less(int(replace(if(empty(string(coalesce(item()?['expires'], ''))), '9999-12-31', string(item()?['expires'])), '-', '')), int(replace(outputs('Today_in_the_UK'), '-', ''))))"
                           },
                           "runAfter": {
@@ -4073,7 +4176,7 @@
                           "actions": {
                             "Reason_to_refuse_if_any_(people)": {
                               "type": "Compose",
-                              "inputs": "@if(not(and(equals(outputs('Person_who_sent_it')?['IsAdministrator'], true), equals(string(outputs('Person_who_sent_it')?['Status']), 'Active'))), 'Only a Competency Hub administrator can do this.', if(equals(string(variables('varUid')), outputs('Sender_ID')), 'You can''t change your own access. Ask another administrator.', if(and(equals(string(variables('varTx')?['RequestType']), 'AddPerson'), equals(variables('varUid'), 0)), 'That email address was not found in Microsoft 365. Check the spelling.', if(and(equals(string(variables('varTx')?['RequestType']), 'AddPerson'), not(empty(first(body('Get_person_(people)')?['value']))), equals(string(first(body('Get_person_(people)')?['value'])?['Status']), 'Left')), concat(string(coalesce(first(body('Get_person_(people)')?['value'])?['Title'], variables('varName'), 'this person')), ' is already in the Hub but marked as left. Use Reactivate instead.'), if(and(equals(string(variables('varTx')?['RequestType']), 'AddPerson'), not(empty(first(body('Get_person_(people)')?['value'])))), concat(string(coalesce(first(body('Get_person_(people)')?['value'])?['Title'], variables('varName'), 'this person')), ' is already in the Hub.'), if(and(contains(createArray('UpdatePerson', 'PersonLeft'), string(variables('varTx')?['RequestType'])), or(empty(first(body('Get_person_(people)')?['value'])), not(equals(string(first(body('Get_person_(people)')?['value'])?['Status']), 'Active')))), 'This person is not active in the Hub.', if(and(equals(string(variables('varTx')?['RequestType']), 'ReactivatePerson'), or(empty(first(body('Get_person_(people)')?['value'])), not(equals(string(first(body('Get_person_(people)')?['value'])?['Status']), 'Left')))), 'This person is already active.', if(not(contains(createArray('Engineer', 'Technician', 'Team Leader', 'Group Head'), string(if(contains(outputs('Payload'), 'role'), outputs('Payload')?['role'], coalesce(first(body('Get_person_(people)')?['value'])?['Role'], ''))))), 'Choose a role.', if(not(empty(body('Areas_that_do_not_exist_(people)'))), 'Choose areas from the list.', if(not(empty(body('Access_end_dates_in_the_past_(people)'))), 'An end date for access cannot be in the past.', if(and(equals(string(variables('varTx')?['RequestType']), 'PersonLeft'), not(empty(body('Get_owned_(people)')?['value']))), concat(string(coalesce(first(body('Get_person_(people)')?['value'])?['Title'], variables('varName'), 'this person')), ' still has ', string(length(body('Get_owned_(people)')?['value'])), if(equals(length(body('Get_owned_(people)')?['value']), 1), ' open action', ' open actions'), '. Reassign them first.'), if(not(empty(body('Names_of_those_areas_(people)'))), concat('Not removed from ', join(body('Names_of_those_areas_(people)'), ', '), ': open actions there are still theirs. Reassign them first.'), if(and(equals(first(body('Get_person_(people)')?['value'])?['IsAdministrator'], true), not(and(not(equals(string(variables('varTx')?['RequestType']), 'PersonLeft')), if(contains(outputs('Payload'), 'administrator'), equals(outputs('Payload')?['administrator'], true), equals(first(body('Get_person_(people)')?['value'])?['IsAdministrator'], true)))), lessOrEquals(length(body('Get_administrators_(people)')?['value']), 1)), 'There must always be at least one active administrator.', '')))))))))))))",
+                              "inputs": "@if(not(and(equals(outputs('Person_who_sent_it')?['IsAdministrator'], true), equals(string(outputs('Person_who_sent_it')?['Status']), 'Active'))), 'Only a Competency Hub administrator can do this.', if(equals(string(variables('varUid')), outputs('Sender_ID')), 'You can''t change your own access. Ask another administrator.', if(and(equals(string(variables('varTx')?['RequestType']), 'AddPerson'), equals(variables('varUid'), 0)), 'That email address was not found in Microsoft 365. Check the spelling.', if(and(equals(string(variables('varTx')?['RequestType']), 'AddPerson'), not(empty(first(body('Get_person_(people)')?['value']))), equals(string(first(body('Get_person_(people)')?['value'])?['Status']), 'Left')), concat(string(coalesce(first(body('Get_person_(people)')?['value'])?['Title'], variables('varName'), 'this person')), ' is already in the Hub but marked as left. Use Reactivate instead.'), if(and(equals(string(variables('varTx')?['RequestType']), 'AddPerson'), not(empty(first(body('Get_person_(people)')?['value'])))), concat(string(coalesce(first(body('Get_person_(people)')?['value'])?['Title'], variables('varName'), 'this person')), ' is already in the Hub.'), if(and(contains(createArray('UpdatePerson', 'PersonLeft'), string(variables('varTx')?['RequestType'])), or(empty(first(body('Get_person_(people)')?['value'])), not(equals(string(first(body('Get_person_(people)')?['value'])?['Status']), 'Active')))), 'This person is not active in the Hub.', if(and(equals(string(variables('varTx')?['RequestType']), 'ReactivatePerson'), or(empty(first(body('Get_person_(people)')?['value'])), not(equals(string(first(body('Get_person_(people)')?['value'])?['Status']), 'Left')))), 'This person is already active.', if(not(contains(createArray('Engineer', 'Technician', 'Team Leader', 'Group Head'), string(if(contains(outputs('Payload'), 'role'), outputs('Payload')?['role'], coalesce(first(body('Get_person_(people)')?['value'])?['Role'], ''))))), 'Choose a role.', if(or(not(or(not(contains(outputs('Payload'), 'areas')), startsWith(string(outputs('Payload')?['areas']), '['))), not(empty(body('Areas_that_do_not_exist_(people)')))), 'Choose areas from the list.', if(not(empty(body('Access_end_dates_in_the_past_(people)'))), 'An end date for access cannot be in the past.', if(and(equals(string(variables('varTx')?['RequestType']), 'PersonLeft'), not(empty(body('Get_owned_(people)')?['value']))), concat(string(coalesce(first(body('Get_person_(people)')?['value'])?['Title'], variables('varName'), 'this person')), ' still has ', string(length(body('Get_owned_(people)')?['value'])), if(equals(length(body('Get_owned_(people)')?['value']), 1), ' open action', ' open actions'), '. Reassign them first.'), if(not(empty(body('Names_of_those_areas_(people)'))), concat('Not removed from ', join(body('Names_of_those_areas_(people)'), ', '), ': open actions there are still theirs. Reassign them first.'), if(and(equals(first(body('Get_person_(people)')?['value'])?['IsAdministrator'], true), not(and(not(equals(string(variables('varTx')?['RequestType']), 'PersonLeft')), if(contains(outputs('Payload'), 'administrator'), equals(outputs('Payload')?['administrator'], true), equals(first(body('Get_person_(people)')?['value'])?['IsAdministrator'], true)))), lessOrEquals(length(body('Get_administrators_(people)')?['value']), 1)), 'There must always be at least one active administrator.', '')))))))))))))",
                               "runAfter": {}
                             },
                             "Refused_or_allowed_(people)": {
@@ -4717,7 +4820,7 @@
                             "Rec_out_want_(people)": {
                               "type": "Query",
                               "inputs": {
-                                "from": "@if(equals(string(variables('varTx')?['RequestType']), 'PersonLeft'), createArray(), if(contains(outputs('Payload'), 'areas'), outputs('Payload')?['areas'], body('Active_areas_(people)')))",
+                                "from": "@if(equals(string(variables('varTx')?['RequestType']), 'PersonLeft'), createArray(), if(contains(outputs('Payload'), 'areas'), if(or(not(contains(outputs('Payload'), 'areas')), startsWith(string(outputs('Payload')?['areas']), '[')), outputs('Payload')?['areas'], createArray()), body('Active_areas_(people)')))",
                                 "where": "@and(equals(string(item()?['key']), last(split(string(items('Rec_out_(people)')?['FileDirRef']), '/'))), equals(item()?['chair'], true))"
                               },
                               "runAfter": {}
@@ -5817,7 +5920,7 @@
                             "Is_this_area_ticked_(people)": {
                               "type": "Query",
                               "inputs": {
-                                "from": "@if(equals(string(variables('varTx')?['RequestType']), 'PersonLeft'), createArray(), if(contains(outputs('Payload'), 'areas'), outputs('Payload')?['areas'], body('Active_areas_(people)')))",
+                                "from": "@if(equals(string(variables('varTx')?['RequestType']), 'PersonLeft'), createArray(), if(contains(outputs('Payload'), 'areas'), if(or(not(contains(outputs('Payload'), 'areas')), startsWith(string(outputs('Payload')?['areas']), '[')), outputs('Payload')?['areas'], createArray()), body('Active_areas_(people)')))",
                                 "where": "@equals(string(item()?['key']), string(items('Each_add_(people)')?['CompetencyKey']))"
                               },
                               "runAfter": {}
@@ -6886,7 +6989,7 @@
                             "canPostNotices": "@and(not(equals(string(variables('varTx')?['RequestType']), 'PersonLeft')), if(contains(outputs('Payload'), 'canPostNotices'), equals(outputs('Payload')?['canPostNotices'], true), not(equals(first(body('Get_person_(people)')?['value'])?['CanPostNotices'], false))))",
                             "administrator": "@and(not(equals(string(variables('varTx')?['RequestType']), 'PersonLeft')), if(contains(outputs('Payload'), 'administrator'), equals(outputs('Payload')?['administrator'], true), equals(first(body('Get_person_(people)')?['value'])?['IsAdministrator'], true)))",
                             "status": "@if(equals(string(variables('varTx')?['RequestType']), 'PersonLeft'), 'Left', 'Active')",
-                            "areas": "@if(equals(string(variables('varTx')?['RequestType']), 'PersonLeft'), createArray(), if(contains(outputs('Payload'), 'areas'), outputs('Payload')?['areas'], body('Active_areas_(people)')))"
+                            "areas": "@if(equals(string(variables('varTx')?['RequestType']), 'PersonLeft'), createArray(), if(contains(outputs('Payload'), 'areas'), if(or(not(contains(outputs('Payload'), 'areas')), startsWith(string(outputs('Payload')?['areas']), '[')), outputs('Payload')?['areas'], createArray()), body('Active_areas_(people)')))"
                           },
                           "runAfter": {
                             "Save_verified_(people)": [
@@ -7130,7 +7233,7 @@
                             "Rec_in_want_(people)": {
                               "type": "Query",
                               "inputs": {
-                                "from": "@if(equals(string(variables('varTx')?['RequestType']), 'PersonLeft'), createArray(), if(contains(outputs('Payload'), 'areas'), outputs('Payload')?['areas'], body('Active_areas_(people)')))",
+                                "from": "@if(equals(string(variables('varTx')?['RequestType']), 'PersonLeft'), createArray(), if(contains(outputs('Payload'), 'areas'), if(or(not(contains(outputs('Payload'), 'areas')), startsWith(string(outputs('Payload')?['areas']), '[')), outputs('Payload')?['areas'], createArray()), body('Active_areas_(people)')))",
                                 "where": "@and(equals(string(item()?['key']), last(split(string(items('Rec_in_(people)')?['FileDirRef']), '/'))), equals(item()?['chair'], true))"
                               },
                               "runAfter": {}

@@ -71,6 +71,8 @@ CH.health = (function () {
     // the switches that fall back when Outlook invitations or PDF conversion cannot be used (Setup 1.3); Yes unless set to No
     out.invitesEnabled = value(rows, 'InvitesEnabled') !== 'No';
     out.pdfEnabled = value(rows, 'PdfEnabled') !== 'No';
+    // before go-live (spec §7.4): what people create is marked as a test record, so it can be removed in one go
+    out.testing = value(rows, 'PreGoLiveTesting') === 'Yes';
     if (daily) {
       out.lastDailyRun = new Date(daily);
       out.reminders = (now.getTime() - out.lastDailyRun.getTime()) / 3600000 > DAILY_LIMIT_HOURS ? 'stale' : 'ok';

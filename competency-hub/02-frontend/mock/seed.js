@@ -188,6 +188,9 @@ window.MockSeed = function (todayIso) {
       InviteState: 'Sent', InviteToken: 'ESGMseed' + meetings.length, OutlookEventId: 'AAMkseed' + meetings.length }, base));
   });
 
+  // made while testing (spec §7.4): one notice is marked as a test record
+  notices.filter(function (n) { return n.Id === 4; }).forEach(function (n) { n.IsTestRecord = true; });
+
   // Flask's last finalised meeting has its frozen record (what the Minutes flow writes): attendance, a notice that was
   // deferred (it comes back as carried forward), a decision, and its PDF.
   var items = [];
@@ -217,7 +220,7 @@ window.MockSeed = function (todayIso) {
     'Requests': [], 'History': history, 'Improvements and Degradations': register, 'Meeting Items': items,
     'Feedback': [
       { Id: 1, Title: 'Report a bug: dates', FeedbackType: 'Report a bug', Description: 'The calendar shows the wrong day for all-day events.', Status: 'New',
-        AuthorId: idOf['Rachel Boulden'], Created: at(-2, '09:12:00'), ClientKey: 'seed-fb-1', PageView: 'area' },
+        AuthorId: idOf['Rachel Boulden'], Created: at(-2, '09:12:00'), ClientKey: 'seed-fb-1', PageView: 'area', IsTestRecord: true },
       { Id: 2, Title: 'Suggest an improvement: colours', FeedbackType: 'Suggest an improvement', Description: 'Could late actions be shown at the top of every list?',
         Status: 'Answered', Response: 'They are now shown first.', AuthorId: idOf['Luke Cain'], Created: at(-9, '14:30:00'), ClientKey: 'seed-fb-2', PageView: 'home' }
     ],
@@ -232,7 +235,8 @@ window.MockSeed = function (todayIso) {
       { Id: 7, Title: 'MaxDeadlineYears', Value: '2' },
       { Id: 8, Title: 'InvitesEnabled', Value: 'Yes' },
       { Id: 9, Title: 'PdfEnabled', Value: 'Yes' },
-      { Id: 10, Title: 'AgendaLookaheadDays', Value: '60' }
+      { Id: 10, Title: 'AgendaLookaheadDays', Value: '60' },
+      { Id: 11, Title: 'PreGoLiveTesting', Value: 'Yes' }
     ]
   };
 };

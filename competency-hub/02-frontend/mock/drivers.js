@@ -909,6 +909,162 @@ window.MockDrivers = (function () {
       await until(function () { return q('#ch-mt .minutes') && /Amendments/.test(q('#ch-mt .minutes').textContent); }, 120000);
       return { errors: errors, minutes: q('#ch-mt .minutes').textContent, pdf: q('#ch-mt .minutes a.btn').getAttribute('href') };
     },
+    // ---- Release 6: removing the test records before go-live
+    removeTestData: async function () {
+      await until(function () { return byText('.subtabs button', 'Remove test data'); });
+      byText('.subtabs button', 'Remove test data').click();
+      await until(function () { return q('#ch-cl-confirm'); }, 60000);
+      var marked = all('.cleanup input[disabled]').length;
+      // tick an early action raised before marking existed
+      var box = q('.cleanup input[data-key^="Action:"]');
+      var key = box.getAttribute('data-key');
+      box.closest('details').open = true;
+      box.click();
+      await until(function () { return q('#ch-cl-confirm') && q('.cleanup input[data-key="' + key + '"]').checked; });
+      type(q('#ch-cl-confirm'), 'remove test data');
+      q('#ch-cl-confirm').form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await wait(50);
+      var wrong = q('#ch-cl-error').textContent;
+      type(q('#ch-cl-confirm'), 'REMOVE TEST DATA');
+      q('#ch-cl-confirm').form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return MockSharePoint.data.Requests.some(function (r) { return r.RequestType === 'RemoveTestRecords' && r.Status === 'Completed'; }); }, 120000);
+      var id = Number(key.split(':')[1]);
+      var req = MockSharePoint.data.Requests.filter(function (r) { return r.RequestType === 'RemoveTestRecords'; })[0];
+      return { marked: marked, wrong: wrong, payload: JSON.parse(req.Payload), result: req.ResultMessage,
+        gone: !MockSharePoint.data.Actions.some(function (a) { return a.Id === id; }) && !MockSharePoint.data.Noticeboard.some(function (n) { return n.Id === 4; }),
+        testing: MockSharePoint.data['Competency Hub Settings'].filter(function (x) { return x.Title === 'PreGoLiveTesting'; })[0].Value, ticked: id };
+    },
+    testMarkedNotice: async function () {
+      await until(function () { return q('.hm-stack'); });
+      byText('.btn', 'Post a notice').click();
+      var form = await until(function () { return q('#ch-n form'); });
+      type(q('#ch-n-title'), 'TEST marking check');
+      type(q('#ch-n-body'), 'Made while testing.');
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return MockSharePoint.data.Noticeboard.some(function (n) { return n.Title === 'TEST marking check'; }); });
+      return { marked: MockSharePoint.data.Noticeboard.filter(function (n) { return n.Title === 'TEST marking check'; })[0].IsTestRecord === true };
+    },
+    // Every view an administrator and Team Leader can open, with the list view threshold enforced by the mock: no query
+    // may be one SharePoint would refuse once the large lists pass 5,000 items (spec Q2, query audit).
+    queryAudit: async function () {
+      var visit = async function (label) { var b = byText('button, a', label); if (b) { b.click(); await wait(400); } return !!b; };
+      await until(function () { return q('.hm-stack'); });
+      var seen = [];
+      for (var i = 0; i < all('.hm-tile').length; i++) {
+        all('.hm-tile')[i].click();
+        await until(function () { return q('.hm-area'); });
+        await wait(200);
+        seen.push(q('.hm-area h2').textContent);
+        (byText('.hm-area .btn-link', 'Full page') || {}).click && byText('.hm-area .btn-link', 'Full page').click();
+        await until(function () { return q('.subtabs'); });
+        for (var t = 0; t < all('.subtabs button').length; t++) { all('.subtabs button')[t].click(); await wait(100); }
+        byText('button', '‹ Overview').click();
+        await until(function () { return q('.hm-stack'); });
+      }
+      var views = [];
+      for (var v of ['My actions', 'Management', 'Administration']) {
+        if (await visit(v)) {
+          views.push(v);
+          for (var k = 0; k < all('.subtabs button').length; k++) { all('.subtabs button')[k].click(); await wait(400); }
+          var back = byText('button', '‹ Overview'); if (back) { back.click(); await wait(200); }
+        }
+      }
+      return { areas: seen.length, views: views, hits: MockSharePoint.thresholdHits.slice(), gets: MockSharePoint.requests.filter(function (r) { return r.indexOf('GET') === 0; }).length };
+    },
+    // Every kind of view, with attack strings in every typed value (mode=xss): nothing runs, nothing is injected.
+    xssSweep: async function () {
+      var opened = [];
+      var settle = async function (sel) { await until(function () { return q(sel); }, 60000); await wait(300); opened.push(sel); };
+      var closeDlg = async function () { var x = q('.dialog-x'); if (x) { x.click(); await wait(100); } };
+      await settle('.hm-stack');
+      all('.hm-tile')[0].click();
+      await settle('.hm-area');
+      var item = q('.hm-area .item-open');
+      if (item) { item.click(); await settle('.dialog'); await closeDlg(); }
+      byText('.hm-area .btn-link', 'Full page').click();
+      await settle('.subtabs');
+      for (var t = 0; t < all('.subtabs button').length; t++) { all('.subtabs button')[t].click(); await wait(200); }
+      var html = document.querySelector('[data-ch-root]').innerHTML;
+      return { opened: opened, xss: window.__xss === 1, injectedImgs: all('img[src="x"]').length, injectedScripts: document.querySelectorAll('[data-ch-root] script').length,
+        injectedBold: document.querySelectorAll('[data-ch-root] b').length && all('b').some(function (b) { return b.textContent === 'bold'; }),
+        shownAsText: html.indexOf('&lt;img src=x onerror=') >= 0 };
+    },
+    // One panel opened by its link (?notice=, ?entry=, ?meeting=), in mode=xss
+    xssCheck: async function () {
+      await until(function () { return q('.dialog .dialog-content') && q('.dialog .dialog-content').textContent.length > 80; }, 60000);
+      await wait(1500);
+      var html = q('.dialog').innerHTML;
+      return { xss: window.__xss === 1, injectedImgs: all('img[src="x"]').length, injectedScripts: document.querySelectorAll('[data-ch-root] script').length,
+        injectedBold: all('.dialog b').some(function (b) { return b.textContent === 'bold'; }), shownAsText: html.indexOf('&lt;img src=x onerror=') >= 0 };
+    },
+    // Accessibility (spec Q3): in every view and form opened here, each control has an accessible name, each dialog is
+    // modal and labelled, and no id is used twice. Reported as a list of problems (none expected).
+    a11yAudit: async function () {
+      var problems = [];
+      var seen = [];
+      var nameOf = function (el) {
+        if (el.getAttribute('aria-label') || el.getAttribute('aria-labelledby')) return true;
+        if (el.id && document.querySelector('label[for="' + el.id + '"]')) return true;
+        if (el.closest('label')) return true;
+        if (el.tagName === 'BUTTON' || el.tagName === 'A') return (el.textContent || '').trim().length > 0;
+        return false;
+      };
+      var audit = function (where) {
+        seen.push(where);
+        all('input:not([type=hidden]), select, textarea, button, a[href]').filter(function (el) { return el.offsetParent !== null; }).forEach(function (el) {
+          if (!nameOf(el)) problems.push(where + ': ' + el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + ' has no accessible name');
+        });
+        all('[role=dialog]').forEach(function (d) {
+          if (d.getAttribute('aria-modal') !== 'true' || !document.getElementById(d.getAttribute('aria-labelledby') || '-')) problems.push(where + ': dialog ' + d.id + ' not modal or not labelled');
+        });
+        var ids = {};
+        all('[id]').forEach(function (el) { if (ids[el.id]) problems.push(where + ': id ' + el.id + ' used twice'); ids[el.id] = true; });
+      };
+      var close = async function () { var x = q('.dialog-x'); if (x) { x.click(); await wait(150); } };
+      await until(function () { return q('.hm-stack'); });
+      await wait(300);
+      audit('home');
+      byText('.btn', 'Raise an action').click();
+      await until(function () { return q('#ch-r form'); });
+      audit('raise form');
+      await close();
+      byText('.btn', 'Post a notice').click();
+      await until(function () { return q('#ch-n form'); });
+      audit('notice form');
+      await close();
+      all('.hm-tile')[0].click();
+      await until(function () { return q('.hm-area'); });
+      await wait(300);
+      audit('area panel');
+      var bookBtn = byText('.hm-area .btn', 'Book a meeting');
+      if (bookBtn) { bookBtn.click(); await until(function () { return q('#ch-m form'); }); audit('booking form'); await close(); }
+      var item = q('.hm-area .item-open');
+      item.click();
+      await until(function () { return q('.dialog .facts'); });
+      await wait(300);
+      audit('action panel');
+      await close();
+      byText('.hm-area .btn-link', 'Full page').click();
+      await until(function () { return q('.subtabs'); });
+      for (var t = 0; t < all('.subtabs button').length; t++) { all('.subtabs button')[t].click(); await wait(200); audit('area page tab ' + (t + 1)); }
+      var fb = byText('button', 'Feedback');
+      if (fb) { fb.click(); await until(function () { return q('#ch-fb form') || q('.dialog form'); }); audit('feedback form'); await close(); }
+      return { views: seen, problems: problems };
+    },
+    narrowFit: async function () {
+      await until(function () { return q('.hm-stack'); });
+      await wait(500);
+      var wide = function () { return document.documentElement.scrollWidth > window.innerWidth + 1; };
+      var home = wide();
+      all('.hm-tile')[0].click();
+      await until(function () { return q('.hm-area'); });
+      await wait(300);
+      var area = wide();
+      q('.hm-area .item-open').click();
+      await until(function () { return q('.dialog .facts'); });
+      await wait(300);
+      return { width: window.innerWidth, homeScrollsSideways: home, areaScrollsSideways: area, dialogScrollsSideways: wide() };
+    },
     // Open every area and every tab: the shell must make no writes at all.
     readOnlyAudit: async function () {
       await until(function () { return q('.tile'); });

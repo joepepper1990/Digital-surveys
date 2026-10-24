@@ -198,10 +198,10 @@ CH.views.actionPanel = (function () {
           if (CH.ui.dialog.showErrors(form, 'ch-u-', errors, ['body'])) return false;
           var text = body.value.trim();
           try {
-            await app.sp.addToFolder('updates', a.areaKey + '/A' + a.id, {
+            await app.sp.addToFolder('updates', a.areaKey + '/A' + a.id, Object.assign({
               Title: text.slice(0, 80), ClientKey: clientKey, ParentType: 'Action', ParentId: a.id,
               EntryType: 'Progress', IsFlagEvent: '0', IsHidden: '0', Body: text
-            });
+            }, app.testMark()));
           } catch (error) {
             var found = await app.sp.items(CH.config.lists.updates.title, "$select=Id&$filter=ClientKey eq '" + CH.sp.escapeOData(clientKey) + "'", 1)
               .catch(function () { return { rows: [] }; });

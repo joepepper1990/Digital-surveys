@@ -27,6 +27,7 @@ PARTS = {
                  'K0': 'unreadable', 'r': 'retry', '': ''},
     'minutes': {'M': 'meeting', 'MZ': 'finalise', 'MA': 'amend', 'back': 'back to in progress', 'M404': 'meeting missing', 'MK': 'unknown kind',
                 'K': 'unknown kind', 'K0': 'unreadable', 'r': 'retry', '': ''},
+    'cleanup': {'X': 'clean-up', 'A': 'actions', 'N': 'notices', 'E': 'entries', 'M': 'meetings', 'F': 'feedback', 'K': 'unknown kind', 'K0': 'unreadable', 'r': 'retry', '': ''},
     'admin': {'T': 'decision', 'P': 'people', 'G': 'setting', 'RH': 'history folder', 'K0': 'unreadable', 'r': 'retry', '': ''},
 }
 

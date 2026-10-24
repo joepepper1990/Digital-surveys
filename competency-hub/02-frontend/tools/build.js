@@ -12,7 +12,7 @@ const MODULES = [
   'src/domain/access.js', 'src/domain/rules.js', 'src/domain/model.js', 'src/domain/health.js', 'src/domain/agenda.js',
   'src/ui/components.js', 'src/ui/dialog.js',
   'src/views/home.js', 'src/views/area.js', 'src/views/notice-form.js', 'src/views/raise-form.js', 'src/views/action-panel.js', 'src/views/my-actions.js', 'src/views/people.js', 'src/views/record-panel.js', 'src/views/entry-form.js', 'src/views/feedback.js', 'src/views/settings.js',
-  'src/views/dashboard.js', 'src/views/meeting-form.js', 'src/views/meeting-panel.js', 'src/views/admin.js',
+  'src/views/dashboard.js', 'src/views/meeting-form.js', 'src/views/meeting-panel.js', 'src/views/cleanup.js', 'src/views/admin.js',
   'src/app.js'
 ];
 
@@ -40,6 +40,18 @@ function scopeCss(css, scope) {
     }
     i = j;
   }
+  return out;
+}
+
+// The lists that can pass SharePoint's list view threshold (plan D.4), and their indexed columns (schema.json).
+const BIG_LISTS = ['actions', 'history', 'updates', 'meetingItems', 'notifications', 'requests'];
+function bigListIndexes() {
+  const schema = JSON.parse(fs.readFileSync(path.join(ROOT, '..', '04-solution', 'schema', 'schema.json'), 'utf8'));
+  const out = {};
+  schema.lists.filter((l) => BIG_LISTS.includes(l.key)).forEach((l) => {
+    const cols = l.fields.concat(l.standard ? schema.standardColumns : []).filter((f) => f.indexed).map((f) => f.name);
+    out[l.title] = cols;
+  });
   return out;
 }
 
@@ -98,7 +110,9 @@ function build() {
   const rules = ['/* Built by tools/build.js from src/core/config.js, dates.js, domain/rules.js and agenda.js for the mock. Do not edit. */',
     'window.MockRules = (function () {', "  'use strict';", '  var CH = {};',
     ['src/core/config.js', 'src/core/dates.js', 'src/domain/rules.js', 'src/domain/agenda.js'].map((m) => read(m).split('\n').map((l) => l ? '  ' + l : l).join('\n')).join('\n'),
-    '  return { config: CH.config, dates: CH.dates, rules: CH.rules, agenda: CH.agenda };', '})();', ''].join('\n');
+    '  return { config: CH.config, dates: CH.dates, rules: CH.rules, agenda: CH.agenda };', '})();',
+    // the indexed columns of the lists that can pass the list view threshold, from the schema Setup builds
+    'window.MockIndexes = ' + JSON.stringify(bigListIndexes()) + ';', ''].join('\n');
 
   return { 'dist/competency-hub.js': js, 'dist/competency-hub.html': layout, 'dist/BUILD_MANIFEST.json': manifest, 'mock/index.html': mock, 'mock/rules.js': rules };
 }

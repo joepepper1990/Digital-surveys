@@ -1,6 +1,6 @@
 # ESG Competency Hub – Power Automate solution
 
-`ESGCompetencyHub_1_7_0_0_unmanaged.zip` is the solution to import into Power Automate. It holds nine flows, which
+`ESGCompetencyHub_1_8_0_0_unmanaged.zip` is the solution to import into Power Automate. It holds ten flows, which
 all ship **Off** so nothing runs until you turn them on:
 
 | Flow | What it does |
@@ -12,6 +12,7 @@ all ship **Off** so nothing runs until you turn them on:
 | **ESG Competency Hub \| 5 Meetings** | Books, changes, cancels and starts monthly meetings. It sends the Outlook invitation, update or cancellation from the Outlook connection's calendar, and fixes the agenda when the meeting starts |
 | **ESG Competency Hub \| 6 Administration** | Records administrators' changes: people, their areas, meeting rights and notice posting, settings, and the decisions on changes needing attention |
 | **ESG Competency Hub \| 7 Minutes** | Finalises and amends the minutes of monthly meetings. Finalising locks the meeting's record folder, then freezes what was recorded into the meeting's own folder (only this flow writes there); if anything turns out missing once it is locked, the meeting goes back to In progress and the folder reopens. Then it makes the PDF minutes |
+| **ESG Competency Hub \| 8 Clean-up** | Used once before go-live by an administrator: moves the test records, and everything that depends on them, to the recycle bin (93 days), writes one audit event and switches test marking off. Its own flow because flow 6 is near Power Automate's 500-step limit |
 | **ESG Competency Hub \| P-INV Invitations probe** | Run by hand, once, before invitations are relied on: makes a TEST event with one attendee, moves it, finds it by its hidden reference and cancels it. Turn it off again afterwards |
 | **ESG Competency Hub \| P-PDF PDF probe** | Run by hand, once, before PDF minutes are relied on: turns a sample page into a PDF with OneDrive and saves it in Meeting Minutes as a TEST file. Turn it off again afterwards |
 
@@ -28,6 +29,11 @@ event). Before every new attempt, and whenever a call's result was uncertain, *5
 reference and uses it rather than making another. A cancellation that finds no event counts as done. The queue monitor
 tries a failed invitation again, up to three times, then tells the administrators; the meeting itself stands. With the
 setting *Outlook invitations* off, no invitations are sent and people add meetings to their calendars from the Hub.
+
+**Checks (Release 6).** `test_security.py` sends every kind of request from someone with no right to it, and a request
+from someone else's folder to every flow: all are refused and nothing changes. The simulator enforces SharePoint's list
+view threshold on every query to the six lists that can grow past 5,000 items, in every test; `test_load.py` runs the
+flows against 10,000 actions, 60,000 History rows and 5,000 notices.
 
 **PDF minutes.** After finalising or an amendment is recorded, *7 Minutes* builds the minutes as HTML from the frozen
 record only, writes it to the OneDrive of the connection's account under a unique name, converts it there (*Convert

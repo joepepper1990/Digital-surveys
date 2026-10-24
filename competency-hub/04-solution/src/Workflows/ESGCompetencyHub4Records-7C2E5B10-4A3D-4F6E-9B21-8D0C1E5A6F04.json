@@ -558,6 +558,7 @@
                 "mtg": "@{outputs('Site_path')}/Lists/Meetings",
                 "items": "@{outputs('Site_path')}/Lists/MeetingItems",
                 "cal": "@{outputs('Site_path')}/Lists/CalendarEvents",
+                "fb": "@{outputs('Site_path')}/Lists/Feedback",
                 "reqRoot": "@{outputs('Site_path')}/Lists/Requests",
                 "actRoot": "@{outputs('Site_path')}/Lists/Actions",
                 "histRoot": "@{outputs('Site_path')}/Lists/History",

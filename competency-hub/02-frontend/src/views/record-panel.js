@@ -75,7 +75,7 @@ CH.views.recordPanel = (function () {
       var values = { Title: (body || entryType + ': ' + r.title).slice(0, 80), ClientKey: clientKey, ParentType: cfg.parentType, ParentId: r.id,
         EntryType: entryType, IsFlagEvent: entryType === 'Comment' ? '0' : '1', Body: body || '' };
       try {
-        await app.sp.addToFolder('updates', r.areaKey, values);
+        await app.sp.addToFolder('updates', r.areaKey, Object.assign(values, app.testMark()));
       } catch (error) {
         // an unclear failure may still have saved it: look for it by its key before reporting a failure
         var found = await app.sp.items(CH.config.lists.updates.title, "$select=Id&$filter=ClientKey eq '" + CH.sp.escapeOData(clientKey) + "'", 1).catch(function () { return { rows: [] }; });

@@ -3,7 +3,7 @@
 <title>Competency Hub – local test</title>
 <style>body{margin:0;background:#f3f6f8} .mock-bar{font:13px Segoe UI,sans-serif;background:#222;color:#fff;padding:6px 12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 .mock-bar select{font:inherit}
-.mock-scope .ch {--navy: #13516b; --navy-soft: #e7f0f6; --accent: #ef7d3a; --accent-dark: #c95f1f; --ink: #16222c; --muted: #5b6774; --bg: #f3f6f8; --card: #ffffff; --line: #dde3e8; --focus: #2b78d0; --late: #a4262c; --late-bg: #fde8e9; --soon: #8a5a00; --soon-bg: #fff3d6; --ok: #1b7a45; --ok-bg: #e6f3eb; box-sizing: border-box; background: var(--bg); color: var(--ink); font: calc(16 * var(--u))/1.55 "Segoe UI", system-ui, sans-serif; position: relative; --scale: 1; --text: 1; --u: calc(1px * var(--scale) * var(--text)); min-height: calc(100vh - 180px); display: flex; flex-direction: column;}
+.mock-scope .ch {--navy: #13516b; --navy-soft: #e7f0f6; --accent: #ef7d3a; --accent-dark: #c95f1f; --accent-strong: #b8561b; --accent-strong-dark: #9a4512; --ink: #16222c; --muted: #5b6774; --bg: #f3f6f8; --card: #ffffff; --line: #dde3e8; --focus: #2b78d0; --late: #a4262c; --late-bg: #fde8e9; --soon: #8a5a00; --soon-bg: #fff3d6; --ok: #1b7a45; --ok-bg: #e6f3eb; box-sizing: border-box; background: var(--bg); color: var(--ink); font: calc(16 * var(--u))/1.55 "Segoe UI", system-ui, sans-serif; position: relative; --scale: 1; --text: 1; --u: calc(1px * var(--scale) * var(--text)); min-height: calc(100vh - 180px); display: flex; flex-direction: column;}
 .mock-scope .ch * {box-sizing: border-box;}
 .mock-scope .ch button, .mock-scope .ch input, .mock-scope .ch select, .mock-scope .ch textarea {font: inherit;}
 .mock-scope .ch button {cursor: pointer;}
@@ -37,8 +37,8 @@
 .mock-scope .ch .btn {border: 1px solid #c3ccd4; background: #fff; color: var(--ink); border-radius: calc(8 * var(--u)); padding: calc(10 * var(--u)) calc(18 * var(--u)); font-weight: 600; min-height: calc(44 * var(--u));}
 .mock-scope .ch .btn:hover {background: #f4f7f9;}
 .mock-scope .ch .btn:disabled {opacity: .6; cursor: default;}
-.mock-scope .ch .btn-main {background: var(--accent); border-color: var(--accent); color: #fff;}
-.mock-scope .ch .btn-main:hover {background: var(--accent-dark);}
+.mock-scope .ch .btn-main {background: var(--accent-strong); border-color: var(--accent-strong); color: #fff;}
+.mock-scope .ch .btn-main:hover {background: var(--accent-strong-dark);}
 .mock-scope .ch .btn-link {background: none; border: 0; color: var(--navy); text-decoration: underline; padding: calc(6 * var(--u)) 0;}
 .mock-scope .ch .when {font-weight: 600; white-space: nowrap; padding: calc(3 * var(--u)) calc(11 * var(--u)); border-radius: calc(999 * var(--u)); font-size: calc(14 * var(--u)); display: inline-block; margin-left: calc(6 * var(--u));}
 .mock-scope .ch .w-late {color: var(--late); background: var(--late-bg);}
@@ -301,7 +301,7 @@
 </style></head><body>
 <div class="mock-bar"><b>Local test with simulated SharePoint – synthetic data only</b><label>Sign in as <select id="mock-user"></select></label>
 <label>Simulate <select id="mock-mode"><option value="">Normal</option><option value="slow">Slow responses</option><option value="people403">People list denied (403)</option><option value="actions404">Actions list missing (404)</option><option value="actionsPartial">Actions over the read limit</option><option value="unknown">Unknown user</option><option value="duplicate">Duplicate person</option><option value="left">Person marked Left</option><option value="flowSlow">Request flow very slow</option><option value="flowFail">Request flow fails</option><option value="limited">Processing down (limited mode)</option><option value="attention">Changes needing attention</option></select></label></div>
-<div class="mock-scope"><div class="ch" data-ch-root data-ch-version="0.9.0"><p>Loading the ESG Competency Hub…</p></div></div>
+<div class="mock-scope"><div class="ch" data-ch-root data-ch-version="1.0.0"><p>Loading the ESG Competency Hub…</p></div></div>
 <script src="seed.js"></script>
 <script src="rules.js"></script>
 <script src="flow-sim.js"></script>

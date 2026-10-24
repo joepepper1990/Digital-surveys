@@ -7,4 +7,7 @@ python3 test_validate.py
 python3 test_flow.py
 python3 test_records.py
 python3 test_meetings.py
+python3 test_cleanup.py
+python3 test_load.py
+python3 test_security.py
 python3 check_package.py

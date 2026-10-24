@@ -301,6 +301,7 @@
                 "mtg": "@{outputs('Site_path')}/Lists/Meetings",
                 "items": "@{outputs('Site_path')}/Lists/MeetingItems",
                 "cal": "@{outputs('Site_path')}/Lists/CalendarEvents",
+                "fb": "@{outputs('Site_path')}/Lists/Feedback",
                 "reqRoot": "@{outputs('Site_path')}/Lists/Requests",
                 "actRoot": "@{outputs('Site_path')}/Lists/Actions",
                 "histRoot": "@{outputs('Site_path')}/Lists/History",
@@ -580,7 +581,7 @@
                   "actions": {
                     "Which_flow_has_stopped": {
                       "type": "If",
-                      "expression": "@contains(createArray('RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting'), string(items('Each_stalled_change')?['RequestType']))",
+                      "expression": "@contains(createArray('RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting', 'RemoveTestRecords'), string(items('Each_stalled_change')?['RequestType']))",
                       "actions": {
                         "Administration_flow_has_stopped": {
                           "type": "SetVariable",

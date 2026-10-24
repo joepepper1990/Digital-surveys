@@ -46,7 +46,7 @@ CH.views.feedback = (function () {
       var values = { Title: (v.type + ': ' + v.description.trim()).slice(0, 255), FeedbackType: v.type, Description: v.description.trim(), Status: 'New',
         PageView: String(app.state.view || 'home').slice(0, 100), ClientKey: clientKey };
       try {
-        await app.sp.addToFolder('feedback', '', values);
+        await app.sp.addToFolder('feedback', '', Object.assign(values, app.testMark()));
       } catch (error) {
         // An unclear failure may still have saved it. The sender can read their own item, so look for it first.
         var found = await app.sp.items(CH.config.lists.feedback.title, "$select=Id&$filter=ClientKey eq '" + CH.sp.escapeOData(clientKey) + "'", 1).catch(function () { return { rows: [] }; });

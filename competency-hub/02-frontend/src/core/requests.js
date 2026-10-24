@@ -10,7 +10,7 @@ CH.requests = (function () {
   // Still on its way: waiting, being processed, or failed and being retried by the queue monitor (spec REL-2).
   var OPEN_STATUSES = ['Submitted', 'Processing', 'Failed'];
   // An administrator's decision about another change: it is confirmed by its own request alone.
-  var ADMIN_TYPES = ['RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting'];
+  var ADMIN_TYPES = ['RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting', 'RemoveTestRecords'];
   // Notices, comments and the register (4 Records): confirmed by their History event, which is written before Completed.
   var RECORD_TYPES = ['EditNotice', 'ArchiveNotice', 'PinNotice', 'HideComment', 'RaiseRegisterEntry', 'UpdateRegisterEntry', 'LinkActionToEntry', 'UnlinkActionFromEntry'];
   // Meetings (5 Meetings): also confirmed by their History event.

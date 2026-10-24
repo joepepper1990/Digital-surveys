@@ -398,6 +398,38 @@ window.MockFlow = (function () {
           ActorId: req.AuthorId, EventTime: new Date().toISOString(), FileDirRef: ROOT + 'History/Administration' });
         return finish(req, 'Completed', 'Setting saved.');
       }
+      // ---- removing the test records (8 Clean-up): the same checks; records and what depends on them go
+      if (req.RequestType === 'RemoveTestRecords') {
+        if (!requester.IsAdministrator) return finish(req, 'Rejected', 'Only a Competency Hub administrator can do this.');
+        if (String(payload.confirm || '').trim() !== 'REMOVE TEST DATA') return finish(req, 'Rejected', 'Type REMOVE TEST DATA to confirm.');
+        var testing = data['Competency Hub Settings'].filter(function (x) { return x.Title === 'PreGoLiveTesting'; })[0];
+        if (!testing || testing.Value !== 'Yes') return finish(req, 'Rejected', 'Test marking is already off: the Hub is live, so nothing is removed this way.');
+        var LISTS = { 'Action': 'Actions', 'Notice': 'Noticeboard', 'Register Entry': 'Improvements and Degradations', 'Meeting': 'Meetings', 'Feedback': 'Feedback' };
+        var set = [];
+        Object.keys(LISTS).forEach(function (t) {
+          var inc = ((payload.include || {})[t] || []).map(Number);
+          data[LISTS[t]].forEach(function (r) { if (r.IsTestRecord || inc.indexOf(r.Id) >= 0) set.push({ type: t, id: r.Id, title: r.Title }); });
+        });
+        var has = function (t, id) { return set.some(function (x) { return x.type === t && x.id === Number(id); }); };
+        var behind = data.Actions.filter(function (a) {
+          return ((a.SourceType === 'Register' && has('Register Entry', a.SourceId)) || (a.SourceType === 'Meeting' && has('Meeting', a.SourceId))) && !has('Action', a.Id);
+        });
+        if (behind.length) return finish(req, 'Rejected', 'These actions depend on records being removed. Include them too: ' +
+          behind.slice(0, 10).map(function (a) { return 'ACT-' + a.Id + ' ' + a.Title; }).join('; ') + '.');
+        var drop = function (title, keep) { data[title] = data[title].filter(keep); };
+        set.forEach(function (x) {
+          drop(LISTS[x.type], function (r) { return r.Id !== x.id; });
+          drop('History', function (r) { return !(r.RecordType === x.type && r.RecordId === x.id); });
+          drop('Updates', function (r) { return !(r.ParentType === x.type && r.ParentId === x.id); });
+          drop('Requests', function (r) { return r === req || !(r.TargetType === x.type && Number(r.TargetId) === x.id); });
+          if (x.type === 'Meeting') drop('Meeting Items', function (r) { return r.MeetingId !== x.id; });
+        });
+        testing.Value = 'No';
+        data.History.push({ Id: nextId(data.History), RowKind: 'Event', RequestKey: req.RequestKey + '|1', RecordType: 'System', EventType: 'Test Records Removed',
+          Note: set.map(function (x) { return x.type + ' ' + x.id + ': ' + x.title; }).join('; '), ActorId: req.AuthorId, EventTime: new Date().toISOString(),
+          FileDirRef: ROOT + 'History/Administration' });
+        return finish(req, 'Completed', set.length + ' test records removed, with everything that depended on them. They stay in the recycle bin for 93 days. Test marking is now off.');
+      }
       if (RECORDS.indexOf(req.RequestType) >= 0) return records(req, payload, requester, access);
       if (MEETINGS.indexOf(req.RequestType) >= 0) return meetings(req, payload, requester, access);
 

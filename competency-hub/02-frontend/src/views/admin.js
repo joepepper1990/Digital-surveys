@@ -180,7 +180,7 @@ CH.views.admin = (function () {
     if (showing()) app.refreshView();
   }
 
-  var TABS = ['Changes needing attention', 'People', 'Settings', 'Feedback'];
+  var TABS = ['Changes needing attention', 'People', 'Settings', 'Feedback', 'Remove test data'];
 
   function render(app) {
     if (!app.access.isAdministrator) {
@@ -199,7 +199,7 @@ CH.views.admin = (function () {
           if (sel) sel.focus();
         } });
     }));
-    var panel = tab === 1 ? CH.views.people.list(app) : tab === 2 ? CH.views.settings.render(app) : tab === 3 ? CH.views.feedback.review(app) : [
+    var panel = tab === 1 ? CH.views.people.list(app) : tab === 2 ? CH.views.settings.render(app) : tab === 3 ? CH.views.feedback.review(app) : tab === 4 ? CH.views.cleanup.render(app) : [
       healthCard(app),
       ui.card('Changes needing attention', [
         h('p', { class: 'muted small', text: 'Changes that failed three times, and runs that stopped more than ' + QUIET_MINUTES + ' minutes ago. The queue monitor retries the rest by itself.' }),

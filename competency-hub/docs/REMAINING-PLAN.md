@@ -8,12 +8,12 @@ specification (`PLAN.md`, Revision 5) and the decisions made since. Where the tw
 | Part | Built and tested here | On the site |
 |---|---|---|
 | Site, lists, groups, Setup | Setup 1.3 | Setup 1.1 |
-| App | 0.9.0: actions, safety net, Administration (People, Settings, Feedback), the *My week* home page, notices, register, Management page, meetings, the live meeting and minutes | 0.3.0 |
-| Flows | 1.7.0.0: 1 Daily tasks, 2 Request queue, 3 Queue monitor, 4 Records, 5 Meetings, 6 Administration, 7 Minutes, and the P-INV and P-PDF probes | 1.2.0.0 |
+| App | 1.0.0: actions, safety net, Administration (People, Settings, Feedback, Remove test data), the *My week* home page, notices, register, Management page, meetings, the live meeting and minutes | 0.3.0 |
+| Flows | 1.8.0.0: 1 Daily tasks, 2 Request queue, 3 Queue monitor, 4 Records, 5 Meetings, 6 Administration, 7 Minutes, 8 Clean-up, and the P-INV and P-PDF probes | 1.2.0.0 |
 | Permission probe | Built | Not run |
 
-**Built so far:** Releases 1 to 5, and the home-page design. That is about 167 of the ~194 Phase 1 hours.
-**Left to build:** about 27 hours, in Release 6.
+**Built so far:** all six releases and the home-page design: Phase 1 is built and tested locally (24 October 2026).
+**Left:** installing on the site and the checks there (HOW-TO), then going live (`GO-LIVE.html`).
 
 **Decisions settled since Revision 5:**
 - Everything runs on your account, and no service account is used. That covers:
@@ -251,7 +251,17 @@ Run a complete TEST meeting with the test colleague:
 | **Add the staff** (GO) | Administration → People → paste the list of 28. Each person shows *Done and verified* once their access has been read back. |
 | **Go-live** | A final health check. Staff get an email from you with the WebView link and a one-page "how to" that I write. |
 
-**Delivered:** solution 1.8.0.0, app 1.0.0, and the go-live note.
+**Delivered:** solution 1.8.0.0, app 1.0.0, the go-live note (`GO-LIVE.html`) and the staff guide (`STAFF-GUIDE.html`), built and
+tested locally on 24 October 2026.
+
+**As built, compared with the above:**
+- The clean-up is a flow of its own, *8 Clean-up* (flow 6 is near the 500-step limit). The page is *Administration →
+  Remove test data*.
+- The security sweep found two things, both fixed: flow 6 looked a new person up in Microsoft 365 before checking the
+  requester was an administrator, and a badly shaped list of areas stopped the run instead of being refused.
+- The accessibility checks found the main buttons' white-on-orange text at 2.7:1; they now use a darker orange (4.8:1).
+- The load test and the list view threshold are checked in the simulator for every query, not only once.
+- Power Automate use (Q4) and adding the staff (GO) are steps on the site, in the go-live note.
 
 ---
 

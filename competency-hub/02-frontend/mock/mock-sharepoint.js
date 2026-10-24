@@ -12,10 +12,20 @@ window.MockSharePoint = (function () {
   var data = window.MockSeed(today);
   var writes = [];
   var requests = [];
+  var thresholdHits = [];          // queries SharePoint would refuse on a large list (none expected)
 
   if (mode === 'duplicate') {
     var me = data.People.filter(function (p) { return p.SiteUserId === asId; })[0];
     if (me) data.People.push(Object.assign({}, me, { Id: 900 }));
+  }
+  // Attack strings in every free-text value people can type (the XSS sweep, spec Q1): all must show as plain text.
+  if (mode === 'xss') {
+    var ATTACK = ' <img src=x onerror="window.__xss=1"><script>window.__xss=1</script>"\'><b>bold</b>';
+    var TEXT = ['Title', 'Body', 'Description', 'Notes', 'Location', 'Blocker', 'CancellationReason', 'Response', 'ClosureNote', 'AmendmentReason'];
+    Object.keys(data).forEach(function (list) {
+      if (list === 'People' || list === 'Competencies' || list === 'Competency Hub Settings') return;
+      data[list].forEach(function (row) { TEXT.forEach(function (f) { if (typeof row[f] === 'string' && row[f]) row[f] += ATTACK; }); });
+    });
   }
   if (mode === 'left') data.People.forEach(function (p) { if (p.SiteUserId === asId) p.Status = 'Left'; });
   // Limited mode: the queue monitor reports that changes are not being picked up.
@@ -110,6 +120,18 @@ window.MockSharePoint = (function () {
     if (mode === 'actions404' && title === 'Actions') return respond(404, { error: 'List not found' });
     if (!data[title]) return respond(404, { error: 'List not found' });
     var q = query(url);
+    // SharePoint's list view threshold, on every query to a list that can grow past 5,000 items: the filter must start
+    // with an indexed column and the order be by one (an unfiltered read in Id order is served from the Id index)
+    var indexed = (window.MockIndexes || {})[title];
+    if (indexed) {
+      var ok = function (col) { return col === 'Id' || col === 'ID' || indexed.indexOf(col) >= 0 || (/Id$/.test(col) && indexed.indexOf(col.slice(0, -2)) >= 0); };
+      var first = /^\s*\(?\s*(?:startswith\()?(\w+)/.exec(q.$filter || '');
+      var orderCol = (q.$orderby || '').split(' ')[0];
+      if ((q.$filter && (!first || !ok(first[1]))) || (orderCol && !ok(orderCol)) || (!q.$filter && orderCol && orderCol !== 'Id')) {
+        thresholdHits.push(title + ': ' + (q.$filter || '') + (q.$orderby ? ' order ' + q.$orderby : ''));
+        return respond(500, { error: { message: { value: 'The attempted operation is prohibited because it exceeds the list view threshold.' } } });
+      }
+    }
     var rows = data[title].filter(function (r) { return matches(r, q.$filter); });
     // Feedback is add-only for everyone but administrators: each person reads only their own (spec ADM-5).
     if (title === 'Feedback') {
@@ -159,6 +181,7 @@ window.MockSharePoint = (function () {
     }
     var id = data[title].reduce(function (m, n) { return Math.max(m, n.Id); }, 0) + 1;
     var row = store.row(values, id, path);
+    if (values.IsTestRecord !== undefined) row.IsTestRecord = values.IsTestRecord === '1';
     data[title].push(row);
     if (title === 'Requests') flow.schedule(row, mode);
     return respond(200, { value: body.formValues.map(function (f) { return { FieldName: f.FieldName, FieldValue: f.FieldValue, HasException: false }; })
@@ -289,5 +312,5 @@ window.MockSharePoint = (function () {
     current.onInitialize();
   }
 
-  return { start: start, reload: reload, ctx: ctx, writes: writes, requests: requests, data: data };
+  return { start: start, reload: reload, ctx: ctx, writes: writes, requests: requests, thresholdHits: thresholdHits, data: data };
 })();

@@ -57,7 +57,7 @@
               "expression": "@not(equals(triggerBody()?['{IsFolder}'], true))"
             },
             {
-              "expression": "@not(contains(createArray('RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting', 'EditNotice', 'ArchiveNotice', 'PinNotice', 'HideComment', 'RaiseRegisterEntry', 'UpdateRegisterEntry', 'LinkActionToEntry', 'UnlinkActionFromEntry', 'ScheduleMeeting', 'UpdateMeeting', 'CancelMeeting', 'StartMeeting', 'FinaliseMeeting', 'AmendMeeting'), string(triggerBody()?['RequestType'])))"
+              "expression": "@not(contains(createArray('RetryTransaction', 'CancelTransaction', 'RevertTransaction', 'AddPerson', 'UpdatePerson', 'PersonLeft', 'ReactivatePerson', 'UpdateSetting', 'EditNotice', 'ArchiveNotice', 'PinNotice', 'HideComment', 'RaiseRegisterEntry', 'UpdateRegisterEntry', 'LinkActionToEntry', 'UnlinkActionFromEntry', 'ScheduleMeeting', 'UpdateMeeting', 'CancelMeeting', 'StartMeeting', 'FinaliseMeeting', 'AmendMeeting', 'RemoveTestRecords'), string(triggerBody()?['RequestType'])))"
             }
           ],
           "runtimeConfiguration": {
@@ -558,6 +558,7 @@
                 "mtg": "@{outputs('Site_path')}/Lists/Meetings",
                 "items": "@{outputs('Site_path')}/Lists/MeetingItems",
                 "cal": "@{outputs('Site_path')}/Lists/CalendarEvents",
+                "fb": "@{outputs('Site_path')}/Lists/Feedback",
                 "reqRoot": "@{outputs('Site_path')}/Lists/Requests",
                 "actRoot": "@{outputs('Site_path')}/Lists/Actions",
                 "histRoot": "@{outputs('Site_path')}/Lists/History",

@@ -69,11 +69,11 @@ CH.views.noticeForm = (function () {
       submit.disabled = true;
       submit.textContent = 'Posting…';
       try {
-        await app.sp.addToFolder('notices', key, {
+        await app.sp.addToFolder('notices', key, Object.assign({
           Title: values.title.trim(), Body: values.body.trim(), Category: values.category,
           IsImportant: important.checked && app.access.canWrite(key) ? '1' : '0',
           ClientKey: clientKey, CreatedRequestKey: 'U|' + clientKey, Status: 'Active'
-        });
+        }, app.testMark()));
         dlg.close();
         app.noticePosted(key);
       } catch (error) {

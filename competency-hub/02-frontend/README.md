@@ -2,6 +2,18 @@
 
 Plain HTML, CSS and JavaScript, delivered as a Welcome by Accelerator 365 custom layout. Same-origin SharePoint REST runs as the signed-in user. There are no libraries and no external calls.
 
+## Version 1.0.0: Release 6 – checks and go-live
+
+- **Administration → Remove test data** (`views/cleanup.js`), used once before go-live: every record marked as a test
+  record, and the older ones an administrator ticks (nothing is chosen by title); the same "nothing left behind" rule as
+  the flow; a typed `REMOVE TEST DATA`. Sent to the *8 Clean-up* flow.
+- While test marking is on (`PreGoLiveTesting`), what people add directly – notices, comments, flags, updates,
+  feedback – is marked as a test record, as the flows mark theirs (`app.testMark`).
+- Checked: an XSS sweep with attack strings in every typed value (mode `xss` in the mock); a query audit with
+  SharePoint's list view threshold enforced by the mock on the six large lists; accessibility (every control named,
+  dialogs modal and labelled, unique ids, 683 px = 200 % zoom without sideways scrolling); colour contrast (unit test).
+- Fixed: white text on the orange main buttons was 2.7:1; the buttons now use a darker orange (4.8:1, WCAG AA).
+
 ## Version 0.9.0: Release 5 – running the meeting, finalising, minutes and amendments
 
 - **The meeting in progress** (`views/meeting-panel.js`), for the people who run the area's meetings and management:

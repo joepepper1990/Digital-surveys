@@ -4,7 +4,7 @@ window.MockRules = (function () {
   var CH = {};
   // Fixed names and limits. Lists are addressed by display title; folders by list URL name.
   CH.config = {
-    VERSION: '0.9.0',
+    VERSION: '1.0.0',
     ENVIRONMENT: 'TEST',
     lists: {
       competencies: { title: 'Competencies', url: 'Competencies' },
@@ -606,3 +606,4 @@ window.MockRules = (function () {
 
   return { config: CH.config, dates: CH.dates, rules: CH.rules, agenda: CH.agenda };
 })();
+window.MockIndexes = {"Actions":["Competency","IsCrossCompetency","AssignedTo","RaisedBy","DateRaised","DueDay","Status","IsOpen","ExtensionCount","DateCompleted","DateClosed","SourceId","IsTestRecord","PendingRequestKey","LastRequestKey","CreatedRequestKey"],"History":["RowKind","RequestKey","RecordId","Competency","EventType","Actor","EventTime","WasOverdue","MeetingId","RequestItemId","RequestType","FirstClaimedAt","State","LeaseUntil","NextAttemptAfter"],"Updates":["ClientKey","ParentId","EntryType","IsFlagEvent","IsTestRecord"],"Meeting Items":["RowKey","RecordKey","MeetingId","SourceId"],"Requests":["RequestKey","RequestType","TargetId","MeetingId","Status","ProcessedAt"],"Notification Log":["NotificationKey","Token","NotificationType","Recipient","RecordId","State","SendingSince","NextAttemptAfter","LeaseUntil","DueDay"]};

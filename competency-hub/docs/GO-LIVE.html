@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ESG Competency Hub – go-live</title>
+<style>
+  body { font-family: Segoe UI, Arial, sans-serif; font-size: 16px; line-height: 1.5; color: #16222c; background: #fff; max-width: 860px; margin: 0 auto; padding: 24px 16px; }
+  h1 { color: #13516b; font-size: 26px; margin-bottom: 4px; }
+  h2 { color: #13516b; font-size: 20px; margin-top: 32px; border-bottom: 2px solid #ef7d3a; padding-bottom: 4px; }
+  h3 { color: #13516b; font-size: 17px; margin-top: 22px; }
+  ol > li { margin-bottom: 12px; }
+  ul.sub { margin-top: 6px; }
+  code { background: #eef2f5; padding: 1px 5px; border-radius: 4px; font-size: 15px; }
+  .note { background: #fff3d6; color: #6b4a00; padding: 10px 14px; border-radius: 6px; }
+  .done { background: #e6f3eb; color: #1b5e37; padding: 10px 14px; border-radius: 6px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border-bottom: 1px solid #d9dfe5; padding: 6px 8px; text-align: left; vertical-align: top; }
+</style>
+</head>
+<body>
+<h1>ESG Competency Hub – going live</h1>
+<p>The steps from a finished TEST system to everyone using the Hub, in order. Do them once Releases 1 to 6 are installed (HOW-TO Parts A to I) and every check there has passed. Updated 24 October 2026.</p>
+<p class="note">Each step changes the live site. Nothing here can be undone in the app, apart from the clean-up, which keeps everything in the recycle bin for 93 days.</p>
+
+<h2>1. A week before</h2>
+<ol>
+  <li><strong>Permission probe again.</strong> Run the P2 probe with the test colleague (HOW-TO Part E). Every row should pass, including the refused notice after <em>Can post notices</em> is switched off.</li>
+  <li><strong>Power Automate use.</strong> In the Power Platform admin centre, open <em>Analytics → Power Automate</em> (or each flow's <em>Analytics</em>) and note the runs and actions per day over a normal week. Your account's daily allowance (6,000 requests) is shared with the 1-to-1 flows. If the total is above about 4,500 a day, reduce the queue monitor's hours under <em>Administration → Settings → Queue monitor hours</em> (for example 07:00–18:00, hourly outside), and tell me.</li>
+  <li><strong>The staff list.</strong> Have the 28 people ready as one line each: <code>email, role, area keys</code> (for example <code>firstname.lastname@…, Technician, GRS RP</code>). Engineers get <em>Can run meetings</em> in their areas; technicians don't, unless you tick it later.</li>
+</ol>
+
+<h2>2. On the day, before anyone is told</h2>
+<ol>
+  <li><strong>Health.</strong> <em>Administration</em>: the first card should say processing, reminders, emails and meetings are all working, and <em>Changes needing attention</em> should be empty.</li>
+  <li><strong>Remove the test data.</strong> <em>Administration → Remove test data</em>. Everything marked as a test record is listed. Under <em>Made before marking</em>, tick the early TEST actions, notices and meetings from before Release 2. Type <code>REMOVE TEST DATA</code> and confirm. Within a few minutes it reports how many were removed, and test marking is switched off. (Turn <em>ESG Competency Hub | 8 Clean-up</em> on first, and off again afterwards.)</li>
+  <li><strong>Add the staff.</strong> <em>Administration → People → Add people → Or paste a list</em>: paste the 28 lines and send them. Each person shows <em>Done and verified</em> once their access has been read back. Any line that can't be found in Microsoft 365 is reported; correct it and send that one again.</li>
+  <li><strong>Check two people.</strong> Open one technician and one engineer in People: their areas, meeting rights and notice posting are as intended.</li>
+  <li><strong>Book the first real meetings</strong>, or let each area's engineers do it on the first day.</li>
+</ol>
+
+<h2>3. Tell everyone</h2>
+<p>Send one email from yourself, with the staff guide (<code>STAFF-GUIDE.html</code>, or printed as a PDF) attached. A suggested text:</p>
+<div class="done"><p><strong>Subject:</strong> The ESG Competency Hub is live</p>
+<p>From today, our actions, notices, improvements and degradations, and monthly meetings are in the ESG Competency Hub. Please use this link, and bookmark it: <em>[the Hub page address ending ?env=WebView]</em></p>
+<p>The Hub shows your own actions first. You'll get an email when an action is given to you, and a reminder before it is due. The one-page guide attached shows the main things you can do.</p>
+<p>If anything looks wrong or could be better, use the <strong>Feedback</strong> button at the bottom of any page.</p></div>
+
+<h2>4. The first fortnight</h2>
+<ul>
+  <li>Look at <em>Administration</em> each morning: health, changes needing attention, and new feedback.</li>
+  <li>Alert emails come to the administrators if anything needs them; Power Automate also emails you if a flow fails repeatedly.</li>
+  <li>Send me anything odd, with a screenshot and the time it happened.</li>
+</ul>
+
+<h2>If something goes wrong</h2>
+<table>
+  <tr><th>What you see</th><th>What to do</th></tr>
+  <tr><td>A banner saying changes can't be processed</td><td>In Power Automate, check that every ESG Competency Hub flow is On, and look at the run history of the one named in the banner.</td></tr>
+  <tr><td>Invitations not arriving</td><td>Check the Outlook connection; if it can't be fixed quickly, set <em>Outlook invitations</em> to No. People use <em>Add to my calendar</em>.</td></tr>
+  <tr><td>PDF minutes not appearing</td><td>Check the OneDrive connection; if it can't be fixed, set <em>PDF minutes</em> to No. Finalised minutes have <em>Print</em>.</td></tr>
+  <tr><td>Your account's password changed</td><td>In Power Automate, open each connection of the solution and sign in again.</td></tr>
+</table>
+</body>
+</html>

@@ -48,6 +48,7 @@ class HubFake:
         self.cal_fail = []                # outcomes for the next calendar calls, in order: 400, 500, 'timeout' (made, then times out)
         self.invites = []                 # every invitation, update and cancellation sent: (kind, subject, attendees)
         self.files = {}                   # files in document libraries: server-relative path -> content
+        self.recycled = []                # what went to the recycle bin, in order: (kind, list title or path, id or name)
         self.onedrive = {}                # the flow account's OneDrive: id -> {'name', 'body'}
         self.pdf_fail = []                # outcomes for the next OneDrive conversions, in order: 400 (refused), 'timeout'
         self.clock = datetime(2026, 10, 21, 9, 30, tzinfo=timezone.utc)
@@ -322,6 +323,37 @@ class HubFake:
             if not u:
                 fail(404, 'User cannot be found.')
             return {'LoginName': u['LoginName']}
+        # the recycle bin: a folder (with everything in it) or a file in a library
+        m = re.match(r"^_api/web/GetFolderByServerRelativePath\(decodedurl='((?:[^']|'')*)'\)/recycle$", path)
+        if method == 'POST' and m:
+            url = m.group(1).replace("''", "'")
+            self._write('RECYCLE', url)
+            for lst in self.lists.values():
+                if url.startswith(lst['root'] + '/'):
+                    rel = url[len(lst['root']) + 1:]
+                    d, _, leaf = rel.rpartition('/')
+                    fold = self._find_folder(lst, d, leaf)
+                    if not fold:
+                        break
+                    for iid, it in list(lst['items'].items()):
+                        if it is fold or it['dir'] == rel or it['dir'].startswith(rel + '/'):
+                            del lst['items'][iid]
+                    self.recycled.append(('folder', url, ''))
+                    return {}
+            fail(404, 'File Not Found.')
+        m = re.match(r"^_api/web/GetFolderByServerRelativePath\(decodedurl='((?:[^']|'')*)'\)/Files$", path)
+        if method == 'GET' and m:
+            url = m.group(1).replace("''", "'")
+            return {'value': [{'Name': p.rpartition('/')[2], 'ServerRelativeUrl': p} for p in sorted(self.files) if p.rpartition('/')[0] == url]}
+        m = re.match(r"^_api/web/GetFileByServerRelativePath\(decodedurl='((?:[^']|'')*)'\)/recycle$", path)
+        if method == 'POST' and m:
+            url = m.group(1).replace("''", "'")
+            self._write('RECYCLE', url)
+            if url not in self.files:
+                fail(404, 'File Not Found.')
+            del self.files[url]
+            self.recycled.append(('file', url, ''))
+            return {}
         m = re.match(r"^_api/web/GetFolderByServerRelativePath\(decodedurl='((?:[^']|'')*)'\)(/ListItemAllFields)?$", path)
         if method == 'GET' and m:
             url = m.group(1).replace("''", "'")
@@ -438,6 +470,7 @@ class HubFake:
             if '/' in c and c.split('/')[0] not in params.get('$expand', '').split(','):
                 fail(400, 'The query to field \'{0}\' is not valid. The $select query string must specify the target fields and the $expand query string must contains {1}.'.format(c, c.split('/')[0]))
         if method == 'GET' and rest == '/items':
+            self._threshold(lst, params)
             rows = sorted([it for it in lst['items'].values() if self._matches(lst, it, params.get('$filter'))], key=lambda x: x['id'])
             order = params.get('$orderby')
             if order:
@@ -449,6 +482,14 @@ class HubFake:
             if params.get('$top'):
                 rows = rows[:int(params['$top'])]
             return {'value': [self._out(lst, it, select, meta) for it in rows]}
+        m = re.match(r'^/items\((\d+)\)/recycle$', rest)
+        if method == 'POST' and m:
+            self._write('RECYCLE', lst['Title'] + rest)
+            it = lst['items'].pop(int(m.group(1)), None)
+            if not it:
+                fail(404, 'Item does not exist. It may have been deleted by another user.')
+            self.recycled.append(('item', lst['Title'], it['id']))
+            return {}
         m = re.match(r'^/items\((\d+)\)$', rest)
         if m:
             it = lst['items'].get(int(m.group(1)))
@@ -477,6 +518,26 @@ class HubFake:
         fail(400, 'not simulated: {0} {1}'.format(method, uri))
 
     # ------------------------------------------------------------------ filters
+    # The lists that can pass SharePoint's list view threshold (5,000 items, plan D.4). On them, a query must start
+    # with an indexed column (or Id) and sort only by one, or SharePoint refuses it once the list is large. Applied to
+    # every query in every test, whatever the list's size now, so a query that would fail later fails here first.
+    BIG = {'Actions', 'History', 'Updates', 'Meeting Items', 'Notification Log', 'Requests'}
+
+    def _threshold(self, lst, params):
+        if lst['Title'] not in self.BIG:
+            return
+        indexed = {n for n, f in lst['fields'].items() if f.get('indexed')}
+        ok = lambda col: col in ('Id', 'ID') or col in indexed or (col.endswith('Id') and col[:-2] in indexed)
+        flt = params.get('$filter', '')
+        m = re.match(r"\s*\(?\s*(?:startswith\()?(\w+)", flt)
+        order = params.get('$orderby')
+        if not flt and (not order or order.split(' ')[0] in ('Id', 'ID')):
+            return                                   # read in Id order, a page at a time: served from the Id index
+        if not flt or not m or not ok(m.group(1)):
+            fail(500, 'The attempted operation is prohibited because it exceeds the list view threshold (' + lst['Title'] + ': ' + (flt or 'no filter') + ').')
+        if order and not ok(order.split(' ')[0]):
+            fail(500, 'The attempted operation is prohibited because it exceeds the list view threshold (' + lst['Title'] + ' ordered by ' + order + ').')
+
     def _matches(self, lst, it, flt):
         if not flt:
             return True

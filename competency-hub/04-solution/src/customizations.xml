@@ -159,6 +159,32 @@
         <LocalizedName languagecode="1033" description="ESG Competency Hub | 7 Minutes" />
       </LocalizedNames>
     </Workflow>
+    <Workflow WorkflowId="{7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f0a}" Name="ESG Competency Hub | 8 Clean-up" Description="Used once before go-live, by an administrator: moves the test records and everything that depends on them to the recycle bin, then switches test marking off.">
+      <JsonFileName>/Workflows/ESGCompetencyHub8Cleanup-7C2E5B10-4A3D-4F6E-9B21-8D0C1E5A6F0A.json</JsonFileName>
+      <Type>1</Type>
+      <Subprocess>0</Subprocess>
+      <Category>5</Category>
+      <Mode>0</Mode>
+      <Scope>4</Scope>
+      <OnDemand>0</OnDemand>
+      <TriggerOnCreate>0</TriggerOnCreate>
+      <TriggerOnDelete>0</TriggerOnDelete>
+      <AsyncAutodelete>0</AsyncAutodelete>
+      <SyncWorkflowLogOnFailure>0</SyncWorkflowLogOnFailure>
+      <StateCode>0</StateCode>
+      <StatusCode>1</StatusCode>
+      <RunAs>1</RunAs>
+      <IsTransacted>1</IsTransacted>
+      <IntroducedVersion>1.8.0.0</IntroducedVersion>
+      <IsCustomizable>1</IsCustomizable>
+      <BusinessProcessType>0</BusinessProcessType>
+      <IsCustomProcessingStepAllowedForOtherPublishers>1</IsCustomProcessingStepAllowedForOtherPublishers>
+      <ModernFlowType>0</ModernFlowType>
+      <PrimaryEntity>none</PrimaryEntity>
+      <LocalizedNames>
+        <LocalizedName languagecode="1033" description="ESG Competency Hub | 8 Clean-up" />
+      </LocalizedNames>
+    </Workflow>
     <Workflow WorkflowId="{7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f07}" Name="ESG Competency Hub | P-INV Invitations probe" Description="Run once by hand before meeting invitations are relied on: makes a TEST event for tomorrow, moves it, finds it by its reference and cancels it.">
       <JsonFileName>/Workflows/ESGCompetencyHubPINVInvitationsprobe-7C2E5B10-4A3D-4F6E-9B21-8D0C1E5A6F07.json</JsonFileName>
       <Type>1</Type>

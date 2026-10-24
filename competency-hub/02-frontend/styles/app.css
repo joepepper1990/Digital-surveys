@@ -1,6 +1,8 @@
 /* Every selector is scoped under .SCOPE .ch by the build. ".ch" alone, or ".ch.something", means the app root. */
 .ch {
   --navy: #13516b; --navy-soft: #e7f0f6; --accent: #ef7d3a; --accent-dark: #c95f1f;
+  /* the orange behind white text: dark enough for 4.5:1 (WCAG AA); the brighter --accent is for lines and marks only */
+  --accent-strong: #b8561b; --accent-strong-dark: #9a4512;
   --ink: #16222c; --muted: #5b6774; --bg: #f3f6f8; --card: #ffffff; --line: #dde3e8;
   --focus: #2b78d0;
   --late: #a4262c; --late-bg: #fde8e9;
@@ -49,8 +51,8 @@ h2 { font-size: calc(18 * var(--u)); font-weight: 600; margin: 0 0 calc(12 * var
 .btn { border: 1px solid #c3ccd4; background: #fff; color: var(--ink); border-radius: calc(8 * var(--u)); padding: calc(10 * var(--u)) calc(18 * var(--u)); font-weight: 600; min-height: calc(44 * var(--u)); }
 .btn:hover { background: #f4f7f9; }
 .btn:disabled { opacity: .6; cursor: default; }
-.btn-main { background: var(--accent); border-color: var(--accent); color: #fff; }
-.btn-main:hover { background: var(--accent-dark); }
+.btn-main { background: var(--accent-strong); border-color: var(--accent-strong); color: #fff; }
+.btn-main:hover { background: var(--accent-strong-dark); }
 .btn-link { background: none; border: 0; color: var(--navy); text-decoration: underline; padding: calc(6 * var(--u)) 0; }
 
 .when { font-weight: 600; white-space: nowrap; padding: calc(3 * var(--u)) calc(11 * var(--u)); border-radius: calc(999 * var(--u)); font-size: calc(14 * var(--u)); display: inline-block; margin-left: calc(6 * var(--u)); }

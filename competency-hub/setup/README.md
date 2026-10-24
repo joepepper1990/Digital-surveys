@@ -25,7 +25,7 @@ library with its area folders, the Notice Posters group, `People.CanPostNotices`
 the History reporting columns, the test-record markers, new settings and the new
 choices on existing columns. **Version 1.3** (Release 4) adds the meeting end time
 (`Meetings.EndTime`) and two settings, `InvitesEnabled` and `PdfEnabled` (both Yes).
-Built and tested locally. Release 5 needs no change to Setup.
+Built and tested locally. Releases 5 and 6 need no change to Setup.
 
 **Check** changes nothing and lists what Apply would do. **Apply** needs `SETUP`
 typed first. It only adds what is missing and reads every change back, and can
