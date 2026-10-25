@@ -44,3 +44,15 @@ These were found on the site and agreed to wait until the next larger app change
    - The item is added at the bottom, but the screen goes back to the start of "All items".
    - Instead, the agenda should open the new item straight away, and "Add an item" should sit
      beside the item list, not at the very bottom of the dialog.
+7. **PDF minutes show SharePoint names (25 Oct 2026).**
+   - The minutes show "Pepper Joseph" and "Howe Richard".
+   - Use the Hub's own names, as `CH.names.display` gives them: Known as, else the first name
+     followed by the surname. Make the change in the PDF step of flows 3 and 7.
+8. **Section 9 of the minutes, actions raised at the meeting (25 Oct 2026).**
+   - The Outcome and Notes columns are empty, because they don't apply to a new action.
+   - Show Owner and Due instead.
+9. **Meeting agenda is too busy, and item kinds look alike (25 Oct 2026, the owner's comment in the TEST minutes).**
+   - Actions, issues and notices have the same outcome list and the same buttons.
+   - Each item should carry a plain label (Action, Issue, Notice, New business).
+   - Each item should show only the buttons that fit its kind.
+   - The aim is a simpler, friendlier meeting screen, done with items 5 and 6.
