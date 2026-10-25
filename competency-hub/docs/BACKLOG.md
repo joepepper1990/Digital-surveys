@@ -56,3 +56,12 @@ These were found on the site and agreed to wait until the next larger app change
    - Each item should carry a plain label (Action, Issue, Notice, New business).
    - Each item should show only the buttons that fit its kind.
    - The aim is a simpler, friendlier meeting screen, done with items 5 and 6.
+10. **Minutes Print view is poor (25 Oct 2026).**
+    - **What's wrong:** content repeats on the next page, there's a stray rule down the left,
+      and the spacing is very loose.
+    - **When the PDF minutes exist:** remove **Print**. Show **Open the PDF** and **Download PDF**,
+      and let people print from the PDF viewer.
+    - **When PDF minutes are switched off:** keep the print page only as the fallback, restyled to
+      match the PDF layout.
+    - **Fix the repeated content:** check the print stylesheet, which probably prints both the
+      page and the dialog.
