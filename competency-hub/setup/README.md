@@ -28,6 +28,11 @@ choices on existing columns. **Version 1.3** (Release 4) adds the meeting end ti
 Built and tested locally. Releases 5 and 6 need no change to Setup.
 **Version 1.3.1** (24 October 2026) fixes Check on a site made by Setup 1.1: it read the new
 `People.CanPostNotices` column before Apply had added it, and stopped. Check now plans that step instead.
+**Version 1.4.3** (25 October 2026), schema 1.4.1:
+- **The problem it fixes:** on the site, an ordinary account could not send any change. Nobody but owners had any permission on the Requests list itself, so SharePoint answered "not found" even for the person's own folder.
+- **The fix:** Setup adds the permission level **Competency Hub Pass-through** and gives it to All Users on Requests. Pass-through is Open, View Application Pages, Browse User Information, Use Remote Interfaces and Use Client Integration Features. It reaches the list without reading any item, so each person still sees only their own folder.
+- **A level made by hand:** if it already exists with a page permission or two more, Setup accepts it as in place, as long as it cannot read items.
+
 **Version 1.4.2** (24 October 2026) shows the Setup version in the page heading and the log, so an old copy left in the
 browser is plain to see, and says so when Known as lines are pasted into the people box.
 **Version 1.4.1** (24 October 2026) adds an optional *Known as* box: one line per person, "Full name – Known as". Each

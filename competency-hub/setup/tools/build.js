@@ -10,7 +10,7 @@ const ROOT = path.join(__dirname, '..');
 const SCHEMA = path.join(ROOT, '..', '04-solution', 'schema', 'schema.json');
 const MODULES = ['src/rest.js', 'src/engine.js', 'src/ui.js'];
 // The Setup version, shown on the page and in the log, so an old copy left in the browser is plain to see.
-const SETUP_VERSION = '1.4.2';
+const SETUP_VERSION = '1.4.3';
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 const sha256 = (t) => crypto.createHash('sha256').update(t).digest('hex');
 

@@ -54,7 +54,8 @@ function expectedGrants(site, grants, area) {
     const key = area ? p.replace('{Key}', area.key) : p;
     const g = schema.groups.map((x) => x.perArea ? schema.areas.map((a) => ({ key: x.key.replace('{Key}', a.key), title: x.title.replace('{Title}', a.title) })) : [x]).flat()
       .filter((x) => x.key === key)[0];
-    out.push(groupId(site, g.title) + ':' + roleId(site, level === 'Edit' ? 'Edit' : 'Competency Hub ' + level));
+    const def = schema.permissionLevels.filter((l) => l.key === level)[0];
+    out.push(groupId(site, g.title) + ':' + roleId(site, level === 'Edit' ? 'Edit' : def ? def.name : 'Competency Hub ' + level));
   });
   return out.sort();
 }
@@ -167,7 +168,10 @@ test('Apply creates exactly what the schema lists, with the expected permissions
   // Spot checks of the access model (plan E.0, E.4).
   const allUsers = groupId(site, 'Competency Hub – All Users');
   const requests = listByUrl(site, 'Requests');
-  assert.ok(!requests.ra.some((a) => a.p === allUsers), 'All Users cannot see the Requests list');
+  // All Users reach the Requests list only through Pass-through, which reads no items (bit 0x1, View Items, is off)
+  const pass = site.roleDefs.filter((d) => d.Name === 'Competency Hub Pass-through')[0];
+  assert.ok(requests.ra.filter((a) => a.p === allUsers).every((a) => [].concat(a.r).every((r) => r === pass.Id)), 'All Users have only Pass-through on Requests');
+  assert.equal(Number(pass.BasePermissions.Low) & 0x1, 0, 'Pass-through cannot read items');
   const tx = folder(site, listByUrl(site, 'History'), 'Transactions');
   deq(site.effective(listByUrl(site, 'History'), tx).map((a) => a.p).sort(),
     [groupId(site, 'ESG Competency Hub Owners'), site.me().Id, groupId(site, 'Competency Hub – Administrators')].sort());
@@ -412,7 +416,7 @@ test('Without the flag, a list that really inherits its permissions is still fou
   requests.unique = false;
   requests.ra = [];
   const check = await run('check');
-  assert.ok(check.entries.some((e) => e.text === 'Would give "Requests" its own permissions: Owners: Full Control.'), 'inheriting Requests list is reported');
+  assert.ok(check.entries.some((e) => e.text === 'Would give "Requests" its own permissions: Owners: Full Control; All Users: Pass-through (reaches the list, reads no items).'), 'inheriting Requests list is reported');
   assert.equal((await run('apply')).result.ok, true);
   assert.equal(requests.unique, true);
   assert.ok(!requests.ra.some((a) => a.p === groupId(site, 'ESG Competency Hub Visitors')), 'site visitors cannot see Requests');
@@ -638,4 +642,17 @@ test('The Noticeboard change stops, changing nothing, if an area folder has its 
   const apply = await run('apply');
   assert.ok(apply.stops.some((s) => /area folders of "Noticeboard" have their own permissions.*FLK/.test(s)), apply.stops.join(' | '));
   assert.equal(JSON.stringify(notices.ra), before, 'the list grants are untouched');
+});
+
+test('A Pass-through level made by hand, with a page permission more, is accepted and not changed', async () => {
+  const { site, run } = newSite();
+  assert.equal((await run('apply')).result.ok, true);
+  const pass = site.roleDefs.filter((d) => d.Name === 'Competency Hub Pass-through')[0];
+  pass.BasePermissions = { Low: String(Number(pass.BasePermissions.Low) | 0x20000), High: pass.BasePermissions.High };   // + View Pages
+  const check = await run('check');
+  assert.equal(check.result.ok, true);
+  assert.ok(check.entries.some((e) => e.level === 'ok' && /Pass-through" already in place \(made by hand/.test(e.text)), 'reported as in place');
+  pass.BasePermissions = { Low: String(Number(pass.BasePermissions.Low) | 0x1), High: pass.BasePermissions.High };          // + View Items: wrong
+  const check2 = await run('check');
+  assert.ok(check2.entries.some((e) => e.level === 'stop' && /Pass-through" exists but its permissions differ/.test(e.text)), 'one that reads items is stopped');
 });

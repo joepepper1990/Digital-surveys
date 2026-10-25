@@ -6,7 +6,7 @@
 window.ESGCompetencyHubProbeP2 = function (ctx) {
     'use strict';
 
-    var VERSION = 'P2-1';
+    var VERSION = 'P2-2';
     var MANAGE_PERMISSIONS_LOW = 0x02000000;
     var SELF_ONLY = 'As a technician you can raise actions for yourself in this area.';
     var POLL_MS = 20000, POLL_LIMIT = 24;   // up to 8 minutes for the flow
@@ -218,17 +218,18 @@ window.ESGCompetencyHubProbeP2 = function (ctx) {
 
     async function readChecks() {
         var fb = await call('GET', listPath(LISTS.feedback) + '/items?$select=Id&$top=5');
-        record('R1', 'Other people\'s feedback cannot be read', fb.outcome === 'DENIED' || (fb.outcome === 'OK' && rows(fb.json).length === 0) ? 'PASS' : 'FAIL',
+        record('R1', 'Other people\'s feedback cannot be read', fb.outcome === 'DENIED' || fb.outcome === 'NOT FOUND' || (fb.outcome === 'OK' && rows(fb.json).length === 0) ? 'PASS' : 'FAIL',
             fb.outcome, fb.outcome === 'OK' ? rows(fb.json).length + ' item(s) visible' : short(fb));
         var nl = await call('GET', listPath(LISTS.notifications) + '/items?$select=Id&$top=5');
-        record('R2', 'The email ledger cannot be read', nl.outcome === 'DENIED' || (nl.outcome === 'OK' && rows(nl.json).length === 0) ? 'PASS' : 'FAIL',
+        record('R2', 'The email ledger cannot be read', nl.outcome === 'DENIED' || nl.outcome === 'NOT FOUND' || (nl.outcome === 'OK' && rows(nl.json).length === 0) ? 'PASS' : 'FAIL',
             nl.outcome, nl.outcome === 'OK' ? rows(nl.json).length + ' item(s) visible' : short(nl));
         var tx = await call('GET', listPath(LISTS.history) + "/items?$select=Id&$top=5&$filter=RowKind eq 'Transaction'");
-        record('R3', 'Change transactions (administrators only) cannot be read', tx.outcome === 'DENIED' || (tx.outcome === 'OK' && rows(tx.json).length === 0) ? 'PASS' : 'FAIL',
+        record('R3', 'Change transactions (administrators only) cannot be read', tx.outcome === 'DENIED' || tx.outcome === 'NOT FOUND' || (tx.outcome === 'OK' && rows(tx.json).length === 0) ? 'PASS' : 'FAIL',
             tx.outcome, tx.outcome === 'OK' ? rows(tx.json).length + ' row(s) visible' : short(tx));
-        var rq = await call('GET', listPath(LISTS.requests) + '/items?$select=Id,AuthorId&$top=50');
-        var foreign = rows(rq.json).filter(function (r) { return Number(r.AuthorId) !== Number(state.me.Id); });
-        record('R4', 'Only your own requests can be read', rq.outcome === 'OK' && foreign.length === 0 ? 'PASS' : rq.outcome === 'DENIED' ? 'NOTE' : 'FAIL',
+        var rq = await call('GET', listPath(LISTS.requests) + '/items?$select=Id,AuthorId,FSObjType&$top=50');
+        // your own folder was made by the flow's account, so it is not counted: only requests (items) are
+        var foreign = rows(rq.json).filter(function (r) { return Number(r.FSObjType) !== 1 && Number(r.AuthorId) !== Number(state.me.Id); });
+        record('R4', 'Only your own requests can be read', rq.outcome === 'OK' && foreign.length === 0 ? 'PASS' : rq.outcome === 'DENIED' || rq.outcome === 'NOT FOUND' ? 'NOTE' : 'FAIL',
             rq.outcome, rq.outcome === 'OK' ? foreign.length + ' request(s) from other people visible' : short(rq));
         var acts = await call('GET', listPath(LISTS.actions) + '/items?$select=Id&$top=1');
         record('R5', 'Every area\'s actions can be read (everyone reads every area)', acts.outcome === 'OK' ? 'PASS' : 'FAIL', acts.outcome, short(acts));

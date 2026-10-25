@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.4.0",
+  "schemaVersion": "1.4.1",
   "areas": [
     { "key": "FLK", "title": "Flask", "sort": 10 },
     { "key": "INS", "title": "Instruments", "sort": 20 },
@@ -15,7 +15,8 @@
   "permissionLevels": [
     { "name": "Competency Hub Read", "description": "Read Competency Hub records. No version history or alerts.", "low": "0x8031021", "high": "0x30" },
     { "name": "Competency Hub Add", "description": "Read and add Competency Hub records. Cannot edit or delete.", "low": "0x8031023", "high": "0x30" },
-    { "name": "Competency Hub Contribute", "description": "Read, add and edit own Competency Hub records. Cannot delete.", "low": "0x8031027", "high": "0x30" }
+    { "name": "Competency Hub Contribute", "description": "Read, add and edit own Competency Hub records. Cannot delete.", "low": "0x8031027", "high": "0x30" },
+    { "name": "Competency Hub Pass-through", "key": "PassThrough", "description": "Reach a list to use a folder shared with you. Cannot read any item.", "low": "0x8011000", "high": "0x30" }
   ],
   "groups": [
     { "key": "AllUsers", "title": "Competency Hub – All Users", "description": "Everyone who uses the ESG Competency Hub." },
@@ -323,7 +324,7 @@
     {
       "key": "requests", "url": "Requests", "title": "Requests", "template": 100, "attachments": true, "writeSecurity": 2, "noCrawl": true,
       "extraFolders": ["System"],
-      "permissions": { "list": [] },
+      "permissions": { "list": [["AllUsers", "PassThrough"]] },
       "fields": [
         { "name": "RequestKey", "title": "Request Key", "type": "Text", "max": 36, "required": true, "indexed": true, "unique": true },
         { "name": "RequestType", "title": "Request Type", "type": "Text", "max": 60, "required": true, "indexed": true },

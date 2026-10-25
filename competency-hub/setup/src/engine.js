@@ -123,11 +123,16 @@ CHS.engine = (function () {
       if (edit) S.roles.Edit = edit.Id;
       for (var i = 0; i < schema.permissionLevels.length; i++) {
         var p = schema.permissionLevels[i];
-        var shortName = p.name.replace('Competency Hub ', '');
+        var shortName = p.key || p.name.replace('Competency Hub ', '');
         var found = defs.filter(function (d) { return d.Name === p.name; })[0];
         if (found) {
           var bp = found.BasePermissions || {};
-          if (Number(bp.Low) !== Number(p.low) || Number(bp.High) !== Number(p.high)) {
+          // Pass-through may have been made by hand in the site settings, which can tick a page permission or two more.
+          // It is right as long as it opens the list and reads no items (View Items is bit 0x1).
+          var handMadePassThrough = p.key === 'PassThrough' && (Number(bp.Low) & 0x1) === 0 && (Number(bp.Low) & 0x10000) !== 0;
+          if (handMadePassThrough && (Number(bp.Low) !== Number(p.low) || Number(bp.High) !== Number(p.high))) {
+            note('ok', step, '"' + p.name + '" already in place (made by hand; it reads no items).');
+          } else if (Number(bp.Low) !== Number(p.low) || Number(bp.High) !== Number(p.high)) {
             note('stop', step, '"' + p.name + '" exists but its permissions differ from the plan. It has not been changed; check it with the developer.');
           } else note('ok', step, '"' + p.name + '" already in place.');
           S.roles[shortName] = found.Id;
@@ -513,7 +518,7 @@ CHS.engine = (function () {
     function has(list, pid, rid) { return list.some(function (a) { return a.id === pid && a.roles.indexOf(rid) >= 0; }); }
     function describe(grants) {
       var who = { Owners: 'Owners', AllUsers: 'All Users', Management: 'Management', Administrators: 'Administrators', NoticePosters: 'Notice Posters', Person: 'the person' };
-      var level = { FullControl: 'Full Control', Read: 'Read', Add: 'Add', Contribute: 'Contribute', Edit: 'Edit' };
+      var level = { FullControl: 'Full Control', Read: 'Read', Add: 'Add', Contribute: 'Contribute', Edit: 'Edit', PassThrough: 'Pass-through (reaches the list, reads no items)' };
       return grants.map(function (g) {
         var name = g[0].indexOf('Members:') === 0 ? g[0].replace('Members:', '') + ' members' : (who[g[0]] || g[0]);
         return name + ': ' + (level[g[1]] || g[1]);
