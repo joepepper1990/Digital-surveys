@@ -222,7 +222,7 @@ CH.views.home = (function () {
           : acts.length ? ui.fitList(acts, 'all ' + area.name + ' actions', full(0), 'items') : h('p', { class: 'hm-empty', text: 'There are no open actions in ' + area.name + '.' })),
         col('Notices & issues', news.length, [ui.sectionNote(m.sections.notices, 'notices'), ui.sectionNote(m.sections.register, 'improvements and degradations'),
           news.length ? ui.fitList(news, 'all notices and issues', full(1)) : h('p', { class: 'hm-empty', text: 'No notices, and no open improvements or degradations, in ' + area.name + '.' })]),
-        col('Meetings & dates', null, ui.fitList(diary, 'all meetings', full(3))))));
+        col('Meetings & dates', null, ui.fitList(diary, 'all meetings', full(2))))));
   }
 
   function render(app) {

@@ -13,6 +13,11 @@ window.MockDrivers = (function () {
   function byText(sel, text) { return all(sel).filter(function (n) { return n.textContent.trim() === text; })[0]; }
   function text() { return document.querySelector('[data-ch-root]').textContent; }
   function type(el, value) { el.value = value; el.dispatchEvent(new Event('input', { bubbles: true })); }
+  // the area page opens on Actions; notices and issues have their own tab (release 1.2)
+  async function openNoticesTab() {
+    var tab = await until(function () { return byText('.subtabs button', 'Notices & issues') || byText('button', 'Post a notice'); });
+    if (tab.getAttribute('role') === 'tab') { tab.click(); await wait(50); }
+  }
   // a listed action with its marks: a home card, or a row in a list
   function cards() { return all('.hm-card, .items li'); }
   // the raise form chooses no area unless opened from one (release 1.2): pick the first offered, as a person would
@@ -49,7 +54,7 @@ window.MockDrivers = (function () {
     postNoticeOutside: async function () {
       await until(function () { return q('.viewonly-bar'); });
       byText('.subtabs button', 'Notices & issues').click();
-      byText('button', 'Post a notice').click();
+      (byText('button', 'Post a notice') || byText('button', 'Post a notice here')).click();
       var title = await until(function () { return q('#ch-n-title'); });
       var outsideShown = q('.explain').style.display !== 'none';
       var importantHidden = q('#ch-n-imp').parentNode.style.display === 'none';
@@ -66,8 +71,9 @@ window.MockDrivers = (function () {
     },
     // One notice on two noticeboards, important for 2 weeks: stored once, in the first area, and shown in both (1.9.0.0).
     noticeMany: async function () {
-      await until(function () { return byText('button', 'Post a notice'); });
-      byText('button', 'Post a notice').click();
+      await openNoticesTab();
+      await until(function () { return (byText('button', 'Post a notice') || byText('button', 'Post a notice here')); });
+      (byText('button', 'Post a notice') || byText('button', 'Post a notice here')).click();
       await until(function () { return q('#ch-n-title'); });
       var ticked = all('#ch-n-areas input:checked').map(function (x) { return x.value; });
       all('#ch-n-areas input').filter(function (x) { return x.value === 'INS'; })[0].click();
@@ -108,8 +114,9 @@ window.MockDrivers = (function () {
     },
     // Empty form: errors shown, focus moved, nothing sent.
     noticeValidation: async function () {
-      await until(function () { return byText('button', 'Post a notice'); });
-      byText('button', 'Post a notice').click();
+      await openNoticesTab();
+      await until(function () { return (byText('button', 'Post a notice') || byText('button', 'Post a notice here')); });
+      (byText('button', 'Post a notice') || byText('button', 'Post a notice here')).click();
       await until(function () { return q('#ch-n-title'); });
       q('form').dispatchEvent(new Event('submit', { cancelable: true }));
       await wait(100);
@@ -550,6 +557,7 @@ window.MockDrivers = (function () {
 
     // The home page (approved 23 October 2026): fits the window, opens an area in place, Escape closes it and
     // focus returns to its tile, and folded sections are remembered after a reload.
+    noticesTab: async function () { await openNoticesTab(); await wait(300); return { ok: true }; },
     measure: async function () {
       await until(function () { return q('.hm-stack'); });
       await wait(300);
@@ -915,7 +923,7 @@ window.MockDrivers = (function () {
       sel.dispatchEvent(new Event('change', { bubbles: true }));
       await wait(50);
       var allCount = all('.panel ul.items')[1].querySelectorAll('li').length;
-      return { notices: notices, entries: entries, all: allCount, raise: !!byText('.tab-actions button', 'Raise an improvement or degradation') };
+      return { notices: notices, entries: entries, all: allCount, raise: !!byText('.tab-actions button', 'Raise an issue') };
     },
     // ---- Release 4: meetings
     bookMeeting: async function () {

@@ -1,23 +1,19 @@
-// One competency area: summary sentence, then Actions / Notices & issues / Calendar / Meetings.
-// Non-members get a clear "View only" page; they may still post a notice (K4.1).
+// One competency area: Actions / Notices & issues / Meetings / Calendar, each tab with its own buttons at the top
+// (release 1.2). Non-members get a clear "View only" page; they may still post a notice (K4.1).
 CH.views = CH.views || {};
 CH.views.area = (function () {
   var h = CH.dom.h;
   var ui = CH.ui;
   var D = CH.dates;
-  var TABS = ['Actions', 'Notices & issues', 'Calendar', 'Meetings'];
+  var TABS = ['Actions', 'Notices & issues', 'Meetings', 'Calendar'];
 
-  function sentence(area, s, actionsState) {
-    return h('p', { class: 'sentence' },
-      actionsState === 'unavailable' ? 'Action figures could not be loaded. '
-        : [s.open + ' open actions' + (actionsState === 'partial' ? ' (incomplete)' : '') + ', ', s.late ? h('b', { class: 'txt-late', text: s.late + ' late' }) : 'none late', '. '],
-      s.nextMeeting ? 'Next meeting ' + D.weekdayShort(s.nextMeeting) + '.'
-        : h('b', { class: 'txt-soon', text: s.lastMeeting ? 'No meeting since ' + D.short(s.lastMeeting) + '.' : 'No meeting booked.' }));
-  }
+  function writable(app, area) { return app.access.canWrite(area.key) && area.status === 'Active'; }
 
   function actionsTab(app, area) {
     var list = app.model.actions.filter(function (a) { return app.model.inArea(a, area.key); });
     return [
+      writable(app, area) ? h('div', { class: 'row tab-actions' }, ui.button('Raise an action here', function () { app.raiseAction(area.key); }, 'main'),
+        h('span', { class: 'grow' }), ui.linkButton('Show finished items', function () { app.showMine(0, area.key); })) : null,
       ui.sectionNote(app.model.sections.actions, 'actions'),
       ui.actionList(list, function (a) {
         return a.ownerName + (a.areaKey !== area.key ? ' · shared from ' + a.areaName : '') + (a.extensions ? ' · deadline moved ' + (a.extensions === 1 ? 'once' : a.extensions + ' times') : '');
@@ -40,24 +36,24 @@ CH.views.area = (function () {
       }));
     return [
       h('div', { class: 'row tab-actions' },
-        app.access.canPostNotice(area.key) ? ui.button('Post a notice', function () { app.postNotice(area.key); }) : null,
-        app.access.canWrite(area.key) && area.status === 'Active' ? ui.button('Raise an improvement or degradation', function () { app.raiseEntry(area.key); }) : null),
+        app.access.canPostNotice(area.key) ? ui.button('Post a notice here', function () { app.postNotice(area.key); }, 'main') : null,
+        writable(app, area) ? ui.button('Raise an issue', function () { app.raiseEntry(area.key); }) : null),
       h('h2', { class: 'group-title', text: 'Noticeboard' }),
       ui.sectionNote(m.sections.notices, 'notices'),
       list.length ? h('ul', { class: 'items' }, list.map(function (n) {
         return h('li', null, h('button', { type: 'button', class: 'item-open', onclick: function () { app.openNotice(n); } },
-          h('span', null, h('span', { class: 't', text: n.title }),
+          h('span', { class: 'kind notice', text: 'Notice' }), h('span', { class: 'grow' }, h('span', { class: 't', text: n.title }),
             h('span', { class: 's notice-body', text: n.body.length > 240 ? n.body.slice(0, 240) + '…' : n.body }),
             h('span', { class: 's', text: n.category + ' · ' + (n.fromOutside ? 'From ' + n.authorName + ', outside ' + area.name : n.authorName) + ' · ' + D.short(n.createdIso) +
               (n.flagged ? ' · flagged for the meeting' : '') }, app.mark(n, 'Notice'))),
           n.pinned ? ui.chip('soon', 'Pinned') : n.important ? ui.chip('soon', 'Important') : null));
       })) : h('p', { class: 'muted', text: 'Nothing has been posted on the ' + area.name + ' noticeboard yet.' }),
-      h('h2', { class: 'group-title' }, 'Improvements and degradations ', h('label', { class: 'inline-filter' }, typeSel)),
+      h('h2', { class: 'group-title' }, 'Issues ', h('label', { class: 'inline-filter' }, typeSel)),
       ui.sectionNote(m.sections.register, 'improvements and degradations'),
       entries.length ? h('ul', { class: 'items' }, entries.map(function (e) {
         var linked = m.actions.filter(function (a) { return a.sourceType === 'Register' && Number(a.sourceId) === e.id; }).length;
         return h('li', null, h('button', { type: 'button', class: 'item-open', onclick: function () { app.openEntry(e); } },
-          h('span', null, h('span', { class: 't', text: e.ref + ' ' + e.title }),
+          h('span', { class: 'kind issue', text: 'Issue' }), h('span', { class: 'grow' }, h('span', { class: 't', text: e.ref + ' ' + e.title }),
             h('span', { class: 's', text: e.entryType + ' · ' + e.impact + ' impact · ' + (e.responsibleName ? e.responsibleName + ' responsible · ' : '') +
               (e.raisedIso ? D.short(e.raisedIso) : '') + (linked ? ' · ' + linked + (linked === 1 ? ' linked action' : ' linked actions') : '') +
               (e.flagged ? ' · flagged for the meeting' : '') }, app.mark(e, 'Register Entry'))),
@@ -92,7 +88,7 @@ CH.views.area = (function () {
         ui.chip(st[0], st[1])));
     };
     return [
-      h('div', { class: 'row tab-actions' }, app.access.runsMeetings(area.key) ? ui.button('Book a meeting', function () { app.bookMeeting(area.key); }) : null),
+      app.access.runsMeetings(area.key) ? h('div', { class: 'row tab-actions' }, ui.button('Book a meeting', function () { app.bookMeeting(area.key); }, 'main')) : null,
       ui.sectionNote(m.sections.meetings, 'meetings'),
       h('h2', { class: 'group-title', text: 'Coming up' }),
       coming.length ? h('ul', { class: 'items' }, coming.map(item)) : h('p', { class: 'muted', text: 'No meeting is booked.' }),
@@ -105,7 +101,6 @@ CH.views.area = (function () {
     var m = app.model;
     var area = m.areaByKey[key];
     var acc = app.access;
-    var s = m.stats[key];
     var out = [];
 
     out.push(h('nav', { class: 'areastrip', 'aria-label': 'Areas' },
@@ -117,7 +112,6 @@ CH.views.area = (function () {
       })));
 
     out.push(h('h1', { text: area.name }));
-    out.push(sentence(area, s, m.sections.actions));
 
     if (area.status !== 'Active') {
       out.push(h('div', { class: 'viewonly-bar', role: 'note' }, h('b', { text: 'Archived. ' }), 'This area is kept for reference and can no longer be changed.'));
@@ -125,11 +119,6 @@ CH.views.area = (function () {
       out.push(h('div', { class: 'viewonly-bar', role: 'note' }, h('b', { text: 'View only. ' }),
         'You are not a member of ' + area.name + ', so you can read everything here' + (acc.canPostNotice(key) ? ' and post on its noticeboard' : '') + ', but cannot change anything else. ' +
         'Speak to one of the ' + area.name + ' engineers or your Team Leader if something needs doing.'));
-    } else {
-      out.push(h('div', { class: 'row actions-row' },
-        ui.button('Raise an action', function () { app.raiseAction(key); }, 'main'),
-        acc.canPostNotice(key) ? ui.button('Post a notice', function () { app.postNotice(key); }) : null,
-        acc.runsMeetings(key) ? ui.button('Book a meeting', function () { app.bookMeeting(key); }) : null));
     }
 
     var tabs = h('div', { class: 'subtabs', role: 'tablist', 'aria-label': area.name + ' sections' });
@@ -141,7 +130,7 @@ CH.views.area = (function () {
         b.tabIndex = i === j ? 0 : -1;
       });
       CH.dom.clear(panel);
-      CH.dom.append(panel, [actionsTab, noticesTab, calendarTab, meetingsTab][i](app, area));
+      CH.dom.append(panel, [actionsTab, noticesTab, meetingsTab, calendarTab][i](app, area));
     }
     TABS.forEach(function (label, i) {
       tabs.appendChild(h('button', { type: 'button', role: 'tab', text: label, onclick: function () { show(i); },

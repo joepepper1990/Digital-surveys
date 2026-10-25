@@ -89,10 +89,11 @@ t = text(r.dom);
 check('non-member area: view-only bar, no raise or meeting buttons', t.includes('View only.') && !t.includes('Raise an action') && !t.includes('Start meeting'));
 r = dump('as=' + RACHEL + '&view=area&area=FLK');
 t = text(r.dom);
-check('member area: raise and post available, no meeting control for a technician', t.includes('Raise an action') && t.includes('Post a notice') && !t.includes('Start meeting'));
+// release 1.2: each tab carries its own buttons; the Actions tab opens first
+check('member area: "Raise an action here" on the Actions tab, no meeting control for a technician', t.includes('Raise an action here') && t.includes('Show finished items') && !t.includes('Start meeting') && !t.includes('Book a meeting'));
 t = text(dump('as=' + RACHEL + '&view=area&area=RP').dom);
 check('a shared action appears in the linked area, labelled with its home area', t.includes('Contamination monitor checks') && t.includes('shared from Flask'));
-r = dump('as=' + RICHARD + '&view=area&area=RW');
+r = dump('as=' + RICHARD + '&area=RW');
 check('engineer in own area: meeting control offered', text(r.dom).includes('Book a meeting'));
 r = dump('as=' + ROBERT + '&view=area&area=DSL');
 check('group head: writes in every area', text(r.dom).includes('Raise an action') && !text(r.dom).includes('View only.'));

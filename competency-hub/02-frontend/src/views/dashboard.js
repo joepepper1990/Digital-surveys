@@ -51,6 +51,8 @@ CH.views.dashboard = (function () {
     var st = app.dash;
     var picked = st.pick && st.pick.key === (key || '') && st.pick.name === name;
     var pending = x.closed && (st.loading || !st.closed);
+    // in the area table a nought is shown faint and opens nothing (release 1.2: badges, as approved)
+    if (key && !pending && !x.list.length) return h('span', { class: 'z', text: '0' });
     return h('button', { type: 'button', class: 'dash-fig' + (picked ? ' on' : '') + (x.kind ? ' k-' + x.kind : ''), 'aria-pressed': String(picked),
       disabled: pending ? true : null,
       onclick: function () { st.pick = picked ? null : { key: key || '', name: name }; app.refreshView(); } },
@@ -86,8 +88,7 @@ CH.views.dashboard = (function () {
     var all = measures(app, '');
     var names = ['open', 'late', 'soon', 'closeOut', 'completed', 'closed'];
     var active = m.areas.filter(function (a) { return a.status === 'Active'; });
-    var degr = active.reduce(function (n, a) { return n + m.stats[a.key].degradations; }, 0);
-    var table = h('table', { class: 'dash-table' },
+    var table = h('table', { class: 'dash-table ov' },
       h('thead', null, h('tr', null, h('th', { scope: 'col', text: 'Area' }), ['Open', 'Late', 'Due soon', 'Completed'].map(function (t) { return h('th', { scope: 'col', text: t }); }),
         h('th', { scope: 'col', text: 'Open issues' }), h('th', { scope: 'col', text: 'Next meeting' }))),
       h('tbody', null, active.map(function (a) {
@@ -95,21 +96,20 @@ CH.views.dashboard = (function () {
         var s = m.stats[a.key];
         return h('tr', null, h('th', { scope: 'row' }, ui.linkButton(a.name, function () { app.openArea(a.key); })),
           ['open', 'late', 'soon', 'completed'].map(function (n) { return h('td', null, figure(app, a.key, n, x[n])); }),
-          h('td', { text: s.openEntries ? s.openEntries + (s.degradations ? ' (' + s.degradations + ' degradation' + (s.degradations === 1 ? '' : 's') + ')' : '') : '–' }),
-          h('td', { class: s.meetingStale ? 'txt-soon' : '', text: s.nextMeeting ? D.weekdayShort(s.nextMeeting) : s.lastMeeting ? 'None since ' + D.short(s.lastMeeting) : 'None booked' }));
+          h('td', null, s.openEntries ? h('span', { class: 'n' + (s.degradations ? ' late' : ''), title: s.degradations ? s.degradations + ' degradation' + (s.degradations === 1 ? '' : 's') : null,
+            text: String(s.openEntries) }) : h('span', { class: 'z', text: '0' })),
+          h('td', null, s.nextMeeting ? h('span', { class: 'mt', text: D.weekdayShort(s.nextMeeting) })
+            : h('span', { class: s.meetingStale ? 'none txt-soon' : 'none', text: s.lastMeeting ? 'None since ' + D.short(s.lastMeeting) : 'None booked' })));
       })));
+    // release 1.2: just the figures and the table; every number opens exactly the actions it counts
     return [
-      h('h1', { text: 'Overview of all areas' }),
-      h('div', { class: 'row filters dash-head' }, h('p', { class: 'sentence' }, 'Across the group: ' + all.open.list.length + ' open actions, ',
-        all.late.list.length ? h('b', { class: 'txt-late', text: all.late.list.length + ' late' }) : 'none late',
-        degr ? ', and ' + degr + ' unresolved degradation' + (degr === 1 ? '' : 's') + '.' : '.'),
-        h('label', null, 'Completed and closed in ', period)),
+      h('div', { class: 'row filters dash-head' }, h('h1', { text: 'Overview of all areas' }), h('span', { class: 'grow' }), h('label', null, 'Completed and closed in ', period)),
       ui.sectionNote(m.sections.actions, 'actions'),
       st.error ? h('p', { class: 'section-note', text: 'Closed actions could not be read just now, so the completed figures are missing. ' }, ui.linkButton('Try again', function () { refresh(app); })) : null,
       st.closedComplete === false ? h('p', { class: 'section-note', text: 'Only the first 5,000 closed actions were read; the completed figures may be low.' }) : null,
       h('div', { class: 'dash-figs' }, names.map(function (n) { return figure(app, '', n, all[n]); })),
       drill(app),
-      ui.card('By area', [h('p', { class: 'muted small', text: 'An action shared with another area counts in both areas, and once in the group figures.' }), table])
+      ui.card('By area', [table])
     ];
   }
 
