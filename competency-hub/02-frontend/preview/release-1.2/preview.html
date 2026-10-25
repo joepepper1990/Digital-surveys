@@ -169,7 +169,26 @@ details.more .row { margin-top: 10px; }
 /* a refused change */
 .toast { position: fixed; right: 24px; bottom: 24px; background: #fff; border: 1px solid var(--late); border-left: 6px solid var(--late); border-radius: 10px; padding: 14px 16px; max-width: 440px; box-shadow: 0 8px 30px rgba(0,0,0,.2); display: none; z-index: 5; }
 .toast.on { display: block; } .toast b { color: var(--late); }
-.fb-bubble { position: fixed; right: 24px; bottom: 20px; background: var(--navy); color: #fff; border: 0; border-radius: 999px; padding: 8px 16px; font-weight: 600; box-shadow: 0 4px 14px rgba(0,0,0,.2); }
+.fb-bubble { position: fixed; right: 24px; bottom: 20px; display: inline-flex; align-items: center; gap: 8px; background: #fff; color: var(--navy); border: 1px solid #c9d6de; border-radius: 999px; padding: 7px 16px 7px 8px; font-weight: 600; font-size: 15px; box-shadow: 0 6px 18px rgba(19,81,107,.18); transition: transform .15s, box-shadow .15s; }
+.fb-bubble:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(19,81,107,.26); }
+.fb-bubble .ic { width: 30px; height: 30px; border-radius: 50%; background: var(--navy); display: grid; place-items: center; }
+.fb-bubble svg { width: 16px; height: 16px; }
+/* overview table: names bold, numbers as small badges, noughts faint */
+table.ov { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 15px; }
+table.ov th { color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 8px 12px; border-bottom: 2px solid var(--line); text-align: center; }
+table.ov th:first-child, table.ov td:first-child { text-align: left; }
+table.ov td { padding: 6px 12px; border-bottom: 1px solid var(--line); text-align: center; }
+table.ov tbody tr:hover td { background: #f6f9fb; }
+table.ov .an { font-weight: 700; color: var(--ink); cursor: pointer; }
+table.ov .an:hover { color: var(--navy); text-decoration: underline; }
+table.ov .n { display: inline-block; min-width: 34px; padding: 2px 10px; border-radius: 999px; font-weight: 700; background: var(--navy-soft); color: var(--navy); cursor: pointer; }
+table.ov .n:hover { background: var(--navy); color: #fff; }
+table.ov .n.late { background: var(--late-bg); color: var(--late); }
+table.ov .n.soon { background: var(--soon-bg); color: var(--soon); }
+table.ov .n.done { background: var(--ok-bg); color: var(--ok); }
+table.ov .z { color: #b3bdc6; }
+table.ov .mt { display: inline-block; font-size: 13px; font-weight: 600; border-radius: 6px; padding: 2px 8px; background: var(--navy-soft); color: var(--navy); }
+table.ov .none { color: var(--muted); font-size: 14px; }
 </style>
 </head>
 <body>
@@ -268,18 +287,18 @@ details.more .row { margin-top: 10px; }
     <button class="fig"><b>1</b>Waiting for close-out</button><button class="fig ok"><b>6</b>Completed</button><button class="fig ok"><b>8</b>All closed</button>
   </div>
   <div class="card"><h2>By area</h2>
-    <table class="t"><thead><tr><th>Area</th><th class="num">Open</th><th class="num">Late</th><th class="num">Due soon</th><th class="num">Completed</th><th class="num">Open issues</th><th>Next meeting</th></tr></thead>
+    <table class="ov"><thead><tr><th>Area</th><th>Open</th><th>Late</th><th>Due soon</th><th>Completed</th><th>Open issues</th><th>Next meeting</th></tr></thead>
     <tbody>
-      <tr><td><a>Flask</a></td><td class="num"><a>3</a></td><td class="num"><a>0</a></td><td class="num"><a>1</a></td><td class="num"><a>2</a></td><td class="num">1</td><td>Wed 11 Nov</td></tr>
-      <tr><td><a>Instruments</a></td><td class="num"><a>0</a></td><td class="num"><a>0</a></td><td class="num"><a>0</a></td><td class="num"><a>1</a></td><td class="num">1</td><td>None booked</td></tr>
-      <tr><td><a>Green Stream</a></td><td class="num"><a>2</a></td><td class="num txt"><a style="color:var(--late)">1</a></td><td class="num"><a>0</a></td><td class="num"><a>0</a></td><td class="num">–</td><td>None booked</td></tr>
-      <tr><td><a>RPE</a></td><td class="num"><a>1</a></td><td class="num"><a>0</a></td><td class="num"><a>1</a></td><td class="num"><a>1</a></td><td class="num">–</td><td>None booked</td></tr>
-      <tr><td><a>BA</a></td><td class="num"><a>1</a></td><td class="num"><a>0</a></td><td class="num"><a>0</a></td><td class="num"><a>0</a></td><td class="num">–</td><td>None booked</td></tr>
-      <tr><td><a>Dosimetry</a></td><td class="num"><a>1</a></td><td class="num"><a>0</a></td><td class="num"><a>0</a></td><td class="num"><a>1</a></td><td class="num">–</td><td>None booked</td></tr>
-      <tr><td><a>Radiological Protection</a></td><td class="num"><a>1</a></td><td class="num"><a>0</a></td><td class="num"><a>1</a></td><td class="num"><a>0</a></td><td class="num">–</td><td>None booked</td></tr>
-      <tr><td><a>DSL</a></td><td class="num"><a>0</a></td><td class="num"><a>0</a></td><td class="num"><a>0</a></td><td class="num"><a>0</a></td><td class="num">–</td><td>None booked</td></tr>
-      <tr><td><a>Active Lab &amp; Sampling</a></td><td class="num"><a>1</a></td><td class="num"><a>0</a></td><td class="num"><a>0</a></td><td class="num"><a>1</a></td><td class="num">–</td><td>None booked</td></tr>
-      <tr><td><a>Radwaste</a></td><td class="num"><a>1</a></td><td class="num"><a>0</a></td><td class="num"><a>0</a></td><td class="num"><a>0</a></td><td class="num">–</td><td>None booked</td></tr>
+<tr><td><span class="an">Flask</span></td><td><span class="n ">3</span></td><td><span class="z">0</span></td><td><span class="n soon">1</span></td><td><span class="n done">2</span></td><td><span class="n ">1</span></td><td><span class="mt">Wed 11 Nov</span></td></tr>
+<tr><td><span class="an">Instruments</span></td><td><span class="z">0</span></td><td><span class="z">0</span></td><td><span class="z">0</span></td><td><span class="n done">1</span></td><td><span class="n ">1</span></td><td><span class="none">None booked</span></td></tr>
+<tr><td><span class="an">Green Stream</span></td><td><span class="n ">2</span></td><td><span class="n late">1</span></td><td><span class="z">0</span></td><td><span class="z">0</span></td><td><span class="z">0</span></td><td><span class="none">None booked</span></td></tr>
+<tr><td><span class="an">RPE</span></td><td><span class="n ">1</span></td><td><span class="z">0</span></td><td><span class="n soon">1</span></td><td><span class="n done">1</span></td><td><span class="z">0</span></td><td><span class="none">None booked</span></td></tr>
+<tr><td><span class="an">BA</span></td><td><span class="n ">1</span></td><td><span class="z">0</span></td><td><span class="z">0</span></td><td><span class="z">0</span></td><td><span class="z">0</span></td><td><span class="none">None booked</span></td></tr>
+<tr><td><span class="an">Dosimetry</span></td><td><span class="n ">1</span></td><td><span class="z">0</span></td><td><span class="z">0</span></td><td><span class="n done">1</span></td><td><span class="z">0</span></td><td><span class="none">None booked</span></td></tr>
+<tr><td><span class="an">Radiological Protection</span></td><td><span class="n ">1</span></td><td><span class="z">0</span></td><td><span class="n soon">1</span></td><td><span class="z">0</span></td><td><span class="z">0</span></td><td><span class="none">None booked</span></td></tr>
+<tr><td><span class="an">DSL</span></td><td><span class="z">0</span></td><td><span class="z">0</span></td><td><span class="z">0</span></td><td><span class="z">0</span></td><td><span class="z">0</span></td><td><span class="none">None booked</span></td></tr>
+<tr><td><span class="an">Active Lab &amp; Sampling</span></td><td><span class="n ">1</span></td><td><span class="z">0</span></td><td><span class="z">0</span></td><td><span class="n done">1</span></td><td><span class="z">0</span></td><td><span class="none">None booked</span></td></tr>
+<tr><td><span class="an">Radwaste</span></td><td><span class="n ">1</span></td><td><span class="z">0</span></td><td><span class="z">0</span></td><td><span class="z">0</span></td><td><span class="z">0</span></td><td><span class="none">None booked</span></td></tr>
     </tbody></table>
   </div>
 </main></section>
@@ -524,7 +543,7 @@ details.more .row { margin-top: 10px; }
   </div>
 </div></div></section>
 
-<button class="fb-bubble">? Feedback</button>
+<button class="fb-bubble" aria-label="Send feedback"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/></svg></span>Feedback</button>
 
 <div class="toast" id="toast" role="alert"><b id="toast-title">Not saved</b><div id="toast-text" style="margin:4px 0 10px"></div><div class="row" id="toast-buttons"></div></div>
 
@@ -567,10 +586,10 @@ details.more .row { margin-top: 10px; }
   var toast = document.getElementById('toast');
   function refuse(label, fault, retry) {
     document.getElementById('toast-title').textContent = 'Not saved: ' + label;
-    document.getElementById('toast-text').textContent = fault ? 'The Hub could not process this change. Nothing was changed, and an administrator has been told.'
+    document.getElementById('toast-text').textContent = fault ? 'The Hub could not process this change. Nothing was changed, and an administrator has been told. Trying again is safe – it can never make the change twice.'
                                                               : 'Someone else changed this a moment ago, so your change was not applied. Nothing was changed – the screen shows it as it is now.';
     var bs = document.getElementById('toast-buttons'); bs.textContent = '';
-    if (!fault) { var r = el('button', 'btn btn-main btn-small', 'Try again'); r.onclick = function () { toast.classList.remove('on'); retry(); }; bs.append(r); }
+    var r = el('button', 'btn btn-main btn-small', 'Try again'); r.onclick = function () { toast.classList.remove('on'); retry(); }; bs.append(r);
     var d = el('button', 'btn btn-small', 'Dismiss'); d.onclick = function () { toast.classList.remove('on'); }; bs.append(d);
     toast.classList.add('on');
   }
