@@ -3325,7 +3325,8 @@
                   "type": "Compose",
                   "inputs": {
                     "State": "Applied",
-                    "ProcessedAt": "@{utcNow()}"
+                    "ProcessedAt": "@{utcNow()}",
+                    "EventTime": "@{body('Read_the_request')?['Created']}"
                   },
                   "runAfter": {
                     "Testing_off_(cleanup)": [

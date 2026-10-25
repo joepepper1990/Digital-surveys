@@ -3482,7 +3482,8 @@
                               "inputs": {
                                 "State": "Applied",
                                 "StepsDone": "VALUES;EVENT;RELEASE",
-                                "ProcessedAt": "@{utcNow()}"
+                                "ProcessedAt": "@{utcNow()}",
+                                "EventTime": "@{body('Read_the_request')?['Created']}"
                               },
                               "runAfter": {
                                 "Release_how_(raise)": [
@@ -6813,7 +6814,8 @@
                             "inputs": {
                               "State": "Applied",
                               "StepsDone": "VALUES;EVENT;RELEASE",
-                              "ProcessedAt": "@{utcNow()}"
+                              "ProcessedAt": "@{utcNow()}",
+                              "EventTime": "@{body('Read_the_request')?['Created']}"
                             },
                             "runAfter": {
                               "Release_how_(change)": [
@@ -7456,7 +7458,8 @@
                         "type": "Compose",
                         "inputs": {
                           "State": "Applied",
-                          "ProcessedAt": "@{utcNow()}"
+                          "ProcessedAt": "@{utcNow()}",
+                          "EventTime": "@{body('Read_the_request')?['Created']}"
                         },
                         "runAfter": {
                           "Save_n_event_N": [

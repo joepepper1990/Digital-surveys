@@ -173,6 +173,8 @@ ul.agenda .agenda-text { flex: 1; min-width: 0; }
 table.t { width: 100%; border-collapse: collapse; margin-bottom: calc(12 * var(--u)); }
 table.t th, table.t td { text-align: left; padding: calc(6 * var(--u)) calc(10 * var(--u)); border-bottom: 1px solid var(--line); vertical-align: top; }
 table.t th { color: var(--muted); font-size: calc(13 * var(--u)); font-weight: 600; }
+table.t .num { text-align: right; white-space: nowrap; }
+table.timings tbody tr:first-child td { font-weight: 700; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 @keyframes ch-pulse { 50% { opacity: .35; } }
 /* the mark beside a record: ✓ Sent, then ✓✓ Saved which fades after three seconds, or ✕ Not saved */

@@ -3414,7 +3414,8 @@
                           "type": "Compose",
                           "inputs": {
                             "State": "Applied",
-                            "ProcessedAt": "@{utcNow()}"
+                            "ProcessedAt": "@{utcNow()}",
+                            "EventTime": "@{body('Read_the_request')?['Created']}"
                           },
                           "runAfter": {
                             "Save_mtg_event_(book)": [
@@ -3784,7 +3785,8 @@
                           "type": "Compose",
                           "inputs": {
                             "State": "Applied",
-                            "ProcessedAt": "@{utcNow()}"
+                            "ProcessedAt": "@{utcNow()}",
+                            "EventTime": "@{body('Read_the_request')?['Created']}"
                           },
                           "runAfter": {
                             "Save_mtg_event_(change_meeting)": [
@@ -4245,7 +4247,8 @@
                           "type": "Compose",
                           "inputs": {
                             "State": "Applied",
-                            "ProcessedAt": "@{utcNow()}"
+                            "ProcessedAt": "@{utcNow()}",
+                            "EventTime": "@{body('Read_the_request')?['Created']}"
                           },
                           "runAfter": {
                             "Save_mtg_event_(cancel_meeting)": [
@@ -5996,7 +5999,8 @@
                           "type": "Compose",
                           "inputs": {
                             "State": "Applied",
-                            "ProcessedAt": "@{utcNow()}"
+                            "ProcessedAt": "@{utcNow()}",
+                            "EventTime": "@{body('Read_the_request')?['Created']}"
                           },
                           "runAfter": {
                             "Save_mtg_event_(start_meeting)": [

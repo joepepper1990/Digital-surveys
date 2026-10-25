@@ -99,3 +99,17 @@ test('a finalised meeting that discussed an item clears flags raised up to its c
   const earlier = build(raw({ discussed: [{ competencyId: 1, source: 'Notice:2', upto: upto - 1000, iso: '2026-10-16' }] }));
   assert.equal(earlier.stats.FLK.flagged, before.stats.FLK.flagged, 'a flag raised after the cut-off still counts');
 });
+
+test('release 1.2: a saved change reads only the lists it can alter; the others are kept from the last read', async () => {
+  const CH2 = loadApp();
+  const asked = [];
+  const sp = { items: async (title) => { asked.push(title); return { rows: [{ Id: asked.length }], complete: true }; } };
+  const prev = await CH2.model.load(sp);
+  const full = asked.length;
+  asked.length = 0;
+  const next = await CH2.model.load(sp, ['actions', 'settings'], prev);
+  assert.ok(full >= 9, 'a full read asks every list');
+  assert.deepEqual(asked.slice().sort(), [CH2.config.lists.actions.title, CH2.config.lists.settings.title].sort());
+  assert.equal(next.notices, prev.notices);
+  assert.notEqual(next.actions, prev.actions);
+});

@@ -208,6 +208,13 @@ CH.app = (function () {
       } catch (_) { /* the next check tries again */ }
     }
 
+    // The lists a saved change can alter (release 1.2: only these are read again). Health comes with the settings.
+    function listsFor(type) {
+      if (CH.requests.RECORD_TYPES.indexOf(type) >= 0) return ['notices', 'register', 'actions', 'settings'];
+      if (CH.requests.MEETING_TYPES.indexOf(type) >= 0) return ['meetings', 'actions', 'settings'];
+      return ['actions', 'settings'];
+    }
+
     function onRequestChange(entry) {
       if (CH.requests.ADMIN_TYPES.indexOf(entry.type) >= 0) {
         // a saved setting is read again, so the page shows the new value and uses it (DueSoonDays, MaxDeadlineYears)
@@ -226,7 +233,7 @@ CH.app = (function () {
         if (app.panel) app.panel.refresh();
         return;
       }
-      reload().then(function () {
+      reload(listsFor(entry.type)).then(function () {
         render(false);
         if (app.panel) app.panel.refresh();
         var a = app.model.actionById[entry.resultId];
@@ -305,15 +312,15 @@ CH.app = (function () {
       return app.tracker.submit({ type: 'ReopenAction', targetId: a.id, expectedRevision: a.revision, payload: { reason: 'Reopened straight after it was marked as done.' },
         label: 'Reopen: ' + a.title }).catch(function (error) { CH.ui.toast(app.root, error.friendly || 'It could not be sent just now. Try again in a moment.', 'info'); });
     };
-    // After an instant write (a flag, a comment): read the lists again and repaint, keeping any open panel.
+    // After an instant write (a flag): read the flags again and repaint, keeping any open panel.
     app.recordChanged = async function () {
-      await reload();
+      await reload(['updates']);
       render(false);
       if (app.panel) app.panel.refresh();
     };
     // keys: every noticeboard it was posted to (the first is where it is kept); all of them reads "every noticeboard"
     app.noticePosted = async function (key, keys) {
-      await reload();
+      await reload(['notices']);
       keys = keys && keys.length ? keys : [key];
       if (app.state.view === 'area' && keys.indexOf(app.state.area) >= 0) app.state.tab = 1;
       render(false);
@@ -354,8 +361,9 @@ CH.app = (function () {
       await reload();
     }
 
-    async function reload() {
-      var raw = await CH.model.load(app.sp);
+    // only: the lists to read again (release 1.2); everything when not given
+    async function reload(only) {
+      var raw = await CH.model.load(app.sp, only, app.raw);
       var now = new Date();
       var today = CH.dates.localDate(now);
       var memberships = (raw.members.rows || [])

@@ -1098,10 +1098,13 @@ window.ESGCompetencyHub = function (ctx) {
     // Columns a later Setup adds: if the site does not have them yet, the list is read without them.
     var OPTIONAL = { actions: ['CoOwnerIds', 'CloseOutById'], notices: ['ImportantDays', 'ShownIn'] };
 
-    // Reads each list independently; one failure does not hide the others.
-    async function load(sp) {
+    // Reads each list independently; one failure does not hide the others. only (release 1.2): just these lists are read
+    // again and the rest are kept from prev, the rows read last time, so a saved change repaints after one or two reads.
+    async function load(sp, only, prev) {
       var raw = {};
-      await Promise.all(Object.keys(QUERIES).map(async function (key) {
+      var keys = only && prev ? only.filter(function (k) { return QUERIES[k]; }) : Object.keys(QUERIES);
+      if (only && prev) Object.keys(QUERIES).forEach(function (k) { if (keys.indexOf(k) < 0) raw[k] = prev[k]; });
+      await Promise.all(keys.map(async function (key) {
         try {
           var res = await sp.items(CH.config.lists[key].title, QUERIES[key], null, OPTIONAL[key]);
           raw[key] = { rows: res.rows, complete: res.complete };
@@ -1109,7 +1112,7 @@ window.ESGCompetencyHub = function (ctx) {
           raw[key] = { rows: [], complete: false, error: error.status || 0 };
         }
       }));
-      raw.discussed = await discussed(sp, raw);
+      raw.discussed = !only || !prev || keys.indexOf('meetings') >= 0 || keys.indexOf('updates') >= 0 ? await discussed(sp, raw) : prev.discussed;
       return raw;
     }
 
@@ -5300,12 +5303,69 @@ window.ESGCompetencyHub = function (ctx) {
       var showing = function () { return app.state.view === 'admin' && (app.adminTab || 0) === 0; };
       app.admin = { loading: true, items: [] };
       if (showing()) app.refreshView();
+      var timed = loadTimings(app).catch(function () { return null; });
       try {
         app.admin = { loading: false, items: await load(app) };
       } catch (_) {
         app.admin = { loading: false, error: true, items: [] };
       }
+      app.admin.timings = await timed;
       if (showing()) app.refreshView();
+    }
+
+    // ---- How long changes take (release 1.2): from the transactions of the last 7 days. Each applied one keeps when
+    // its request was sent (EventTime), picked up by its flow (FirstClaimedAt, to the minute) and saved (ProcessedAt).
+    var TIMING_DAYS = 7;
+    async function loadTimings(app) {
+      var since = new Date(Date.now() - TIMING_DAYS * 86400000).toISOString();
+      var res = await app.sp.items(CH.config.lists.history.title, '$select=Id,RequestType,State,EventTime,FirstClaimedAt,ProcessedAt' +
+        "&$filter=FirstClaimedAt ge datetime'" + since + "' and RowKind eq 'Transaction'", 2000);
+      return timings(res.rows);
+    }
+
+    function median(list) {
+      var s = list.slice().sort(function (a, b) { return a - b; });
+      return s.length ? (s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : null;
+    }
+    // rows: transaction rows. Only applied ones with all three times count; a time that runs backwards is not counted.
+    function timings(rows) {
+      var by = {};
+      var all = { saves: [], picks: [] };
+      (rows || []).forEach(function (r) {
+        if (r.State !== 'Applied' || !r.EventTime || !r.ProcessedAt) return;
+        var sent = new Date(r.EventTime).getTime();
+        var saved = (new Date(r.ProcessedAt).getTime() - sent) / 1000;
+        if (!(saved >= 0)) return;
+        var picked = r.FirstClaimedAt ? Math.max(0, (new Date(r.FirstClaimedAt).getTime() - sent) / 1000) : null;
+        var x = by[r.RequestType] = by[r.RequestType] || { type: r.RequestType, saves: [], picks: [] };
+        x.saves.push(saved); all.saves.push(saved);
+        if (picked !== null) { x.picks.push(Math.min(picked, saved)); all.picks.push(Math.min(picked, saved)); }
+      });
+      var list = Object.keys(by).map(function (k) {
+        var x = by[k];
+        return { type: k, label: WORDS[k] || k, count: x.saves.length, picked: median(x.picks), saved: median(x.saves), slowest: Math.max.apply(null, x.saves) };
+      }).sort(function (a, b) { return b.count - a.count || a.label.localeCompare(b.label); });
+      return { days: TIMING_DAYS, list: list, count: all.saves.length, picked: median(all.picks), saved: median(all.saves),
+        slowest: all.saves.length ? Math.max.apply(null, all.saves) : null };
+    }
+    function took(sec) {
+      if (sec === null || sec === undefined) return '–';
+      if (sec < 60) return Math.round(sec) + ' s';
+      if (sec < 600) return (Math.round(sec / 6) / 10) + ' min';
+      if (sec < 5400) return Math.round(sec / 60) + ' min';
+      return (Math.round(sec / 360) / 10) + ' h';
+    }
+    function timingsCard(app) {
+      var t = app.admin && app.admin.timings;
+      if (!app.admin || app.admin.loading) return null;
+      if (!t) return ui.card('How long changes take', h('p', { class: 'section-note', text: 'The timings could not be read just now.' }));
+      var row = function (label, x) { return h('tr', null, h('td', { text: label }), h('td', { class: 'num', text: String(x.count) }), h('td', { class: 'num', text: took(x.picked) }),
+        h('td', { class: 'num', text: took(x.saved) }), h('td', { class: 'num', text: took(x.slowest) })); };
+      return ui.card('How long changes take', [
+        h('p', { class: 'muted small', text: 'Changes saved in the last ' + t.days + ' days: from being sent, how long until the flow picked each up, and until it was saved (the middle value, and the slowest). Picked up is to the nearest minute.' }),
+        t.count ? h('table', { class: 't timings' }, h('thead', null, h('tr', null, ['Kind of change', 'Saved', 'Picked up after', 'Saved after', 'Slowest'].map(function (x, i) { return h('th', { class: i ? 'num' : null, text: x }); }))),
+          h('tbody', null, row('All changes', t), t.list.map(function (x) { return row(x.label, x); })))
+          : h('p', { class: 'muted', text: 'No changes have been saved with their times yet. Times are kept from solution 1.9.0.4 on.' })]);
     }
 
     var TABS = ['Changes needing attention', 'People', 'Settings', 'Feedback', 'Remove test data'];
@@ -5329,6 +5389,7 @@ window.ESGCompetencyHub = function (ctx) {
       }));
       var panel = tab === 1 ? CH.views.people.list(app) : tab === 2 ? CH.views.settings.render(app) : tab === 3 ? CH.views.feedback.review(app) : tab === 4 ? CH.views.cleanup.render(app) : [
         healthCard(app),
+        timingsCard(app),
         ui.card('Changes needing attention', [
           h('p', { class: 'muted small', text: 'Changes that failed three times, and runs that stopped more than ' + QUIET_MINUTES + ' minutes ago. The queue monitor retries the rest by itself.' }),
           h('div', { class: 'row' }, ui.linkButton('Check again', function () { refresh(app); })),
@@ -5340,7 +5401,7 @@ window.ESGCompetencyHub = function (ctx) {
       ];
     }
 
-    return { render: render, load: load, refresh: refresh };
+    return { render: render, load: load, refresh: refresh, timings: timings, took: took };
   })();
 
   /* src/app.js */
@@ -5554,6 +5615,13 @@ window.ESGCompetencyHub = function (ctx) {
         } catch (_) { /* the next check tries again */ }
       }
 
+      // The lists a saved change can alter (release 1.2: only these are read again). Health comes with the settings.
+      function listsFor(type) {
+        if (CH.requests.RECORD_TYPES.indexOf(type) >= 0) return ['notices', 'register', 'actions', 'settings'];
+        if (CH.requests.MEETING_TYPES.indexOf(type) >= 0) return ['meetings', 'actions', 'settings'];
+        return ['actions', 'settings'];
+      }
+
       function onRequestChange(entry) {
         if (CH.requests.ADMIN_TYPES.indexOf(entry.type) >= 0) {
           // a saved setting is read again, so the page shows the new value and uses it (DueSoonDays, MaxDeadlineYears)
@@ -5572,7 +5640,7 @@ window.ESGCompetencyHub = function (ctx) {
           if (app.panel) app.panel.refresh();
           return;
         }
-        reload().then(function () {
+        reload(listsFor(entry.type)).then(function () {
           render(false);
           if (app.panel) app.panel.refresh();
           var a = app.model.actionById[entry.resultId];
@@ -5651,15 +5719,15 @@ window.ESGCompetencyHub = function (ctx) {
         return app.tracker.submit({ type: 'ReopenAction', targetId: a.id, expectedRevision: a.revision, payload: { reason: 'Reopened straight after it was marked as done.' },
           label: 'Reopen: ' + a.title }).catch(function (error) { CH.ui.toast(app.root, error.friendly || 'It could not be sent just now. Try again in a moment.', 'info'); });
       };
-      // After an instant write (a flag, a comment): read the lists again and repaint, keeping any open panel.
+      // After an instant write (a flag): read the flags again and repaint, keeping any open panel.
       app.recordChanged = async function () {
-        await reload();
+        await reload(['updates']);
         render(false);
         if (app.panel) app.panel.refresh();
       };
       // keys: every noticeboard it was posted to (the first is where it is kept); all of them reads "every noticeboard"
       app.noticePosted = async function (key, keys) {
-        await reload();
+        await reload(['notices']);
         keys = keys && keys.length ? keys : [key];
         if (app.state.view === 'area' && keys.indexOf(app.state.area) >= 0) app.state.tab = 1;
         render(false);
@@ -5700,8 +5768,9 @@ window.ESGCompetencyHub = function (ctx) {
         await reload();
       }
 
-      async function reload() {
-        var raw = await CH.model.load(app.sp);
+      // only: the lists to read again (release 1.2); everything when not given
+      async function reload(only) {
+        var raw = await CH.model.load(app.sp, only, app.raw);
         var now = new Date();
         var today = CH.dates.localDate(now);
         var memberships = (raw.members.rows || [])

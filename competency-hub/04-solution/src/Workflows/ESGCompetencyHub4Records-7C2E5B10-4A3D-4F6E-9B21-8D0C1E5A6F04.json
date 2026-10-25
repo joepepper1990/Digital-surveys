@@ -2199,7 +2199,8 @@
                           "type": "Compose",
                           "inputs": {
                             "State": "Applied",
-                            "ProcessedAt": "@{utcNow()}"
+                            "ProcessedAt": "@{utcNow()}",
+                            "EventTime": "@{body('Read_the_request')?['Created']}"
                           },
                           "runAfter": {
                             "Save_rec_event_(edit_notice)": [
@@ -2893,7 +2894,8 @@
                           "type": "Compose",
                           "inputs": {
                             "State": "Applied",
-                            "ProcessedAt": "@{utcNow()}"
+                            "ProcessedAt": "@{utcNow()}",
+                            "EventTime": "@{body('Read_the_request')?['Created']}"
                           },
                           "runAfter": {
                             "Save_rec_event_(archive_notice)": [
@@ -3587,7 +3589,8 @@
                           "type": "Compose",
                           "inputs": {
                             "State": "Applied",
-                            "ProcessedAt": "@{utcNow()}"
+                            "ProcessedAt": "@{utcNow()}",
+                            "EventTime": "@{body('Read_the_request')?['Created']}"
                           },
                           "runAfter": {
                             "Save_rec_event_(pin_notice)": [
@@ -4277,7 +4280,8 @@
                           "type": "Compose",
                           "inputs": {
                             "State": "Applied",
-                            "ProcessedAt": "@{utcNow()}"
+                            "ProcessedAt": "@{utcNow()}",
+                            "EventTime": "@{body('Read_the_request')?['Created']}"
                           },
                           "runAfter": {
                             "Save_rec_event_(hide_comment)": [
@@ -5003,7 +5007,8 @@
                           "type": "Compose",
                           "inputs": {
                             "State": "Applied",
-                            "ProcessedAt": "@{utcNow()}"
+                            "ProcessedAt": "@{utcNow()}",
+                            "EventTime": "@{body('Read_the_request')?['Created']}"
                           },
                           "runAfter": {
                             "Save_rec_event_(raise_entry)": [
@@ -5713,7 +5718,8 @@
                           "type": "Compose",
                           "inputs": {
                             "State": "Applied",
-                            "ProcessedAt": "@{utcNow()}"
+                            "ProcessedAt": "@{utcNow()}",
+                            "EventTime": "@{body('Read_the_request')?['Created']}"
                           },
                           "runAfter": {
                             "Save_rec_event_(update_entry)": [
@@ -6493,7 +6499,8 @@
                           "type": "Compose",
                           "inputs": {
                             "State": "Applied",
-                            "ProcessedAt": "@{utcNow()}"
+                            "ProcessedAt": "@{utcNow()}",
+                            "EventTime": "@{body('Read_the_request')?['Created']}"
                           },
                           "runAfter": {
                             "Save_rec_event_(link_action)": [
@@ -7273,7 +7280,8 @@
                           "type": "Compose",
                           "inputs": {
                             "State": "Applied",
-                            "ProcessedAt": "@{utcNow()}"
+                            "ProcessedAt": "@{utcNow()}",
+                            "EventTime": "@{body('Read_the_request')?['Created']}"
                           },
                           "runAfter": {
                             "Save_rec_event_(unlink_action)": [

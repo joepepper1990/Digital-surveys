@@ -911,6 +911,18 @@ def tx_of(s, req_id):
     return next(it for it in s.by_key['history']['items'].values() if it['f'].get('RowKind') == 'Transaction' and it['f'].get('RequestItemId') == float(req_id))
 
 
+class Timings(unittest.TestCase):
+    """1.9.0.4: an applied transaction keeps when its request was sent, for the administrators' Timings."""
+    def test_an_applied_transaction_has_sent_picked_up_and_saved_times(self):
+        s = site()
+        r = submit(s, RACHEL, 'ExtendDeadline', Extend().payload(), target=s.action, revision=2)
+        status, eng = run(s, r)
+        self.assertEqual(request(s, r)['Status'], 'Completed', eng.log)
+        tx = tx_of(s, r)['f']
+        self.assertEqual(tx['EventTime'], s.item('requests', r)['created'])
+        self.assertTrue(tx['FirstClaimedAt'] and tx['ProcessedAt'])
+
+
 class HealthBack(unittest.TestCase):
     """1.9.0.4: a request that completes clears its own part of QueueHealth, so the app's banner goes without waiting for the monitor."""
     def set_health(self, s, value):

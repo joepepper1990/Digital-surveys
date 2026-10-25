@@ -23,10 +23,13 @@ CH.model = (function () {
   // Columns a later Setup adds: if the site does not have them yet, the list is read without them.
   var OPTIONAL = { actions: ['CoOwnerIds', 'CloseOutById'], notices: ['ImportantDays', 'ShownIn'] };
 
-  // Reads each list independently; one failure does not hide the others.
-  async function load(sp) {
+  // Reads each list independently; one failure does not hide the others. only (release 1.2): just these lists are read
+  // again and the rest are kept from prev, the rows read last time, so a saved change repaints after one or two reads.
+  async function load(sp, only, prev) {
     var raw = {};
-    await Promise.all(Object.keys(QUERIES).map(async function (key) {
+    var keys = only && prev ? only.filter(function (k) { return QUERIES[k]; }) : Object.keys(QUERIES);
+    if (only && prev) Object.keys(QUERIES).forEach(function (k) { if (keys.indexOf(k) < 0) raw[k] = prev[k]; });
+    await Promise.all(keys.map(async function (key) {
       try {
         var res = await sp.items(CH.config.lists[key].title, QUERIES[key], null, OPTIONAL[key]);
         raw[key] = { rows: res.rows, complete: res.complete };
@@ -34,7 +37,7 @@ CH.model = (function () {
         raw[key] = { rows: [], complete: false, error: error.status || 0 };
       }
     }));
-    raw.discussed = await discussed(sp, raw);
+    raw.discussed = !only || !prev || keys.indexOf('meetings') >= 0 || keys.indexOf('updates') >= 0 ? await discussed(sp, raw) : prev.discussed;
     return raw;
   }
 

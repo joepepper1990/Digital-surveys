@@ -2913,7 +2913,8 @@
                   "type": "Compose",
                   "inputs": {
                     "State": "Applied",
-                    "ProcessedAt": "@{utcNow()}"
+                    "ProcessedAt": "@{utcNow()}",
+                    "EventTime": "@{body('Read_the_request')?['Created']}"
                   },
                   "runAfter": {
                     "Save_administrator_event_(decision)": [
@@ -3506,7 +3507,8 @@
                         "type": "Compose",
                         "inputs": {
                           "State": "Applied",
-                          "ProcessedAt": "@{utcNow()}"
+                          "ProcessedAt": "@{utcNow()}",
+                          "EventTime": "@{body('Read_the_request')?['Created']}"
                         },
                         "runAfter": {
                           "Save_setting_event_(setting)": [
@@ -7373,7 +7375,8 @@
                           "type": "Compose",
                           "inputs": {
                             "State": "Applied",
-                            "ProcessedAt": "@{utcNow()}"
+                            "ProcessedAt": "@{utcNow()}",
+                            "EventTime": "@{body('Read_the_request')?['Created']}"
                           },
                           "runAfter": {
                             "Rec_in_(people)": [

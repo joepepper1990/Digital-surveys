@@ -856,6 +856,10 @@ def flow_request_queue(domain='actions'):
                 ('Mark_' + status.lower() + sfx, merge(req_item, 'Request_' + status.lower() + sfx))]
 
     def tx_update(sfx, fields):
+        # 1.9.0.4: an applied transaction also keeps when its request was sent (EventTime, unused on transaction rows
+        # until now), so the administrators' Timings can show sent, picked up and saved without reading people's requests
+        if fields.get('State') == 'Applied':
+            fields = dict(fields, EventTime='@{' + R + "?['Created']}")
         return [('Tx_' + sfx, compose(fields)),
                 ('Save_tx_' + sfx, merge(L('hist', "/items(@{" + idstr(TX + "?['Id']") + "})"), 'Tx_' + sfx))]
 
