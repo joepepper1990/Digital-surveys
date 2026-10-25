@@ -12,45 +12,42 @@
   --kind-action: #13516b; --kind-issue: #6a4fb0; --kind-notice: #1f7190; --kind-other: #8a5a00;
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; }
+html, body { margin: 0; }
 body { background: var(--bg); color: var(--ink); font: 16px/1.5 "Segoe UI", system-ui, sans-serif; }
 button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 
-/* the preview switcher – not part of the app */
-.switcher { background: #20262c; color: #e8edf1; display: flex; gap: 6px; align-items: center; padding: 6px 16px; flex-wrap: wrap; font-size: 13px; }
-.switcher b { margin-right: 8px; }
-.switcher button { background: #353d45; color: #e8edf1; border: 0; border-radius: 6px; padding: 5px 11px; }
+/* ---- the preview switcher: not part of the app */
+.switcher { background: #20262c; color: #e8edf1; padding: 6px 16px; font-size: 13px; }
+.switcher .grp { display: inline-flex; gap: 4px; align-items: center; margin: 2px 14px 2px 0; flex-wrap: wrap; }
+.switcher .grp > span { color: #aeb8c1; margin-right: 2px; }
+.switcher button { background: #353d45; color: #e8edf1; border: 0; border-radius: 6px; padding: 4px 9px; }
 .switcher button[aria-pressed="true"] { background: var(--accent); color: #fff; }
-.switcher .note { margin-left: auto; color: #aeb8c1; }
 
-/* app shell */
+/* ---- app shell */
 .bar { background: var(--navy); color: #fff; border-bottom: 3px solid var(--accent); }
 .bar-in { display: flex; align-items: center; gap: 16px; padding: 8px 32px; min-height: 58px; flex-wrap: wrap; }
 .brand { font-weight: 600; font-size: 17px; }
 .brand small { display: block; font-weight: 400; font-size: 12px; color: #c9dde6; }
 .env { background: #fff3d6; color: #6b4a00; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 600; }
 .pills { display: flex; background: rgba(255,255,255,.1); border-radius: 999px; padding: 4px; gap: 2px; }
-.pills a { color: #fff; text-decoration: none; padding: 6px 14px; border-radius: 999px; font-weight: 600; font-size: 15px; }
-.pills a.on { background: #fff; color: var(--navy); }
+.pills button { color: #fff; background: none; border: 0; padding: 6px 14px; border-radius: 999px; font-weight: 600; font-size: 15px; }
+.pills button.on { background: #fff; color: var(--navy); }
 .bar .right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
 .who { font-size: 14px; color: #dbe8ee; margin-left: 8px; }
-
-/* the quiet status line: replaces the "being recorded" banners */
 .status { display: flex; align-items: center; gap: 10px; padding: 6px 32px; font-size: 14px; color: var(--muted); background: #fff; border-bottom: 1px solid var(--line); min-height: 34px; }
 .status .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); flex: none; }
 .status.busy .dot { background: var(--accent); animation: pulse 1.2s infinite; }
 @keyframes pulse { 50% { opacity: .35; } }
 
 main { padding: 20px 32px 32px; }
-h1 { font-size: 28px; font-weight: 600; margin: 0 0 4px; }
+h1 { font-size: 28px; font-weight: 600; margin: 0 0 14px; }
 h2 { font-size: 18px; font-weight: 600; margin: 0 0 10px; }
 h3 { font-size: 15px; font-weight: 600; margin: 0 0 8px; }
-.muted { color: var(--muted); }
-.small { font-size: 14px; }
+.muted { color: var(--muted); } .small { font-size: 14px; }
 .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-
+.grow { flex: 1; }
 .btn { border: 1px solid #c3ccd4; background: #fff; color: var(--ink); border-radius: 8px; padding: 9px 16px; font-weight: 600; min-height: 42px; }
 .btn:hover { background: #f4f7f9; }
 .btn-main { background: var(--accent-strong); border-color: var(--accent-strong); color: #fff; }
@@ -58,42 +55,45 @@ h3 { font-size: 15px; font-weight: 600; margin: 0 0 8px; }
 .btn-light { background: #fff; color: var(--navy); border-color: #fff; }
 .btn-link { background: none; border: 0; color: var(--navy); text-decoration: underline; padding: 4px 0; min-height: 0; font-weight: 600; }
 .btn-small { padding: 5px 11px; min-height: 34px; font-size: 14px; }
-
-.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; }
 .chip { display: inline-block; border-radius: 999px; padding: 2px 10px; font-size: 13px; font-weight: 600; white-space: nowrap; }
-.chip.late { background: var(--late-bg); color: var(--late); }
-.chip.soon { background: var(--soon-bg); color: var(--soon); }
-.chip.ok { background: var(--ok-bg); color: var(--ok); }
-.chip.plain { background: #eef2f5; color: var(--muted); }
+.chip.late { background: var(--late-bg); color: var(--late); } .chip.soon { background: var(--soon-bg); color: var(--soon); }
+.chip.ok { background: var(--ok-bg); color: var(--ok); } .chip.plain { background: #eef2f5; color: var(--muted); }
+.mark { font-size: 13px; font-weight: 600; white-space: nowrap; transition: opacity .8s; margin-left: 6px; }
+.mark.sent { color: var(--muted); } .mark.saved { color: var(--ok); } .mark.gone { opacity: 0; } .mark.refused { color: var(--late); }
+.kind { font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; border-radius: 4px; padding: 1px 7px; color: #fff; white-space: nowrap; }
+.kind.action { background: var(--kind-action); } .kind.issue { background: var(--kind-issue); } .kind.notice { background: var(--kind-notice); } .kind.other { background: var(--kind-other); }
+.card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; }
+.explain { background: #fffbe6; border: 1px dashed #d9b84a; border-radius: 10px; padding: 9px 14px; font-size: 14px; margin-bottom: 14px; }
+.explain b { color: #6b4a00; }
+.screen { display: none; } .screen.on { display: block; }
 
-/* the saving mark: one grey tick when sent, two green ticks when everything is done, then it fades away */
-.mark { font-size: 13px; font-weight: 600; white-space: nowrap; transition: opacity .8s; }
-.mark.sent { color: var(--muted); }
-.mark.saved { color: var(--ok); }
-.mark.gone { opacity: 0; }
-.mark.refused { color: var(--late); }
+/* tables and lists */
+table.t { width: 100%; border-collapse: collapse; font-size: 15px; }
+table.t th, table.t td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.t th { color: var(--muted); font-size: 13px; font-weight: 600; }
+table.t td.num, table.t th.num { text-align: right; }
+table.t a, .linkish { color: var(--navy); font-weight: 600; text-decoration: underline; cursor: pointer; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
+.tabs button { background: none; border: 0; border-bottom: 3px solid transparent; padding: 8px 14px; font-weight: 600; color: var(--muted); }
+.tabs button.on { color: var(--navy); border-bottom-color: var(--navy); }
+.filters { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+select, input[type=text], input[type=date], input[type=email], textarea { border: 1px solid #b9c3cc; border-radius: 8px; padding: 8px 10px; background: #fff; }
+textarea { width: 100%; min-height: 80px; resize: vertical; }
+.list-row { display: flex; gap: 14px; align-items: center; padding: 11px 4px; border-bottom: 1px solid var(--line); }
+.list-row:last-child { border-bottom: 0; }
+.list-row .t { flex: 1; min-width: 0; }
+.list-row .t b { display: block; }
 
-/* kinds of agenda item: a label in words, and a colour */
-.kind { font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; border-radius: 4px; padding: 1px 7px; color: #fff; }
-.kind.action { background: var(--kind-action); } .kind.issue { background: var(--kind-issue); }
-.kind.notice { background: var(--kind-notice); } .kind.other { background: var(--kind-other); }
-
-.screen { display: none; }
-.screen.on { display: block; }
-
-/* HOME – the approved layout, with the week as a slim strip */
+/* HOME */
 .panel { background: #fff; border: 1px solid var(--line); border-radius: 12px; margin-bottom: 14px; }
-.panel-head { display: flex; align-items: baseline; gap: 10px; padding: 12px 18px; }
+.panel-head { display: flex; align-items: center; gap: 10px; padding: 12px 18px; }
 .panel-head h2 { margin: 0; font-size: 17px; }
-.panel-head .grow { flex: 1; }
 .panel-body { padding: 0 18px 14px; }
 .folded .panel-body, .folded .week-empty { display: none; }
-.folded .panel-head { padding-bottom: 12px; }
 .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
 .day { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; min-height: 58px; }
 .day.today { border-color: var(--navy); box-shadow: inset 0 0 0 1px var(--navy); }
-.day .d { font-weight: 700; font-size: 14px; }
-.day .d small { font-weight: 400; color: var(--muted); }
+.day .d { font-weight: 700; font-size: 14px; } .day .d small { font-weight: 400; color: var(--muted); }
 .day .e { margin-top: 4px; background: var(--soon-bg); color: var(--soon); border-radius: 6px; padding: 1px 7px; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .day .none { color: var(--muted); font-size: 13px; margin-top: 4px; }
 .week-empty { padding: 0 18px 12px; color: var(--muted); }
@@ -102,45 +102,55 @@ h3 { font-size: 15px; font-weight: 600; margin: 0 0 8px; }
 .lane h3 { font-size: 14px; display: flex; gap: 6px; align-items: center; }
 .lane .count { margin-left: auto; background: #fff; border-radius: 999px; padding: 0 8px; font-size: 13px; }
 .todo { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; margin-top: 8px; }
-.todo .t { font-weight: 600; }
-.todo .m { display: flex; gap: 8px; align-items: center; margin-top: 4px; flex-wrap: wrap; }
-.todo .m .grow { flex: 1; }
+.todo .t { font-weight: 600; } .todo .m { display: flex; gap: 8px; align-items: center; margin-top: 4px; flex-wrap: wrap; }
 .empty-lane { color: var(--muted); font-size: 14px; padding: 10px 2px; }
 .tiles { display: grid; grid-template-columns: repeat(10, 1fr); gap: 8px; }
 .tile { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; text-align: left; }
 .tile:hover, .tile[aria-expanded="true"] { border-color: var(--navy); box-shadow: inset 0 0 0 1px var(--navy); }
 .tile b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .area-open { border: 1px solid var(--navy); border-radius: 12px; background: #fff; margin-top: 12px; }
-.area-open .panel-head { border-bottom: 1px solid var(--line); flex-wrap: wrap; align-items: center; }
+.area-open .panel-head { border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .area-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 12px 18px 16px; }
-.area-cols .lane { min-height: 150px; }
-.line-item { border-bottom: 1px solid var(--line); padding: 7px 0; }
-.line-item:last-child { border-bottom: 0; }
+.line-item { border-bottom: 1px solid var(--line); padding: 7px 0; } .line-item:last-child { border-bottom: 0; }
 .line-item .s { color: var(--muted); font-size: 13px; }
 
-/* DIALOGS (shown in place for the preview) */
-.dlg-wrap { background: rgba(22,34,44,.45); padding: 24px; display: flex; justify-content: center; min-height: calc(100vh - 140px); }
-.dlg { background: #fff; border-radius: 14px; width: min(1180px, 100%); max-height: calc(100vh - 190px); display: flex; flex-direction: column; box-shadow: 0 10px 40px rgba(0,0,0,.25); }
-.dlg-head { padding: 18px 24px 14px; border-bottom: 1px solid var(--line); display: flex; gap: 14px; align-items: flex-start; }
-.dlg-head .title { flex: 1; }
-.dlg-head .x { border: 0; background: none; font-size: 22px; color: var(--muted); }
-.dlg-body { padding: 18px 24px 22px; overflow: auto; }
-.what-label { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+/* OVERVIEW */
+.figs { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 16px; }
+.fig { background: #fff; border: 1px solid var(--line); border-left: 4px solid var(--navy); border-radius: 10px; padding: 10px 14px; text-align: left; }
+.fig b { font-size: 26px; display: block; line-height: 1.1; }
+.fig.late { border-left-color: var(--late); } .fig.soon { border-left-color: var(--soon); } .fig.ok { border-left-color: var(--ok); }
 
-/* ACTION */
-.facts { display: grid; grid-template-columns: 90px 1fr; gap: 6px 14px; margin: 0 0 16px; }
-.facts dt { color: var(--muted); font-weight: 600; }
-.facts dd { margin: 0; }
-.two-col { display: grid; grid-template-columns: 1.3fr 1fr; gap: 24px; }
-.update { border-top: 1px solid var(--line); padding: 10px 0; }
-.update:first-child { border-top: 0; }
-details.more { margin-top: 12px; }
-details.more summary { color: var(--navy); font-weight: 600; cursor: pointer; }
+/* DIALOGS – as tall as their content, never taller than the window */
+.dlg-wrap { background: rgba(22,34,44,.45); padding: 28px 24px; display: flex; justify-content: center; align-items: flex-start; min-height: calc(100vh - 175px); }
+.dlg { background: #fff; border-radius: 14px; width: min(1180px, 100%); max-height: calc(100vh - 235px); display: flex; flex-direction: column; box-shadow: 0 10px 40px rgba(0,0,0,.25); }
+.dlg.narrow { width: min(820px, 100%); } .dlg.form { width: min(720px, 100%); }
+.dlg-head { padding: 18px 26px 14px; border-bottom: 1px solid var(--line); display: flex; gap: 14px; align-items: flex-start; }
+.dlg-head .title { flex: 1; }
+.dlg-head h1 { font-size: 24px; margin: 2px 0 0; }
+.dlg-head .x { border: 0; background: none; font-size: 22px; color: var(--muted); }
+.dlg-body { padding: 20px 26px 24px; overflow: auto; }
+.what-label { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.facts { display: grid; grid-template-columns: 110px 1fr; gap: 10px 16px; margin: 0 0 20px; font-size: 16px; }
+.facts dt { color: var(--muted); font-weight: 600; } .facts dd { margin: 0; }
+.update { border-top: 1px solid var(--line); padding: 10px 0; } .update:first-child { border-top: 0; }
+details.more { margin-top: 14px; } details.more summary { color: var(--navy); font-weight: 600; cursor: pointer; }
 details.more .row { margin-top: 10px; }
+.section { margin-top: 22px; }
+.field { margin-bottom: 14px; }
+.field label, .field .lab { display: block; font-weight: 600; margin-bottom: 4px; }
+.field select, .field input[type=text], .field input[type=date], .field input[type=email] { width: 100%; }
+.field .err { color: var(--late); font-weight: 600; font-size: 14px; margin-top: 4px; }
+.field.need select { border-color: var(--late); box-shadow: 0 0 0 1px var(--late); }
+.checks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 16px; }
+.checks label { font-weight: 400; display: flex; gap: 8px; align-items: center; }
+.progress { margin-bottom: 18px; } .progress .lbl { font-size: 14px; color: var(--muted); } .progress .lbl b { color: var(--ink); }
+.progress .track { height: 4px; background: #e3e8ec; border-radius: 4px; margin-top: 6px; } .progress .fill { height: 4px; background: var(--navy); border-radius: 4px; }
+.summary { background: var(--navy-soft); border-radius: 10px; padding: 12px 16px; } .summary .big { font-size: 18px; font-weight: 700; color: var(--navy); }
+.foot { display: flex; gap: 10px; align-items: center; margin-top: 18px; }
 
 /* MEETING */
-.meet { display: grid; grid-template-columns: 300px 1fr; min-height: 0; flex: 1; }
-.agenda-list { border-right: 1px solid var(--line); padding: 14px 0; overflow-y: auto; overflow-x: hidden; min-width: 0; }
+.meet { display: grid; grid-template-columns: 290px 1fr; min-height: 420px; }
+.agenda-list { border-right: 1px solid var(--line); padding: 12px 0; overflow-y: auto; overflow-x: hidden; min-width: 0; }
 .agenda-list .sec { padding: 8px 18px 4px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
 .agenda-list button.it { display: flex; width: 100%; gap: 8px; align-items: center; text-align: left; border: 0; background: none; padding: 8px 18px; border-left: 3px solid transparent; }
 .agenda-list button.it.on { background: var(--navy-soft); border-left-color: var(--navy); font-weight: 600; }
@@ -151,67 +161,42 @@ details.more .row { margin-top: 10px; }
 .outcomes { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 14px; }
 .outcomes button { border: 1px solid #c3ccd4; background: #fff; border-radius: 999px; padding: 6px 14px; font-weight: 600; }
 .outcomes button[aria-pressed="true"] { background: var(--navy); border-color: var(--navy); color: #fff; }
-textarea { width: 100%; min-height: 86px; border: 1px solid #b9c3cc; border-radius: 8px; padding: 8px 10px; resize: vertical; }
-.pane-foot { display: flex; gap: 10px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
-.pane-foot .grow { flex: 1; }
 
-/* MINUTES */
-.minutes-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 15px; }
-.minutes-table th, .minutes-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
-.minutes-table th { color: var(--muted); font-size: 13px; }
-
-/* RAISE: one line and a thin bar instead of numbered boxes */
-.progress { margin-bottom: 18px; }
-.progress .lbl { font-size: 14px; color: var(--muted); }
-.progress .lbl b { color: var(--ink); }
-.progress .track { height: 4px; background: #e3e8ec; border-radius: 4px; margin-top: 6px; }
-.progress .fill { height: 4px; background: var(--navy); border-radius: 4px; width: 50%; }
-.field { margin-bottom: 14px; }
-.field label { display: block; font-weight: 600; margin-bottom: 4px; }
-.field select, .field input { width: 100%; border: 1px solid #b9c3cc; border-radius: 8px; padding: 9px 10px; background: #fff; }
-.field .err { color: var(--late); font-weight: 600; font-size: 14px; margin-top: 4px; }
-.field.need select { border-color: var(--late); box-shadow: 0 0 0 1px var(--late); }
-.summary { background: var(--navy-soft); border-radius: 10px; padding: 12px 16px; }
-.summary .big { font-size: 18px; font-weight: 700; color: var(--navy); }
+/* ADMIN */
+.health { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.health:last-child { border-bottom: 0; }
 
 /* a refused change */
-.toast { position: fixed; right: 24px; bottom: 24px; background: #fff; border: 1px solid var(--late); border-left: 6px solid var(--late); border-radius: 10px; padding: 14px 16px; max-width: 420px; box-shadow: 0 8px 30px rgba(0,0,0,.2); display: none; }
-.toast.on { display: block; }
-.toast b { color: var(--late); }
-
-.explain { background: #fffbe6; border: 1px dashed #d9b84a; border-radius: 10px; padding: 10px 14px; font-size: 14px; margin-bottom: 14px; }
-.explain b { color: #6b4a00; }
+.toast { position: fixed; right: 24px; bottom: 24px; background: #fff; border: 1px solid var(--late); border-left: 6px solid var(--late); border-radius: 10px; padding: 14px 16px; max-width: 440px; box-shadow: 0 8px 30px rgba(0,0,0,.2); display: none; z-index: 5; }
+.toast.on { display: block; } .toast b { color: var(--late); }
+.fb-bubble { position: fixed; right: 24px; bottom: 20px; background: var(--navy); color: #fff; border: 0; border-radius: 999px; padding: 8px 16px; font-weight: 600; box-shadow: 0 4px 14px rgba(0,0,0,.2); }
 </style>
 </head>
 <body>
 
 <div class="switcher" role="toolbar" aria-label="Preview screens">
-  <b>Preview 1.2 (2nd draft) –</b>
-  <button data-go="home" aria-pressed="true">Home</button>
-  <button data-go="action">An action</button>
-  <button data-go="raise">Raise an action</button>
-  <button data-go="meeting">Meeting – running</button>
-  <button data-go="minutes">Meeting – finalised</button>
-  <button id="toggle-week">Show an empty week</button>
-  <span class="note">Sample data. Every 4th change is refused on purpose, to show that message.</span>
+  <div class="grp"><span>Main pages:</span><button data-go="home">Home</button><button data-go="todos">My to-dos</button><button data-go="overview">Overview of all areas</button><button data-go="area">An area's full page</button></div>
+  <div class="grp"><span>Actions:</span><button data-go="action">An action</button><button data-go="raise">Raise an action</button></div>
+  <div class="grp"><span>Notices &amp; issues:</span><button data-go="notice">A notice</button><button data-go="issue">An issue</button><button data-go="post">Post a notice</button><button data-go="raiseissue">Raise an issue</button></div>
+  <div class="grp"><span>Meetings:</span><button data-go="book">Book a meeting</button><button data-go="booked">Booked</button><button data-go="meeting">Running</button><button data-go="minutes">Finalised</button></div>
+  <div class="grp"><span>Administration:</span><button data-go="adm-changes">Changes needing attention</button><button data-go="adm-people">People</button><button data-go="adm-person">A person</button><button data-go="adm-settings">Settings</button><button data-go="adm-feedback">Feedback</button><button data-go="adm-clean">Remove test data</button></div>
+  <div class="grp"><span>Try:</span><button id="toggle-week">Empty week</button><button id="demo-fault">A system fault</button></div>
 </div>
 
 <header class="bar"><div class="bar-in">
   <div class="brand">ESG Competency Hub<small>Environmental Safety Group</small></div>
   <span class="env">TEST – not live data</span>
-  <nav class="pills"><a href="#" class="on">My week</a><a href="#">My to-dos</a><a href="#">Overview of all areas</a><a href="#">Administration</a></nav>
-  <div class="right"><button class="btn btn-light btn-small">Post a notice</button><button class="btn btn-main btn-small" data-go="raise">Raise an action</button><span class="who">Joe · Team Leader</span></div>
+  <nav class="pills"><button data-go="home" data-pill="home">My week</button><button data-go="todos" data-pill="todos">My to-dos</button><button data-go="overview" data-pill="overview">Overview of all areas</button><button data-go="adm-changes" data-pill="admin">Administration</button></nav>
+  <div class="right"><button class="btn btn-light btn-small" data-go="post">Post a notice</button><button class="btn btn-main btn-small" data-go="raise">Raise an action</button><span class="who">Joe · Team Leader</span></div>
 </div></header>
-
 <div class="status" id="status" role="status" aria-live="polite"><span class="dot"></span><span id="status-text">Everything is up to date.</span></div>
 
-<!-- ============================================================ HOME -->
-<section class="screen on" id="s-home"><main>
-  <div class="explain"><b>What changed:</b> your approved layout stays. A change shows a grey ✓ (sent), then green ✓✓ (saved, everything done) and the mark fades away; the thin line above lists anything still saving. An empty week is one line, not a box. Click an area tile to open it here.</div>
-  <h1>Good morning, Joe <span class="muted" style="font-size:16px;font-weight:400">2 due this week · nothing late · next meeting Flask, Wed 11 Nov</span></h1>
-
+<!-- =========================================================== HOME -->
+<section class="screen" id="s-home"><main>
+  <div class="explain"><b>Changes:</b> no summary text beside the headings. A change shows ✓ Sent, then ✓✓ Saved, which fades. Click an area tile to open it here.</div>
+  <h1>Good morning, Joe</h1>
   <section class="panel" id="week-panel">
-    <div class="panel-head"><h2>Coming up this week</h2><span class="muted small" id="week-sum">2 to-dos · no meetings</span></div>
+    <div class="panel-head"><h2>Coming up this week</h2></div>
     <div class="panel-body" id="week-full"><div class="week">
       <div class="day today"><div class="d">Mon 26 <small>today</small></div><div class="e">Replace FH40 probe</div></div>
       <div class="day"><div class="d">Tue 27</div><div class="none">Nothing due</div></div>
@@ -223,101 +208,224 @@ textarea { width: 100%; min-height: 86px; border: 1px solid #b9c3cc; border-radi
     </div></div>
     <div class="week-empty" id="week-empty" hidden>Nothing due and no meetings this week.</div>
   </section>
-
   <section class="panel" id="todo-panel">
-    <div class="panel-head"><h2>Your to-dos</h2><span class="muted small">0 late · 2 this week · 1 later</span><span class="grow"></span><button class="btn-link">See all my to-dos</button></div>
+    <div class="panel-head"><h2>Your to-dos</h2><span class="grow"></span><button class="btn-link" data-go="todos">See all my to-dos</button></div>
     <div class="panel-body"><div class="lanes">
       <div class="lane"><h3>Late <span class="count">0</span></h3><div class="empty-lane">Nothing late.</div></div>
-      <div class="lane"><h3>Due this week <span class="count">2</span></h3>
+      <div class="lane" id="lane-week"><h3>Due this week <span class="count">2</span></h3>
         <div class="todo"><div class="t">Replace FH40 probe</div><div class="m"><span class="chip soon">Due tomorrow</span><span class="muted small">Flask</span><span class="grow"></span><button class="btn btn-small" data-done>Mark as done</button></div></div>
         <div class="todo"><div class="t">Review RPE fit-test records</div><div class="m"><span class="chip soon">Due Friday</span><span class="muted small">RPE</span><span class="grow"></span><button class="btn btn-small" data-done>Mark as done</button></div></div>
       </div>
-      <div class="lane"><h3>Coming up <span class="count">1</span></h3>
+      <div class="lane" id="lane-later"><h3>Coming up <span class="count">1</span></h3>
         <div class="todo"><div class="t">Update dosimetry procedure</div><div class="m"><span class="chip plain">Due 22 Nov</span><span class="muted small">Dosimetry</span><span class="grow"></span><button class="btn btn-small" data-done>Mark as done</button></div></div>
       </div>
     </div></div>
   </section>
-
   <section class="panel" style="margin-bottom:0">
-    <div class="panel-head"><h2>Areas</h2><span class="muted small">all on track · pick one to look inside</span></div>
+    <div class="panel-head"><h2>Areas</h2></div>
     <div class="panel-body">
       <div class="tiles" id="tiles"></div>
       <div class="area-open" id="area-open" hidden>
-        <div class="panel-head"><h2 id="area-name">Flask</h2><span class="muted small">3 open · none late · next meeting Wed 11 Nov</span><span class="grow"></span>
-          <button class="btn btn-small">Raise an action here</button><button class="btn btn-small">Post a notice here</button><button class="btn btn-small">Raise an issue</button><button class="btn btn-small">Book a meeting</button><button class="btn-link" id="area-close" aria-label="Close the area">Close ✕</button></div>
+        <div class="panel-head"><h2 id="area-name">Flask</h2><span class="grow"></span>
+          <button class="btn btn-small" data-go="raise">Raise an action here</button><button class="btn btn-small" data-go="post">Post a notice here</button><button class="btn btn-small" data-go="raiseissue">Raise an issue</button><button class="btn btn-small" data-go="book">Book a meeting</button><button class="btn btn-small" data-go="area">Full page</button><button class="btn-link" id="area-close">Close ✕</button></div>
         <div class="area-cols">
           <div class="lane"><h3>Actions <span class="count">3</span></h3>
-            <div class="line-item">Replace FH40 probe <div class="s">Rachel · due tomorrow</div></div>
-            <div class="line-item">Check the second FH40 <div class="s">Richard Howe · due 30 Nov</div></div>
-            <div class="line-item">Store layout review <div class="s">Joe · due 12 Dec</div></div></div>
+            <div class="line-item"><span class="linkish" data-go="action">Replace FH40 probe</span><div class="s">Rachel · due tomorrow</div></div>
+            <div class="line-item">Check the second FH40<div class="s">Richard Howe · due 30 Nov</div></div>
+            <div class="line-item">Store layout review<div class="s">Joe · due 12 Dec</div></div></div>
           <div class="lane"><h3>Notices &amp; issues <span class="count">2</span></h3>
-            <div class="line-item"><span class="kind notice">Notice</span> New check-source register <div class="s">Joe · 22 Oct · flagged for the meeting</div></div>
-            <div class="line-item"><span class="kind issue">Issue</span> Contamination monitor drift <div class="s">Degradation · Kevin · 20 Oct</div></div></div>
+            <div class="line-item"><span class="kind notice">Notice</span> <span class="linkish" data-go="notice">New check-source register</span><div class="s">Joe · 22 Oct · flagged for the meeting</div></div>
+            <div class="line-item"><span class="kind issue">Issue</span> <span class="linkish" data-go="issue">Contamination monitor drift</span><div class="s">Degradation · Kevin · 20 Oct</div></div></div>
           <div class="lane"><h3>Meetings &amp; dates</h3>
-            <div class="line-item">Next meeting: Wed 11 Nov, 10:00 <div class="s">Store room 2 · 3 items for discussion</div></div>
-            <div class="line-item">Last met: Sun 25 Oct <div class="s">Minutes (PDF)</div></div></div>
+            <div class="line-item"><span class="linkish" data-go="booked">Next meeting: Wed 11 Nov, 10:00</span><div class="s">Store room 2 · 3 items for discussion</div></div>
+            <div class="line-item"><span class="linkish" data-go="minutes">Last met: Sun 25 Oct</span><div class="s">Minutes (PDF)</div></div></div>
         </div>
       </div>
     </div>
   </section>
 </main></section>
 
-<!-- ============================================================ ACTION -->
-<section class="screen" id="s-action"><div class="dlg-wrap"><div class="dlg" role="dialog" aria-label="Action">
-  <div class="dlg-head"><div class="title">
-    <div class="what-label">Action · ACT-00042 · Flask</div>
-    <h1 style="font-size:24px;margin:2px 0 0">Replace FH40 probe <span class="chip soon" id="act-state" style="vertical-align:middle">Open</span> <span id="act-mark"></span></h1>
-  </div><button class="x" aria-label="Close">✕</button></div>
+<!-- =========================================================== MY TO-DOS -->
+<section class="screen" id="s-todos"><main>
+  <div class="explain"><b>Changes:</b> plainer tabs; the same buttons and ticks as Home. "Show finished items" brings back closed ones with <i>Reopen</i>.</div>
+  <h1>My to-dos</h1>
+  <div class="tabs" id="todo-tabs"><button class="on">Mine</button><button>Raised by me</button><button>In my areas</button></div>
+  <div class="filters"><label>Area <select><option>All areas</option><option>Flask</option><option>RPE</option><option>Dosimetry</option></select></label><label class="row" style="gap:6px"><input type="checkbox"> Show finished items</label></div>
+  <div class="card">
+    <div class="list-row"><div class="t"><b class="linkish" data-go="action">Replace FH40 probe</b><span class="muted small">Flask · owner Rachel</span></div><span class="chip soon">Due tomorrow</span><button class="btn btn-small" data-done-row>Mark as done</button></div>
+    <div class="list-row"><div class="t"><b>Review RPE fit-test records</b><span class="muted small">RPE · owner Joe</span></div><span class="chip soon">Due Friday</span><button class="btn btn-small" data-done-row>Mark as done</button></div>
+    <div class="list-row"><div class="t"><b>Update dosimetry procedure</b><span class="muted small">Dosimetry · owner Joe</span></div><span class="chip plain">Due 22 Nov</span><button class="btn btn-small" data-done-row>Mark as done</button></div>
+    <div class="list-row"><div class="t"><b>Store layout review</b><span class="muted small">Flask · owner Joe</span></div><span class="chip plain">Due 12 Dec</span><button class="btn btn-small" data-done-row>Mark as done</button></div>
+  </div>
+</main></section>
+
+<!-- =========================================================== OVERVIEW -->
+<section class="screen" id="s-overview"><main>
+  <div class="explain"><b>Changes:</b> just the figures and the table – every number opens exactly the actions it counts.</div>
+  <div class="row" style="justify-content:space-between"><h1 style="margin:0">Overview of all areas</h1><label>Completed and closed in <select><option>Last 3 months</option><option>Last month</option><option>Last 12 months</option></select></label></div>
+  <div class="figs" style="margin-top:14px">
+    <button class="fig"><b>11</b>Open</button><button class="fig late"><b>1</b>Late</button><button class="fig soon"><b>3</b>Due soon</button>
+    <button class="fig"><b>1</b>Waiting for close-out</button><button class="fig ok"><b>6</b>Completed</button><button class="fig ok"><b>8</b>All closed</button>
+  </div>
+  <div class="card"><h2>By area</h2>
+    <table class="t"><thead><tr><th>Area</th><th class="num">Open</th><th class="num">Late</th><th class="num">Due soon</th><th class="num">Completed</th><th class="num">Open issues</th><th>Next meeting</th></tr></thead>
+    <tbody>
+      <tr><td><a>Flask</a></td><td class="num"><a>3</a></td><td class="num"><a>0</a></td><td class="num"><a>1</a></td><td class="num"><a>2</a></td><td class="num">1</td><td>Wed 11 Nov</td></tr>
+      <tr><td><a>Instruments</a></td><td class="num"><a>0</a></td><td class="num"><a>0</a></td><td class="num"><a>0</a></td><td class="num"><a>1</a></td><td class="num">1</td><td>None booked</td></tr>
+      <tr><td><a>Green Stream</a></td><td class="num"><a>2</a></td><td class="num txt"><a style="color:var(--late)">1</a></td><td class="num"><a>0</a></td><td class="num"><a>0</a></td><td class="num">–</td><td>None booked</td></tr>
+      <tr><td><a>RPE</a></td><td class="num"><a>1</a></td><td class="num"><a>0</a></td><td class="num"><a>1</a></td><td class="num"><a>1</a></td><td class="num">–</td><td>None booked</td></tr>
+      <tr><td><a>BA</a></td><td class="num"><a>1</a></td><td class="num"><a>0</a></td><td class="num"><a>0</a></td><td class="num"><a>0</a></td><td class="num">–</td><td>None booked</td></tr>
+      <tr><td><a>Dosimetry</a></td><td class="num"><a>1</a></td><td class="num"><a>0</a></td><td class="num"><a>0</a></td><td class="num"><a>1</a></td><td class="num">–</td><td>None booked</td></tr>
+      <tr><td><a>Radiological Protection</a></td><td class="num"><a>1</a></td><td class="num"><a>0</a></td><td class="num"><a>1</a></td><td class="num"><a>0</a></td><td class="num">–</td><td>None booked</td></tr>
+      <tr><td><a>DSL</a></td><td class="num"><a>0</a></td><td class="num"><a>0</a></td><td class="num"><a>0</a></td><td class="num"><a>0</a></td><td class="num">–</td><td>None booked</td></tr>
+      <tr><td><a>Active Lab &amp; Sampling</a></td><td class="num"><a>1</a></td><td class="num"><a>0</a></td><td class="num"><a>0</a></td><td class="num"><a>1</a></td><td class="num">–</td><td>None booked</td></tr>
+      <tr><td><a>Radwaste</a></td><td class="num"><a>1</a></td><td class="num"><a>0</a></td><td class="num"><a>0</a></td><td class="num"><a>0</a></td><td class="num">–</td><td>None booked</td></tr>
+    </tbody></table>
+  </div>
+</main></section>
+
+<!-- =========================================================== AREA FULL PAGE -->
+<section class="screen" id="s-area"><main>
+  <div class="explain"><b>Changes:</b> each tab's main button sits at the top of that tab; notices and issues are labelled; "Show finished items" replaces the separate History tab.</div>
+  <div class="row" style="justify-content:space-between"><h1 style="margin:0">Flask</h1><button class="btn-link" data-go="home">Back to My week</button></div>
+  <div class="tabs" id="area-tabs" style="margin-top:12px"><button class="on" data-at="a">Actions</button><button data-at="n">Notices &amp; issues</button><button data-at="m">Meetings</button><button data-at="c">Calendar</button></div>
+  <div data-ap="a"><div class="row" style="margin-bottom:12px"><button class="btn btn-main" data-go="raise">Raise an action here</button><span class="grow"></span><label class="row" style="gap:6px"><input type="checkbox"> Show finished items</label></div>
+    <div class="card"><div class="list-row"><div class="t"><b class="linkish" data-go="action">Replace FH40 probe</b><span class="muted small">Rachel</span></div><span class="chip soon">Due tomorrow</span></div>
+      <div class="list-row"><div class="t"><b>Check the second FH40</b><span class="muted small">Richard Howe · raised at the meeting on 25 Oct</span></div><span class="chip plain">Due 30 Nov</span></div>
+      <div class="list-row"><div class="t"><b>Store layout review</b><span class="muted small">Joe</span></div><span class="chip plain">Due 12 Dec</span></div></div></div>
+  <div data-ap="n" hidden><div class="row" style="margin-bottom:12px"><button class="btn btn-main" data-go="post">Post a notice here</button><button class="btn" data-go="raiseissue">Raise an issue</button><span class="grow"></span><label>Show <select><option>Everything</option><option>Notices</option><option>Issues</option></select></label></div>
+    <div class="card"><div class="list-row"><span class="kind notice">Notice</span><div class="t"><b class="linkish" data-go="notice">New check-source register</b><span class="muted small">Joe · 22 Oct · flagged for the next meeting</span></div><span class="chip soon">Important</span></div>
+      <div class="list-row"><span class="kind issue">Issue</span><div class="t"><b class="linkish" data-go="issue">Contamination monitor drift</b><span class="muted small">Degradation · medium impact · Kevin · 20 Oct</span></div><span class="chip plain">Open</span></div></div></div>
+  <div data-ap="m" hidden><div class="row" style="margin-bottom:12px"><button class="btn btn-main" data-go="book">Book a meeting</button></div>
+    <div class="card"><div class="list-row"><div class="t"><b class="linkish" data-go="booked">Wed 11 Nov, 10:00</b><span class="muted small">Store room 2 · Joe chairs</span></div><span class="chip plain">Booked</span></div>
+      <div class="list-row"><div class="t"><b class="linkish" data-go="minutes">Sun 25 Oct, 08:10</b><span class="muted small">Minutes (PDF) · 1 amendment</span></div><span class="chip ok">Finalised</span></div></div></div>
+  <div data-ap="c" hidden><div class="card"><div class="list-row"><div class="t"><b>Wed 11 Nov, 10:00 – Flask monthly meeting</b><span class="muted small">Store room 2</span></div></div>
+      <div class="list-row"><div class="t"><b>Fri 20 Nov – Source check due</b><span class="muted small">Important date</span></div></div></div></div>
+</main></section>
+
+<!-- =========================================================== ACTION -->
+<section class="screen" id="s-action"><div class="dlg-wrap"><div class="dlg narrow" role="dialog" aria-label="Action">
+  <div class="dlg-head"><div class="title"><div class="what-label">Action · ACT-00042 · Flask</div>
+    <h1>Replace FH40 probe <span class="chip soon" id="act-state" style="vertical-align:middle">Open</span><span id="act-mark"></span></h1></div><button class="x" aria-label="Close">✕</button></div>
   <div class="dlg-body">
-    <div class="explain"><b>What changed:</b> buttons never disappear. After "Mark as done" the action shows <b>Done</b> and its button becomes <b>Reopen</b>; the ✓ / ✓✓ mark sits beside what changed and fades once saved. Try "Add an update" too.</div>
-    <div class="two-col">
-      <div>
-        <dl class="facts">
-          <dt>When</dt><dd><span class="chip soon" id="act-due">Due tomorrow</span> Monday 26 October · moved once (was 20 Oct)</dd>
-          <dt>Who</dt><dd>Owner: Rachel · Raised by Joe, 12 Oct</dd>
-          <dt>What</dt><dd>The FH40 in the Flask store reads low against the check source. Replace it and record the new serial number.</dd>
-        </dl>
-        <div class="row" id="act-buttons"></div>
-        <details class="more"><summary>More for this action</summary>
-          <div class="row"><button class="btn btn-small">Edit this action</button><button class="btn btn-small">Give it to someone else</button><button class="btn btn-small">Change its status</button><button class="btn btn-small">Close this action</button></div>
-        </details>
-      </div>
-      <div>
-        <h3>Updates</h3>
-        <div id="updates">
-          <div class="update"><b>Rachel</b> <span class="muted small">· 22 Oct</span><div>Replacement ordered, due Thursday.</div></div>
-          <div class="update"><b>Joe</b> <span class="muted small">· 14 Oct</span><div>Deadline moved: waiting on stores.</div></div>
-        </div>
-      </div>
-    </div>
+    <dl class="facts">
+      <dt>When</dt><dd><span class="chip soon" id="act-due">Due tomorrow</span> Monday 26 October · moved once (was 20 Oct)</dd>
+      <dt>Who</dt><dd>Owner: Rachel · Raised by Joe on 12 Oct</dd>
+      <dt>What</dt><dd>The FH40 in the Flask store reads low against the check source. Replace it and record the new serial number.</dd>
+    </dl>
+    <div class="row" id="act-buttons"></div>
+    <details class="more"><summary>More for this action</summary>
+      <div class="row"><button class="btn btn-small">Edit this action</button><button class="btn btn-small">Give it to someone else</button><button class="btn btn-small">Change its status</button><button class="btn btn-small">Close this action</button></div></details>
+    <div class="section"><h3>Updates</h3><div id="updates">
+      <div class="update"><b>Rachel</b> <span class="muted small">· 22 Oct</span><div>Replacement ordered, due Thursday.</div></div>
+      <div class="update"><b>Joe</b> <span class="muted small">· 14 Oct</span><div>Deadline moved: waiting on stores.</div></div></div></div>
   </div>
 </div></div></section>
 
-<!-- ============================================================ RAISE -->
-<section class="screen" id="s-raise"><div class="dlg-wrap"><div class="dlg" role="dialog" aria-label="Raise an action" style="width:min(760px,100%)">
-  <div class="dlg-head"><div class="title"><div class="what-label">New action</div><h1 style="font-size:24px;margin:2px 0 0">Raise an action</h1></div><button class="x" aria-label="Close">✕</button></div>
+<!-- =========================================================== RAISE -->
+<section class="screen" id="s-raise"><div class="dlg-wrap"><div class="dlg form" role="dialog" aria-label="Raise an action">
+  <div class="dlg-head"><div class="title"><div class="what-label">New action</div><h1>Raise an action</h1></div><button class="x" aria-label="Close">✕</button></div>
   <div class="dlg-body">
-    <div class="explain"><b>What changed:</b> one line and a thin bar show where you are, instead of numbered boxes. No area is chosen for you from the top bar; from inside an area it is already that area. The summary shows the area in large type.</div>
-    <div class="progress"><div class="lbl">Step 2 of 4 · <b>Who and where</b> <span class="muted">– next: by when</span></div><div class="track"><div class="fill"></div></div></div>
+    <div class="progress"><div class="lbl">Step 2 of 4 · <b>Who and where</b> <span class="muted">– next: by when</span></div><div class="track"><div class="fill" style="width:50%"></div></div></div>
     <div class="field need" id="area-field"><label for="area">Which area is it for?</label>
       <select id="area"><option value="">Choose an area…</option><option>Flask</option><option>Instruments</option><option>Green Stream</option><option>RPE</option><option>BA</option><option>Dosimetry</option><option>Radiological Protection</option><option>DSL</option><option>Active Lab &amp; Sampling</option><option>Radwaste</option></select>
       <div class="err" id="area-err">Choose the area this action belongs to.</div></div>
     <div class="field"><label for="owner">Who will do it?</label><select id="owner"><option>Joe (you)</option><option>Rachel</option><option>Kevin</option></select></div>
     <div class="summary"><div class="muted small">You are raising</div><div class="big">"Update dosimetry procedure" in <span id="sum-area">— choose an area —</span></div><div class="small">for Joe, by Fri 20 November</div></div>
-    <div class="pane-foot"><button class="btn">Back</button><span class="grow"></span><button class="btn btn-main" id="raise-send">Raise action</button></div>
+    <div class="foot"><button class="btn">Back</button><span class="grow"></span><button class="btn btn-main" id="raise-send">Raise action</button></div>
   </div>
 </div></div></section>
 
-<!-- ============================================================ MEETING (running) -->
-<section class="screen" id="s-meeting"><div class="dlg-wrap"><div class="dlg" role="dialog" aria-label="Meeting" style="height:calc(100vh - 190px)">
-  <div class="dlg-head"><div class="title">
-    <div class="what-label">Meeting · MTG-00012 · Flask</div>
-    <h1 style="font-size:24px;margin:2px 0 0">Flask monthly meeting <span class="chip soon" style="vertical-align:middle">In progress</span></h1>
-    <div class="muted small" style="margin-top:4px">Sun 25 Oct, 08:10 · TEST Place · Joe chairs · Richard Howe: apologies · <button class="btn-link">Attendance</button></div>
+<!-- =========================================================== NOTICE -->
+<section class="screen" id="s-notice"><div class="dlg-wrap"><div class="dlg narrow" role="dialog" aria-label="Notice">
+  <div class="dlg-head"><div class="title"><div class="what-label">Notice · Flask and Dosimetry noticeboards · General</div>
+    <h1>New check-source register <span class="chip soon" style="vertical-align:middle">Important until 6 Nov</span></h1><div class="muted small">Posted by Joe on 22 Oct</div></div><button class="x" aria-label="Close">✕</button></div>
+  <div class="dlg-body">
+    <p style="margin-top:0">From Monday, sign check sources in and out in the new register by the store door. The old book is withdrawn.</p>
+    <div class="row"><button class="btn" id="flag">Flag for the next meeting</button><button class="btn" data-go="raise">Turn into an action</button><span id="flag-mark"></span></div>
+    <details class="more"><summary>More for this notice</summary><div class="row"><button class="btn btn-small">Edit this notice</button><button class="btn btn-small">Pin it</button><button class="btn btn-small">Archive it</button></div></details>
+    <div class="section"><h3>Comments</h3>
+      <div id="comments"><div class="update"><b>Kevin</b> <span class="muted small">· 23 Oct</span><div>Is the register also for the Dosimetry sources?</div></div></div>
+      <div class="row" style="margin-top:8px;align-items:flex-start"><textarea id="comment-text" style="min-height:60px;flex:1" aria-label="Add a comment">Yes – both stores use it.</textarea><button class="btn" id="comment-add">Add comment</button></div></div>
+    <div class="section"><details><summary class="linkish" style="text-decoration:none">Discussed at meetings (1) · Actions from this notice (0)</summary><p class="muted small">25 Oct – Flask meeting: Discussed.</p></details></div>
   </div>
-  <div class="row"><button class="btn">Cancel meeting</button><button class="btn btn-main">Review and finalise</button></div>
-  <button class="x" aria-label="Close">✕</button></div>
-  <div class="explain" style="margin:12px 24px 0"><b>What changed:</b> items are grouped and labelled. Each kind has its own buttons: an <b>action</b> can be closed right here by the chair, or get a further action; a <b>notice</b> or <b>issue</b> can be turned into an action. "Other business" replaces "New business"; "+ Add an item" opens the new item straight away.</div>
+</div></div></section>
+
+<!-- =========================================================== ISSUE -->
+<section class="screen" id="s-issue"><div class="dlg-wrap"><div class="dlg narrow" role="dialog" aria-label="Issue">
+  <div class="dlg-head"><div class="title"><div class="what-label">Issue · REG-00004 · Flask · Degradation</div>
+    <h1>Contamination monitor drift <span class="chip plain" id="iss-state" style="vertical-align:middle">Open</span><span id="iss-mark"></span></h1><div class="muted small">Raised by Kevin on 20 Oct · medium impact</div></div><button class="x" aria-label="Close">✕</button></div>
+  <div class="dlg-body">
+    <p style="margin-top:0">The bench monitor drifts high after 20 minutes on. Readings settle after a restart.</p>
+    <div class="row"><button class="btn" data-go="raise">Turn into an action</button><button class="btn" id="iss-resolve">Mark as resolved</button><button class="btn">Flag for the next meeting</button></div>
+    <details class="more"><summary>More for this issue</summary><div class="row"><button class="btn btn-small">Edit this issue</button><button class="btn btn-small">Change its status</button><button class="btn btn-small">Link an existing action</button></div></details>
+    <div class="section"><h3>Actions from this issue</h3><p class="muted small" style="margin:0">None yet.</p></div>
+    <div class="section"><h3>Comments</h3><div class="update"><b>Rachel</b> <span class="muted small">· 21 Oct</span><div>Same on the second monitor.</div></div></div>
+  </div>
+</div></div></section>
+
+<!-- =========================================================== POST A NOTICE -->
+<section class="screen" id="s-post"><div class="dlg-wrap"><div class="dlg form" role="dialog" aria-label="Post a notice">
+  <div class="dlg-head"><div class="title"><div class="what-label">New notice</div><h1>Post a notice</h1></div><button class="x" aria-label="Close">✕</button></div>
+  <div class="dlg-body">
+    <div class="field"><label for="n-title">Title</label><input type="text" id="n-title" value="Store door code changes on Friday"></div>
+    <div class="field"><label for="n-body">Notice</label><textarea id="n-body">The new code will be on the noticeboard by the door.</textarea></div>
+    <div class="field"><span class="lab">Show it on</span><div class="checks"><label><input type="checkbox"> All noticeboards</label><label><input type="checkbox" checked> Flask</label><label><input type="checkbox"> Instruments</label><label><input type="checkbox"> Green Stream</label><label><input type="checkbox"> RPE</label><label><input type="checkbox" checked> Dosimetry</label></div></div>
+    <div class="row" style="gap:20px"><div class="field" style="flex:1"><label for="n-cat">Category</label><select id="n-cat"><option>General</option><option>Safety</option></select></div>
+      <div class="field" style="flex:1"><label for="n-imp">Important for</label><select id="n-imp"><option>Not important</option><option>1 week</option><option>2 weeks</option><option>1 month</option><option>3 months</option></select></div></div>
+    <div class="foot"><button class="btn">Cancel</button><span class="grow"></span><button class="btn btn-main" id="post-send">Post notice</button></div>
+  </div>
+</div></div></section>
+
+<!-- =========================================================== RAISE AN ISSUE -->
+<section class="screen" id="s-raiseissue"><div class="dlg-wrap"><div class="dlg form" role="dialog" aria-label="Raise an issue">
+  <div class="dlg-head"><div class="title"><div class="what-label">New issue · Flask</div><h1>Raise an issue</h1></div><button class="x" aria-label="Close">✕</button></div>
+  <div class="dlg-body">
+    <div class="row" style="gap:20px"><div class="field" style="flex:1"><label>Type</label><select><option>Degradation</option><option>Improvement</option><option>Concern</option><option>Opportunity</option><option>Positive observation</option><option>Other</option></select></div>
+      <div class="field" style="flex:1"><label>Impact</label><select><option>Medium</option><option>Low</option><option>High</option></select></div></div>
+    <div class="field"><label>Title</label><input type="text" value="Fume cupboard alarm slow to reset"></div>
+    <div class="field"><label>Description</label><textarea>Takes about two minutes to clear after the sash is lowered.</textarea></div>
+    <div class="foot"><button class="btn">Cancel</button><span class="grow"></span><button class="btn btn-main" data-go="area">Raise issue</button></div>
+  </div>
+</div></div></section>
+
+<!-- =========================================================== BOOK A MEETING -->
+<section class="screen" id="s-book"><div class="dlg-wrap"><div class="dlg form" role="dialog" aria-label="Book a meeting">
+  <div class="dlg-head"><div class="title"><div class="what-label">New meeting · Flask</div><h1>Book a meeting</h1></div><button class="x" aria-label="Close">✕</button></div>
+  <div class="dlg-body">
+    <div class="row" style="gap:20px"><div class="field" style="flex:1"><label>Date</label><input type="date" value="2026-11-11"></div><div class="field" style="flex:1"><label>From</label><input type="text" value="10:00"></div><div class="field" style="flex:1"><label>To</label><input type="text" value="11:00"></div></div>
+    <div class="row" style="gap:20px"><div class="field" style="flex:1"><label>Place</label><input type="text" value="Store room 2"></div><div class="field" style="flex:1"><label>Online link (optional)</label><input type="text" placeholder="Teams link"></div></div>
+    <div class="field"><label>Chair</label><select><option>Joe</option><option>Rachel</option></select></div>
+    <div class="field"><span class="lab">Who to invite</span><div class="checks"><label><input type="checkbox" checked> Joe</label><label><input type="checkbox" checked> Rachel</label><label><input type="checkbox" checked> Kevin</label><label><input type="checkbox" checked> Richard Howe</label><label><input type="checkbox"> Adam</label><label><input type="checkbox" checked> Sadie</label></div></div>
+    <p class="muted small" style="margin:0">An Outlook invitation goes to everyone ticked, from your calendar.</p>
+    <div class="foot"><button class="btn">Cancel</button><span class="grow"></span><button class="btn btn-main" data-go="booked">Book meeting</button></div>
+  </div>
+</div></div></section>
+
+<!-- =========================================================== BOOKED MEETING -->
+<section class="screen" id="s-booked"><div class="dlg-wrap"><div class="dlg narrow" role="dialog" aria-label="Booked meeting">
+  <div class="dlg-head"><div class="title"><div class="what-label">Meeting · MTG-00013 · Flask</div>
+    <h1>Flask monthly meeting <span class="chip plain" style="vertical-align:middle">Booked</span></h1><div class="muted small">Wed 11 Nov, 10:00–11:00 · Store room 2 · Joe chairs · 5 invited</div></div>
+    <div class="row"><button class="btn btn-main" data-go="meeting">Start meeting</button></div><button class="x" aria-label="Close">✕</button></div>
+  <div class="dlg-body">
+    <div class="row" style="margin-bottom:16px"><button class="btn btn-small">Change</button><button class="btn btn-small">Cancel meeting</button><button class="btn btn-small">Add to my calendar</button><span class="muted small">The Outlook invitation has gone to everyone invited.</span></div>
+    <h3>Agenda so far</h3><p class="muted small" style="margin-top:-4px">Built from today's records; it is fixed when the meeting starts.</p>
+    <table class="t"><tbody>
+      <tr><td style="width:150px"><span class="kind action">Action</span></td><td>Replace FH40 probe</td><td class="muted">Rachel · due tomorrow</td></tr>
+      <tr><td><span class="kind action">Action</span></td><td>Store layout review</td><td class="muted">Joe · due 12 Dec</td></tr>
+      <tr><td><span class="kind issue">Issue</span></td><td>Contamination monitor drift</td><td class="muted">Degradation · open</td></tr>
+      <tr><td><span class="kind notice">Notice</span></td><td>New check-source register</td><td class="muted">Flagged by Joe</td></tr>
+    </tbody></table>
+    <div class="row" style="margin-top:12px"><button class="btn btn-small">+ Add an item before the meeting</button></div>
+  </div>
+</div></div></section>
+
+<!-- =========================================================== MEETING RUNNING -->
+<section class="screen" id="s-meeting"><div class="dlg-wrap"><div class="dlg" role="dialog" aria-label="Meeting">
+  <div class="dlg-head"><div class="title"><div class="what-label">Meeting · MTG-00012 · Flask</div>
+    <h1>Flask monthly meeting <span class="chip soon" style="vertical-align:middle">In progress</span></h1>
+    <div class="muted small" style="margin-top:4px">Sun 25 Oct, 08:10 · TEST Place · Joe chairs · Richard Howe: apologies · <button class="btn-link">Attendance</button></div></div>
+    <div class="row"><button class="btn">Cancel meeting</button><button class="btn btn-main" data-go="minutes">Review and finalise</button></div><button class="x" aria-label="Close">✕</button></div>
   <div class="meet">
     <nav class="agenda-list" aria-label="Agenda">
       <div class="sec">Open actions</div><div id="sec-action"></div>
@@ -330,97 +438,183 @@ textarea { width: 100%; min-height: 86px; border: 1px solid #b9c3cc; border-radi
   </div>
 </div></div></section>
 
-<!-- ============================================================ MINUTES (finalised) -->
+<!-- =========================================================== MINUTES -->
 <section class="screen" id="s-minutes"><div class="dlg-wrap"><div class="dlg" role="dialog" aria-label="Finalised meeting">
-  <div class="dlg-head"><div class="title">
-    <div class="what-label">Meeting · MTG-00012 · Flask</div>
-    <h1 style="font-size:24px;margin:2px 0 0">Flask monthly meeting <span class="chip ok" style="vertical-align:middle">Finalised</span></h1>
-    <div class="muted small" style="margin-top:4px">Sun 25 Oct · finalised by Joe at 10:03 · 1 amendment</div>
-  </div>
-  <div class="row"><button class="btn btn-main">Open the PDF</button><button class="btn">Download PDF</button><button class="btn" id="amend">Amend these minutes</button></div>
-  <button class="x" aria-label="Close">✕</button></div>
+  <div class="dlg-head"><div class="title"><div class="what-label">Meeting · MTG-00012 · Flask</div>
+    <h1>Flask monthly meeting <span class="chip ok" style="vertical-align:middle">Finalised</span></h1><div class="muted small" style="margin-top:4px">Sun 25 Oct · finalised by Joe at 10:03 · 1 amendment</div></div>
+    <div class="row"><button class="btn btn-main">Open the PDF</button><button class="btn">Download PDF</button><button class="btn" id="amend">Amend these minutes</button></div><button class="x" aria-label="Close">✕</button></div>
   <div class="dlg-body">
-    <div class="explain"><b>What changed:</b> the minutes' own buttons are together at the top ("Print" is gone – print from the PDF). New section: <b>Actions closed at this meeting</b>, with who closed them. Names are the Hub's names; actions raised show owner and due date.</div>
-    <table class="minutes-table"><thead><tr><th style="width:50%">Attendance</th><th></th></tr></thead><tbody><tr><td>Joe</td><td>Present</td></tr><tr><td>Richard Howe</td><td>Apologies</td></tr></tbody></table>
+    <table class="t" style="margin-bottom:14px"><thead><tr><th style="width:50%">Attendance</th><th></th></tr></thead><tbody><tr><td>Joe</td><td>Present</td></tr><tr><td>Richard Howe</td><td>Apologies</td></tr></tbody></table>
     <h3>1. Open actions</h3>
-    <table class="minutes-table"><thead><tr><th style="width:30%">Action</th><th style="width:14%">Outcome</th><th>Notes</th></tr></thead><tbody><tr><td>Replace FH40 probe</td><td>Discussed</td><td>Replacement arrives Thursday; Rachel to record the serial number.</td></tr></tbody></table>
+    <table class="t" style="margin-bottom:14px"><thead><tr><th style="width:30%">Action</th><th style="width:14%">Outcome</th><th>Notes</th></tr></thead><tbody><tr><td>Replace FH40 probe</td><td>Discussed</td><td>Replacement arrives Thursday; Rachel to record the serial number.</td></tr></tbody></table>
     <h3>Actions closed at this meeting</h3>
-    <table class="minutes-table"><thead><tr><th style="width:30%">Action</th><th style="width:24%">Outcome</th><th>Closed by</th></tr></thead><tbody><tr><td>Store layout review</td><td>Completed</td><td>Joe (chair)</td></tr></tbody></table>
+    <table class="t" style="margin-bottom:14px"><thead><tr><th style="width:30%">Action</th><th style="width:24%">Outcome</th><th>Closed by</th></tr></thead><tbody><tr><td>Store layout review</td><td>Completed</td><td>Joe (chair)</td></tr></tbody></table>
     <h3>Actions raised at this meeting</h3>
-    <table class="minutes-table"><thead><tr><th style="width:44%">Action</th><th style="width:28%">Owner</th><th>Due</th></tr></thead><tbody><tr><td>Check the second FH40 against the source</td><td>Richard Howe</td><td>30 Nov</td></tr></tbody></table>
+    <table class="t" style="margin-bottom:14px"><thead><tr><th style="width:44%">Action</th><th style="width:28%">Owner</th><th>Due</th></tr></thead><tbody><tr><td>Check the second FH40 against the source</td><td>Richard Howe</td><td>30 Nov</td></tr></tbody></table>
     <h3>Amendments</h3>
-    <table class="minutes-table"><thead><tr><th>Amendment</th><th>Why</th><th>By</th></tr></thead><tbody id="amends"><tr><td>Serial number corrected to 41-2207.</td><td>Typo in the notes</td><td>Joe, 25 Oct</td></tr></tbody></table>
+    <table class="t"><thead><tr><th>Amendment</th><th>Why</th><th>By</th></tr></thead><tbody id="amends"><tr><td>Serial number corrected to 41-2207.</td><td>Typo in the notes</td><td>Joe, 25 Oct</td></tr></tbody></table>
   </div>
 </div></div></section>
 
-<div class="toast" id="toast" role="alert"><b id="toast-title">Not saved</b><div style="margin:4px 0 10px">Someone else changed this a moment ago, so your change was not applied. It is shown as it is now.</div><div class="row"><button class="btn btn-main btn-small" id="toast-retry">Try again</button><button class="btn btn-small" id="toast-close">Dismiss</button></div></div>
+<!-- =========================================================== ADMINISTRATION -->
+<section class="screen" id="s-admin"><main>
+  <h1>Administration</h1>
+  <div class="tabs" id="adm-tabs"><button data-adm="changes">Changes needing attention</button><button data-adm="people">People</button><button data-adm="settings">Settings</button><button data-adm="feedback">Feedback</button><button data-adm="clean">Remove test data</button></div>
+
+  <div data-admp="changes">
+    <div class="explain"><b>Changes:</b> a plain health card; a change that needs you says what it was, who sent it, and the one button that applies (Retry, Cancel, Finish or Revert).</div>
+    <div class="card" style="margin-bottom:14px"><h2>Automatic processing</h2>
+      <div class="health"><span class="chip ok">Working</span><div class="grow"><b>Changes are being recorded.</b> <span class="muted">Last checked 10:45.</span></div></div>
+      <div class="health"><span class="chip ok">Working</span><div class="grow"><b>Reminders ran</b> today at 06:00.</div></div></div>
+    <div class="card"><h2>Changes needing attention</h2>
+      <div class="list-row"><div class="t"><b>Add a person: richard.howe@…</b><span class="muted small">Sent by Joe on 24 Oct, 16:25 · tried 3 times · part of it was made</span></div><span class="chip late">Needs finishing</span><button class="btn btn-main btn-small" id="finish">Finish</button></div>
+    </div>
+  </div>
+
+  <div data-admp="people" hidden>
+    <div class="row" style="margin-bottom:12px"><button class="btn btn-main">Add people</button><span class="grow"></span><input type="text" placeholder="Find a person" aria-label="Find a person"></div>
+    <div class="card"><table class="t"><thead><tr><th>Name</th><th>Role</th><th>Areas</th><th>Notices</th><th></th></tr></thead><tbody>
+      <tr><td><a data-go="adm-person">Joe</a> <span class="muted small">(Joseph Pepper)</span></td><td>Team Leader · administrator</td><td>All areas</td><td>Can post</td><td><span class="chip ok">Active</span></td></tr>
+      <tr><td><a data-go="adm-person">Richard Howe</a></td><td>Technician</td><td>Flask, Green Stream (runs meetings)</td><td>Can post</td><td><span class="chip ok">Active</span></td></tr>
+    </tbody></table></div>
+  </div>
+
+  <div data-admp="settings" hidden>
+    <div class="card"><table class="t"><thead><tr><th>Setting</th><th>Now</th><th></th></tr></thead><tbody>
+      <tr><td><b>First reminder</b><div class="muted small">Days before an action's deadline</div></td><td>7 days</td><td><button class="btn btn-small" data-setting>Change</button></td></tr>
+      <tr><td><b>Due soon</b><div class="muted small">An action counts as due soon this many days before its deadline</div></td><td id="due-soon">7 days</td><td><button class="btn btn-small" data-setting>Change</button></td></tr>
+      <tr><td><b>Longest deadline</b><div class="muted small">How far ahead a deadline can be set</div></td><td>2 years</td><td><button class="btn btn-small" data-setting>Change</button></td></tr>
+      <tr><td><b>Queue monitor hours</b><div class="muted small">Every 15 minutes in these hours on weekdays; otherwise once an hour</div></td><td>07:00 to 19:45</td><td><button class="btn btn-small" data-setting>Change</button></td></tr>
+      <tr><td><b>Outlook invitations</b><div class="muted small">Booked meetings send invitations from the booker's calendar</div></td><td>Yes</td><td><button class="btn btn-small" data-setting>Change</button></td></tr>
+      <tr><td><b>PDF minutes</b><div class="muted small">Finalised minutes are saved as a PDF</div></td><td>Yes</td><td><button class="btn btn-small" data-setting>Change</button></td></tr>
+    </tbody></table></div>
+  </div>
+
+  <div data-admp="feedback" hidden>
+    <div class="filters"><label>Type <select><option>All</option><option>Improvement</option><option>Bug</option><option>Question</option></select></label><label>Status <select><option>Open</option><option>All</option></select></label></div>
+    <div class="card">
+      <div class="list-row"><span class="chip plain">Question</span><div class="t"><b>Can I see who flagged a notice?</b><span class="muted small">Kevin · 23 Oct</span></div><span class="chip soon">New</span><button class="btn btn-small">Respond</button></div>
+      <div class="list-row"><span class="chip plain">Improvement</span><div class="t"><b>TEST feedback item</b><span class="muted small">Joe · 24 Oct</span></div><span class="chip ok">Answered</span><button class="btn btn-small">Open</button></div>
+    </div>
+  </div>
+
+  <div data-admp="clean" hidden>
+    <div class="card"><h2>Remove test data</h2>
+      <p>Everything marked as test data, and everything that depends on it, goes to the site's recycle bin (recoverable for 93 days). Use this once, just before go-live.</p>
+      <table class="t" style="margin-bottom:14px"><thead><tr><th>Kind</th><th class="num">Records</th></tr></thead><tbody><tr><td>Actions</td><td class="num">17</td></tr><tr><td>Notices and comments</td><td class="num">16</td></tr><tr><td>Issues</td><td class="num">2</td></tr><tr><td>Meetings and minutes</td><td class="num">4</td></tr><tr><td>Requests and history</td><td class="num">142</td></tr></tbody></table>
+      <div class="field" style="max-width:420px"><label>Type REMOVE TEST DATA to confirm</label><input type="text"></div>
+      <button class="btn btn-main">Remove test data</button></div>
+  </div>
+</main></section>
+
+<!-- =========================================================== A PERSON -->
+<section class="screen" id="s-adm-person"><div class="dlg-wrap"><div class="dlg narrow" role="dialog" aria-label="A person">
+  <div class="dlg-head"><div class="title"><div class="what-label">Person · Technician</div><h1>Richard Howe</h1><div class="muted small">richard.howe@… · in the Hub since 24 Oct</div></div><button class="x" aria-label="Close">✕</button></div>
+  <div class="dlg-body">
+    <div class="row" style="gap:20px"><div class="field" style="flex:1"><label>Known as</label><input type="text" value="Richard Howe"></div><div class="field" style="flex:1"><label>Role</label><select><option>Technician</option><option>Engineer</option><option>Team Leader</option><option>Group Head</option></select></div></div>
+    <h3>Areas</h3>
+    <table class="t" style="margin-bottom:14px"><thead><tr><th>Area</th><th>Member</th><th>Runs meetings</th><th>Until</th></tr></thead><tbody>
+      <tr><td>Flask</td><td><input type="checkbox" checked aria-label="Member of Flask"></td><td><input type="checkbox" aria-label="Runs Flask meetings"></td><td class="muted">–</td></tr>
+      <tr><td>Green Stream</td><td><input type="checkbox" checked aria-label="Member of Green Stream"></td><td><input type="checkbox" checked aria-label="Runs Green Stream meetings"></td><td class="muted">–</td></tr>
+      <tr><td>RPE</td><td><input type="checkbox" aria-label="Member of RPE"></td><td><input type="checkbox" aria-label="Runs RPE meetings"></td><td class="muted">–</td></tr>
+    </tbody></table>
+    <label class="row" style="gap:8px"><input type="checkbox" checked> Can post notices</label>
+    <div class="foot"><button class="btn">Mark as left</button><span class="grow"></span><button class="btn btn-main" id="person-save">Save changes</button><span id="person-mark"></span></div>
+    <details class="more"><summary>Change history</summary><p class="muted small">24 Oct 16:44 – areas set by Joe. 24 Oct 16:25 – added by Joe.</p></details>
+  </div>
+</div></div></section>
+
+<button class="fb-bubble">? Feedback</button>
+
+<div class="toast" id="toast" role="alert"><b id="toast-title">Not saved</b><div id="toast-text" style="margin:4px 0 10px"></div><div class="row" id="toast-buttons"></div></div>
 
 <script>
 (function () {
   'use strict';
   function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
-  var screens = ['home', 'action', 'raise', 'meeting', 'minutes'];
+  var adminTabs = { 'adm-changes': 'changes', 'adm-people': 'people', 'adm-settings': 'settings', 'adm-feedback': 'feedback', 'adm-clean': 'clean' };
+  var pillOf = { home: 'home', todos: 'todos', overview: 'overview', area: 'home' };
   function go(name) {
-    screens.forEach(function (s) { document.getElementById('s-' + s).classList.toggle('on', s === name); });
+    var screen = adminTabs[name] ? 'admin' : name;
+    document.querySelectorAll('.screen').forEach(function (s) { s.classList.toggle('on', s.id === 's-' + screen); });
+    if (adminTabs[name]) admTab(adminTabs[name]);
     document.querySelectorAll('.switcher button[data-go]').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.go === name ? 'true' : 'false'); });
+    var pill = adminTabs[name] || name === 'adm-person' ? 'admin' : pillOf[name];
+    document.querySelectorAll('.pills button').forEach(function (b) { b.classList.toggle('on', b.dataset.pill === pill); });
+    window.scrollTo(0, 0);
   }
   document.addEventListener('click', function (e) { var g = e.target.closest('[data-go]'); if (g) { e.preventDefault(); go(g.dataset.go); } });
+  function admTab(t) {
+    document.querySelectorAll('#adm-tabs button').forEach(function (b) { b.classList.toggle('on', b.dataset.adm === t); });
+    document.querySelectorAll('[data-admp]').forEach(function (p) { p.hidden = p.dataset.admp !== t; });
+  }
+  document.querySelectorAll('#adm-tabs button').forEach(function (b) { b.onclick = function () { go('adm-' + b.dataset.adm); }; });
+  document.querySelectorAll('#area-tabs button').forEach(function (b) {
+    b.onclick = function () {
+      document.querySelectorAll('#area-tabs button').forEach(function (x) { x.classList.toggle('on', x === b); });
+      document.querySelectorAll('[data-ap]').forEach(function (p) { p.hidden = p.dataset.ap !== b.dataset.at; });
+    };
+  });
+  document.querySelectorAll('#todo-tabs button').forEach(function (b) { b.onclick = function () { document.querySelectorAll('#todo-tabs button').forEach(function (x) { x.classList.toggle('on', x === b); }); }; });
 
-  // ---- saving: a grey tick when sent, two green ticks when everything is done, then the mark fades away
+  // ---- saving: ✓ Sent, then ✓✓ Saved which fades; refusals explain themselves
   var status = document.getElementById('status'), statusText = document.getElementById('status-text');
-  var pending = [], counter = 0;
+  var pending = [], counter = 0, nextIsFault = false;
   function showStatus() {
     status.classList.toggle('busy', pending.length > 0);
     statusText.textContent = pending.length ? (pending.length === 1 ? '1 change still saving: ' + pending[0] + ' – you can carry on.' : pending.length + ' changes still saving – you can carry on.') : 'Everything is up to date.';
   }
-  function save(label, slot, onRefused) {
+  var toast = document.getElementById('toast');
+  function refuse(label, fault, retry) {
+    document.getElementById('toast-title').textContent = 'Not saved: ' + label;
+    document.getElementById('toast-text').textContent = fault ? 'The Hub could not process this change. Nothing was changed, and an administrator has been told.'
+                                                              : 'Someone else changed this a moment ago, so your change was not applied. Nothing was changed – the screen shows it as it is now.';
+    var bs = document.getElementById('toast-buttons'); bs.textContent = '';
+    if (!fault) { var r = el('button', 'btn btn-main btn-small', 'Try again'); r.onclick = function () { toast.classList.remove('on'); retry(); }; bs.append(r); }
+    var d = el('button', 'btn btn-small', 'Dismiss'); d.onclick = function () { toast.classList.remove('on'); }; bs.append(d);
+    toast.classList.add('on');
+  }
+  function save(label, slot, apply, undo) {
+    if (apply) apply();
     var mark = el('span', 'mark sent', '✓ Sent');
     if (slot) { slot.textContent = ''; slot.append(mark); }
     pending.push(label); showStatus();
-    var refused = (++counter % 4 === 0);
+    var fault = nextIsFault; nextIsFault = false;
+    var refused = fault || (++counter % 5 === 0);
     setTimeout(function () {
       pending.splice(pending.indexOf(label), 1); showStatus();
-      if (refused) {
-        mark.className = 'mark refused'; mark.textContent = '✕ Not saved';
-        document.getElementById('toast-title').textContent = 'Not saved: ' + label;
-        document.getElementById('toast').classList.add('on');
-        if (onRefused) onRefused();
-        return;
-      }
+      if (refused) { mark.className = 'mark refused'; mark.textContent = '✕ Not saved'; if (undo) undo(); refuse(label, fault, function () { save(label, slot, apply, undo); }); return; }
       mark.className = 'mark saved'; mark.textContent = '✓✓ Saved';
       setTimeout(function () { mark.classList.add('gone'); }, 3000);
       setTimeout(function () { mark.remove(); }, 4000);
     }, 2500);
   }
-  document.getElementById('toast-close').onclick = function () { document.getElementById('toast').classList.remove('on'); };
-  document.getElementById('toast-retry').onclick = function () { document.getElementById('toast').classList.remove('on'); save('trying again', null); };
+  document.getElementById('demo-fault').onclick = function () { nextIsFault = true; this.textContent = 'Next change will hit a system fault'; };
 
-  // ---- home: Mark as done – the button becomes Reopen, the row shows Done
-  document.querySelectorAll('[data-done]').forEach(function (b) {
+  // ---- home and my to-dos: Mark as done becomes Reopen
+  function doneButton(b, rowSel) {
     b.onclick = function () {
-      var todo = b.closest('.todo'), chip = todo.querySelector('.chip'), slot = el('span');
-      var before = [chip.className, chip.textContent];
-      chip.className = 'chip ok'; chip.textContent = 'Done';
-      b.textContent = 'Reopen';
+      var row = b.closest(rowSel), chip = row.querySelector('.chip'), slot = el('span');
       b.parentNode.insertBefore(slot, b);
-      save('Mark as done: ' + todo.querySelector('.t').textContent, slot, function () { chip.className = before[0]; chip.textContent = before[1]; b.textContent = 'Mark as done'; });
+      var before = [chip.className, chip.textContent, b.textContent];
+      var marking = b.textContent === 'Mark as done';
+      save((marking ? 'Mark as done: ' : 'Reopen: ') + (row.querySelector('.t b, .t').textContent), slot,
+        function () { chip.className = marking ? 'chip ok' : 'chip soon'; chip.textContent = marking ? 'Done' : 'Open'; b.textContent = marking ? 'Reopen' : 'Mark as done'; },
+        function () { chip.className = before[0]; chip.textContent = before[1]; b.textContent = before[2]; });
     };
-  });
+  }
+  document.querySelectorAll('[data-done]').forEach(function (b) { doneButton(b, '.todo'); });
+  document.querySelectorAll('[data-done-row]').forEach(function (b) { doneButton(b, '.list-row'); });
 
-  // empty week: one line
   document.getElementById('toggle-week').onclick = function () {
-    var empty = document.getElementById('week-empty').hidden;
-    document.getElementById('week-empty').hidden = !empty;
-    document.getElementById('week-full').hidden = empty;
-    document.getElementById('week-sum').textContent = empty ? 'nothing this week' : '2 to-dos · no meetings';
-    this.textContent = empty ? 'Show a busy week' : 'Show an empty week';
-    go('home');
+    var showEmpty = document.getElementById('week-empty').hidden;
+    document.getElementById('week-empty').hidden = !showEmpty; document.getElementById('week-full').hidden = showEmpty;
+    this.textContent = showEmpty ? 'Busy week' : 'Empty week'; go('home');
   };
-
-  // area tiles: open the area in place
   var areas = [['Flask', '3 open', 'ok'], ['Instruments', '0 open', 'plain'], ['Green Stream', '1 late', 'late'], ['RPE', '1 open', 'ok'], ['BA', '1 open', 'ok'],
-    ['Dosimetry', '1 open', 'ok'], ['Rad Protection', '1 open', 'ok'], ['DSL', '0 open', 'plain'], ['Active Lab', '1 open', 'ok'], ['Radwaste', '0 open', 'plain']];
+    ['Dosimetry', '1 open', 'ok'], ['Rad Protection', '1 open', 'ok'], ['DSL', '0 open', 'plain'], ['Active Lab', '1 open', 'ok'], ['Radwaste', '1 open', 'ok']];
   var tiles = document.getElementById('tiles'), open = document.getElementById('area-open');
+  function fold(on) { ['week-panel', 'todo-panel'].forEach(function (id) { document.getElementById(id).classList.toggle('folded', on); }); }
   areas.forEach(function (a) {
     var t = el('button', 'tile'); t.setAttribute('aria-expanded', 'false');
     t.append(el('b', null, a[0]), el('span', 'chip ' + a[2], a[1]));
@@ -432,34 +626,32 @@ textarea { width: 100%; min-height: 86px; border: 1px solid #b9c3cc; border-radi
     };
     tiles.append(t);
   });
-  // while an area is open, "This week" and "Your to-dos" fold to their title lines (as in the approved design)
-  function fold(on) { ['week-panel', 'todo-panel'].forEach(function (id) { document.getElementById(id).classList.toggle('folded', on); }); }
   document.getElementById('area-close').onclick = function () { open.hidden = true; fold(false); tiles.querySelectorAll('.tile').forEach(function (x) { x.setAttribute('aria-expanded', 'false'); }); };
 
-  // ---- action panel
+  // ---- action
   var actState = document.getElementById('act-state'), actMark = document.getElementById('act-mark'), btns = document.getElementById('act-buttons');
   function actionButtons(done) {
     btns.textContent = '';
     var upd = el('button', 'btn btn-main', 'Add an update'); upd.onclick = addUpdate; btns.append(upd);
-    if (done) {
-      var re = el('button', 'btn', 'Reopen'); re.onclick = function () { setDone(false); }; btns.append(re);
-    } else {
+    if (done) { var re = el('button', 'btn', 'Reopen'); re.onclick = function () { setDone(false); }; btns.append(re); }
+    else {
       var more = el('button', 'btn', 'I need more time');
-      more.onclick = function () { var d = document.getElementById('act-due'); d.textContent = 'Due 2 Nov'; d.className = 'chip plain'; save('Move deadline: Replace FH40 probe', actMark); };
-      var done2 = el('button', 'btn', 'Mark as done'); done2.onclick = function () { setDone(true); };
-      btns.append(more, done2);
+      more.onclick = function () { var d = document.getElementById('act-due'), was = [d.textContent, d.className];
+        save('Move deadline: Replace FH40 probe', actMark, function () { d.textContent = 'Due 2 Nov'; d.className = 'chip plain'; }, function () { d.textContent = was[0]; d.className = was[1]; }); };
+      var dn = el('button', 'btn', 'Mark as done'); dn.onclick = function () { setDone(true); };
+      btns.append(more, dn);
     }
   }
   function setDone(done) {
-    actState.textContent = done ? 'Done' : 'Open'; actState.className = 'chip ' + (done ? 'ok' : 'soon');
-    actionButtons(done);
-    save((done ? 'Mark as done' : 'Reopen') + ': Replace FH40 probe', actMark, function () { actState.textContent = done ? 'Open' : 'Done'; actState.className = 'chip ' + (done ? 'soon' : 'ok'); actionButtons(!done); });
+    save((done ? 'Mark as done' : 'Reopen') + ': Replace FH40 probe', actMark,
+      function () { actState.textContent = done ? 'Done' : 'Open'; actState.className = 'chip ' + (done ? 'ok' : 'soon'); actionButtons(done); },
+      function () { actState.textContent = done ? 'Open' : 'Done'; actState.className = 'chip ' + (done ? 'soon' : 'ok'); actionButtons(!done); });
   }
   function addUpdate() {
     var u = el('div', 'update'), slot = el('span');
-    u.append(el('b', null, 'Joe'), el('span', 'muted small', ' · just now '), slot, el('div', null, 'Spoke to stores – arriving Thursday morning.'));
-    var list = document.getElementById('updates'); list.insertBefore(u, list.firstChild);
-    save('Update on: Replace FH40 probe', slot, function () { u.remove(); });
+    u.append(el('b', null, 'Joe'), el('span', 'muted small', ' · just now'), slot, el('div', null, 'Spoke to stores – arriving Thursday morning.'));
+    var list = document.getElementById('updates');
+    save('Update on: Replace FH40 probe', slot, function () { list.insertBefore(u, list.firstChild); }, function () { u.remove(); });
   }
   actionButtons(false);
 
@@ -473,55 +665,71 @@ textarea { width: 100%; min-height: 86px; border: 1px solid #b9c3cc; border-radi
   document.getElementById('raise-send').onclick = function () {
     if (!area.value) { area.focus(); return; }
     go('home');
-    var lane = document.querySelectorAll('#s-home .lane')[2];
-    var todo = el('div', 'todo'), m = el('div', 'm'), slot = el('span');
+    var lane = document.getElementById('lane-later'), todo = el('div', 'todo'), m = el('div', 'm'), slot = el('span');
     m.append(el('span', 'chip plain', 'Due 20 Nov'), el('span', 'muted small', area.value), el('span', 'grow'), slot);
     todo.append(el('div', 't', 'Update dosimetry procedure'), m);
-    lane.insertBefore(todo, lane.children[1]);
-    save('Raise: Update dosimetry procedure', slot, function () { todo.remove(); });
+    save('Raise: Update dosimetry procedure', slot, function () { lane.insertBefore(todo, lane.children[1]); }, function () { todo.remove(); });
   };
 
-  // ---- meeting: one item at a time; each kind has its own buttons
+  // ---- notice and issue
+  document.getElementById('flag').onclick = function () {
+    var b = this, flagged = b.textContent === 'Flag for the next meeting';
+    save(flagged ? 'Flag: New check-source register' : 'Withdraw flag', document.getElementById('flag-mark'),
+      function () { b.textContent = flagged ? 'Withdraw the flag' : 'Flag for the next meeting'; }, function () { b.textContent = flagged ? 'Flag for the next meeting' : 'Withdraw the flag'; });
+  };
+  document.getElementById('comment-add').onclick = function () {
+    var t = document.getElementById('comment-text'), u = el('div', 'update'), slot = el('span');
+    u.append(el('b', null, 'Joe'), el('span', 'muted small', ' · just now'), slot, el('div', null, t.value));
+    save('Comment on: New check-source register', slot, function () { document.getElementById('comments').append(u); t.value = ''; }, function () { u.remove(); });
+  };
+  document.getElementById('iss-resolve').onclick = function () {
+    var s = document.getElementById('iss-state'), b = this;
+    save('Resolve: Contamination monitor drift', document.getElementById('iss-mark'), function () { s.textContent = 'Resolved'; s.className = 'chip ok'; b.textContent = 'Reopen'; },
+      function () { s.textContent = 'Open'; s.className = 'chip plain'; b.textContent = 'Mark as resolved'; });
+  };
+  document.getElementById('post-send').onclick = function () { go('area'); document.querySelector('#area-tabs button[data-at="n"]').click();
+    var card = document.querySelector('[data-ap="n"] .card'), row = el('div', 'list-row'), t = el('div', 't'), slot = el('span');
+    t.append(el('b', null, document.getElementById('n-title').value), el('span', 'muted small', 'Joe · just now · Flask and Dosimetry'));
+    row.append(el('span', 'kind notice', 'Notice'), t, slot);
+    save('Post notice', slot, function () { card.insertBefore(row, card.firstChild); }, function () { row.remove(); }); };
+
+  // ---- meeting
   var items = [
-    { kind: 'action', k: 'Action', title: 'Replace FH40 probe', meta: 'Owner Rachel · due tomorrow · moved once', notes: 'Replacement arrives Thursday.', out: 'Discussed',
-      buttons: ['Open this action', 'Close this action', 'Raise a further action'] },
-    { kind: 'action', k: 'Action', title: 'Store layout review', meta: 'Owner Joe · due 12 Dec', notes: '', out: '',
-      buttons: ['Open this action', 'Close this action', 'Raise a further action'] },
-    { kind: 'issue', k: 'Issue', title: 'Contamination monitor drift', meta: 'Degradation · medium impact · raised by Kevin, 20 Oct', notes: '', out: '',
-      buttons: ['Open this issue', 'Turn into an action'] },
-    { kind: 'notice', k: 'Notice', title: 'New check-source register', meta: 'Posted by Joe, 22 Oct · flagged for this meeting', notes: '', out: '',
-      buttons: ['Open this notice', 'Turn into an action'] }
+    { kind: 'action', k: 'Action', title: 'Replace FH40 probe', meta: 'Owner Rachel · due tomorrow · moved once', notes: 'Replacement arrives Thursday.', out: 'Discussed', buttons: ['Open this action', 'Close this action', 'Raise a further action'] },
+    { kind: 'action', k: 'Action', title: 'Store layout review', meta: 'Owner Joe · due 12 Dec', notes: '', out: '', buttons: ['Open this action', 'Close this action', 'Raise a further action'] },
+    { kind: 'issue', k: 'Issue', title: 'Contamination monitor drift', meta: 'Degradation · medium impact · raised by Kevin, 20 Oct', notes: '', out: '', buttons: ['Open this issue', 'Turn into an action'] },
+    { kind: 'notice', k: 'Notice', title: 'New check-source register', meta: 'Posted by Joe, 22 Oct · flagged for this meeting', notes: '', out: '', buttons: ['Open this notice', 'Turn into an action'] }
   ];
   var pane = document.getElementById('pane'), current = 0;
-  function listItem(i) {
-    var it = items[i], b = el('button', 'it'); b.dataset.item = String(i);
-    var st = el('span', 'chip ' + (it.out ? (it.out === 'Not reached' || it.out === 'Carry forward' ? 'soon' : 'ok') : 'plain'), it.out || 'To do');
-    b.append(el('span', 'lbl', it.title), st);
-    b.onclick = function () { show(i); };
-    return b;
-  }
   function drawList() {
     ['action', 'issue', 'notice', 'other'].forEach(function (k) { document.getElementById('sec-' + k).textContent = ''; });
-    items.forEach(function (it, i) { var b = listItem(i); if (i === current) b.classList.add('on'); document.getElementById('sec-' + it.kind).append(b); });
+    items.forEach(function (it, i) {
+      var b = el('button', 'it' + (i === current ? ' on' : ''));
+      b.append(el('span', 'lbl', it.title), el('span', 'chip ' + (it.out ? (/Not reached|Carry/.test(it.out) ? 'soon' : 'ok') : 'plain'), it.out || 'To do'));
+      b.onclick = function () { show(i); };
+      document.getElementById('sec-' + it.kind).append(b);
+    });
   }
   function show(i) {
     current = i; drawList();
-    var it = items[i];
-    pane.textContent = '';
+    var it = items[i]; pane.textContent = '';
     var head = el('div', 'row'); head.append(el('span', 'kind ' + it.kind, it.k));
     var h = el('h2', null, it.title); h.style.margin = '8px 0 0'; h.style.fontSize = '22px';
     var outs = el('div', 'outcomes');
-    var choices = it.kind === 'action' ? ['Discussed', 'Carry forward', 'Not reached'] : ['Discussed', 'Carry forward', 'Not reached'];
-    choices.forEach(function (o) {
+    ['Discussed', 'Carry forward', 'Not reached'].forEach(function (o) {
       var b = el('button', null, o); b.setAttribute('aria-pressed', it.out === o ? 'true' : 'false');
-      b.onclick = function () { it.out = o; show(i); save('Outcome: ' + it.title, null); };
+      b.onclick = function () { var was = it.out; save('Outcome: ' + it.title, null, function () { it.out = o; show(i); }, function () { it.out = was; show(current); }); };
       outs.append(b);
     });
     var ta = el('textarea'); ta.value = it.notes; ta.setAttribute('aria-label', 'Notes for the minutes');
-    var foot = el('div', 'pane-foot');
+    var foot = el('div', 'foot');
     it.buttons.forEach(function (label) {
       var b = el('button', 'btn', label);
-      if (label === 'Close this action') b.onclick = function () { it.out = 'Closed'; it.meta = 'Closed by Joe (chair) just now · will appear in the minutes'; show(i); save('Close: ' + it.title, null); };
+      if (label === 'Close this action') b.onclick = function () { var was = [it.out, it.meta]; save('Close: ' + it.title, null, function () { it.out = 'Closed'; it.meta = 'Closed by Joe (chair) just now · will appear in the minutes'; show(i); }, function () { it.out = was[0]; it.meta = was[1]; show(current); }); };
+      if (/Open this action/.test(label)) b.dataset.go = 'action';
+      if (/Open this notice/.test(label)) b.dataset.go = 'notice';
+      if (/Open this issue/.test(label)) b.dataset.go = 'issue';
+      if (/Turn into|Raise/.test(label)) b.dataset.go = 'raise';
       foot.append(b);
     });
     foot.append(el('span', 'grow'));
@@ -531,20 +739,32 @@ textarea { width: 100%; min-height: 86px; border: 1px solid #b9c3cc; border-radi
     pane.append(head, h, el('div', 'meta', it.meta), el('div', 'what-label', 'Outcome'), outs, el('div', 'what-label', 'Notes for the minutes'), ta, foot);
   }
   document.getElementById('add-item').onclick = function () {
-    items.push({ kind: 'other', k: 'Other business', title: 'TEST in-meeting item', meta: 'Added by Joe just now', notes: '', out: '', buttons: ['Raise an action'] });
-    show(items.length - 1);
-    save('Add item: TEST in-meeting item', null);
+    var it = { kind: 'other', k: 'Other business', title: 'TEST in-meeting item', meta: 'Added by Joe just now', notes: '', out: '', buttons: ['Raise an action'] };
+    save('Add item: TEST in-meeting item', null, function () { items.push(it); show(items.length - 1); }, function () { items.splice(items.indexOf(it), 1); show(0); });
   };
   show(0);
 
-  // ---- amend
   document.getElementById('amend').onclick = function () {
-    var tr = el('tr');
-    ['Attendance: Kevin also present.', 'Missed from the record', 'Joe, just now'].forEach(function (x) { tr.append(el('td', null, x)); });
-    document.getElementById('amends').append(tr);
-    var slot = el('span'); tr.lastChild.append(' ', slot);
-    save('Amend these minutes', slot);
+    var tr = el('tr'), slot = el('span');
+    ['Attendance: Kevin also present.', 'Missed from the record'].forEach(function (x) { tr.append(el('td', null, x)); });
+    var by = el('td', null, 'Joe, just now '); by.append(slot); tr.append(by);
+    save('Amend these minutes', slot, function () { document.getElementById('amends').append(tr); }, function () { tr.remove(); });
   };
+
+  // ---- administration
+  document.getElementById('finish').onclick = function () {
+    var row = this.closest('.list-row'), slot = el('span'); this.replaceWith(slot);
+    save('Finish: Add a person', slot, function () { row.querySelector('.chip').textContent = 'Finishing'; }, function () {});
+    setTimeout(function () { row.style.opacity = '.4'; }, 2600);
+  };
+  document.querySelectorAll('[data-setting]').forEach(function (b) {
+    b.onclick = function () { var cell = b.closest('tr').children[1], was = cell.textContent, slot = el('span');
+      b.parentNode.append(slot);
+      save('Change setting', slot, function () { cell.textContent = was === '7 days' ? '10 days' : was; }, function () { cell.textContent = was; }); };
+  });
+  document.getElementById('person-save').onclick = function () { save('Change access for Richard Howe', document.getElementById('person-mark')); };
+
+  go('home');
 })();
 </script>
 </body>
