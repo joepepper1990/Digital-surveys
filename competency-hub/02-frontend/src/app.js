@@ -296,6 +296,15 @@ CH.app = (function () {
       return null;
     };
     app.markAction = function (a) { return app.mark(a, 'Action'); };
+    // "Mark as done" straight from a to-do card; "Reopen" on a card just marked done, if it was a slip (release 1.2)
+    app.quickDone = function (a) {
+      return app.tracker.submit({ type: 'MarkComplete', targetId: a.id, expectedRevision: a.revision, payload: { note: '' }, label: 'Mark as done: ' + a.title })
+        .catch(function (error) { CH.ui.toast(app.root, error.friendly || 'It could not be sent just now. Try again in a moment.', 'info'); });
+    };
+    app.quickReopen = function (a) {
+      return app.tracker.submit({ type: 'ReopenAction', targetId: a.id, expectedRevision: a.revision, payload: { reason: 'Reopened straight after it was marked as done.' },
+        label: 'Reopen: ' + a.title }).catch(function (error) { CH.ui.toast(app.root, error.friendly || 'It could not be sent just now. Try again in a moment.', 'info'); });
+    };
     // After an instant write (a flag, a comment): read the lists again and repaint, keeping any open panel.
     app.recordChanged = async function () {
       await reload();

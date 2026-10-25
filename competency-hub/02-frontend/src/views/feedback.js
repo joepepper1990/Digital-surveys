@@ -19,8 +19,18 @@ CH.views.feedback = (function () {
   }
 
   function bubble(app) {
+    // a speech bubble, drawn as an inline SVG (release 1.2)
+    var ns = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    ['M4 5h16v11H9l-5 4z', 'M8 9h8M8 12h5'].forEach(function (d) {
+      var p = document.createElementNS(ns, 'path');
+      p.setAttribute('d', d);
+      svg.appendChild(p);
+    });
     return h('button', { type: 'button', class: 'fb-bubble', 'aria-label': 'Send feedback about the Competency Hub', title: 'Send feedback',
-      onclick: function () { openForm(app); } }, h('span', { 'aria-hidden': 'true', text: '?' }), h('span', { class: 'fb-label', text: 'Feedback' }));
+      onclick: function () { openForm(app); } }, h('span', { class: 'ic', 'aria-hidden': 'true' }, svg), h('span', { class: 'fb-label', text: 'Feedback' }));
   }
 
   function openForm(app) {

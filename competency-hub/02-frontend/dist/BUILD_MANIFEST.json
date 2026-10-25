@@ -2,8 +2,8 @@
   "product": "ESG Competency Hub",
   "version": "1.1.1",
   "outputs": {
-    "competency-hub.js": "0229c066b6747e705f87de73c7c6823e340fe29bfdf0e697fb1920e910207fc3",
-    "competency-hub.html": "15a252d9fdff3ad79f654eb4fb3e69324e3d79434b98d3eb4558c2815cf1277d"
+    "competency-hub.js": "bd6a826d46b4da19834b27904864b08ceeac6d354c60976025d891e59aba46f4",
+    "competency-hub.html": "b566189679c08452e73cbbd2443619806011d71e1021f27e347e52659c32b438"
   },
   "sources": {
     "src/core/config.js": "aa3976a9eda614cdbbc51ade48f6112c084d58c0423d6867d0478ab75fc1e568",
@@ -18,9 +18,9 @@
     "src/domain/optimistic.js": "1f4a338db42ce05517f63187d892e5fac369de59539f1fbe06e507ebc9f753f9",
     "src/domain/health.js": "8a9218519b669c400bc865e331f7051cf8826c0bfb8c26fc92612919cb32a4e6",
     "src/domain/agenda.js": "eb2a928a9aab786a33167eb76e6cad74c33d06211c15bc435c5e33f564d43b34",
-    "src/ui/components.js": "367f132a8e47916fa764231a411cd0f56c9f5c71973a928f80cb3d4507360e68",
+    "src/ui/components.js": "469163ba756253863d4161ed0d5f1ace5ab41d4f67cc4830f52ef49cf529b211",
     "src/ui/dialog.js": "662bf1e1d9c3853de6f11acd968fb9cdf7596fba1ed504bc9a9ab3319032c728",
-    "src/views/home.js": "f20b1b9db1259a108b5416b641da17f18b89d2e1b3c6c2222ecae8842223077a",
+    "src/views/home.js": "a1377bae9201184e8477d053cdfec164faaf03015268153b9e54b58a730dcce8",
     "src/views/area.js": "5a498d61c7e151a118ff7fba9391c84e6edcccd8830986fcd55e0c27269f2b7a",
     "src/views/notice-form.js": "b182e6e4c7abe34a916691763d292a5fff47d2cbd7fbc9e6418d50e79b574a1e",
     "src/views/raise-form.js": "c7dd3ed3d4a677bfdec1fe9629c4cfe53db6f535e6a421be360443195478f859",
@@ -29,15 +29,15 @@
     "src/views/people.js": "41b26f0bea55b6978cd51ec2eac4f34b6f9b887797bc02647576602f3c601bda",
     "src/views/record-panel.js": "4ec4f8dd238822235afec386f2bf02ee7fb9867d19ed88be1e8dedf87697c6fa",
     "src/views/entry-form.js": "0061d63a18d4fb95971ffe8091e86a4ad0a36368246b19ce0166d6ccda831e18",
-    "src/views/feedback.js": "c32b4e4a936d6db268b333e7c90a59c4577fcdcabe3ba4d9ad5dab98f890c870",
+    "src/views/feedback.js": "794143394973851f9ebfdd40f16ad18512a84df75ef6ae883f4f5306279d5272",
     "src/views/settings.js": "badf03ed51a8b1e10a5e036511a3eeda093f599918ebe6b3e702692af41857b4",
     "src/views/dashboard.js": "668f8f91126d8b60fa6c396d85914d5aaf08aca054371e1f1b3d72c486641329",
     "src/views/meeting-form.js": "4f7f543b89b3d422a760d483ec950c9600c2d031bc5fefe1dd6c04da731f6a67",
     "src/views/meeting-panel.js": "29ec6a161866788b4c36d9cb79c9c789c28c29608ef8d0b238907a52497a0f5f",
     "src/views/cleanup.js": "e0c85ae105fa19e937088aa7963af4d5eec4b25417a611bd2d0a939b3d2ebd21",
     "src/views/admin.js": "5bf2e6ab3217c5f354e2f1e201b162bc5f47a8868346adca41ead755db5e001c",
-    "src/app.js": "9dff49c999c448627f58e066069974f41de7d6b1642a55ee64f6ff6265f358ee",
-    "styles/app.css": "18dd430175daab4cf7ade8d34e7ac7e92647b651d9c2fbff1df49b7513d46645",
+    "src/app.js": "f6453e58871fb904ad4fbf96777bea110d3d18ecb0e68f448e0d3468cedbe84b",
+    "styles/app.css": "f3eda6bbf769baa07d11773479f8a3596108420594329ca0f33fb9e859ae2731",
     "layout/competency-hub.layout.html": "d1ab8207281c0906fe2ebeefbf0ac495d292c1b80af30fd3d69d96129967a4c7"
   }
 }

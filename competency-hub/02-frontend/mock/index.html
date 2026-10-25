@@ -204,6 +204,12 @@
 .mock-scope .ch .item-open.hm-card, .mock-scope .ch .hm-card {flex: none; display: flex; flex-direction: column; align-items: stretch; justify-content: center; gap: calc(3 * var(--u)); height: calc(58 * var(--u)); background: #fff; border: 1px solid var(--line); border-radius: calc(10 * var(--u)); padding: calc(6 * var(--u)) calc(12 * var(--u)); text-align: left; min-width: 0;}
 .mock-scope .ch .item-open.hm-card:hover {border-color: var(--navy);}
 .mock-scope .ch .hm-card .t {font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+.mock-scope .ch .hm-card > .item-open.t {display: block; background: none; border: 0; padding: 0; text-align: left; color: var(--ink); width: 100%; line-height: 1.35; flex: none;}
+.mock-scope .ch .hm-card:hover {border-color: var(--navy);}
+.mock-scope .ch .hm-card.done .t {color: var(--muted);}
+.mock-scope .ch .hm-card .btn-small, .mock-scope .ch .btn.btn-small {min-height: calc(26 * var(--u)); padding: calc(1 * var(--u)) calc(10 * var(--u)); font-size: calc(13 * var(--u)); flex: none;}
+.mock-scope .ch .hm-meta .when + .btn {margin-left: calc(4 * var(--u));}
+.mock-scope .ch .week-empty {margin: 0; color: var(--muted); padding: calc(4 * var(--u)) 0;}
 .mock-scope .ch .hm-meta {display: flex; align-items: center; gap: calc(6 * var(--u)); min-width: 0; font-size: calc(13 * var(--u)); color: var(--muted);}
 .mock-scope .ch .hm-meta .when {margin-left: auto; font-size: calc(12.5 * var(--u)); padding: 0 calc(8 * var(--u)); line-height: calc(20 * var(--u));}
 .mock-scope .ch .hm-meta .when.hm-area-chip {margin-left: 0; background: var(--navy-soft); color: var(--navy); max-width: 55%; overflow: hidden; text-overflow: ellipsis;}
@@ -211,7 +217,7 @@
 .mock-scope .ch .hm-x, .mock-scope .ch .hm-note {white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
 .mock-scope .ch .hm-note {color: var(--navy); font-weight: 600;}
 .mock-scope .ch .hm-week {display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: calc(10 * var(--u));}
-.mock-scope .ch .hm-day {min-height: calc(100 * var(--u)); border: 1px solid var(--line); border-radius: calc(10 * var(--u)); padding: calc(8 * var(--u)) calc(9 * var(--u)); display: flex; flex-direction: column; gap: calc(5 * var(--u)); min-width: 0; background: #fff;}
+.mock-scope .ch .hm-day {min-height: calc(78 * var(--u)); border: 1px solid var(--line); border-radius: calc(10 * var(--u)); padding: calc(8 * var(--u)) calc(9 * var(--u)); display: flex; flex-direction: column; gap: calc(5 * var(--u)); min-width: 0; background: #fff;}
 .mock-scope .ch .hm-day.today {border: 2px solid var(--navy); padding: calc(7 * var(--u)) calc(8 * var(--u));}
 .mock-scope .ch .hm-day.weekend {background: #fafbfc;}
 .mock-scope .ch .hm-dh {display: flex; align-items: baseline; gap: calc(6 * var(--u));}
@@ -222,7 +228,7 @@
 .mock-scope .ch .hm-ev.late {background: var(--late-bg); color: var(--late);}
 .mock-scope .ch .hm-ev.soon {background: var(--soon-bg); color: var(--soon);}
 .mock-scope .ch .hm-ev.mtg {background: var(--navy-soft); color: var(--navy);}
-.mock-scope .ch .hm-none {color: var(--muted); font-size: calc(13 * var(--u)); margin-top: auto;}
+.mock-scope .ch .hm-none {color: var(--muted); font-size: calc(13 * var(--u));}
 .mock-scope .ch .hm-plus {color: var(--muted); font-size: calc(12.5 * var(--u)); font-weight: 600;}
 .mock-scope .ch .hm-lanes {display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: calc(12 * var(--u)); flex: 1; min-height: 0;}
 .mock-scope .ch .hm-lane, .mock-scope .ch .hm-col {overflow: hidden; background: #eef2f5; border-radius: calc(12 * var(--u)); padding: calc(10 * var(--u)); display: flex; flex-direction: column; min-height: 0;}
@@ -313,9 +319,10 @@
 .mock-scope .ch .setting-edit {display: flex; flex-wrap: wrap; align-items: center; gap: calc(8 * var(--u)); margin-top: calc(8 * var(--u));}
 .mock-scope .ch .setting-edit .field-error {flex-basis: 100%;}
 .mock-scope .ch .inline-fields input.num {width: calc(80 * var(--u));}
-.mock-scope .ch .fb-bubble {display: flex; align-items: center; gap: calc(6 * var(--u)); background: var(--navy); color: #fff; border: 0; border-radius: 999px; padding: calc(4 * var(--u)) calc(12 * var(--u)) calc(4 * var(--u)) calc(4 * var(--u)); font-weight: 600; font-size: calc(13 * var(--u));}
-.mock-scope .ch .fb-bubble span[aria-hidden] {display: inline-flex; align-items: center; justify-content: center; width: calc(22 * var(--u)); height: calc(22 * var(--u)); border-radius: 50%; background: #fff; color: var(--navy);}
-.mock-scope .ch .fb-bubble:hover, .mock-scope .ch .fb-bubble:focus-visible {background: var(--accent-dark);}
+.mock-scope .ch .fb-bubble {display: inline-flex; align-items: center; gap: calc(8 * var(--u)); background: #fff; color: var(--navy); border: 1px solid #c9d6de; border-radius: 999px; padding: calc(4 * var(--u)) calc(14 * var(--u)) calc(4 * var(--u)) calc(5 * var(--u)); font-weight: 600; font-size: calc(14 * var(--u)); box-shadow: 0 calc(4 * var(--u)) calc(12 * var(--u)) rgba(19, 81, 107, .16); transition: transform .15s, box-shadow .15s;}
+.mock-scope .ch .fb-bubble .ic {width: calc(26 * var(--u)); height: calc(26 * var(--u)); border-radius: 50%; background: var(--navy); display: grid; place-items: center;}
+.mock-scope .ch .fb-bubble svg {width: calc(15 * var(--u)); height: calc(15 * var(--u)); fill: none; stroke: #fff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round;}
+.mock-scope .ch .fb-bubble:hover, .mock-scope .ch .fb-bubble:focus-visible {transform: translateY(-1px); box-shadow: 0 calc(8 * var(--u)) calc(20 * var(--u)) rgba(19, 81, 107, .26);}
 .mock-scope .ch .dash-figs {display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(150 * var(--u)), 1fr)); gap: calc(12 * var(--u)); margin: calc(12 * var(--u)) 0 calc(18 * var(--u));}
 .mock-scope .ch .dash-fig {display: flex; flex-direction: column; align-items: flex-start; gap: calc(2 * var(--u)); background: #fff; border: 1px solid var(--line); border-left: 5px solid var(--navy); border-radius: calc(10 * var(--u)); padding: calc(10 * var(--u)) calc(14 * var(--u)); text-align: left; color: var(--ink);}
 .mock-scope .ch .dash-fig b {font-size: calc(26 * var(--u)); line-height: 1.1;}

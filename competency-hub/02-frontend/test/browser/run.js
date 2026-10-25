@@ -55,8 +55,9 @@ check('engineer home: "For you to manage" lists late work in their areas, with o
 
 r = dump('as=' + ROBERT);
 t = text(r.dom);
-check('group head home: all areas, attention list, totals count shared actions once', r.errors.length === 0 && (r.dom.match(/class="tile hm-tile/g) || []).length === 10 &&
-  t.includes('Needs your attention') && t.includes('26 open actions') && !t.includes('View only'));
+// release 1.2: the greeting stands alone; group totals (each shared action counted once) are on the Overview page
+check('group head home: all areas and the attention list, nothing view only', r.errors.length === 0 && (r.dom.match(/class="tile hm-tile/g) || []).length === 10 &&
+  t.includes('Needs your attention') && !t.includes('View only'));
 r = dump('as=' + JOE);
 check('team leader home: same overview as group head', text(r.dom).includes('Needs your attention'));
 
@@ -186,6 +187,10 @@ check('a system fault: the change goes back, a card says an administrator has be
   res.result.reverted, JSON.stringify(res));
 check('Try again after a fault resumes the same request (no second one), and it is saved', res.ok && JSON.stringify(res.result.requests) === '["MarkComplete:Completed"]' &&
   res.result.status === 'Closed' && JSON.stringify(res.result.writes) === '["Requests","Requests:update"]', JSON.stringify(res));
+res = drive('as=' + RICHARD + '&drive=quickDone', SLOW);
+check('home: Mark as done on a to-do card shows Done at once with ✓ Sent, then ✓✓ Saved; it stays with Reopen, which puts it back', res.ok &&
+  /Done/.test(res.result.sent) && /Reopen/.test(res.result.sent) && /✓✓ Saved/.test(res.result.saved) && res.result.closed === 'Closed' &&
+  /Mark as done/.test(res.result.after) && res.result.status === 'In Progress' && JSON.stringify(res.result.requests) === '["MarkComplete:Completed","ReopenAction:Completed"]', JSON.stringify(res));
 // Finishing actions (plan K9): status, reassign, close and reopen, edit, close-out, My actions
 const KELLY = 102, CRAIG = 105;
 res = drive('as=' + RACHEL + '&action=40&drive=statusBlocker', SLOW);

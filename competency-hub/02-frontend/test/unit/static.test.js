@@ -18,7 +18,8 @@ test('S1/S4: no HTML injection or dynamic code', () => {
 });
 
 test('S5: no external resources or absolute URLs', () => {
-  for (const s of sources) assert.doesNotMatch(s.text, /https?:\/\//, s.name);
+  // the SVG namespace (the feedback button's icon) is a name, not a resource: nothing is fetched from it
+  for (const s of sources) assert.doesNotMatch(s.text.split("'http://www.w3.org/2000/svg'").join(''), /https?:\/\//, s.name);
 });
 
 test('S6/S8: writes go only to notices, updates, feedback, meeting record folders and the own request folder; no permission or sharing calls', () => {

@@ -108,7 +108,7 @@ CH.ui = (function () {
     return h('section', { class: 'hm-panel' + (closed ? ' closed' : '') + (o.extraClass ? ' ' + o.extraClass : ''), 'data-panel': id },
       h('div', { class: 'hm-ph' },
         h('button', { type: 'button', class: 'hm-tg', 'aria-expanded': String(!closed), 'aria-controls': bodyId, onclick: o.onToggle },
-          h('h2', { text: title }), h('span', { class: 'hm-sum', text: summary }), arrow),
+          h('h2', { text: title }), summary ? h('span', { class: 'hm-sum', text: summary }) : null, arrow),
         o.link ? linkButton(o.link[0], o.link[1]) : null),
       h('div', { class: 'hm-pb', id: bodyId }, body));
   }

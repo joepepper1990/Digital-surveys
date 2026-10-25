@@ -13,6 +13,8 @@ window.MockDrivers = (function () {
   function byText(sel, text) { return all(sel).filter(function (n) { return n.textContent.trim() === text; })[0]; }
   function text() { return document.querySelector('[data-ch-root]').textContent; }
   function type(el, value) { el.value = value; el.dispatchEvent(new Event('input', { bubbles: true })); }
+  // a listed action with its marks: a home card, or a row in a list
+  function cards() { return all('.hm-card, .items li'); }
   // the raise form chooses no area unless opened from one (release 1.2): pick the first offered, as a person would
   function pickArea() {
     var a = q('#ch-r-areaKey');
@@ -154,7 +156,7 @@ window.MockDrivers = (function () {
       var summary = (q('#ch-r .raise-summary') || {}).textContent + ' ' + q('#ch-r .facts').textContent;
       form.dispatchEvent(new Event('submit', { cancelable: true }));
       await until(function () { return !q('#ch-r'); });
-      var ghost = await until(function () { return all('.item-open').filter(function (b) { return b.textContent.indexOf('Order replacement smear papers') >= 0; })[0]; });
+      var ghost = await until(function () { return cards().filter(function (b) { return b.textContent.indexOf('Order replacement smear papers') >= 0; })[0]; });
       var stripText = ghost.textContent;
       await until(function () { return text().indexOf('raised: Order replacement smear papers') >= 0; }, 120000);
       var req = MockSharePoint.data.Requests[0];
@@ -166,7 +168,7 @@ window.MockDrivers = (function () {
       item.click();
       var opens = !!(await until(function () { return q('#ch-a .facts'); })) && q('#ch-a').textContent.indexOf('Stock is down to one box.') >= 0;
       return { areaBefore: areaBefore, areaError: areaError, stepLine: stepLine, reachable: !!onTop && item.contains(onTop), opens: opens, emptyError: emptyError, pastError: pastError, owners: owners, summary: summary, stripText: stripText,
-        stripGone: !all('.item-open').some(function (b) { return b.textContent.indexOf('Order replacement smear papers') >= 0 && b.textContent.indexOf('✓ Sent') >= 0; }),
+        stripGone: !cards().some(function (b) { return b.textContent.indexOf('Order replacement smear papers') >= 0 && b.textContent.indexOf('✓ Sent') >= 0; }),
         listed: !!byText('.items .t', 'Order replacement smear papers'),
         request: { folder: req.FileDirRef.split('/').pop(), type: req.RequestType, status: req.Status },
         writes: MockSharePoint.writes.slice() };
@@ -316,10 +318,10 @@ window.MockDrivers = (function () {
       q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
       await until(function () { return q('#ch-a .pending'); });
       MockSharePoint.reload();
-      var item = await until(function () { return all('.items .item-open').filter(function (b) { return b.textContent.indexOf('Replace FH40 probe') >= 0; })[0]; });
+      var item = await until(function () { return cards().filter(function (b) { return b.textContent.indexOf('Replace FH40 probe') >= 0 && b.textContent.indexOf('✓ Sent') >= 0; })[0]; });
       var noteAfterReload = item.textContent;
       await until(function () { return text().indexOf('Deadline moved to') >= 0; }, 120000);
-      var confirmedNoteGone = all('.items .item-open').filter(function (b) { return b.textContent.indexOf('Replace FH40 probe') >= 0; })[0].textContent.indexOf('✓ Sent') < 0;
+      var confirmedNoteGone = !cards().some(function (b) { return b.textContent.indexOf('Replace FH40 probe') >= 0 && b.textContent.indexOf('✓ Sent') >= 0; });
       // Raise an action, reload before the flow has run, then open the new action from the list.
       byText('button', 'Raise an action').click();
       type(await until(function () { return q('#ch-r-title'); }), 'Check spare filter stock');
@@ -336,7 +338,7 @@ window.MockDrivers = (function () {
       form.dispatchEvent(new Event('submit', { cancelable: true }));
       await until(function () { return !q('#ch-r'); });
       MockSharePoint.reload();
-      var strip = await until(function () { return all('.item-open').filter(function (b) { return b.textContent.indexOf('Check spare filter stock') >= 0; })[0]; });
+      var strip = await until(function () { return cards().filter(function (b) { return b.textContent.indexOf('Check spare filter stock') >= 0 && b.textContent.indexOf('✓ Sent') >= 0; })[0]; });
       var stripAfterReload = strip.textContent;
       await until(function () { return text().indexOf('raised: Check spare filter stock') >= 0; }, 120000);
       all('.dialog-x').forEach(function (x) { x.click(); });
@@ -398,6 +400,23 @@ window.MockDrivers = (function () {
       var reqs = MockSharePoint.data.Requests;
       return { cardText: cardText, reverted: reverted, requests: reqs.map(function (r) { return r.RequestType + ':' + r.Status; }),
         status: MockSharePoint.data.Actions.filter(function (a) { return a.Id === 53; })[0].Status, writes: MockSharePoint.writes.map(function (w) { return w.list + (w.update ? ':update' : ''); }) };
+    },
+    // Mark as done straight from a to-do card (release 1.2): it stays, marked Done, with Reopen for a slip.
+    quickDone: async function () {
+      function card() { return cards().filter(function (c) { return c.textContent.indexOf('Review Green Stream sample results') >= 0; })[0]; }
+      await until(function () { return card(); });
+      var b = Array.prototype.filter.call(card().querySelectorAll('.btn'), function (x) { return x.textContent === 'Mark as done'; })[0];
+      b.click();
+      await until(function () { return /Done/.test(card().textContent) && /✓ Sent/.test(card().textContent); });
+      var sent = card().textContent;
+      await until(function () { return /✓✓ Saved/.test(card().textContent); }, 120000);
+      var saved = card().textContent;
+      var closed = MockSharePoint.data.Actions.filter(function (a) { return a.Title === 'Review Green Stream sample results'; })[0].Status;
+      Array.prototype.filter.call(card().querySelectorAll('.btn'), function (x) { return x.textContent === 'Reopen'; })[0].click();
+      await until(function () { return /up to date/.test(q('.status-line').textContent) && /Mark as done/.test(card().textContent); }, 120000);
+      return { sent: sent, saved: saved, closed: closed, after: card().textContent,
+        status: MockSharePoint.data.Actions.filter(function (a) { return a.Title === 'Review Green Stream sample results'; })[0].Status,
+        requests: MockSharePoint.data.Requests.map(function (r) { return r.RequestType + ':' + r.Status; }) };
     },
     // A visitor reads an action in another area: no buttons, a plain explanation.
     viewOnlyAction: async function () {
@@ -524,6 +543,12 @@ window.MockDrivers = (function () {
 
     // The home page (approved 23 October 2026): fits the window, opens an area in place, Escape closes it and
     // focus returns to its tile, and folded sections are remembered after a reload.
+    measure: async function () {
+      await until(function () { return q('.hm-stack'); });
+      await wait(300);
+      function r(sel) { var n = q(sel); if (!n) return null; var b = n.getBoundingClientRect(); return [Math.round(b.top), Math.round(b.height)]; }
+      return { inner: window.innerHeight, root: r('[data-ch-root]'), shell: r('.shell'), main: r('#ch-main'), stack: r('.hm-stack'), footer: r('footer'), lanes: r('.hm-lanes') };
+    },
     homeFit: async function () {
       window.localStorage.removeItem('esg-competency-hub-home');
       await until(function () { return q('.hm-stack'); });

@@ -40,12 +40,18 @@ CH.views.home = (function () {
 
   function byDue(a, b) { return a.dueIso.localeCompare(b.dueIso); }
 
-  // A uniform card: title on one line, then a meta line with chips. Opens the action when given one.
-  function actionCard(app, a, meta) {
-    return h('button', { type: 'button', class: 'item-open hm-card', title: a.title, onclick: function () { app.openAction(a); } },
-      h('span', { class: 't', text: a.title }),
+  // A uniform card: title on one line, then a meta line with chips. The title opens the action; on your own to-dos
+  // "Mark as done" sits on the card, and once done (while you stay on the page) "Reopen" where you may (release 1.2).
+  function actionCard(app, a, meta, quick) {
+    var r = quick && !a.isNew ? CH.rules.roles(a, app.person.SiteUserId, app.access) : null;
+    var blocked = app.queueBlocked() || (a.locked && !a.sending);
+    var button = !r || blocked ? null : a.done ? (r.canReopen ? ui.button('Reopen', function () { app.quickReopen(a); }) : null)
+      : r.canComplete && !a.waitingCloseOut ? ui.button('Mark as done', function () { app.quickDone(a); }) : null;
+    if (button) button.classList.add('btn-small');
+    return h('div', { class: 'hm-card' + (a.done ? ' done' : '') },
+      h('button', { type: 'button', class: 'item-open t', title: a.title, onclick: function () { app.openAction(a); }, text: a.title }),
       h('span', { class: 'hm-meta' }, meta, app.markAction(a),
-        h('span', { class: 'when w-' + (a.waitingCloseOut ? 'later' : a.group), text: a.dueText })));
+        h('span', { class: 'when w-' + (a.done ? 'ok' : a.waitingCloseOut ? 'later' : a.group), text: a.dueText }), button));
   }
   function infoCard(text, kind, kindClass, onclick) {
     return h(onclick ? 'button' : 'div', onclick ? { type: 'button', class: 'item-open hm-card', title: text, onclick: onclick } : { class: 'hm-card', title: text },
@@ -107,7 +113,7 @@ CH.views.home = (function () {
     for (var i = 0; i < 7; i++) {
       var iso = D.addDays(m.today, i);
       var dow = D.weekday(iso);
-      var evs = mine.filter(function (a) { return !a.waitingCloseOut && (a.dueIso === iso || (i === 0 && a.group === 'late')); }).sort(byDue).map(function (a) {
+      var evs = mine.filter(function (a) { return !a.waitingCloseOut && !a.done && (a.dueIso === iso || (i === 0 && a.group === 'late')); }).sort(byDue).map(function (a) {
         return h('button', { type: 'button', class: 'hm-ev ' + (a.group === 'late' ? 'late' : 'soon'), title: a.title + ' – ' + a.dueText, onclick: function () { app.openAction(a); }, text: a.title });
       }).concat(keys.filter(function (k) { return m.stats[k].nextMeeting === iso; }).map(function (k) {
         var mt = m.meetings.filter(function (x) { return x.areaKey === k && x.dateIso === iso && x.status !== 'Cancelled'; })[0];
@@ -121,9 +127,10 @@ CH.views.home = (function () {
         evs.slice(0, 2), evs.length > 2 ? h('span', { class: 'hm-plus', text: '+ ' + (evs.length - 2) + ' more' }) : null,
         evs.length ? null : h('span', { class: 'hm-none', text: weekend ? 'Weekend' : 'Nothing due' })));
     }
-    var due = mine.filter(function (a) { return !a.waitingCloseOut && D.daysBetween(m.today, a.dueIso) < 7; }).length;
+    var due = mine.filter(function (a) { return !a.waitingCloseOut && !a.done && D.daysBetween(m.today, a.dueIso) < 7; }).length;
     var meets = keys.filter(function (k) { var n = m.stats[k].nextMeeting; return n && D.daysBetween(m.today, n) < 7; }).length;
-    return { el: h('div', { class: 'hm-week' }, days), summary: due + (due === 1 ? ' to-do' : ' to-dos') + ' · ' + (meets ? meets + (meets === 1 ? ' meeting' : ' meetings') : 'no meetings') };
+    // a week with nothing in it is one line, not seven empty boxes (release 1.2)
+    return { el: due || meets ? h('div', { class: 'hm-week' }, days) : h('p', { class: 'week-empty', text: 'Nothing due and no meetings this week.' }) };
   }
 
   function tileFor(app, a) {
@@ -202,8 +209,6 @@ CH.views.home = (function () {
     return h('section', { class: 'hm-panel hm-area', 'aria-label': area.name },
       h('div', { class: 'hm-ph' },
         h('h2', { text: area.name }),
-        h('span', { class: 'hm-sum', text: (unavailable ? 'Action figures unavailable' : s.open + ' open · ' + (s.late ? s.late + ' late' : 'none late')) + ' · ' +
-          (s.nextMeeting ? 'next meeting ' + D.weekdayShort(s.nextMeeting) : s.lastMeeting ? 'no meeting since ' + D.short(s.lastMeeting) : 'no meeting booked') }),
         acc.canWrite(key) ? null : h('span', { class: 'vo', text: 'View only' }),
         h('span', { class: 'hm-acts' },
           acc.canWrite(key) && area.status === 'Active' ? ui.button('Raise an action here', function () { app.raiseAction(key); }) : null,
@@ -237,18 +242,10 @@ CH.views.home = (function () {
     var keys = areaKeysForMe(app);
     var next = keys.filter(function (k) { return m.stats[k].nextMeeting; }).sort(function (a, b) { return m.stats[a].nextMeeting.localeCompare(m.stats[b].nextMeeting); })[0];
 
-    // One line: greeting, then the day in a sentence. Management sees group totals (each action counted once).
-    var summary;
-    if (unavailable) summary = [h('span', { text: acc.isManagement ? 'Action figures could not be loaded just now. Reload the page to try again.' : 'Your actions could not be loaded just now.' })];
-    else {
-      var groupLate = m.actions.filter(function (a) { return a.group === 'late'; }).length;
-      var lateN = acc.isManagement ? groupLate : late.length;
-      summary = [acc.isManagement ? 'Across the group: ' + m.actions.length + ' open actions · ' : '',
-        lateN ? h('b', { class: 'txt-late', text: lateN + ' late' }) : 'nothing late',
-        ' · ' + soon.length + (acc.isManagement ? ' of yours' : '') + ' due this week',
-        next ? ' · next meeting ' + m.areaByKey[next].name + ', ' + D.weekdayShort(m.stats[next].nextMeeting) : ''];
-    }
-    var out = [h('div', { class: 'hm-hello' }, h('h1', { text: greeting(firstName(app)) }), h('p', null, summary)), adminLine(app)];
+    // Just the greeting (release 1.2): the week and the to-dos below say the rest. A failed read is said plainly.
+    var out = [h('div', { class: 'hm-hello' }, h('h1', { text: greeting(firstName(app)) }),
+      unavailable ? h('p', { text: acc.isManagement ? 'Action figures could not be loaded just now. Reload the page to try again.' : 'Your actions could not be loaded just now.' }) : null),
+      adminLine(app)];
 
     function toggle(id) {
       return function () {
@@ -268,22 +265,21 @@ CH.views.home = (function () {
     if (!unavailable) {
       if (acc.isManagement) lanes.push(lane('Needs your attention', 'var(--navy)', attentionCards(app), 'Nothing needs your attention right now.', function () { app.showMine(0); }));
       else if (acc.isEngineer) lanes.push(lane('For you to manage', 'var(--navy)', manageCards(app), 'Nothing for you to manage right now.', function () { app.showMine(0); }));
-      lanes.push(lane('Late', 'var(--late)', late.map(function (a) { return actionCard(app, a, h('span', { class: 'when hm-area-chip', text: a.areaName })); }), 'Nothing late.', function () { app.showMine(0); }));
-      lanes.push(lane('Due this week', 'var(--soon)', soon.map(function (a) { return actionCard(app, a, h('span', { class: 'when hm-area-chip', text: a.areaName })); }), 'Nothing due this week.', function () { app.showMine(0); }));
-      lanes.push(lane('Coming up', '#8a95a5', later.map(function (a) { return actionCard(app, a, h('span', { class: 'when hm-area-chip', text: a.areaName })); }), 'Nothing further ahead.', function () { app.showMine(0); }));
+      var card = function (a) { return actionCard(app, a, h('span', { class: 'when hm-area-chip', text: a.areaName }), true); };
+      lanes.push(lane('Late', 'var(--late)', late.map(card), 'Nothing late.', function () { app.showMine(0); }));
+      lanes.push(lane('Due this week', 'var(--soon)', soon.map(card), 'Nothing due this week.', function () { app.showMine(0); }));
+      lanes.push(lane('Coming up', '#8a95a5', later.map(card), 'Nothing further ahead.', function () { app.showMine(0); }));
     }
     var actionsBody = [ui.sectionNote(m.sections.actions, 'actions'), lanes.length ? h('div', { class: 'hm-lanes', style: '--n:' + lanes.length }, lanes) : null];
-    var actsSummary = unavailable ? 'Could not load actions' : late.length + ' late · ' + soon.length + ' this week · ' + later.length + ' later';
 
     var active = m.areas.filter(function (a) { return a.status === 'Active'; });
-    var lateAreas = active.filter(function (a) { return m.stats[a.key].late; }).length;
     var tiles = h('div', { class: 'hm-tiles' + (openKey ? ' compact' : '') }, active.map(function (a) { return tileFor(app, a); }));
 
     var stack = h('div', { class: 'hm-stack' + (openKey ? ' area-open' : '') + (actsClosed ? ' acts-closed' : '') },
-      ui.panel('week', 'Coming up this week', week.summary, week.el, { closed: weekClosed, onToggle: toggle('week') }),
-      ui.panel('actions', 'Your to-dos', actsSummary, actionsBody,
+      ui.panel('week', 'Coming up this week', '', week.el, { closed: weekClosed, onToggle: toggle('week') }),
+      ui.panel('actions', 'Your to-dos', '', actionsBody,
         { closed: actsClosed, onToggle: toggle('actions'), link: ['See all my to-dos', function () { app.showMine(0); }] }),
-      ui.panel('areas', 'Areas', (unavailable ? active.length + ' areas' : lateAreas ? lateAreas + (lateAreas === 1 ? ' area has' : ' areas have') + ' late to-dos' : 'all on track') + (openKey ? '' : ' · pick one to look inside'), tiles,
+      ui.panel('areas', 'Areas', '', tiles,
         { closed: areasClosed, onToggle: toggle('areas') }),
       openKey ? areaPanel(app, openKey) : null);
     out.push(stack);
