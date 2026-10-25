@@ -974,14 +974,53 @@ window.MockDrivers = (function () {
       await until(function () { return q('#ch-mt .facts') && byText('#ch-mt .btn', 'Start meeting'); }).catch(function () { throw new Error('panel: ' + (q('#ch-mt') || {}).textContent); });
       byText('#ch-mt .btn', 'Start meeting').click();
       (await until(function () { return q('#ch-mt form.dialog-body'); })).dispatchEvent(new Event('submit', { cancelable: true }));
+      // release 1.2: the live screen comes at once, while the flow fixes the agenda; an outcome recorded now stays with its item
+      await until(function () { return q('#ch-mt-progress') && q('#ch-mt .outcomes'); }, 10000);
+      var started = MockSharePoint.data.Requests.some(function (r) { return r.RequestType === 'StartMeeting' && r.Status === 'Completed'; });
+      var firstTitle = q('#ch-mt-item-title').textContent;
+      byText('#ch-mt .outcomes button', 'Discussed').click();
+      await until(function () { return MockSharePoint.data['Meeting Items'].some(function (x) { return x.RowType === 'Outcome' && x.Title === firstTitle; }); });
       await until(function () { return MockSharePoint.data.Requests.some(function (r) { return r.RequestType === 'StartMeeting' && r.Status === 'Completed'; }); }, 120000);
       // the people who run it now have the live screen: the fixed agenda, one item at a time
-      await until(function () { return q('#ch-mt') && /In progress/.test(q('#ch-mt').textContent) && q('#ch-mt-progress'); }, 120000);
+      await until(function () { return q('#ch-mt') && /In progress/.test(q('#ch-mt').textContent) && q('#ch-mt-progress') && !q('#ch-mt .pending'); }, 120000);
       var fixed = q('#ch-mt').textContent;
+      var kept = byText('#ch-mt .outcomes button', 'Discussed');
       var mt = MockSharePoint.data.Meetings.filter(function (m) { return m.Id === 2; })[0];
       return { preview: /Open actions \(\d+\)/.test(preview) && /Replace FH40 probe/.test(preview), added: MockSharePoint.data['Meeting Items'].filter(function (x) { return x.RowType === 'New Business'; }).map(function (x) {
         return x.FileDirRef.split('/Lists/')[1]; }), status: mt.Status, start: mt.MeetingDate.slice(11, 16), agendaRows: MockSharePoint.data['Meeting Items'].filter(function (x) { return x.RowType === 'Agenda Item'; }).length,
-        fixed: /Item 1 of \d+ · Open actions/.test(fixed) && !/preview/.test(fixed) && fixed.indexOf('Spare cable order') >= 0, noStart: !byText('#ch-mt .btn', 'Start meeting') };
+        fixed: /Item 1 of \d+ · Open actions/.test(fixed) && !/preview/.test(fixed) && fixed.indexOf('Spare cable order') >= 0, noStart: !byText('#ch-mt .btn', 'Start meeting'),
+        instant: !started, kept: !!kept && kept.getAttribute('aria-pressed') === 'true' && q('#ch-mt-item-title').textContent === firstTitle };
+    },
+    // a meeting started straight after booking, before the booking is saved: it runs at once, and what is recorded follows it
+    meetingBeforeBooked: async function () {
+      (await until(function () { return byText('.hm-area .btn', 'Book a meeting'); })).click();
+      var form = await until(function () { return q('#ch-m form'); });
+      q('#ch-m-dateIso').value = MockSharePoint.data.today || q('#ch-m-dateIso').min;
+      q('#ch-m-start').value = '16:00';
+      q('#ch-m-end').value = '17:00';
+      type(q('#ch-m-location'), 'Ghost room');
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return !q('#ch-m'); });
+      var row = await until(function () { return all('.hm-area .hm-rw').filter(function (b) { return b.textContent.indexOf('Ghost room') >= 0; })[0]; });
+      row.click();
+      await until(function () { return q('#ch-mt') && byText('#ch-mt .btn', 'Start meeting'); });
+      var unnumbered = /not yet numbered/.test(q('#ch-mt .what-label').textContent);
+      var change = !!byText('#ch-mt .btn', 'Change');
+      byText('#ch-mt .btn', 'Start meeting').click();
+      (await until(function () { return q('#ch-mt form.dialog-body'); })).dispatchEvent(new Event('submit', { cancelable: true }));
+      var sel = await until(function () { return q('#ch-mt-progress') && q('#ch-mt .attendance select'); }, 10000);
+      var live = /not yet numbered/.test(q('#ch-mt .what-label').textContent);
+      var raiseNote = /once the booking is saved/.test(q('#ch-mt .live-item').textContent);
+      sel.value = 'Present';
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+      var kept = await until(function () { return /sent as soon as the booking is saved/.test(q('#ch-mt .attendance').parentNode.textContent) || /Kept/.test(q('#ch-mt').textContent); });
+      await until(function () { return MockSharePoint.data.Requests.some(function (r) { return r.RequestType === 'StartMeeting' && r.Status === 'Completed'; }); }, 120000);
+      var mt = MockSharePoint.data.Meetings.filter(function (m) { return m.Location === 'Ghost room'; })[0];
+      await until(function () { return MockSharePoint.data['Meeting Items'].some(function (x) { return x.RowType === 'Attendee' && x.MeetingId === mt.Id; }); }, 30000);
+      var att = MockSharePoint.data['Meeting Items'].filter(function (x) { return x.RowType === 'Attendee' && x.MeetingId === mt.Id; })[0];
+      await until(function () { return q('#ch-mt') && q('#ch-mt-progress') && !/not yet numbered/.test(q('#ch-mt .what-label').textContent); }, 120000);
+      return { unnumbered: unnumbered, change: change, live: live, raiseNote: raiseNote, kept: !!kept, status: mt.Status, attFolder: att.FileDirRef.split('/Lists/')[1],
+        attKey: att.RecordKey, realId: mt.Id, panel: q('#ch-mt .what-label').textContent };
     },
     meetingCancel: async function () {
       await until(function () { return q('#ch-mt .facts'); });
@@ -1076,11 +1115,14 @@ window.MockDrivers = (function () {
       await until(function () { return q('#ch-mt form.dialog-body') && !byText('#ch-mt form .btn', 'Finalise the minutes').disabled; }, 120000)
         .catch(function () { throw new Error('review: ' + (q('#ch-mt form.dialog-body') || {}).textContent + ' seen: ' + seen.join(' | ')); });
       q('#ch-mt form.dialog-body').dispatchEvent(new Event('submit', { cancelable: true }));
+      // release 1.2: the minutes show at once, before the flow has frozen the record
+      await until(function () { return q('#ch-mt .minutes') && /Probe checks stay monthly/.test(q('#ch-mt .minutes').textContent); }, 20000);
+      var draft = { minutes: q('#ch-mt .minutes').textContent, flowDone: M().Status === 'Finalised' };
       await until(function () { return M().Status === 'Finalised'; }, 120000);
-      await until(function () { return q('#ch-mt .minutes') && /Probe checks stay monthly/.test(q('#ch-mt .minutes').textContent); }, 120000);
+      await until(function () { return q('#ch-mt .minutes a[download]'); }, 120000);
       var minutes = q('#ch-mt .minutes').textContent;
       var a = MockSharePoint.data.Actions.filter(function (x) { return x.Title === 'Order spare probes'; })[0];
-      return { early: early, heading: heading, areas: areas, requestMeeting: request && request.MeetingId, source: a && [a.SourceType, a.SourceId], items: seen.length,
+      return { early: early, heading: heading, areas: areas, requestMeeting: request && request.MeetingId, source: a && [a.SourceType, a.SourceId], items: seen.length, draft: draft,
         frozenNotes: items().filter(function (r) { return /MTG-2$/.test(r.FileDirRef) && r.Notes === 'Probe stock is the priority.'; }).length,
         pdf: (q('#ch-mt .minutes a.btn') || {}).getAttribute ? q('#ch-mt .minutes a.btn').getAttribute('href') : '', minutes: minutes,
         writesInRecord: MockSharePoint.writes.filter(function (w) { return w.list === 'Meeting Items'; }).every(function (w) { return /^FLK\/MTG-2\/Record$/.test(w.folder); }) };

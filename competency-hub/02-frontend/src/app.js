@@ -208,6 +208,58 @@ CH.app = (function () {
       } catch (_) { /* the next check tries again */ }
     }
 
+    // ---- a meeting used before its booking is saved (release 1.2). It has a temporary (negative) number; what is
+    // recorded meanwhile waits here, and when the flow has made the meeting and its record folder it is sent there,
+    // under the real number, and a Start pressed meanwhile is sent too.
+    app.meetingAlias = {};
+    app.meetingBuffer = {};
+    // ids: items added by hand before the booking was saved, by their temporary number -> the number SharePoint gave them
+    function retarget(values, from, to, ids) {
+      var v = Object.assign({}, values, { MeetingId: to });
+      delete v.Id;
+      if (v.RecordKey && String(v.RecordKey).indexOf(from + '|') === 0) v.RecordKey = to + String(v.RecordKey).slice(String(from).length);
+      if (v.SourceType === 'New Business' && v.RowType === 'Outcome' && ids[v.SourceId]) {
+        v.SourceId = ids[v.SourceId];
+        v.RecordKey = to + '|O|New Business|' + v.SourceId;
+      }
+      return v;
+    }
+    async function meetingBooked(entry) {
+      var tmp = -entry.tempId;
+      var real = Number(entry.resultId);
+      var mt = real && app.model.meetingById[real];
+      if (!mt) return;
+      app.meetingAlias[tmp] = real;
+      if (entry.startNow) {
+        try {
+          await app.tracker.submit({ type: 'StartMeeting', targetId: real, targetType: 'Meeting', expectedRevision: mt.revision, payload: {},
+            label: 'Start the ' + mt.areaName + ' meeting' });
+        } catch (_) { CH.ui.toast(app.root, 'The meeting could not be started just now. Open it and press Start meeting again.', 'info'); }
+      }
+      flush(mt, tmp, real);
+    }
+    async function flush(mt, tmp, real) {
+      var rows = app.meetingBuffer[tmp] || [];
+      delete app.meetingBuffer[tmp];
+      var ids = {};
+      for (var i = 0; i < rows.length; i++) {
+        try {
+          var made = await app.sp.addToFolder('meetingItems', mt.areaKey + '/MTG-' + real + '/Record', retarget(rows[i], tmp, real, ids));
+          if (rows[i].RowType === 'New Business' && made) ids[rows[i].Id] = made;
+        } catch (_) { CH.ui.toast(app.root, 'Part of what was recorded before the booking was saved could not be sent. Check the meeting and record it again.', 'info'); }
+      }
+      if (rows.length && app.panel) app.panel.refresh();
+    }
+    // A Start pressed on a meeting whose booking is still being saved: shown at once, sent when it is booked.
+    app.startWhenBooked = function (mt) {
+      var e = app.tracker.entries().filter(function (x) { return x.key === mt.sending; })[0];
+      if (!e) return false;
+      e.startNow = true;
+      rebuild();
+      render(false);
+      return true;
+    };
+
     // The lists a saved change can alter (release 1.2: only these are read again). Health comes with the settings.
     function listsFor(type) {
       if (CH.requests.RECORD_TYPES.indexOf(type) >= 0) return ['notices', 'register', 'actions', 'settings'];
@@ -233,7 +285,9 @@ CH.app = (function () {
         if (app.panel) app.panel.refresh();
         return;
       }
-      reload(listsFor(entry.type)).then(function () {
+      reload(listsFor(entry.type)).then(async function () {
+        // a meeting started before its booking was saved is started now, before the screen shows it as booked
+        if (entry.type === 'ScheduleMeeting' && entry.tempId) await meetingBooked(entry);
         render(false);
         if (app.panel) app.panel.refresh();
         var a = app.model.actionById[entry.resultId];

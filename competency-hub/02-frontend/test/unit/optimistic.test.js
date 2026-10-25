@@ -122,3 +122,21 @@ test('Try again after a fault sets the same request back to Submitted; after a r
   assert.equal(again.state, 'submitted');
   assert.equal(CH.requests.isConflict({ message: 'As a technician you can raise actions for yourself in this area.' }), false);
 });
+
+test('starting and finalising a meeting show at once; a meeting started before its booking is saved shows as running', () => {
+  let out = CH.optimistic.apply(raw(), [entry({ type: 'StartMeeting', targetType: 'Meeting', targetId: 5, payload: {} })], {}, CTX);
+  let m = out.meetings.rows[0];
+  assert.deepEqual(plain([m.Status, m.StartedById, m._starting, m.Revision, m.CutoffTime]), ['In Progress', 112, true, 2, NOW.toISOString()]);
+  const started = raw(); started.meetings.rows[0].Status = 'In Progress';
+  out = CH.optimistic.apply(started, [entry({ type: 'FinaliseMeeting', targetType: 'Meeting', targetId: 5, payload: {} })], {}, CTX);
+  m = out.meetings.rows[0];
+  assert.deepEqual(plain([m.Status, m.FinalisedById, m._finalising, m.PdfState]), ['Finalised', 112, true, 'Pending']);
+  const book = entry({ type: 'ScheduleMeeting', targetId: null, targetType: '', startNow: true,
+    payload: { areaKey: 'FLK', dateIso: '2026-10-26', start: '14:00', end: '15:00', chairId: 112, attendeeIds: [112, 103] } });
+  out = CH.optimistic.apply(raw(), [book], {}, CTX);
+  m = out.meetings.rows[1];
+  assert.ok(m.Id < 0);
+  assert.deepEqual(plain([m.Status, m._starting, m.Attendees]), ['In Progress', true, '["112","103"]']);
+  // the same temporary number every time the screen is built, so an open meeting keeps following it
+  assert.equal(CH.optimistic.apply(raw(), [book], {}, CTX).meetings.rows[1].Id, m.Id);
+});

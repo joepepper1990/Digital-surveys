@@ -84,7 +84,12 @@ CH.optimistic = (function () {
       if ('chairId' in p) row.ChairId = Number(p.chairId);
       if ('attendeeIds' in p) row.Attendees = JSON.stringify(p.attendeeIds.map(String));
     },
-    CancelMeeting: function (row, p) { row.Status = 'Cancelled'; row.CancellationReason = p.reason || ''; }
+    CancelMeeting: function (row, p) { row.Status = 'Cancelled'; row.CancellationReason = p.reason || ''; },
+    // meetings start and finish at once on screen (release 1.2): the flow fixes the agenda, or freezes the record, behind
+    StartMeeting: function (row, p, ctx) { row.Status = 'In Progress'; row.CutoffTime = row.CutoffTime || ctx.nowIso; row.StartedById = ctx.personId; row._starting = true; },
+    FinaliseMeeting: function (row, p, ctx) {
+      row.Status = 'Finalised'; row.FinalisedAt = ctx.nowIso; row.FinalisedById = ctx.personId; row.PdfState = 'Pending'; row.PdfVersion = 0; row._finalising = true;
+    }
   };
 
   // New records: shown at once with a temporary negative id until the flow gives them their own.
@@ -102,11 +107,12 @@ CH.optimistic = (function () {
   }
   function addMeeting(raw, rows, e, p, ctx, n) {
     rows.push({ Id: -n, Title: 'Meeting', CompetencyId: areaId(raw, p.areaKey), MeetingDate: londonInstant(p.dateIso, p.start), EndTime: londonInstant(p.dateIso, p.end),
-      Status: 'Scheduled', ChairId: Number(p.chairId) || null, Location: p.location || '', OnlineLink: p.onlineLink || '',
+      Status: e.startNow ? 'In Progress' : 'Scheduled', _starting: !!e.startNow, CutoffTime: e.startNow ? ctx.nowIso : null, ChairId: Number(p.chairId) || null, Location: p.location || '', OnlineLink: p.onlineLink || '',
       Attendees: JSON.stringify((p.attendeeIds || []).map(String)), InviteState: 'None', Revision: 1, FileDirRef: folderFor(raw, 'meetings', p.areaKey),
       _sending: e.key, _new: true });
   }
 
+  var seq = 0;   // temporary ids, one per new record for the life of the page
   var TABLES = [
     ['actions', 'Action', ACTIONS, { RaiseAction: addAction }],
     ['notices', 'Notice', NOTICES, {}],
@@ -121,7 +127,6 @@ CH.optimistic = (function () {
     var c = { personId: Number(ctx.personId), today: ctx.today, nowIso: (ctx.now || new Date()).toISOString() };
     var sending = (entries || []).filter(function (e) { return (e.state === 'submitted' || e.state === 'slow') && e.payload; })
       .sort(function (a, b) { return a.submittedAt - b.submittedAt; });
-    var n = 0;
     TABLES.forEach(function (t) {
       if (!raw[t[0]]) return;
       var rows = copy(raw[t[0]].rows);
@@ -132,7 +137,7 @@ CH.optimistic = (function () {
       }
       sending.forEach(function (e) {
         var p = e.payload || {};
-        if (t[3][e.type]) { n++; t[3][e.type](raw, rows, e, p, c, n); return; }
+        if (t[3][e.type]) { e.tempId = e.tempId || ++seq; t[3][e.type](raw, rows, e, p, c, e.tempId); return; }
         if (!t[2][e.type] || (e.targetType || 'Action') !== t[1]) return;
         var row = rows.filter(function (r) { return Number(r.Id) === Number(e.targetId); })[0];
         if (!row) return;

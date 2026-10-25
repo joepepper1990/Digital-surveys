@@ -242,7 +242,9 @@ CH.model = (function () {
         previousId: m.PreviousMeetingId ? Number(m.PreviousMeetingId) : null, locked: isUncommitted(m), cutoffUpdatesId: Number(m.CutoffUpdatesId) || 0,
         finalisedIso: m.FinalisedAt ? D.localDate(m.FinalisedAt) : '', finalisedByName: m.FinalisedById ? nameOf(m.FinalisedById) : '',
         amendments: Number(m.AmendmentCount) || 0, pdfState: m.PdfState || 'None', pdfVersion: Number(m.PdfVersion) || 0,
-        sending: m._sending || '', isNew: !!m._new
+        sending: m._sending || '', isNew: !!m._new,
+        // started or finalised on this screen, while the flow fixes the agenda or freezes the record (release 1.2)
+        starting: !!m._starting, finalising: !!m._finalising
       };
     }
     var meetings = (raw.meetings.rows || []).filter(function (m) { return !isUncommitted(m); }).map(meetingFrom)

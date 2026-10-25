@@ -138,6 +138,8 @@ CH.views.meetingPanel = (function () {
     });
   }
 
+  var bufferSeq = 0;   // temporary numbers for rows kept until a booking is saved
+
   function open(app, id) {
     var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-mt', title: 'Meeting', wide: true, onClose: function () { app.panel = null; app.liveMeetingId = null; } });
     var view = 'main';
@@ -146,23 +148,56 @@ CH.views.meetingPanel = (function () {
     var adding = false;     // the "Add an item" form is in the item pane
     var openTitle = null;   // an item just added: opened as soon as the agenda is read again (backlog 6)
 
-    function mt() { return app.model.meetingById[id]; }
+    function mt() {
+      if (id < 0 && app.meetingAlias && app.meetingAlias[id] && app.model.meetingById[app.meetingAlias[id]]) { id = app.meetingAlias[id]; agenda = null; loadAgenda(); }
+      return app.model.meetingById[id];
+    }
+
+    // what is recorded for the meeting, with what waits on this screen for its booking to be saved
+    async function readItems(x) {
+      var rows = x.id < 0 ? { frozen: [], live: [] } : await loadItems(app, x);
+      rows.live = rows.live.concat(app.meetingBuffer[x.id] || []);
+      return rows;
+    }
+
+    // the agenda items now: the fixed ones, or while the start is saved those built on this screen, with every outcome
+    function itemsNow(x) {
+      if (agenda.kind !== 'starting') return fromRows(app, x, agenda.frozen, agenda.live);
+      var last = latest(agenda.live);
+      return agenda.items.map(function (it) {
+        if (!it.key) return it;
+        var rec = last[it.key];
+        return Object.assign({}, it, { outcome: rec ? rec.Outcome || '' : '', notes: rec ? rec.Notes || '' : '' });
+      }).concat(fromRows(app, x, [], agenda.live));
+    }
 
     async function loadAgenda() {
       var x = mt();
       if (!x) return;
       try {
         if (x.status === 'Scheduled') {
-          var both = await Promise.all([CH.agenda.preview(app.sp, app.model, x, app.settings), loadItems(app, x)]);
+          var both = await Promise.all([CH.agenda.preview(app.sp, app.model, x, app.settings), readItems(x)]);
           agenda = { kind: 'preview', items: fromPreview(app, both[0]).concat(fromRows(app, x, [], both[1].live)), frozen: both[1].frozen, live: both[1].live };
         } else {
-          var rows = await loadItems(app, x);
-          agenda = { kind: 'fixed', items: fromRows(app, x, rows.frozen, x.status === 'In Progress' || x.status === 'Finalising' ? rows.live : []), frozen: rows.frozen, live: rows.live };
+          var rows = await readItems(x);
+          var fixed = rows.frozen.some(function (r) { return r.RowType === 'Agenda Item'; });
+          if (x.status === 'In Progress' && !fixed) {
+            // started on this screen (release 1.2): the agenda by the same rules the flow uses, until it has fixed it.
+            // Outcomes are kept by their source, so they attach to the fixed agenda when it comes.
+            var pre = await CH.agenda.preview(app.sp, app.model, x, app.settings);
+            var items = fromPreview(app, pre).map(function (it) {
+              if (it.type !== 'Date' && it.sourceId) it.key = outcomeKey(x.id, it.type, it.sourceId);
+              return it;
+            });
+            agenda = { kind: 'starting', items: items, frozen: [], live: rows.live };
+          } else {
+            agenda = { kind: 'fixed', items: fromRows(app, x, rows.frozen, x.status === 'In Progress' || x.status === 'Finalising' || x.finalising ? rows.live : []),
+              frozen: rows.frozen, live: rows.live };
+          }
         }
       } catch (_) { agenda = 'error'; }
       if (openTitle && agenda && agenda !== 'error') {
-        var x2 = mt();
-        var list = fromRows(app, x2, agenda.frozen, agenda.live);
+        var list = itemsNow(mt());
         for (var i = list.length - 1; i >= 0; i--) if (list[i].type === 'New Business' && list[i].title === openTitle) { at = i; break; }
         openTitle = null;
       }
@@ -172,16 +207,18 @@ CH.views.meetingPanel = (function () {
     // changes made from this meeting that are still being recorded (they hold back finalising)
     function meetingPending(x) {
       return app.tracker.entries().filter(function (e) {
-        return Number(e.meetingId) === Number(x.id) && (e.state === 'submitted' || e.state === 'slow');
-      });
+        return (Number(e.meetingId) === Number(x.id) || (e.type === 'StartMeeting' && Number(e.targetId) === Number(x.id))) && (e.state === 'submitted' || e.state === 'slow');
+      }).concat(x.id < 0 ? [{ label: 'The booking of this meeting' }] : []);
     }
 
     function pending(x) {
       var e = app.tracker.forTarget(x.id, 'Meeting');
       // release 1.2: a change to the booking already shows; a refusal has its own card, with Try again
       if (e && (e.state === 'submitted' || e.state === 'slow')) {
-        return h('p', { class: 'pending', role: 'status' }, app.mark(x, 'Meeting') || app.mark({ sending: true }, 'Meeting'), ' ' + e.label + ' – ' +
-          (e.retrying ? e.message : 'you can carry on. The next steps are offered once it is saved.'));
+        var what = e.retrying ? e.message : e.type === 'StartMeeting' ? 'the meeting is on. Record it now; the agenda is fixed in the background.'
+          : e.type === 'FinaliseMeeting' ? 'the minutes below are what is being saved. The PDF follows a few minutes after.'
+          : 'you can carry on. The next steps are offered once it is saved.';
+        return h('p', { class: 'pending', role: 'status' }, app.mark(x, 'Meeting') || app.mark({ sending: true }, 'Meeting'), ' ' + e.label + ' – ' + what);
       }
       var mark = app.mark(x, 'Meeting');
       return mark ? h('p', { class: 'mark-line' }, mark) : null;
@@ -195,7 +232,9 @@ CH.views.meetingPanel = (function () {
       if (view !== 'main') { CH.dom.append(dlg.body, form(view, x)); return; }
       var runs = app.access.runsMeetings(x.areaKey);
       var e = app.tracker.forTarget(x.id, 'Meeting');
-      var busy = (e && (e.state === 'submitted' || e.state === 'slow')) || app.meetingsBlocked();
+      var saving = e && (e.state === 'submitted' || e.state === 'slow');
+      // a start being saved does not hold the meeting up (release 1.2); any other change to the booking still does
+      var busy = (saving && e.type !== 'StartMeeting') || app.meetingsBlocked();
       var live = runs && !busy && x.status === 'In Progress';
       app.liveMeetingId = live ? x.id : null;
       var st = STATUS[x.status] || ['later', x.status];
@@ -218,9 +257,9 @@ CH.views.meetingPanel = (function () {
         words && !live ? h('p', { class: x.inviteState === 'Failed' ? 'section-note' : 'muted small', text: words }) : null,
         h('div', { class: 'row actions-row' },
           runs && !busy && x.status === 'Scheduled' ? ui.button('Start meeting', function () { show('start'); }, 'main') : null,
-          runs && !busy && x.status === 'Scheduled' ? ui.button('Change', function () { dlg.close(); CH.views.meetingForm.open(app, x.areaKey, x); }) : null,
+          runs && !busy && x.status === 'Scheduled' && x.id > 0 ? ui.button('Change', function () { dlg.close(); CH.views.meetingForm.open(app, x.areaKey, x); }) : null,
           live ? ui.button('Review and finalise', function () { show('finalise'); }, 'main') : null,
-          runs && !busy && (x.status === 'Scheduled' || x.status === 'In Progress') ? ui.button('Cancel meeting', function () { show('cancel'); }) : null,
+          runs && !busy && x.id > 0 && (x.status === 'Scheduled' || x.status === 'In Progress') ? ui.button('Cancel meeting', function () { show('cancel'); }) : null,
           x.status === 'Scheduled' || x.status === 'In Progress' ? ui.button('Add to my calendar', function () { download(x.ref + '.ics', ics(x, x.areaName)); }) : null,
           x.status === 'Finalised' && app.access.isManagement && !busy ? ui.button('Amend these minutes', function () { show('amend'); }) : null),
         x.status === 'Finalised' ? minutes(x) : live ? liveScreen(x) : [
@@ -241,6 +280,13 @@ CH.views.meetingPanel = (function () {
     function saveRow(x, values, status) {
       var clientKey = CH.requests.newKey();
       status.textContent = 'Saving…';
+      if (x.id < 0) {
+        var row = Object.assign({ Id: -(++bufferSeq), AuthorId: app.person.SiteUserId, RowKey: 'U|' + clientKey, MeetingId: x.id }, values);
+        (app.meetingBuffer[x.id] = app.meetingBuffer[x.id] || []).push(row);
+        if (agenda && agenda !== 'error') agenda.live.push(row);
+        status.textContent = 'Kept – sent as soon as the booking is saved';
+        return Promise.resolve();
+      }
       return app.sp.addToFolder('meetingItems', x.areaKey + '/MTG-' + x.id + '/Record', Object.assign({ RowKey: 'U|' + clientKey, MeetingId: x.id }, values))
         .then(function () { status.textContent = 'Saved'; if (agenda && agenda !== 'error') agenda.live.push(Object.assign({ Id: Infinity, AuthorId: app.person.SiteUserId }, values)); })
         .catch(function (error) {
@@ -252,7 +298,7 @@ CH.views.meetingPanel = (function () {
     function liveScreen(x) {
       if (agenda === null || agenda === 'error') return agendaBody(false);
       var last = latest(agenda.live);
-      var items = fromRows(app, x, agenda.frozen, agenda.live);
+      var items = itemsNow(x);
       at = Math.max(0, Math.min(at, items.length - 1));
       return [h('div', { class: 'meet' }, agendaNav(items), h('div', { class: 'item-pane' }, adding ? addItemForm(x) : items.length ? oneItem(x, items) : h('p', { class: 'muted', text: 'Nothing on the agenda.' }))),
         attendance(x, last), decisions(x)];
@@ -320,7 +366,8 @@ CH.views.meetingPanel = (function () {
         } catch (error) { status.textContent = error.friendly || 'The action could not be closed just now. Try again in a moment.'; }
       }
       var r = action ? R.roles(action, app.person.SiteUserId, app.access) : null;
-      var buttons = kind === 'action' ? [
+      var buttons = x.id < 0 ? [h('span', { class: 'muted small', text: 'Actions can be raised or closed from here once the booking is saved – usually within a minute.' })]
+        : kind === 'action' ? [
         it.open ? ui.button('Open this action', it.open) : null,
         action && r.canClose && it.outcome !== 'Closed' && !action.done ? ui.button('Close this action', closeIt) : null,
         ui.button('Raise a further action', function () { CH.views.raiseForm.open(app, x.areaKey, { meeting: x, title: '' }); })]
@@ -377,8 +424,10 @@ CH.views.meetingPanel = (function () {
         btn.disabled = true; btn.textContent = 'Saving…';
         var clientKey = CH.requests.newKey();
         try {
-          await app.sp.addToFolder('meetingItems', x.areaKey + '/MTG-' + x.id + '/Record', { Title: t, RowKey: 'U|' + clientKey, RecordKey: x.id + '|N|' + clientKey,
-            MeetingId: x.id, RowType: 'New Business', SourceType: 'New Business', Section: 'New business', Notes: notes.value.trim() });
+          var nb = { Id: -(++bufferSeq), AuthorId: app.person.SiteUserId, Title: t, RowKey: 'U|' + clientKey, RecordKey: x.id + '|N|' + clientKey,
+            MeetingId: x.id, RowType: 'New Business', SourceType: 'New Business', Section: 'New business', Notes: notes.value.trim() };
+          if (x.id < 0) (app.meetingBuffer[x.id] = app.meetingBuffer[x.id] || []).push(nb);
+          else { delete nb.Id; delete nb.AuthorId; await app.sp.addToFolder('meetingItems', x.areaKey + '/MTG-' + x.id + '/Record', nb); }
           adding = false;
           openTitle = t;
           agenda = null;
@@ -397,8 +446,10 @@ CH.views.meetingPanel = (function () {
     // and Download PDF; Print only when there is no PDF. Actions closed at the meeting, and those raised there, have tables.
     function minutes(x) {
       if (agenda === null || agenda === 'error') return agendaBody(true);
-      var rows = agenda.frozen;
-      var items = fromRows(app, x, rows, []);
+      // being finalised (release 1.2): the minutes as recorded, at once; the flow freezes the same record behind
+      var draft = !!x.finalising;
+      var rows = draft ? draftRows(x) : agenda.frozen;
+      var items = draft ? itemsNow(x).filter(function (it) { return it.section !== 'Decisions and additional actions'; }) : fromRows(app, x, rows, []);
       var pdfOn = !app.health || app.health.pdfEnabled !== false;
       var pdf = x.pdfState === 'Ready' && x.pdfVersion > 0
         ? app.sp.siteRelative + '/' + CH.config.lists.minutes.url + '/' + x.areaKey + '/MTG-' + Number(x.id) + '-v' + Number(x.pdfVersion) + '.pdf' : '';
@@ -406,7 +457,8 @@ CH.views.meetingPanel = (function () {
       var dec = rows.filter(function (r) { return r.RowType === 'Decision'; });
       var amend = rows.filter(function (r) { return r.RowType === 'Amendment'; });
       var closed = items.filter(function (it) { return it.outcome === 'Closed'; });
-      var raised = items.filter(function (it) { return it.section === 'Decisions and additional actions'; });
+      var raised = draft ? rows.filter(function (r) { return r.RowType === 'Agenda Item' && r.Section === 'Decisions and additional actions'; })
+        : items.filter(function (it) { return it.section === 'Decisions and additional actions'; });
       var rest = items.filter(function (it) { return it.outcome !== 'Closed' && it.section !== 'Decisions and additional actions'; });
       var raisedRows = rows.filter(function (r) { return r.RowType === 'Agenda Item' && r.Section === 'Decisions and additional actions'; });
       function table(head, body) {
@@ -422,8 +474,9 @@ CH.views.meetingPanel = (function () {
         h('div', { class: 'row actions-row no-print' },
           pdf ? h('a', { class: 'btn btn-main', href: pdf, target: '_blank', rel: 'noopener', text: 'Open the PDF' }) : null,
           pdf ? h('a', { class: 'btn', href: pdf, download: x.ref + '.pdf', text: 'Download PDF' }) : null,
-          !pdf && !pdfOn ? ui.button('Print the minutes', function () { window.print(); }) : null),
-        !pdf && pdfOn && (x.pdfState === 'Pending' || x.pdfState === 'Failed') ? h('p', { class: 'muted small no-print', text: 'The PDF is being prepared. The minutes below are final.' }) : null,
+          !pdf && !pdfOn && !draft ? ui.button('Print the minutes', function () { window.print(); }) : null),
+        draft ? h('p', { class: 'muted small no-print', text: 'These are the minutes being saved. Once they are, the PDF is made and they can be amended.' }) : null,
+        !draft && !pdf && pdfOn && (x.pdfState === 'Pending' || x.pdfState === 'Failed') ? h('p', { class: 'muted small no-print', text: 'The PDF is being prepared. The minutes below are final.' }) : null,
         att.length ? table(['Attendance', ''], att.map(function (r) { return [r.SourceId ? app.model.nameOf(Number(r.SourceId)) : r.Title, r.Attendance || 'Not recorded']; }))
           : h('p', { class: 'muted', text: 'Attendance was not recorded.' }),
         sections,
@@ -433,6 +486,21 @@ CH.views.meetingPanel = (function () {
         }))] : null,
         dec.length ? [h('h4', { class: 'agenda-title', text: 'Decisions' }), table(['Decision', 'Details'], dec.map(function (r) { return [r.Title, r.Notes || '']; }))] : null,
         amend.length ? [h('h4', { class: 'agenda-title', text: 'Amendments' }), table(['Amendment', 'Why'], amend.map(function (r) { return [(r.Title || '') + (r.Notes ? ': ' + r.Notes : ''), r.AmendmentReason || '']; }))] : null);
+    }
+
+    // The record as it will be frozen, built from what was recorded live: attendance (the latest choice for each person
+    // invited), decisions, and the actions raised at this meeting.
+    function draftRows(x) {
+      var last = latest(agenda.live);
+      var att = x.attendeeIds.map(function (pid) {
+        var rec = last[x.id + '|P|' + pid];
+        return { RowType: 'Attendee', SourceId: pid, Attendance: rec ? rec.Attendance : '' };
+      });
+      var dec = agenda.live.filter(function (r) { return r.RowType === 'Decision'; });
+      var raised = app.model.actions.filter(function (a) { return a.sourceType === 'Meeting' && Number(a.sourceId) === Number(x.id); }).map(function (a) {
+        return { RowType: 'Agenda Item', Section: 'Decisions and additional actions', Title: a.title, SnapshotOwner: a.ownerId, SnapshotDueDate: a.dueIso ? a.dueIso + 'T12:00:00Z' : '' };
+      });
+      return att.concat(dec, raised);
     }
 
     function form(kind, x) {
@@ -446,7 +514,7 @@ CH.views.meetingPanel = (function () {
         fields.push(h('p', { class: 'explain', text: 'The amendment is added to the minutes with your name and the date. The original minutes are kept as they are, and a new PDF version is made.' }),
           field('What is the amendment?', what), field('Why is it needed?', reason));
       } else if (kind === 'finalise') {
-        var items = agenda && agenda !== 'error' ? fromRows(app, x, agenda.frozen, agenda.live) : [];
+        var items = agenda && agenda !== 'error' ? itemsNow(x) : [];
         var outcomes = {};
         items.forEach(function (it) { if (it.key) outcomes[it.key] = it.outcome; });
         var missing = R.missingOutcomes(items, outcomes);
@@ -477,6 +545,7 @@ CH.views.meetingPanel = (function () {
           if (CH.ui.dialog.showErrors(f, 'ch-mt-', aerrs, ['what', 'reason'])) return;
           payload = { what: what.value.trim(), reason: reason.value.trim() };
         }
+        if (kind === 'start' && x.id < 0 && app.startWhenBooked(x)) { view = 'main'; fill(); loadAgenda(); return; }
         submit.disabled = true; submit.textContent = 'Sending…';
         var type = { cancel: 'CancelMeeting', start: 'StartMeeting', finalise: 'FinaliseMeeting', amend: 'AmendMeeting' }[kind];
         var verb = { cancel: 'Cancel the ', start: 'Start the ', finalise: 'Finalise the minutes of the ', amend: 'Amend the minutes of the ' }[kind];
@@ -484,6 +553,7 @@ CH.views.meetingPanel = (function () {
           await app.tracker.submit({ type: type, targetId: x.id, targetType: 'Meeting', expectedRevision: x.revision, payload: payload, label: verb + x.areaName + ' meeting' });
           view = 'main';
           fill();
+          if (kind === 'start' || kind === 'finalise') loadAgenda();
         } catch (error) {
           submit.disabled = false; submit.textContent = 'Try again';
           errorBox.textContent = error.friendly || 'This could not be sent just now. Try again in a moment.';

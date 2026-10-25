@@ -2,6 +2,17 @@
 
 Plain HTML, CSS and JavaScript, delivered as a Welcome by Accelerator 365 custom layout. Same-origin SharePoint REST runs as the signed-in user. There are no libraries and no external calls.
 
+## Version 1.2.1: meetings without waiting (25 October 2026)
+
+- **Start meeting** opens the live screen at once. Until the flow has fixed the agenda, the screen builds it by the
+  same rules (`CH.agenda.preview`); outcomes are keyed by their source, so they attach to the fixed agenda when it comes.
+- **Finalise** shows the minutes at once, from what was recorded (attendance, outcomes, decisions, actions raised),
+  marked as being saved; the flow freezes the record and the PDF follows. Finalising waits only while the start itself
+  is still being saved.
+- **A meeting booked a moment ago** can be opened and started straight away. What is recorded is kept on the screen
+  and sent to the meeting's record folder as soon as the booking is saved, with the start (`app.js`, `meetingBooked`).
+  Raising or closing actions from it, Change and Cancel wait for the booking.
+
 ## Version 1.2.0: release 1.2, as approved in the preview (25 October 2026)
 
 - **Changes show at once** (`src/domain/optimistic.js`): every change still being saved is applied to the rows last

@@ -24,6 +24,14 @@
 <h1>ESG Competency Hub – installing release 1.2</h1>
 <p>25 October 2026. Release 1.2 is the version you approved in the preview. Install it in the order below: Setup first, then the solution, then the app. Allow about 30 minutes, plus a short session with Rich.</p>
 
+<div class="note"><strong>App 1.2.1 – meetings without waiting.</strong> If you have already installed release 1.2, only Step 3 is needed (the app files):
+  <ul class="sub">
+    <li><strong>Start meeting</strong> opens the live screen at once. The agenda is fixed in the background, and outcomes you record meanwhile stay with their items.</li>
+    <li><strong>Finalise</strong> shows the minutes at once, marked as being saved. The PDF follows a few minutes later.</li>
+    <li><strong>A meeting booked a moment ago</strong> can be started straight away. What you record is sent as soon as the booking is saved. Raising or closing actions from it waits for the booking, usually under a minute.</li>
+  </ul>
+</div>
+
 <h2>What changes for people using the Hub</h2>
 <ul>
   <li><strong>Changes show at once.</strong> When you raise, move, finish or change something, the screen shows it straight away, marked <strong>✓ Sent</strong>. When it is recorded, the mark turns into a green <strong>✓✓ Saved</strong>, which fades after a few seconds. You can carry on meanwhile; buttons don't disappear.</li>
@@ -53,7 +61,7 @@
   <tr><th>Folder</th><th>Version</th><th>Step</th></tr>
   <tr><td><code>1-Setup</code>: <code>CH_Setup.html</code>, <code>CH_Setup.js</code></td><td>Setup 1.4.3</td><td>1</td></tr>
   <tr><td><code>2-Power-Automate</code>: <code>ESGCompetencyHub_1_9_0_4_unmanaged.zip</code></td><td>Solution 1.9.0.4</td><td>2</td></tr>
-  <tr><td><code>3-App</code>: <code>competency-hub.html</code>, <code>competency-hub.js</code></td><td>App 1.2.0</td><td>3</td></tr>
+  <tr><td><code>3-App</code>: <code>competency-hub.html</code>, <code>competency-hub.js</code></td><td>App 1.2.1</td><td>3</td></tr>
   <tr><td><code>4-Permission-probe</code>: <code>CH_Probe_P2.html</code>, <code>CH_Probe_P2.js</code></td><td>Probe P2-2</td><td>5 (with Rich)</td></tr>
 </table>
 
@@ -92,10 +100,10 @@
   </ul>
 </div>
 
-<h2>Step 3 – app 1.2.0</h2>
+<h2>Step 3 – app 1.2.1</h2>
 <ol>
   <li>Open <a href="{SITE}/_layouts/15/viewlsts.aspx">Site contents</a>, then <em>Welcome Web Part - Custom Layouts</em>. Upload both files from <code>3-App</code> and choose <strong>Replace</strong> for each.</li>
-  <li>Open the <a href="{SITE}/SitePages/Hub.aspx">Hub</a>. Edit the web part, click <strong>Reset layout cache</strong>, republish, then press <strong>Ctrl+F5</strong>. The footer should say <em>version 1.2.0</em>, and a line under the top bar should say <em>Everything is up to date</em>.</li>
+  <li>Open the <a href="{SITE}/SitePages/Hub.aspx">Hub</a>. Edit the web part, click <strong>Reset layout cache</strong>, republish, then press <strong>Ctrl+F5</strong>. The footer should say <em>version 1.2.1</em>, and a line under the top bar should say <em>Everything is up to date</em>.</li>
 </ol>
 
 <h2>Step 4 – try it (as yourself, about 15 minutes)</h2>
@@ -106,11 +114,11 @@
   <li>Open a TEST notice. The notice and its comments sit side by side, with no scrollbar.</li>
   <li><strong>A meeting:</strong>
     <ol class="sub">
-      <li>Book a TEST Flask meeting and start it.</li>
+      <li>Book a TEST Flask meeting, open it straight away from the area's meetings and click <strong>Start meeting</strong>. The meeting runs at once, before the booking shows ✓✓ Saved: record attendance, and it is sent when the booking is saved.</li>
       <li>The agenda is grouped as Actions, Issues, Notices and Other business.</li>
       <li>On a TEST action, add a note and click <strong>Close this action</strong>: it shows <em>Closed</em>, and the action itself is closed.</li>
       <li>Click <strong>+ Add an item</strong>: the new item opens.</li>
-      <li>Finalise. Within about 5 minutes the minutes show <em>Actions closed at this meeting</em> and <em>Actions raised at this meeting</em> (owner and due date), and <strong>Open the PDF</strong> appears. The PDF uses Hub names.</li>
+      <li>Finalise. The minutes show at once, marked as being saved. Within about 5 minutes they show <em>Actions closed at this meeting</em> and <em>Actions raised at this meeting</em> (owner and due date), and <strong>Open the PDF</strong> appears. The PDF uses Hub names.</li>
     </ol></li>
   <li><strong>Administration</strong>, first tab: <em>How long changes take</em> lists the changes you just made. Send me a screenshot of it. It gives us real timings at last.</li>
 </ol>

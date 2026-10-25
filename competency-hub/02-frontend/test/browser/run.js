@@ -386,6 +386,11 @@ check('meeting: the agenda preview is shown before it starts', res.ok && res.res
 check('meeting: an item added by hand goes into the meeting\'s record folder', res.ok && JSON.stringify(res.result.added) === '["MeetingItems/FLK/MTG-2/Record"]', JSON.stringify(res));
 check('meeting: a change is recorded, and starting fixes the agenda', res.ok && res.result.start === '11:00' && res.result.status === 'In Progress' && res.result.agendaRows > 0 &&
   res.result.fixed && res.result.noStart, JSON.stringify(res));
+check('start is instant: the live screen comes before the flow has fixed the agenda, and an outcome recorded then stays with its item', res.ok && res.result.instant && res.result.kept, JSON.stringify(res));
+res = drive('as=' + KELLY + '&area=FLK&drive=meetingBeforeBooked', SLOW);
+check('a meeting booked a moment ago can be started at once; what is recorded is sent to its record folder when the booking is saved', res.ok && res.result.unnumbered &&
+  !res.result.change && res.result.live && res.result.raiseNote && res.result.kept && res.result.status === 'In Progress' &&
+  res.result.attFolder === 'MeetingItems/FLK/MTG-' + res.result.realId + '/Record' && res.result.attKey.indexOf(res.result.realId + '|P|') === 0, JSON.stringify(res));
 res = drive('as=' + KELLY + '&area=FLK&meeting=2&drive=meetingCancel', SLOW);
 check('meeting: cancelling needs a reason, then shows as cancelled', res.ok && /at least 10 characters/.test(res.result.reasonError) && /Most of the area is on the outage/.test(res.result.text), JSON.stringify(res));
 res = drive('as=' + RACHEL + '&area=FLK&meeting=2&drive=meetingAsTechnician', SLOW);
@@ -401,6 +406,8 @@ check('live meeting: attendance, outcomes and decisions go only to the meeting\'
 check('finalised: the minutes show attendance, outcomes, the decision and the action raised, with the PDF', res.ok && res.result.frozenNotes === 1 &&
   /Rachel Boulden\s*Apologies/.test(res.result.minutes) && /Probe checks stay monthly/.test(res.result.minutes) && /Actions raised at this meeting\s*ActionOwnerDue\s*Order spare probes/.test(res.result.minutes) &&
   res.result.pdf === '/sites/ESGCompetencyHub/MeetingMinutes/FLK/MTG-2-v1.pdf', JSON.stringify(res));
+check('finalise is instant: the minutes as recorded show at once, before the flow has frozen them', res.ok && !res.result.draft.flowDone &&
+  /being saved/.test(res.result.draft.minutes) && /Rachel Boulden\s*Apologies/.test(res.result.draft.minutes) && /Order spare probes/.test(res.result.draft.minutes), JSON.stringify(res && res.result && res.result.draft));
 res = drive('as=' + KELLY + '&area=FLK&meeting=2&drive=meetingKinds', SLOW);
 check('live meeting: the agenda is grouped by kind and each item is labelled; an action offers Close this action and Raise a further action, an issue Turn into an action', res.ok &&
   res.result.groups.join('|') === 'Actions|Issues|Notices|Other business' && res.result.first.kind === 'Action' &&
