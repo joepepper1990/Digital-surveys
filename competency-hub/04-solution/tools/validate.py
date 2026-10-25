@@ -359,6 +359,23 @@ def check_empty_create_array(f):
     return []
 
 
+def check_empty_set_variable(f):
+    """The designer refuses a Set variable step whose Value is empty ("'Value' is required"), so the flow cannot be
+    saved or tested; an empty text is @string('')."""
+    out = []
+    def walk(actions):
+        for n, a in (actions or {}).items():
+            if a.get('type') == 'SetVariable' and a.get('inputs', {}).get('value') == '':
+                out.append("[{0}] {1}: Set variable with an empty Value (\"'Value' is required\"); use @string('')".format(f['name'], n))
+            walk(a.get('actions'))
+            walk((a.get('else') or {}).get('actions'))
+            for c in (a.get('cases') or {}).values():
+                walk(c.get('actions'))
+            walk((a.get('default') or {}).get('actions'))
+    walk(f['json']['properties']['definition'].get('actions'))
+    return out
+
+
 MAX_NESTING = 8      # Power Automate: an action may be nested at most 8 levels deep (top-level actions are level 0)
 MAX_ACTIONS = 500    # Power Automate: actions per workflow
 
@@ -438,6 +455,7 @@ def validate_all(flows, raw=None):
         probs += check_platform(f)
         probs += check_array_outputs(f)
         probs += check_empty_create_array(f)
+        probs += check_empty_set_variable(f)
         probs += check_nesting(f['name'], f['json']['properties']['definition'])
         refs = f['json']['properties']['connectionReferences']
         used = set(re.findall(r'"connectionName": "([^"]+)"', json.dumps(f['json'])))

@@ -727,7 +727,7 @@ def pdf_steps(sfx, meeting_id_expr):
                 ('Pdf_claim_body' + s, compose({'PdfAttempts': "@add(" + ATTEMPTS + ", 1)"})),
                 ('Pdf_claim' + s, merge(L('mtg', "/items(@{" + meeting_id_expr + "})"), 'Pdf_claim_body' + s, if_match="@{" + M + "?['odata.etag']}")),
                 ('Pdf_start' + s, set_var('varPdfResult', 'failed')),
-                ('Pdf_html_id' + s, set_var('varPdfHtml', '')),
+                ('Pdf_html_id' + s, set_var('varPdfHtml', "@string('')")),
                 ('Pdf_comps' + s, http('GET', L('comps', "/items?$select=Id,Title,CompetencyKey&$top=500"))),
                 ('Pdf_area' + s, query("@body('Pdf_comps" + s + "')?['value']", "@equals(" + idstr(IT('Id')) + ", " + idstr(M + "?['CompetencyId']") + ")")),
                 ('Pdf_exists' + s, http('GET', "_api/web/GetFileByServerRelativePath(decodedurl='@{outputs('Site_path')}@{" + FOLDER + "}/@{" + NAME + "}')?$select=Name")),

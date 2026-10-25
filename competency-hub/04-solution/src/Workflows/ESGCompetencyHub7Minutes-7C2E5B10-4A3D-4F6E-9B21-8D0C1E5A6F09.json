@@ -5439,7 +5439,7 @@
                           "type": "SetVariable",
                           "inputs": {
                             "name": "varPdfHtml",
-                            "value": ""
+                            "value": "@string('')"
                           },
                           "runAfter": {
                             "PDF_start": [

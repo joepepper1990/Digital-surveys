@@ -101,6 +101,13 @@ class BrokenFlowsAreRejected(unittest.TestCase):
         probs = validate.validate_all(fl)
         self.assertTrue(any('createArray() with no parameters' in p for p in probs), probs)
 
+    def test_empty_set_variable(self):
+        # The designer refuses a Set variable with an empty Value (found on the site, 25 Oct 2026)
+        fl = copy.deepcopy(GOOD)
+        fl[0]['json']['properties']['definition']['actions']['Blank'] = {'type': 'SetVariable', 'inputs': {'name': 'x', 'value': ''}, 'runAfter': {}}
+        probs = validate.validate_all(fl)
+        self.assertTrue(any('empty Value' in p for p in probs), probs)
+
     def test_windows_time_zone_on_an_outlook_event(self):
         # The Outlook V4 event actions take the connector's display names, not 'GMT Standard Time'
         fl = copy.deepcopy(GOOD)
