@@ -695,16 +695,32 @@ def pdf_steps(sfx, meeting_id_expr):
     ON = "not(equals(string(coalesce(first(body('Pdf_switch" + s + "'))?['Value'], 'Yes')), 'No'))"
     IT = lambda col: "item()?['" + col + "']"
     cell = lambda expr: "'<td>', " + html_text(expr) + ", '</td>'"
-    name_of = lambda step: "string(coalesce(first(body('" + step + "'))?['Title'], ''))"
+    # people as the Hub names them: their Known as name, else the name in People (a lookup by site user id)
+    who = lambda row: "if(empty(trim(string(coalesce(" + row + "?['KnownAs'], '')))), string(coalesce(" + row + "?['Title'], '')), trim(string(" + row + "?['KnownAs'])))"
+    name_of = lambda step: who("first(body('" + step + "'))")
+    NAME_BY_ID = lambda id_expr: "string(coalesce(outputs('Pdf_names" + s + "')?[" + idstr(id_expr) + "], ''))"
     uk = lambda col: "convertFromUtc(string(coalesce(" + M + "?['" + col + "'], '2000-01-01T00:00:00Z')), 'GMT Standard Time', 'dddd d MMMM yyyy, HH:mm')"
     table = lambda step, head: ("if(empty(body('" + step + "')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr>" + head + "</tr>', join(body('" + step + "'), ''), '</table>'))")
     sections, parts = [], []
+    due = "if(empty(string(coalesce(" + IT('SnapshotDueDate') + ", ''))), '', convertFromUtc(string(" + IT('SnapshotDueDate') + "), 'GMT Standard Time', 'd MMM yyyy'))"
     for i, sec in enumerate(MINUTES_SECTIONS, 1):
         f, sel = 'Pdf_sec{0}_rows{1}'.format(i, s), 'Pdf_sec{0}{1}'.format(i, s)
-        sections += [(f, query('@' + ROWS, "@and(equals(" + IT('RowType') + ", 'Agenda Item'), equals(string(" + IT('Section') + "), " + q(sec) + "))")),
+        if sec == 'Decisions and additional actions':
+            # the actions raised at the meeting: who owns each and when it is due
+            sections += [(f, query('@' + ROWS, "@and(equals(" + IT('RowType') + ", 'Agenda Item'), equals(string(" + IT('Section') + "), " + q(sec) + "))")),
+                         (sel, {'type': 'Select', 'inputs': {'from': "@body('" + f + "')", 'select': "@concat('<tr>', " + cell(IT('Title')) + ", " + cell(NAME_BY_ID(IT('SnapshotOwner'))) + ", "
+                                                                                                   + cell(due) + ", '</tr>')"}})]
+            parts.append("'<h2>Actions closed at this meeting</h2>', " + table('Pdf_closed' + s, '<th>Action</th><th>Notes</th>'))
+            parts.append("'<h2>{0}. Actions raised at this meeting</h2>', ".format(i) + table(sel, '<th>Action</th><th>Owner</th><th>Due</th>'))
+            continue
+        # an action the chair closed at the meeting is listed once, under "Actions closed at this meeting"
+        sections += [(f, query('@' + ROWS, "@and(equals(" + IT('RowType') + ", 'Agenda Item'), equals(string(" + IT('Section') + "), " + q(sec) + "), "
+                                           "not(equals(string(" + IT('Outcome') + "), 'Closed')))")),
                      (sel, {'type': 'Select', 'inputs': {'from': "@body('" + f + "')", 'select': "@concat('<tr>', " + cell(IT('Title')) + ", " + cell(IT('Outcome')) + ", "
                                                                                                + cell(IT('Notes')) + ", '</tr>')"}})]
         parts.append("'<h2>{0}. {1}</h2>', ".format(i, sec) + table(sel, '<th>Item</th><th>Outcome</th><th>Notes</th>'))
+    sections += [('Pdf_closed_rows' + s, query('@' + ROWS, "@and(equals(" + IT('RowType') + ", 'Agenda Item'), equals(string(" + IT('Outcome') + "), 'Closed'))")),
+                 ('Pdf_closed' + s, {'type': 'Select', 'inputs': {'from': "@body('Pdf_closed_rows" + s + "')", 'select': "@concat('<tr>', " + cell(IT('Title')) + ", " + cell(IT('Notes')) + ", '</tr>')"}})]
     html = ("concat('<!doctype html><html><head><meta charset=\"utf-8\"><title>Minutes</title>" + PDF_STYLE + "</head><body>', "
             "'<h1>', " + html_text("concat(string(" + AREA + "?['Title']), ' monthly meeting')") + ", '</h1>', "
             "'<p>', " + html_text(uk('MeetingDate')) + ", if(empty(string(coalesce(" + M + "?['Location'], ''))), '', concat(' · ', " + html_text(M + "?['Location']") + ")), '</p>', "
@@ -734,15 +750,19 @@ def pdf_steps(sfx, meeting_id_expr):
                 ('Pdf_make' + s, after(cond("@equals(actions('Pdf_exists" + s + "')?['status'], 'Succeeded')", seq(
                     ('Pdf_already' + s, set_var('varPdfResult', 'ok')),
                 ), seq(
-                    ('Pdf_rows' + s, http('GET', L('items', "/items?$select=Id,Title,RowType,Section,Outcome,Notes,Attendance,AmendmentReason,SortOrder,FileDirRef"
+                    ('Pdf_rows' + s, http('GET', L('items', "/items?$select=Id,Title,RowType,Section,Outcome,Notes,Attendance,AmendmentReason,SortOrder,FileDirRef,SourceId,SnapshotOwner,SnapshotDueDate"
                                                             "&$filter=MeetingId eq @{" + MID + "}&$top=5000"))),
                     ('Pdf_frozen' + s, query("@body('Pdf_rows" + s + "')?['value']", "@equals(last(split(string(" + IT('FileDirRef') + "), '/')), concat('MTG-', " + MID + "))")),
-                    ('Pdf_people' + s, http('GET', L('people', "/items?$select=SiteUserId,Title&$top=5000"))),
+                    ('Pdf_people' + s, http('GET', L('people', "/items?$select=SiteUserId,Title,KnownAs&$top=5000"))),
+                    ('Pdf_name_pairs' + s, {'type': 'Select', 'inputs': {'from': "@body('Pdf_people" + s + "')?['value']", 'select':
+                        "@concat('\"', " + idstr(IT('SiteUserId')) + ", '\":\"', replace(replace(" + who('item()') + ", '\\', '\\\\'), '\"', '\\\"'), '\"')"}}),
+                    ('Pdf_names' + s, compose("@json(concat('{', join(body('Pdf_name_pairs" + s + "'), ','), '}'))")),
                     ('Pdf_chair' + s, query("@body('Pdf_people" + s + "')?['value']", "@equals(" + idstr(IT('SiteUserId')) + ", " + idstr(M + "?['ChairId']") + ")")),
                     ('Pdf_finaliser' + s, query("@body('Pdf_people" + s + "')?['value']", "@equals(" + idstr(IT('SiteUserId')) + ", " + idstr(M + "?['FinalisedById']") + ")")),
                     ('Pdf_att_rows' + s, query('@' + ROWS, "@equals(" + IT('RowType') + ", 'Attendee')")),
                     ('Pdf_att' + s, {'type': 'Select', 'inputs': {'from': "@body('Pdf_att_rows" + s + "')", 'select':
-                                     "@concat('<tr>', " + cell(IT('Title')) + ", " + cell("if(empty(string(coalesce(" + IT('Attendance') + ", ''))), 'Not recorded', " + IT('Attendance') + ")") + ", '</tr>')"}}),
+                                     "@concat('<tr>', " + cell("coalesce(outputs('Pdf_names" + s + "')?[" + idstr(IT('SourceId')) + "], " + IT('Title') + ")") + ", "
+                     + cell("if(empty(string(coalesce(" + IT('Attendance') + ", ''))), 'Not recorded', " + IT('Attendance') + ")") + ", '</tr>')"}}),
                     *sections,
                     ('Pdf_dec_rows' + s, query('@' + ROWS, "@equals(" + IT('RowType') + ", 'Decision')")),
                     ('Pdf_dec' + s, {'type': 'Select', 'inputs': {'from': "@body('Pdf_dec_rows" + s + "')", 'select': "@concat('<tr>', " + cell(IT('Title')) + ", " + cell(IT('Notes')) + ", '</tr>')"}}),
@@ -2390,7 +2410,7 @@ def flow_request_queue(domain='actions'):
         IN_MTG = "equals(last(split(string(" + IT_('FileDirRef') + "), '/')), concat('MTG-', " + MID + "))"
         IN_REC = ("and(endsWith(string(" + IT_('FileDirRef') + "), concat('/MTG-', " + MID + ", '/Record')), startsWith(string(coalesce(" + IT_('RecordKey') + ", '')), concat(" + MID + ", '|')))")
         DISC = "createArray('Carried forward', 'Noticeboard', 'New improvements and degradations')"
-        ALLOWED = "createArray('Discussed', 'Deferred', 'Not reached', 'Action raised', 'Discarded')"
+        ALLOWED = "createArray('Discussed', 'Deferred', 'Not reached', 'Action raised', 'Discarded', 'Closed')"
         out_key = lambda typ, sid: "concat(" + MID + ", '|O|', " + typ + ", '|', " + sid + ")"
         rows_sel = "/items?$select=Id,Title,RowType,Section,SourceType,SourceId,RecordKey,RowKey,Outcome,Notes,Attendance,FileDirRef,SortOrder&$filter=MeetingId eq @{" + MID + "}&$top=5000"
         fin_check = [('Fin_check_M', cond("@and(" + TYPE_IS('FinaliseMeeting') + ", " + UNDECIDED + ")", seq(
@@ -3180,6 +3200,20 @@ def flow_request_queue(domain='actions'):
     actions['Try'] = after(scope(try_actions), {list(actions)[-1]: OK})
     # emails for a change that is complete: a failure here never touches the request, and the daily run retries
     actions['Send_emails'] = after(scope(send_outbox_steps('')), {'Try': OK})
+    # this flow is working again: if the monitor marked its part of processing as stopped, say it has recovered
+    # (the app's banner goes at once, not at the monitor's next full run)
+    part, why = {'actions': ('state', 'reason'), 'admin': ('admin', 'adminReason'), 'cleanup': ('admin', 'adminReason'),
+                 'records': ('records', 'recordsReason'), 'meetings': ('meetings', 'meetingsReason'), 'minutes': ('meetings', 'meetingsReason')}[domain]
+    HEALTH_ROW = "first(body('Health_now')?['value'])"
+    HEALTH = "outputs('Health_was')"
+    actions['Health_back'] = after(scope(seq(
+        ('Health_now', http('GET', L('settings', "/items?$select=Id,Title,Value&$filter=Title eq 'QueueHealth'"))),
+        ('Health_was', compose("@json(if(empty(string(coalesce(" + HEALTH_ROW + "?['Value'], ''))), '{}', string(" + HEALTH_ROW + "?['Value'])))")),
+        ('Health_down', cond("@equals(string(coalesce(" + HEALTH + "?['" + part + "'], '')), 'Down')", seq(
+            ('Health_fixed', compose({'Value': "@{string(setProperty(setProperty(" + HEALTH + ", '" + part + "', 'Healthy'), '" + why + "', ''))}"})),
+            ('Save_health', merge(L('settings', "/items(@{" + HEALTH_ROW + "?['Id']})"), 'Health_fixed')),
+        ))),
+    )), {'Try': OK})
     if domain == 'meetings':
         # the Outlook invitation, once the meeting change is recorded: a failure here never touches the meeting,
         # and the queue monitor tries again (spec §5.4)

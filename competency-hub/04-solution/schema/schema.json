@@ -292,7 +292,7 @@
         { "name": "CarriedFromRowKey", "title": "Carried From Row Key", "type": "Text", "max": 120 },
         { "name": "Attendee", "title": "Attendee", "type": "User" },
         { "name": "Attendance", "title": "Attendance", "type": "Choice", "choices": ["Present", "Apologies", "Absent"] },
-        { "name": "Outcome", "title": "Outcome", "type": "Choice", "choices": ["No change", "Discussed", "Deferred", "Not reached", "Action raised", "Discarded"] },
+        { "name": "Outcome", "title": "Outcome", "type": "Choice", "choices": ["No change", "Discussed", "Deferred", "Not reached", "Action raised", "Discarded", "Closed"] },
         { "name": "Notes", "title": "Notes", "type": "Note" },
         { "name": "AmendmentReason", "title": "Amendment Reason", "type": "Note" },
         { "name": "AmendedBy", "title": "Amended By", "type": "User" }

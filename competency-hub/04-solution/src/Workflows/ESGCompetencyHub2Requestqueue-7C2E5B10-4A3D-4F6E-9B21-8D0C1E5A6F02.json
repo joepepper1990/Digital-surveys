@@ -7971,6 +7971,94 @@
             ]
           }
         },
+        "Health_back": {
+          "type": "Scope",
+          "actions": {
+            "Health_now": {
+              "type": "OpenApiConnection",
+              "inputs": {
+                "host": {
+                  "connectionName": "shared_sharepointonline",
+                  "operationId": "HttpRequest",
+                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                },
+                "parameters": {
+                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                  "parameters/method": "GET",
+                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['settings']}')/items?$select=Id,Title,Value&$filter=Title eq 'QueueHealth'",
+                  "parameters/headers": {
+                    "Accept": "application/json;odata=nometadata"
+                  }
+                },
+                "authentication": "@parameters('$authentication')"
+              },
+              "runAfter": {}
+            },
+            "Health_was": {
+              "type": "Compose",
+              "inputs": "@json(if(empty(string(coalesce(first(body('Health_now')?['value'])?['Value'], ''))), '{}', string(first(body('Health_now')?['value'])?['Value'])))",
+              "runAfter": {
+                "Health_now": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Health_down": {
+              "type": "If",
+              "expression": "@equals(string(coalesce(outputs('Health_was')?['state'], '')), 'Down')",
+              "actions": {
+                "Health_fixed": {
+                  "type": "Compose",
+                  "inputs": {
+                    "Value": "@{string(setProperty(setProperty(outputs('Health_was'), 'state', 'Healthy'), 'reason', ''))}"
+                  },
+                  "runAfter": {}
+                },
+                "Save_the_health_setting": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['settings']}')/items(@{first(body('Health_now')?['value'])?['Id']})",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata",
+                        "Content-Type": "application/json;odata=nometadata",
+                        "X-HTTP-Method": "MERGE",
+                        "IF-MATCH": "*"
+                      },
+                      "parameters/body": "@{string(outputs('Health_fixed'))}"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "Health_fixed": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {
+                "Health_was": [
+                  "Succeeded"
+                ]
+              }
+            }
+          },
+          "runAfter": {
+            "Try": [
+              "Succeeded"
+            ]
+          }
+        },
         "Catch": {
           "type": "Scope",
           "actions": {

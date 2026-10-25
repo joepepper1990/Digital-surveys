@@ -294,6 +294,12 @@ def call(name, a, ctx):
             return int(a[0])
         except (TypeError, ValueError):
             raise ExprError("int('{0}') failed".format(a[0]))
+    if name == 'setProperty':
+        if not isinstance(a[0], dict):
+            raise ExprError('setProperty needs an object')
+        out = dict(a[0])
+        out[a[1]] = a[2]
+        return out
     if name == 'json':
         try:
             return json.loads(a[0])

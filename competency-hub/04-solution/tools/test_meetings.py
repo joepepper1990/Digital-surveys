@@ -473,6 +473,26 @@ class Finalise(unittest.TestCase):
         ev = s.rows('history', RequestKey=KEY3 + '|1')[0]['f']
         self.assertEqual((ev['EventType'], ev['RecordType']), ('Meeting Finalised', 'Meeting'))
 
+    def test_the_pdf_uses_hub_names_lists_closed_actions_and_who_owns_the_new_ones(self):
+        s = started()
+        rachel = s.rows('people', SiteUserId=float(RACHEL))[0]
+        rachel['f']['KnownAs'] = 'Rach'
+        # the chair closed "Replace FH40 probe" at the meeting: its outcome is Closed
+        for it in s.by_key['meetingItems']['items'].values():
+            if it['f'].get('RowType') == 'Outcome' and it['f'].get('Title') == 'Replace FH40 probe':
+                it['f']['Outcome'], it['f']['Notes'] = 'Closed', 'Closed by Kelly (chair)'
+        r, eng = finalise(s)
+        self.assertEqual(request(s, r)['Status'], 'Completed', eng.log)
+        pdf = s.files[pdf_path(s.mid, 1)]
+        self.assertIn('<td>Rach</td><td>Apologies</td>', pdf, 'attendance uses the Known as name')
+        closed = pdf.split('Actions closed at this meeting')[1].split('</table>')[0]
+        self.assertIn('Replace FH40 probe', closed)
+        self.assertIn('Closed by Kelly (chair)', closed)
+        opened = pdf.split('1. Open actions')[1].split('</table>')[0]
+        self.assertNotIn('Replace FH40 probe', opened, 'a closed action is listed once, under the closed ones')
+        raised = pdf.split('Actions raised at this meeting')[1].split('</table>')[0]
+        self.assertIn('<td>Order spare probes</td><td>Rach</td><td>20 Nov 2026</td>', raised)
+
     def test_items_without_an_outcome_are_named_and_nothing_changes(self):
         s = started()
         for it in list(s.by_key['meetingItems']['items'].values()):

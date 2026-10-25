@@ -2011,7 +2011,7 @@
                                   "parameters": {
                                     "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                                     "parameters/method": "GET",
-                                    "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['items']}')/items?$select=Id,Title,RowType,Section,Outcome,Notes,Attendance,AmendmentReason,SortOrder,FileDirRef&$filter=MeetingId eq @{first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['Id'], '')), '.'))}&$top=5000",
+                                    "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['items']}')/items?$select=Id,Title,RowType,Section,Outcome,Notes,Attendance,AmendmentReason,SortOrder,FileDirRef,SourceId,SnapshotOwner,SnapshotDueDate&$filter=MeetingId eq @{first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['Id'], '')), '.'))}&$top=5000",
                                     "parameters/headers": {
                                       "Accept": "application/json;odata=nometadata"
                                     }
@@ -2043,7 +2043,7 @@
                                   "parameters": {
                                     "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                                     "parameters/method": "GET",
-                                    "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['people']}')/items?$select=SiteUserId,Title&$top=5000",
+                                    "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['people']}')/items?$select=SiteUserId,Title,KnownAs&$top=5000",
                                     "parameters/headers": {
                                       "Accept": "application/json;odata=nometadata"
                                     }
@@ -2056,6 +2056,27 @@
                                   ]
                                 }
                               },
+                              "PDF_name_pairs_(PDF_minutes)": {
+                                "type": "Select",
+                                "inputs": {
+                                  "from": "@body('PDF_people_(PDF_minutes)')?['value']",
+                                  "select": "@concat('\"', first(split(string(coalesce(item()?['SiteUserId'], '')), '.')), '\":\"', replace(replace(if(empty(trim(string(coalesce(item()?['KnownAs'], '')))), string(coalesce(item()?['Title'], '')), trim(string(item()?['KnownAs']))), '\\', '\\\\'), '\"', '\\\"'), '\"')"
+                                },
+                                "runAfter": {
+                                  "PDF_people_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_names_(PDF_minutes)": {
+                                "type": "Compose",
+                                "inputs": "@json(concat('{', join(body('PDF_name_pairs_(PDF_minutes)'), ','), '}'))",
+                                "runAfter": {
+                                  "PDF_name_pairs_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
                               "PDF_chair_(PDF_minutes)": {
                                 "type": "Query",
                                 "inputs": {
@@ -2063,7 +2084,7 @@
                                   "where": "@equals(first(split(string(coalesce(item()?['SiteUserId'], '')), '.')), first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['ChairId'], '')), '.')))"
                                 },
                                 "runAfter": {
-                                  "PDF_people_(PDF_minutes)": [
+                                  "PDF_names_(PDF_minutes)": [
                                     "Succeeded"
                                   ]
                                 }
@@ -2096,7 +2117,7 @@
                                 "type": "Select",
                                 "inputs": {
                                   "from": "@body('PDF_attendance_rows_(PDF_minutes)')",
-                                  "select": "@concat('<tr>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Title'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '<td>', replace(replace(replace(replace(replace(string(coalesce(if(empty(string(coalesce(item()?['Attendance'], ''))), 'Not recorded', item()?['Attendance']), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '</tr>')"
+                                  "select": "@concat('<tr>', '<td>', replace(replace(replace(replace(replace(string(coalesce(coalesce(outputs('PDF_names_(PDF_minutes)')?[first(split(string(coalesce(item()?['SourceId'], '')), '.'))], item()?['Title']), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '<td>', replace(replace(replace(replace(replace(string(coalesce(if(empty(string(coalesce(item()?['Attendance'], ''))), 'Not recorded', item()?['Attendance']), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '</tr>')"
                                 },
                                 "runAfter": {
                                   "PDF_attendance_rows_(PDF_minutes)": [
@@ -2108,7 +2129,7 @@
                                 "type": "Query",
                                 "inputs": {
                                   "from": "@body('PDF_frozen_(PDF_minutes)')",
-                                  "where": "@and(equals(item()?['RowType'], 'Agenda Item'), equals(string(item()?['Section']), 'Open actions'))"
+                                  "where": "@and(equals(item()?['RowType'], 'Agenda Item'), equals(string(item()?['Section']), 'Open actions'), not(equals(string(item()?['Outcome']), 'Closed')))"
                                 },
                                 "runAfter": {
                                   "PDF_attendance_(PDF_minutes)": [
@@ -2132,7 +2153,7 @@
                                 "type": "Query",
                                 "inputs": {
                                   "from": "@body('PDF_frozen_(PDF_minutes)')",
-                                  "where": "@and(equals(item()?['RowType'], 'Agenda Item'), equals(string(item()?['Section']), 'Closed since last meeting'))"
+                                  "where": "@and(equals(item()?['RowType'], 'Agenda Item'), equals(string(item()?['Section']), 'Closed since last meeting'), not(equals(string(item()?['Outcome']), 'Closed')))"
                                 },
                                 "runAfter": {
                                   "PDF_sec1_(PDF_minutes)": [
@@ -2156,7 +2177,7 @@
                                 "type": "Query",
                                 "inputs": {
                                   "from": "@body('PDF_frozen_(PDF_minutes)')",
-                                  "where": "@and(equals(item()?['RowType'], 'Agenda Item'), equals(string(item()?['Section']), 'Carried forward'))"
+                                  "where": "@and(equals(item()?['RowType'], 'Agenda Item'), equals(string(item()?['Section']), 'Carried forward'), not(equals(string(item()?['Outcome']), 'Closed')))"
                                 },
                                 "runAfter": {
                                   "PDF_sec2_(PDF_minutes)": [
@@ -2180,7 +2201,7 @@
                                 "type": "Query",
                                 "inputs": {
                                   "from": "@body('PDF_frozen_(PDF_minutes)')",
-                                  "where": "@and(equals(item()?['RowType'], 'Agenda Item'), equals(string(item()?['Section']), 'Noticeboard'))"
+                                  "where": "@and(equals(item()?['RowType'], 'Agenda Item'), equals(string(item()?['Section']), 'Noticeboard'), not(equals(string(item()?['Outcome']), 'Closed')))"
                                 },
                                 "runAfter": {
                                   "PDF_sec3_(PDF_minutes)": [
@@ -2204,7 +2225,7 @@
                                 "type": "Query",
                                 "inputs": {
                                   "from": "@body('PDF_frozen_(PDF_minutes)')",
-                                  "where": "@and(equals(item()?['RowType'], 'Agenda Item'), equals(string(item()?['Section']), 'New improvements and degradations'))"
+                                  "where": "@and(equals(item()?['RowType'], 'Agenda Item'), equals(string(item()?['Section']), 'New improvements and degradations'), not(equals(string(item()?['Outcome']), 'Closed')))"
                                 },
                                 "runAfter": {
                                   "PDF_sec4_(PDF_minutes)": [
@@ -2228,7 +2249,7 @@
                                 "type": "Query",
                                 "inputs": {
                                   "from": "@body('PDF_frozen_(PDF_minutes)')",
-                                  "where": "@and(equals(item()?['RowType'], 'Agenda Item'), equals(string(item()?['Section']), 'Unresolved degradations'))"
+                                  "where": "@and(equals(item()?['RowType'], 'Agenda Item'), equals(string(item()?['Section']), 'Unresolved degradations'), not(equals(string(item()?['Outcome']), 'Closed')))"
                                 },
                                 "runAfter": {
                                   "PDF_sec5_(PDF_minutes)": [
@@ -2252,7 +2273,7 @@
                                 "type": "Query",
                                 "inputs": {
                                   "from": "@body('PDF_frozen_(PDF_minutes)')",
-                                  "where": "@and(equals(item()?['RowType'], 'Agenda Item'), equals(string(item()?['Section']), 'Important dates'))"
+                                  "where": "@and(equals(item()?['RowType'], 'Agenda Item'), equals(string(item()?['Section']), 'Important dates'), not(equals(string(item()?['Outcome']), 'Closed')))"
                                 },
                                 "runAfter": {
                                   "PDF_sec6_(PDF_minutes)": [
@@ -2276,7 +2297,7 @@
                                 "type": "Query",
                                 "inputs": {
                                   "from": "@body('PDF_frozen_(PDF_minutes)')",
-                                  "where": "@and(equals(item()?['RowType'], 'Agenda Item'), equals(string(item()?['Section']), 'New business'))"
+                                  "where": "@and(equals(item()?['RowType'], 'Agenda Item'), equals(string(item()?['Section']), 'New business'), not(equals(string(item()?['Outcome']), 'Closed')))"
                                 },
                                 "runAfter": {
                                   "PDF_sec7_(PDF_minutes)": [
@@ -2312,10 +2333,34 @@
                                 "type": "Select",
                                 "inputs": {
                                   "from": "@body('PDF_sec9_rows_(PDF_minutes)')",
-                                  "select": "@concat('<tr>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Title'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Outcome'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Notes'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '</tr>')"
+                                  "select": "@concat('<tr>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Title'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '<td>', replace(replace(replace(replace(replace(string(coalesce(string(coalesce(outputs('PDF_names_(PDF_minutes)')?[first(split(string(coalesce(item()?['SnapshotOwner'], '')), '.'))], '')), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '<td>', replace(replace(replace(replace(replace(string(coalesce(if(empty(string(coalesce(item()?['SnapshotDueDate'], ''))), '', convertFromUtc(string(item()?['SnapshotDueDate']), 'GMT Standard Time', 'd MMM yyyy')), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '</tr>')"
                                 },
                                 "runAfter": {
                                   "PDF_sec9_rows_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_closed_rows_(PDF_minutes)": {
+                                "type": "Query",
+                                "inputs": {
+                                  "from": "@body('PDF_frozen_(PDF_minutes)')",
+                                  "where": "@and(equals(item()?['RowType'], 'Agenda Item'), equals(string(item()?['Outcome']), 'Closed'))"
+                                },
+                                "runAfter": {
+                                  "PDF_sec9_(PDF_minutes)": [
+                                    "Succeeded"
+                                  ]
+                                }
+                              },
+                              "PDF_closed_(PDF_minutes)": {
+                                "type": "Select",
+                                "inputs": {
+                                  "from": "@body('PDF_closed_rows_(PDF_minutes)')",
+                                  "select": "@concat('<tr>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Title'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '<td>', replace(replace(replace(replace(replace(string(coalesce(item()?['Notes'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</td>', '</tr>')"
+                                },
+                                "runAfter": {
+                                  "PDF_closed_rows_(PDF_minutes)": [
                                     "Succeeded"
                                   ]
                                 }
@@ -2327,7 +2372,7 @@
                                   "where": "@equals(item()?['RowType'], 'Decision')"
                                 },
                                 "runAfter": {
-                                  "PDF_sec9_(PDF_minutes)": [
+                                  "PDF_closed_(PDF_minutes)": [
                                     "Succeeded"
                                   ]
                                 }
@@ -2370,7 +2415,7 @@
                               },
                               "PDF_email_text_(PDF_minutes)": {
                                 "type": "Compose",
-                                "inputs": "@concat('<!doctype html><html><head><meta charset=\"utf-8\"><title>Minutes</title><style>body{font-family:Segoe UI,Arial,sans-serif;font-size:11pt;color:#16222c}h1{color:#13516b;font-size:18pt;margin:0 0 4pt}h2{color:#13516b;font-size:13pt;border-bottom:2px solid #ef7d3a;padding-bottom:2pt;margin-top:16pt}table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid #d9dfe5;padding:4pt;text-align:left;vertical-align:top}th{background:#eef2f5}.muted{color:#5b6774}</style></head><body>', '<h1>', replace(replace(replace(replace(replace(string(coalesce(concat(string(first(body('PDF_area_(PDF_minutes)'))?['Title']), ' monthly meeting'), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</h1>', '<p>', replace(replace(replace(replace(replace(string(coalesce(convertFromUtc(string(coalesce(body('PDF_get_(PDF_minutes)')?['MeetingDate'], '2000-01-01T00:00:00Z')), 'GMT Standard Time', 'dddd d MMMM yyyy, HH:mm'), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), if(empty(string(coalesce(body('PDF_get_(PDF_minutes)')?['Location'], ''))), '', concat(' · ', replace(replace(replace(replace(replace(string(coalesce(body('PDF_get_(PDF_minutes)')?['Location'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'))), '</p>', '<p>Chair: ', replace(replace(replace(replace(replace(string(coalesce(string(coalesce(first(body('PDF_chair_(PDF_minutes)'))?['Title'], '')), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '. Finalised by ', replace(replace(replace(replace(replace(string(coalesce(string(coalesce(first(body('PDF_finaliser_(PDF_minutes)'))?['Title'], '')), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' on ', replace(replace(replace(replace(replace(string(coalesce(convertFromUtc(string(coalesce(body('PDF_get_(PDF_minutes)')?['FinalisedAt'], '2000-01-01T00:00:00Z')), 'GMT Standard Time', 'dddd d MMMM yyyy, HH:mm'), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '.</p>', '<p class=\"muted\">', replace(replace(replace(replace(replace(string(coalesce(concat('MTG-', first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['Id'], '')), '.')), ' · version ', string(add(int(if(empty(first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['AmendmentCount'], '')), '.'))), '0', first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['AmendmentCount'], '')), '.')))), 1))), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</p>', '<h2>Attendance</h2>', if(empty(body('PDF_attendance_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Person</th><th>Attendance</th></tr>', join(body('PDF_attendance_(PDF_minutes)'), ''), '</table>')), '<h2>1. Open actions</h2>', if(empty(body('PDF_sec1_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Item</th><th>Outcome</th><th>Notes</th></tr>', join(body('PDF_sec1_(PDF_minutes)'), ''), '</table>')), '<h2>2. Closed since last meeting</h2>', if(empty(body('PDF_sec2_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Item</th><th>Outcome</th><th>Notes</th></tr>', join(body('PDF_sec2_(PDF_minutes)'), ''), '</table>')), '<h2>3. Carried forward</h2>', if(empty(body('PDF_sec3_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Item</th><th>Outcome</th><th>Notes</th></tr>', join(body('PDF_sec3_(PDF_minutes)'), ''), '</table>')), '<h2>4. Noticeboard</h2>', if(empty(body('PDF_sec4_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Item</th><th>Outcome</th><th>Notes</th></tr>', join(body('PDF_sec4_(PDF_minutes)'), ''), '</table>')), '<h2>5. New improvements and degradations</h2>', if(empty(body('PDF_sec5_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Item</th><th>Outcome</th><th>Notes</th></tr>', join(body('PDF_sec5_(PDF_minutes)'), ''), '</table>')), '<h2>6. Unresolved degradations</h2>', if(empty(body('PDF_sec6_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Item</th><th>Outcome</th><th>Notes</th></tr>', join(body('PDF_sec6_(PDF_minutes)'), ''), '</table>')), '<h2>7. Important dates</h2>', if(empty(body('PDF_sec7_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Item</th><th>Outcome</th><th>Notes</th></tr>', join(body('PDF_sec7_(PDF_minutes)'), ''), '</table>')), '<h2>8. New business</h2>', if(empty(body('PDF_sec8_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Item</th><th>Outcome</th><th>Notes</th></tr>', join(body('PDF_sec8_(PDF_minutes)'), ''), '</table>')), '<h2>9. Decisions and additional actions</h2>', if(empty(body('PDF_sec9_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Item</th><th>Outcome</th><th>Notes</th></tr>', join(body('PDF_sec9_(PDF_minutes)'), ''), '</table>')), '<h2>Decisions</h2>', if(empty(body('PDF_decision_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Decision</th><th>Details</th></tr>', join(body('PDF_decision_(PDF_minutes)'), ''), '</table>')), if(empty(body('PDF_amend_(PDF_minutes)')), '', concat('<h2>Amendments</h2><table><tr><th>Amendment</th><th>What changed</th><th>Why</th></tr>', join(body('PDF_amend_(PDF_minutes)'), ''), '</table>')), '<p class=\"muted\">Produced by the ESG Competency Hub from the finalised record. The original minutes are not changed by amendments.</p></body></html>')",
+                                "inputs": "@concat('<!doctype html><html><head><meta charset=\"utf-8\"><title>Minutes</title><style>body{font-family:Segoe UI,Arial,sans-serif;font-size:11pt;color:#16222c}h1{color:#13516b;font-size:18pt;margin:0 0 4pt}h2{color:#13516b;font-size:13pt;border-bottom:2px solid #ef7d3a;padding-bottom:2pt;margin-top:16pt}table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid #d9dfe5;padding:4pt;text-align:left;vertical-align:top}th{background:#eef2f5}.muted{color:#5b6774}</style></head><body>', '<h1>', replace(replace(replace(replace(replace(string(coalesce(concat(string(first(body('PDF_area_(PDF_minutes)'))?['Title']), ' monthly meeting'), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</h1>', '<p>', replace(replace(replace(replace(replace(string(coalesce(convertFromUtc(string(coalesce(body('PDF_get_(PDF_minutes)')?['MeetingDate'], '2000-01-01T00:00:00Z')), 'GMT Standard Time', 'dddd d MMMM yyyy, HH:mm'), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), if(empty(string(coalesce(body('PDF_get_(PDF_minutes)')?['Location'], ''))), '', concat(' · ', replace(replace(replace(replace(replace(string(coalesce(body('PDF_get_(PDF_minutes)')?['Location'], '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'))), '</p>', '<p>Chair: ', replace(replace(replace(replace(replace(string(coalesce(if(empty(trim(string(coalesce(first(body('PDF_chair_(PDF_minutes)'))?['KnownAs'], '')))), string(coalesce(first(body('PDF_chair_(PDF_minutes)'))?['Title'], '')), trim(string(first(body('PDF_chair_(PDF_minutes)'))?['KnownAs']))), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '. Finalised by ', replace(replace(replace(replace(replace(string(coalesce(if(empty(trim(string(coalesce(first(body('PDF_finaliser_(PDF_minutes)'))?['KnownAs'], '')))), string(coalesce(first(body('PDF_finaliser_(PDF_minutes)'))?['Title'], '')), trim(string(first(body('PDF_finaliser_(PDF_minutes)'))?['KnownAs']))), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), ' on ', replace(replace(replace(replace(replace(string(coalesce(convertFromUtc(string(coalesce(body('PDF_get_(PDF_minutes)')?['FinalisedAt'], '2000-01-01T00:00:00Z')), 'GMT Standard Time', 'dddd d MMMM yyyy, HH:mm'), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '.</p>', '<p class=\"muted\">', replace(replace(replace(replace(replace(string(coalesce(concat('MTG-', first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['Id'], '')), '.')), ' · version ', string(add(int(if(empty(first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['AmendmentCount'], '')), '.'))), '0', first(split(string(coalesce(body('PDF_get_(PDF_minutes)')?['AmendmentCount'], '')), '.')))), 1))), '')), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '\"', '&quot;'), '''', '&#39;'), '</p>', '<h2>Attendance</h2>', if(empty(body('PDF_attendance_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Person</th><th>Attendance</th></tr>', join(body('PDF_attendance_(PDF_minutes)'), ''), '</table>')), '<h2>1. Open actions</h2>', if(empty(body('PDF_sec1_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Item</th><th>Outcome</th><th>Notes</th></tr>', join(body('PDF_sec1_(PDF_minutes)'), ''), '</table>')), '<h2>2. Closed since last meeting</h2>', if(empty(body('PDF_sec2_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Item</th><th>Outcome</th><th>Notes</th></tr>', join(body('PDF_sec2_(PDF_minutes)'), ''), '</table>')), '<h2>3. Carried forward</h2>', if(empty(body('PDF_sec3_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Item</th><th>Outcome</th><th>Notes</th></tr>', join(body('PDF_sec3_(PDF_minutes)'), ''), '</table>')), '<h2>4. Noticeboard</h2>', if(empty(body('PDF_sec4_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Item</th><th>Outcome</th><th>Notes</th></tr>', join(body('PDF_sec4_(PDF_minutes)'), ''), '</table>')), '<h2>5. New improvements and degradations</h2>', if(empty(body('PDF_sec5_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Item</th><th>Outcome</th><th>Notes</th></tr>', join(body('PDF_sec5_(PDF_minutes)'), ''), '</table>')), '<h2>6. Unresolved degradations</h2>', if(empty(body('PDF_sec6_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Item</th><th>Outcome</th><th>Notes</th></tr>', join(body('PDF_sec6_(PDF_minutes)'), ''), '</table>')), '<h2>7. Important dates</h2>', if(empty(body('PDF_sec7_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Item</th><th>Outcome</th><th>Notes</th></tr>', join(body('PDF_sec7_(PDF_minutes)'), ''), '</table>')), '<h2>8. New business</h2>', if(empty(body('PDF_sec8_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Item</th><th>Outcome</th><th>Notes</th></tr>', join(body('PDF_sec8_(PDF_minutes)'), ''), '</table>')), '<h2>Actions closed at this meeting</h2>', if(empty(body('PDF_closed_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Action</th><th>Notes</th></tr>', join(body('PDF_closed_(PDF_minutes)'), ''), '</table>')), '<h2>9. Actions raised at this meeting</h2>', if(empty(body('PDF_sec9_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Action</th><th>Owner</th><th>Due</th></tr>', join(body('PDF_sec9_(PDF_minutes)'), ''), '</table>')), '<h2>Decisions</h2>', if(empty(body('PDF_decision_(PDF_minutes)')), '<p class=\"muted\">Nothing recorded.</p>', concat('<table><tr><th>Decision</th><th>Details</th></tr>', join(body('PDF_decision_(PDF_minutes)'), ''), '</table>')), if(empty(body('PDF_amend_(PDF_minutes)')), '', concat('<h2>Amendments</h2><table><tr><th>Amendment</th><th>What changed</th><th>Why</th></tr>', join(body('PDF_amend_(PDF_minutes)'), ''), '</table>')), '<p class=\"muted\">Produced by the ESG Competency Hub from the finalised record. The original minutes are not changed by amendments.</p></body></html>')",
                                 "runAfter": {
                                   "PDF_amend_(PDF_minutes)": [
                                     "Succeeded"

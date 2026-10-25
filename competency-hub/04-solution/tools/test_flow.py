@@ -797,7 +797,8 @@ class Calls(unittest.TestCase):
     """Fewer SharePoint calls per request (plan K7.10): a first run skips every "already done?" look-up."""
     # SharePoint calls for the change itself; each email adds at most 3 (queue it, record the outcome, cover a reminder)
     # 1.9.0.0: raising reads the area's members and the active people, to check co-owners and the close-out check (+2)
-    BUDGET = {'RaiseAction': 22, 'ExtendDeadline': 17, 'MarkComplete': 17}
+    # 1.9.0.4: after Completed, one read of the QueueHealth row so a Down part clears itself (+1, not seen by the user)
+    BUDGET = {'RaiseAction': 23, 'ExtendDeadline': 18, 'MarkComplete': 18}
 
     def first_run(self, rtype, s=None):
         s = s or site()
@@ -908,6 +909,32 @@ def health(s):
 
 def tx_of(s, req_id):
     return next(it for it in s.by_key['history']['items'].values() if it['f'].get('RowKind') == 'Transaction' and it['f'].get('RequestItemId') == float(req_id))
+
+
+class HealthBack(unittest.TestCase):
+    """1.9.0.4: a request that completes clears its own part of QueueHealth, so the app's banner goes without waiting for the monitor."""
+    def set_health(self, s, value):
+        s.rows('settings', Title='QueueHealth')[0]['f']['Value'] = json.dumps(value)
+
+    def test_a_completed_request_clears_its_part_and_leaves_the_others(self):
+        s = site()
+        s.monitor_alive = False
+        self.set_health(s, {'state': 'Down', 'reason': 'Oldest request waiting 25 minutes', 'records': 'Down', 'recordsReason': 'x', 'checkedAt': '2026-10-21T09:00:00Z'})
+        r = submit(s, RACHEL, 'ExtendDeadline', Extend().payload(), target=s.action, revision=2)
+        status, eng = run(s, r)
+        self.assertEqual(request(s, r)['Status'], 'Completed', eng.log)
+        h = health(s)
+        self.assertEqual((h['state'], h['reason']), ('Healthy', ''))
+        self.assertEqual((h['records'], h['recordsReason']), ('Down', 'x'), 'only the actions part is cleared')
+        self.assertEqual(h['checkedAt'], '2026-10-21T09:00:00Z')
+
+    def test_a_healthy_row_is_not_written(self):
+        s = site()
+        s.monitor_alive = False
+        self.set_health(s, {'state': 'Healthy', 'reason': ''})
+        r = submit(s, RACHEL, 'ExtendDeadline', Extend().payload(), target=s.action, revision=2)
+        run(s, r)
+        self.assertFalse([p for m, p in s.writes if m == 'MERGE' and 'Settings' in p], s.writes)
 
 
 class Monitor(unittest.TestCase):
