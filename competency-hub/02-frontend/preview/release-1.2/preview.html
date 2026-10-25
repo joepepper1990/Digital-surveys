@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Competency Hub 1.2 preview</title>
+<style>
+:root {
+  --navy: #13516b; --navy-soft: #e7f0f6; --accent: #ef7d3a; --accent-strong: #b8561b; --accent-strong-dark: #9a4512;
+  --ink: #16222c; --muted: #5b6774; --bg: #f3f6f8; --card: #fff; --line: #dde3e8; --focus: #2b78d0;
+  --late: #a4262c; --late-bg: #fde8e9; --soon: #8a5a00; --soon-bg: #fff3d6; --ok: #1b7a45; --ok-bg: #e6f3eb;
+  --kind-action: #13516b; --kind-issue: #6a4fb0; --kind-notice: #1f7190; --kind-new: #8a5a00;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--ink); font: 16px/1.5 "Segoe UI", system-ui, sans-serif; }
+button, input, select, textarea { font: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+/* the preview switcher – not part of the app */
+.switcher { background: #20262c; color: #e8edf1; display: flex; gap: 6px; align-items: center; padding: 6px 16px; flex-wrap: wrap; font-size: 13px; }
+.switcher b { margin-right: 8px; }
+.switcher button { background: #353d45; color: #e8edf1; border: 0; border-radius: 6px; padding: 5px 11px; }
+.switcher button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.switcher .note { margin-left: auto; color: #aeb8c1; }
+
+/* app shell */
+.bar { background: var(--navy); color: #fff; border-bottom: 3px solid var(--accent); }
+.bar-in { display: flex; align-items: center; gap: 16px; padding: 8px 32px; min-height: 58px; flex-wrap: wrap; }
+.brand { font-weight: 600; font-size: 17px; }
+.brand small { display: block; font-weight: 400; font-size: 12px; color: #c9dde6; }
+.env { background: #fff3d6; color: #6b4a00; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 600; }
+.pills { display: flex; background: rgba(255,255,255,.1); border-radius: 999px; padding: 4px; gap: 2px; }
+.pills a { color: #fff; text-decoration: none; padding: 6px 14px; border-radius: 999px; font-weight: 600; font-size: 15px; }
+.pills a.on { background: #fff; color: var(--navy); }
+.bar .right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+.who { font-size: 14px; color: #dbe8ee; margin-left: 8px; }
+
+/* the quiet status line: replaces the "being recorded" banners */
+.status { display: flex; align-items: center; gap: 10px; padding: 6px 32px; font-size: 14px; color: var(--muted); background: #fff; border-bottom: 1px solid var(--line); min-height: 34px; }
+.status .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); flex: none; }
+.status.busy .dot { background: var(--accent); animation: pulse 1.2s infinite; }
+.status.bad { background: var(--late-bg); color: var(--late); }
+.status.bad .dot { background: var(--late); }
+.status .grow { flex: 1; }
+@keyframes pulse { 50% { opacity: .35; } }
+
+main { padding: 22px 32px 40px; }
+h1 { font-size: 28px; font-weight: 600; margin: 0 0 4px; }
+h2 { font-size: 18px; font-weight: 600; margin: 0 0 10px; }
+h3 { font-size: 15px; font-weight: 600; margin: 0 0 8px; }
+.muted { color: var(--muted); }
+.small { font-size: 14px; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+.btn { border: 1px solid #c3ccd4; background: #fff; color: var(--ink); border-radius: 8px; padding: 9px 16px; font-weight: 600; min-height: 42px; }
+.btn:hover { background: #f4f7f9; }
+.btn-main { background: var(--accent-strong); border-color: var(--accent-strong); color: #fff; }
+.btn-main:hover { background: var(--accent-strong-dark); }
+.btn-light { background: #fff; color: var(--navy); border-color: #fff; }
+.btn-link { background: none; border: 0; color: var(--navy); text-decoration: underline; padding: 4px 0; min-height: 0; font-weight: 600; }
+.btn-small { padding: 5px 11px; min-height: 34px; font-size: 14px; }
+
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; }
+.chip { display: inline-block; border-radius: 999px; padding: 2px 10px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.chip.late { background: var(--late-bg); color: var(--late); }
+.chip.soon { background: var(--soon-bg); color: var(--soon); }
+.chip.ok { background: var(--ok-bg); color: var(--ok); }
+.chip.plain { background: #eef2f5; color: var(--muted); }
+.saved { color: var(--ok); font-weight: 600; font-size: 13px; }
+.saved::before { content: "✓ "; }
+
+/* kinds of agenda item: a label in words, and a coloured edge */
+.kind { font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; border-radius: 4px; padding: 1px 7px; color: #fff; }
+.kind.action { background: var(--kind-action); } .kind.issue { background: var(--kind-issue); }
+.kind.notice { background: var(--kind-notice); } .kind.new { background: var(--kind-new); }
+
+.screen { display: none; }
+.screen.on { display: block; }
+
+/* HOME */
+.home-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 18px; }
+.todo { display: flex; align-items: center; gap: 12px; padding: 11px 4px; border-top: 1px solid var(--line); }
+.todo:first-of-type { border-top: 0; }
+.todo .t { flex: 1; min-width: 0; }
+.todo .t b { display: block; }
+.areas { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 18px; }
+.area { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.area b { display: block; }
+.week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+.day { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-height: 76px; background: #fff; }
+.day.today { border-color: var(--navy); box-shadow: inset 0 0 0 1px var(--navy); }
+.day .d { font-weight: 700; font-size: 14px; }
+.day .e { margin-top: 6px; background: var(--soon-bg); color: var(--soon); border-radius: 6px; padding: 2px 7px; font-size: 13px; }
+
+/* DIALOGS (shown in place for the preview) */
+.dlg-wrap { background: rgba(22,34,44,.45); padding: 24px; display: flex; justify-content: center; min-height: calc(100vh - 140px); }
+.dlg { background: #fff; border-radius: 14px; width: min(1180px, 100%); max-height: calc(100vh - 190px); display: flex; flex-direction: column; box-shadow: 0 10px 40px rgba(0,0,0,.25); }
+.dlg-head { padding: 18px 24px 14px; border-bottom: 1px solid var(--line); display: flex; gap: 14px; align-items: flex-start; }
+.dlg-head .title { flex: 1; }
+.dlg-head .x { border: 0; background: none; font-size: 22px; color: var(--muted); }
+.dlg-body { padding: 18px 24px 22px; overflow: auto; }
+.what-label { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+
+/* ACTION */
+.facts { display: grid; grid-template-columns: 90px 1fr; gap: 6px 14px; margin: 0 0 16px; }
+.facts dt { color: var(--muted); font-weight: 600; }
+.facts dd { margin: 0; }
+.two-col { display: grid; grid-template-columns: 1.3fr 1fr; gap: 24px; }
+.update { border-top: 1px solid var(--line); padding: 10px 0; }
+.update:first-child { border-top: 0; }
+details.more { margin-top: 12px; }
+details.more summary { color: var(--navy); font-weight: 600; cursor: pointer; }
+details.more .row { margin-top: 10px; }
+
+/* MEETING */
+.meet { display: grid; grid-template-columns: 300px 1fr; gap: 0; min-height: 0; flex: 1; }
+.agenda-list { border-right: 1px solid var(--line); padding: 14px 0; overflow-y: auto; overflow-x: hidden; min-width: 0; }
+.agenda-list .add { width: auto; display: inline-block; }
+.agenda-list .sec { padding: 8px 18px 4px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.agenda-list button { display: flex; width: 100%; gap: 8px; align-items: center; text-align: left; border: 0; background: none; padding: 8px 18px; border-left: 3px solid transparent; }
+.agenda-list button.on { background: var(--navy-soft); border-left-color: var(--navy); font-weight: 600; }
+.agenda-list .n { color: var(--muted); width: 18px; }
+.agenda-list .lbl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agenda-list .add { margin: 10px 18px 4px; }
+.item-pane { padding: 18px 26px; overflow: auto; }
+.item-pane .meta { margin: 6px 0 14px; color: var(--muted); }
+.outcomes { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 14px; }
+.outcomes button { border: 1px solid #c3ccd4; background: #fff; border-radius: 999px; padding: 6px 14px; font-weight: 600; }
+.outcomes button[aria-pressed="true"] { background: var(--navy); border-color: var(--navy); color: #fff; }
+textarea { width: 100%; min-height: 86px; border: 1px solid #b9c3cc; border-radius: 8px; padding: 8px 10px; resize: vertical; }
+.pane-foot { display: flex; gap: 10px; align-items: center; margin-top: 14px; }
+.pane-foot .grow { flex: 1; }
+.meet-side { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+
+/* MINUTES */
+.minutes-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 15px; }
+.minutes-table th, .minutes-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.minutes-table th { color: var(--muted); font-size: 13px; }
+
+/* RAISE */
+.steps { display: flex; gap: 8px; margin-bottom: 16px; }
+.steps span { flex: 1; text-align: center; padding: 6px; border-radius: 6px; background: #eef2f5; color: var(--muted); font-weight: 600; font-size: 14px; }
+.steps span.on { background: var(--navy); color: #fff; }
+.field { margin-bottom: 14px; }
+.field label { display: block; font-weight: 600; margin-bottom: 4px; }
+.field select, .field input { width: 100%; border: 1px solid #b9c3cc; border-radius: 8px; padding: 9px 10px; background: #fff; }
+.field .err { color: var(--late); font-weight: 600; font-size: 14px; margin-top: 4px; }
+.field.need select { border-color: var(--late); box-shadow: 0 0 0 1px var(--late); }
+.summary { background: var(--navy-soft); border-radius: 10px; padding: 12px 16px; }
+.summary .big { font-size: 18px; font-weight: 700; color: var(--navy); }
+
+/* toast for the preview's "refused" demonstration */
+.toast { position: fixed; right: 24px; bottom: 24px; background: #fff; border: 1px solid var(--late); border-left: 6px solid var(--late); border-radius: 10px; padding: 14px 16px; max-width: 420px; box-shadow: 0 8px 30px rgba(0,0,0,.2); display: none; }
+.toast.on { display: block; }
+.toast b { color: var(--late); }
+
+.explain { background: #fffbe6; border: 1px dashed #d9b84a; border-radius: 10px; padding: 10px 14px; font-size: 14px; margin-bottom: 16px; }
+.explain b { color: #6b4a00; }
+</style>
+</head>
+<body>
+
+<div class="switcher" role="toolbar" aria-label="Preview screens">
+  <b>Preview 1.2 –</b>
+  <button data-go="home" aria-pressed="true">Home</button>
+  <button data-go="action">An action</button>
+  <button data-go="raise">Raise an action</button>
+  <button data-go="meeting">Meeting – running</button>
+  <button data-go="minutes">Meeting – finalised</button>
+  <span class="note">Sample data. Buttons show the new "saved at once" behaviour.</span>
+</div>
+
+<header class="bar"><div class="bar-in">
+  <div class="brand">ESG Competency Hub<small>Environmental Safety Group</small></div>
+  <span class="env">TEST – not live data</span>
+  <nav class="pills"><a href="#" class="on">My week</a><a href="#">My to-dos</a><a href="#">Overview of all areas</a><a href="#">Administration</a></nav>
+  <div class="right"><button class="btn btn-light btn-small">Post a notice</button><button class="btn btn-main btn-small" data-go="raise">Raise an action</button><span class="who">Joe · Team Leader</span></div>
+</div></header>
+
+<div class="status" id="status" role="status" aria-live="polite"><span class="dot"></span><span class="grow" id="status-text">Everything is up to date.</span></div>
+
+<!-- ============================================================ HOME -->
+<section class="screen on" id="s-home"><main>
+  <div class="explain"><b>What changed:</b> the "being recorded" banners are gone. The thin line above says what is saving, in one line, and never pushes the page down. A change shows on the page straight away.</div>
+  <h1>Good morning, Joe</h1>
+  <p class="muted" style="margin:0 0 18px">2 due this week · nothing late · next meeting Flask, Wed 11 Nov</p>
+  <div class="home-grid">
+    <div class="card">
+      <div class="row" style="justify-content:space-between"><h2 style="margin:0">Your to-dos</h2><button class="btn-link">See all my to-dos</button></div>
+      <div style="margin-top:8px">
+        <div class="todo"><div class="t"><b>Replace FH40 probe</b><span class="muted small">Flask</span></div><span class="chip soon">Due tomorrow</span><button class="btn btn-small" data-quick="Marked as done: Replace FH40 probe">Mark as done</button></div>
+        <div class="todo"><div class="t"><b>Review RPE fit-test records</b><span class="muted small">RPE</span></div><span class="chip soon">Due Friday</span><button class="btn btn-small" data-quick="Marked as done: Review RPE fit-test records">Mark as done</button></div>
+        <div class="todo"><div class="t"><b>Update dosimetry procedure</b><span class="muted small">Dosimetry</span></div><span class="chip plain">Due 22 Nov</span><button class="btn btn-small" data-quick="Marked as done: Update dosimetry procedure">Mark as done</button></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>This week</h2>
+      <div class="week" style="grid-template-columns:repeat(2,1fr)">
+        <div class="day today"><div class="d">Mon 26</div><div class="e">Replace FH40 probe</div></div>
+        <div class="day"><div class="d">Fri 30</div><div class="e">RPE fit-test records</div></div>
+      </div>
+    </div>
+  </div>
+  <h2 style="margin-top:22px">Areas</h2>
+  <div class="areas" style="margin-top:0">
+    <div class="area"><b>Flask</b><span class="chip ok">3 open</span></div>
+    <div class="area"><b>Instruments</b><span class="chip plain">0 open</span></div>
+    <div class="area"><b>Green Stream</b><span class="chip late">1 late</span></div>
+    <div class="area"><b>RPE</b><span class="chip ok">1 open</span></div>
+    <div class="area"><b>BA</b><span class="chip ok">1 open</span></div>
+    <div class="area"><b>Dosimetry</b><span class="chip ok">1 open</span></div>
+    <div class="area"><b>Radiological Protection</b><span class="chip ok">1 open</span></div>
+    <div class="area"><b>DSL</b><span class="chip plain">0 open</span></div>
+    <div class="area"><b>Active Lab &amp; Sampling</b><span class="chip ok">1 open</span></div>
+    <div class="area"><b>Radwaste</b><span class="chip plain">0 open</span></div>
+  </div>
+</main></section>
+
+<!-- ============================================================ ACTION -->
+<section class="screen" id="s-action"><div class="dlg-wrap"><div class="dlg" role="dialog" aria-label="Action">
+  <div class="dlg-head"><div class="title">
+    <div class="what-label">Action · ACT-00042 · Flask</div>
+    <h1 style="font-size:24px;margin:2px 0 0">Replace FH40 probe</h1>
+  </div><button class="x" aria-label="Close">✕</button></div>
+  <div class="dlg-body">
+    <div class="explain"><b>What changed:</b> the heading says plainly this is an <i>action</i>. The three everyday buttons come first; the rest are under "More for this action". A change appears below at once with a green tick.</div>
+    <div class="two-col">
+      <div>
+        <dl class="facts">
+          <dt>When</dt><dd><span class="chip soon">Due tomorrow</span> Monday 26 October · moved once (was 20 Oct)</dd>
+          <dt>Who</dt><dd>Owner: Rachel · Raised by Joe, 12 Oct</dd>
+          <dt>What</dt><dd>The FH40 in the Flask store reads low against the check source. Replace it and record the new serial number.</dd>
+        </dl>
+        <div class="row">
+          <button class="btn btn-main" id="act-update">Add an update</button>
+          <button class="btn" data-quick="Deadline moved to 2 November: Replace FH40 probe">I need more time</button>
+          <button class="btn" data-quick="Marked as done: Replace FH40 probe">Mark as done</button>
+        </div>
+        <details class="more"><summary>More for this action</summary>
+          <div class="row"><button class="btn btn-small">Edit this action</button><button class="btn btn-small">Give it to someone else</button><button class="btn btn-small">Change its status</button><button class="btn btn-small">Close this action</button></div>
+        </details>
+      </div>
+      <div>
+        <h3>Updates</h3>
+        <div id="updates">
+          <div class="update"><b>Rachel</b> <span class="muted small">· 22 Oct</span><div>Replacement ordered, due Thursday.</div></div>
+          <div class="update"><b>Joe</b> <span class="muted small">· 14 Oct</span><div>Deadline moved: waiting on stores.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div></div></section>
+
+<!-- ============================================================ RAISE -->
+<section class="screen" id="s-raise"><div class="dlg-wrap"><div class="dlg" role="dialog" aria-label="Raise an action" style="width:min(760px,100%)">
+  <div class="dlg-head"><div class="title"><div class="what-label">New action</div><h1 style="font-size:24px;margin:2px 0 0">Raise an action</h1></div><button class="x" aria-label="Close">✕</button></div>
+  <div class="dlg-body">
+    <div class="explain"><b>What changed:</b> no area is chosen for you. From the top bar the box starts on "Choose an area" and you must pick one; from inside an area it is already that area. The summary shows the area in large type before you send.</div>
+    <div class="steps"><span>1 What</span><span class="on">2 Who and where</span><span>3 By when</span><span>4 Check</span></div>
+    <div class="field need" id="area-field"><label for="area">Which area is it for?</label>
+      <select id="area"><option value="">Choose an area…</option><option>Flask</option><option>Instruments</option><option>Green Stream</option><option>RPE</option><option>BA</option><option>Dosimetry</option><option>Radiological Protection</option><option>DSL</option><option>Active Lab &amp; Sampling</option><option>Radwaste</option></select>
+      <div class="err" id="area-err">Choose the area this action belongs to.</div></div>
+    <div class="field"><label for="owner">Who will do it?</label><select id="owner"><option>Joe (you)</option><option>Rachel</option><option>Kevin</option></select></div>
+    <div class="summary"><div class="muted small">You are raising</div><div class="big" id="sum">"Update dosimetry procedure" in <span id="sum-area">— choose an area —</span></div><div class="small">for Joe, by Fri 20 November</div></div>
+    <div class="pane-foot"><button class="btn">Back</button><span class="grow"></span><button class="btn btn-main" id="raise-send">Raise action</button></div>
+  </div>
+</div></div></section>
+
+<!-- ============================================================ MEETING (running) -->
+<section class="screen" id="s-meeting"><div class="dlg-wrap"><div class="dlg" role="dialog" aria-label="Meeting" style="height:calc(100vh - 190px)">
+  <div class="dlg-head"><div class="title">
+    <div class="what-label">Meeting · MTG-00012 · Flask</div>
+    <h1 style="font-size:24px;margin:2px 0 0">Flask monthly meeting <span class="chip soon" style="vertical-align:middle">In progress</span></h1>
+    <div class="meet-side muted small" style="margin-top:4px"><span>Sun 25 Oct, 08:10 · TEST Place</span><span>Joe chairs · Richard Howe: apologies</span><button class="btn-link">Attendance</button></div>
+  </div>
+  <div class="row"><button class="btn">Cancel meeting</button><button class="btn btn-main">Review and finalise</button></div>
+  <button class="x" aria-label="Close">✕</button></div>
+  <div class="explain" style="margin:12px 24px 0"><b>What changed:</b> the agenda is grouped and labelled by kind (Action, Issue, Notice, New business), and each item shows only the buttons that fit it – an action offers "Raise a further action". "+ Add an item" sits under the list and opens the new item straight away. Outcomes and notes save as you go.</div>
+  <div class="meet">
+    <nav class="agenda-list" aria-label="Agenda">
+      <div class="sec">Open actions</div>
+      <button class="on" data-item="0"><span class="n">1</span><span class="lbl">Replace FH40 probe</span><span class="chip ok" id="st0">Discussed</span></button>
+      <div class="sec">Issues</div>
+      <button data-item="1"><span class="n">2</span><span class="lbl">Contamination monitor drift</span><span class="chip plain" id="st1">To do</span></button>
+      <div class="sec">Notices</div>
+      <button data-item="2"><span class="n">3</span><span class="lbl">New check-source register</span><span class="chip plain" id="st2">To do</span></button>
+      <div class="sec">New business</div>
+      <div id="newbiz"></div>
+      <button class="btn btn-small add" id="add-item">+ Add an item</button>
+    </nav>
+    <div class="item-pane" id="pane"></div>
+  </div>
+</div></div></section>
+
+<!-- ============================================================ MINUTES (finalised) -->
+<section class="screen" id="s-minutes"><div class="dlg-wrap"><div class="dlg" role="dialog" aria-label="Finalised meeting">
+  <div class="dlg-head"><div class="title">
+    <div class="what-label">Meeting · MTG-00012 · Flask</div>
+    <h1 style="font-size:24px;margin:2px 0 0">Flask monthly meeting <span class="chip ok" style="vertical-align:middle">Finalised</span></h1>
+    <div class="muted small" style="margin-top:4px">Sun 25 Oct · finalised by Joe at 10:03 · 1 amendment</div>
+  </div>
+  <div class="row"><button class="btn btn-main">Open the PDF</button><button class="btn">Download PDF</button><button class="btn" id="amend">Amend these minutes</button></div>
+  <button class="x" aria-label="Close">✕</button></div>
+  <div class="dlg-body">
+    <div class="explain"><b>What changed:</b> the minutes' own buttons sit together at the top: <i>Open the PDF</i> (print from there), <i>Download PDF</i>, and <i>Amend these minutes</i> – a different wording from anything on an action, so they cannot be mixed up. "Print" is gone while a PDF exists. Names are the Hub's names; section 9 shows owner and due date.</div>
+    <table class="minutes-table"><thead><tr><th>Attendance</th><th></th></tr></thead><tbody><tr><td>Joe</td><td>Present</td></tr><tr><td>Richard Howe</td><td>Apologies</td></tr></tbody></table>
+    <h3>1. Open actions</h3>
+    <table class="minutes-table"><thead><tr><th style="width:30%">Action</th><th style="width:14%">Outcome</th><th>Notes</th></tr></thead><tbody><tr><td>Replace FH40 probe</td><td>Discussed</td><td>Replacement arrives Thursday; Rachel to record the serial number.</td></tr></tbody></table>
+    <h3>9. Actions raised at this meeting</h3>
+    <table class="minutes-table"><thead><tr><th style="width:44%">Action</th><th style="width:28%">Owner</th><th>Due</th></tr></thead><tbody><tr><td>Check the second FH40 against the source</td><td>Richard Howe</td><td>30 Nov</td></tr></tbody></table>
+    <h3>Amendments</h3>
+    <table class="minutes-table"><thead><tr><th>Amendment</th><th>Why</th><th>By</th></tr></thead><tbody id="amends"><tr><td>Serial number corrected to 41-2207.</td><td>Typo in the notes</td><td>Joe, 25 Oct</td></tr></tbody></table>
+  </div>
+</div></div></section>
+
+<div class="toast" id="toast" role="alert"><b>Not saved: "Mark as done"</b><div style="margin:4px 0 10px">Someone else changed this action a moment ago, so your change was not applied. The action is shown as it is now.</div><div class="row"><button class="btn btn-main btn-small" id="toast-retry">Try again</button><button class="btn btn-small" id="toast-close">Dismiss</button></div></div>
+
+<script>
+(function () {
+  'use strict';
+  var screens = ['home', 'action', 'raise', 'meeting', 'minutes'];
+  function go(name) {
+    screens.forEach(function (s) { document.getElementById('s-' + s).classList.toggle('on', s === name); });
+    document.querySelectorAll('.switcher button').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.go === name ? 'true' : 'false'); });
+  }
+  document.addEventListener('click', function (e) {
+    var g = e.target.closest('[data-go]');
+    if (g) { e.preventDefault(); go(g.dataset.go); }
+  });
+
+  // the status line: one line, never pushes the page
+  var status = document.getElementById('status'), statusText = document.getElementById('status-text');
+  var pending = 0, demoFail = 0;
+  function setStatus() {
+    status.classList.toggle('busy', pending > 0);
+    statusText.textContent = pending > 0 ? 'Saving ' + pending + (pending === 1 ? ' change' : ' changes') + ' in the background – you can carry on.' : 'Everything is up to date.';
+  }
+  function save(label, onDone) {
+    pending++; setStatus();
+    var willFail = (++demoFail % 4 === 0);           // the preview refuses every fourth change, to show what that looks like
+    setTimeout(function () {
+      pending--; setStatus();
+      if (willFail) { document.getElementById('toast').classList.add('on'); }
+      else if (onDone) onDone();
+    }, 2500);
+  }
+  document.getElementById('toast-close').onclick = function () { document.getElementById('toast').classList.remove('on'); };
+  document.getElementById('toast-retry').onclick = function () { document.getElementById('toast').classList.remove('on'); save('retry'); };
+
+  // a quick button: the result shows at once, with a tick
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-quick]');
+    if (!b) return;
+    var tick = document.createElement('span');
+    tick.className = 'saved'; tick.textContent = 'Done';
+    b.replaceWith(tick);
+    save(b.dataset.quick);
+  });
+
+  // add an update: appears at once at the top of the list
+  document.getElementById('act-update').onclick = function () {
+    var u = document.createElement('div');
+    u.className = 'update';
+    var who = document.createElement('b'); who.textContent = 'Joe';
+    var when = document.createElement('span'); when.className = 'muted small'; when.textContent = ' · just now ';
+    var ok = document.createElement('span'); ok.className = 'saved'; ok.textContent = 'Saved';
+    var t = document.createElement('div'); t.textContent = 'Spoke to stores – arriving Thursday morning.';
+    u.append(who, when, ok, t);
+    var list = document.getElementById('updates'); list.insertBefore(u, list.firstChild);
+    save('update');
+  };
+
+  // raise: the area must be chosen, and the summary says it in large type
+  var area = document.getElementById('area');
+  area.onchange = function () {
+    var chosen = area.value;
+    document.getElementById('area-field').classList.toggle('need', !chosen);
+    document.getElementById('area-err').style.display = chosen ? 'none' : '';
+    document.getElementById('sum-area').textContent = chosen || '— choose an area —';
+  };
+  document.getElementById('raise-send').onclick = function () {
+    if (!area.value) { area.focus(); return; }
+    go('home');
+    var first = document.querySelector('#s-home .todo');
+    var row = document.createElement('div'); row.className = 'todo';
+    var t = document.createElement('div'); t.className = 't';
+    var b = document.createElement('b'); b.textContent = 'Update dosimetry procedure';
+    var s = document.createElement('span'); s.className = 'muted small'; s.textContent = area.value;
+    t.append(b, s);
+    var c = document.createElement('span'); c.className = 'chip plain'; c.textContent = 'Due 20 Nov';
+    var ok = document.createElement('span'); ok.className = 'saved'; ok.textContent = 'Raised';
+    row.append(t, c, ok);
+    first.parentNode.insertBefore(row, first);
+    save('raise');
+  };
+
+  // meeting: one item at a time, labelled by kind, with only the buttons that fit
+  var items = [
+    { kind: 'action', k: 'Action', title: 'Replace FH40 probe', meta: 'Owner Rachel · due tomorrow · moved once', notes: 'Replacement arrives Thursday.', out: 'Discussed',
+      buttons: ['Open this action', 'Raise a further action'] },
+    { kind: 'issue', k: 'Issue', title: 'Contamination monitor drift', meta: 'Degradation · medium impact · raised by Kevin, 20 Oct', notes: '', out: '',
+      buttons: ['Open this issue', 'Turn into an action'] },
+    { kind: 'notice', k: 'Notice', title: 'New check-source register', meta: 'Posted by Joe, 22 Oct · flagged for this meeting', notes: '', out: '',
+      buttons: ['Open this notice'] }
+  ];
+  var current = 0;
+  var pane = document.getElementById('pane');
+  function show(i) {
+    current = i;
+    document.querySelectorAll('.agenda-list button[data-item]').forEach(function (b) { b.classList.toggle('on', Number(b.dataset.item) === i); });
+    var it = items[i];
+    pane.textContent = '';
+    var head = document.createElement('div'); head.className = 'row';
+    var k = document.createElement('span'); k.className = 'kind ' + it.kind; k.textContent = it.k;
+    var pos = document.createElement('span'); pos.className = 'muted small'; pos.textContent = 'Item ' + (i + 1) + ' of ' + items.length;
+    head.append(k, pos);
+    var h = document.createElement('h2'); h.style.margin = '8px 0 0'; h.style.fontSize = '22px'; h.textContent = it.title;
+    var m = document.createElement('div'); m.className = 'meta'; m.textContent = it.meta;
+    var ol = document.createElement('div'); ol.className = 'what-label'; ol.textContent = 'Outcome';
+    var outs = document.createElement('div'); outs.className = 'outcomes';
+    ['Discussed', 'Carry forward', 'Not reached'].forEach(function (o) {
+      var b = document.createElement('button'); b.textContent = o; b.setAttribute('aria-pressed', it.out === o ? 'true' : 'false');
+      b.onclick = function () { it.out = o; var st = document.getElementById('st' + i); if (st) { st.textContent = o; st.className = 'chip ' + (o === 'Discussed' ? 'ok' : 'soon'); } show(i); save('outcome'); };
+      outs.append(b);
+    });
+    var nl = document.createElement('div'); nl.className = 'what-label'; nl.textContent = 'Notes for the minutes';
+    var ta = document.createElement('textarea'); ta.value = it.notes; ta.setAttribute('aria-label', 'Notes for the minutes');
+    var foot = document.createElement('div'); foot.className = 'pane-foot';
+    it.buttons.forEach(function (label) { var b = document.createElement('button'); b.className = 'btn'; b.textContent = label; foot.append(b); });
+    var grow = document.createElement('span'); grow.className = 'grow'; foot.append(grow);
+    var saved = document.createElement('span'); saved.className = 'saved'; saved.textContent = 'Notes saved'; saved.style.visibility = it.notes ? 'visible' : 'hidden'; foot.append(saved);
+    var next = document.createElement('button'); next.className = 'btn btn-main'; next.textContent = i < items.length - 1 ? 'Next item' : 'Last item';
+    next.onclick = function () { it.notes = ta.value; if (i < items.length - 1) show(i + 1); };
+    foot.append(next);
+    ta.oninput = function () { saved.style.visibility = 'visible'; };
+    pane.append(head, h, m, ol, outs, nl, ta, foot);
+  }
+  document.querySelector('.agenda-list').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-item]'); if (b) show(Number(b.dataset.item));
+  });
+  // add an item: it goes in "New business" and opens straight away
+  document.getElementById('add-item').onclick = function () {
+    var n = items.length;
+    items.push({ kind: 'new', k: 'New business', title: 'TEST in-meeting item', meta: 'Added by Joe just now', notes: '', out: '', buttons: ['Raise an action'] });
+    var b = document.createElement('button'); b.dataset.item = String(n);
+    var num = document.createElement('span'); num.className = 'n'; num.textContent = String(n + 1);
+    var lbl = document.createElement('span'); lbl.className = 'lbl'; lbl.textContent = 'TEST in-meeting item';
+    var st = document.createElement('span'); st.className = 'chip plain'; st.id = 'st' + n; st.textContent = 'To do';
+    b.append(num, lbl, st);
+    document.getElementById('newbiz').append(b);
+    show(n);
+    save('add item');
+  };
+  show(0);
+
+  // amend: appears at once
+  document.getElementById('amend').onclick = function () {
+    var tr = document.createElement('tr');
+    ['Attendance: Kevin also present.', 'Missed from the record', 'Joe, just now'].forEach(function (x) { var td = document.createElement('td'); td.textContent = x; tr.append(td); });
+    document.getElementById('amends').append(tr);
+    save('amend');
+  };
+
+  var start = (location.hash || '').slice(1);
+  if (screens.indexOf(start) >= 0) go(start);
+})();
+</script>
+</body>
+</html>
