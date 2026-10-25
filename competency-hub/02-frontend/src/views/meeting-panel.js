@@ -15,6 +15,13 @@ CH.views.meetingPanel = (function () {
   var STATUS = { 'Scheduled': ['later', 'Booked'], 'In Progress': ['soon', 'In progress'], 'Finalising': ['soon', 'Being finalised'],
     'Finalised': ['done', 'Minutes finalised'], 'Cancelled': ['late', 'Cancelled'] };
   var ATTENDANCE = ['Present', 'Apologies', 'Absent'];
+  // release 1.2 (backlog 9): each agenda item says what kind of thing it is, and offers only the buttons that fit it
+  var KINDS = { 'Action': ['action', 'Action'], 'Register Entry': ['issue', 'Issue'], 'Notice': ['notice', 'Notice'], 'New Business': ['other', 'Other business'], 'Date': ['other', 'Date'] };
+  function kindOf(it) { return KINDS[it.type] || ['other', 'Item']; }
+  function kindLabel(it) { var k = kindOf(it); return h('span', { class: 'kind ' + k[0], text: k[1] }); }
+  // the outcomes offered as buttons; "Closed" comes only from "Close this action"
+  var OUTCOME_BUTTONS = [['Discussed', 'Discussed'], ['Deferred', 'Carry forward'], ['Not reached', 'Not reached'], ['Action raised', 'Action raised']];
+  function outcomeWords(o) { var b = OUTCOME_BUTTONS.filter(function (x) { return x[0] === o; })[0]; return b ? b[1] : o; }
 
   function inviteWords(app, mt) {
     var on = !app.health || app.health.invitesEnabled !== false;
@@ -90,7 +97,7 @@ CH.views.meetingPanel = (function () {
       var key = outcomeKey(mt.id, 'New Business', r.Id);
       if (items.some(function (it) { return it.key === key; })) return;
       var rec = last[key];
-      items.push({ section: 'New business', title: r.Title, detail: (r.Notes ? r.Notes + ' · ' : '') + 'added by ' + app.model.nameOf(r.AuthorId), key: key,
+      items.push({ section: 'New business', type: 'New Business', title: r.Title, detail: (r.Notes ? r.Notes + ' · ' : '') + 'added by ' + app.model.nameOf(r.AuthorId), key: key,
         outcome: rec ? rec.Outcome || '' : '', notes: rec ? rec.Notes || '' : '' });
     });
     return items;
@@ -113,7 +120,7 @@ CH.views.meetingPanel = (function () {
     if (type === 'Action' && due) bits.push('due ' + D.short(String(due).slice(0, 10)));
     if (details) bits.push(details);
     if (marker) bits.push(marker.toLowerCase());
-    return { section: section, type: type, title: title || '', detail: bits.join(' · '), open: open };
+    return { section: section, type: section === 'New business' && type === 'Date' ? 'New Business' : type, title: title || '', detail: bits.join(' · '), open: open, sourceId: id };
   }
 
   function agendaList(items, withOutcomes) {
@@ -124,8 +131,8 @@ CH.views.meetingPanel = (function () {
     });
     return groups.filter(function (g) { return g.rows.length; }).map(function (g) {
       return [h('h4', { class: 'agenda-title', text: g.title + ' (' + g.rows.length + ')' }), h('ul', { class: 'plain agenda' }, g.rows.map(function (it) {
-        return h('li', null, h('span', null, h('b', { text: it.title }), it.detail ? [h('br'), h('span', { class: 'muted small', text: it.detail })] : null,
-          withOutcomes && (it.outcome || it.notes) ? [h('br'), h('span', { class: 'small' }, it.outcome ? h('b', { text: it.outcome + (it.notes ? ': ' : '') }) : null, it.notes || '')] : null),
+        return h('li', null, kindLabel(it), h('span', { class: 'agenda-text' }, h('b', { text: it.title }), it.detail ? [h('br'), h('span', { class: 'muted small', text: it.detail })] : null,
+          withOutcomes && (it.outcome || it.notes) ? [h('br'), h('span', { class: 'small' }, it.outcome ? h('b', { text: outcomeWords(it.outcome) + (it.notes ? ': ' : '') }) : null, it.notes || '')] : null),
           it.open ? ui.linkButton('Open', it.open) : null);
       }))];
     });
@@ -136,6 +143,8 @@ CH.views.meetingPanel = (function () {
     var view = 'main';
     var agenda = null;      // { kind: 'preview' | 'fixed', items, frozen, live } or 'error'
     var at = 0;             // the agenda item on screen while the meeting runs
+    var adding = false;     // the "Add an item" form is in the item pane
+    var openTitle = null;   // an item just added: opened as soon as the agenda is read again (backlog 6)
 
     function mt() { return app.model.meetingById[id]; }
 
@@ -151,6 +160,12 @@ CH.views.meetingPanel = (function () {
           agenda = { kind: 'fixed', items: fromRows(app, x, rows.frozen, x.status === 'In Progress' || x.status === 'Finalising' ? rows.live : []), frozen: rows.frozen, live: rows.live };
         }
       } catch (_) { agenda = 'error'; }
+      if (openTitle && agenda && agenda !== 'error') {
+        var x2 = mt();
+        var list = fromRows(app, x2, agenda.frozen, agenda.live);
+        for (var i = list.length - 1; i >= 0; i--) if (list[i].type === 'New Business' && list[i].title === openTitle) { at = i; break; }
+        openTitle = null;
+      }
       if (view === 'main' && dlg.isOpen()) fill();
     }
 
@@ -186,10 +201,13 @@ CH.views.meetingPanel = (function () {
       var st = STATUS[x.status] || ['later', x.status];
       var words = inviteWords(app, x);
       var people = x.attendeeIds.map(function (pid) { return app.model.nameOf(pid); }).sort();
+      // while it runs the meeting gets the room: wider, and when, where and who on one line (release 1.2)
+      dlg.node.classList.toggle('dialog-xl', live);
       CH.dom.append(dlg.body, [
-        h('p', { class: 'muted small' }, x.ref + ' · ' + x.areaName + ' ', ui.chip(st[0], st[1])),
+        h('p', { class: 'what-label' }, 'Meeting · ' + (x.isNew ? 'not yet numbered' : x.ref) + ' · ' + x.areaName + ' ', ui.chip(st[0], st[1])),
         pending(x),
-        h('dl', { class: 'facts' },
+        live ? h('p', { class: 'muted small live-line', text: D.weekdayShort(x.dateIso) + ', ' + x.start + (x.location ? ' · ' + x.location : '') +
+          (x.chairName ? ' · ' + x.chairName + ' chairs' : '') + ' · ' + people.length + ' invited' }) : h('dl', { class: 'facts' },
           h('dt', { text: 'When' }), h('dd', { text: D.weekday(x.dateIso) + ' ' + D.long(x.dateIso) + ', ' + x.start + (x.end ? ' to ' + x.end : '') }),
           h('dt', { text: 'Where' }), h('dd', null, x.location || (x.onlineLink ? 'Online' : 'Not given'),
             x.onlineLink ? [' · ', h('span', { class: 'muted small', text: x.onlineLink })] : null),
@@ -197,16 +215,16 @@ CH.views.meetingPanel = (function () {
           x.status === 'Cancelled' ? [h('dt', { text: 'Cancelled' }), h('dd', { class: 'notice-body', text: x.cancellationReason })] : null,
           x.status === 'Finalised' ? [h('dt', { text: 'Finalised' }), h('dd', { text: (x.finalisedIso ? D.long(x.finalisedIso) : '') + (x.finalisedByName ? ' by ' + x.finalisedByName : '') +
             (x.amendments ? '. ' + x.amendments + (x.amendments === 1 ? ' amendment.' : ' amendments.') : '') })] : null),
-        words ? h('p', { class: x.inviteState === 'Failed' ? 'section-note' : 'muted small', text: words }) : null,
+        words && !live ? h('p', { class: x.inviteState === 'Failed' ? 'section-note' : 'muted small', text: words }) : null,
         h('div', { class: 'row actions-row' },
           runs && !busy && x.status === 'Scheduled' ? ui.button('Start meeting', function () { show('start'); }, 'main') : null,
           runs && !busy && x.status === 'Scheduled' ? ui.button('Change', function () { dlg.close(); CH.views.meetingForm.open(app, x.areaKey, x); }) : null,
           live ? ui.button('Review and finalise', function () { show('finalise'); }, 'main') : null,
           runs && !busy && (x.status === 'Scheduled' || x.status === 'In Progress') ? ui.button('Cancel meeting', function () { show('cancel'); }) : null,
           x.status === 'Scheduled' || x.status === 'In Progress' ? ui.button('Add to my calendar', function () { download(x.ref + '.ics', ics(x, x.areaName)); }) : null,
-          x.status === 'Finalised' && app.access.isManagement && !busy ? ui.button('Amend the minutes', function () { show('amend'); }) : null),
+          x.status === 'Finalised' && app.access.isManagement && !busy ? ui.button('Amend these minutes', function () { show('amend'); }) : null),
         x.status === 'Finalised' ? minutes(x) : live ? liveScreen(x) : [
-          h('h3', { class: 'group-title', text: x.status === 'Scheduled' ? 'Agenda – preview' : 'Agenda' }),
+          h('h3', { class: 'group-title', text: x.status === 'Scheduled' ? 'Agenda so far' : 'Agenda' }),
           x.status === 'Scheduled' ? h('p', { class: 'muted small', text: 'Built from today\'s records by the same rules as the meeting. It is fixed when the meeting starts.' }) : null,
           x.status === 'Finalising' ? h('p', { class: 'muted small', text: 'The minutes are being finalised. The record can no longer be changed.' }) : null,
           agendaBody(x.status !== 'Scheduled'),
@@ -236,7 +254,24 @@ CH.views.meetingPanel = (function () {
       var last = latest(agenda.live);
       var items = fromRows(app, x, agenda.frozen, agenda.live);
       at = Math.max(0, Math.min(at, items.length - 1));
-      return [items.length ? oneItem(x, items) : h('p', { class: 'muted', text: 'Nothing on the agenda.' }), attendance(x, last), decisions(x), addItemForm(x)];
+      return [h('div', { class: 'meet' }, agendaNav(items), h('div', { class: 'item-pane' }, adding ? addItemForm(x) : items.length ? oneItem(x, items) : h('p', { class: 'muted', text: 'Nothing on the agenda.' }))),
+        attendance(x, last), decisions(x)];
+    }
+
+    // the agenda, grouped by kind, each with how far it has got; "Add an item" sits with it (backlog 6)
+    function agendaNav(items) {
+      var groups = [['action', 'Actions'], ['issue', 'Issues'], ['notice', 'Notices'], ['other', 'Other business']];
+      return h('nav', { class: 'agenda-list', 'aria-label': 'Agenda' }, groups.map(function (g) {
+        var mine = items.map(function (it, i) { return { it: it, i: i }; }).filter(function (x) { return kindOf(x.it)[0] === g[0]; });
+        if (!mine.length) return null;
+        return [h('div', { class: 'sec', text: g[1] }), mine.map(function (x) {
+          var o = x.it.outcome;
+          var chip = o ? ui.chip(o === 'Not reached' || o === 'Deferred' ? 'soon' : 'done', outcomeWords(o))
+            : R.DISCUSSION_SECTIONS.indexOf(x.it.section) >= 0 ? ui.chip('soon', 'Needs an outcome') : ui.chip('plain', 'To do');
+          return h('button', { type: 'button', class: 'it' + (x.i === at && !adding ? ' on' : ''), 'aria-current': x.i === at && !adding ? 'true' : null,
+            onclick: function () { adding = false; at = x.i; fill(); } }, h('span', { class: 'lbl', text: x.it.title }), chip);
+        })];
+      }), h('button', { type: 'button', class: 'btn btn-small add', text: '+ Add an item', onclick: function () { adding = true; fill(); var f = dlg.body.querySelector('#ch-mt-title'); if (f) f.focus(); } }));
     }
 
     function attendance(x, last) {
@@ -260,40 +295,52 @@ CH.views.meetingPanel = (function () {
     function oneItem(x, items) {
       var it = items[at];
       var status = h('span', { class: 'muted small', role: 'status' });
-      var outcome = h('select', { id: 'ch-mt-outcome' }, [h('option', { value: '', text: it.type === 'Action' || it.type === 'Date' ? 'No change' : 'Choose…' })]
-        .concat(R.MINUTE_OUTCOMES.map(function (o) { return h('option', { value: o, text: o, selected: it.outcome === o ? true : null }); })));
-      var notes = h('textarea', { id: 'ch-mt-item-notes', rows: '3', maxlength: '4000', value: it.notes || '' });
+      var notes = h('textarea', { id: 'ch-mt-item-notes', rows: '3', maxlength: '4000', 'aria-label': 'Notes for the minutes' });
       notes.value = it.notes || '';
       var needs = R.DISCUSSION_SECTIONS.indexOf(it.section) >= 0;
-      async function save(next) {
+      var kind = kindOf(it)[0];
+      var action = it.type === 'Action' ? app.model.actionById[it.sourceId] : null;
+      async function save(outcome, next) {
         if (!it.key) { if (next) go(at + 1); return; }
         try {
           await saveRow(x, { Title: it.title, RecordKey: it.key, RowType: 'Outcome', SourceType: it.key.split('|')[2], SourceId: Number(it.key.split('|')[3]),
-            Outcome: outcome.value, Notes: notes.value.trim() }, status);
+            Outcome: outcome, Notes: notes.value.trim() }, status);
           if (next) go(at + 1); else fill();
         } catch (_) { /* the message is shown beside the buttons */ }
       }
-      function go(i) { at = Math.max(0, Math.min(i, items.length - 1)); fill(); var o = dlg.body.querySelector('#ch-mt-outcome'); if (o) o.focus(); }
-      return h('section', { class: 'live-block' },
-        h('h3', { class: 'group-title', text: 'Agenda, one item at a time' }),
-        h('p', { class: 'muted small', id: 'ch-mt-progress', text: 'Item ' + (at + 1) + ' of ' + items.length + ' · ' + it.section + (needs ? ' · needs an outcome' : '') }),
-        h('div', { class: 'live-item' },
-          h('h4', { id: 'ch-mt-item-title', text: it.title }),
-          it.detail ? h('p', { class: 'muted small', text: it.detail }) : null,
-          it.key ? [field('Outcome', outcome), field('Notes and decisions', notes, 'Saved for the minutes.')] : h('p', { class: 'muted small', text: 'For information.' }),
-          h('div', { class: 'row' },
-            it.key ? ui.button('Save and next', function () { save(true); }, 'main') : ui.button('Next', function () { go(at + 1); }, 'main'),
-            it.key ? ui.button('Save', function () { save(false); }) : null,
-            at > 0 ? ui.button('Previous', function () { go(at - 1); }) : null,
-            it.open ? ui.button(it.type === 'Action' ? 'Open the action' : 'Open', it.open) : null,
-            ui.button('Raise an action', function () { CH.views.raiseForm.open(app, x.areaKey, { meeting: x, title: it.type === 'Action' ? '' : it.title }); }),
-            status)),
-        h('h4', { class: 'agenda-title', text: 'All items' }),
-        h('ol', { class: 'agenda-index' }, items.map(function (o, i) {
-          var done = R.MINUTE_OUTCOMES.indexOf(o.outcome) >= 0;
-          return h('li', { class: i === at ? 'current' : null }, ui.linkButton(o.title, function () { go(i); }),
-            done ? ui.chip('done', o.outcome) : R.DISCUSSION_SECTIONS.indexOf(o.section) >= 0 ? ui.chip('soon', 'Needs an outcome') : null);
-        })));
+      function go(i) { at = Math.max(0, Math.min(i, items.length - 1)); fill(); var o = dlg.body.querySelector('.outcomes button'); if (o) o.focus(); }
+      // Close this action: recorded for the minutes as Closed, with the notes, and the action itself is closed (queued)
+      async function closeIt() {
+        var note = notes.value.trim();
+        try {
+          await save('Closed', false);
+          await app.tracker.submit({ type: 'CloseAction', targetId: action.id, expectedRevision: action.revision, meetingId: x.id,
+            payload: { outcome: 'Completed', note: note }, label: 'Close: ' + action.title });
+          fill();
+        } catch (error) { status.textContent = error.friendly || 'The action could not be closed just now. Try again in a moment.'; }
+      }
+      var r = action ? R.roles(action, app.person.SiteUserId, app.access) : null;
+      var buttons = kind === 'action' ? [
+        it.open ? ui.button('Open this action', it.open) : null,
+        action && r.canClose && it.outcome !== 'Closed' && !action.done ? ui.button('Close this action', closeIt) : null,
+        ui.button('Raise a further action', function () { CH.views.raiseForm.open(app, x.areaKey, { meeting: x, title: '' }); })]
+        : kind === 'issue' || kind === 'notice' ? [
+          it.open ? ui.button(kind === 'issue' ? 'Open this issue' : 'Open this notice', it.open) : null,
+          ui.button('Turn into an action', function () { CH.views.raiseForm.open(app, x.areaKey, { meeting: x, title: it.title }); })]
+        : it.type === 'New Business' ? [ui.button('Raise an action', function () { CH.views.raiseForm.open(app, x.areaKey, { meeting: x, title: it.title }); })] : [];
+      return h('section', { class: 'live-item' },
+        h('div', { class: 'row' }, kindLabel(it), h('span', { class: 'muted small', id: 'ch-mt-progress', text: 'Item ' + (at + 1) + ' of ' + items.length + ' · ' + it.section + (needs ? ' · needs an outcome' : '') })),
+        h('h4', { id: 'ch-mt-item-title', text: it.title }),
+        it.detail ? h('p', { class: 'muted small', text: it.detail }) : null,
+        it.outcome === 'Closed' ? h('p', { class: 'small', text: 'Closed at this meeting – it will appear in the minutes under "Actions closed at this meeting".' }) : null,
+        it.key ? [h('div', { class: 'what-label', text: 'Outcome' }),
+          h('div', { class: 'outcomes', role: 'group', 'aria-label': 'Outcome' }, OUTCOME_BUTTONS.filter(function (o) { return o[0] !== 'Action raised' || kind !== 'action'; }).map(function (o) {
+            return h('button', { type: 'button', 'aria-pressed': String(it.outcome === o[0]), text: o[1], onclick: function () { save(o[0], false); } });
+          })),
+          h('div', { class: 'what-label', text: 'Notes for the minutes' }), notes] : h('p', { class: 'muted small', text: 'For information.' }),
+        h('div', { class: 'row foot' }, buttons, h('span', { class: 'grow' }), status,
+          at > 0 ? ui.button('Previous', function () { go(at - 1); }) : null,
+          ui.button(at < items.length - 1 ? 'Next item' : 'Last item', function () { if (it.key && notes.value.trim() !== (it.notes || '')) save(it.outcome, at < items.length - 1); else if (at < items.length - 1) go(at + 1); }, 'main')));
     }
 
     function decisions(x) {
@@ -319,8 +366,10 @@ CH.views.meetingPanel = (function () {
       var title = h('input', { id: 'ch-mt-title', type: 'text', maxlength: '255' });
       var notes = h('textarea', { id: 'ch-mt-notes', rows: '2', maxlength: '2000' });
       var err = h('p', { class: 'form-error', role: 'alert' });
-      var btn = h('button', { type: 'submit', class: 'btn', text: 'Add to the agenda' });
-      var f = h('form', { class: 'comment-form', novalidate: true }, h('h4', { text: 'Add an item' }), field('Item', title), field('Details', notes, 'Optional.'), err, btn);
+      var btn = h('button', { type: 'submit', class: 'btn btn-main', text: 'Add to the agenda' });
+      var live = x.status === 'In Progress';
+      var f = h('form', { class: 'comment-form', novalidate: true }, h('h4', { text: live ? 'Add an item' : 'Add an item before the meeting' }), field('Item', title), field('Details', notes, 'Optional.'), err,
+        h('div', { class: 'row' }, btn, live ? ui.button('Back to the agenda', function () { adding = false; fill(); }) : null));
       f.addEventListener('submit', async function (e) {
         e.preventDefault();
         var t = title.value.trim();
@@ -330,6 +379,8 @@ CH.views.meetingPanel = (function () {
         try {
           await app.sp.addToFolder('meetingItems', x.areaKey + '/MTG-' + x.id + '/Record', { Title: t, RowKey: 'U|' + clientKey, RecordKey: x.id + '|N|' + clientKey,
             MeetingId: x.id, RowType: 'New Business', SourceType: 'New Business', Section: 'New business', Notes: notes.value.trim() });
+          adding = false;
+          openTitle = t;
           agenda = null;
           fill();
           loadAgenda();
@@ -342,7 +393,8 @@ CH.views.meetingPanel = (function () {
       return f;
     }
 
-    // ---- finalised minutes (spec MTG-4 to MTG-6): only the record the flow froze
+    // ---- finalised minutes (spec MTG-4 to MTG-6): only the record the flow froze. Release 1.2 (backlog 10): Open the PDF
+    // and Download PDF; Print only when there is no PDF. Actions closed at the meeting, and those raised there, have tables.
     function minutes(x) {
       if (agenda === null || agenda === 'error') return agendaBody(true);
       var rows = agenda.frozen;
@@ -353,21 +405,34 @@ CH.views.meetingPanel = (function () {
       var att = rows.filter(function (r) { return r.RowType === 'Attendee'; });
       var dec = rows.filter(function (r) { return r.RowType === 'Decision'; });
       var amend = rows.filter(function (r) { return r.RowType === 'Amendment'; });
+      var closed = items.filter(function (it) { return it.outcome === 'Closed'; });
+      var raised = items.filter(function (it) { return it.section === 'Decisions and additional actions'; });
+      var rest = items.filter(function (it) { return it.outcome !== 'Closed' && it.section !== 'Decisions and additional actions'; });
+      var raisedRows = rows.filter(function (r) { return r.RowType === 'Agenda Item' && r.Section === 'Decisions and additional actions'; });
+      function table(head, body) {
+        return h('table', { class: 't' }, h('thead', null, h('tr', null, head.map(function (x) { return h('th', { text: x }); }))),
+          h('tbody', null, body.map(function (cells) { return h('tr', null, cells.map(function (c) { return h('td', { text: c }); })); })));
+      }
+      var sections = CH.agenda.SECTIONS.concat(['New business']).map(function (s) {
+        var list = rest.filter(function (it) { return it.section === s; });
+        return list.length ? [h('h4', { class: 'agenda-title', text: s }), table([s === 'New business' ? 'Item' : 'Item', 'Outcome', 'Notes'],
+          list.map(function (it) { return [it.title, it.outcome ? outcomeWords(it.outcome) : '', it.notes || '']; }))] : null;
+      });
       return h('section', { class: 'minutes print-area' },
         h('div', { class: 'row actions-row no-print' },
           pdf ? h('a', { class: 'btn btn-main', href: pdf, target: '_blank', rel: 'noopener', text: 'Open the PDF' }) : null,
           pdf ? h('a', { class: 'btn', href: pdf, download: x.ref + '.pdf', text: 'Download PDF' }) : null,
-          ui.button('Print', function () { window.print(); })),
+          !pdf && !pdfOn ? ui.button('Print the minutes', function () { window.print(); }) : null),
         !pdf && pdfOn && (x.pdfState === 'Pending' || x.pdfState === 'Failed') ? h('p', { class: 'muted small no-print', text: 'The PDF is being prepared. The minutes below are final.' }) : null,
-        h('h3', { class: 'group-title', text: 'Attendance' }),
-        att.length ? h('ul', { class: 'plain' }, att.map(function (r) { return h('li', { text: r.Title + ': ' + (r.Attendance || 'not recorded') }); })) : h('p', { class: 'muted', text: 'Not recorded.' }),
-        h('h3', { class: 'group-title', text: 'Minutes' }),
-        items.length ? agendaList(items, true) : h('p', { class: 'muted', text: 'Nothing on the agenda.' }),
-        h('h3', { class: 'group-title', text: 'Decisions' }),
-        dec.length ? h('ul', { class: 'plain' }, dec.map(function (r) { return h('li', null, h('span', null, h('b', { text: r.Title }), r.Notes ? ' – ' + r.Notes : '')); })) : h('p', { class: 'muted', text: 'None recorded.' }),
-        amend.length ? [h('h3', { class: 'group-title', text: 'Amendments' }), h('ul', { class: 'plain' }, amend.map(function (r) {
-          return h('li', null, h('span', null, h('b', { text: r.Title }), ': ' + (r.Notes || ''), h('br'), h('span', { class: 'muted small', text: 'Why: ' + (r.AmendmentReason || '') })));
-        }))] : null);
+        att.length ? table(['Attendance', ''], att.map(function (r) { return [r.SourceId ? app.model.nameOf(Number(r.SourceId)) : r.Title, r.Attendance || 'Not recorded']; }))
+          : h('p', { class: 'muted', text: 'Attendance was not recorded.' }),
+        sections,
+        closed.length ? [h('h4', { class: 'agenda-title', text: 'Actions closed at this meeting' }), table(['Action', 'Notes'], closed.map(function (it) { return [it.title, it.notes || '']; }))] : null,
+        raised.length ? [h('h4', { class: 'agenda-title', text: 'Actions raised at this meeting' }), table(['Action', 'Owner', 'Due'], raisedRows.map(function (r) {
+          return [r.Title, r.SnapshotOwner ? app.model.nameOf(Number(r.SnapshotOwner)) : '', r.SnapshotDueDate ? D.short(D.localDate(r.SnapshotDueDate)) : ''];
+        }))] : null,
+        dec.length ? [h('h4', { class: 'agenda-title', text: 'Decisions' }), table(['Decision', 'Details'], dec.map(function (r) { return [r.Title, r.Notes || '']; }))] : null,
+        amend.length ? [h('h4', { class: 'agenda-title', text: 'Amendments' }), table(['Amendment', 'Why'], amend.map(function (r) { return [(r.Title || '') + (r.Notes ? ': ' + r.Notes : ''), r.AmendmentReason || '']; }))] : null);
     }
 
     function form(kind, x) {
@@ -387,14 +452,14 @@ CH.views.meetingPanel = (function () {
         var missing = R.missingOutcomes(items, outcomes);
         var waiting = meetingPending(x);
         blocked = !!missing.length || !!waiting.length;
-        fields.push(h('p', { class: 'explain', text: 'Finalising makes the record read-only for good: the minutes are fixed as they are now, and a PDF is made. Management can add amendments later; the original stays.' }),
+        fields.push(h('p', { class: 'explain', text: 'Finalising makes the record read-only for good: the minutes are fixed as they are now, and a PDF is made. Team Leaders and the Group Head can add amendments later; the original stays.' }),
           h('p', { text: items.filter(function (it) { return it.outcome; }).length + ' of ' + items.length + ' items have an outcome.' }),
           missing.length ? h('div', { class: 'section-note', id: 'ch-mt-missing' }, h('b', { text: 'These items still need an outcome: ' }), missing.join('; ') + '.') : null,
           waiting.length ? h('div', { class: 'section-note', id: 'ch-mt-waiting' }, h('b', { text: 'Still being recorded: ' }), waiting.map(function (e) { return e.label; }).join('; ') +
             '. Finalise once they show as saved.') : null);
       } else fields.push(h('p', { class: 'explain', text: 'Starting fixes the agenda from the records as they are now. It cannot be undone.' }));
       var labels = { cancel: ['Cancel this meeting?', 'Cancel the meeting'], start: ['Start this meeting?', 'Start the meeting'],
-        finalise: ['Finalise the minutes?', 'Finalise the minutes'], amend: ['Amend the minutes', 'Add the amendment'] }[kind];
+        finalise: ['Finalise the minutes?', 'Finalise the minutes'], amend: ['Amend these minutes', 'Add the amendment'] }[kind];
       var submit = h('button', { type: 'submit', class: 'btn btn-main', text: labels[1], disabled: blocked ? true : null });
       var f = h('form', { class: 'dialog-body', novalidate: true }, h('h3', { text: labels[0] }), fields, errorBox,
         h('div', { class: 'row' }, submit, h('button', { type: 'button', class: 'btn', text: 'Back', onclick: function () { show('main'); } })));

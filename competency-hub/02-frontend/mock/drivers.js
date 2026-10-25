@@ -985,7 +985,7 @@ window.MockDrivers = (function () {
       type(q('#ch-mt-reason'), 'Most of the area is on the outage.');
       form.dispatchEvent(new Event('submit', { cancelable: true }));
       await until(function () { return MockSharePoint.data.Meetings.filter(function (m) { return m.Id === 2; })[0].Status === 'Cancelled'; }, 120000);
-      await until(function () { return q('#ch-mt') && /Cancelled/.test(q('#ch-mt .muted.small').textContent); }, 120000);
+      await until(function () { return q('#ch-mt') && /Cancelled/.test(q('#ch-mt .what-label').textContent); }, 120000);
       return { reasonError: reasonError, text: q('#ch-mt').textContent };
     },
     meetingAsTechnician: async function () {
@@ -1008,7 +1008,7 @@ window.MockDrivers = (function () {
       byText('#ch-mt .btn', 'Start meeting').click();
       (await until(function () { return q('#ch-mt form.dialog-body'); })).dispatchEvent(new Event('submit', { cancelable: true }));
       await until(function () { return M().Status === 'In Progress'; }, 120000);
-      await until(function () { return q('#ch-mt-outcome') || byText('#ch-mt .btn', 'Next'); }, 120000);
+      await until(function () { return q('#ch-mt-item-title'); }, 120000);
       // attendance saves at once
       var att = q('#ch-mt-att-112');
       att.value = 'Apologies';
@@ -1021,7 +1021,7 @@ window.MockDrivers = (function () {
       byText('#ch-mt form .btn', 'Back').click();
       // raise an action from the first item
       await until(function () { return q('#ch-mt-item-title'); });
-      byText('#ch-mt .btn', 'Raise an action').click();
+      (byText('#ch-mt .btn', 'Raise a further action') || byText('#ch-mt .btn', 'Turn into an action') || byText('#ch-mt .btn', 'Raise an action')).click();
       var form = await until(function () { return q('#ch-r form'); });
       var heading = q('#ch-r h2').textContent;
       type(q('#ch-r-title'), 'Order spare probes');
@@ -1046,15 +1046,16 @@ window.MockDrivers = (function () {
         var title = q('#ch-mt-item-title').textContent;
         seen.push(title);
         var before = items().length;
-        if (q('#ch-mt-outcome')) {
-          if (/needs an outcome/.test(progress.textContent)) q('#ch-mt-outcome').value = 'Discussed';
-          if (i === 0) type(q('#ch-mt-item-notes'), 'Probe stock is the priority.');
-          byText('#ch-mt .btn', 'Save and next').click();
+        // release 1.2: an outcome is a button and saves at once; notes are saved by Next item
+        if (q('#ch-mt .outcomes') && /needs an outcome/.test(progress.textContent)) {
+          byText('#ch-mt .outcomes button', 'Discussed').click();
           await until(function () { return items().length > before; });
-        } else {
-          byText('#ch-mt .btn', 'Next').click();
+          before = items().length;
         }
+        if (i === 0 && q('#ch-mt-item-notes')) type(q('#ch-mt-item-notes'), 'Probe stock is the priority.');
         if (label[1] === label[2]) break;
+        byText('#ch-mt .btn', 'Next item').click();
+        if (i === 0) await until(function () { return items().length > before; });
         await until(function () { return q('#ch-mt-item-title') && q('#ch-mt-item-title').textContent !== title; });
       }
       // a decision
@@ -1080,8 +1081,37 @@ window.MockDrivers = (function () {
       await until(function () { return q('#ch-mt .facts'); });
       byText('#ch-mt .btn', 'Start meeting').click();
       (await until(function () { return q('#ch-mt form.dialog-body'); })).dispatchEvent(new Event('submit', { cancelable: true }));
-      await until(function () { return q('#ch-mt-progress'); }, 120000);
+      await until(function () { return q('#ch-mt-progress') && /up to date/.test(q('.status-line').textContent); }, 120000);
+      await wait(500);
       return { ok: true };
+    },
+    // Release 1.2 (backlog 5, 6, 9): items grouped and labelled by kind, each with only its own buttons; "Close this
+    // action" records Closed for the minutes and closes the action (carrying the meeting); a new item opens at once.
+    meetingKinds: async function () {
+      var items = function () { return MockSharePoint.data['Meeting Items']; };
+      await until(function () { return q('#ch-mt .facts'); });
+      byText('#ch-mt .btn', 'Start meeting').click();
+      (await until(function () { return q('#ch-mt form.dialog-body'); })).dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-mt-item-title') && q('#ch-mt .agenda-list'); }, 120000);
+      var groups = all('#ch-mt .agenda-list .sec').map(function (s) { return s.textContent; });
+      var first = { kind: q('#ch-mt .item-pane .kind').textContent, buttons: all('#ch-mt .item-pane .foot .btn').map(function (b) { return b.textContent; }) };
+      var issue = all('#ch-mt .agenda-list .it').filter(function (b) { return /Calibration rig drift/.test(b.textContent); })[0];
+      issue.click();
+      await until(function () { return /Calibration rig drift/.test(q('#ch-mt-item-title').textContent); });
+      var second = { kind: q('#ch-mt .item-pane .kind').textContent, buttons: all('#ch-mt .item-pane .foot .btn').map(function (b) { return b.textContent; }) };
+      all('#ch-mt .agenda-list .it').filter(function (b) { return /Replace FH40 probe/.test(b.textContent); })[0].click();
+      await until(function () { return /Replace FH40 probe/.test(q('#ch-mt-item-title').textContent); });
+      type(q('#ch-mt-item-notes'), 'Replaced and checked against the source.');
+      byText('#ch-mt .item-pane .btn', 'Close this action').click();
+      await until(function () { return items().some(function (r) { return r.Outcome === 'Closed' && r.Notes === 'Replaced and checked against the source.' && /\/Record$/.test(r.FileDirRef); }); });
+      await until(function () { return MockSharePoint.data.Actions.filter(function (a) { return a.Id === 40; })[0].Status === 'Closed'; }, 120000);
+      var closeReq = MockSharePoint.data.Requests.filter(function (r) { return r.RequestType === 'CloseAction'; })[0];
+      byText('#ch-mt .btn', '+ Add an item').click();
+      type(await until(function () { return q('#ch-mt-title'); }), 'Spare cable order');
+      q('#ch-mt-title').form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-mt-item-title') && q('#ch-mt-item-title').textContent === 'Spare cable order'; }, 60000);
+      return { groups: groups, first: first, second: second, closeMeeting: closeReq && closeReq.MeetingId, closePayload: closeReq && JSON.parse(closeReq.Payload),
+        newKind: q('#ch-mt .item-pane .kind').textContent, newButtons: all('#ch-mt .item-pane .foot .btn').map(function (b) { return b.textContent; }) };
     },
     minutesAsTechnician: async function () {
       await until(function () { return q('#ch-mt .minutes'); }, 60000);
@@ -1097,7 +1127,7 @@ window.MockDrivers = (function () {
     },
     amendMinutes: async function () {
       await until(function () { return q('#ch-mt .minutes'); }, 60000);
-      byText('#ch-mt .btn', 'Amend the minutes').click();
+      byText('#ch-mt .btn', 'Amend these minutes').click();
       var form = await until(function () { return q('#ch-mt form.dialog-body'); });
       form.dispatchEvent(new Event('submit', { cancelable: true }));
       await wait(50);

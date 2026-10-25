@@ -63,6 +63,7 @@ h2 { font-size: calc(18 * var(--u)); font-weight: 600; margin: 0 0 calc(12 * var
 .w-later { color: var(--muted); background: #eef1f4; }
 .w-done { color: #1b5e37; background: #e6f3eb; }
 .w-ok { color: var(--ok); background: var(--ok-bg); }
+.w-plain { color: var(--muted); background: #eef2f5; }
 
 .group-title { display: flex; align-items: center; gap: calc(8 * var(--u)); font-weight: 600; font-size: calc(16 * var(--u)); margin: calc(14 * var(--u)) 0 calc(8 * var(--u)); }
 .group-title:first-child { margin-top: 0; }
@@ -142,6 +143,36 @@ h2 { font-size: calc(18 * var(--u)); font-weight: 600; margin: 0 0 calc(12 * var
 .rec-cols { display: grid; gap: calc(20 * var(--u)); }
 @media (min-width: 1000px) { .rec-cols { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); } .rec-side { border-left: 1px solid var(--line); padding-left: calc(20 * var(--u)); } }
 .rec-side > .group-title:first-child { margin-top: 0; }
+/* release 1.2 (backlog 9): what kind of agenda item it is, in words and colour */
+.kind { display: inline-block; font-size: calc(11.5 * var(--u)); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; border-radius: calc(4 * var(--u));
+  padding: calc(1 * var(--u)) calc(7 * var(--u)); color: #fff; white-space: nowrap; flex: none; }
+.kind.action { background: #13516b; } .kind.issue { background: #6a4fb0; } .kind.notice { background: #1f7190; } .kind.other { background: #8a5a00; }
+ul.agenda li { display: flex; gap: calc(10 * var(--u)); align-items: flex-start; }
+ul.agenda .agenda-text { flex: 1; min-width: 0; }
+/* the meeting in progress: the agenda on the left, the item on the right */
+.meet { display: grid; grid-template-columns: minmax(calc(220 * var(--u)), calc(290 * var(--u))) minmax(0, 1fr); border: 1px solid var(--line); border-radius: calc(10 * var(--u)); min-height: calc(360 * var(--u)); }
+.agenda-list { border-right: 1px solid var(--line); padding: calc(10 * var(--u)) 0; min-width: 0; max-height: calc(60vh); overflow-y: auto; }
+.agenda-list .sec { padding: calc(8 * var(--u)) calc(16 * var(--u)) calc(4 * var(--u)); font-size: calc(12 * var(--u)); font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.agenda-list button.it { display: flex; width: 100%; gap: calc(8 * var(--u)); align-items: center; text-align: left; border: 0; background: none; padding: calc(7 * var(--u)) calc(16 * var(--u)); border-left: 3px solid transparent; color: var(--ink); }
+.agenda-list button.it.on { background: var(--navy-soft); border-left-color: var(--navy); font-weight: 600; }
+.agenda-list .when { font-size: calc(12 * var(--u)); padding: 0 calc(8 * var(--u)); line-height: calc(20 * var(--u)); margin-left: 0; flex: none; }
+.dialog.dialog-xl { width: min(calc(1180 * var(--u)), 100%); }
+.live-line { margin: 0 0 calc(10 * var(--u)); }
+.agenda-list .lbl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agenda-list .add { margin: calc(10 * var(--u)) calc(16 * var(--u)) calc(4 * var(--u)); }
+.item-pane { padding: calc(16 * var(--u)) calc(22 * var(--u)); min-width: 0; }
+.item-pane .live-item { background: none; padding: 0; }
+.item-pane h4 { margin: calc(8 * var(--u)) 0 calc(4 * var(--u)); font-size: calc(20 * var(--u)); }
+.item-pane .foot { margin-top: calc(14 * var(--u)); }
+.outcomes { display: flex; gap: calc(8 * var(--u)); flex-wrap: wrap; margin: calc(6 * var(--u)) 0 calc(12 * var(--u)); }
+.outcomes button { border: 1px solid #c3ccd4; background: #fff; border-radius: 999px; padding: calc(5 * var(--u)) calc(14 * var(--u)); font-weight: 600; color: var(--ink); }
+.outcomes button[aria-pressed="true"] { background: var(--navy); border-color: var(--navy); color: #fff; }
+.grow { flex: 1; }
+@media (max-width: 900px) { .meet { grid-template-columns: minmax(0, 1fr); } .agenda-list { border-right: 0; border-bottom: 1px solid var(--line); max-height: none; } }
+/* minutes as tables */
+table.t { width: 100%; border-collapse: collapse; margin-bottom: calc(12 * var(--u)); }
+table.t th, table.t td { text-align: left; padding: calc(6 * var(--u)) calc(10 * var(--u)); border-bottom: 1px solid var(--line); vertical-align: top; }
+table.t th { color: var(--muted); font-size: calc(13 * var(--u)); font-weight: 600; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 @keyframes ch-pulse { 50% { opacity: .35; } }
 /* the mark beside a record: ✓ Sent, then ✓✓ Saved which fades after three seconds, or ✕ Not saved */

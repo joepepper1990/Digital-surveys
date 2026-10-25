@@ -398,16 +398,25 @@ check('live meeting: an action raised from the meeting is in its area and carrie
   JSON.stringify(res.result.areas) === '["FLK"]' && res.result.requestMeeting === 2 && JSON.stringify(res.result.source) === '["Meeting",2]', JSON.stringify(res));
 check('live meeting: attendance, outcomes and decisions go only to the meeting\'s record folder', res.ok && res.result.writesInRecord && res.result.items >= 5, JSON.stringify(res));
 check('finalised: the minutes show attendance, outcomes, the decision and the action raised, with the PDF', res.ok && res.result.frozenNotes === 1 &&
-  /Rachel Boulden: Apologies/.test(res.result.minutes) && /Probe checks stay monthly/.test(res.result.minutes) && /Order spare probes/.test(res.result.minutes) &&
+  /Rachel Boulden\s*Apologies/.test(res.result.minutes) && /Probe checks stay monthly/.test(res.result.minutes) && /Actions raised at this meeting\s*ActionOwnerDue\s*Order spare probes/.test(res.result.minutes) &&
   res.result.pdf === '/sites/ESGCompetencyHub/MeetingMinutes/FLK/MTG-2-v1.pdf', JSON.stringify(res));
+res = drive('as=' + KELLY + '&area=FLK&meeting=2&drive=meetingKinds', SLOW);
+check('live meeting: the agenda is grouped by kind and each item is labelled; an action offers Close this action and Raise a further action, an issue Turn into an action', res.ok &&
+  res.result.groups.join('|') === 'Actions|Issues|Notices|Other business' && res.result.first.kind === 'Action' &&
+  ['Open this action', 'Close this action', 'Raise a further action'].every((b) => res.result.first.buttons.includes(b)) &&
+  res.result.second.kind === 'Issue' && res.result.second.buttons.includes('Turn into an action') && !res.result.second.buttons.includes('Close this action'), JSON.stringify(res));
+check('live meeting: Close this action records Closed with the notes and closes the action, carrying the meeting', res.ok && res.result.closeMeeting === 2 &&
+  res.result.closePayload.outcome === 'Completed' && /checked against the source/.test(res.result.closePayload.note), JSON.stringify(res));
+check('live meeting: an item added during the meeting opens straight away, as Other business', res.ok && res.result.newKind === 'Other business' &&
+  res.result.newButtons.includes('Raise an action') && !res.result.newButtons.includes('Close this action'), JSON.stringify(res));
 res = drive('as=' + RACHEL + '&area=FLK&meeting=1&drive=minutesAsTechnician', SLOW);
-check('minutes: everyone can read them, open, download or print the PDF; only management amends', res.ok && JSON.stringify(res.result.buttons) === '["Open the PDF","Download PDF","Print"]' &&
-  /Deferred: Waiting for the stores count/.test(res.result.minutes), JSON.stringify(res));
+check('minutes: everyone can read them, open or download the PDF (and print from it); only Team Leaders and the Group Head amend', res.ok && JSON.stringify(res.result.buttons) === '["Open the PDF","Download PDF"]' &&
+  /Carry forward\s*Waiting for the stores count/.test(res.result.minutes), JSON.stringify(res));
 res = drive('as=' + RACHEL + '&area=FLK&notice=2&drive=noticeHistory', SLOW);
 check('notice: its discussion history lists the meeting that took it up, and the outcome', res.ok && /Flask meeting, \d+ \w+ 2026: Deferred – Waiting for the stores count/.test(res.result.history), JSON.stringify(res));
 res = drive('as=' + ROBERT + '&meeting=1&drive=amendMinutes', 300000);
 check('amend: what and why are needed; the amendment is added beside the original, and a second PDF version follows', res.ok && /at least 10 characters/.test(res.result.errors[0]) &&
-  /Amendment 1 by Robert Starbuck: Nick Pearce attended/.test(res.result.minutes) && /Kelly Bates: Present/.test(res.result.minutes) && /MTG-1-v2\.pdf$/.test(res.result.pdf), JSON.stringify(res));
+  /Amendment 1 by Robert Starbuck: Nick Pearce attended/.test(res.result.minutes) && /Kelly Bates\s*Present/.test(res.result.minutes) && /MTG-1-v2\.pdf$/.test(res.result.pdf), JSON.stringify(res));
 
 // Release 6: test marking and removing the test records
 res = drive('as=' + RACHEL + '&drive=testMarkedNotice', SLOW);

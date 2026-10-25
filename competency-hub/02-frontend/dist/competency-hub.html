@@ -51,6 +51,7 @@
 .SCOPE .ch .w-later {color: var(--muted); background: #eef1f4;}
 .SCOPE .ch .w-done {color: #1b5e37; background: #e6f3eb;}
 .SCOPE .ch .w-ok {color: var(--ok); background: var(--ok-bg);}
+.SCOPE .ch .w-plain {color: var(--muted); background: #eef2f5;}
 .SCOPE .ch .group-title {display: flex; align-items: center; gap: calc(8 * var(--u)); font-weight: 600; font-size: calc(16 * var(--u)); margin: calc(14 * var(--u)) 0 calc(8 * var(--u));}
 .SCOPE .ch .group-title:first-child {margin-top: 0;}
 .SCOPE .ch .dot {width: calc(10 * var(--u)); height: calc(10 * var(--u)); border-radius: 50%; display: inline-block;}
@@ -123,6 +124,38 @@
 .SCOPE .ch .rec-side {border-left: 1px solid var(--line); padding-left: calc(20 * var(--u));}
 }
 .SCOPE .ch .rec-side > .group-title:first-child {margin-top: 0;}
+.SCOPE .ch .kind {display: inline-block; font-size: calc(11.5 * var(--u)); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; border-radius: calc(4 * var(--u)); padding: calc(1 * var(--u)) calc(7 * var(--u)); color: #fff; white-space: nowrap; flex: none;}
+.SCOPE .ch .kind.action {background: #13516b;}
+.SCOPE .ch .kind.issue {background: #6a4fb0;}
+.SCOPE .ch .kind.notice {background: #1f7190;}
+.SCOPE .ch .kind.other {background: #8a5a00;}
+.SCOPE .ch ul.agenda li {display: flex; gap: calc(10 * var(--u)); align-items: flex-start;}
+.SCOPE .ch ul.agenda .agenda-text {flex: 1; min-width: 0;}
+.SCOPE .ch .meet {display: grid; grid-template-columns: minmax(calc(220 * var(--u)), calc(290 * var(--u))) minmax(0, 1fr); border: 1px solid var(--line); border-radius: calc(10 * var(--u)); min-height: calc(360 * var(--u));}
+.SCOPE .ch .agenda-list {border-right: 1px solid var(--line); padding: calc(10 * var(--u)) 0; min-width: 0; max-height: calc(60vh); overflow-y: auto;}
+.SCOPE .ch .agenda-list .sec {padding: calc(8 * var(--u)) calc(16 * var(--u)) calc(4 * var(--u)); font-size: calc(12 * var(--u)); font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em;}
+.SCOPE .ch .agenda-list button.it {display: flex; width: 100%; gap: calc(8 * var(--u)); align-items: center; text-align: left; border: 0; background: none; padding: calc(7 * var(--u)) calc(16 * var(--u)); border-left: 3px solid transparent; color: var(--ink);}
+.SCOPE .ch .agenda-list button.it.on {background: var(--navy-soft); border-left-color: var(--navy); font-weight: 600;}
+.SCOPE .ch .agenda-list .when {font-size: calc(12 * var(--u)); padding: 0 calc(8 * var(--u)); line-height: calc(20 * var(--u)); margin-left: 0; flex: none;}
+.SCOPE .ch .dialog.dialog-xl {width: min(calc(1180 * var(--u)), 100%);}
+.SCOPE .ch .live-line {margin: 0 0 calc(10 * var(--u));}
+.SCOPE .ch .agenda-list .lbl {flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
+.SCOPE .ch .agenda-list .add {margin: calc(10 * var(--u)) calc(16 * var(--u)) calc(4 * var(--u));}
+.SCOPE .ch .item-pane {padding: calc(16 * var(--u)) calc(22 * var(--u)); min-width: 0;}
+.SCOPE .ch .item-pane .live-item {background: none; padding: 0;}
+.SCOPE .ch .item-pane h4 {margin: calc(8 * var(--u)) 0 calc(4 * var(--u)); font-size: calc(20 * var(--u));}
+.SCOPE .ch .item-pane .foot {margin-top: calc(14 * var(--u));}
+.SCOPE .ch .outcomes {display: flex; gap: calc(8 * var(--u)); flex-wrap: wrap; margin: calc(6 * var(--u)) 0 calc(12 * var(--u));}
+.SCOPE .ch .outcomes button {border: 1px solid #c3ccd4; background: #fff; border-radius: 999px; padding: calc(5 * var(--u)) calc(14 * var(--u)); font-weight: 600; color: var(--ink);}
+.SCOPE .ch .outcomes button[aria-pressed="true"] {background: var(--navy); border-color: var(--navy); color: #fff;}
+.SCOPE .ch .grow {flex: 1;}
+@media (max-width: 900px) {
+.SCOPE .ch .meet {grid-template-columns: minmax(0, 1fr);}
+.SCOPE .ch .agenda-list {border-right: 0; border-bottom: 1px solid var(--line); max-height: none;}
+}
+.SCOPE .ch table.t {width: 100%; border-collapse: collapse; margin-bottom: calc(12 * var(--u));}
+.SCOPE .ch table.t th, .SCOPE .ch table.t td {text-align: left; padding: calc(6 * var(--u)) calc(10 * var(--u)); border-bottom: 1px solid var(--line); vertical-align: top;}
+.SCOPE .ch table.t th {color: var(--muted); font-size: calc(13 * var(--u)); font-weight: 600;}
 .SCOPE .ch .sr-only {position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;}
 .SCOPE .ch @keyframes ch-pulse {50% { opacity: .35; }}
 .SCOPE .ch .mark {font-size: calc(13 * var(--u)); font-weight: 600; white-space: nowrap; margin-left: calc(6 * var(--u));}

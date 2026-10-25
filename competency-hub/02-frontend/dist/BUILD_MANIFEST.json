@@ -2,8 +2,8 @@
   "product": "ESG Competency Hub",
   "version": "1.1.1",
   "outputs": {
-    "competency-hub.js": "3e2f71d190d2b18dc9c253ca4cffef5d19ba34f1667838d74b04e47b56ac6cd3",
-    "competency-hub.html": "9c4d4136ed3f3d2990b6c3eb697204e7b9bd5bf384c22d4a31e1226bdbb45c6c"
+    "competency-hub.js": "78f4a61c2e0d9f5458e1490dbb9e5c5308c74830295cc965936e97b7a0d092e1",
+    "competency-hub.html": "d1200c08fb53821bb296abfc12cf208183898091b49c00d3100d2ab43be5f2d7"
   },
   "sources": {
     "src/core/config.js": "aa3976a9eda614cdbbc51ade48f6112c084d58c0423d6867d0478ab75fc1e568",
@@ -33,11 +33,11 @@
     "src/views/settings.js": "badf03ed51a8b1e10a5e036511a3eeda093f599918ebe6b3e702692af41857b4",
     "src/views/dashboard.js": "668f8f91126d8b60fa6c396d85914d5aaf08aca054371e1f1b3d72c486641329",
     "src/views/meeting-form.js": "4f7f543b89b3d422a760d483ec950c9600c2d031bc5fefe1dd6c04da731f6a67",
-    "src/views/meeting-panel.js": "29ec6a161866788b4c36d9cb79c9c789c28c29608ef8d0b238907a52497a0f5f",
+    "src/views/meeting-panel.js": "77088f711b8895f198ce992b52f124ce4ae7c745dc77de378de7b6e966afc9fd",
     "src/views/cleanup.js": "e0c85ae105fa19e937088aa7963af4d5eec4b25417a611bd2d0a939b3d2ebd21",
     "src/views/admin.js": "5bf2e6ab3217c5f354e2f1e201b162bc5f47a8868346adca41ead755db5e001c",
     "src/app.js": "f6453e58871fb904ad4fbf96777bea110d3d18ecb0e68f448e0d3468cedbe84b",
-    "styles/app.css": "b7bc94f9c17116bd856d8a21025ba4140ffffcd3bfd2ef920d4f01a5becc0a4c",
+    "styles/app.css": "327281719f2eb05614ced2060f81c20d6cd001b7f2f51f45a9365431d478b577",
     "layout/competency-hub.layout.html": "d1ab8207281c0906fe2ebeefbf0ac495d292c1b80af30fd3d69d96129967a4c7"
   }
 }
