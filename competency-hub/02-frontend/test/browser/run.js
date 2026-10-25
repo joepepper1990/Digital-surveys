@@ -387,6 +387,10 @@ check('meeting: an item added by hand goes into the meeting\'s record folder', r
 check('meeting: a change is recorded, and starting fixes the agenda', res.ok && res.result.start === '11:00' && res.result.status === 'In Progress' && res.result.agendaRows > 0 &&
   res.result.fixed && res.result.noStart, JSON.stringify(res));
 check('start is instant: the live screen comes before the flow has fixed the agenda, and an outcome recorded then stays with its item', res.ok && res.result.instant && res.result.kept, JSON.stringify(res));
+res = drive('as=' + KELLY + '&area=FLK&meeting=2&drive=meetingFastRun', SLOW);
+check('a meeting gone through fast while it catches up: never blanks, never jumps to another item, keeps every outcome, then stays still', res.ok &&
+  res.result.blanks === 0 && res.result.titles === res.result.clicked && res.result.stayed && res.result.withOutcome > 3 && res.result.outcomes === res.result.withOutcome &&
+  res.result.pressed === res.result.withOutcome && res.result.idleRepaints === 0, JSON.stringify(res));
 res = drive('as=' + KELLY + '&area=FLK&drive=meetingBeforeBooked', SLOW);
 check('a meeting booked a moment ago can be started at once; what is recorded is sent to its record folder when the booking is saved', res.ok && res.result.unnumbered &&
   !res.result.change && res.result.live && res.result.raiseNote && res.result.kept && res.result.status === 'In Progress' &&

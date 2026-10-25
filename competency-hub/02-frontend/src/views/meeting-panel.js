@@ -147,9 +147,14 @@ CH.views.meetingPanel = (function () {
     var at = 0;             // the agenda item on screen while the meeting runs
     var adding = false;     // the "Add an item" form is in the item pane
     var openTitle = null;   // an item just added: opened as soon as the agenda is read again (backlog 6)
+    var loads = 0;          // only the newest read of the agenda is shown
+    var shown = '';         // what the screen shows, so a read that brings nothing new repaints nothing
+    var mine = [];          // rows saved from this screen that a read may not include yet: kept on screen until it does
+    var refreshTimer = null;
+    var attOpen = null;     // the attendance list as the person left it (open or closed)
 
     function mt() {
-      if (id < 0 && app.meetingAlias && app.meetingAlias[id] && app.model.meetingById[app.meetingAlias[id]]) { id = app.meetingAlias[id]; agenda = null; loadAgenda(); }
+      if (id < 0 && app.meetingAlias && app.meetingAlias[id] && app.model.meetingById[app.meetingAlias[id]]) { id = app.meetingAlias[id]; loadAgenda(true); }
       return app.model.meetingById[id];
     }
 
@@ -171,9 +176,28 @@ CH.views.meetingPanel = (function () {
       }).concat(fromRows(app, x, [], agenda.live));
     }
 
-    async function loadAgenda() {
+    // What the screen would show, in short: the meeting, its agenda and every latest outcome, and what is being saved.
+    function signature(x, a) {
+      if (!x || !a || a === 'error') return String(a);
+      var last = latest(a.live);
+      return JSON.stringify([x.status, x.revision, x.pdfState, x.pdfVersion, !!x.sending, !!x.starting, !!x.finalising, a.kind,
+        (a.items || []).map(function (it) { return [it.key, it.title, it.detail]; }),
+        a.frozen.map(function (r) { return [r.Id, r.Outcome, r.Notes, r.Attendance, r.Title]; }),
+        Object.keys(last).sort().map(function (k) { return [k, last[k].Outcome, last[k].Notes, last[k].Attendance, last[k].Title]; }),
+        meetingPending(x).map(function (e) { return e.label; }),
+        (function () { var e = app.tracker.forTarget(x.id, 'Meeting'); return e ? [e.type, e.state] : null; })(),
+        itemsNow2(x, a).filter(function (it) { return it.type === 'Action'; }).map(function (it) {
+          var ac = app.model.actionById[it.sourceId]; return ac ? [ac.id, ac.done, ac.status, ac.revision] : null; })]);
+    }
+    function itemsNow2(x, a) { var keep = agenda; agenda = a; try { return itemsNow(x); } finally { agenda = keep; } }
+
+    // quiet: a refresh while the meeting is open. Nothing is blanked; the screen is repainted only if something changed,
+    // and stays on the item it was on.
+    async function loadAgenda(quiet) {
       var x = mt();
       if (!x) return;
+      var mineLoad = ++loads;
+      var agendaWas = agenda;
       try {
         if (x.status === 'Scheduled') {
           var both = await Promise.all([CH.agenda.preview(app.sp, app.model, x, app.settings), readItems(x)]);
@@ -195,13 +219,31 @@ CH.views.meetingPanel = (function () {
               frozen: rows.frozen, live: rows.live };
           }
         }
-      } catch (_) { agenda = 'error'; }
+      } catch (_) { agenda = quiet && agendaWas && agendaWas !== 'error' ? agendaWas : 'error'; }
+      if (mineLoad !== loads) { agenda = agendaWas; return; }   // a newer read is on its way
+      if (agenda && agenda !== 'error' && agenda !== agendaWas) {
+        // rows saved here that this read does not include yet stay on screen, newest last
+        var seen = {};
+        agenda.live.forEach(function (r) { if (r.RowKey) seen[r.RowKey] = true; });
+        mine = mine.filter(function (r) { return !seen[r.RowKey]; });
+        agenda.live = agenda.live.concat(mine);
+      }
+      // stay on the item that was on screen, wherever it now sits
+      if (agendaWas && agendaWas !== 'error' && agenda && agenda !== 'error' && !openTitle) {
+        var before = itemsNow2(x, agendaWas)[at];
+        if (before) {
+          var now = itemsNow(mt());
+          for (var j = 0; j < now.length; j++) if ((before.key && now[j].key === before.key) || (!before.key && now[j].title === before.title)) { at = j; break; }
+        }
+      }
       if (openTitle && agenda && agenda !== 'error') {
         var list = itemsNow(mt());
         for (var i = list.length - 1; i >= 0; i--) if (list[i].type === 'New Business' && list[i].title === openTitle) { at = i; break; }
         openTitle = null;
       }
-      if (view === 'main' && dlg.isOpen()) fill();
+      if (view !== 'main' || !dlg.isOpen()) return;
+      if (quiet && signature(mt(), agenda) === shown) return;
+      fill();
     }
 
     // changes made from this meeting that are still being recorded (they hold back finalising)
@@ -225,6 +267,25 @@ CH.views.meetingPanel = (function () {
     }
 
     function fill() {
+      var keep = { body: dlg.body.scrollTop, nav: (dlg.body.querySelector('.agenda-list') || {}).scrollTop || 0,
+        focus: document.activeElement && dlg.node.contains(document.activeElement) ? focusPath(document.activeElement) : null };
+      paint();
+      dlg.body.scrollTop = keep.body;
+      var nav = dlg.body.querySelector('.agenda-list');
+      if (nav) nav.scrollTop = keep.nav;
+      if (keep.focus) { var el = findPath(keep.focus); if (el && el !== document.activeElement) el.focus({ preventScroll: true }); }
+      shown = signature(mt(), agenda);
+    }
+    // a control found again after a repaint: by its id, or by its text within its group
+    function focusPath(el) { return el.id ? { id: el.id } : { cls: el.parentNode && el.parentNode.className, text: el.textContent }; }
+    function findPath(p) {
+      if (p.id) return dlg.node.querySelector('#' + p.id);
+      var all = dlg.body.querySelectorAll('button');
+      for (var i = 0; i < all.length; i++) if (all[i].textContent === p.text && all[i].parentNode.className === p.cls) return all[i];
+      return null;
+    }
+
+    function paint() {
       CH.dom.clear(dlg.body);
       var x = mt();
       if (!x) { dlg.setTitle('Meeting not available'); CH.dom.append(dlg.body, h('p', { text: 'This meeting could not be found. It may have been cancelled.' })); return; }
@@ -288,7 +349,12 @@ CH.views.meetingPanel = (function () {
         return Promise.resolve();
       }
       return app.sp.addToFolder('meetingItems', x.areaKey + '/MTG-' + x.id + '/Record', Object.assign({ RowKey: 'U|' + clientKey, MeetingId: x.id }, values))
-        .then(function () { status.textContent = 'Saved'; if (agenda && agenda !== 'error') agenda.live.push(Object.assign({ Id: Infinity, AuthorId: app.person.SiteUserId }, values)); })
+        .then(function () {
+          status.textContent = 'Saved';
+          var row = Object.assign({ Id: Infinity, AuthorId: app.person.SiteUserId, RowKey: 'U|' + clientKey }, values);
+          mine.push(row);
+          if (agenda && agenda !== 'error') agenda.live.push(row);
+        })
         .catch(function (error) {
           status.textContent = error.status === 403 ? 'Only the people who run this area\'s meetings, and the Team Leaders and Group Head, can record this.' : 'Not saved – try again in a moment.';
           throw error;
@@ -323,7 +389,7 @@ CH.views.meetingPanel = (function () {
     function attendance(x, last) {
       var status = h('span', { class: 'muted small', role: 'status' });
       var done = x.attendeeIds.filter(function (pid) { return last[x.id + '|P|' + pid] && last[x.id + '|P|' + pid].Attendance; }).length;
-      return h('details', { class: 'live-block', open: done < x.attendeeIds.length ? true : null },
+      var d = h('details', { class: 'live-block', open: (attOpen === null ? done < x.attendeeIds.length : attOpen) ? true : null },
         h('summary', null, h('span', { class: 'group-title', text: 'Attendance' }), ' ', h('span', { class: 'muted small', text: done + ' of ' + x.attendeeIds.length + ' recorded' })), status,
         h('ul', { class: 'plain attendance' }, x.attendeeIds.map(function (pid) {
           var rec = last[x.id + '|P|' + pid];
@@ -336,6 +402,8 @@ CH.views.meetingPanel = (function () {
           });
           return h('li', null, h('span', { text: app.model.nameOf(pid) }), sel);
         })));
+      d.addEventListener('toggle', function () { attOpen = d.open; });
+      return d;
     }
 
     function oneItem(x, items) {
@@ -430,7 +498,6 @@ CH.views.meetingPanel = (function () {
           else { delete nb.Id; delete nb.AuthorId; await app.sp.addToFolder('meetingItems', x.areaKey + '/MTG-' + x.id + '/Record', nb); }
           adding = false;
           openTitle = t;
-          agenda = null;
           fill();
           loadAgenda();
           CH.ui.toast(app.root, 'Added to the agenda.', 'ok');
@@ -564,15 +631,21 @@ CH.views.meetingPanel = (function () {
 
     function show(next) { view = next; fill(); var first = dlg.body.querySelector('textarea, input'); if (first) first.focus(); }
 
-    app.panel = { refresh: function () {
+    // Changes elsewhere (a request saved, the page read again) come in bursts while a meeting catches up: they are
+    // gathered into one quiet read, and never repaint over what someone is typing or choosing.
+    function refreshNow() {
+      refreshTimer = null;
       if (!dlg.isOpen()) return;
-      // the review before finalising follows the changes still being recorded
       if (view === 'finalise') { fill(); return; }
       if (view !== 'main') return;
-      // never over what someone is typing or choosing during the meeting: the next refresh catches up
       var active = document.activeElement;
-      if (active && dlg.body.contains(active) && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)) return;
-      agenda = null; fill(); loadAgenda();
+      if (active && dlg.body.contains(active) && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)) { refreshTimer = setTimeout(refreshNow, 2000); return; }
+      loadAgenda(true);
+    }
+    app.panel = { refresh: function () {
+      if (!dlg.isOpen()) return;
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(refreshNow, 600);
     } };
     fill();
     loadAgenda();

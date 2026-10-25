@@ -2,6 +2,15 @@
 
 Plain HTML, CSS and JavaScript, delivered as a Welcome by Accelerator 365 custom layout. Same-origin SharePoint REST runs as the signed-in user. There are no libraries and no external calls.
 
+## Version 1.2.2: a steady meeting screen (25 October 2026)
+
+- The live meeting no longer blanks and rebuilds each time something is saved. Changes arriving together are read
+  once, a little after the last; the screen is repainted only if what it shows has changed, and keeps its place:
+  the item on screen (found again by its key if the agenda is re-ordered when the flow fixes it), the scroll
+  position, the focused button and whether Attendance is open or closed.
+- Outcomes saved from the screen stay shown until a read includes them, so a read that started earlier can't flick
+  them off and on again.
+
 ## Version 1.2.1: meetings without waiting (25 October 2026)
 
 - **Start meeting** opens the live screen at once. Until the flow has fixed the agenda, the screen builds it by the

@@ -991,6 +991,46 @@ window.MockDrivers = (function () {
         fixed: /Item 1 of \d+ · Open actions/.test(fixed) && !/preview/.test(fixed) && fixed.indexOf('Spare cable order') >= 0, noStart: !byText('#ch-mt .btn', 'Start meeting'),
         instant: !started, kept: !!kept && kept.getAttribute('aria-pressed') === 'true' && q('#ch-mt-item-title').textContent === firstTitle };
     },
+    // going through the agenda fast while the start is still being saved: the screen never blanks, never jumps to
+    // another item by itself, and keeps every outcome; once it has caught up it stays still
+    meetingFastRun: async function () {
+      await until(function () { return q('#ch-mt .facts') && byText('#ch-mt .btn', 'Start meeting'); });
+      byText('#ch-mt .btn', 'Start meeting').click();
+      (await until(function () { return q('#ch-mt form.dialog-body'); })).dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-mt-progress') && q('#ch-mt .outcomes'); }, 10000);
+      var blanks = 0, repaints = 0, titles = [];
+      var obs = new MutationObserver(function (list) {
+        list.forEach(function (m) { if (m.target === q('#ch-mt .dialog-body') || (m.target.classList && m.target.classList.contains('dialog-body'))) repaints++; });
+        if (/Building the agenda/.test(q('#ch-mt').textContent)) blanks++;
+        var tt = q('#ch-mt-item-title');
+        if (tt && titles[titles.length - 1] !== tt.textContent) titles.push(tt.textContent);
+      });
+      obs.observe(q('#ch-mt'), { childList: true, subtree: true });
+      var clicked = [], withOutcome = 0;
+      for (var i = 0; i < 40; i++) {
+        var title = q('#ch-mt-item-title').textContent;
+        clicked.push(title);
+        var label = /Item (\d+) of (\d+)/.exec(q('#ch-mt-progress').textContent);
+        var ob = q('#ch-mt .outcomes') && byText('#ch-mt .outcomes button', 'Discussed');
+        if (ob) { ob.click(); withOutcome++; }
+        await wait(150);
+        if (label[1] === label[2]) break;
+        byText('#ch-mt .btn', 'Next item').click();
+        await until(function () { return q('#ch-mt-item-title') && q('#ch-mt-item-title').textContent !== title; }, 5000);
+        await wait(250);
+      }
+      var lastTitle = q('#ch-mt-item-title').textContent;
+      await until(function () { return MockSharePoint.data.Requests.some(function (r) { return r.RequestType === 'StartMeeting' && r.Status === 'Completed'; }); }, 120000);
+      await until(function () { return !q('#ch-mt .pending'); }, 120000);
+      await wait(1500);
+      var settled = repaints;
+      await wait(25000);
+      obs.disconnect();
+      var outcomes = MockSharePoint.data['Meeting Items'].filter(function (x) { return x.RowType === 'Outcome' && x.MeetingId === 2 && x.Outcome === 'Discussed'; }).length;
+      var pressed = all('#ch-mt .agenda-list .it').filter(function (b) { return /Discussed/.test(b.textContent); }).length;
+      return { blanks: blanks, titles: titles.length, clicked: clicked.length, stayed: q('#ch-mt-item-title').textContent === lastTitle,
+        outcomes: outcomes, pressed: pressed, withOutcome: withOutcome, idleRepaints: repaints - settled };
+    },
     // a meeting started straight after booking, before the booking is saved: it runs at once, and what is recorded follows it
     meetingBeforeBooked: async function () {
       (await until(function () { return byText('.hm-area .btn', 'Book a meeting'); })).click();
