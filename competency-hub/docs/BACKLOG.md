@@ -65,3 +65,12 @@ These were found on the site and agreed to wait until the next larger app change
       match the PDF layout.
     - **Fix the repeated content:** check the print stylesheet, which probably prints both the
       page and the dialog.
+11. **Overall clarity: too much in one place, and things are hard to find (25 Oct 2026).**
+    - **What happened:** the owner amended an action when they meant to amend the meeting
+      minutes.
+    - **Next app release, a simplification pass:**
+      - each screen has one job;
+      - the buttons name what they act on ("Amend these minutes", "Edit this action");
+      - each screen shows its main step, with the rest under More options;
+      - agenda items are labelled by kind (with 5, 6 and 9).
+    - **Before building:** agree it with the owner, and ideally a technician, on a preview first.
