@@ -33,3 +33,14 @@ These were found on the site and agreed to wait until the next larger app change
    - **Fix (flow):** when *2 Request queue* (and 4, 5, 6, 7 for their own areas) completes a
      request, set its own part of `QueueHealth` back to Healthy if it says Down.
    - **Test:** a simulator test that Down clears on the next completed request.
+4. **"Management" still shown in the Finalise dialog (25 Oct 2026).**
+   - Current wording: "Management can add amendments later". Change it to "Team Leaders
+     and the Group Head can add amendments later".
+   - Sweep all on-screen text again for "Management".
+5. **"Raise an action" on an agenda item that is already an action (25 Oct 2026).**
+   - Rename it **Raise a further action** on action items. Keep "Raise an action" on
+     notices, issues and new business.
+6. **Adding a new business item during a meeting is confusing (25 Oct 2026).**
+   - The item is added at the bottom, but the screen goes back to the start of "All items".
+   - Instead, the agenda should open the new item straight away, and "Add an item" should sit
+     beside the item list, not at the very bottom of the dialog.
