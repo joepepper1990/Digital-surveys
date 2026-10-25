@@ -2,6 +2,26 @@
 
 Plain HTML, CSS and JavaScript, delivered as a Welcome by Accelerator 365 custom layout. Same-origin SharePoint REST runs as the signed-in user. There are no libraries and no external calls.
 
+## Version 1.2.0: release 1.2, as approved in the preview (25 October 2026)
+
+- **Changes show at once** (`src/domain/optimistic.js`): every change still being saved is applied to the rows last
+  read, by request type, before the model is built. It is marked ✓ Sent, then ✓✓ Saved (which fades); it survives a
+  page reload, and simply stops showing if it is refused or fails. Your own change still saving no longer locks the
+  panel: the next one is sent against the revision the first leaves.
+- **One status line** under the bar replaces the request strip and the limited-mode banner (backlog 2).
+- **A refused change or a fault** gets a card with Try again and Dismiss. After a fault, Try again sets the same
+  request back to Submitted, and the flow resumes its stored copy, so it can never be made twice.
+- **Home:** Mark as done (then Reopen) on each to-do card; no summaries by the headings; an empty week is one line;
+  the feedback button is a white pill with an icon.
+- **Raise:** no area is guessed (backlog 12); a step line with a progress bar; the summary names the area.
+- **Notice and issue panels** fit the window, record and comments side by side (backlog 1); "More for this …" menus;
+  every button names what it acts on (backlog 11).
+- **Meetings:** items labelled by kind with only their own buttons; Close this action; Raise a further action; Turn
+  into an action; Add an item beside the agenda, opening the new item (backlog 5, 6, 9). Minutes as tables with
+  Open the PDF and Download PDF, Print only as the fallback (backlog 10); "Team Leaders and the Group Head" (backlog 4).
+- **Overview** as a badge table; **area tabs** carry their own buttons and kind labels.
+- **Faster:** a saved change re-reads only the lists it can alter. **Administration** shows *How long changes take*.
+
 ## Version 1.1.1 (24 October 2026)
 
 - After posting a notice on several noticeboards, the message names all of them (it named only the first).

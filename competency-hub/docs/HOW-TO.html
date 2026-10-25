@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ESG Competency Hub – next steps</title>
+<title>ESG Competency Hub – installing release 1.2</title>
 <style>
   body { font-family: Segoe UI, Arial, sans-serif; font-size: 16px; line-height: 1.5; color: #16222c; background: #fff; max-width: 860px; margin: 0 auto; padding: 24px 16px; }
   h1 { color: #13516b; font-size: 26px; margin-bottom: 4px; }
@@ -12,174 +12,155 @@
   ol > li { margin-bottom: 12px; }
   ul.sub { margin-top: 6px; }
   code { background: #eef2f5; padding: 1px 5px; border-radius: 4px; font-size: 15px; }
+  a { color: #13516b; font-weight: 600; }
   .note { background: #fff3d6; color: #6b4a00; padding: 10px 14px; border-radius: 6px; }
   .done { background: #e6f3eb; color: #1b5e37; padding: 10px 14px; border-radius: 6px; }
+  .rich { border: 2px solid #13516b; border-radius: 8px; padding: 4px 16px 10px; }
   table { border-collapse: collapse; width: 100%; }
   th, td { border-bottom: 1px solid #d9dfe5; padding: 6px 8px; text-align: left; vertical-align: top; }
 </style>
 </head>
 <body>
-<h1>ESG Competency Hub – where you are, and what's next</h1>
-<p>Updated 24 October 2026, afternoon. This starts from where you are now and lists only what is left to do, in order.</p>
+<h1>ESG Competency Hub – installing release 1.2</h1>
+<p>25 October 2026. Release 1.2 is the version you approved in the preview. Install it in the order below: Setup first, then the solution, then the app. Allow about 30 minutes, plus a short session with Rich.</p>
 
-<h2>Where you are</h2>
-<div class="done">
-  <ul>
-    <li><strong>Setup 1.4.2</strong> applied: the new columns, the type <em>Other</em>, and your Known as name (<em>Joe</em>).</li>
-    <li><strong>Solution 1.9.0.1</strong> imported. It fixes the queue monitor failing at <em>Inv_retry</em>.</li>
-    <li><strong>Solution 1.9.0.2</strong> (24 Oct): fixes adding a person stopping before their request folder is opened to them (Power Automate refuses an empty <code>createArray()</code>). Import it as an upgrade with the box unticked, then turn the same five flows back On.</li>
-    <li><strong>App 1.1.1</strong> installed: the footer says <em>version 1.1.1</em> and the top bar <em>Joe · Team Leader</em>.</li>
-    <li>Tried and working: raising, updating, extending, completing, status, edit, close and reopen; emails and 06:00 reminders; notices on two noticeboards with <em>Important for</em>; <em>Turn into an action</em>.</li>
-  </ul>
-</div>
-<p class="note">Co-owners and <em>Who checks it?</em> need a second person to choose, so they wait until the test account is added in Step 3.</p>
+<h2>What changes for people using the Hub</h2>
+<ul>
+  <li><strong>Changes show at once.</strong> When you raise, move, finish or change something, the screen shows it straight away, marked <strong>✓ Sent</strong>. When it is recorded, the mark turns into a green <strong>✓✓ Saved</strong>, which fades after a few seconds. You can carry on meanwhile; buttons don't disappear.</li>
+  <li><strong>One line under the top bar</strong> says <em>Everything is up to date</em>, or what is still saving. It replaces the yellow strips, so the page no longer jumps.</li>
+  <li><strong>If a change can't be saved</strong>, a card says why, with <strong>Try again</strong> and <strong>Dismiss</strong>, and the screen goes back to how the record really is. If someone else changed it first, nothing was changed. If the system had a fault, an administrator has been told. Trying again is safe either way: it can never make the change twice.</li>
+  <li><strong>Home:</strong> <em>Mark as done</em> on each to-do card (then <em>Reopen</em> if it was a slip). There are no summaries beside the headings, and a week with nothing in it is one line.</li>
+  <li><strong>Raise an action</strong> from the top bar no longer chooses an area for you (the Flask problem). Step 2 asks <em>Which area is it for?</em>, and the summary names the area in large type.</li>
+  <li><strong>Notices and issues</strong> fit the screen: the notice on the left, comments on the right. Less-used buttons are under <em>More for this notice</em> or <em>More for this issue</em>.</li>
+  <li><strong>Actions:</strong> <em>More for this action</em> holds <em>Edit this action</em>, <em>Give it to someone else</em>, <em>Change its status</em> and <em>Close this action</em>.</li>
+  <li><strong>Meetings:</strong>
+    <ul class="sub">
+      <li>Items are labelled <em>Action</em>, <em>Issue</em>, <em>Notice</em> or <em>Other business</em>, and each offers only its own buttons:
+        <ul class="sub">
+          <li>actions: <em>Close this action</em> and <em>Raise a further action</em>;</li>
+          <li>issues and notices: <em>Turn into an action</em>.</li>
+        </ul></li>
+      <li><em>+ Add an item</em> sits with the agenda, and the new item opens straight away.</li>
+      <li>Finalised minutes have <em>Open the PDF</em>, <em>Download PDF</em> and <em>Amend these minutes</em>.</li>
+      <li>The minutes and the PDF use people's Hub names. They list <em>Actions closed at this meeting</em>, and the actions raised at the meeting with their owner and due date.</li>
+    </ul></li>
+  <li><strong>Overview of all areas:</strong> the numbers are coloured badges; click any one to see exactly those actions. <strong>Area pages:</strong> each tab has its own buttons at the top.</li>
+  <li><strong>Administration</strong> gains <em>How long changes take</em>: for the last 7 days, how long each kind of change took to be picked up and saved.</li>
+</ul>
 
+<h2>What's in this zip</h2>
 <table>
-  <tr><th>In this zip</th><th>When</th></tr>
-  <tr><td><code>4-Permission-probe</code>: <code>CH_Probe_P2.html</code>, <code>CH_Probe_P2.js</code></td><td>Step 3</td></tr>
-  <tr><td><code>known-as.txt</code>, <code>GO-LIVE.html</code>, <code>STAFF-GUIDE.html</code></td><td>At go-live</td></tr>
+  <tr><th>Folder</th><th>Version</th><th>Step</th></tr>
+  <tr><td><code>1-Setup</code>: <code>CH_Setup.html</code>, <code>CH_Setup.js</code></td><td>Setup 1.4.3</td><td>1</td></tr>
+  <tr><td><code>2-Power-Automate</code>: <code>ESGCompetencyHub_1_9_0_4_unmanaged.zip</code></td><td>Solution 1.9.0.4</td><td>2</td></tr>
+  <tr><td><code>3-App</code>: <code>competency-hub.html</code>, <code>competency-hub.js</code></td><td>App 1.2.0</td><td>3</td></tr>
+  <tr><td><code>4-Permission-probe</code>: <code>CH_Probe_P2.html</code>, <code>CH_Probe_P2.js</code></td><td>Probe P2-2</td><td>5 (with Rich)</td></tr>
 </table>
 
-<h2>Step 1 – turn the flows back on (5 minutes)</h2>
-<p>An upgrade leaves the replaced flows <strong>Off</strong>: that is the "deactivated and replaced" message.</p>
+<h2>Step 1 – Setup 1.4.3: Check, then Apply</h2>
+<p>Setup 1.4.3 does by itself what you did by hand on 24 October: the <em>Competency Hub Pass-through</em> permission level on the Requests list, which stops the 404 for people who are not site owners. It recognises the level you made, so it won't make a second one. It also adds the outcome <em>Closed</em> to Meeting Items, which <em>Close this action</em> in a meeting needs.</p>
 <ol>
-  <li>In Power Automate open <strong>Solutions → ESG Competency Hub</strong> and turn <strong>On</strong>: <em>1 Daily tasks</em>, <em>2 Request queue</em>, <em>3 Queue monitor</em>, <em>4 Records</em> and <em>6 Administration</em>.</li>
-  <li>Leave <strong>Off</strong> for now: <em>5 Meetings</em> and <em>7 Minutes</em> (Steps 5 and 6 turn them on), <em>8 Clean-up</em> (go-live), and the two probes.</li>
-  <li>If one refuses to turn on, send me its error.</li>
-</ol>
-
-<h2>Step 2 – check the safety net</h2>
-<p><strong>When the monitor works.</strong> <em>3 Queue monitor</em> runs every 15 minutes. On weekdays 07:00–19:45 (the <em>Monitor hours</em> setting) every run does the work. At other times only the run just after the hour does it, for example 15:00–15:14; the others end at once and still show <em>Succeeded</em>. Clicking <strong>Run</strong> by hand follows the same rule.</p>
-<ol>
-  <li>After the next run that does the work, open <em>3 Queue monitor → Run history</em>: it should be <strong>Succeeded</strong>. If it failed, send me the failed step and its error.</li>
-  <li>In the Hub, open <strong>Administration</strong>: the first card should now say <em>Automatic processing is working</em>, and the yellow "has not reported yet" banner on the home page goes. Your earlier TEST action <em>TEST 2 Queue request OFF</em> should now be recorded.</li>
-  <li><strong>The stopped-queue test</strong> (optional; quicker on a weekday): turn <em>2 Request queue</em> <strong>Off</strong> and raise a TEST action. It shows <em>waiting to be recorded</em>.
+  <li>Open <a href="{SITE}/_layouts/15/viewlsts.aspx">Site contents</a>, then <em>Welcome Web Part - Custom Layouts</em>. Upload both files from <code>1-Setup</code> and choose <strong>Replace</strong> for each.</li>
+  <li>Open the <a href="{SITE}/SitePages/HubSetup.aspx">HubSetup page</a>. If you deleted it, make it again as before: a page called <code>HubSetup</code> with a Welcome web part and the layout <em>Competency Hub Setup</em>. Edit the web part, click <strong>Reset layout cache</strong>, republish, then press <strong>Ctrl+F5</strong>. The heading should say <em>Setup 1.4.3</em>.</li>
+  <li>Leave both optional boxes empty. Tick the Microsoft 365 group box, then click <strong>Check</strong>. Expect:
     <ul class="sub">
-      <li>At the first run that does the work (at least 10 minutes after you raised it), the monitor puts the request back in the queue. If it is still not picked up at the next such run, the monitor reports that changes aren't being processed: the app shows a banner and pauses the buttons that send changes. That is what staff would see. On a weekday this takes about 25–40 minutes; at a weekend about 2 hours.</li>
-      <li>Turn <em>2 Request queue</em> back <strong>On</strong>. The action is recorded without you doing anything else, and the banner goes at the next run that does the work.</li>
-    </ul></li>
-  <li>Send me a screenshot of the Administration page and the monitor's run history.</li>
-</ol>
-<p class="note">Reading and adding updates always keep working. If only <em>6 Administration</em> is off, staff carry on as normal and the Administration page says so.</p>
-
-<h2>Step 3 – administration and the permission probe</h2>
-<p>This needs <strong>one ordinary account</strong> that is not a site owner, for example a test account from IT or a colleague for one session. A site owner can't be used: owners bypass permissions, so every check would pass without proving anything.</p>
-<h3>Add the test account</h3>
-<ol>
-  <li><strong>Administration → People → Add people.</strong> Enter the test account's email, role <strong>Technician</strong>.</li>
-  <li>Tick <strong>Flask</strong> as a member (leave <em>Can run meetings</em> off), and tick <strong>Green Stream</strong> with <em>Can run meetings</em> <strong>on</strong>. Leave <em>Can post notices</em> on. Click <strong>Add this person</strong>; it shows <em>Done and verified</em> after a minute or two.</li>
-  <li>Open your own name in the list: it should say you can't change your own access.</li>
-</ol>
-<h3>Run the probe as the test account</h3>
-<ol>
-  <li>As yourself: upload both files from <code>4-Permission-probe</code> to <em>Welcome Web Part - Custom Layouts</em>, create a page <code>HubProbe2</code> with a Welcome web part, choose the layout <em>Competency Hub probe P2</em>, and publish it.</li>
-  <li>Open the page to the test account: <em>Site contents → Site Pages</em>, select <code>HubProbe2</code>, <em>… → Manage access → Advanced settings</em>, <em>Stop Inheriting Permissions</em>, then <em>Grant Permissions</em> to <em>Competency Hub – All Users</em> with <em>Read</em> (untick the email invitation). Don't use "Give access" or Share: that grants edit to one person.</li>
-  <li>Sign in as the <strong>test account</strong> (a private browser window is easiest) and open the <code>HubProbe2</code> page.</li>
-  <li>Click <strong>Run read checks</strong>, then <strong>Run write checks</strong>. The write checks wait for the flow, so allow up to 10 minutes. They add one TEST notice and up to two TEST requests, all marked as test records. The second request raises a TEST action for a Team Leader, so that person (you, if you're the first one listed) gets an "assigned to you" email.</li>
-  <li>Copy everything in the results box and send it to me. The box hides names, email addresses and the site address.</li>
-  <li><strong>Then, as yourself:</strong> in People, open the test account and turn <em>Can post notices</em> <strong>off</strong>, <em>Save changes</em>. Run the write checks again as the test account and send the results; the notice check should now show it is refused.</li>
-</ol>
-<h3>Tidy up</h3>
-<ol>
-  <li>Delete the probe files and the <code>HubProbe2</code> page.</li>
-  <li>Keep the test account until we've read the results. Then, in People, open it and choose <strong>Mark as left</strong>.</li>
+      <li>the Pass-through level <em>already in place</em>;</li>
+      <li>All Users with Pass-through on Requests <em>already in place</em>;</li>
+      <li>"Would add the choice Closed" on Meeting Items;</li>
+      <li>no Stopped rows.</li>
+    </ul>
+    Send me the log.</li>
+  <li>Type <code>SETUP</code> and click <strong>Apply</strong>. Then click <strong>Check</strong> again: it should report no changes. Send me both logs.</li>
 </ol>
 
-<h2>Step 4 – notices, the register, feedback, settings and the overview</h2>
-<p>All of this can be tried as yourself. Use <strong>TEST</strong> in titles so the clean-up in go-live clean-up can find them.</p>
-<h3>Notices and comments</h3>
+<h2>Step 2 – solution 1.9.0.4</h2>
 <ol>
-  <li>On the home page, open <strong>Flask</strong>. The middle column, <em>Notices &amp; issues</em>, now lists notices and open improvements and degradations. Click a notice: it opens in full.</li>
-  <li>Add a comment. It appears at once.</li>
-  <li><em>(Done 24 Oct.)</em> A TEST notice on <strong>two</strong> noticeboards with <em>Important for 1 week</em> shows on both, and <strong>Turn into an action</strong> fills in the title; once recorded, the notice lists the action under <em>Actions from this notice</em>.</li>
-  <li>Click <strong>Flag for the next meeting</strong>, then <strong>Withdraw the flag</strong>. Both are immediate; <em>Discussion history</em> lists them.</li>
-  <li>Click <strong>Pin</strong>, then <strong>Edit</strong> and change the title. Each shows <em>being recorded</em> and then the change, usually within two minutes.</li>
-  <li>On a comment, click <strong>Hide</strong>. It disappears once recorded.</li>
+  <li>Open <a href="https://make.powerautomate.com">Power Automate</a> and go to <strong>Solutions → Import solution</strong>. Choose <code>ESGCompetencyHub_1_9_0_4_unmanaged.zip</code> and import it as an <strong>upgrade</strong>, with <em>Enable plugin steps and flows</em> <strong>unticked</strong>, as before.</li>
+  <li>The upgrade leaves the replaced flows Off ("deactivated and replaced"). In <strong>Solutions → ESG Competency Hub</strong>, turn <strong>On</strong>:
+    <ul class="sub">
+      <li><em>1 Daily tasks</em>, <em>2 Request queue</em>, <em>3 Queue monitor</em>, <em>4 Records</em>;</li>
+      <li><em>5 Meetings</em>, <em>6 Administration</em>, <em>7 Minutes</em>.</li>
+    </ul>
+    Leave <em>8 Clean-up</em> and the two probes Off.</li>
+  <li><strong>7 Minutes has changed.</strong> It now runs by itself every 5 minutes, so it can no longer fall behind the way it did on Saturday. Your hand edit (<code>string('')</code>) is already in the new version, so there is nothing to redo.</li>
+  <li>If a flow refuses to turn on, send me its error.</li>
 </ol>
-<h3>Improvements and degradations</h3>
-<ol>
-  <li>In the Flask panel, click <strong>Raise an issue</strong>. Choose <em>Degradation</em> (the list also has <em>Other</em>), give a TEST title and description, and send it. There is no "Who is responsible": the person who raised it is shown. It appears in the list within two minutes as <em>REG-0000n</em>.</li>
-  <li>Open it. Click <strong>Turn into an action</strong> and raise a TEST action: it is listed under <em>Linked actions</em>. Or click <strong>Link an existing action</strong>.</li>
-  <li>Click <strong>Change status</strong>, choose <em>Resolved</em>: it asks for an outcome. Enter one and save.</li>
-  <li>The full area page has the same lists under <em>Notices &amp; issues</em>, with a filter for the register.</li>
-</ol>
-<h3>Feedback, settings and the dashboard</h3>
-<ol>
-  <li>Click <strong>Feedback</strong> at the bottom right of any page, send a TEST question, and wait for <em>Thanks – your feedback has been sent</em>.</li>
-  <li><strong>Administration → Feedback</strong>: your item is listed. Open it, write a response, set it to <em>Answered</em>.</li>
-  <li><strong>Administration → Settings</strong>: change <em>Due soon</em> from 7 to 10 days and back. Each change is recorded within a few minutes; try 40 to see it refused.</li>
-  <li><strong>Overview of all areas</strong> (in the top bar): click any number. The list underneath is exactly the actions that number counts.</li>
-  <li>Send me screenshots of the notice, the entry and the Overview of all areas page.</li>
-</ol>
-<p class="note">If <em>4 Records</em> is off, actions carry on as normal; changes to notices and the register are paused and the Administration page says so. Comments and flags still work, because they don't go through a flow.</p>
-
-<h2>Step 5 – meetings, invitations and the agenda</h2>
-<p>Invitations come from <strong>your calendar</strong>, with you as the organiser, so replies and acceptances come to you. You need the test colleague from Step 3 (or any colleague willing to receive three TEST emails).</p>
-<h3>First: the invitations probe</h3>
-<ol>
-  <li>In the solution, turn <em>ESG Competency Hub | P-INV Invitations probe</em> <strong>On</strong>, open it and click <strong>Run</strong>. Enter the colleague's email address and run it.</li>
-  <li>It makes a TEST event for tomorrow at 12:00 with the two of you, moves it to 13:00, finds it again by its hidden reference, and cancels it. Your colleague should get the invitation, the update and the cancellation, a few seconds apart.</li>
-  <li>Open the run and the last step, <em>Probe results</em>. Send me what it shows (it has no addresses in it), and ask your colleague what arrived.</li>
-  <li>Turn the probe <strong>Off</strong> again.</li>
-</ol>
-<p class="note">If the probe fails, go to <strong>Administration → Settings</strong> and set <em>Outlook invitations</em> to <strong>No</strong>. Meetings are still booked and shown; everyone adds them to their calendar with <em>Add to my calendar</em>. Nothing needs rebuilding.</p>
-<h3>Then: book, change, start and cancel</h3>
-<ol>
-  <li>Turn <em>ESG Competency Hub | 5 Meetings</em> <strong>On</strong>.</li>
-  <li>On the home page, open <strong>Flask</strong> and click <strong>Book a meeting</strong>. Choose a date this week, a TEST place, yourself as chair, and untick everyone except you and the test colleague (the attendees are Flask's members, so add your colleague to Flask first in People if they aren't). Click <strong>Book meeting</strong>. Within about two minutes it appears in the Flask panel and the week strip, and the invitation arrives.</li>
-  <li>Click the meeting. It shows <em>The Outlook invitation has gone to the attendees</em> and an agenda <strong>preview</strong>. Under the agenda, add a TEST item: it appears under <em>New business</em> at once.</li>
-  <li>Click <strong>Change</strong> and move it an hour. The update arrives in Outlook.</li>
-  <li>Click <strong>Start meeting</strong>. Within about two minutes the meeting shows <em>In progress</em> and the agenda is fixed: it no longer says <em>preview</em>.</li>
-  <li>Book a second TEST meeting and click <strong>Cancel meeting</strong>, giving a reason. The cancellation arrives.</li>
-  <li>On the first meeting, click <strong>Add to my calendar</strong>: a calendar file downloads and opens in Outlook.</li>
-  <li>Send me screenshots of the meeting before and after starting it.</li>
-</ol>
-<p class="note">If <em>5 Meetings</em> is off, booking pauses and the Administration page says so; everything else carries on.</p>
-
-<h2>Step 6 – run a meeting, finalise it, and the PDF minutes</h2>
-<h3>First: the PDF probe</h3>
-<ol>
-  <li>In the solution, turn <em>ESG Competency Hub | P-PDF PDF probe</em> <strong>On</strong>, open it and click <strong>Run</strong>. It asks for nothing.</li>
-  <li>It writes a sample page to your OneDrive, turns it into a PDF, saves it in the <em>Meeting Minutes</em> library as <code>TEST-PDF-probe-…pdf</code>, and removes the working file.</li>
-  <li>Open the run's last step, <em>Probe results</em>, and send me what it shows. Open the TEST PDF in Meeting Minutes and check it looks right, then delete it.</li>
-  <li>Turn the probe <strong>Off</strong> again.</li>
-</ol>
-<p class="note">If the probe fails (for example the data policy blocks OneDrive), go to <strong>Administration → Settings</strong> and set <em>PDF minutes</em> to <strong>No</strong>. Finalised minutes then have a <em>Print</em> button, and the browser's <em>Save as PDF</em> makes the PDF. Nothing needs rebuilding.</p>
-<h3>Then: a whole TEST meeting</h3>
-<ol>
-  <li>Turn <em>ESG Competency Hub | 7 Minutes</em> <strong>On</strong>.</li>
-  <li>Open the TEST meeting you started in Step 5 (or book and start a new one). As someone who runs Flask's meetings you now see the meeting <strong>one item at a time</strong>: choose an outcome, add notes, <strong>Save and next</strong>. Items for discussion are marked <em>Needs an outcome</em>.</li>
-  <li>Under <em>Attendance</em>, mark yourself Present and your colleague Apologies. Under <em>Decisions</em>, record a TEST decision.</li>
-  <li>On one item, click <strong>Raise an action</strong> and raise a TEST action. On an action item, click <strong>Open the action</strong> and close a TEST action. Both show <em>being recorded</em>.</li>
-  <li>Click <strong>Review and finalise</strong>. It lists anything still needing an outcome and any change still being recorded; once there is nothing, <strong>Finalise the minutes</strong>.</li>
-  <li>Within about two minutes the meeting shows <em>Minutes finalised</em>, with the minutes. Within a few more, <strong>Open the PDF</strong> and <strong>Download PDF</strong> appear. Check the PDF, and try <strong>Print</strong>.</li>
-  <li>As yourself (a Team Leader), click <strong>Amend the minutes</strong>, say what and why, and send it. The amendment appears with the minutes, and a second PDF (<code>-v2</code>) appears beside the first.</li>
-  <li>Open a notice that was discussed: its <em>Discussion history</em> lists the meeting and the outcome, and its flag is gone.</li>
-  <li>Send me screenshots of the live meeting, the review, and the minutes.</li>
-</ol>
-<p class="note">The PDF is made after the minutes are finalised, separately: if it fails, the minutes stand and can be read and printed, the queue monitor tries again, and after three failures the administrators get an email. If <em>7 Minutes</em> is off, finalising and amending pause; everything else carries on.</p>
-
-<h2>Step 7 – before go-live</h2>
-<ol>
-  <li>Post a TEST notice: until go-live it is marked as a test record, like everything the flows make.</li>
-  <li>Open <strong>Administration → Remove test data</strong> and look: it lists every record marked as a test, and underneath, the records made before marking existed, to tick. <strong>Don't confirm yet</strong> – that is a go-live step.</li>
-  <li>Follow <code>GO-LIVE.html</code> when you are ready to go live.</li>
-</ol>
-
-<h2>With the test account: co-owners and the close-out check</h2>
-<p>Any time after Step 3, while the test account is still in the Hub.</p>
-<ol>
-  <li>Raise a TEST action owned by yourself, choose the test account as a <strong>co-owner</strong>, and under <em>More options</em> tick <em>Needs a close-out check</em>: <em>Who checks it?</em> appears. Choose the test account: it can't be you here, because the owner never checks their own action.</li>
-  <li>Once recorded, the action's Who line lists the co-owner and who checks it.</li>
-  <li>As the test account: the action is in <em>My to-dos</em>; they can add an update, but are not offered <em>I need more time</em> or <em>Mark as done</em>.</li>
-  <li>As yourself, mark it done. The test account gets the "ready for your check" email and is offered <em>Confirm close-out</em>; so are Team Leaders and the Group Head.</li>
-</ol>
-
-<h2>Already done</h2>
-<div class="done">
-  <ul>
-    <li>Site, Setup 1.4.2 and the app shell; actions from raising to reopening; My to-dos; emails and 06:00 reminders; Known as; notices on several noticeboards; turn into an action.</li>
+<div class="note">Also fixed in 1.9.0.4:
+  <ul class="sub">
+    <li>"Automatic processing is not working" now clears as soon as the next change of that kind is saved.</li>
+    <li>The PDF minutes use Hub names, not "Pepper Joseph".</li>
   </ul>
 </div>
+
+<h2>Step 3 – app 1.2.0</h2>
+<ol>
+  <li>Open <a href="{SITE}/_layouts/15/viewlsts.aspx">Site contents</a>, then <em>Welcome Web Part - Custom Layouts</em>. Upload both files from <code>3-App</code> and choose <strong>Replace</strong> for each.</li>
+  <li>Open the <a href="{SITE}/SitePages/Hub.aspx">Hub</a>. Edit the web part, click <strong>Reset layout cache</strong>, republish, then press <strong>Ctrl+F5</strong>. The footer should say <em>version 1.2.0</em>, and a line under the top bar should say <em>Everything is up to date</em>.</li>
+</ol>
+
+<h2>Step 4 – try it (as yourself, about 15 minutes)</h2>
+<p>Use <strong>TEST</strong> in titles. Every change should show at once with ✓ Sent. ✓✓ Saved usually follows within 1–3 minutes: SharePoint passes changes to the flows every couple of minutes. You don't need to wait for it.</p>
+<ol>
+  <li><strong>Raise</strong> a TEST action from the top bar. Step 2 asks for the area: choose <em>Dosimetry</em>. The summary says <em>“…” in Dosimetry</em>. After sending, the action is in your to-dos at once with ✓ Sent, then ✓✓ Saved.</li>
+  <li>On its to-do card, click <strong>Mark as done</strong>. The card says <em>Done</em> and offers <em>Reopen</em>. Click <strong>Reopen</strong>: it comes back.</li>
+  <li>Open a TEST notice. The notice and its comments sit side by side, with no scrollbar.</li>
+  <li><strong>A meeting:</strong>
+    <ol class="sub">
+      <li>Book a TEST Flask meeting and start it.</li>
+      <li>The agenda is grouped as Actions, Issues, Notices and Other business.</li>
+      <li>On a TEST action, add a note and click <strong>Close this action</strong>: it shows <em>Closed</em>, and the action itself is closed.</li>
+      <li>Click <strong>+ Add an item</strong>: the new item opens.</li>
+      <li>Finalise. Within about 5 minutes the minutes show <em>Actions closed at this meeting</em> and <em>Actions raised at this meeting</em> (owner and due date), and <strong>Open the PDF</strong> appears. The PDF uses Hub names.</li>
+    </ol></li>
+  <li><strong>Administration</strong>, first tab: <em>How long changes take</em> lists the changes you just made. Send me a screenshot of it. It gives us real timings at last.</li>
+</ol>
+
+<h2>Step 5 – with Rich: the remaining checks</h2>
+<h3>You, before Rich starts</h3>
+<ol>
+  <li>Upload both files from <code>4-Permission-probe</code> to <em>Welcome Web Part - Custom Layouts</em> (<a href="{SITE}/_layouts/15/viewlsts.aspx">Site contents</a>), choosing <strong>Replace</strong>. Then open the <a href="{SITE}/SitePages/HubProbe2.aspx">HubProbe2 page</a>, click <strong>Reset layout cache</strong> on its web part, and republish. The page should say <em>P2-2</em>.</li>
+  <li>Send Rich the box below and this one link: <a href="{SITE}/SitePages/HubProbe2.aspx">{SITE}/SitePages/HubProbe2.aspx</a>.</li>
+</ol>
+<div class="rich">
+  <h3>For Rich</h3>
+  <ol>
+    <li>Open the link Joe sent. Press Ctrl+F5 once. The page should say P2-2.</li>
+    <li>Click Run read checks, then Run write checks. The write checks wait for the flow, so leave the page open for up to 10 minutes.</li>
+    <li>Copy everything in the results box and send it to Joe. Then wait until Joe says continue.</li>
+    <li>When Joe says continue, press Ctrl+F5, click Run write checks again, and send Joe the new results.</li>
+  </ol>
+</div>
+<ol start="3">
+  <li>When Rich's first results arrive, send them to me.</li>
+  <li><strong>Checkpoint B:</strong> in <strong>Administration → People</strong>, open <em>Richard Howe</em>, turn <em>Can post notices</em> <strong>off</strong>, and click <em>Save changes</em>. Wait for ✓✓ Saved, then tell Rich to continue. Send me his second results: the notice check should now be refused.</li>
+  <li><strong>Co-owners and the close-out check:</strong>
+    <ol class="sub">
+      <li>Raise a TEST action owned by yourself, with Rich as a <strong>co-owner</strong>.</li>
+      <li>Under <em>More options</em>, tick <em>Needs a close-out check</em> and choose Rich for <em>Who checks it?</em>.</li>
+      <li>Ask Rich to check two things:
+        <ul class="sub">
+          <li>The action is in his <em>My to-dos</em>.</li>
+          <li>He can add an update, but isn't offered <em>I need more time</em> or <em>Mark as done</em>.</li>
+        </ul></li>
+      <li>Mark it done yourself. Rich gets the "ready for your check" email and is offered <em>Confirm close-out</em>.</li>
+    </ol></li>
+  <li><strong>Afterwards:</strong> in People, give Rich his real areas: Green Stream, RPE, BA, Dosimetry, Radiological Protection and DSL. Turn <em>Can post notices</em> back <strong>on</strong> and click <em>Save changes</em>.</li>
+</ol>
+
+<h2>Leave as they are</h2>
+<div class="done">
+  <ul>
+    <li>The <em>Competency Hub Pass-through</em> level you made by hand, and its grant on Requests: Setup 1.4.3 recognises them.</li>
+    <li>Rich's own grant on his request folder (<code>u27</code>).</li>
+    <li>The flows' run history: nothing needs clearing.</li>
+  </ul>
+</div>
+
+<h2>Still to come</h2>
+<ul>
+  <li>Your review of the administration side.</li>
+  <li>Your question to IT about a premium licence, for faster saving. It isn't needed for 1.2.</li>
+  <li>Go-live: follow <code>GO-LIVE.html</code> from the earlier zip when you are ready.</li>
+</ul>
 </body>
 </html>

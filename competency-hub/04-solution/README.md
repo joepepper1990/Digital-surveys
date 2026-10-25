@@ -1,7 +1,18 @@
 # ESG Competency Hub – Power Automate solution
 
-`ESGCompetencyHub_1_8_0_2_unmanaged.zip` is the solution to import into Power Automate. It holds ten flows, which
-all ship **Off** so nothing runs until you turn them on:
+`ESGCompetencyHub_1_9_0_4_unmanaged.zip` is the solution to import into Power Automate. It holds ten flows, which
+all ship **Off** so nothing runs until you turn them on.
+
+**1.9.0.4 (25 October 2026), for app 1.2.0:**
+- *7 Minutes* runs every 5 minutes by itself instead of waiting for SharePoint's trigger, which fell behind.
+- A completed change sets its own part of `QueueHealth` back to healthy (backlog 3).
+- The sender's Try again after *Needs attention* resumes the same transaction; it can never be made twice.
+- An applied transaction keeps when its request was sent (`EventTime`), for the administrators' Timings.
+- PDF minutes use the Hub's names, list the actions closed at the meeting, and give the owner and due date of those
+  raised there (backlog 7, 8).
+- From 1.9.0.2 and 1.9.0.3: no empty `createArray()`, and no empty Set variable, which Power Automate refuses.
+
+The flows:
 
 | Flow | What it does |
 |---|---|

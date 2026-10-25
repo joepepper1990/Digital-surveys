@@ -1,5 +1,7 @@
 # Backlog – small fixes for the next substantial app release
 
+**All twelve are done in release 1.2 (app 1.2.0, solution 1.9.0.4, Setup 1.4.3; 25 October 2026).** Kept here as the record of what was found.
+
 These were found on the site and agreed to wait until the next larger app change.
 
 1. **Notice dialog scrolls at about 960 px window height (24 Oct 2026).**
