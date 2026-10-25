@@ -36,17 +36,17 @@ CH.app = (function () {
       return [
         app.stale ? h('p', { class: 'stale-copy', role: 'alert' }, h('b', { text: 'A newer version of the Competency Hub is available. ' }),
           'Press Ctrl+F5 to load it. Until then some buttons may not work.') : null,
-        // Limited mode (spec REL-5): only the changes that need automatic processing are paused.
-        app.queueBlocked() ? h('p', { class: 'stale-copy limited', role: 'alert' }, h('b', { text: 'Changes can\'t be processed at the moment. ' }),
-          'You can still read everything, add updates to actions and post notices. Raising and changing actions will be back shortly – nothing you have already sent is lost.') : null,
         h('header', { class: 'bar' }, h('div', { class: 'bar-in' },
           h('div', { class: 'brand' }, 'ESG Competency Hub', h('small', { text: 'Environmental Safety Group' })),
           C.ENVIRONMENT !== 'PRODUCTION' ? h('span', { class: 'env', text: C.ENVIRONMENT + ' – not live data' }) : null,
           app.person && app.model ? nav() : null,
           app.person && app.model && app.state.view === 'home' ? homeButtons() : null,
           app.person ? h('span', { class: 'who', text: CH.names.of(app.person) + ' · ' + app.person.Role }) : null)),
+        app.person && app.model ? statusLine() : null,
         h('main', { id: 'ch-main', tabindex: '-1' }, content),
+        app.person && app.model ? problems() : null,
         h('p', { class: 'toast', 'data-ch-live': true, role: 'status', 'aria-live': 'polite' }),
+        h('p', { class: 'sr-only', 'data-ch-said': true, role: 'status', 'aria-live': 'polite' }),
         // the feedback button sits in its own place in the footer, so it never covers anything (spec FB-1)
         h('footer', null, h('span'), h('span', { text: 'ESG Competency Hub · version ' + C.VERSION }),
           h('span', { class: 'fb-slot' }, app.person && app.model ? CH.views.feedback.bubble(app) : null))
@@ -68,8 +68,9 @@ CH.app = (function () {
       var acc = app.access;
       var first = acc.memberAreas[0] || (app.model.areas[0] && app.model.areas[0].key);
       return h('span', { class: 'bar-btns' },
-        acc.canPostNotice(first) ? CH.ui.button('Post a notice', function () { app.postNotice(first); }) : null,
-        acc.memberAreas.length || acc.isManagement ? CH.ui.button('Raise an action', function () { app.raiseAction(first); }, 'main') : null);
+        acc.canPostNotice(first) ? CH.ui.button('Post a notice', function () { app.postNotice(app.state.homeArea || first); }) : null,
+        // the area is never guessed: the open area, else the person chooses (backlog 12)
+        acc.memberAreas.length || acc.isManagement ? CH.ui.button('Raise an action', function () { app.raiseAction(app.state.homeArea || null); }, 'main') : null);
     }
 
     // On the home page the app fills the window exactly, so the page itself never scrolls. Small windows
@@ -123,31 +124,76 @@ CH.app = (function () {
       fitToWindow();
     }
 
-    // Raised actions being recorded, changes that were not accepted, and requests that never left the browser.
-    function requestStrip() {
-      if (!app.tracker) return null;
-      var items = app.tracker.entries().filter(function (e) {
-        if (e.dismissed) return false;
-        if (CH.requests.ADMIN_TYPES.indexOf(e.type) >= 0) return false;   // shown on the Administration page
-        if (e.type === 'RaiseAction' || e.type === 'RaiseRegisterEntry' || e.type === 'ScheduleMeeting') return e.state !== 'done';
-        return ['rejected', 'attention', 'cancelled', 'reverted'].indexOf(e.state) >= 0;
-      }).map(function (e) {
-        var waiting = e.state === 'submitted' || e.state === 'slow';
-        var how = { rejected: 'not accepted: ', attention: 'not recorded: ', cancelled: 'cancelled: ', reverted: 'reverted: ' }[e.state];
-        return h('li', { class: waiting ? 'pending' : 'section-note' }, h('b', { text: e.label }),
-          waiting ? ' – submitted ' + CH.dates.ukTime(e.submittedAt) + (e.retrying ? '. ' + e.message
-            : (e.processing ? ', being recorded now.' : ', waiting to be recorded (usually under 5 minutes).') + (e.state === 'slow' ? ' ' + e.message : ''))
-            : ' – ' + how + e.message + ' ',
-          waiting ? null : CH.ui.linkButton('Dismiss', function () { app.tracker.dismiss(e); }));
-      });
-      var unsent = app.tracker.unsent();
-      if (unsent.length) {
-        items.push(h('li', { class: 'section-note' }, h('b', { text: unsent.length === 1 ? '1 change was not sent. ' : unsent.length + ' changes were not sent. ' }),
-          'Your connection dropped before it reached SharePoint. ', CH.ui.linkButton('Send again', async function () {
-            try { await app.tracker.resend(); render(false); } catch (_) { CH.ui.toast(app.root, 'Still could not send. Try again in a moment.', 'info'); }
-          })));
+    // Changes the page shows itself (release 1.2); administrators' changes are followed on the Administration page.
+    function followed(e) { return CH.requests.ADMIN_TYPES.indexOf(e.type) < 0; }
+    function saving(e) { return e.state === 'submitted' || e.state === 'slow'; }
+
+    // One line under the bar, always there (so nothing below moves): what is still being saved, a pause in automatic
+    // processing, or requests a dropped connection kept back. Otherwise "Everything is up to date."
+    function statusLine() {
+      var entries = app.tracker ? app.tracker.entries().filter(function (e) { return followed(e) && saving(e); }) : [];
+      var unsent = app.tracker ? app.tracker.unsent() : [];
+      var text, kind = '', extra = null;
+      if (app.queueBlocked()) {
+        kind = 'down';
+        text = 'Changes can\'t be processed at the moment. You can still read everything, add updates and post notices – nothing you have sent is lost.';
+      } else if (unsent.length) {
+        kind = 'down';
+        text = (unsent.length === 1 ? '1 change was not sent' : unsent.length + ' changes were not sent') + ': your connection dropped before it reached SharePoint. ';
+        extra = CH.ui.linkButton('Send again', async function () {
+          try { await app.tracker.resend(); render(false); } catch (_) { CH.ui.toast(app.root, 'Still could not send. Try again in a moment.', 'info'); }
+        });
+      } else if (entries.length) {
+        kind = 'busy';
+        var e = entries[0];
+        var how = entries.some(function (x) { return x.retrying; }) ? ' – retrying automatically, you can carry on.'
+          : entries.some(function (x) { return x.state === 'slow'; }) ? ' – taking longer than usual, but it will be saved. You can carry on.' : ' – you can carry on.';
+        text = (entries.length === 1 ? '1 change still saving: ' + e.label : entries.length + ' changes still saving') + how;
+      } else {
+        text = 'Everything is up to date.';
       }
-      return items.length ? h('ul', { class: 'request-strip', 'aria-live': 'polite' }, items) : null;
+      return h('div', { class: 'status-line' + (kind ? ' ' + kind : ''), role: 'status', 'aria-live': 'polite' },
+        h('span', { class: 'dot', 'aria-hidden': 'true' }), h('span', { text: text }), extra);
+    }
+
+    // A change that was not saved: what happened, and Try again where that can work. Shown until dismissed.
+    function problems() {
+      if (!app.tracker) return null;
+      var list = app.tracker.entries().filter(function (e) {
+        return followed(e) && !e.dismissed && ['rejected', 'attention', 'cancelled', 'reverted'].indexOf(e.state) >= 0;
+      }).slice(-3);
+      if (!list.length) return null;
+      return h('div', { class: 'problems', role: 'alert' }, list.map(function (e) {
+        var text, again = false;
+        if (e.state === 'rejected') {
+          again = CH.requests.isConflict(e);
+          text = again ? 'Someone else changed this a moment ago, so your change was not applied. Nothing was changed – the screen shows it as it is now.'
+            : e.message + ' Nothing was changed.';
+        } else if (e.state === 'attention') {
+          again = true;
+          text = /locked|Not fully/i.test(e.message)
+            ? 'The Hub could not finish this change, and an administrator has been told. Part of it was made, so the record is locked until it is finished. Trying again is safe – it can never make the change twice.'
+            : 'The Hub could not process this change. Nothing was changed, and an administrator has been told. Trying again is safe – it can never make the change twice.';
+        } else {
+          text = e.message;
+        }
+        return h('div', { class: 'problem' }, h('b', { text: (e.state === 'cancelled' ? 'Cancelled: ' : e.state === 'reverted' ? 'Reverted: ' : 'Not saved: ') + e.label }),
+          h('p', { text: text }),
+          h('div', { class: 'row' },
+            again ? CH.ui.button('Try again', function () { tryAgain(e); }, 'main') : null,
+            CH.ui.button('Dismiss', function () { app.tracker.dismiss(e); })));
+      }));
+    }
+
+    async function tryAgain(e) {
+      var rec = e.targetType === 'Notice' ? app.model.noticeById[e.targetId] : e.targetType === 'Register Entry' ? app.model.entryById[e.targetId]
+        : e.targetType === 'Meeting' ? app.model.meetingById[e.targetId] : app.model.actionById[e.targetId];
+      try {
+        await app.tracker.retry(e, e.state === 'rejected' && rec && e.spec && e.spec.expectedRevision ? rec.revision : undefined);
+      } catch (error) {
+        CH.ui.toast(app.root, error.friendly || 'It could not be sent just now. Try again in a moment.', 'info');
+      }
+      render(false);
     }
 
     // Every few minutes: is automatic processing still working (or working again)? Repaints only on a change.
@@ -174,14 +220,21 @@ CH.app = (function () {
         if (entry.state === 'done' && app.state.view === 'admin') setTimeout(function () { CH.views.admin.refresh(app); }, 1500);
         return;
       }
-      if (entry.state !== 'done') { render(false); if (app.panel) app.panel.refresh(); return; }
+      if (entry.state !== 'done') {
+        rebuild();
+        render(false);
+        if (app.panel) app.panel.refresh();
+        return;
+      }
       reload().then(function () {
         render(false);
         if (app.panel) app.panel.refresh();
         var a = app.model.actionById[entry.resultId];
         var e = app.model.entryById[entry.resultId];
-        CH.ui.toast(app.root, entry.type === 'RaiseAction' && a ? a.ref + ' raised: ' + a.title + '.'
-          : entry.type === 'RaiseRegisterEntry' && e ? e.ref + ' raised: ' + e.title + '.' : entry.message, 'ok');
+        // a new record gets its number now; other changes just show ✓✓ Saved where they are (and are told to screen readers)
+        if (entry.type === 'RaiseAction' && a) CH.ui.toast(app.root, a.ref + ' raised: ' + a.title + '.', 'ok');
+        else if (entry.type === 'RaiseRegisterEntry' && e) CH.ui.toast(app.root, e.ref + ' raised: ' + e.title + '.', 'ok');
+        CH.ui.say(app.root, 'Saved: ' + entry.label + '. ' + entry.message);
       }).catch(function () { CH.ui.toast(app.root, entry.message + ' Reload the page to see it.', 'ok'); });
     }
 
@@ -228,26 +281,26 @@ CH.app = (function () {
     app.openNotice = function (n) { CH.views.recordPanel.openNotice(app, n.id); };
     app.openEntry = function (e) { CH.views.recordPanel.openEntry(app, e.id); };
     app.raiseEntry = function (key) { CH.views.entryForm.open(app, key); };
-    // "being recorded" and the like for a notice or entry in a list (kind: 'Notice' or 'Register Entry')
-    app.recordNote = function (kind, id) {
-      var e = app.tracker && app.tracker.forTarget(id, kind);
-      if (e && (e.state === 'submitted' || e.state === 'slow')) return 'change being recorded';
-      if (e && e.state === 'rejected') return 'change not accepted';
-      if (e && e.state === 'attention') return 'change not recorded';
-      return '';
+    // The mark beside a record (release 1.2): ✓ Sent while it is being saved, ✓✓ Saved for three seconds (it then fades),
+    // ✕ Not saved after a refusal or a fault. kind: 'Action', 'Notice', 'Register Entry' or 'Meeting'.
+    app.mark = function (rec, kind) {
+      if (!rec || !app.tracker) return null;
+      if (rec.sending) return h('span', { class: 'mark sent', title: 'Sent – being saved', text: '✓ Sent' });
+      var e = app.tracker.forRecord(rec.id, kind);
+      var since = e && e.state === 'done' && e.doneAt ? Date.now() - e.doneAt : Infinity;
+      if (since < 4000) {
+        return h('span', { class: 'mark saved', title: 'Saved', text: '✓✓ Saved', style: 'animation-delay:' + Math.round(3000 - since) + 'ms' });
+      }
+      if (e && !e.dismissed && (e.state === 'rejected' || e.state === 'attention')) return h('span', { class: 'mark refused', text: '✕ Not saved' });
+      if (rec.locked) return h('span', { class: 'mark sent', text: 'being updated' });
+      return null;
     };
+    app.markAction = function (a) { return app.mark(a, 'Action'); };
     // After an instant write (a flag, a comment): read the lists again and repaint, keeping any open panel.
     app.recordChanged = async function () {
       await reload();
       render(false);
       if (app.panel) app.panel.refresh();
-    };
-    app.pendingNote = function (a) {
-      var e = app.tracker && app.tracker.forTarget(a.id);
-      if (e && (e.state === 'submitted' || e.state === 'slow')) return 'change being recorded';
-      if (e && e.state === 'rejected') return 'change not accepted';
-      if (e && e.state === 'attention') return 'change not recorded';
-      return a.locked ? 'being updated' : '';
     };
     // keys: every noticeboard it was posted to (the first is where it is kept); all of them reads "every noticeboard"
     app.noticePosted = async function (key, keys) {
@@ -264,7 +317,8 @@ CH.app = (function () {
 
     function render(moveFocus) {
       if (!app.model) return;
-      var content = [requestStrip(), app.state.view === 'area' && app.model.areaByKey[app.state.area]
+      if (moveFocus && app.keep && Object.keys(app.keep).length) { app.keep = {}; rebuild(); }
+      var content = [app.state.view === 'area' && app.model.areaByKey[app.state.area]
         ? CH.views.area.render(app, app.state.area, app.state.tab)
         : app.state.view === 'mine' ? CH.views.myActions.render(app)
         : app.state.view === 'manage' ? CH.views.dashboard.render(app)
@@ -311,7 +365,29 @@ CH.app = (function () {
       // the "due soon" window an administrator sets (DueSoonDays, 1 to 30 days)
       var soon = (app.settings.filter(function (r) { return r.Title === 'DueSoonDays'; })[0] || {}).Value;
       CH.config.dueSoonDays = /^\d{1,2}$/.test(String(soon || '')) && Number(soon) >= 1 && Number(soon) <= 30 ? Number(soon) : 7;
-      app.model = CH.model.build(raw, app.people, app.access, today, now);
+      app.raw = raw;
+      rebuild();
+    }
+
+    // The model from the rows last read plus every change still being saved (CH.optimistic). Actions closed on this
+    // screen are kept, marked Done, until the person moves to another page.
+    function rebuild() {
+      if (!app.raw || !app.access) return;
+      var now = new Date();
+      var today = CH.dates.localDate(now);
+      var entries = app.tracker ? app.tracker.entries() : [];
+      app.keep = app.keep || {};
+      var view = CH.optimistic.apply(app.raw, entries, app.keep, { personId: app.person.SiteUserId, today: today, now: now });
+      entries.forEach(function (e) {
+        var closing = e.type === 'MarkComplete' || e.type === 'CloseAction';
+        if (closing && saving(e)) {
+          var row = (view.actions.rows || []).filter(function (r) { return Number(r.Id) === Number(e.targetId); })[0];
+          if (row && row.Status === 'Closed') app.keep[e.targetId] = Object.assign({}, row, { _sending: '' });
+        }
+        if (closing && ['rejected', 'attention', 'cancelled'].indexOf(e.state) >= 0) delete app.keep[e.targetId];
+        if (e.type === 'ReopenAction' && e.state === 'done') delete app.keep[e.targetId];
+      });
+      app.model = CH.model.build(view, app.people, app.access, today, now);
     }
 
     async function start() {
@@ -349,6 +425,7 @@ CH.app = (function () {
       app.tracker = CH.requests.tracker(app, onRequestChange);
       try {
         await Promise.all([reload(), app.tracker.resume().catch(function () { return 0; })]);
+        rebuild();   // the changes still being saved, read back with the requests, show again
       } catch (error) {
         stateScreen('The Competency Hub could not load', 'Some of the information could not be read. Please reload the page in a few minutes.',
           'Details for the administrator: ' + (error.status ? 'HTTP ' + error.status : error.message));

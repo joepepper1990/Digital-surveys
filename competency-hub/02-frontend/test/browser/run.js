@@ -147,9 +147,12 @@ res = drive('as=' + RICHARD + '&drive=raiseAction', SLOW);
 check('raise: empty title and a past date are refused, in plain words', res.ok && /Enter what needs doing/.test(res.result.emptyError) && /past/.test(res.result.pastError), JSON.stringify(res));
 check('raise: an engineer\'s owner list holds area members and management, with "(you)"', res.ok && res.result.owners.some((o) => /Richard Harrisson \(you\)/.test(o)) &&
   res.result.owners.some((o) => /Robert Starbuck – Group Head/.test(o)) && res.result.owners.length > 5, JSON.stringify(res && res.result && res.result.owners));
-check('raise: summary shown, then "being recorded" until the flow confirms it', res.ok && /Order replacement smear papers/.test(res.result.summary) &&
-  /(being|to be) recorded/.test(res.result.stripText), JSON.stringify(res));
-check('raise: the new action appears once confirmed, and the note goes', res.ok && res.result.listed && res.result.stripGone && res.result.request.status === 'Completed', JSON.stringify(res));
+check('raise from the top bar: no area is chosen for you, one must be chosen; the step line says where you are', res.ok && res.result.areaBefore === '' &&
+  /Choose the area this action belongs to/.test(res.result.areaError) && /Step 2 of 4 · Who and where – next: by when/.test(res.result.stepLine) &&
+  /“Order replacement smear papers” in Green Stream/.test(res.result.summary), JSON.stringify(res));
+check('raise: summary shown, then the new action at once, marked ✓ Sent until the flow confirms it', res.ok && /Order replacement smear papers/.test(res.result.summary) &&
+  /✓ Sent/.test(res.result.stripText), JSON.stringify(res));
+check('raise: once confirmed it keeps its place and the ✓ Sent mark goes', res.ok && res.result.listed && res.result.stripGone && res.result.request.status === 'Completed', JSON.stringify(res));
 check('raise: once confirmed, the new action opens on click without a reload', res.ok && res.result.reachable && res.result.opens, JSON.stringify(res));
 check('raise: the only write is a request in the user\'s own folder', res.ok && res.result.writes.length === 1 && res.result.writes[0].list === 'Requests' &&
   res.result.writes[0].folder === 'u' + RICHARD && res.result.request.type === 'RaiseAction', JSON.stringify(res && res.result && res.result.writes));
@@ -158,12 +161,14 @@ check('action panel: what, who and when in plain words, with the original deadli
   /Owner: Rachel Boulden/.test(res.result.before) && /Deadline moved once \(was/.test(res.result.before), JSON.stringify(res && res.result && res.result.before));
 check('update: saved instantly into the action\'s own folder and listed', res.ok && res.result.writes[0].list === 'Updates' && res.result.writes[0].folder === 'FLK/A40', JSON.stringify(res));
 check('extend: a short reason is refused; the effect is explained', res.ok && /10 characters/.test(res.result.reasonError) && /The new deadline will be/.test(res.result.effect), JSON.stringify(res));
-check('extend: pending while recorded, buttons disabled, then the history shows both changes', res.ok && /(being|to be) recorded/.test(res.result.pending) &&
-  res.result.buttonsDisabled && /Show all deadline changes \(2\)/.test(res.result.after) && res.result.history === 2, JSON.stringify(res));
+check('extend: the new deadline shows at once with ✓ Sent, the buttons stay, the status line says it is saving; then ✓✓ Saved and the history shows both changes', res.ok &&
+  /✓ Sent/.test(res.result.pending) && /Deadline moved 2 times/.test(res.result.shownAtOnce) && !res.result.buttonsDisabled && /1 change still saving: New deadline/.test(res.result.status) &&
+  /✓✓ Saved/.test(res.result.saved) && /Everything is up to date/.test(res.result.statusAfter) &&
+  /Show all deadline changes \(2\)/.test(res.result.after) && res.result.history === 2, JSON.stringify(res));
 res = drive('as=' + RACHEL + '&action=40&drive=reloadWhilePending', SLOW);
-check('reload while an extension is recorded: the note comes back, then clears once confirmed', res.ok && /change being recorded/.test(res.result.noteAfterReload) &&
+check('reload while an extension is being saved: the change and its ✓ Sent come back, then the mark clears once confirmed', res.ok && /✓ Sent/.test(res.result.noteAfterReload) &&
   res.result.confirmedNoteGone, JSON.stringify(res));
-check('reload while a raised action is recorded: the strip comes back, and the new action opens on click', res.ok && /(being|to be) recorded/.test(res.result.stripAfterReload) &&
+check('reload while a raised action is being saved: it shows again with ✓ Sent, and once saved opens on click', res.ok && /✓ Sent/.test(res.result.stripAfterReload) &&
   res.result.reachable && res.result.opened, JSON.stringify(res));
 res = drive('as=' + RACHEL + '&drive=staleCopy&stamp=0.0.1');
 check('an old copy of an app file is reported, with Ctrl+F5', res.ok && /Ctrl\+F5/.test(res.result.banner), JSON.stringify(res));
@@ -172,8 +177,15 @@ check('matching files: no old-copy banner', res.ok && res.result.banner === '', 
 res = drive('as=' + RACHEL + '&action=53&drive=markDone', SLOW);
 check('mark as done: explained, then the action is closed', res.ok && /will be closed/.test(res.result.explain) && res.result.status === 'Closed', JSON.stringify(res));
 res = drive('as=' + RACHEL + '&action=40&drive=staleRevision', SLOW);
-check('a change based on an old version is refused with the plain message, and nothing changes', res.ok &&
-  /updated by someone else/.test(res.result.panel) && res.result.status === 'In Progress', JSON.stringify(res));
+check('a change based on an old version: shown at once, then refused in plain words with Try again; the screen goes back to the action as it is', res.ok &&
+  /Closed/.test(res.result.atOnce) && /Someone else changed this a moment ago/.test(res.result.panel) && JSON.stringify(res.result.buttons) === '["Try again","Dismiss"]' &&
+  /I need more time/.test(res.result.panel) && res.result.status === 'In Progress', JSON.stringify(res));
+res = drive('as=' + RACHEL + '&action=53&mode=faultOnce&drive=faultTryAgain', SLOW);
+check('a system fault: the change goes back, a card says an administrator has been told and that trying again is safe', res.ok &&
+  /could not process this change/.test(res.result.cardText) && /an administrator has been told/.test(res.result.cardText) && /can never make the change twice/.test(res.result.cardText) &&
+  res.result.reverted, JSON.stringify(res));
+check('Try again after a fault resumes the same request (no second one), and it is saved', res.ok && JSON.stringify(res.result.requests) === '["MarkComplete:Completed"]' &&
+  res.result.status === 'Closed' && JSON.stringify(res.result.writes) === '["Requests","Requests:update"]', JSON.stringify(res));
 // Finishing actions (plan K9): status, reassign, close and reopen, edit, close-out, My actions
 const KELLY = 102, CRAIG = 105;
 res = drive('as=' + RACHEL + '&action=40&drive=statusBlocker', SLOW);
@@ -261,7 +273,7 @@ check('screenshots written', fs.readdirSync(SHOTS).filter((f) => f.endsWith('.pn
 
 // Safety net (spec REL-2, REL-3, REL-5)
 res = drive('as=' + RACHEL + '&mode=limited&drive=limitedMode');
-check('limited mode: a banner explains that changes are paused and nothing is lost', res.ok && /can't be processed at the moment/.test(res.result.banner) && /nothing you have already sent is lost/.test(res.result.banner), JSON.stringify(res));
+check('limited mode: the status line explains that changes are paused and nothing is lost', res.ok && /can't be processed at the moment/.test(res.result.banner) && /nothing you have sent is lost/.test(res.result.banner), JSON.stringify(res));
 check('limited mode: raising is not offered, with a plain message', res.ok && !res.result.raiseOpened && /Raising actions is paused/.test(res.result.toast), JSON.stringify(res));
 check('limited mode: only "Add an update" stays available in an action', res.ok && res.result.buttons.every((b) => b[1] === (b[0] !== 'Add an update')) && /You can still add an update/.test(res.result.note) && res.result.writes === 0, JSON.stringify(res));
 res = drive('as=' + RACHEL + '&mode=flowFail&drive=retrying', SLOW);

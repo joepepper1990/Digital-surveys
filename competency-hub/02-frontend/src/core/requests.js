@@ -86,7 +86,7 @@ CH.requests = (function () {
       }
       writeUnsent(readUnsent().filter(function (u) { return u.key !== spec.key; }));
       var entry = { key: spec.key, type: spec.type, targetId: spec.targetId || null, meetingId: values(spec).MeetingId || null, targetType: spec.targetId ? spec.targetType || 'Action' : '', label: spec.label, submittedAt: new Date(),
-        state: 'submitted', message: '', resultId: null, polls: 0 };
+        state: 'submitted', message: '', resultId: null, polls: 0, payload: spec.payload, spec: spec };
       entries.push(entry);
       schedule(entry);
       onChange(entry);
@@ -102,14 +102,17 @@ CH.requests = (function () {
       var since = new Date(Date.now() - 24 * 3600000).toISOString();
       for (var i = 0; i < statuses.length; i++) {
         var recent = statuses[i] === 'Cancelled' || statuses[i] === 'Reverted' ? " and Modified ge datetime'" + since + "'" : '';
-        var res = await app.sp.items(CH.config.lists.requests.title, '$select=Id,Title,RequestKey,RequestType,TargetType,TargetId,MeetingId,Created' +
+        var res = await app.sp.items(CH.config.lists.requests.title, '$select=Id,Title,RequestKey,RequestType,TargetType,TargetId,MeetingId,Created,Payload,ExpectedRevision' +
           "&$filter=Status eq '" + statuses[i] + "' and AuthorId eq " + Number(app.person.SiteUserId) + recent, 100);
         found = found.concat(res.rows);
       }
       found.sort(function (a, b) { return a.Id - b.Id; }).forEach(function (row) {
         if (!row.RequestKey || entries.some(function (e) { return e.key === row.RequestKey; })) return;
+        var payload = null;
+        try { payload = JSON.parse(row.Payload || 'null'); } catch (_) { payload = null; }
         var entry = { key: row.RequestKey, type: row.RequestType, targetId: row.TargetId || null, meetingId: row.MeetingId || null, targetType: row.TargetType || (row.TargetId ? 'Action' : ''), label: row.Title || 'Your change',
-          submittedAt: row.Created ? new Date(row.Created) : new Date(), state: 'submitted', message: '', resultId: null, polls: 0 };
+          submittedAt: row.Created ? new Date(row.Created) : new Date(), state: 'submitted', message: '', resultId: null, polls: 0, payload: payload,
+          spec: { type: row.RequestType, targetId: row.TargetId || null, targetType: row.TargetType || '', expectedRevision: row.ExpectedRevision || '', payload: payload, label: row.Title || 'Your change', meetingId: row.MeetingId || '' } };
         entries.push(entry);
         schedule(entry);
       });
@@ -190,6 +193,7 @@ CH.requests = (function () {
     function settle(entry, state, message) {
       entry.state = state;
       entry.message = message;
+      if (state === 'done') entry.doneAt = Date.now();
       onChange(entry);
       if (state === 'attention') watchAttention(entry);
     }
@@ -218,14 +222,48 @@ CH.requests = (function () {
       }, 5 * 60000));
     }
 
+    // Try again (release 1.2). A change that failed on the system's side is the same request set back to Submitted: the
+    // flow resumes its stored copy, so it can never be made twice. A refused change (someone else changed the record
+    // first) is sent again as a new request, against the record as it is now (revision: the record's current revision).
+    async function retry(entry, revision) {
+      if (entry.state === 'attention' && ADMIN_TYPES.indexOf(entry.type) < 0) {
+        var row = await findRequest(entry.key);
+        if (!row) throw new Error('The change could not be found.');
+        await app.sp.update('requests', row.Id, { Status: 'Submitted' });
+        entry.state = 'submitted';
+        entry.message = '';
+        entry.retrying = false;
+        entry.dismissed = false;
+        entry.polls = 0;
+        entry.submittedAt = new Date();
+        onChange(entry);
+        schedule(entry);
+        return entry;
+      }
+      if (entry.state !== 'rejected' || !entry.spec) throw new Error('This change cannot be tried again.');
+      var spec = Object.assign({}, entry.spec, { key: null });
+      if (revision !== undefined && revision !== null) spec.expectedRevision = revision;
+      entry.dismissed = true;
+      return submit(spec);
+    }
+
     return {
       submit: submit,
       resume: resume,
+      retry: retry,
       entries: function () { return entries.slice(); },
       // The newest unfinished or unread request for a record (an action unless another kind is named).
       forTarget: function (id, targetType) {
         var kind = targetType || 'Action';
         return entries.filter(function (e) { return Number(e.targetId) === Number(id) && (e.targetType || 'Action') === kind && !e.dismissed; }).slice(-1)[0] || null;
+      },
+      // The newest change for a record, including the one that created it (a raise is found by the id it was given).
+      forRecord: function (id, targetType) {
+        var kind = targetType || 'Action';
+        var made = { 'Action': 'RaiseAction', 'Register Entry': 'RaiseRegisterEntry', 'Meeting': 'ScheduleMeeting' }[kind];
+        return entries.filter(function (e) {
+          return (Number(e.targetId) === Number(id) && (e.targetType || 'Action') === kind) || (e.type === made && e.state === 'done' && Number(e.resultId) === Number(id));
+        }).slice(-1)[0] || null;
       },
       dismiss: function (entry) { entry.dismissed = true; onChange(entry); },
       unsent: readUnsent,
@@ -241,6 +279,9 @@ CH.requests = (function () {
 
   var RETRYING = 'Not recorded yet – retrying automatically.';
 
-  return { tracker: tracker, newKey: newKey, SCHEDULE: SCHEDULE, GIVE_UP_MINUTES: GIVE_UP_MINUTES, ADMIN_TYPES: ADMIN_TYPES, RECORD_TYPES: RECORD_TYPES, MEETING_TYPES: MEETING_TYPES,
+  // A refusal because someone else changed the record first (or is changing it now): trying again can work.
+  function isConflict(entry) { return /someone else|being updated/i.test(String(entry && entry.message || '')); }
+
+  return { tracker: tracker, newKey: newKey, isConflict: isConflict, SCHEDULE: SCHEDULE, GIVE_UP_MINUTES: GIVE_UP_MINUTES, ADMIN_TYPES: ADMIN_TYPES, RECORD_TYPES: RECORD_TYPES, MEETING_TYPES: MEETING_TYPES,
     LimitedError: LimitedError, RETRYING: RETRYING };
 })();

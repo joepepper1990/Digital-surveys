@@ -31,7 +31,9 @@ test('S6/S8: writes go only to notices, updates, feedback, meeting record folder
   // The one edit the app makes directly: administrators answering feedback (only they may edit that list).
   assert.equal((all.match(/ValidateUpdateListItem/g) || []).length, 1, 'only sp.update edits an item');
   const updates = all.match(/\.update\('(\w+)'/g) || [];
-  assert.deepEqual([...new Set(updates)], [".update('feedback'"]);
+  // feedback (administrators answering it), and Try again on the person's own request (Status back to Submitted, release 1.2)
+  assert.deepEqual([...new Set(updates)].sort(), [".update('feedback'", ".update('requests'"]);
+  assert.match(all, /app\.sp\.update\('requests', row\.Id, \{ Status: 'Submitted' \}\)/);
   // Every call names its list literally, so the allow-list above is complete.
   const calls = all.match(/\.addToFolder\([^)]{0,20}/g) || [];
   assert.ok(calls.length >= 3 && calls.every((c) => /\.addToFolder\('/.test(c)), calls.join(' | '));

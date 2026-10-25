@@ -111,6 +111,8 @@ CH.model = (function () {
       var dueIso = D.fromDueDay(r.DueDay);
       var waitingCloseOut = r.Status === 'Completed';
       var words = waitingCloseOut ? { group: 'later', text: 'Waiting for close-out check' } : D.dueWords(dueIso, today);
+      // closed just now on this screen: it stays where it was, marked Done, until the person moves on (release 1.2)
+      var keptDone = r.Status === 'Closed' && !!r._keep;
       return {
         id: r.Id, ref: 'ACT-' + ('0000' + r.Id).slice(-5), title: r.Title,
         areaKey: primary ? primary.key : '', areaName: primary ? primary.name : 'Unknown area',
@@ -123,14 +125,16 @@ CH.model = (function () {
         description: r.Description || '', priority: r.Priority || 'Normal', requiresCloseOut: !!r.RequiresCloseOut,
         raisedIso: r.DateRaised ? D.localDate(r.DateRaised) : '', raisedByName: nameOf(r.RaisedById),
         revision: Number(r.Revision) || 1, dueDay: Number(r.DueDay), locked: !!r.PendingRequestKey,
-        waitingCloseOut: waitingCloseOut, group: r.Status === 'Closed' ? 'done' : words.group,
-        dueText: r.Status === 'Closed' ? 'Closed' : words.text,
+        waitingCloseOut: waitingCloseOut, group: r.Status === 'Closed' && !keptDone ? 'done' : words.group,
+        dueText: keptDone ? 'Done' : r.Status === 'Closed' ? 'Closed' : words.text, done: r.Status === 'Closed',
+        // still being saved (✓ Sent), and a new one the flow has not numbered yet (a temporary negative id)
+        sending: r._sending || '', isNew: !!r._new,
         blocker: r.Status === 'Awaiting Input' ? (r.Blocker || '') : '', closeOutcome: r.CloseOutcome || '', closureNote: r.ClosureNote || '',
         closedIso: r.DateClosed ? D.localDate(r.DateClosed) : '',
         sourceType: r.SourceType || 'None', sourceId: r.SourceId ? Number(r.SourceId) : null
       };
     }
-    var actions = (raw.actions.rows || []).filter(function (r) { return !isUncommitted(r) && r.Status !== 'Closed'; }).map(actionFrom);
+    var actions = (raw.actions.rows || []).filter(function (r) { return !isUncommitted(r) && (r.Status !== 'Closed' || r._keep); }).map(actionFrom);
     function inArea(action, key) { return action.areaKey === key || action.linkedKeys.indexOf(key) >= 0; }
 
     // Notices: the area is the folder the item sits in, not a typed value.
@@ -154,7 +158,7 @@ CH.model = (function () {
         createdIso: createdIso, created: n.Created, important: important, pinned: pinned,
         importantDays: n.ImportantDays ? Number(n.ImportantDays) : null, areaKeys: areaKeys, shownAll: shownAll,
         // notices posted before the Revision column existed have none: they are then sent without a stale check
-        revision: Number(n.Revision) || 0, lastRequestKey: n.LastRequestKey || ''
+        revision: Number(n.Revision) || 0, lastRequestKey: n.LastRequestKey || '', sending: n._sending || ''
       };
     }).filter(function (n) { return !!areaByKey[n.areaKey]; })
       .sort(function (a, b) { return String(b.created).localeCompare(String(a.created)); });
@@ -170,7 +174,7 @@ CH.model = (function () {
         responsibleId: e.ResponsiblePersonId, responsibleName: e.ResponsiblePersonId ? nameOf(e.ResponsiblePersonId) : '',
         raisedIso: e.DateRaised ? D.localDate(e.DateRaised) : (e.Created ? D.localDate(e.Created) : ''),
         resolvedIso: e.DateResolved ? D.localDate(e.DateResolved) : '', revision: Number(e.Revision) || 1,
-        open: e.Status === 'Open' || e.Status === 'Under Review'
+        open: e.Status === 'Open' || e.Status === 'Under Review', sending: e._sending || '', isNew: !!e._new
       };
     }).filter(function (e) { return !!areaByKey[e.areaKey]; })
       .sort(function (a, b) { return b.id - a.id; });
@@ -234,7 +238,8 @@ CH.model = (function () {
         cancellationReason: m.CancellationReason || '', cutoff: m.CutoffTime || '', intervalStart: m.IntervalStart || '',
         previousId: m.PreviousMeetingId ? Number(m.PreviousMeetingId) : null, locked: isUncommitted(m), cutoffUpdatesId: Number(m.CutoffUpdatesId) || 0,
         finalisedIso: m.FinalisedAt ? D.localDate(m.FinalisedAt) : '', finalisedByName: m.FinalisedById ? nameOf(m.FinalisedById) : '',
-        amendments: Number(m.AmendmentCount) || 0, pdfState: m.PdfState || 'None', pdfVersion: Number(m.PdfVersion) || 0
+        amendments: Number(m.AmendmentCount) || 0, pdfState: m.PdfState || 'None', pdfVersion: Number(m.PdfVersion) || 0,
+        sending: m._sending || '', isNew: !!m._new
       };
     }
     var meetings = (raw.meetings.rows || []).filter(function (m) { return !isUncommitted(m); }).map(meetingFrom)
@@ -259,7 +264,7 @@ CH.model = (function () {
 
     var stats = {};
     areas.forEach(function (a) {
-      var list = actions.filter(function (x) { return inArea(x, a.key); });
+      var list = actions.filter(function (x) { return inArea(x, a.key) && !x.done; });
       var m = meetingsByArea[a.key] || { next: null, last: null };
       // Overdue once the gap since the last meeting, or since tracking started, exceeds the limit.
       var since = m.last || a.trackingStart;

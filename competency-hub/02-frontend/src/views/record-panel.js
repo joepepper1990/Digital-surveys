@@ -20,16 +20,15 @@ CH.views.recordPanel = (function () {
   }
 
   function pendingLine(app, id, kind, locked) {
+    // release 1.2: the change already shows; this line says it is on its way. A refusal has its own card, with Try again.
     var entry = app.tracker.forTarget(id, kind);
+    var rec = kind === 'Notice' ? app.model.noticeById[id] : app.model.entryById[id];
     if (entry && (entry.state === 'submitted' || entry.state === 'slow')) {
-      return h('p', { class: 'pending', role: 'status' }, h('b', { text: entry.label }), ' – submitted ' + D.ukTime(entry.submittedAt) +
-        (entry.retrying ? '. ' + entry.message : ', being recorded (usually under 5 minutes).'));
+      return h('p', { class: 'pending', role: 'status' }, app.mark(rec || { sending: true }, kind), ' ' + entry.label + ' – ' + (entry.retrying ? entry.message : 'you can carry on.'));
     }
-    var heading = { rejected: 'Not accepted: ', attention: 'Not recorded: ', cancelled: 'Cancelled: ', reverted: 'Reverted: ' }[entry && entry.state];
-    if (heading) {
-      return h('div', { class: 'section-note', role: 'alert' }, h('b', { text: heading }), entry.message + ' ', ui.linkButton('Dismiss', function () { app.tracker.dismiss(entry); }));
-    }
-    return locked ? h('p', { class: 'pending', role: 'status', text: 'Being updated… Try again in a minute.' }) : null;
+    if (locked) return h('p', { class: 'pending', role: 'status', text: 'Being updated… Try again in a minute.' });
+    var mark = app.mark(rec, kind);
+    return mark ? h('p', { class: 'mark-line' }, mark) : null;
   }
 
   function busy(app, id, kind) {

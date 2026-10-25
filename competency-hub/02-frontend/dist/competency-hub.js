@@ -422,7 +422,7 @@ window.ESGCompetencyHub = function (ctx) {
         }
         writeUnsent(readUnsent().filter(function (u) { return u.key !== spec.key; }));
         var entry = { key: spec.key, type: spec.type, targetId: spec.targetId || null, meetingId: values(spec).MeetingId || null, targetType: spec.targetId ? spec.targetType || 'Action' : '', label: spec.label, submittedAt: new Date(),
-          state: 'submitted', message: '', resultId: null, polls: 0 };
+          state: 'submitted', message: '', resultId: null, polls: 0, payload: spec.payload, spec: spec };
         entries.push(entry);
         schedule(entry);
         onChange(entry);
@@ -438,14 +438,17 @@ window.ESGCompetencyHub = function (ctx) {
         var since = new Date(Date.now() - 24 * 3600000).toISOString();
         for (var i = 0; i < statuses.length; i++) {
           var recent = statuses[i] === 'Cancelled' || statuses[i] === 'Reverted' ? " and Modified ge datetime'" + since + "'" : '';
-          var res = await app.sp.items(CH.config.lists.requests.title, '$select=Id,Title,RequestKey,RequestType,TargetType,TargetId,MeetingId,Created' +
+          var res = await app.sp.items(CH.config.lists.requests.title, '$select=Id,Title,RequestKey,RequestType,TargetType,TargetId,MeetingId,Created,Payload,ExpectedRevision' +
             "&$filter=Status eq '" + statuses[i] + "' and AuthorId eq " + Number(app.person.SiteUserId) + recent, 100);
           found = found.concat(res.rows);
         }
         found.sort(function (a, b) { return a.Id - b.Id; }).forEach(function (row) {
           if (!row.RequestKey || entries.some(function (e) { return e.key === row.RequestKey; })) return;
+          var payload = null;
+          try { payload = JSON.parse(row.Payload || 'null'); } catch (_) { payload = null; }
           var entry = { key: row.RequestKey, type: row.RequestType, targetId: row.TargetId || null, meetingId: row.MeetingId || null, targetType: row.TargetType || (row.TargetId ? 'Action' : ''), label: row.Title || 'Your change',
-            submittedAt: row.Created ? new Date(row.Created) : new Date(), state: 'submitted', message: '', resultId: null, polls: 0 };
+            submittedAt: row.Created ? new Date(row.Created) : new Date(), state: 'submitted', message: '', resultId: null, polls: 0, payload: payload,
+            spec: { type: row.RequestType, targetId: row.TargetId || null, targetType: row.TargetType || '', expectedRevision: row.ExpectedRevision || '', payload: payload, label: row.Title || 'Your change', meetingId: row.MeetingId || '' } };
           entries.push(entry);
           schedule(entry);
         });
@@ -526,6 +529,7 @@ window.ESGCompetencyHub = function (ctx) {
       function settle(entry, state, message) {
         entry.state = state;
         entry.message = message;
+        if (state === 'done') entry.doneAt = Date.now();
         onChange(entry);
         if (state === 'attention') watchAttention(entry);
       }
@@ -554,14 +558,48 @@ window.ESGCompetencyHub = function (ctx) {
         }, 5 * 60000));
       }
 
+      // Try again (release 1.2). A change that failed on the system's side is the same request set back to Submitted: the
+      // flow resumes its stored copy, so it can never be made twice. A refused change (someone else changed the record
+      // first) is sent again as a new request, against the record as it is now (revision: the record's current revision).
+      async function retry(entry, revision) {
+        if (entry.state === 'attention' && ADMIN_TYPES.indexOf(entry.type) < 0) {
+          var row = await findRequest(entry.key);
+          if (!row) throw new Error('The change could not be found.');
+          await app.sp.update('requests', row.Id, { Status: 'Submitted' });
+          entry.state = 'submitted';
+          entry.message = '';
+          entry.retrying = false;
+          entry.dismissed = false;
+          entry.polls = 0;
+          entry.submittedAt = new Date();
+          onChange(entry);
+          schedule(entry);
+          return entry;
+        }
+        if (entry.state !== 'rejected' || !entry.spec) throw new Error('This change cannot be tried again.');
+        var spec = Object.assign({}, entry.spec, { key: null });
+        if (revision !== undefined && revision !== null) spec.expectedRevision = revision;
+        entry.dismissed = true;
+        return submit(spec);
+      }
+
       return {
         submit: submit,
         resume: resume,
+        retry: retry,
         entries: function () { return entries.slice(); },
         // The newest unfinished or unread request for a record (an action unless another kind is named).
         forTarget: function (id, targetType) {
           var kind = targetType || 'Action';
           return entries.filter(function (e) { return Number(e.targetId) === Number(id) && (e.targetType || 'Action') === kind && !e.dismissed; }).slice(-1)[0] || null;
+        },
+        // The newest change for a record, including the one that created it (a raise is found by the id it was given).
+        forRecord: function (id, targetType) {
+          var kind = targetType || 'Action';
+          var made = { 'Action': 'RaiseAction', 'Register Entry': 'RaiseRegisterEntry', 'Meeting': 'ScheduleMeeting' }[kind];
+          return entries.filter(function (e) {
+            return (Number(e.targetId) === Number(id) && (e.targetType || 'Action') === kind) || (e.type === made && e.state === 'done' && Number(e.resultId) === Number(id));
+          }).slice(-1)[0] || null;
         },
         dismiss: function (entry) { entry.dismissed = true; onChange(entry); },
         unsent: readUnsent,
@@ -577,7 +615,10 @@ window.ESGCompetencyHub = function (ctx) {
 
     var RETRYING = 'Not recorded yet – retrying automatically.';
 
-    return { tracker: tracker, newKey: newKey, SCHEDULE: SCHEDULE, GIVE_UP_MINUTES: GIVE_UP_MINUTES, ADMIN_TYPES: ADMIN_TYPES, RECORD_TYPES: RECORD_TYPES, MEETING_TYPES: MEETING_TYPES,
+    // A refusal because someone else changed the record first (or is changing it now): trying again can work.
+    function isConflict(entry) { return /someone else|being updated/i.test(String(entry && entry.message || '')); }
+
+    return { tracker: tracker, newKey: newKey, isConflict: isConflict, SCHEDULE: SCHEDULE, GIVE_UP_MINUTES: GIVE_UP_MINUTES, ADMIN_TYPES: ADMIN_TYPES, RECORD_TYPES: RECORD_TYPES, MEETING_TYPES: MEETING_TYPES,
       LimitedError: LimitedError, RETRYING: RETRYING };
   })();
 
@@ -686,7 +727,8 @@ window.ESGCompetencyHub = function (ctx) {
       else if (title.length > 255) e.title = 'Keep the title to 255 characters or fewer.';
       if (!description) e.description = 'Add a short description.';
       else if (description.length > 5000) e.description = 'Keep the description to 5,000 characters or fewer.';
-      if (!v.areaKey || !ctx.canWrite(v.areaKey)) e.areaKey = 'Choose one of your areas.';
+      if (!v.areaKey) e.areaKey = 'Choose the area this action belongs to.';
+      else if (!ctx.canWrite(v.areaKey)) e.areaKey = 'Choose one of your areas.';
       if (!v.ownerId) e.ownerId = 'Choose who will do it.';
       else if (!e.areaKey && !ctx.ownerAllowed(v.areaKey, Number(v.ownerId))) e.ownerId = 'Choose a member of this area or a Team Leader.';
       else if (!e.areaKey && ctx.canRaiseFor && !ctx.canRaiseFor(v.areaKey, Number(v.ownerId))) e.ownerId = SELF_ONLY;
@@ -977,7 +1019,7 @@ window.ESGCompetencyHub = function (ctx) {
 
     // The live meeting and its minutes (spec MTG-3 to MTG-5), the same as the Minutes flow. Items for discussion – carried
     // forward, flagged notices, new register entries and new business – each need one of these outcomes to finalise.
-    var MINUTE_OUTCOMES = ['Discussed', 'Deferred', 'Not reached', 'Action raised', 'Discarded'];
+    var MINUTE_OUTCOMES = ['Discussed', 'Deferred', 'Not reached', 'Action raised', 'Discarded', 'Closed'];
     var DISCUSSION_SECTIONS = ['Carried forward', 'Noticeboard', 'New improvements and degradations', 'New business'];
     // items: [{ key, section, title }]; outcomes: { key: outcome } (the last one recorded). Returns the titles still missing one.
     function missingOutcomes(items, outcomes) {
@@ -1144,6 +1186,8 @@ window.ESGCompetencyHub = function (ctx) {
         var dueIso = D.fromDueDay(r.DueDay);
         var waitingCloseOut = r.Status === 'Completed';
         var words = waitingCloseOut ? { group: 'later', text: 'Waiting for close-out check' } : D.dueWords(dueIso, today);
+        // closed just now on this screen: it stays where it was, marked Done, until the person moves on (release 1.2)
+        var keptDone = r.Status === 'Closed' && !!r._keep;
         return {
           id: r.Id, ref: 'ACT-' + ('0000' + r.Id).slice(-5), title: r.Title,
           areaKey: primary ? primary.key : '', areaName: primary ? primary.name : 'Unknown area',
@@ -1156,14 +1200,16 @@ window.ESGCompetencyHub = function (ctx) {
           description: r.Description || '', priority: r.Priority || 'Normal', requiresCloseOut: !!r.RequiresCloseOut,
           raisedIso: r.DateRaised ? D.localDate(r.DateRaised) : '', raisedByName: nameOf(r.RaisedById),
           revision: Number(r.Revision) || 1, dueDay: Number(r.DueDay), locked: !!r.PendingRequestKey,
-          waitingCloseOut: waitingCloseOut, group: r.Status === 'Closed' ? 'done' : words.group,
-          dueText: r.Status === 'Closed' ? 'Closed' : words.text,
+          waitingCloseOut: waitingCloseOut, group: r.Status === 'Closed' && !keptDone ? 'done' : words.group,
+          dueText: keptDone ? 'Done' : r.Status === 'Closed' ? 'Closed' : words.text, done: r.Status === 'Closed',
+          // still being saved (✓ Sent), and a new one the flow has not numbered yet (a temporary negative id)
+          sending: r._sending || '', isNew: !!r._new,
           blocker: r.Status === 'Awaiting Input' ? (r.Blocker || '') : '', closeOutcome: r.CloseOutcome || '', closureNote: r.ClosureNote || '',
           closedIso: r.DateClosed ? D.localDate(r.DateClosed) : '',
           sourceType: r.SourceType || 'None', sourceId: r.SourceId ? Number(r.SourceId) : null
         };
       }
-      var actions = (raw.actions.rows || []).filter(function (r) { return !isUncommitted(r) && r.Status !== 'Closed'; }).map(actionFrom);
+      var actions = (raw.actions.rows || []).filter(function (r) { return !isUncommitted(r) && (r.Status !== 'Closed' || r._keep); }).map(actionFrom);
       function inArea(action, key) { return action.areaKey === key || action.linkedKeys.indexOf(key) >= 0; }
 
       // Notices: the area is the folder the item sits in, not a typed value.
@@ -1187,7 +1233,7 @@ window.ESGCompetencyHub = function (ctx) {
           createdIso: createdIso, created: n.Created, important: important, pinned: pinned,
           importantDays: n.ImportantDays ? Number(n.ImportantDays) : null, areaKeys: areaKeys, shownAll: shownAll,
           // notices posted before the Revision column existed have none: they are then sent without a stale check
-          revision: Number(n.Revision) || 0, lastRequestKey: n.LastRequestKey || ''
+          revision: Number(n.Revision) || 0, lastRequestKey: n.LastRequestKey || '', sending: n._sending || ''
         };
       }).filter(function (n) { return !!areaByKey[n.areaKey]; })
         .sort(function (a, b) { return String(b.created).localeCompare(String(a.created)); });
@@ -1203,7 +1249,7 @@ window.ESGCompetencyHub = function (ctx) {
           responsibleId: e.ResponsiblePersonId, responsibleName: e.ResponsiblePersonId ? nameOf(e.ResponsiblePersonId) : '',
           raisedIso: e.DateRaised ? D.localDate(e.DateRaised) : (e.Created ? D.localDate(e.Created) : ''),
           resolvedIso: e.DateResolved ? D.localDate(e.DateResolved) : '', revision: Number(e.Revision) || 1,
-          open: e.Status === 'Open' || e.Status === 'Under Review'
+          open: e.Status === 'Open' || e.Status === 'Under Review', sending: e._sending || '', isNew: !!e._new
         };
       }).filter(function (e) { return !!areaByKey[e.areaKey]; })
         .sort(function (a, b) { return b.id - a.id; });
@@ -1267,7 +1313,8 @@ window.ESGCompetencyHub = function (ctx) {
           cancellationReason: m.CancellationReason || '', cutoff: m.CutoffTime || '', intervalStart: m.IntervalStart || '',
           previousId: m.PreviousMeetingId ? Number(m.PreviousMeetingId) : null, locked: isUncommitted(m), cutoffUpdatesId: Number(m.CutoffUpdatesId) || 0,
           finalisedIso: m.FinalisedAt ? D.localDate(m.FinalisedAt) : '', finalisedByName: m.FinalisedById ? nameOf(m.FinalisedById) : '',
-          amendments: Number(m.AmendmentCount) || 0, pdfState: m.PdfState || 'None', pdfVersion: Number(m.PdfVersion) || 0
+          amendments: Number(m.AmendmentCount) || 0, pdfState: m.PdfState || 'None', pdfVersion: Number(m.PdfVersion) || 0,
+          sending: m._sending || '', isNew: !!m._new
         };
       }
       var meetings = (raw.meetings.rows || []).filter(function (m) { return !isUncommitted(m); }).map(meetingFrom)
@@ -1292,7 +1339,7 @@ window.ESGCompetencyHub = function (ctx) {
 
       var stats = {};
       areas.forEach(function (a) {
-        var list = actions.filter(function (x) { return inArea(x, a.key); });
+        var list = actions.filter(function (x) { return inArea(x, a.key) && !x.done; });
         var m = meetingsByArea[a.key] || { next: null, last: null };
         // Overdue once the gap since the last meeting, or since tracking started, exceeds the limit.
         var since = m.last || a.trackingStart;
@@ -1355,6 +1402,161 @@ window.ESGCompetencyHub = function (ctx) {
     }
 
     return { QUERIES: QUERIES, load: load, build: build, isUncommitted: isUncommitted, loadFinished: loadFinished, loadAction: loadAction };
+  })();
+
+  /* src/domain/optimistic.js */
+  // Optimistic saving (release 1.2): a change shows on the screen as soon as it is sent. The rows read from SharePoint
+  // are copied and every change still being saved is applied on top, by its request type, before the model is built.
+  // When the flow confirms it, the rows are read again and already hold it; when it is refused or fails, it is simply
+  // no longer applied, so the screen shows the records as they really are. Nothing here is ever written anywhere.
+  CH.optimistic = (function () {
+    var D = CH.dates;
+
+    // The UTC instant of a London wall-clock time on a date (GMT or BST, whichever gives that local time back).
+    function londonInstant(iso, hhmm) {
+      var y = +iso.slice(0, 4), m = +iso.slice(5, 7) - 1, d = +iso.slice(8, 10);
+      var hh = +String(hhmm).slice(0, 2), mm = +String(hhmm).slice(3, 5);
+      for (var offset = 0; offset <= 1; offset++) {
+        var t = new Date(Date.UTC(y, m, d, hh - offset, mm));
+        if (D.localDate(t) === iso && D.ukTime(t) === String(hhmm).slice(0, 5)) return t.toISOString();
+      }
+      return new Date(Date.UTC(y, m, d, hh, mm)).toISOString();
+    }
+
+    function copy(list) { return (list || []).map(function (r) { return Object.assign({}, r); }); }
+    // the flow adds one to the revision of what it changes; a record with none (older notices) is sent without a stale check
+    function bump(row, key) { if (Number(row.Revision)) row.Revision = Number(row.Revision) + 1; row._sending = key; }
+    function areaId(raw, key) {
+      var c = (raw.competencies.rows || []).filter(function (x) { return x.CompetencyKey === key; })[0];
+      return c ? c.Id : null;
+    }
+    function folderFor(raw, list, key) {
+      var any = (raw[list].rows || [])[0];
+      var base = any && any.FileDirRef ? String(any.FileDirRef).split('/').slice(0, -1).join('/') : '/Lists/' + list;
+      return base + '/' + key;
+    }
+
+    // Each kind of change: how it alters the rows. row is the copied target row (found by TargetId); add pushes a new one.
+    var ACTIONS = {
+      ExtendDeadline: function (row, p) { row.DueDay = D.toDueDay(p.newDueIso); row.ExtensionCount = (Number(row.ExtensionCount) || 0) + 1; },
+      MarkComplete: function (row, p, ctx) {
+        if (row.RequiresCloseOut) { row.Status = 'Completed'; return; }
+        row.Status = 'Closed'; row.IsOpen = false; row.CloseOutcome = 'Completed'; row.ClosureNote = p.note || ''; row.DateClosed = ctx.nowIso; row._keep = true;
+      },
+      ChangeStatus: function (row, p) { row.Status = p.status; row.Blocker = p.status === 'Awaiting Input' ? p.blocker : ''; },
+      ReassignAction: function (row, p) { row.AssignedToId = Number(p.ownerId); row.CoOwnerIds = JSON.stringify((p.coOwnerIds || []).map(String)); },
+      CloseAction: function (row, p, ctx) {
+        row.Status = 'Closed'; row.IsOpen = false; row.CloseOutcome = p.outcome; row.ClosureNote = p.note || ''; row.DateClosed = ctx.nowIso; row._keep = true;
+      },
+      ReopenAction: function (row) { row.Status = 'In Progress'; row.IsOpen = true; row.CloseOutcome = null; row.ClosureNote = null; row.DateClosed = null; },
+      EditActionDetails: function (row, p) {
+        if ('title' in p) row.Title = p.title;
+        if ('description' in p) row.Description = p.description;
+        if ('priority' in p) row.Priority = p.priority;
+        if ('requiresCloseOut' in p) row.RequiresCloseOut = !!p.requiresCloseOut;
+        if ('checkerId' in p) row.CloseOutById = p.checkerId;
+      }
+    };
+    var NOTICES = {
+      EditNotice: function (row, p, ctx) {
+        if ('title' in p) row.Title = p.title;
+        if ('body' in p) row.Body = p.body;
+        if ('category' in p) row.Category = p.category;
+        if ('important' in p) {
+          row.IsImportant = !!p.important;
+          row.ImportantDays = p.important ? p.importantDays : null;
+          row.ImportantUntil = p.important ? D.addDays(ctx.today, p.importantDays) + 'T12:00:00Z' : null;
+        }
+      },
+      PinNotice: function (row, p) { row.IsImportant = !!p.pinned; row.ImportantUntil = null; row.ImportantDays = null; },
+      ArchiveNotice: function (row) { row._remove = true; }
+    };
+    var ENTRIES = {
+      UpdateRegisterEntry: function (row, p, ctx) {
+        ['title', 'description', 'impact', 'status', 'outcome'].forEach(function (k) {
+          if (k in p) row[k.charAt(0).toUpperCase() + k.slice(1)] = p[k];
+        });
+        if (p.status === 'Resolved' || p.status === 'Closed') row.DateResolved = row.DateResolved || ctx.nowIso;
+        if (p.status === 'Open' || p.status === 'Under Review') row.DateResolved = null;
+      }
+    };
+    var MEETINGS = {
+      UpdateMeeting: function (row, p) {
+        var start = row.MeetingDate ? new Date(row.MeetingDate) : null;
+        var dateIso = p.dateIso || (start ? D.localDate(start) : '');
+        if (dateIso && ('dateIso' in p || 'start' in p)) row.MeetingDate = londonInstant(dateIso, p.start || D.ukTime(start));
+        if (dateIso && ('dateIso' in p || 'end' in p)) row.EndTime = londonInstant(dateIso, p.end || (row.EndTime ? D.ukTime(row.EndTime) : '11:00'));
+        if ('location' in p) row.Location = p.location;
+        if ('onlineLink' in p) row.OnlineLink = p.onlineLink;
+        if ('chairId' in p) row.ChairId = Number(p.chairId);
+        if ('attendeeIds' in p) row.Attendees = JSON.stringify(p.attendeeIds.map(String));
+      },
+      CancelMeeting: function (row, p) { row.Status = 'Cancelled'; row.CancellationReason = p.reason || ''; }
+    };
+
+    // New records: shown at once with a temporary negative id until the flow gives them their own.
+    function addAction(raw, rows, e, p, ctx, n) {
+      rows.push({ Id: -n, Title: p.title, Description: p.description, CompetencyId: areaId(raw, p.areaKey), LinkedCompetenciesId: [],
+        AssignedToId: Number(p.ownerId), RaisedById: ctx.personId, DateRaised: ctx.nowIso, DueDay: D.toDueDay(p.dueIso), OriginalDueDate: p.dueIso + 'T12:00:00Z',
+        Status: 'Open', IsOpen: true, Priority: p.priority || 'Normal', ExtensionCount: 0, RequiresCloseOut: !!p.requiresCloseOut, Revision: 1,
+        CoOwnerIds: JSON.stringify((p.coOwnerIds || []).map(String)), CloseOutById: p.checkerId || null, SourceType: 'None', _sending: e.key, _new: true,
+        FileDirRef: folderFor(raw, 'actions', p.areaKey) });
+    }
+    function addEntry(raw, rows, e, p, ctx, n) {
+      rows.push({ Id: -n, Title: p.title, Description: p.description, EntryType: p.entryType, Impact: p.impact, Status: 'Open', RaisedById: ctx.personId,
+        DateRaised: ctx.nowIso, Created: ctx.nowIso, Revision: 1, CompetencyId: areaId(raw, p.areaKey), FileDirRef: folderFor(raw, 'register', p.areaKey),
+        _sending: e.key, _new: true });
+    }
+    function addMeeting(raw, rows, e, p, ctx, n) {
+      rows.push({ Id: -n, Title: 'Meeting', CompetencyId: areaId(raw, p.areaKey), MeetingDate: londonInstant(p.dateIso, p.start), EndTime: londonInstant(p.dateIso, p.end),
+        Status: 'Scheduled', ChairId: Number(p.chairId) || null, Location: p.location || '', OnlineLink: p.onlineLink || '',
+        Attendees: JSON.stringify((p.attendeeIds || []).map(String)), InviteState: 'None', Revision: 1, FileDirRef: folderFor(raw, 'meetings', p.areaKey),
+        _sending: e.key, _new: true });
+    }
+
+    var TABLES = [
+      ['actions', 'Action', ACTIONS, { RaiseAction: addAction }],
+      ['notices', 'Notice', NOTICES, {}],
+      ['register', 'Register Entry', ENTRIES, { RaiseRegisterEntry: addEntry }],
+      ['meetings', 'Meeting', MEETINGS, { ScheduleMeeting: addMeeting }]
+    ];
+
+    // raw: CH.model.load() output; entries: tracker entries; keep: { actionId: row } actions closed on this screen, still shown.
+    // ctx: { personId, today, now }. Returns a new raw; the original is not touched.
+    function apply(raw, entries, keep, ctx) {
+      var out = Object.assign({}, raw);
+      var c = { personId: Number(ctx.personId), today: ctx.today, nowIso: (ctx.now || new Date()).toISOString() };
+      var sending = (entries || []).filter(function (e) { return (e.state === 'submitted' || e.state === 'slow') && e.payload; })
+        .sort(function (a, b) { return a.submittedAt - b.submittedAt; });
+      var n = 0;
+      TABLES.forEach(function (t) {
+        if (!raw[t[0]]) return;
+        var rows = copy(raw[t[0]].rows);
+        if (t[0] === 'actions') {
+          Object.keys(keep || {}).forEach(function (id) {
+            if (!rows.some(function (r) { return Number(r.Id) === Number(id); })) rows.push(Object.assign({}, keep[id], { _keep: true }));
+          });
+        }
+        sending.forEach(function (e) {
+          var p = e.payload || {};
+          if (t[3][e.type]) { n++; t[3][e.type](raw, rows, e, p, c, n); return; }
+          if (!t[2][e.type] || (e.targetType || 'Action') !== t[1]) return;
+          var row = rows.filter(function (r) { return Number(r.Id) === Number(e.targetId); })[0];
+          if (!row) return;
+          t[2][e.type](row, p, c);
+          bump(row, e.key);
+        });
+        out[t[0]] = Object.assign({}, raw[t[0]], { rows: rows.filter(function (r) { return !r._remove; }) });
+      });
+      return out;
+    }
+
+    // The request types shown this way; anything else is shown as before (on its own page, or in the status line).
+    function covers(type) {
+      return TABLES.some(function (t) { return !!t[2][type] || !!t[3][type]; });
+    }
+
+    return { apply: apply, covers: covers, londonInstant: londonInstant };
   })();
 
   /* src/domain/health.js */
@@ -1614,8 +1816,8 @@ window.ESGCompetencyHub = function (ctx) {
     var GROUPS = [['late', 'Late', 'var(--late)'], ['soon', 'Due within 7 days', 'var(--soon)'], ['later', 'Coming up', '#9aa5af']];
 
     // Actions grouped as Late / Due within 7 days / Coming up. sub(action) gives the grey second line.
-    // Each action opens with open(action); pending(action) gives a "being recorded" note, if any.
-    function actionList(actions, sub, emptyText, state, open, pending) {
+    // Each action opens with open(action); mark(action) gives its ✓ Sent / ✓✓ Saved mark, if any (release 1.2).
+    function actionList(actions, sub, emptyText, state, open, mark) {
       if (state === 'unavailable') return null;
       if (!actions.length) return h('p', { class: 'muted', text: emptyText });
       var out = [];
@@ -1625,9 +1827,8 @@ window.ESGCompetencyHub = function (ctx) {
         if (!rows.length) return;
         out.push(h('h3', { class: 'group-title' }, h('span', { class: 'dot', style: 'background:' + g[2], 'aria-hidden': 'true' }), g[1]));
         out.push(h('ul', { class: 'items' }, rows.map(function (a) {
-          var note = pending ? pending(a) : '';
           return h('li', null, h('button', { type: 'button', class: 'item-open', onclick: open ? function () { open(a); } : null, disabled: open ? null : true },
-            h('span', null, h('span', { class: 't', text: a.title }), h('span', { class: 's', text: sub(a) + (note ? ' · ' + note : '') })),
+            h('span', null, h('span', { class: 't', text: a.title }), h('span', { class: 's' }, sub(a), mark ? mark(a) : null)),
             chip(a.waitingCloseOut ? 'later' : a.group, a.dueText)));
         })));
       });
@@ -1673,6 +1874,12 @@ window.ESGCompetencyHub = function (ctx) {
       setTimeout(function () { if (region.textContent === text) { region.textContent = ''; region.className = 'toast'; } }, 6000);
     }
 
+
+    // Said to screen readers only (release 1.2): a change that is now saved. Sighted readers see ✓✓ Saved beside it.
+    function say(root, text) {
+      var region = root.querySelector('[data-ch-said]');
+      if (region) region.textContent = text;
+    }
 
     // Collapsed sections on the home page, remembered in this browser only (storage may be unavailable).
     var FOLD_KEY = 'esg-competency-hub-home';
@@ -1746,7 +1953,7 @@ window.ESGCompetencyHub = function (ctx) {
     return {
       scaleFor: scaleFor, TEXT_SIZES: TEXT_SIZES, textSize: textSize, textFactor: textFactor, saveTextSize: saveTextSize,
       chip: chip, card: card, button: button, linkButton: linkButton, sectionNote: sectionNote,
-      actionList: actionList, tile: tile, tileGrid: tileGrid, areaStatusLines: areaStatusLines, toast: toast,
+      actionList: actionList, tile: tile, tileGrid: tileGrid, areaStatusLines: areaStatusLines, toast: toast, say: say,
       folded: folded, saveFolded: saveFolded, panel: panel, fitList: fitList, refit: refit, resetFits: resetFits
     };
   })();
@@ -1871,10 +2078,9 @@ window.ESGCompetencyHub = function (ctx) {
 
     // A uniform card: title on one line, then a meta line with chips. Opens the action when given one.
     function actionCard(app, a, meta) {
-      var note = app.pendingNote(a);
       return h('button', { type: 'button', class: 'item-open hm-card', title: a.title, onclick: function () { app.openAction(a); } },
         h('span', { class: 't', text: a.title }),
-        h('span', { class: 'hm-meta' }, meta, note ? h('span', { class: 'hm-note', text: note }) : null,
+        h('span', { class: 'hm-meta' }, meta, app.markAction(a),
           h('span', { class: 'when w-' + (a.waitingCloseOut ? 'later' : a.group), text: a.dueText })));
     }
     function infoCard(text, kind, kindClass, onclick) {
@@ -1992,20 +2198,18 @@ window.ESGCompetencyHub = function (ctx) {
       var news = notices.filter(function (n) { return n.important; }).map(function (n) { return { n: n }; }).concat(rest).map(function (x) {
         if (x.e) {
           var en = x.e;
-          var note = app.recordNote('Register Entry', en.id);
           return h('button', { type: 'button', class: 'hm-rw item-open', title: en.title, onclick: function () { app.openEntry(en); } },
             h('span', { class: 'hm-dot' + (en.entryType === 'Degradation' ? ' bad' : ''), title: en.entryType }),
             h('span', { class: 'hm-tx' }, h('b', { text: en.title }),
               h('small', { text: en.entryType + ' · ' + en.impact + ' impact · ' + en.raisedByName + (en.raisedIso ? ' · ' + D.short(en.raisedIso) : '') +
-                (en.flagged ? ' · flagged' : '') + (note ? ' · ' + note : '') })));
+                (en.flagged ? ' · flagged' : '') }, app.mark(en, 'Register Entry'))));
         }
         var n = x.n;
-        var nnote = app.recordNote('Notice', n.id);
         return h('button', { type: 'button', class: 'hm-rw item-open', title: n.title, onclick: function () { app.openNotice(n); } },
           h('span', { class: 'hm-dot' + (n.important ? ' on' : ''), title: n.important ? 'Important' : null }),
           h('span', { class: 'hm-tx' }, h('b', { text: n.title }),
             h('small', { text: (n.pinned ? 'Pinned · ' : n.important ? 'Important · ' : '') + (n.fromOutside ? 'From ' + n.authorName + ', outside ' + area.name : n.authorName) +
-              ' · ' + D.short(n.createdIso) + (n.flagged ? ' · flagged' : '') + (nnote ? ' · ' + nnote : '') })));
+              ' · ' + D.short(n.createdIso) + (n.flagged ? ' · flagged' : '') }, app.mark(n, 'Notice'))));
       });
       // meetings: those to come (and one in progress), then the last one held
       var diary = [];
@@ -2149,7 +2353,7 @@ window.ESGCompetencyHub = function (ctx) {
         ui.sectionNote(app.model.sections.actions, 'actions'),
         ui.actionList(list, function (a) {
           return a.ownerName + (a.areaKey !== area.key ? ' · shared from ' + a.areaName : '') + (a.extensions ? ' · deadline moved ' + (a.extensions === 1 ? 'once' : a.extensions + ' times') : '');
-        }, 'There are no open actions in ' + area.name + '.', app.model.sections.actions, app.openAction, app.pendingNote)
+        }, 'There are no open actions in ' + area.name + '.', app.model.sections.actions, app.openAction, app.markAction)
       ];
     }
 
@@ -2173,24 +2377,22 @@ window.ESGCompetencyHub = function (ctx) {
         h('h2', { class: 'group-title', text: 'Noticeboard' }),
         ui.sectionNote(m.sections.notices, 'notices'),
         list.length ? h('ul', { class: 'items' }, list.map(function (n) {
-          var note = app.recordNote('Notice', n.id);
           return h('li', null, h('button', { type: 'button', class: 'item-open', onclick: function () { app.openNotice(n); } },
             h('span', null, h('span', { class: 't', text: n.title }),
               h('span', { class: 's notice-body', text: n.body.length > 240 ? n.body.slice(0, 240) + '…' : n.body }),
               h('span', { class: 's', text: n.category + ' · ' + (n.fromOutside ? 'From ' + n.authorName + ', outside ' + area.name : n.authorName) + ' · ' + D.short(n.createdIso) +
-                (n.flagged ? ' · flagged for the meeting' : '') + (note ? ' · ' + note : '') })),
+                (n.flagged ? ' · flagged for the meeting' : '') }, app.mark(n, 'Notice'))),
             n.pinned ? ui.chip('soon', 'Pinned') : n.important ? ui.chip('soon', 'Important') : null));
         })) : h('p', { class: 'muted', text: 'Nothing has been posted on the ' + area.name + ' noticeboard yet.' }),
         h('h2', { class: 'group-title' }, 'Improvements and degradations ', h('label', { class: 'inline-filter' }, typeSel)),
         ui.sectionNote(m.sections.register, 'improvements and degradations'),
         entries.length ? h('ul', { class: 'items' }, entries.map(function (e) {
-          var note = app.recordNote('Register Entry', e.id);
           var linked = m.actions.filter(function (a) { return a.sourceType === 'Register' && Number(a.sourceId) === e.id; }).length;
           return h('li', null, h('button', { type: 'button', class: 'item-open', onclick: function () { app.openEntry(e); } },
             h('span', null, h('span', { class: 't', text: e.ref + ' ' + e.title }),
               h('span', { class: 's', text: e.entryType + ' · ' + e.impact + ' impact · ' + (e.responsibleName ? e.responsibleName + ' responsible · ' : '') +
                 (e.raisedIso ? D.short(e.raisedIso) : '') + (linked ? ' · ' + linked + (linked === 1 ? ' linked action' : ' linked actions') : '') +
-                (e.flagged ? ' · flagged for the meeting' : '') + (note ? ' · ' + note : '') })),
+                (e.flagged ? ' · flagged for the meeting' : '') }, app.mark(e, 'Register Entry'))),
             CH.views.recordPanel.entryChip(e)));
         })) : h('p', { class: 'muted', text: filter === 'open' ? 'No open improvements or degradations in ' + area.name + '.' : 'No entries to show.' })
       ];
@@ -2417,10 +2619,11 @@ window.ESGCompetencyHub = function (ctx) {
     var D = CH.dates;
     var R = CH.rules;
     var field = function (l, i, hint) { return CH.ui.dialog.field(l, i, hint); };
+    // release 1.2: short step names, shown as "Step 2 of 4 · Who and where – next: by when" with a progress bar
     var STEPS = [
-      { title: 'What needs doing?', keys: ['title', 'description'] },
-      { title: 'Who will do it, and in which area?', keys: ['areaKey', 'ownerId', 'coOwnerIds'] },
-      { title: 'By when?', keys: ['dueIso', 'priority', 'checkerId'] },
+      { title: 'What needs doing', keys: ['title', 'description'] },
+      { title: 'Who and where', keys: ['areaKey', 'ownerId', 'coOwnerIds'] },
+      { title: 'By when', keys: ['dueIso', 'priority', 'checkerId'] },
       { title: 'Check and raise', keys: [] }
     ];
 
@@ -2445,9 +2648,12 @@ window.ESGCompetencyHub = function (ctx) {
       var title = h('input', { id: 'ch-r-title', type: 'text', maxlength: '255', autocomplete: 'off', value: (opts && opts.title) || (source ? source.title : '') });
       var description = h('textarea', { id: 'ch-r-description', rows: '5', maxlength: '5000' });
       if (source) description.value = String(notice ? notice.body : entry.description || '').slice(0, 5000);
-      var area = h('select', { id: 'ch-r-areaKey' }, mine.map(function (a) {
-        return h('option', { value: a.key, selected: a.key === areaKey ? true : null, text: a.name });
-      }));
+      // which area: never guessed (backlog 12). It is preselected only when the form is opened from an area, or the
+      // person can raise in just one; otherwise they choose it.
+      var preset = mine.length === 1 ? mine[0].key : mine.some(function (a) { return a.key === areaKey; }) ? areaKey : '';
+      var area = h('select', { id: 'ch-r-areaKey' }, (preset ? [] : [h('option', { value: '', text: 'Choose an area…' })]).concat(mine.map(function (a) {
+        return h('option', { value: a.key, selected: a.key === preset ? true : null, text: a.name });
+      })));
       var owner = h('select', { id: 'ch-r-ownerId' });
       var due = h('input', { id: 'ch-r-dueIso', type: 'date', min: today, max: R.addYears(today, maxYears) });
       var priority = h('select', { id: 'ch-r-priority' }, R.PRIORITIES.map(function (p) { return h('option', { value: p, selected: p === 'Normal' ? true : null, text: p }); }));
@@ -2491,7 +2697,8 @@ window.ESGCompetencyHub = function (ctx) {
       function fillOwners() {
         var current = owner.value || String(app.person.SiteUserId);
         CH.dom.clear(owner);
-        owner.appendChild(h('option', { value: '', text: 'Choose a person' }));
+        owner.appendChild(h('option', { value: '', text: area.value ? 'Choose a person' : 'Choose the area first' }));
+        if (!area.value) { selfNote.style.display = 'none'; return; }
         // a technician without meeting rights in this area is offered only themselves (spec §4.2)
         m.ownersFor(area.value).filter(function (p) { return app.access.canRaiseFor(area.value, p.id, app.person.SiteUserId); }).forEach(function (p) {
           owner.appendChild(h('option', { value: String(p.id), selected: String(p.id) === current ? true : null,
@@ -2524,7 +2731,7 @@ window.ESGCompetencyHub = function (ctx) {
       }
 
       var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-r', title: entry ? 'Turn ' + entry.ref + ' into an action' : notice ? 'Turn a notice into an action' : meeting ? 'Raise an action from the meeting' : 'Raise an action' });
-      var progress = h('p', { class: 'muted small', 'aria-live': 'polite' });
+      var progress = h('div', { class: 'progress', 'aria-live': 'polite' });
       var errorBox = h('p', { class: 'form-error', role: 'alert' });
       var stepBox = h('div');
       var nextBtn = h('button', { type: 'submit', class: 'btn btn-main' });
@@ -2534,7 +2741,7 @@ window.ESGCompetencyHub = function (ctx) {
 
       var panes = [
         [field('Title', title, 'A short summary, for example "Replace FH40 probe".'), field('Description', description, 'What needs doing and anything the owner should know.')],
-        [field('Area', area), field('Who will do it?', owner), selfNote, coField],
+        [field('Which area is it for?', area), field('Who will do it?', owner), selfNote, coField],
         [field('Target date', due, 'From today up to ' + maxYears + (maxYears === 1 ? ' year' : ' years') + ' ahead.'),
           h('details', { class: 'more' }, h('summary', { text: 'More options' }),
             field('Priority', priority), h('label', { class: 'check' }, closeOut, ' Needs a close-out check before it is closed'), checkerField)],
@@ -2544,20 +2751,26 @@ window.ESGCompetencyHub = function (ctx) {
       function summary() {
         var v = values();
         var ownerName = m.nameOf(Number(v.ownerId));
-        return h('dl', { class: 'facts' },
+        return [h('div', { class: 'raise-summary' }, h('span', { class: 'muted small', text: 'You are raising' }),
+          h('b', { class: 'big', text: '“' + v.title.trim() + '” in ' + m.areaByKey[v.areaKey].name }),
+          h('span', { class: 'small', text: 'for ' + ownerName + ', by ' + D.weekday(v.dueIso) + ' ' + D.long(v.dueIso) })),
+        h('dl', { class: 'facts' },
           h('dt', { text: 'What' }), h('dd', null, h('b', { text: v.title.trim() }), h('br'), h('span', { class: 'notice-body', text: v.description.trim() })),
           h('dt', { text: 'Who' }), h('dd', { text: ownerName + ', in ' + m.areaByKey[v.areaKey].name +
             (v.coOwnerIds.length ? ' – co-owners ' + v.coOwnerIds.map(function (id) { return m.nameOf(id); }).join(', ') : '') }),
           h('dt', { text: 'When' }), h('dd', { text: 'By ' + D.weekday(v.dueIso) + ' ' + D.long(v.dueIso) }),
           h('dt', { text: 'Also' }), h('dd', { text: v.priority + ' priority' + (v.requiresCloseOut ? ', with a close-out check by ' + m.nameOf(v.checkerId) : '') }),
           entry ? [h('dt', { text: 'For' }), h('dd', { text: entry.ref + ' ' + entry.title })] : null,
-          notice ? [h('dt', { text: 'From' }), h('dd', { text: 'The notice “' + notice.title + '”' })] : null);
+          notice ? [h('dt', { text: 'From' }), h('dd', { text: 'The notice “' + notice.title + '”' })] : null)];
       }
 
       function go(n) {
         step = Math.max(0, Math.min(STEPS.length - 1, n));
         errorBox.textContent = '';
-        progress.textContent = 'Step ' + (step + 1) + ' of ' + STEPS.length + ' – ' + STEPS[step].title;
+        CH.dom.clear(progress);
+        CH.dom.append(progress, [h('div', { class: 'lbl' }, 'Step ' + (step + 1) + ' of ' + STEPS.length + ' · ', h('b', { text: STEPS[step].title }),
+          STEPS[step + 1] ? h('span', { class: 'muted', text: ' – next: ' + STEPS[step + 1].title.toLowerCase() }) : null),
+          h('div', { class: 'track', 'aria-hidden': 'true' }, h('div', { class: 'fill', style: 'width:' + Math.round((step + 1) * 100 / STEPS.length) + '%' }))]);
         Array.prototype.forEach.call(form.querySelectorAll('.field-error'), function (x) { x.textContent = ''; });
         CH.dom.clear(stepBox);
         CH.dom.append(stepBox, panes[step] || summary());
@@ -2588,7 +2801,7 @@ window.ESGCompetencyHub = function (ctx) {
             coOwnerIds: v.coOwnerIds.length ? v.coOwnerIds : undefined, checkerId: v.checkerId, sourceEntryId: entry ? entry.id : undefined, sourceNoticeId: notice ? notice.id : undefined,
             sourceMeetingId: meeting ? meeting.id : undefined }, meetingId: meeting ? meeting.id : undefined });
           dlg.close();
-          CH.ui.toast(app.root, 'Your action has been sent. It will appear in a few minutes.', 'ok');
+          CH.ui.toast(app.root, 'Sent. It shows ✓✓ Saved as soon as it is recorded – you can carry on.', 'ok');
         } catch (error) {
           nextBtn.disabled = false;
           nextBtn.textContent = 'Try again';
@@ -2615,21 +2828,18 @@ window.ESGCompetencyHub = function (ctx) {
 
     function timeOf(date) { return D.ukTime(date); }
 
-    // The panel's line about a change in progress, rejected or not yet recorded.
+    // The panel's line about a change being saved (release 1.2: the change already shows; this says it is on its way).
+    // A refusal or a fault is explained in its own card, with Try again.
     function pendingLine(app, action) {
       var entry = app.tracker.forTarget(action.id);
+      if (action.isNew) return h('p', { class: 'pending', role: 'status' }, app.mark(action, 'Action'), ' Being saved – it gets its number in a moment, and can then be changed.');
       if (entry && (entry.state === 'submitted' || entry.state === 'slow')) {
-        return h('p', { class: 'pending', role: 'status' }, h('b', { text: entry.label }), ' – submitted ' + timeOf(entry.submittedAt) +
-          (entry.retrying ? '. ' + entry.message : entry.processing ? ', being recorded now.' + (entry.state === 'slow' ? ' ' + entry.message : '')
-            : ', waiting to be recorded (usually under 5 minutes).' + (entry.state === 'slow' ? ' ' + entry.message : '')));
+        return h('p', { class: 'pending', role: 'status' }, app.mark(action, 'Action'), ' ' + entry.label + ' – ' +
+          (entry.retrying ? entry.message : entry.state === 'slow' ? 'taking longer than usual, but it will be saved.' : 'you can carry on.'));
       }
-      var heading = { rejected: 'Not accepted: ', attention: 'Not recorded: ', cancelled: 'Cancelled: ', reverted: 'Reverted: ' }[entry && entry.state];
-      if (heading) {
-        return h('div', { class: 'section-note', role: 'alert' }, h('b', { text: heading }),
-          entry.message + ' ', ui.linkButton('Dismiss', function () { app.tracker.dismiss(entry); }));
-      }
-      if (action.locked) return h('p', { class: 'pending', role: 'status', text: 'Being updated… Try again in a minute.' });
-      return null;
+      if (action.locked) return h('p', { class: 'pending', role: 'status', text: 'Someone else\'s change to this action is being saved… Try again in a minute.' });
+      var mark = app.mark(action, 'Action');
+      return mark ? h('p', { class: 'mark-line' }, mark) : null;
     }
 
     var STATUS_WORDS = { 'Open': 'Open', 'In Progress': 'In progress', 'Awaiting Input': 'Waiting on something' };
@@ -2702,7 +2912,10 @@ window.ESGCompetencyHub = function (ctx) {
         }
         var r = R.roles(a, app.person.SiteUserId, app.access);
         var entry = app.tracker.forTarget(a.id);
-        var busy = a.locked || (entry && (entry.state === 'submitted' || entry.state === 'slow'));
+        var mine = entry && (entry.state === 'submitted' || entry.state === 'slow');
+        // your own change still saving does not stop the next one: the flow takes them in order, each against the
+        // revision the one before it leaves. Someone else's change being saved does, and so does a raise not yet numbered.
+        var busy = (a.locked && !mine) || a.isNew;
         var finished = a.status === 'Closed' || a.waitingCloseOut;
         // the less common changes sit under "More options" (plan C.9), only those this person may make
         var more = [
@@ -3068,7 +3281,7 @@ window.ESGCompetencyHub = function (ctx) {
         h('div', { class: 'panel', role: 'tabpanel' },
           ui.sectionNote(app.model.sections.actions, 'actions'),
           ui.actionList(list, function (a) { return a.areaName + (tab === 0 ? '' : ' · ' + a.ownerName) + (a.blocker ? ' · waiting on something' : ''); },
-            tab === 0 ? 'You have no open actions.' : 'No open actions here.', app.model.sections.actions, app.openAction, app.pendingNote),
+            tab === 0 ? 'You have no open actions.' : 'No open actions here.', app.model.sections.actions, app.openAction, app.markAction),
           finished)
       ];
     }
@@ -3311,16 +3524,15 @@ window.ESGCompetencyHub = function (ctx) {
     }
 
     function pendingLine(app, id, kind, locked) {
+      // release 1.2: the change already shows; this line says it is on its way. A refusal has its own card, with Try again.
       var entry = app.tracker.forTarget(id, kind);
+      var rec = kind === 'Notice' ? app.model.noticeById[id] : app.model.entryById[id];
       if (entry && (entry.state === 'submitted' || entry.state === 'slow')) {
-        return h('p', { class: 'pending', role: 'status' }, h('b', { text: entry.label }), ' – submitted ' + D.ukTime(entry.submittedAt) +
-          (entry.retrying ? '. ' + entry.message : ', being recorded (usually under 5 minutes).'));
+        return h('p', { class: 'pending', role: 'status' }, app.mark(rec || { sending: true }, kind), ' ' + entry.label + ' – ' + (entry.retrying ? entry.message : 'you can carry on.'));
       }
-      var heading = { rejected: 'Not accepted: ', attention: 'Not recorded: ', cancelled: 'Cancelled: ', reverted: 'Reverted: ' }[entry && entry.state];
-      if (heading) {
-        return h('div', { class: 'section-note', role: 'alert' }, h('b', { text: heading }), entry.message + ' ', ui.linkButton('Dismiss', function () { app.tracker.dismiss(entry); }));
-      }
-      return locked ? h('p', { class: 'pending', role: 'status', text: 'Being updated… Try again in a minute.' }) : null;
+      if (locked) return h('p', { class: 'pending', role: 'status', text: 'Being updated… Try again in a minute.' });
+      var mark = app.mark(rec, kind);
+      return mark ? h('p', { class: 'mark-line' }, mark) : null;
     }
 
     function busy(app, id, kind) {
@@ -3744,7 +3956,7 @@ window.ESGCompetencyHub = function (ctx) {
           await app.tracker.submit({ key: key, type: 'RaiseRegisterEntry', label: 'Raise “' + v.title.trim() + '”', payload: {
             areaKey: v.areaKey, entryType: v.entryType, impact: v.impact, title: v.title.trim(), description: v.description.trim() } });
           dlg.close();
-          CH.ui.toast(app.root, 'Your entry has been sent. It will appear in a few minutes.', 'ok');
+          CH.ui.toast(app.root, 'Sent. It shows ✓✓ Saved as soon as it is recorded – you can carry on.', 'ok');
         } catch (error) {
           submit.disabled = false;
           submit.textContent = 'Try again';
@@ -4452,11 +4664,13 @@ window.ESGCompetencyHub = function (ctx) {
 
       function pending(x) {
         var e = app.tracker.forTarget(x.id, 'Meeting');
+        // release 1.2: a change to the booking already shows; a refusal has its own card, with Try again
         if (e && (e.state === 'submitted' || e.state === 'slow')) {
-          return h('p', { class: 'pending', role: 'status' }, h('b', { text: e.label }), ' – submitted ' + D.ukTime(e.submittedAt) + ', being recorded (usually under 5 minutes).');
+          return h('p', { class: 'pending', role: 'status' }, app.mark(x, 'Meeting') || app.mark({ sending: true }, 'Meeting'), ' ' + e.label + ' – ' +
+            (e.retrying ? e.message : 'you can carry on. The next steps are offered once it is saved.'));
         }
-        var heading = { rejected: 'Not accepted: ', attention: 'Not recorded: ', cancelled: 'Cancelled: ' }[e && e.state];
-        return heading ? h('div', { class: 'section-note', role: 'alert' }, h('b', { text: heading }), e.message + ' ', ui.linkButton('Dismiss', function () { app.tracker.dismiss(e); })) : null;
+        var mark = app.mark(x, 'Meeting');
+        return mark ? h('p', { class: 'mark-line' }, mark) : null;
       }
 
       function fill() {
@@ -5102,17 +5316,17 @@ window.ESGCompetencyHub = function (ctx) {
         return [
           app.stale ? h('p', { class: 'stale-copy', role: 'alert' }, h('b', { text: 'A newer version of the Competency Hub is available. ' }),
             'Press Ctrl+F5 to load it. Until then some buttons may not work.') : null,
-          // Limited mode (spec REL-5): only the changes that need automatic processing are paused.
-          app.queueBlocked() ? h('p', { class: 'stale-copy limited', role: 'alert' }, h('b', { text: 'Changes can\'t be processed at the moment. ' }),
-            'You can still read everything, add updates to actions and post notices. Raising and changing actions will be back shortly – nothing you have already sent is lost.') : null,
           h('header', { class: 'bar' }, h('div', { class: 'bar-in' },
             h('div', { class: 'brand' }, 'ESG Competency Hub', h('small', { text: 'Environmental Safety Group' })),
             C.ENVIRONMENT !== 'PRODUCTION' ? h('span', { class: 'env', text: C.ENVIRONMENT + ' – not live data' }) : null,
             app.person && app.model ? nav() : null,
             app.person && app.model && app.state.view === 'home' ? homeButtons() : null,
             app.person ? h('span', { class: 'who', text: CH.names.of(app.person) + ' · ' + app.person.Role }) : null)),
+          app.person && app.model ? statusLine() : null,
           h('main', { id: 'ch-main', tabindex: '-1' }, content),
+          app.person && app.model ? problems() : null,
           h('p', { class: 'toast', 'data-ch-live': true, role: 'status', 'aria-live': 'polite' }),
+          h('p', { class: 'sr-only', 'data-ch-said': true, role: 'status', 'aria-live': 'polite' }),
           // the feedback button sits in its own place in the footer, so it never covers anything (spec FB-1)
           h('footer', null, h('span'), h('span', { text: 'ESG Competency Hub · version ' + C.VERSION }),
             h('span', { class: 'fb-slot' }, app.person && app.model ? CH.views.feedback.bubble(app) : null))
@@ -5134,8 +5348,9 @@ window.ESGCompetencyHub = function (ctx) {
         var acc = app.access;
         var first = acc.memberAreas[0] || (app.model.areas[0] && app.model.areas[0].key);
         return h('span', { class: 'bar-btns' },
-          acc.canPostNotice(first) ? CH.ui.button('Post a notice', function () { app.postNotice(first); }) : null,
-          acc.memberAreas.length || acc.isManagement ? CH.ui.button('Raise an action', function () { app.raiseAction(first); }, 'main') : null);
+          acc.canPostNotice(first) ? CH.ui.button('Post a notice', function () { app.postNotice(app.state.homeArea || first); }) : null,
+          // the area is never guessed: the open area, else the person chooses (backlog 12)
+          acc.memberAreas.length || acc.isManagement ? CH.ui.button('Raise an action', function () { app.raiseAction(app.state.homeArea || null); }, 'main') : null);
       }
 
       // On the home page the app fills the window exactly, so the page itself never scrolls. Small windows
@@ -5189,31 +5404,76 @@ window.ESGCompetencyHub = function (ctx) {
         fitToWindow();
       }
 
-      // Raised actions being recorded, changes that were not accepted, and requests that never left the browser.
-      function requestStrip() {
-        if (!app.tracker) return null;
-        var items = app.tracker.entries().filter(function (e) {
-          if (e.dismissed) return false;
-          if (CH.requests.ADMIN_TYPES.indexOf(e.type) >= 0) return false;   // shown on the Administration page
-          if (e.type === 'RaiseAction' || e.type === 'RaiseRegisterEntry' || e.type === 'ScheduleMeeting') return e.state !== 'done';
-          return ['rejected', 'attention', 'cancelled', 'reverted'].indexOf(e.state) >= 0;
-        }).map(function (e) {
-          var waiting = e.state === 'submitted' || e.state === 'slow';
-          var how = { rejected: 'not accepted: ', attention: 'not recorded: ', cancelled: 'cancelled: ', reverted: 'reverted: ' }[e.state];
-          return h('li', { class: waiting ? 'pending' : 'section-note' }, h('b', { text: e.label }),
-            waiting ? ' – submitted ' + CH.dates.ukTime(e.submittedAt) + (e.retrying ? '. ' + e.message
-              : (e.processing ? ', being recorded now.' : ', waiting to be recorded (usually under 5 minutes).') + (e.state === 'slow' ? ' ' + e.message : ''))
-              : ' – ' + how + e.message + ' ',
-            waiting ? null : CH.ui.linkButton('Dismiss', function () { app.tracker.dismiss(e); }));
-        });
-        var unsent = app.tracker.unsent();
-        if (unsent.length) {
-          items.push(h('li', { class: 'section-note' }, h('b', { text: unsent.length === 1 ? '1 change was not sent. ' : unsent.length + ' changes were not sent. ' }),
-            'Your connection dropped before it reached SharePoint. ', CH.ui.linkButton('Send again', async function () {
-              try { await app.tracker.resend(); render(false); } catch (_) { CH.ui.toast(app.root, 'Still could not send. Try again in a moment.', 'info'); }
-            })));
+      // Changes the page shows itself (release 1.2); administrators' changes are followed on the Administration page.
+      function followed(e) { return CH.requests.ADMIN_TYPES.indexOf(e.type) < 0; }
+      function saving(e) { return e.state === 'submitted' || e.state === 'slow'; }
+
+      // One line under the bar, always there (so nothing below moves): what is still being saved, a pause in automatic
+      // processing, or requests a dropped connection kept back. Otherwise "Everything is up to date."
+      function statusLine() {
+        var entries = app.tracker ? app.tracker.entries().filter(function (e) { return followed(e) && saving(e); }) : [];
+        var unsent = app.tracker ? app.tracker.unsent() : [];
+        var text, kind = '', extra = null;
+        if (app.queueBlocked()) {
+          kind = 'down';
+          text = 'Changes can\'t be processed at the moment. You can still read everything, add updates and post notices – nothing you have sent is lost.';
+        } else if (unsent.length) {
+          kind = 'down';
+          text = (unsent.length === 1 ? '1 change was not sent' : unsent.length + ' changes were not sent') + ': your connection dropped before it reached SharePoint. ';
+          extra = CH.ui.linkButton('Send again', async function () {
+            try { await app.tracker.resend(); render(false); } catch (_) { CH.ui.toast(app.root, 'Still could not send. Try again in a moment.', 'info'); }
+          });
+        } else if (entries.length) {
+          kind = 'busy';
+          var e = entries[0];
+          var how = entries.some(function (x) { return x.retrying; }) ? ' – retrying automatically, you can carry on.'
+            : entries.some(function (x) { return x.state === 'slow'; }) ? ' – taking longer than usual, but it will be saved. You can carry on.' : ' – you can carry on.';
+          text = (entries.length === 1 ? '1 change still saving: ' + e.label : entries.length + ' changes still saving') + how;
+        } else {
+          text = 'Everything is up to date.';
         }
-        return items.length ? h('ul', { class: 'request-strip', 'aria-live': 'polite' }, items) : null;
+        return h('div', { class: 'status-line' + (kind ? ' ' + kind : ''), role: 'status', 'aria-live': 'polite' },
+          h('span', { class: 'dot', 'aria-hidden': 'true' }), h('span', { text: text }), extra);
+      }
+
+      // A change that was not saved: what happened, and Try again where that can work. Shown until dismissed.
+      function problems() {
+        if (!app.tracker) return null;
+        var list = app.tracker.entries().filter(function (e) {
+          return followed(e) && !e.dismissed && ['rejected', 'attention', 'cancelled', 'reverted'].indexOf(e.state) >= 0;
+        }).slice(-3);
+        if (!list.length) return null;
+        return h('div', { class: 'problems', role: 'alert' }, list.map(function (e) {
+          var text, again = false;
+          if (e.state === 'rejected') {
+            again = CH.requests.isConflict(e);
+            text = again ? 'Someone else changed this a moment ago, so your change was not applied. Nothing was changed – the screen shows it as it is now.'
+              : e.message + ' Nothing was changed.';
+          } else if (e.state === 'attention') {
+            again = true;
+            text = /locked|Not fully/i.test(e.message)
+              ? 'The Hub could not finish this change, and an administrator has been told. Part of it was made, so the record is locked until it is finished. Trying again is safe – it can never make the change twice.'
+              : 'The Hub could not process this change. Nothing was changed, and an administrator has been told. Trying again is safe – it can never make the change twice.';
+          } else {
+            text = e.message;
+          }
+          return h('div', { class: 'problem' }, h('b', { text: (e.state === 'cancelled' ? 'Cancelled: ' : e.state === 'reverted' ? 'Reverted: ' : 'Not saved: ') + e.label }),
+            h('p', { text: text }),
+            h('div', { class: 'row' },
+              again ? CH.ui.button('Try again', function () { tryAgain(e); }, 'main') : null,
+              CH.ui.button('Dismiss', function () { app.tracker.dismiss(e); })));
+        }));
+      }
+
+      async function tryAgain(e) {
+        var rec = e.targetType === 'Notice' ? app.model.noticeById[e.targetId] : e.targetType === 'Register Entry' ? app.model.entryById[e.targetId]
+          : e.targetType === 'Meeting' ? app.model.meetingById[e.targetId] : app.model.actionById[e.targetId];
+        try {
+          await app.tracker.retry(e, e.state === 'rejected' && rec && e.spec && e.spec.expectedRevision ? rec.revision : undefined);
+        } catch (error) {
+          CH.ui.toast(app.root, error.friendly || 'It could not be sent just now. Try again in a moment.', 'info');
+        }
+        render(false);
       }
 
       // Every few minutes: is automatic processing still working (or working again)? Repaints only on a change.
@@ -5240,14 +5500,21 @@ window.ESGCompetencyHub = function (ctx) {
           if (entry.state === 'done' && app.state.view === 'admin') setTimeout(function () { CH.views.admin.refresh(app); }, 1500);
           return;
         }
-        if (entry.state !== 'done') { render(false); if (app.panel) app.panel.refresh(); return; }
+        if (entry.state !== 'done') {
+          rebuild();
+          render(false);
+          if (app.panel) app.panel.refresh();
+          return;
+        }
         reload().then(function () {
           render(false);
           if (app.panel) app.panel.refresh();
           var a = app.model.actionById[entry.resultId];
           var e = app.model.entryById[entry.resultId];
-          CH.ui.toast(app.root, entry.type === 'RaiseAction' && a ? a.ref + ' raised: ' + a.title + '.'
-            : entry.type === 'RaiseRegisterEntry' && e ? e.ref + ' raised: ' + e.title + '.' : entry.message, 'ok');
+          // a new record gets its number now; other changes just show ✓✓ Saved where they are (and are told to screen readers)
+          if (entry.type === 'RaiseAction' && a) CH.ui.toast(app.root, a.ref + ' raised: ' + a.title + '.', 'ok');
+          else if (entry.type === 'RaiseRegisterEntry' && e) CH.ui.toast(app.root, e.ref + ' raised: ' + e.title + '.', 'ok');
+          CH.ui.say(app.root, 'Saved: ' + entry.label + '. ' + entry.message);
         }).catch(function () { CH.ui.toast(app.root, entry.message + ' Reload the page to see it.', 'ok'); });
       }
 
@@ -5294,26 +5561,26 @@ window.ESGCompetencyHub = function (ctx) {
       app.openNotice = function (n) { CH.views.recordPanel.openNotice(app, n.id); };
       app.openEntry = function (e) { CH.views.recordPanel.openEntry(app, e.id); };
       app.raiseEntry = function (key) { CH.views.entryForm.open(app, key); };
-      // "being recorded" and the like for a notice or entry in a list (kind: 'Notice' or 'Register Entry')
-      app.recordNote = function (kind, id) {
-        var e = app.tracker && app.tracker.forTarget(id, kind);
-        if (e && (e.state === 'submitted' || e.state === 'slow')) return 'change being recorded';
-        if (e && e.state === 'rejected') return 'change not accepted';
-        if (e && e.state === 'attention') return 'change not recorded';
-        return '';
+      // The mark beside a record (release 1.2): ✓ Sent while it is being saved, ✓✓ Saved for three seconds (it then fades),
+      // ✕ Not saved after a refusal or a fault. kind: 'Action', 'Notice', 'Register Entry' or 'Meeting'.
+      app.mark = function (rec, kind) {
+        if (!rec || !app.tracker) return null;
+        if (rec.sending) return h('span', { class: 'mark sent', title: 'Sent – being saved', text: '✓ Sent' });
+        var e = app.tracker.forRecord(rec.id, kind);
+        var since = e && e.state === 'done' && e.doneAt ? Date.now() - e.doneAt : Infinity;
+        if (since < 4000) {
+          return h('span', { class: 'mark saved', title: 'Saved', text: '✓✓ Saved', style: 'animation-delay:' + Math.round(3000 - since) + 'ms' });
+        }
+        if (e && !e.dismissed && (e.state === 'rejected' || e.state === 'attention')) return h('span', { class: 'mark refused', text: '✕ Not saved' });
+        if (rec.locked) return h('span', { class: 'mark sent', text: 'being updated' });
+        return null;
       };
+      app.markAction = function (a) { return app.mark(a, 'Action'); };
       // After an instant write (a flag, a comment): read the lists again and repaint, keeping any open panel.
       app.recordChanged = async function () {
         await reload();
         render(false);
         if (app.panel) app.panel.refresh();
-      };
-      app.pendingNote = function (a) {
-        var e = app.tracker && app.tracker.forTarget(a.id);
-        if (e && (e.state === 'submitted' || e.state === 'slow')) return 'change being recorded';
-        if (e && e.state === 'rejected') return 'change not accepted';
-        if (e && e.state === 'attention') return 'change not recorded';
-        return a.locked ? 'being updated' : '';
       };
       // keys: every noticeboard it was posted to (the first is where it is kept); all of them reads "every noticeboard"
       app.noticePosted = async function (key, keys) {
@@ -5330,7 +5597,8 @@ window.ESGCompetencyHub = function (ctx) {
 
       function render(moveFocus) {
         if (!app.model) return;
-        var content = [requestStrip(), app.state.view === 'area' && app.model.areaByKey[app.state.area]
+        if (moveFocus && app.keep && Object.keys(app.keep).length) { app.keep = {}; rebuild(); }
+        var content = [app.state.view === 'area' && app.model.areaByKey[app.state.area]
           ? CH.views.area.render(app, app.state.area, app.state.tab)
           : app.state.view === 'mine' ? CH.views.myActions.render(app)
           : app.state.view === 'manage' ? CH.views.dashboard.render(app)
@@ -5377,7 +5645,29 @@ window.ESGCompetencyHub = function (ctx) {
         // the "due soon" window an administrator sets (DueSoonDays, 1 to 30 days)
         var soon = (app.settings.filter(function (r) { return r.Title === 'DueSoonDays'; })[0] || {}).Value;
         CH.config.dueSoonDays = /^\d{1,2}$/.test(String(soon || '')) && Number(soon) >= 1 && Number(soon) <= 30 ? Number(soon) : 7;
-        app.model = CH.model.build(raw, app.people, app.access, today, now);
+        app.raw = raw;
+        rebuild();
+      }
+
+      // The model from the rows last read plus every change still being saved (CH.optimistic). Actions closed on this
+      // screen are kept, marked Done, until the person moves to another page.
+      function rebuild() {
+        if (!app.raw || !app.access) return;
+        var now = new Date();
+        var today = CH.dates.localDate(now);
+        var entries = app.tracker ? app.tracker.entries() : [];
+        app.keep = app.keep || {};
+        var view = CH.optimistic.apply(app.raw, entries, app.keep, { personId: app.person.SiteUserId, today: today, now: now });
+        entries.forEach(function (e) {
+          var closing = e.type === 'MarkComplete' || e.type === 'CloseAction';
+          if (closing && saving(e)) {
+            var row = (view.actions.rows || []).filter(function (r) { return Number(r.Id) === Number(e.targetId); })[0];
+            if (row && row.Status === 'Closed') app.keep[e.targetId] = Object.assign({}, row, { _sending: '' });
+          }
+          if (closing && ['rejected', 'attention', 'cancelled'].indexOf(e.state) >= 0) delete app.keep[e.targetId];
+          if (e.type === 'ReopenAction' && e.state === 'done') delete app.keep[e.targetId];
+        });
+        app.model = CH.model.build(view, app.people, app.access, today, now);
       }
 
       async function start() {
@@ -5415,6 +5705,7 @@ window.ESGCompetencyHub = function (ctx) {
         app.tracker = CH.requests.tracker(app, onRequestChange);
         try {
           await Promise.all([reload(), app.tracker.resume().catch(function () { return 0; })]);
+          rebuild();   // the changes still being saved, read back with the requests, show again
         } catch (error) {
           stateScreen('The Competency Hub could not load', 'Some of the information could not be read. Please reload the page in a few minutes.',
             'Details for the administrator: ' + (error.status ? 'HTTP ' + error.status : error.message));

@@ -121,6 +121,38 @@ h2 { font-size: calc(18 * var(--u)); font-weight: 600; margin: 0 0 calc(12 * var
 .pending { background: var(--navy-soft); color: var(--navy); border-radius: calc(8 * var(--u)); padding: calc(8 * var(--u)) calc(12 * var(--u)); }
 .stale-copy { margin: 0; background: #fff3d6; color: #6b4a00; padding: calc(10 * var(--u)) calc(16 * var(--u)); text-align: center; }
 .request-strip { list-style: none; margin: 0 0 calc(18 * var(--u)); padding: 0; display: grid; gap: calc(8 * var(--u)); }
+/* Release 1.2: one status line under the bar, always the same height, so nothing below it moves */
+.status-line { display: flex; align-items: center; gap: calc(10 * var(--u)); padding: calc(5 * var(--u)) calc(32 * var(--u)); min-height: calc(32 * var(--u));
+  font-size: calc(14 * var(--u)); color: var(--muted); background: #fff; border-bottom: 1px solid var(--line); white-space: nowrap; overflow: hidden; }
+.status-line > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; }
+.status-line .dot { width: calc(9 * var(--u)); height: calc(9 * var(--u)); border-radius: 50%; background: var(--ok); flex: none; }
+.status-line.busy .dot { background: var(--accent); animation: ch-pulse 1.2s infinite; }
+.status-line.down { color: var(--late); }
+.status-line.down .dot { background: var(--late); }
+.status-line .btn-link { padding: 0; flex: none; }
+/* the raise form's step line and summary (release 1.2) */
+.progress { margin-bottom: calc(14 * var(--u)); }
+.progress .lbl { font-size: calc(14 * var(--u)); margin-bottom: calc(6 * var(--u)); }
+.progress .track { height: calc(6 * var(--u)); background: #e3e9ee; border-radius: calc(3 * var(--u)); overflow: hidden; }
+.progress .fill { height: 100%; background: var(--accent); }
+.raise-summary { display: grid; gap: calc(2 * var(--u)); background: var(--navy-soft); border-radius: calc(10 * var(--u)); padding: calc(12 * var(--u)) calc(16 * var(--u)); margin-bottom: calc(12 * var(--u)); }
+.raise-summary .big { font-size: calc(19 * var(--u)); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+@keyframes ch-pulse { 50% { opacity: .35; } }
+/* the mark beside a record: ✓ Sent, then ✓✓ Saved which fades after three seconds, or ✕ Not saved */
+.mark { font-size: calc(13 * var(--u)); font-weight: 600; white-space: nowrap; margin-left: calc(6 * var(--u)); }
+.mark.sent { color: var(--muted); }
+.mark.saved { color: var(--ok); animation: ch-fade .8s forwards; }
+.mark.refused { color: var(--late); }
+@keyframes ch-fade { to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .status-line.busy .dot { animation: none; } }
+/* a change that was not saved: says what happened, with Try again where that can work */
+.problems { position: fixed; right: calc(24 * var(--u)); bottom: calc(24 * var(--u)); z-index: 1002; display: grid; gap: calc(10 * var(--u)); max-width: calc(440 * var(--u)); }
+.problem { background: #fff; border: 1px solid var(--late); border-left: calc(6 * var(--u)) solid var(--late); border-radius: calc(10 * var(--u));
+  padding: calc(12 * var(--u)) calc(16 * var(--u)); box-shadow: 0 calc(8 * var(--u)) calc(30 * var(--u)) rgba(0, 0, 0, .2); }
+.problem b { color: var(--late); }
+.problem p { margin: calc(4 * var(--u)) 0 calc(10 * var(--u)); }
+.problem .btn { min-height: calc(34 * var(--u)); padding: calc(5 * var(--u)) calc(12 * var(--u)); font-size: calc(14 * var(--u)); }
 .item-open { display: flex; justify-content: space-between; align-items: center; gap: calc(14 * var(--u)); width: 100%; background: none; border: 0; padding: 0; text-align: left; color: inherit; }
 .item-open:disabled { cursor: default; }
 .items li:has(.item-open:not(:disabled)):hover { border-color: var(--navy); }

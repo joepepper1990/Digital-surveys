@@ -27,8 +27,8 @@ CH.ui = (function () {
   var GROUPS = [['late', 'Late', 'var(--late)'], ['soon', 'Due within 7 days', 'var(--soon)'], ['later', 'Coming up', '#9aa5af']];
 
   // Actions grouped as Late / Due within 7 days / Coming up. sub(action) gives the grey second line.
-  // Each action opens with open(action); pending(action) gives a "being recorded" note, if any.
-  function actionList(actions, sub, emptyText, state, open, pending) {
+  // Each action opens with open(action); mark(action) gives its ✓ Sent / ✓✓ Saved mark, if any (release 1.2).
+  function actionList(actions, sub, emptyText, state, open, mark) {
     if (state === 'unavailable') return null;
     if (!actions.length) return h('p', { class: 'muted', text: emptyText });
     var out = [];
@@ -38,9 +38,8 @@ CH.ui = (function () {
       if (!rows.length) return;
       out.push(h('h3', { class: 'group-title' }, h('span', { class: 'dot', style: 'background:' + g[2], 'aria-hidden': 'true' }), g[1]));
       out.push(h('ul', { class: 'items' }, rows.map(function (a) {
-        var note = pending ? pending(a) : '';
         return h('li', null, h('button', { type: 'button', class: 'item-open', onclick: open ? function () { open(a); } : null, disabled: open ? null : true },
-          h('span', null, h('span', { class: 't', text: a.title }), h('span', { class: 's', text: sub(a) + (note ? ' · ' + note : '') })),
+          h('span', null, h('span', { class: 't', text: a.title }), h('span', { class: 's' }, sub(a), mark ? mark(a) : null)),
           chip(a.waitingCloseOut ? 'later' : a.group, a.dueText)));
       })));
     });
@@ -86,6 +85,12 @@ CH.ui = (function () {
     setTimeout(function () { if (region.textContent === text) { region.textContent = ''; region.className = 'toast'; } }, 6000);
   }
 
+
+  // Said to screen readers only (release 1.2): a change that is now saved. Sighted readers see ✓✓ Saved beside it.
+  function say(root, text) {
+    var region = root.querySelector('[data-ch-said]');
+    if (region) region.textContent = text;
+  }
 
   // Collapsed sections on the home page, remembered in this browser only (storage may be unavailable).
   var FOLD_KEY = 'esg-competency-hub-home';
@@ -159,7 +164,7 @@ CH.ui = (function () {
   return {
     scaleFor: scaleFor, TEXT_SIZES: TEXT_SIZES, textSize: textSize, textFactor: textFactor, saveTextSize: saveTextSize,
     chip: chip, card: card, button: button, linkButton: linkButton, sectionNote: sectionNote,
-    actionList: actionList, tile: tile, tileGrid: tileGrid, areaStatusLines: areaStatusLines, toast: toast,
+    actionList: actionList, tile: tile, tileGrid: tileGrid, areaStatusLines: areaStatusLines, toast: toast, say: say,
     folded: folded, saveFolded: saveFolded, panel: panel, fitList: fitList, refit: refit, resetFits: resetFits
   };
 })();

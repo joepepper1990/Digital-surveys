@@ -42,10 +42,9 @@ CH.views.home = (function () {
 
   // A uniform card: title on one line, then a meta line with chips. Opens the action when given one.
   function actionCard(app, a, meta) {
-    var note = app.pendingNote(a);
     return h('button', { type: 'button', class: 'item-open hm-card', title: a.title, onclick: function () { app.openAction(a); } },
       h('span', { class: 't', text: a.title }),
-      h('span', { class: 'hm-meta' }, meta, note ? h('span', { class: 'hm-note', text: note }) : null,
+      h('span', { class: 'hm-meta' }, meta, app.markAction(a),
         h('span', { class: 'when w-' + (a.waitingCloseOut ? 'later' : a.group), text: a.dueText })));
   }
   function infoCard(text, kind, kindClass, onclick) {
@@ -163,20 +162,18 @@ CH.views.home = (function () {
     var news = notices.filter(function (n) { return n.important; }).map(function (n) { return { n: n }; }).concat(rest).map(function (x) {
       if (x.e) {
         var en = x.e;
-        var note = app.recordNote('Register Entry', en.id);
         return h('button', { type: 'button', class: 'hm-rw item-open', title: en.title, onclick: function () { app.openEntry(en); } },
           h('span', { class: 'hm-dot' + (en.entryType === 'Degradation' ? ' bad' : ''), title: en.entryType }),
           h('span', { class: 'hm-tx' }, h('b', { text: en.title }),
             h('small', { text: en.entryType + ' · ' + en.impact + ' impact · ' + en.raisedByName + (en.raisedIso ? ' · ' + D.short(en.raisedIso) : '') +
-              (en.flagged ? ' · flagged' : '') + (note ? ' · ' + note : '') })));
+              (en.flagged ? ' · flagged' : '') }, app.mark(en, 'Register Entry'))));
       }
       var n = x.n;
-      var nnote = app.recordNote('Notice', n.id);
       return h('button', { type: 'button', class: 'hm-rw item-open', title: n.title, onclick: function () { app.openNotice(n); } },
         h('span', { class: 'hm-dot' + (n.important ? ' on' : ''), title: n.important ? 'Important' : null }),
         h('span', { class: 'hm-tx' }, h('b', { text: n.title }),
           h('small', { text: (n.pinned ? 'Pinned · ' : n.important ? 'Important · ' : '') + (n.fromOutside ? 'From ' + n.authorName + ', outside ' + area.name : n.authorName) +
-            ' · ' + D.short(n.createdIso) + (n.flagged ? ' · flagged' : '') + (nnote ? ' · ' + nnote : '') })));
+            ' · ' + D.short(n.createdIso) + (n.flagged ? ' · flagged' : '') }, app.mark(n, 'Notice'))));
     });
     // meetings: those to come (and one in progress), then the last one held
     var diary = [];

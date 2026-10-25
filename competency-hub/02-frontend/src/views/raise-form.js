@@ -6,10 +6,11 @@ CH.views.raiseForm = (function () {
   var D = CH.dates;
   var R = CH.rules;
   var field = function (l, i, hint) { return CH.ui.dialog.field(l, i, hint); };
+  // release 1.2: short step names, shown as "Step 2 of 4 · Who and where – next: by when" with a progress bar
   var STEPS = [
-    { title: 'What needs doing?', keys: ['title', 'description'] },
-    { title: 'Who will do it, and in which area?', keys: ['areaKey', 'ownerId', 'coOwnerIds'] },
-    { title: 'By when?', keys: ['dueIso', 'priority', 'checkerId'] },
+    { title: 'What needs doing', keys: ['title', 'description'] },
+    { title: 'Who and where', keys: ['areaKey', 'ownerId', 'coOwnerIds'] },
+    { title: 'By when', keys: ['dueIso', 'priority', 'checkerId'] },
     { title: 'Check and raise', keys: [] }
   ];
 
@@ -34,9 +35,12 @@ CH.views.raiseForm = (function () {
     var title = h('input', { id: 'ch-r-title', type: 'text', maxlength: '255', autocomplete: 'off', value: (opts && opts.title) || (source ? source.title : '') });
     var description = h('textarea', { id: 'ch-r-description', rows: '5', maxlength: '5000' });
     if (source) description.value = String(notice ? notice.body : entry.description || '').slice(0, 5000);
-    var area = h('select', { id: 'ch-r-areaKey' }, mine.map(function (a) {
-      return h('option', { value: a.key, selected: a.key === areaKey ? true : null, text: a.name });
-    }));
+    // which area: never guessed (backlog 12). It is preselected only when the form is opened from an area, or the
+    // person can raise in just one; otherwise they choose it.
+    var preset = mine.length === 1 ? mine[0].key : mine.some(function (a) { return a.key === areaKey; }) ? areaKey : '';
+    var area = h('select', { id: 'ch-r-areaKey' }, (preset ? [] : [h('option', { value: '', text: 'Choose an area…' })]).concat(mine.map(function (a) {
+      return h('option', { value: a.key, selected: a.key === preset ? true : null, text: a.name });
+    })));
     var owner = h('select', { id: 'ch-r-ownerId' });
     var due = h('input', { id: 'ch-r-dueIso', type: 'date', min: today, max: R.addYears(today, maxYears) });
     var priority = h('select', { id: 'ch-r-priority' }, R.PRIORITIES.map(function (p) { return h('option', { value: p, selected: p === 'Normal' ? true : null, text: p }); }));
@@ -80,7 +84,8 @@ CH.views.raiseForm = (function () {
     function fillOwners() {
       var current = owner.value || String(app.person.SiteUserId);
       CH.dom.clear(owner);
-      owner.appendChild(h('option', { value: '', text: 'Choose a person' }));
+      owner.appendChild(h('option', { value: '', text: area.value ? 'Choose a person' : 'Choose the area first' }));
+      if (!area.value) { selfNote.style.display = 'none'; return; }
       // a technician without meeting rights in this area is offered only themselves (spec §4.2)
       m.ownersFor(area.value).filter(function (p) { return app.access.canRaiseFor(area.value, p.id, app.person.SiteUserId); }).forEach(function (p) {
         owner.appendChild(h('option', { value: String(p.id), selected: String(p.id) === current ? true : null,
@@ -113,7 +118,7 @@ CH.views.raiseForm = (function () {
     }
 
     var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-r', title: entry ? 'Turn ' + entry.ref + ' into an action' : notice ? 'Turn a notice into an action' : meeting ? 'Raise an action from the meeting' : 'Raise an action' });
-    var progress = h('p', { class: 'muted small', 'aria-live': 'polite' });
+    var progress = h('div', { class: 'progress', 'aria-live': 'polite' });
     var errorBox = h('p', { class: 'form-error', role: 'alert' });
     var stepBox = h('div');
     var nextBtn = h('button', { type: 'submit', class: 'btn btn-main' });
@@ -123,7 +128,7 @@ CH.views.raiseForm = (function () {
 
     var panes = [
       [field('Title', title, 'A short summary, for example "Replace FH40 probe".'), field('Description', description, 'What needs doing and anything the owner should know.')],
-      [field('Area', area), field('Who will do it?', owner), selfNote, coField],
+      [field('Which area is it for?', area), field('Who will do it?', owner), selfNote, coField],
       [field('Target date', due, 'From today up to ' + maxYears + (maxYears === 1 ? ' year' : ' years') + ' ahead.'),
         h('details', { class: 'more' }, h('summary', { text: 'More options' }),
           field('Priority', priority), h('label', { class: 'check' }, closeOut, ' Needs a close-out check before it is closed'), checkerField)],
@@ -133,20 +138,26 @@ CH.views.raiseForm = (function () {
     function summary() {
       var v = values();
       var ownerName = m.nameOf(Number(v.ownerId));
-      return h('dl', { class: 'facts' },
+      return [h('div', { class: 'raise-summary' }, h('span', { class: 'muted small', text: 'You are raising' }),
+        h('b', { class: 'big', text: '“' + v.title.trim() + '” in ' + m.areaByKey[v.areaKey].name }),
+        h('span', { class: 'small', text: 'for ' + ownerName + ', by ' + D.weekday(v.dueIso) + ' ' + D.long(v.dueIso) })),
+      h('dl', { class: 'facts' },
         h('dt', { text: 'What' }), h('dd', null, h('b', { text: v.title.trim() }), h('br'), h('span', { class: 'notice-body', text: v.description.trim() })),
         h('dt', { text: 'Who' }), h('dd', { text: ownerName + ', in ' + m.areaByKey[v.areaKey].name +
           (v.coOwnerIds.length ? ' – co-owners ' + v.coOwnerIds.map(function (id) { return m.nameOf(id); }).join(', ') : '') }),
         h('dt', { text: 'When' }), h('dd', { text: 'By ' + D.weekday(v.dueIso) + ' ' + D.long(v.dueIso) }),
         h('dt', { text: 'Also' }), h('dd', { text: v.priority + ' priority' + (v.requiresCloseOut ? ', with a close-out check by ' + m.nameOf(v.checkerId) : '') }),
         entry ? [h('dt', { text: 'For' }), h('dd', { text: entry.ref + ' ' + entry.title })] : null,
-        notice ? [h('dt', { text: 'From' }), h('dd', { text: 'The notice “' + notice.title + '”' })] : null);
+        notice ? [h('dt', { text: 'From' }), h('dd', { text: 'The notice “' + notice.title + '”' })] : null)];
     }
 
     function go(n) {
       step = Math.max(0, Math.min(STEPS.length - 1, n));
       errorBox.textContent = '';
-      progress.textContent = 'Step ' + (step + 1) + ' of ' + STEPS.length + ' – ' + STEPS[step].title;
+      CH.dom.clear(progress);
+      CH.dom.append(progress, [h('div', { class: 'lbl' }, 'Step ' + (step + 1) + ' of ' + STEPS.length + ' · ', h('b', { text: STEPS[step].title }),
+        STEPS[step + 1] ? h('span', { class: 'muted', text: ' – next: ' + STEPS[step + 1].title.toLowerCase() }) : null),
+        h('div', { class: 'track', 'aria-hidden': 'true' }, h('div', { class: 'fill', style: 'width:' + Math.round((step + 1) * 100 / STEPS.length) + '%' }))]);
       Array.prototype.forEach.call(form.querySelectorAll('.field-error'), function (x) { x.textContent = ''; });
       CH.dom.clear(stepBox);
       CH.dom.append(stepBox, panes[step] || summary());
@@ -177,7 +188,7 @@ CH.views.raiseForm = (function () {
           coOwnerIds: v.coOwnerIds.length ? v.coOwnerIds : undefined, checkerId: v.checkerId, sourceEntryId: entry ? entry.id : undefined, sourceNoticeId: notice ? notice.id : undefined,
           sourceMeetingId: meeting ? meeting.id : undefined }, meetingId: meeting ? meeting.id : undefined });
         dlg.close();
-        CH.ui.toast(app.root, 'Your action has been sent. It will appear in a few minutes.', 'ok');
+        CH.ui.toast(app.root, 'Sent. It shows ✓✓ Saved as soon as it is recorded – you can carry on.', 'ok');
       } catch (error) {
         nextBtn.disabled = false;
         nextBtn.textContent = 'Try again';

@@ -1366,7 +1366,7 @@
             },
             "Already_finished": {
               "type": "If",
-              "expression": "@contains(createArray('Applied', 'Void', 'Rolled Back', 'Cancelled', 'Reverted', 'Needs attention'), string(variables('varTx')?['State']))",
+              "expression": "@contains(createArray('Applied', 'Void', 'Rolled Back', 'Cancelled', 'Reverted'), string(variables('varTx')?['State']))",
               "actions": {
                 "Final_status": {
                   "type": "Compose",

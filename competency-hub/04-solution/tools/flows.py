@@ -3113,8 +3113,9 @@ def flow_request_queue(domain='actions'):
         ('Event_time', compose("@if(and(greaterOrEquals(ticks(" + R + "?['Created']), sub(ticks(outputs('Claim_time')), 18000000000)), "
                                "lessOrEquals(ticks(" + R + "?['Created']), ticks(outputs('Claim_time')))), " + R + "?['Created'], outputs('Claim_time'))")),
         ('Today', compose("@convertFromUtc(" + EVENT_TIME + ", 'GMT Standard Time', 'yyyy-MM-dd')")),
-        # a finished transaction (or one handed to the administrators) is only mirrored on the request
-        ('Already_final', cond("@contains(createArray('Applied', 'Void', 'Rolled Back', 'Cancelled', 'Reverted', 'Needs attention'), string(" + TX + "?['State']))", seq(
+        # a finished transaction is only mirrored on the request. One handed to the administrators (Needs attention) is
+        # resumed when its sender tries it again from the app: the same key, so it can never be made twice (1.9.0.4)
+        ('Already_final', cond("@contains(createArray('Applied', 'Void', 'Rolled Back', 'Cancelled', 'Reverted'), string(" + TX + "?['State']))", seq(
             ('Final_status', compose("@if(equals(string(" + TX + "?['State']), 'Applied'), 'Completed', if(contains(createArray('Void', 'Rolled Back'), "
                                      "string(" + TX + "?['State'])), 'Rejected', string(" + TX + "?['State'])))")),
             ('Final_body', compose({'Status': "@{outputs('Final_status')}"})),

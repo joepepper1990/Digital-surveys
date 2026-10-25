@@ -1051,6 +1051,25 @@ class Monitor(unittest.TestCase):
         self.assertEqual((a['PendingRequestKey'], float(a['DueDay'])), (KEY, 20261028.0), 'the values are written and the lock is kept')
         self.assertIn('Part of it was made', [m for m in s.sent if 'needs attention' in m['subject']][0]['body'])
 
+    def test_the_sender_trying_again_finishes_a_change_once(self):
+        """1.9.0.4: Try again in the app sets the same request back to Submitted; the stored copy is resumed."""
+        for fault in (lambda m, path, where: m == 'MERGE' and path.startswith('Actions/'),
+                      lambda m, path, where: m == 'ADD' and path == 'History' and '/FLK/A' in where):
+            with self.subTest():
+                s = site()
+                s.clock = WEEKDAY
+                r = submit(s, KELLY, 'ExtendDeadline', Extend().payload(), target=s.action, revision=2)
+                self.assertEqual(self.fail_three_times(s, r, fault)['Status'], 'Needs attention')
+                s.fail_if = None
+                s.item('requests', r)['f']['Status'] = 'Submitted'
+                status, eng = run(s, r, now=s.clock + timedelta(minutes=30))
+                self.assertEqual(request(s, r)['Status'], 'Completed', eng.log)
+                a = s.item('actions', s.action)['f']
+                self.assertEqual((float(a['DueDay']), float(a['Revision']), a['PendingRequestKey'] or None), (20261028.0, 3.0, None))
+                self.assertEqual(len(s.rows('history', RequestKey=KEY + '|1')), 1)
+                status, eng = run(s, r, now=s.clock + timedelta(minutes=31))
+                self.assertEqual(float(s.item('actions', s.action)['f']['Revision']), 3.0, 'a second try changes nothing')
+
     def test_processing_is_down_when_changes_are_not_picked_up(self):
         s = site()
         s.clock = WEEKDAY

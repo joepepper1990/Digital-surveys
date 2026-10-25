@@ -9,7 +9,7 @@ const crypto = require('crypto');
 const ROOT = path.join(__dirname, '..');
 const MODULES = [
   'src/core/config.js', 'src/core/dom.js', 'src/core/names.js', 'src/core/dates.js', 'src/core/sp.js', 'src/core/requests.js',
-  'src/domain/access.js', 'src/domain/rules.js', 'src/domain/model.js', 'src/domain/health.js', 'src/domain/agenda.js',
+  'src/domain/access.js', 'src/domain/rules.js', 'src/domain/model.js', 'src/domain/optimistic.js', 'src/domain/health.js', 'src/domain/agenda.js',
   'src/ui/components.js', 'src/ui/dialog.js',
   'src/views/home.js', 'src/views/area.js', 'src/views/notice-form.js', 'src/views/raise-form.js', 'src/views/action-panel.js', 'src/views/my-actions.js', 'src/views/people.js', 'src/views/record-panel.js', 'src/views/entry-form.js', 'src/views/feedback.js', 'src/views/settings.js',
   'src/views/dashboard.js', 'src/views/meeting-form.js', 'src/views/meeting-panel.js', 'src/views/cleanup.js', 'src/views/admin.js',

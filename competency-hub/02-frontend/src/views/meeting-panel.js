@@ -163,11 +163,13 @@ CH.views.meetingPanel = (function () {
 
     function pending(x) {
       var e = app.tracker.forTarget(x.id, 'Meeting');
+      // release 1.2: a change to the booking already shows; a refusal has its own card, with Try again
       if (e && (e.state === 'submitted' || e.state === 'slow')) {
-        return h('p', { class: 'pending', role: 'status' }, h('b', { text: e.label }), ' – submitted ' + D.ukTime(e.submittedAt) + ', being recorded (usually under 5 minutes).');
+        return h('p', { class: 'pending', role: 'status' }, app.mark(x, 'Meeting') || app.mark({ sending: true }, 'Meeting'), ' ' + e.label + ' – ' +
+          (e.retrying ? e.message : 'you can carry on. The next steps are offered once it is saved.'));
       }
-      var heading = { rejected: 'Not accepted: ', attention: 'Not recorded: ', cancelled: 'Cancelled: ' }[e && e.state];
-      return heading ? h('div', { class: 'section-note', role: 'alert' }, h('b', { text: heading }), e.message + ' ', ui.linkButton('Dismiss', function () { app.tracker.dismiss(e); })) : null;
+      var mark = app.mark(x, 'Meeting');
+      return mark ? h('p', { class: 'mark-line' }, mark) : null;
     }
 
     function fill() {

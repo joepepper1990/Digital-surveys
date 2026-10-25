@@ -548,10 +548,15 @@ window.MockFlow = (function () {
     }
 
     return {
-      // mode: '' (about 3 seconds), 'flowSlow' (20 minutes) or 'flowFail'.
+      // mode: '' (about 3 seconds), 'flowSlow' (20 minutes), 'flowFail', or 'faultOnce' (the first try ends with the
+      // administrators, as after three failed attempts; tried again by its sender, it is recorded)
       schedule: function (req, mode) {
         setTimeout(function () {
           if (mode === 'flowFail') return finish(req, 'Failed', 'Simulated failure.');
+          if (mode === 'faultOnce' && !req._faulted) {
+            req._faulted = true;
+            return finish(req, 'Needs attention', 'Not recorded – an administrator has been told. Nothing was changed.');
+          }
           req.Status = 'Processing';
           process(req);
         }, mode === 'flowSlow' ? 20 * 60 * 1000 : 3000);

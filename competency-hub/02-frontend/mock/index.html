@@ -100,6 +100,34 @@
 .mock-scope .ch .pending {background: var(--navy-soft); color: var(--navy); border-radius: calc(8 * var(--u)); padding: calc(8 * var(--u)) calc(12 * var(--u));}
 .mock-scope .ch .stale-copy {margin: 0; background: #fff3d6; color: #6b4a00; padding: calc(10 * var(--u)) calc(16 * var(--u)); text-align: center;}
 .mock-scope .ch .request-strip {list-style: none; margin: 0 0 calc(18 * var(--u)); padding: 0; display: grid; gap: calc(8 * var(--u));}
+.mock-scope .ch .status-line {display: flex; align-items: center; gap: calc(10 * var(--u)); padding: calc(5 * var(--u)) calc(32 * var(--u)); min-height: calc(32 * var(--u)); font-size: calc(14 * var(--u)); color: var(--muted); background: #fff; border-bottom: 1px solid var(--line); white-space: nowrap; overflow: hidden;}
+.mock-scope .ch .status-line > span:nth-child(2) {overflow: hidden; text-overflow: ellipsis;}
+.mock-scope .ch .status-line .dot {width: calc(9 * var(--u)); height: calc(9 * var(--u)); border-radius: 50%; background: var(--ok); flex: none;}
+.mock-scope .ch .status-line.busy .dot {background: var(--accent); animation: ch-pulse 1.2s infinite;}
+.mock-scope .ch .status-line.down {color: var(--late);}
+.mock-scope .ch .status-line.down .dot {background: var(--late);}
+.mock-scope .ch .status-line .btn-link {padding: 0; flex: none;}
+.mock-scope .ch .progress {margin-bottom: calc(14 * var(--u));}
+.mock-scope .ch .progress .lbl {font-size: calc(14 * var(--u)); margin-bottom: calc(6 * var(--u));}
+.mock-scope .ch .progress .track {height: calc(6 * var(--u)); background: #e3e9ee; border-radius: calc(3 * var(--u)); overflow: hidden;}
+.mock-scope .ch .progress .fill {height: 100%; background: var(--accent);}
+.mock-scope .ch .raise-summary {display: grid; gap: calc(2 * var(--u)); background: var(--navy-soft); border-radius: calc(10 * var(--u)); padding: calc(12 * var(--u)) calc(16 * var(--u)); margin-bottom: calc(12 * var(--u));}
+.mock-scope .ch .raise-summary .big {font-size: calc(19 * var(--u));}
+.mock-scope .ch .sr-only {position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;}
+.mock-scope .ch @keyframes ch-pulse {50% { opacity: .35; }}
+.mock-scope .ch .mark {font-size: calc(13 * var(--u)); font-weight: 600; white-space: nowrap; margin-left: calc(6 * var(--u));}
+.mock-scope .ch .mark.sent {color: var(--muted);}
+.mock-scope .ch .mark.saved {color: var(--ok); animation: ch-fade .8s forwards;}
+.mock-scope .ch .mark.refused {color: var(--late);}
+.mock-scope .ch @keyframes ch-fade {to { opacity: 0; }}
+@media (prefers-reduced-motion: reduce) {
+.mock-scope .ch .status-line.busy .dot {animation: none;}
+}
+.mock-scope .ch .problems {position: fixed; right: calc(24 * var(--u)); bottom: calc(24 * var(--u)); z-index: 1002; display: grid; gap: calc(10 * var(--u)); max-width: calc(440 * var(--u));}
+.mock-scope .ch .problem {background: #fff; border: 1px solid var(--late); border-left: calc(6 * var(--u)) solid var(--late); border-radius: calc(10 * var(--u)); padding: calc(12 * var(--u)) calc(16 * var(--u)); box-shadow: 0 calc(8 * var(--u)) calc(30 * var(--u)) rgba(0, 0, 0, .2);}
+.mock-scope .ch .problem b {color: var(--late);}
+.mock-scope .ch .problem p {margin: calc(4 * var(--u)) 0 calc(10 * var(--u));}
+.mock-scope .ch .problem .btn {min-height: calc(34 * var(--u)); padding: calc(5 * var(--u)) calc(12 * var(--u)); font-size: calc(14 * var(--u));}
 .mock-scope .ch .item-open {display: flex; justify-content: space-between; align-items: center; gap: calc(14 * var(--u)); width: 100%; background: none; border: 0; padding: 0; text-align: left; color: inherit;}
 .mock-scope .ch .item-open:disabled {cursor: default;}
 .mock-scope .ch .items li:has(.item-open:not(:disabled)):hover {border-color: var(--navy);}

@@ -32,7 +32,8 @@ CH.rules = (function () {
     else if (title.length > 255) e.title = 'Keep the title to 255 characters or fewer.';
     if (!description) e.description = 'Add a short description.';
     else if (description.length > 5000) e.description = 'Keep the description to 5,000 characters or fewer.';
-    if (!v.areaKey || !ctx.canWrite(v.areaKey)) e.areaKey = 'Choose one of your areas.';
+    if (!v.areaKey) e.areaKey = 'Choose the area this action belongs to.';
+    else if (!ctx.canWrite(v.areaKey)) e.areaKey = 'Choose one of your areas.';
     if (!v.ownerId) e.ownerId = 'Choose who will do it.';
     else if (!e.areaKey && !ctx.ownerAllowed(v.areaKey, Number(v.ownerId))) e.ownerId = 'Choose a member of this area or a Team Leader.';
     else if (!e.areaKey && ctx.canRaiseFor && !ctx.canRaiseFor(v.areaKey, Number(v.ownerId))) e.ownerId = SELF_ONLY;
@@ -323,7 +324,7 @@ CH.rules = (function () {
 
   // The live meeting and its minutes (spec MTG-3 to MTG-5), the same as the Minutes flow. Items for discussion – carried
   // forward, flagged notices, new register entries and new business – each need one of these outcomes to finalise.
-  var MINUTE_OUTCOMES = ['Discussed', 'Deferred', 'Not reached', 'Action raised', 'Discarded'];
+  var MINUTE_OUTCOMES = ['Discussed', 'Deferred', 'Not reached', 'Action raised', 'Discarded', 'Closed'];
   var DISCUSSION_SECTIONS = ['Carried forward', 'Noticeboard', 'New improvements and degradations', 'New business'];
   // items: [{ key, section, title }]; outcomes: { key: outcome } (the last one recorded). Returns the titles still missing one.
   function missingOutcomes(items, outcomes) {

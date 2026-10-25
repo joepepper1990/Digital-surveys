@@ -10,21 +10,18 @@ CH.views.actionPanel = (function () {
 
   function timeOf(date) { return D.ukTime(date); }
 
-  // The panel's line about a change in progress, rejected or not yet recorded.
+  // The panel's line about a change being saved (release 1.2: the change already shows; this says it is on its way).
+  // A refusal or a fault is explained in its own card, with Try again.
   function pendingLine(app, action) {
     var entry = app.tracker.forTarget(action.id);
+    if (action.isNew) return h('p', { class: 'pending', role: 'status' }, app.mark(action, 'Action'), ' Being saved – it gets its number in a moment, and can then be changed.');
     if (entry && (entry.state === 'submitted' || entry.state === 'slow')) {
-      return h('p', { class: 'pending', role: 'status' }, h('b', { text: entry.label }), ' – submitted ' + timeOf(entry.submittedAt) +
-        (entry.retrying ? '. ' + entry.message : entry.processing ? ', being recorded now.' + (entry.state === 'slow' ? ' ' + entry.message : '')
-          : ', waiting to be recorded (usually under 5 minutes).' + (entry.state === 'slow' ? ' ' + entry.message : '')));
+      return h('p', { class: 'pending', role: 'status' }, app.mark(action, 'Action'), ' ' + entry.label + ' – ' +
+        (entry.retrying ? entry.message : entry.state === 'slow' ? 'taking longer than usual, but it will be saved.' : 'you can carry on.'));
     }
-    var heading = { rejected: 'Not accepted: ', attention: 'Not recorded: ', cancelled: 'Cancelled: ', reverted: 'Reverted: ' }[entry && entry.state];
-    if (heading) {
-      return h('div', { class: 'section-note', role: 'alert' }, h('b', { text: heading }),
-        entry.message + ' ', ui.linkButton('Dismiss', function () { app.tracker.dismiss(entry); }));
-    }
-    if (action.locked) return h('p', { class: 'pending', role: 'status', text: 'Being updated… Try again in a minute.' });
-    return null;
+    if (action.locked) return h('p', { class: 'pending', role: 'status', text: 'Someone else\'s change to this action is being saved… Try again in a minute.' });
+    var mark = app.mark(action, 'Action');
+    return mark ? h('p', { class: 'mark-line' }, mark) : null;
   }
 
   var STATUS_WORDS = { 'Open': 'Open', 'In Progress': 'In progress', 'Awaiting Input': 'Waiting on something' };
@@ -97,7 +94,10 @@ CH.views.actionPanel = (function () {
       }
       var r = R.roles(a, app.person.SiteUserId, app.access);
       var entry = app.tracker.forTarget(a.id);
-      var busy = a.locked || (entry && (entry.state === 'submitted' || entry.state === 'slow'));
+      var mine = entry && (entry.state === 'submitted' || entry.state === 'slow');
+      // your own change still saving does not stop the next one: the flow takes them in order, each against the
+      // revision the one before it leaves. Someone else's change being saved does, and so does a raise not yet numbered.
+      var busy = (a.locked && !mine) || a.isNew;
       var finished = a.status === 'Closed' || a.waitingCloseOut;
       // the less common changes sit under "More options" (plan C.9), only those this person may make
       var more = [

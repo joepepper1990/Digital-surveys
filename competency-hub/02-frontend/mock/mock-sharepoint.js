@@ -167,6 +167,14 @@ window.MockSharePoint = (function () {
       var editor = data.People.filter(function (p) { return p.SiteUserId === asId && p.Status === 'Active'; })[0];
       var list = listTitle(url);
       writes.push({ list: list, update: Number(upd[1]), by: asId });
+      // Try again (release 1.2): a person may set their own request back to Submitted; the flow then resumes it
+      if (list === 'Requests') {
+        var own = data.Requests.filter(function (r) { return r.Id === Number(upd[1]) && /\/u(\d+)$/.exec(r.FileDirRef || '') && Number(/\/u(\d+)$/.exec(r.FileDirRef)[1]) === asId; })[0];
+        if (!own || !editor) return respond(403, { error: 'Access denied' });
+        body.formValues.forEach(function (f) { own[f.FieldName] = f.FieldValue; });
+        if (own.Status === 'Submitted') flow.schedule(own, mode);
+        return respond(200, { value: body.formValues.map(function (f) { return { FieldName: f.FieldName, FieldValue: f.FieldValue, HasException: false }; }) });
+      }
       if (list !== 'Feedback' || !editor || !editor.IsAdministrator) return respond(403, { error: 'Access denied' });
       var item = data.Feedback.filter(function (f) { return f.Id === Number(upd[1]); })[0];
       if (!item) return respond(404, { error: 'Item not found' });
