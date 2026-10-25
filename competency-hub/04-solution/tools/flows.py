@@ -810,7 +810,8 @@ def flow_request_queue(domain='actions'):
     its lock. History gets the event row; the transaction is marked Applied; the lock is released; the request is
     marked Completed. A run that stops part-way is finished by putting the request back to Submitted: every step
     checks whether it was already done."""
-    TB = 'triggerBody()'
+    # The minutes flow is started on a timer and takes the oldest waiting request (see below); the others by their trigger
+    TB = "variables('varPick')" if domain == 'minutes' else 'triggerBody()'
     R = "body('Get_request')"
     TX = "variables('varTx')"
     P = "outputs('Payload')"
@@ -3162,6 +3163,20 @@ def flow_request_queue(domain='actions'):
                       ('Initialize_varFlagAt', init_var('varFlagAt', 'array', [])),
                       ('Initialize_varFinCheck', init_var('varFinCheck', 'string', '')), ('Initialize_varFinMissing', init_var('varFinMissing', 'array', []))] + PDF_VARS + INVITE_VARS
                     if domain in ('meetings', 'minutes') else []))
+    if domain == 'minutes':
+        # 7 Minutes did not start reliably from the Requests trigger on the site (25 Oct 2026), so it runs on a timer:
+        # every 5 minutes it looks for the oldest finalise or amend request still waiting, and stops at once if none.
+        site_path = "if(endsWith(uriPath(" + SITE + "), '/'), take(uriPath(" + SITE + "), sub(length(uriPath(" + SITE + ")), 1)), uriPath(" + SITE + "))"
+        pick = seq(
+            ('Find_work', http('GET', "_api/web/GetList('@{" + site_path + "}/Lists/" + BY_KEY[LIST_URLS['req']]['url'] + "')/items"
+                                      "?$select=ID,Id,RequestType,Status,FileDirRef&$filter=Status eq 'Submitted'&$orderby=ID&$top=500")),
+            ('Waiting_minutes', query("@body('Find_work')?['value']", "@contains(createArray(" + ", ".join(q(x) for x in DOMAIN_TYPES['minutes']) +
+                                       "), string(item()?['RequestType']))")),
+            ('Any_waiting', cond("@empty(body('Waiting_minutes'))", seq(('Nothing_waiting', terminate('Succeeded'))))),
+            ('Initialize_varPick', init_var('varPick', 'object', "@first(body('Waiting_minutes'))")))
+        first = list(actions)[0]
+        actions[first] = dict(actions[first], runAfter={'Initialize_varPick': OK})
+        actions = dict(pick, **actions)
     actions['Try'] = after(scope(try_actions), {list(actions)[-1]: OK})
     # emails for a change that is complete: a failure here never touches the request, and the daily run retries
     actions['Send_emails'] = after(scope(send_outbox_steps('')), {'Try': OK})
@@ -3181,6 +3196,9 @@ def flow_request_queue(domain='actions'):
     others = [t for d, types in DOMAIN_TYPES.items() if d != domain for t in types]
     mine = ("@not(contains(createArray(" + ", ".join(q(x) for x in others) + "), string(triggerBody()?['RequestType'])))" if domain == 'actions'
             else "@contains(createArray(" + ", ".join(q(x) for x in DOMAIN_TYPES[domain]) + "), string(triggerBody()?['RequestType']))")
+    if domain == 'minutes':
+        return definition({'Every_5_minutes': {'type': 'Recurrence', 'recurrence': {'frequency': 'Minute', 'interval': 5},
+                                               'runtimeConfiguration': {'concurrency': {'runs': 1}}}}, actions)
     triggers = {'When_a_request_is_submitted': {
         'type': 'OpenApiConnection',
         'recurrence': {'frequency': 'Minute', 'interval': 2},

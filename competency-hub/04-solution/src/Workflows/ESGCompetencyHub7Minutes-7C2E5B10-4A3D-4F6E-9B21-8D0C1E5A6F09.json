@@ -51,50 +51,90 @@
         }
       },
       "triggers": {
-        "When_a_request_is_submitted": {
-          "type": "OpenApiConnection",
+        "Every_5_minutes": {
+          "type": "Recurrence",
           "recurrence": {
             "frequency": "Minute",
-            "interval": 2
+            "interval": 5
           },
-          "splitOn": "@triggerOutputs()?['body/value']",
-          "conditions": [
-            {
-              "expression": "@equals(triggerBody()?['Status']?['Value'], 'Submitted')"
-            },
-            {
-              "expression": "@not(equals(triggerBody()?['{IsFolder}'], true))"
-            },
-            {
-              "expression": "@contains(createArray('FinaliseMeeting', 'AmendMeeting'), string(triggerBody()?['RequestType']))"
-            }
-          ],
           "runtimeConfiguration": {
-            "secureData": {
-              "properties": [
-                "inputs",
-                "outputs"
-              ]
-            },
             "concurrency": {
               "runs": 1
             }
-          },
-          "inputs": {
-            "host": {
-              "connectionName": "shared_sharepointonline",
-              "operationId": "GetOnUpdatedItems",
-              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-            },
-            "parameters": {
-              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-              "table": "Requests"
-            },
-            "authentication": "@parameters('$authentication')"
           }
         }
       },
       "actions": {
+        "Find_work": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+            },
+            "parameters": {
+              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+              "parameters/method": "GET",
+              "parameters/uri": "_api/web/GetList('@{if(endsWith(uriPath(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')), '/'), take(uriPath(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')), sub(length(uriPath(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)'))), 1)), uriPath(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')))}/Lists/Requests')/items?$select=ID,Id,RequestType,Status,FileDirRef&$filter=Status eq 'Submitted'&$orderby=ID&$top=500",
+              "parameters/headers": {
+                "Accept": "application/json;odata=nometadata"
+              }
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {}
+        },
+        "Waiting_minutes": {
+          "type": "Query",
+          "inputs": {
+            "from": "@body('Find_work')?['value']",
+            "where": "@contains(createArray('FinaliseMeeting', 'AmendMeeting'), string(item()?['RequestType']))"
+          },
+          "runAfter": {
+            "Find_work": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Any_waiting": {
+          "type": "If",
+          "expression": "@empty(body('Waiting_minutes'))",
+          "actions": {
+            "Nothing_waiting": {
+              "type": "Terminate",
+              "inputs": {
+                "runStatus": "Succeeded"
+              },
+              "runAfter": {}
+            }
+          },
+          "else": {
+            "actions": {}
+          },
+          "runAfter": {
+            "Waiting_minutes": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_pick": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varPick",
+                "type": "object",
+                "value": "@first(body('Waiting_minutes'))"
+              }
+            ]
+          },
+          "runAfter": {
+            "Any_waiting": [
+              "Succeeded"
+            ]
+          }
+        },
         "Initialise_change_record": {
           "type": "InitializeVariable",
           "inputs": {
@@ -106,7 +146,11 @@
               }
             ]
           },
-          "runAfter": {}
+          "runAfter": {
+            "Initialise_pick": [
+              "Succeeded"
+            ]
+          }
         },
         "Initialise_change_record_ID": {
           "type": "InitializeVariable",
@@ -826,7 +870,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{triggerBody()?['ID']})?$select=Id,RequestKey,RequestType,TargetId,ExpectedRevision,Payload,Status,Created,AuthorId,FileDirRef,FSObjType",
+                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{variables('varPick')?['ID']})?$select=Id,RequestKey,RequestType,TargetId,ExpectedRevision,Payload,Status,Created,AuthorId,FileDirRef,FSObjType",
                   "parameters/headers": {
                     "Accept": "application/json;odata=minimalmetadata"
                   }
@@ -882,7 +926,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                   "parameters/method": "POST",
-                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{triggerBody()?['ID']})",
+                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{variables('varPick')?['ID']})",
                   "parameters/headers": {
                     "Accept": "application/json;odata=nometadata",
                     "Content-Type": "application/json;odata=nometadata",
@@ -1050,7 +1094,7 @@
                       "parameters": {
                         "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                         "parameters/method": "POST",
-                        "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{triggerBody()?['ID']})",
+                        "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{variables('varPick')?['ID']})",
                         "parameters/headers": {
                           "Accept": "application/json;odata=nometadata",
                           "Content-Type": "application/json;odata=nometadata",
@@ -1136,7 +1180,7 @@
                       "parameters": {
                         "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                         "parameters/method": "POST",
-                        "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{triggerBody()?['ID']})",
+                        "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{variables('varPick')?['ID']})",
                         "parameters/headers": {
                           "Accept": "application/json;odata=nometadata",
                           "Content-Type": "application/json;odata=nometadata",
@@ -1192,7 +1236,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items?$select=Id,RequestKey,RequestType,RecordId,ExpectedRevision,Payload,State,FirstClaimedAt,PreviousValue,StepsDone&$filter=RequestItemId eq @{triggerBody()?['ID']} and RowKind eq 'Transaction'",
+                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items?$select=Id,RequestKey,RequestType,RecordId,ExpectedRevision,Payload,State,FirstClaimedAt,PreviousValue,StepsDone&$filter=RequestItemId eq @{variables('varPick')?['ID']} and RowKind eq 'Transaction'",
                   "parameters/headers": {
                     "Accept": "application/json;odata=nometadata"
                   }
@@ -1214,7 +1258,7 @@
                   "inputs": [
                     {
                       "FieldName": "Title",
-                      "FieldValue": "@{concat('Request ', first(split(string(coalesce(triggerBody()?['ID'], '')), '.')), ': ', string(body('Read_the_request')?['RequestType']))}"
+                      "FieldValue": "@{concat('Request ', first(split(string(coalesce(variables('varPick')?['ID'], '')), '.')), ': ', string(body('Read_the_request')?['RequestType']))}"
                     },
                     {
                       "FieldName": "RowKind",
@@ -1226,7 +1270,7 @@
                     },
                     {
                       "FieldName": "RequestItemId",
-                      "FieldValue": "@{triggerBody()?['ID']}"
+                      "FieldValue": "@{variables('varPick')?['ID']}"
                     },
                     {
                       "FieldName": "RequestType",
@@ -1381,7 +1425,7 @@
                         "parameters": {
                           "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                           "parameters/method": "GET",
-                          "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items?$select=Id,RequestKey,RequestType,RecordId,ExpectedRevision,Payload,State,FirstClaimedAt,PreviousValue,StepsDone&$filter=RequestItemId eq @{triggerBody()?['ID']} and RowKind eq 'Transaction'",
+                          "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items?$select=Id,RequestKey,RequestType,RecordId,ExpectedRevision,Payload,State,FirstClaimedAt,PreviousValue,StepsDone&$filter=RequestItemId eq @{variables('varPick')?['ID']} and RowKind eq 'Transaction'",
                           "parameters/headers": {
                             "Accept": "application/json;odata=nometadata"
                           }
@@ -1591,7 +1635,7 @@
                     "parameters": {
                       "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                       "parameters/method": "POST",
-                      "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{triggerBody()?['ID']})",
+                      "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{variables('varPick')?['ID']})",
                       "parameters/headers": {
                         "Accept": "application/json;odata=nometadata",
                         "Content-Type": "application/json;odata=nometadata",
@@ -1704,7 +1748,7 @@
                       "parameters": {
                         "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                         "parameters/method": "POST",
-                        "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{triggerBody()?['ID']})",
+                        "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{variables('varPick')?['ID']})",
                         "parameters/headers": {
                           "Accept": "application/json;odata=nometadata",
                           "Content-Type": "application/json;odata=nometadata",
@@ -1890,7 +1934,7 @@
                                 "parameters": {
                                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                                   "parameters/method": "POST",
-                                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{triggerBody()?['ID']})",
+                                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{variables('varPick')?['ID']})",
                                   "parameters/headers": {
                                     "Accept": "application/json;odata=nometadata",
                                     "Content-Type": "application/json;odata=nometadata",
@@ -2481,7 +2525,7 @@
                               "parameters": {
                                 "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                                 "parameters/method": "POST",
-                                "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{triggerBody()?['ID']})",
+                                "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{variables('varPick')?['ID']})",
                                 "parameters/headers": {
                                   "Accept": "application/json;odata=nometadata",
                                   "Content-Type": "application/json;odata=nometadata",
@@ -3441,7 +3485,7 @@
                                   "parameters": {
                                     "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                                     "parameters/method": "POST",
-                                    "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{triggerBody()?['ID']})",
+                                    "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{variables('varPick')?['ID']})",
                                     "parameters/headers": {
                                       "Accept": "application/json;odata=nometadata",
                                       "Content-Type": "application/json;odata=nometadata",
@@ -4330,7 +4374,7 @@
                             "parameters": {
                               "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                               "parameters/method": "POST",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{triggerBody()?['ID']})",
+                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{variables('varPick')?['ID']})",
                               "parameters/headers": {
                                 "Accept": "application/json;odata=nometadata",
                                 "Content-Type": "application/json;odata=nometadata",
@@ -4862,7 +4906,7 @@
                             "parameters": {
                               "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                               "parameters/method": "POST",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{triggerBody()?['ID']})",
+                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{variables('varPick')?['ID']})",
                               "parameters/headers": {
                                 "Accept": "application/json;odata=nometadata",
                                 "Content-Type": "application/json;odata=nometadata",
@@ -4944,7 +4988,7 @@
                           "parameters": {
                             "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                             "parameters/method": "POST",
-                            "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{triggerBody()?['ID']})",
+                            "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{variables('varPick')?['ID']})",
                             "parameters/headers": {
                               "Accept": "application/json;odata=nometadata",
                               "Content-Type": "application/json;odata=nometadata",
@@ -6247,7 +6291,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                   "parameters/method": "POST",
-                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{triggerBody()?['ID']})",
+                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{variables('varPick')?['ID']})",
                   "parameters/headers": {
                     "Accept": "application/json;odata=nometadata",
                     "Content-Type": "application/json;odata=nometadata",
