@@ -99,16 +99,17 @@ CH.views.actionPanel = (function () {
       // revision the one before it leaves. Someone else's change being saved does, and so does a raise not yet numbered.
       var busy = (a.locked && !mine) || a.isNew;
       var finished = a.status === 'Closed' || a.waitingCloseOut;
-      // the less common changes sit under "More options" (plan C.9), only those this person may make
+      // the less common changes sit under "More for this action" (plan C.9), only those this person may make
+      // release 1.2: each button names what it acts on (backlog 11)
       var more = [
-        r.canStatus ? ui.linkButton('Change status', function () { show('status'); }) : null,
-        r.canReassign ? ui.linkButton('Reassign', function () { show('reassign'); }) : null,
-        r.canEdit ? ui.linkButton('Edit details', function () { show('edit'); }) : null,
-        r.canClose && !a.waitingCloseOut ? ui.linkButton('Close with an outcome', function () { show('close'); }) : null
+        r.canEdit ? ui.linkButton('Edit this action', function () { show('edit'); }) : null,
+        r.canReassign ? ui.linkButton('Give it to someone else', function () { show('reassign'); }) : null,
+        r.canStatus ? ui.linkButton('Change its status', function () { show('status'); }) : null,
+        r.canClose && !a.waitingCloseOut ? ui.linkButton('Close this action', function () { show('close'); }) : null
       ].filter(Boolean);
       dlg.setTitle(a.title);
       CH.dom.append(dlg.body, [
-        h('p', { class: 'muted small', text: a.ref + ' · ' + a.areaName + (a.priority === 'High' ? ' · High priority' : '') }),
+        h('p', { class: 'what-label', text: 'Action · ' + (a.isNew ? 'not yet numbered' : a.ref) + ' · ' + a.areaName + (a.priority === 'High' ? ' · High priority' : '') }),
         pendingLine(app, a),
         h('dl', { class: 'facts' },
           h('dt', { text: 'When' }), h('dd', null, ui.chip(a.waitingCloseOut ? 'later' : a.group, a.dueText), ' ', whenText(a)),
@@ -130,7 +131,7 @@ CH.views.actionPanel = (function () {
           r.canComplete ? ui.button('Mark as done', function () { show('complete'); }) : null,
           a.waitingCloseOut && r.canClose ? ui.button('Confirm close-out', function () { show('closeout'); }, 'main') : null,
           r.canReopen ? ui.button('Reopen', function () { show('reopen'); }) : null),
-        more.length ? h('details', { class: 'more' }, h('summary', { text: 'More options' }), h('div', { class: 'row' }, more)) : null,
+        more.length ? h('details', { class: 'more' }, h('summary', { text: 'More for this action' }), h('div', { class: 'row' }, more)) : null,
         !r.canUpdate && !r.canExtend && !r.canComplete && !r.canReopen ? h('p', { class: 'muted small', text: 'You can read this action. Only its owner, the people who manage it and members of ' + a.areaName + ' can change it.' }) : null,
         h('h3', { class: 'group-title', text: 'Updates' }),
         updates === null ? h('p', { class: 'muted', text: 'Loading updates…' })

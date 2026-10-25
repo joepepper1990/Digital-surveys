@@ -171,18 +171,20 @@ CH.views.recordPanel = (function () {
       }
       dlg.setTitle(r.title);
       if (view !== 'main') { CH.dom.append(dlg.body, cfg.form(view, r, ctl)); return; }
-      CH.dom.append(dlg.body, [
-        cfg.header(r),
-        pendingLine(app, r.id, cfg.parentType, false),
-        cfg.facts(r),
-        cfg.buttons(r, ctl),
-        h('h3', { class: 'group-title', text: 'For the meeting' }),
-        flagRow(r),
-        cfg.extra ? cfg.extra(r, ctl) : null,
-        h('h3', { class: 'group-title', text: 'Comments' }),
-        commentList(r),
-        commentBox(r)
-      ]);
+      // release 1.2 (backlog 1): it fits the window. On a wide screen the record is on the left and its comments on
+      // the right; the less common changes are under "More for this …".
+      CH.dom.append(dlg.body, h('div', { class: 'rec-cols' },
+        h('div', { class: 'rec-main' },
+          cfg.header(r),
+          pendingLine(app, r.id, cfg.parentType, false),
+          cfg.facts(r),
+          flagRow(r),
+          cfg.buttons(r, ctl),
+          cfg.extra ? cfg.extra(r, ctl) : null),
+        h('div', { class: 'rec-side' },
+          h('h3', { class: 'group-title', text: 'Comments' }),
+          commentList(r),
+          commentBox(r))));
     }
 
     function show(next) { view = next; fill(); var f = dlg.body.querySelector('input, select, textarea'); if (f) f.focus(); }
@@ -229,7 +231,7 @@ CH.views.recordPanel = (function () {
       header: function (n) {
         var area = m().areaByKey[n.areaKey];
         var where = n.shownAll ? 'Every noticeboard' : n.areaKeys.length > 1 ? n.areaKeys.map(function (k) { return m().areaByKey[k].name; }).join(', ') + ' noticeboards' : area.name + ' noticeboard';
-        return h('p', { class: 'muted small', text: where + ' · ' + n.category + ' · ' +
+        return h('p', { class: 'what-label', text: 'Notice · ' + where + ' · ' + n.category + ' · ' +
           (n.fromOutside ? 'from ' + n.authorName + ', outside ' + area.name : n.authorName) + ' · ' + D.long(n.createdIso) +
           (n.pinned ? ' · Pinned' : n.important ? ' · Important' : '') });
       },
@@ -239,11 +241,12 @@ CH.views.recordPanel = (function () {
         var list = m().actions.filter(function (a) { return a.sourceType === 'Noticeboard' && Number(a.sourceId) === Number(n.id); });
         var areas = n.areaKeys.filter(function (k) { return R.canConvert(k, app.access); });
         if (!list.length && !areas.length) return null;
-        return [h('h3', { class: 'group-title', text: 'Actions from this notice' }),
+        // release 1.2: the heading only when there are actions to list
+        return [list.length ? h('h3', { class: 'group-title', text: 'Actions from this notice' }) : null,
           list.length ? h('ul', { class: 'items linked' }, list.map(function (a) {
             return h('li', null, h('button', { type: 'button', class: 'item-open', onclick: function () { ctl.dlg.close(); app.openAction(a); } },
               h('span', null, h('span', { class: 't', text: a.ref + ' ' + a.title }), h('span', { class: 's', text: a.ownerName })), ui.chip(a.group, a.dueText)));
-          })) : h('p', { class: 'muted', text: 'No actions have been made from this notice yet.' }),
+          })) : null,
           areas.length ? h('div', { class: 'row' }, ui.button('Turn into an action', function () {
             ctl.dlg.close();
             if (!app.queueBlocked()) CH.views.raiseForm.open(app, areas.indexOf(n.areaKey) >= 0 ? n.areaKey : areas[0], { notice: n, areas: areas });
@@ -253,10 +256,10 @@ CH.views.recordPanel = (function () {
         var r = R.noticeRoles(n, app.person.SiteUserId, app.access);
         if (!r.canEdit && !r.canPin) return null;
         if (ctl.busy(n)) return h('p', { class: 'muted small', text: app.recordsBlocked() ? 'Changes to notices are paused for the moment.' : '' });
-        return h('div', { class: 'row actions-row' },
-          r.canEdit ? ui.button('Edit', function () { ctl.show('edit'); }) : null,
-          r.canPin ? ui.button(n.pinned ? 'Unpin' : 'Pin', function () { ctl.show('pin'); }) : null,
-          r.canArchive ? ui.button('Archive', function () { ctl.show('archive'); }) : null);
+        return h('details', { class: 'more' }, h('summary', { text: 'More for this notice' }), h('div', { class: 'row actions-row' },
+          r.canEdit ? ui.button('Edit this notice', function () { ctl.show('edit'); }) : null,
+          r.canPin ? ui.button(n.pinned ? 'Unpin it' : 'Pin it', function () { ctl.show('pin'); }) : null,
+          r.canArchive ? ui.button('Archive it', function () { ctl.show('archive'); }) : null));
       },
       form: function (view, n, ctl) {
         var label = function (what) { return what + ' “' + n.title + '”'; };
@@ -317,12 +320,12 @@ CH.views.recordPanel = (function () {
     function allowed(key, pid) { return ownersFor(key).some(function (p) { return Number(p.id) === Number(pid); }); }
     function linkedActions(e) { return m().actions.filter(function (a) { return a.sourceType === 'Register' && Number(a.sourceId) === Number(e.id); }); }
     return panel(app, {
-      parentType: 'Register Entry', title: 'Improvement or degradation', missingTitle: 'Entry not available',
+      parentType: 'Register Entry', title: 'Issue', missingTitle: 'Issue not available',
       missingText: 'This entry is not available. It may have been removed.',
       get: function () { return m().entryById[id]; },
       ownerOf: function (e) { return e.raisedById; },
       header: function (e) {
-        return h('p', { class: 'muted small' }, e.ref + ' · ' + m().areaByKey[e.areaKey].name + ' · ' + e.entryType + ' · ' + e.impact + ' impact ', entryChip(e));
+        return h('p', { class: 'what-label' }, 'Issue · ' + (e.isNew ? 'not yet numbered' : e.ref) + ' · ' + m().areaByKey[e.areaKey].name + ' · ' + e.entryType + ' · ' + e.impact + ' impact ', entryChip(e));
       },
       facts: function (e) {
         return h('dl', { class: 'facts' },
@@ -334,9 +337,10 @@ CH.views.recordPanel = (function () {
         var can = R.managesEntry(e, app.person.SiteUserId, app.access);
         if (!can) return h('p', { class: 'muted small', text: 'The person who raised it, the area\'s engineers and meeting runners, and the Team Leaders and Group Head can change this entry.' });
         if (ctl.busy(e)) return h('p', { class: 'muted small', text: app.recordsBlocked() ? 'Changes to the register are paused for the moment.' : '' });
-        return h('div', { class: 'row actions-row' },
-          ui.button('Change status', function () { ctl.show('status'); }, 'main'),
-          ui.button('Edit details', function () { ctl.show('edit'); }));
+        return [e.open ? h('div', { class: 'row' }, ui.button('Mark as resolved', function () { ctl.show('resolve'); })) : null,
+          h('details', { class: 'more' }, h('summary', { text: 'More for this issue' }), h('div', { class: 'row actions-row' },
+            ui.button('Change its status', function () { ctl.show('status'); }),
+            ui.button('Edit this issue', function () { ctl.show('edit'); })))];
       },
       extra: function (e, ctl) {
         var list = linkedActions(e);
@@ -354,8 +358,9 @@ CH.views.recordPanel = (function () {
       },
       form: function (view, e, ctl) {
         var label = function (what) { return what + ' ' + e.ref; };
-        if (view === 'status') {
-          var status = h('select', { id: 'ch-re-status' }, R.ENTRY_STATUSES.map(function (s) { return h('option', { value: s, selected: s === e.status ? true : null, text: STATUS_WORDS[s] }); }));
+        if (view === 'status' || view === 'resolve') {
+          var to = view === 'resolve' ? 'Resolved' : e.status;
+          var status = h('select', { id: 'ch-re-status' }, R.ENTRY_STATUSES.map(function (s) { return h('option', { value: s, selected: s === to ? true : null, text: STATUS_WORDS[s] }); }));
           var outcome = h('textarea', { id: 'ch-re-outcome', rows: '4', maxlength: '2000' });
           outcome.value = e.outcome;
           return formShell('Change the status', [field('Status', status), field('Outcome', outcome, 'Needed to resolve or close it: what was done or decided.')],

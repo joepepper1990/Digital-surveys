@@ -137,6 +137,11 @@ h2 { font-size: calc(18 * var(--u)); font-weight: 600; margin: 0 0 calc(12 * var
 .progress .fill { height: 100%; background: var(--accent); }
 .raise-summary { display: grid; gap: calc(2 * var(--u)); background: var(--navy-soft); border-radius: calc(10 * var(--u)); padding: calc(12 * var(--u)) calc(16 * var(--u)); margin-bottom: calc(12 * var(--u)); }
 .raise-summary .big { font-size: calc(19 * var(--u)); }
+.what-label { margin: 0 0 calc(8 * var(--u)); color: var(--muted); font-size: calc(13 * var(--u)); font-weight: 600; letter-spacing: .02em; }
+/* a notice or an issue: the record and its comments side by side on a wide screen (backlog 1) */
+.rec-cols { display: grid; gap: calc(20 * var(--u)); }
+@media (min-width: 1000px) { .rec-cols { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); } .rec-side { border-left: 1px solid var(--line); padding-left: calc(20 * var(--u)); } }
+.rec-side > .group-title:first-child { margin-top: 0; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 @keyframes ch-pulse { 50% { opacity: .35; } }
 /* the mark beside a record: ✓ Sent, then ✓✓ Saved which fades after three seconds, or ✕ Not saved */

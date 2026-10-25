@@ -118,8 +118,8 @@ t = text(dump('as=' + RACHEL + '&mode=slow').dom);
 check('slow responses: page still completes', t.includes('Coming up this week'));
 
 // Scripted interactions
-function drive(query, budget) {
-  const d = open(query, ['--dump-dom'], budget);
+function drive(query, budget, extra) {
+  const d = open(query, ['--dump-dom'].concat(extra || []), budget);
   const m = /<pre id="drive-result">([\s\S]*?)<\/pre>/.exec(d.dom);
   if (!m) return { ok: false, error: 'no result; script errors: ' + d.errors.join(' | ') };
   return JSON.parse(m[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>'));
@@ -320,7 +320,9 @@ check('notice: a technician who did not post it gets no edit, pin or archive, an
 check('notice: a comment is saved at once, in the area\'s Updates folder', res.ok && res.result.saved &&
   JSON.stringify(res.result.update) === '[{"folder":"FLK","type":"Comment","parent":"Notice:1","flag":false}]', JSON.stringify(res));
 check('notice: the author may edit and archive their own notice in another area, but not comment there', res.ok &&
-  JSON.stringify(res.result.own.buttons) === '["Edit","Archive"]' && !res.result.own.canComment && /Members of DSL, and the Team Leaders and Group Head, can comment/.test(res.result.own.note), JSON.stringify(res));
+  JSON.stringify(res.result.own.buttons) === '["Edit this notice","Archive it"]' && !res.result.own.canComment && /Members of DSL, and the Team Leaders and Group Head, can comment/.test(res.result.own.note), JSON.stringify(res));
+res = drive('as=' + KELLY + '&area=FLK&notice=2&drive=noticeFits', 15000, ['--window-size=1920,1047']);
+check('notice dialog at 1920 × 960: the notice and its comments side by side, no scrollbar', res.ok && res.result.columns === 2 && !res.result.scrolls, JSON.stringify(res));
 res = drive('as=' + KELLY + '&area=FLK&notice=2&drive=noticeModerate', SLOW);
 check('notice: pinning is shown as being recorded, then confirmed', res.ok && /Pin “Spare probe stock levels”/.test(res.result.pending) && res.result.pinned, JSON.stringify(res));
 check('notice: an edit is checked against its revision and saved', res.ok && res.result.title === 'Spare probes: two left in stores' && res.result.revision === 3, JSON.stringify(res));

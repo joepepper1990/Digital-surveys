@@ -209,7 +209,7 @@ window.MockDrivers = (function () {
     statusBlocker: async function () {
       await until(function () { return q('#ch-a .facts'); });
       q('#ch-a .more summary').click();
-      byText('#ch-a .more button', 'Change status').click();
+      byText('#ch-a .more button', 'Change its status').click();
       var status = await until(function () { return q('#ch-s-status'); });
       status.value = 'Awaiting Input';
       status.dispatchEvent(new Event('change'));
@@ -229,7 +229,7 @@ window.MockDrivers = (function () {
     reassign: async function () {
       await until(function () { return q('#ch-a .facts'); });
       q('#ch-a .more summary').click();
-      byText('#ch-a .more button', 'Reassign').click();
+      byText('#ch-a .more button', 'Give it to someone else').click();
       var owner = await until(function () { return q('#ch-g-ownerId'); });
       var options = all('#ch-g-ownerId option').map(function (o) { return o.textContent; });
       owner.value = String(126);
@@ -243,7 +243,7 @@ window.MockDrivers = (function () {
     closeAndReopen: async function () {
       await until(function () { return q('#ch-a .facts'); });
       q('#ch-a .more summary').click();
-      byText('#ch-a .more button', 'Close with an outcome').click();
+      byText('#ch-a .more button', 'Close this action').click();
       var outcome = await until(function () { return q('#ch-l-outcome'); });
       outcome.value = 'Superseded';
       q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
@@ -267,7 +267,7 @@ window.MockDrivers = (function () {
     editDetails: async function () {
       await until(function () { return q('#ch-a .facts'); });
       q('#ch-a .more summary').click();
-      byText('#ch-a .more button', 'Edit details').click();
+      byText('#ch-a .more button', 'Edit this action').click();
       var title = await until(function () { return q('#ch-e-title'); });
       type(title, 'Replace FH40 probe (bay 3)');
       q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
@@ -417,6 +417,13 @@ window.MockDrivers = (function () {
       return { sent: sent, saved: saved, closed: closed, after: card().textContent,
         status: MockSharePoint.data.Actions.filter(function (a) { return a.Title === 'Review Green Stream sample results'; })[0].Status,
         requests: MockSharePoint.data.Requests.map(function (r) { return r.RequestType + ':' + r.Status; }) };
+    },
+    // Backlog 1: the notice dialog fits the window (about 960 pixels high) without scrolling.
+    noticeFits: async function () {
+      await until(function () { return q('#ch-rec .notice-full') && q('#ch-rec .comments, #ch-rec .rec-side p'); });
+      await wait(300);
+      var d = q('#ch-rec');
+      return { inner: window.innerHeight, scrolls: d.scrollHeight > d.clientHeight + 1, height: d.clientHeight, columns: getComputedStyle(q('#ch-rec .rec-cols')).gridTemplateColumns.split(' ').length };
     },
     // A visitor reads an action in another area: no buttons, a plain explanation.
     viewOnlyAction: async function () {
@@ -615,13 +622,13 @@ window.MockDrivers = (function () {
     // An engineer moderates: pins a notice, edits it, hides a comment and flags it for the meeting.
     noticeModerate: async function () {
       await until(function () { return q('#ch-rec .notice-full'); });
-      byText('#ch-rec .actions-row button', 'Pin').click();
+      byText('#ch-rec .actions-row button', 'Pin it').click();
       var pinForm = await until(function () { return q('#ch-rec form.dialog-body'); });
       pinForm.dispatchEvent(new Event('submit', { cancelable: true }));
       await until(function () { return q('#ch-rec .pending'); });
       var pending = q('#ch-rec .pending').textContent;
-      await until(function () { var hd = q('#ch-rec .muted.small'); return hd && !q('#ch-rec .pending') && /Pinned/.test(hd.textContent); }, 120000);
-      byText('#ch-rec .actions-row button', 'Edit').click();
+      await until(function () { var hd = q('#ch-rec .what-label'); return hd && !q('#ch-rec .pending') && /Pinned/.test(hd.textContent); }, 120000);
+      byText('#ch-rec .actions-row button', 'Edit this notice').click();
       var title = await until(function () { return q('#ch-ne-title'); });
       type(title, 'Spare probes: two left in stores');
       q('#ch-rec form.dialog-body').dispatchEvent(new Event('submit', { cancelable: true }));
@@ -660,7 +667,7 @@ window.MockDrivers = (function () {
       all('.hm-area .hm-rw').filter(function (b) { return b.textContent.indexOf('Calibration rig drift') >= 0; })[0].click();
       await until(function () { return q('#ch-rec .facts'); });
       var linked = q('#ch-rec').textContent.indexOf('Replace FH40 probe') >= 0;
-      byText('#ch-rec .actions-row button', 'Change status').click();
+      byText('#ch-rec .actions-row button', 'Change its status').click();
       await until(function () { return q('#ch-re-status'); });
       q('#ch-re-status').value = 'Resolved';
       q('#ch-rec form.dialog-body').dispatchEvent(new Event('submit', { cancelable: true }));
@@ -668,7 +675,7 @@ window.MockDrivers = (function () {
       var outcomeError = q('#ch-re-outcome-err').textContent;
       type(q('#ch-re-outcome'), 'Rig recalibrated and drift checked over a week.');
       q('#ch-rec form.dialog-body').dispatchEvent(new Event('submit', { cancelable: true }));
-      await until(function () { var hd = q('#ch-rec .muted.small'); return hd && !q('#ch-rec .pending') && /Resolved/.test(hd.textContent); }, 120000);
+      await until(function () { var hd = q('#ch-rec .what-label'); return hd && !q('#ch-rec .pending') && /Resolved/.test(hd.textContent); }, 120000);
       var resolvedButtons = !!byText('#ch-rec button', 'Raise a linked action');
       q('#ch-rec .dialog-x').click();
       await openRow('Shared probe sign-out sheet');

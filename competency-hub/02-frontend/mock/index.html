@@ -113,6 +113,13 @@
 .mock-scope .ch .progress .fill {height: 100%; background: var(--accent);}
 .mock-scope .ch .raise-summary {display: grid; gap: calc(2 * var(--u)); background: var(--navy-soft); border-radius: calc(10 * var(--u)); padding: calc(12 * var(--u)) calc(16 * var(--u)); margin-bottom: calc(12 * var(--u));}
 .mock-scope .ch .raise-summary .big {font-size: calc(19 * var(--u));}
+.mock-scope .ch .what-label {margin: 0 0 calc(8 * var(--u)); color: var(--muted); font-size: calc(13 * var(--u)); font-weight: 600; letter-spacing: .02em;}
+.mock-scope .ch .rec-cols {display: grid; gap: calc(20 * var(--u));}
+@media (min-width: 1000px) {
+.mock-scope .ch .rec-cols {grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);}
+.mock-scope .ch .rec-side {border-left: 1px solid var(--line); padding-left: calc(20 * var(--u));}
+}
+.mock-scope .ch .rec-side > .group-title:first-child {margin-top: 0;}
 .mock-scope .ch .sr-only {position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;}
 .mock-scope .ch @keyframes ch-pulse {50% { opacity: .35; }}
 .mock-scope .ch .mark {font-size: calc(13 * var(--u)); font-weight: 600; white-space: nowrap; margin-left: calc(6 * var(--u));}
