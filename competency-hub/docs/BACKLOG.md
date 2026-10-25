@@ -74,3 +74,11 @@ These were found on the site and agreed to wait until the next larger app change
       - each screen shows its main step, with the rest under More options;
       - agenda items are labelled by kind (with 5, 6 and 9).
     - **Before building:** agree it with the owner, and ideally a technician, on a preview first.
+12. **The top-bar "Raise an action" quietly uses the first area, Flask (25 Oct 2026).**
+    - **What happened:** the owner meant Dosimetry, and the action went to Flask. `app.js` passes
+      the first area, so the area box is pre-filled.
+    - **Fix:**
+      - with no area panel open, open the form with "Choose an area" and no area chosen, and
+        require a choice;
+      - with an area panel open, preselect that area;
+      - on the summary step, show the area prominently.
