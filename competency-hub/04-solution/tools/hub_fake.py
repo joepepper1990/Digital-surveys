@@ -45,6 +45,7 @@ class HubFake:
         self.calls = []                   # every SharePoint call, in order: (method, uri)
         self.fail_at = None               # 1-based index of a write that fails once (simulated interruption)
         self.fail_if = None               # (method, list title, path) -> True: that write fails every time (a lasting fault)
+        self.on_call = None               # (method, uri, site) called before every call: a test's chance to act as another run
         self.return_new_id = True         # AddValidateUpdateItemUsingPath lists the new item's Id among its results
         self.sent = []                    # emails the Outlook connector sent: {'to', 'subject', 'body'}
         self.mail_fail = []               # outcomes for the next sends, in order: 400 (refused), 500 or 'timeout' (unclear)
@@ -310,6 +311,8 @@ class HubFake:
 
     def rest(self, method, uri, headers, body):
         self.calls.append((method, uri))
+        if self.on_call:
+            self.on_call(method, uri, self)
         if not uri.startswith('_api/'):
             fail(400, 'uri must start with _api/: ' + uri)
         path, _, qs = uri.partition('?')

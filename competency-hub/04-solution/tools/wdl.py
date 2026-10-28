@@ -545,6 +545,27 @@ class Engine:
                 return st
             if t == 'Terminate':
                 raise Terminated(act['inputs']['runStatus'], act['inputs'].get('runError', {}).get('message', ''))
+            if t == 'Until':
+                # do-until: the steps run, then the condition is checked; at most limit.count times
+                limit = int((act.get('limit') or {}).get('count', 60))
+                st = 'Succeeded'
+                for _ in range(limit):
+                    if self.run_container(act['actions'], ctx) == 'Failed':
+                        st = 'Failed'
+                        break
+                    if truthy(eval_expr(act['expression'][1:], ctx)):
+                        break
+                self.results[name] = {'status': st, 'outputs': None}
+                return st
+            if t == 'Wait':
+                # a delay: the simulated clock moves on by that much (the site's too, so what it stamps follows)
+                iv = act['inputs']['interval']
+                seconds = int(iv['count']) * {'Second': 1, 'Minute': 60, 'Hour': 3600}[iv['unit']]
+                self.now = self.now + timedelta(seconds=seconds)
+                if hasattr(self.connectors, 'clock'):
+                    self.connectors.clock = self.connectors.clock + timedelta(seconds=seconds)
+                self.results[name] = {'status': 'Succeeded', 'outputs': None}
+                return 'Succeeded'
             out, kind = self.simple(name, act, t, ctx), ('array' if t in ('Query', 'Select', 'Join') else 'plain')
             if t == 'OpenApiConnection':
                 kind = 'api'

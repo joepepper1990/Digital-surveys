@@ -138,6 +138,25 @@ class Change(unittest.TestCase):
         run(s, r)
         self.assertEqual(request(s, r)['ResultMessage'], 'This meeting was changed by someone else. Review the latest details and try again.')
 
+    def test_a_change_landing_between_reading_and_writing_is_refused_not_overwritten(self):
+        # 1.10.0.0: meetings handle a 412 like actions do: someone else's save just before ours is a plain refusal
+        s = site()
+        book(s)
+        m = meeting(s)
+        r = submit(s, KELLY, 'UpdateMeeting', {'location': 'Room 5'}, target=m['id'], revision=1, key=KEY2)
+        original = s.rest
+
+        def racing(method, uri, headers, body):
+            if headers.get('X-HTTP-Method') == 'MERGE' and headers.get('IF-MATCH', '*') != '*' and '/items({0})'.format(m['id']) in uri:
+                s.item('meetings', m['id'])['version'] += 1
+            return original(method, uri, headers, body)
+        s.rest = racing
+        status, eng = run(s, r)
+        self.assertEqual((request(s, r)['Status'], request(s, r)['ResultMessage']),
+                         ('Rejected', 'This meeting was changed by someone else. Review the latest details and try again.'), eng.log)
+        self.assertEqual((meeting(s)['f']['Location'], meeting(s)['f']['Revision']), ('Room 4', 1.0))
+        self.assertEqual([k for k, _, _ in s.invites], ['invite'])
+
     def test_cancelling_sends_a_cancellation_and_makes_the_record_read_only(self):
         s = site()
         book(s)

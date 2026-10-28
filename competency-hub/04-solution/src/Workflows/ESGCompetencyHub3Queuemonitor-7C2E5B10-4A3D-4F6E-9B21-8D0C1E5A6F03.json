@@ -55,7 +55,7 @@
           "type": "Recurrence",
           "recurrence": {
             "frequency": "Minute",
-            "interval": 15,
+            "interval": 10,
             "startTime": "2026-10-01T00:00:00",
             "timeZone": "GMT Standard Time"
           },
@@ -395,7 +395,7 @@
             },
             "Is_a_check_due_now": {
               "type": "If",
-              "expression": "@or(outputs('In_working_hours'), less(mod(outputs('Minute_of_the_day'), max(15, int(split(string(coalesce(first(body('Monitor_hours_setting'))?['Value'], '07:00|19:45|60')), '|')[2]))), 15))",
+              "expression": "@or(outputs('In_working_hours'), less(mod(outputs('Minute_of_the_day'), max(10, int(split(string(coalesce(first(body('Monitor_hours_setting'))?['Value'], '07:00|19:45|60')), '|')[2]))), 10))",
               "actions": {},
               "else": {
                 "actions": {

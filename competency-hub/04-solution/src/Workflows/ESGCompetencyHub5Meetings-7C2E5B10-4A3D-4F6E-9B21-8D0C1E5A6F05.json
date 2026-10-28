@@ -46,7 +46,7 @@
           "type": "OpenApiConnection",
           "recurrence": {
             "frequency": "Minute",
-            "interval": 2
+            "interval": 1
           },
           "splitOn": "@triggerOutputs()?['body/value']",
           "conditions": [
@@ -68,7 +68,7 @@
               ]
             },
             "concurrency": {
-              "runs": 1
+              "runs": 5
             }
           },
           "inputs": {
@@ -167,12 +167,12 @@
             ]
           }
         },
-        "Initialise_fields": {
+        "Initialise_plan_object": {
           "type": "InitializeVariable",
           "inputs": {
             "variables": [
               {
-                "name": "varValues",
+                "name": "varPlanObj",
                 "type": "object",
                 "value": {}
               }
@@ -184,70 +184,70 @@
             ]
           }
         },
-        "Initialise_event_details": {
+        "Initialise_event_form": {
           "type": "InitializeVariable",
           "inputs": {
             "variables": [
               {
-                "name": "varEventJson",
+                "name": "varEventForm",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_plan_object": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_mtg": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varMtg",
                 "type": "object",
                 "value": {}
               }
             ]
           },
           "runAfter": {
-            "Initialise_fields": [
+            "Initialise_event_form": [
               "Succeeded"
             ]
           }
         },
-        "Initialise_flag_on": {
+        "Initialise_finalise_check": {
           "type": "InitializeVariable",
           "inputs": {
             "variables": [
               {
-                "name": "varFlagOn",
-                "type": "array",
-                "value": []
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_event_details": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_finalise_missing": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varFinMissing",
-                "type": "array",
-                "value": []
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_flag_on": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_inv_event": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varInvEvent",
+                "name": "varFinCheck",
                 "type": "string",
                 "value": ""
               }
             ]
           },
           "runAfter": {
-            "Initialise_finalise_missing": [
+            "Initialise_mtg": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_inv_result": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varInvResult",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_finalise_check": [
               "Succeeded"
             ]
           }
@@ -333,6 +333,172 @@
             ]
           }
         },
+        "Initialise_fields": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varValues",
+                "type": "object",
+                "value": {}
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_emails_to_send": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_event_details": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varEventJson",
+                "type": "object",
+                "value": {}
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_fields": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_flag_on": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varFlagOn",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_event_details": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_finalise_missing": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varFinMissing",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_flag_on": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_inv_event": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varInvEvent",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_finalise_missing": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_change_record_plan": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varTxPlan",
+                "type": "string",
+                "value": "{}"
+              }
+            ]
+          },
+          "runAfter": {}
+        },
+        "Initialise_existing_ID": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varExistingId",
+                "type": "integer",
+                "value": 0
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_change_record_plan": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_action": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varAct",
+                "type": "object",
+                "value": {}
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_existing_ID": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_user_id": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varUid",
+                "type": "integer",
+                "value": 0
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_action": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_stale": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varStale",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_user_id": [
+              "Succeeded"
+            ]
+          }
+        },
         "Initialise_event_title": {
           "type": "InitializeVariable",
           "inputs": {
@@ -345,7 +511,7 @@
             ]
           },
           "runAfter": {
-            "Initialise_emails_to_send": [
+            "Initialise_stale": [
               "Succeeded"
             ]
           }
@@ -418,66 +584,66 @@
             ]
           }
         },
-        "Initialise_change_record_plan": {
+        "Initialise_due": {
           "type": "InitializeVariable",
           "inputs": {
             "variables": [
               {
-                "name": "varTxPlan",
+                "name": "varDue",
                 "type": "string",
-                "value": "{}"
+                "value": ""
               }
             ]
           },
           "runAfter": {}
         },
-        "Initialise_existing_ID": {
+        "Initialise_folder_exists": {
           "type": "InitializeVariable",
           "inputs": {
             "variables": [
               {
-                "name": "varExistingId",
-                "type": "integer",
-                "value": 0
+                "name": "varFolderExists",
+                "type": "boolean",
+                "value": false
               }
             ]
           },
           "runAfter": {
-            "Initialise_change_record_plan": [
+            "Initialise_due": [
               "Succeeded"
             ]
           }
         },
-        "Initialise_action": {
+        "Initialise_entry": {
           "type": "InitializeVariable",
           "inputs": {
             "variables": [
               {
-                "name": "varAct",
+                "name": "varEntry",
                 "type": "object",
                 "value": {}
               }
             ]
           },
           "runAfter": {
-            "Initialise_existing_ID": [
+            "Initialise_folder_exists": [
               "Succeeded"
             ]
           }
         },
-        "Initialise_user_id": {
+        "Initialise_login": {
           "type": "InitializeVariable",
           "inputs": {
             "variables": [
               {
-                "name": "varUid",
-                "type": "integer",
-                "value": 0
+                "name": "varLogin",
+                "type": "string",
+                "value": ""
               }
             ]
           },
           "runAfter": {
-            "Initialise_action": [
+            "Initialise_entry": [
               "Succeeded"
             ]
           }
@@ -494,7 +660,7 @@
             ]
           },
           "runAfter": {
-            "Initialise_user_id": [
+            "Initialise_login": [
               "Succeeded"
             ]
           }
@@ -563,155 +729,6 @@
           },
           "runAfter": {
             "Initialise_flag_at": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_due": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varDue",
-                "type": "string",
-                "value": ""
-              }
-            ]
-          },
-          "runAfter": {}
-        },
-        "Initialise_folder_exists": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varFolderExists",
-                "type": "boolean",
-                "value": false
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_due": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_entry": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varEntry",
-                "type": "object",
-                "value": {}
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_folder_exists": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_login": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varLogin",
-                "type": "string",
-                "value": ""
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_entry": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_plan_object": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varPlanObj",
-                "type": "object",
-                "value": {}
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_login": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_event_form": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varEventForm",
-                "type": "array",
-                "value": []
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_plan_object": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_mtg": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varMtg",
-                "type": "object",
-                "value": {}
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_event_form": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_finalise_check": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varFinCheck",
-                "type": "string",
-                "value": ""
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_mtg": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_inv_result": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varInvResult",
-                "type": "string",
-                "value": ""
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_finalise_check": [
               "Succeeded"
             ]
           }
@@ -3545,6 +3562,39 @@
                                   "Succeeded"
                                 ]
                               }
+                            },
+                            "Save_update_OK_(meeting)": {
+                              "type": "If",
+                              "expression": "@equals(actions('Save_update_(meeting)')?['status'], 'Succeeded')",
+                              "actions": {},
+                              "else": {
+                                "actions": {
+                                  "Save_update_stale_(meeting)": {
+                                    "type": "SetVariable",
+                                    "inputs": {
+                                      "name": "varStale",
+                                      "value": "@if(equals(outputs('Save_update_(meeting)')?['statusCode'], 412), 'This meeting was changed by someone else. Review the latest details and try again.', '')"
+                                    },
+                                    "runAfter": {}
+                                  },
+                                  "Save_update_failed_(meeting)": {
+                                    "type": "Compose",
+                                    "inputs": "@int('The record could not be updated. See Save update (meeting).')",
+                                    "runAfter": {
+                                      "Save_update_stale_(meeting)": [
+                                        "Succeeded"
+                                      ]
+                                    }
+                                  }
+                                }
+                              },
+                              "runAfter": {
+                                "Save_update_(meeting)": [
+                                  "Succeeded",
+                                  "Failed",
+                                  "TimedOut"
+                                ]
+                              }
                             }
                           },
                           "else": {
@@ -3999,6 +4049,39 @@
                                   "Succeeded"
                                 ]
                               }
+                            },
+                            "Save_cancel_OK_(meeting)": {
+                              "type": "If",
+                              "expression": "@equals(actions('Save_cancel_(meeting)')?['status'], 'Succeeded')",
+                              "actions": {},
+                              "else": {
+                                "actions": {
+                                  "Save_cancel_stale_(meeting)": {
+                                    "type": "SetVariable",
+                                    "inputs": {
+                                      "name": "varStale",
+                                      "value": "@if(equals(outputs('Save_cancel_(meeting)')?['statusCode'], 412), 'This meeting was changed by someone else. Review the latest details and try again.', '')"
+                                    },
+                                    "runAfter": {}
+                                  },
+                                  "Save_cancel_failed_(meeting)": {
+                                    "type": "Compose",
+                                    "inputs": "@int('The record could not be updated. See Save cancel (meeting).')",
+                                    "runAfter": {
+                                      "Save_cancel_stale_(meeting)": [
+                                        "Succeeded"
+                                      ]
+                                    }
+                                  }
+                                }
+                              },
+                              "runAfter": {
+                                "Save_cancel_(meeting)": [
+                                  "Succeeded",
+                                  "Failed",
+                                  "TimedOut"
+                                ]
+                              }
                             }
                           },
                           "else": {
@@ -4406,6 +4489,39 @@
                               "runAfter": {
                                 "Start_fields_(meeting)": [
                                   "Succeeded"
+                                ]
+                              }
+                            },
+                            "Save_start_OK_(meeting)": {
+                              "type": "If",
+                              "expression": "@equals(actions('Save_start_(meeting)')?['status'], 'Succeeded')",
+                              "actions": {},
+                              "else": {
+                                "actions": {
+                                  "Save_start_stale_(meeting)": {
+                                    "type": "SetVariable",
+                                    "inputs": {
+                                      "name": "varStale",
+                                      "value": "@if(equals(outputs('Save_start_(meeting)')?['statusCode'], 412), 'This meeting was changed by someone else. Review the latest details and try again.', '')"
+                                    },
+                                    "runAfter": {}
+                                  },
+                                  "Save_start_failed_(meeting)": {
+                                    "type": "Compose",
+                                    "inputs": "@int('The record could not be updated. See Save start (meeting).')",
+                                    "runAfter": {
+                                      "Save_start_stale_(meeting)": [
+                                        "Succeeded"
+                                      ]
+                                    }
+                                  }
+                                }
+                              },
+                              "runAfter": {
+                                "Save_start_(meeting)": [
+                                  "Succeeded",
+                                  "Failed",
+                                  "TimedOut"
                                 ]
                               }
                             }
@@ -6176,6 +6292,9 @@
             }
           },
           "runAfter": {
+            "Initialise_inv_result": [
+              "Succeeded"
+            ],
             "Initialise_inv_event": [
               "Succeeded"
             ],
@@ -6183,9 +6302,6 @@
               "Succeeded"
             ],
             "Initialise_pdf_email_text": [
-              "Succeeded"
-            ],
-            "Initialise_inv_result": [
               "Succeeded"
             ]
           }
@@ -7225,13 +7341,115 @@
         "Catch": {
           "type": "Scope",
           "actions": {
+            "Was_stale": {
+              "type": "If",
+              "expression": "@not(empty(variables('varStale')))",
+              "actions": {
+                "Change_record_void_stale": {
+                  "type": "Compose",
+                  "inputs": {
+                    "State": "Void",
+                    "LastError": "@{variables('varStale')}"
+                  },
+                  "runAfter": {}
+                },
+                "Save_change_record_void_stale": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items(@{first(split(string(coalesce(variables('varTx')?['Id'], '')), '.'))})",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata",
+                        "Content-Type": "application/json;odata=nometadata",
+                        "X-HTTP-Method": "MERGE",
+                        "IF-MATCH": "*"
+                      },
+                      "parameters/body": "@{string(outputs('Change_record_void_stale'))}"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "Change_record_void_stale": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Request_rejected_stale": {
+                  "type": "Compose",
+                  "inputs": {
+                    "Status": "Rejected",
+                    "ResultMessage": "@{variables('varStale')}",
+                    "ProcessedAt": "@{utcNow()}"
+                  },
+                  "runAfter": {
+                    "Save_change_record_void_stale": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Mark_the_request_rejected_stale": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{triggerBody()?['ID']})",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata",
+                        "Content-Type": "application/json;odata=nometadata",
+                        "X-HTTP-Method": "MERGE",
+                        "IF-MATCH": "*"
+                      },
+                      "parameters/body": "@{string(outputs('Request_rejected_stale'))}"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "Request_rejected_stale": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Stop_stale": {
+                  "type": "Terminate",
+                  "inputs": {
+                    "runStatus": "Succeeded"
+                  },
+                  "runAfter": {
+                    "Mark_the_request_rejected_stale": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {}
+            },
             "Failed_and_retrying": {
               "type": "Compose",
               "inputs": {
                 "Status": "Failed",
                 "ResultMessage": "Not recorded yet – retrying automatically."
               },
-              "runAfter": {}
+              "runAfter": {
+                "Was_stale": [
+                  "Succeeded"
+                ]
+              }
             },
             "Mark_the_request_failed": {
               "type": "OpenApiConnection",

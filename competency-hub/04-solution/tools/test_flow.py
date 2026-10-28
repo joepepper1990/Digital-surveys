@@ -253,8 +253,12 @@ class Extend(unittest.TestCase):
         s = site()
         s.item('actions', s.action)['f']['PendingRequestKey'] = 'someone-else'
         r = submit(s, RACHEL, 'ExtendDeadline', self.payload(), target=s.action, revision=2)
-        run(s, r)
-        self.assertEqual(request(s, r)['ResultMessage'], 'This action is being updated. Try again in a minute.')
+        before = s.clock
+        status, eng = run(s, r)
+        # 1.10.0.0: a lock held by another change is waited for (12 re-reads, 15 s apart), then refused plainly
+        self.assertEqual(request(s, r)['ResultMessage'], 'This action is still being updated by an earlier change. Try again in a minute.')
+        self.assertEqual(len([u for m, u in s.calls if m == 'GET' and '/items({0})'.format(s.action) in u]), 13)
+        self.assertGreaterEqual((eng.now - before).total_seconds(), 180)
         s = site()
         s.item('actions', s.action)['f']['Status'] = 'Completed'
         r = submit(s, RACHEL, 'ExtendDeadline', self.payload(), target=s.action, revision=2)
@@ -264,6 +268,25 @@ class Extend(unittest.TestCase):
         r = submit(s, RACHEL, 'ExtendDeadline', self.payload(), target=999, revision=2)
         run(s, r)
         self.assertEqual(request(s, r)['ResultMessage'], 'That action could not be found.')
+
+    def test_a_lock_released_while_waiting_lets_the_change_through(self):
+        s = site()
+        s.item('actions', s.action)['f']['PendingRequestKey'] = 'someone-else'
+        r = submit(s, RACHEL, 'ExtendDeadline', self.payload(), target=s.action, revision=2)
+        reads = []
+
+        def release(method, uri, site):
+            # the earlier change finishes (its lock goes) while this run is on its third re-read
+            if method == 'GET' and '/items({0})'.format(s.action) in uri:
+                reads.append(uri)
+                if len(reads) == 3:
+                    site.item('actions', s.action)['f']['PendingRequestKey'] = ''
+        s.on_call = release
+        status, eng = run(s, r)
+        self.assertEqual(request(s, r)['Status'], 'Completed', eng.log)
+        self.assertEqual(len(reads), 3)
+        self.assertEqual(float(s.item('actions', s.action)['f']['DueDay']), 20261028.0)
+        self.assertEqual(s.item('actions', s.action)['f']['PendingRequestKey'], '')
 
     def test_a_change_between_reading_and_writing_is_refused_not_overwritten(self):
         s = site()

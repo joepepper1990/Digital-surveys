@@ -24,7 +24,17 @@
 <h1>ESG Competency Hub – installing release 1.2</h1>
 <p>25 October 2026. Release 1.2 is the version you approved in the preview. Install it in the order below: Setup first, then the solution, then the app. Allow about 30 minutes, plus a short session with Rich.</p>
 
-<div class="note"><strong>Solution 1.9.0.6 and app 1.2.4.</strong> If you have already installed release 1.2, do Step 2 (the solution) and Step 3 (the app files) only:
+<div class="note"><strong>App 1.3.0 and solution 1.10.0.0 (28 October): quicker, and safe however fast people press.</strong> If you have already installed release 1.2, do Step 3 (the app files) first, then Step 2 (the solution), then the quick tests in Step 4b. The app works with the solution you have now; the solution is what makes saving quicker.
+  <ul class="sub">
+    <li><strong>App 1.3.0 – one press, one change.</strong> A button whose change is on its way is greyed until it returns, so a double click never sends twice. Changes to one record go out one at a time, in order, each against the revision the one before it left; changes to different records go out at once.</li>
+    <li><strong>Nothing lost on reload.</strong> Changes waiting their turn, and anything recorded on a meeting booked a moment ago, are kept in the browser and sent after a reload. The browser warns before you leave while something is still only on your screen.</li>
+    <li><strong>Notes are never thrown away:</strong> typed notes go with you when you click another agenda item, Next or Previous.</li>
+    <li><strong>Everyone sees everyone.</strong> Other people's changes appear on your screen within a minute, and at once when you come back to the tab, without a reload; your own pending changes stay on top. A record someone else changed since you opened it says so under its title.</li>
+    <li><strong>A real clash is explained.</strong> If someone else changed the same record first, the card names them and what they changed, and offers <em>Apply mine on top</em>. If your change can't clash with theirs (a different field), it is sent again by itself. If your own earlier change was refused, the ones behind it are held, not sent, with one card: <em>Try again, then the rest</em> or <em>Discard all</em>.</li>
+    <li><strong>✓✓ Saved appears sooner:</strong> the app asks every 15 seconds for the first 3 minutes after a change.</li>
+    <li><strong>Solution 1.10.0.0 – quicker.</strong> The flows look for new changes every minute instead of every 2, and work on up to five at once instead of one at a time, so five quick changes take about a minute, not five. A change that finds a record still being updated by an earlier change waits its turn (re-reading every 15 seconds for up to 3 minutes) instead of being refused. Meetings, notices and issues refuse a clash with someone else plainly instead of overwriting. The queue monitor runs every 10 minutes in working hours, so a stalled run is picked up within 10 minutes.</li>
+  </ul>
+  Earlier in release 1.2 (solution 1.9.0.6 and app 1.2.4):
   <ul class="sub">
     <li><strong>Start meeting</strong> opens the live screen at once. The agenda is fixed in the background, and outcomes you record meanwhile stay with their items.</li>
     <li><strong>Finalise</strong> shows the minutes at once, marked as being saved. The PDF follows a few minutes later.</li>
@@ -63,8 +73,8 @@
 <table>
   <tr><th>Folder</th><th>Version</th><th>Step</th></tr>
   <tr><td><code>1-Setup</code>: <code>CH_Setup.html</code>, <code>CH_Setup.js</code></td><td>Setup 1.4.3</td><td>1</td></tr>
-  <tr><td><code>2-Power-Automate</code>: <code>ESGCompetencyHub_1_9_0_6_unmanaged.zip</code></td><td>Solution 1.9.0.6</td><td>2</td></tr>
-  <tr><td><code>3-App</code>: <code>competency-hub.html</code>, <code>competency-hub.js</code></td><td>App 1.2.4</td><td>3</td></tr>
+  <tr><td><code>2-Power-Automate</code>: <code>ESGCompetencyHub_1_10_0_0_unmanaged.zip</code></td><td>Solution 1.10.0.0</td><td>2</td></tr>
+  <tr><td><code>3-App</code>: <code>competency-hub.html</code>, <code>competency-hub.js</code></td><td>App 1.3.0</td><td>3</td></tr>
   <tr><td><code>4-Permission-probe</code>: <code>CH_Probe_P2.html</code>, <code>CH_Probe_P2.js</code></td><td>Probe P2-2</td><td>5 (with Rich)</td></tr>
 </table>
 
@@ -84,29 +94,29 @@
   <li>Type <code>SETUP</code> and click <strong>Apply</strong>. Then click <strong>Check</strong> again: it should report no changes. Send me both logs.</li>
 </ol>
 
-<h2>Step 2 – solution 1.9.0.6</h2>
+<h2>Step 2 – solution 1.10.0.0</h2>
 <ol>
-  <li>Open <a href="https://make.powerautomate.com">Power Automate</a> and go to <strong>Solutions → Import solution</strong>. Choose <code>ESGCompetencyHub_1_9_0_6_unmanaged.zip</code> and import it as an <strong>upgrade</strong>, with <em>Enable plugin steps and flows</em> <strong>unticked</strong>, as before.</li>
+  <li>Open <a href="https://make.powerautomate.com">Power Automate</a> and go to <strong>Solutions → Import solution</strong>. Choose <code>ESGCompetencyHub_1_10_0_0_unmanaged.zip</code> and import it as an <strong>upgrade</strong>, with <em>Enable plugin steps and flows</em> <strong>unticked</strong>, as before.</li>
   <li>The upgrade leaves the replaced flows Off ("deactivated and replaced"). In <strong>Solutions → ESG Competency Hub</strong>, turn <strong>On</strong>:
     <ul class="sub">
       <li><em>1 Daily tasks</em>, <em>2 Request queue</em>, <em>3 Queue monitor</em>, <em>4 Records</em>;</li>
       <li><em>5 Meetings</em>, <em>6 Administration</em>, <em>7 Minutes</em>.</li>
     </ul>
     Leave <em>8 Clean-up</em> and the two probes Off.</li>
-  <li><strong>7 Minutes has changed.</strong> It now runs by itself every 5 minutes, so it can no longer fall behind the way it did on Saturday. Your hand edit (<code>string('')</code>) is already in the new version, so there is nothing to redo.</li>
+  <li><strong>Turn them on in that order, one at a time.</strong> <em>2 Request queue</em>, <em>4 Records</em>, <em>5 Meetings</em> and <em>6 Administration</em> now run up to five requests side by side; nothing else needs setting.</li>
   <li>If a flow refuses to turn on, send me its error.</li>
 </ol>
-<div class="note">Also fixed in 1.9.0.4 to 1.9.0.6:
+<div class="note">Also in 1.9.0.4 to 1.9.0.6, if you are coming from 1.9.0.3:
   <ul class="sub">
     <li>"Automatic processing is not working" now clears as soon as the next change of that kind is saved.</li>
     <li>The PDF minutes use Hub names, not "Pepper Joseph".</li>
   </ul>
 </div>
 
-<h2>Step 3 – app 1.2.4</h2>
+<h2>Step 3 – app 1.3.0</h2>
 <ol>
   <li>Open <a href="{SITE}/_layouts/15/viewlsts.aspx">Site contents</a>, then <em>Welcome Web Part - Custom Layouts</em>. Upload both files from <code>3-App</code> and choose <strong>Replace</strong> for each.</li>
-  <li>Open the <a href="{SITE}/SitePages/Hub.aspx">Hub</a>. Edit the web part, click <strong>Reset layout cache</strong>, republish, then press <strong>Ctrl+F5</strong>. The footer should say <em>version 1.2.4</em>, and a line under the top bar should say <em>Everything is up to date</em>.</li>
+  <li>Open the <a href="{SITE}/SitePages/Hub.aspx">Hub</a>. Edit the web part, click <strong>Reset layout cache</strong>, republish, then press <strong>Ctrl+F5</strong>. The footer should say <em>version 1.3.0</em>, and a line under the top bar should say <em>Everything is up to date</em>.</li>
 </ol>
 
 <h2>Step 4 – try it (as yourself, about 15 minutes)</h2>
@@ -124,6 +134,24 @@
       <li>Finalise. The minutes show at once, marked as being saved. Within about 5 minutes they show <em>Actions closed at this meeting</em> and <em>Actions raised at this meeting</em> (owner and due date), and <strong>Open the PDF</strong> appears. The PDF uses Hub names.</li>
     </ol></li>
   <li><strong>Administration</strong>, first tab: <em>How long changes take</em> lists the changes you just made. Send me a screenshot of it. It gives us real timings at last.</li>
+</ol>
+
+<h2>Step 4b – press everything quickly (about 10 minutes, then 10 with Rich)</h2>
+<p>These are the checks that prove 1.3.0. Use <strong>TEST</strong> in titles. Everything should show at once; nothing should be duplicated, lost or refused.</p>
+<ol>
+  <li><strong>Double clicks.</strong> On a TEST to-do card, double-click <strong>Mark as done</strong>. The button greys on the first click; the card shows <em>Done</em> once. Double-click <strong>Reopen</strong>: it comes back once. Open the action and in <em>Add an update</em> double-click <strong>Send</strong>: one update appears.</li>
+  <li><strong>Five quick changes on one action.</strong> Open a TEST action and, without waiting between them: add an update, move the deadline, change its status, edit its title, mark it done. All five show at once (✓ Sent). Within about 2–3 minutes all show ✓✓ Saved, in that order, and the card under <em>Administration → How long changes take</em> lists five rows. None says "changed by someone else".</li>
+  <li><strong>Five quick changes on five actions.</strong> Mark five different TEST cards as done as fast as you can. All five show ✓✓ Saved within about 1–2 minutes (before 1.10.0.0 this took about 5).</li>
+  <li><strong>Reload in the middle.</strong> Move the deadline on a TEST action, then change its status straight after, and press <strong>F5</strong> before either shows ✓✓ Saved. After the reload both are still shown as sent, and both save. (If the browser asks "Leave site?" on a reload, that is the warning working: you had a change that was still only on your screen. Choose <em>Leave</em>; it is kept.)</li>
+  <li><strong>A meeting, quickly.</strong> Book a TEST Flask meeting, open it at once, <strong>Start meeting</strong>, tick attendance, record an outcome on the first item, type a note and click the next item (the note stays), then press <strong>F5</strong>. Everything you recorded is still there. Then <strong>Finalise</strong>: the minutes show at once, and the PDF follows within a few minutes.</li>
+  <li><strong>With Rich, both signed in.</strong>
+    <ol class="sub">
+      <li>Both open the same TEST action. Rich adds an update; within a minute it appears on your screen without a reload, and the action says <em>Updated by Rich</em>.</li>
+      <li>Both move the deadline of the same TEST action within the same minute, to different dates. One saves. The other gets a card naming the other person and the new deadline, with <em>Apply mine on top</em>: click it, and that one saves too.</li>
+      <li>Both open the same live TEST meeting. Rich records an outcome on item 1; you record one on item 2. Each sees the other's within a minute, and nothing is doubled.</li>
+      <li>Rich hides the tab for a few minutes, then comes back to it: it refreshes at once.</li>
+    </ol></li>
+  <li>Send me a screenshot of <em>How long changes take</em> afterwards: it is the before-and-after we agreed.</li>
 </ol>
 
 <h2>Step 5 – with Rich: the remaining checks</h2>
@@ -170,7 +198,9 @@
 <h2>Still to come</h2>
 <ul>
   <li>Your review of the administration side.</li>
-  <li>Your question to IT about a premium licence, for faster saving. It isn't needed for 1.2.</li>
+  <li>Your question to IT about a premium licence. It is the only way past the one-minute polling floor; nothing on screen waits for it.</li>
+  <li>After a week of 1.10.0.0: read the daily allowance figures (Power Platform admin centre → Analytics → Power Automate) and the <em>How long changes take</em> card, then decide on splitting <em>5 Meetings</em> and on the licence.</li>
+  <li>Solution 1.10.1: fewer repeated reads at the start of every run (settings, people and memberships once each), for a few seconds off each change.</li>
   <li>Go-live: follow <code>GO-LIVE.html</code> from the earlier zip when you are ready.</li>
 </ul>
 </body>

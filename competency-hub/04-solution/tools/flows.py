@@ -38,6 +38,7 @@ REQUEST_LIST = BY_KEY['requests']['title']
 MANAGEMENT = "createArray('Team Leader', 'Group Head')"
 OPEN = "createArray('Open', 'In Progress', 'Awaiting Input')"
 STALE = 'This action was updated by someone else. Review the latest details and try again.'
+MTG_STALE = 'This meeting was changed by someone else. Review the latest details and try again.'
 SELF_ONLY = 'As a technician you can raise actions for yourself in this area. Ask an engineer, or someone who runs meetings in this area, to raise it for someone else.'
 # the action values a queued change may write, kept in its plan so that an administrator can write them back
 REVERTABLE = ['Status', 'IsOpen', 'Blocker', 'AssignedToId', 'DueDay', 'CurrentDueDate', 'ExtensionCount', 'LastExtendedOn', 'DateCompleted',
@@ -863,6 +864,15 @@ def flow_request_queue(domain='actions'):
         return [('Tx_' + sfx, compose(fields)),
                 ('Save_tx_' + sfx, merge(L('hist', "/items(@{" + idstr(TX + "?['Id']") + "})"), 'Tx_' + sfx))]
 
+    def saved_or_stale(step, sfx, message):
+        """After a MERGE with the record's ETag: a 412 means someone else changed the record between reading and
+        writing, and nothing has been done yet, so the change is refused in plain words (1.10.0.0) – Catch sees the
+        message in varStale and marks the request Rejected instead of Failed. Any other failure stops the run as before.
+        Two steps per write, so the Records flow stays under Power Automate's 500."""
+        return [(step + '_ok', after(cond("@equals(actions('" + step + "')?['status'], 'Succeeded')", None, seq(
+            (step + '_stale', set_var('varStale', "@if(equals(outputs('" + step + "')?['statusCode'], 412), " + q(message) + ", '')")),
+            (step + '_failed', fail_here('The record could not be updated. See ' + step + '.')))), {step: TOLERANT}))]
+
     def reject(sfx, message_expr):
         """Nothing has been done yet (point of no return not passed): the transaction is void, the request Rejected."""
         return seq(*tx_update('void' + sfx, {'State': 'Void', 'LastError': '@{' + message_expr + '}'}),
@@ -944,9 +954,11 @@ def flow_request_queue(domain='actions'):
             ('Notices' + sfx, notice_step),
             ('To_notify' + sfx, query("@outputs('Notices" + sfx + "')", "@equals(item()?['send'], true)")),
             *outbox_create(sfx, "body('To_notify" + sfx + "')"),
-            # this run took the lock, and only these one-at-a-time runs write Actions: release it directly.
-            # A resumed run reads the action first and releases only its own lock. The lock goes before the
-            # transaction is marked Applied, so an Applied transaction never leaves an action locked.
+            # this run took the lock: release it directly. Every other write to an action carries the ETag it was read
+            # with, and no run writes an action it found locked (it waits, then refuses), so nothing else can have
+            # written it meanwhile, even with runs side by side (1.10.0.0). A resumed run reads the action first and
+            # releases only its own lock. The lock goes before the transaction is marked Applied, so an Applied
+            # transaction never leaves an action locked.
             ('Release_how' + sfx, cond("@variables('varLockedHere')", seq(
                 ('Release_mine_body' + sfx, compose({'PendingRequestKey': '', 'LastRequestKey': '@{' + KEY + '}'})),
                 ('Release_mine' + sfx, merge(L('act', "/items(@{" + action_id_expr + "})"), 'Release_mine_body' + sfx)),
@@ -1144,7 +1156,7 @@ def flow_request_queue(domain='actions'):
         write the values with its ETag, then the event row, the emails and the release. The shared steps are built
         once; each kind adds only small Switch cases that set variables, so the flow stays well within 500 actions."""
         sfx = '_U'
-        A = "body('Get_action" + sfx + "')"
+        A = "variables('varAct')"
         AREA_KEY = A + "?['Competency']?['CompetencyKey']"
         PENDING = "string(coalesce(" + A + "?['PendingRequestKey'], ''))"
         ALREADY = "or(equals(" + PENDING + ", " + KEY + "), equals(string(coalesce(" + A + "?['LastRequestKey'], '')), " + KEY + "))"
@@ -1197,6 +1209,19 @@ def flow_request_queue(domain='actions'):
                 ('Action_missing' + sfx, cond("@equals(outputs('Get_action" + sfx + "')?['statusCode'], 404)", reject(sfx + '_missing', "'That action could not be found.'"),
                                               seq(('Action_unreadable' + sfx, fail_here('The action could not be read. See Get_action' + sfx + '.'))))))),
                 {'Get_action' + sfx: TOLERANT})),
+            ('Set_action' + sfx, set_var('varAct', "@body('Get_action" + sfx + "')")),
+            # another change holds the action (1.10.0.0): wait for its lock to go, re-reading every 15 seconds for up
+            # to 3 minutes, so quick changes from several people are taken in turn instead of refused
+            ('Held_by_other' + sfx, cond("@and(not(empty(string(coalesce(" + A + "?['PendingRequestKey'], '')))), not(equals(string(coalesce(" + A + "?['PendingRequestKey'], '')), " + KEY + ")))", seq(
+                ('Wait_turn' + sfx, {'type': 'Until', 'expression': "@or(empty(string(coalesce(" + A + "?['PendingRequestKey'], ''))), equals(string(coalesce(" + A + "?['PendingRequestKey'], '')), " + KEY + "))",
+                                     'limit': {'count': 12, 'timeout': 'PT4M'}, 'actions': seq(
+                    ('Wait_15s' + sfx, {'type': 'Wait', 'inputs': {'interval': {'count': 15, 'unit': 'Second'}}}),
+                    ('Get_action_again' + sfx, http('GET', action_item + sel, meta=True)),
+                    ('Action_again' + sfx, after(compose("@if(equals(actions('Get_action_again" + sfx + "')?['status'], 'Succeeded'), body('Get_action_again" + sfx + "'), variables('varAct'))"),
+                                                 {'Get_action_again' + sfx: TOLERANT})),
+                    ('Set_action_again' + sfx, set_var('varAct', "@outputs('Action_again" + sfx + "')")),
+                )}),
+            ))),
             ('My_member' + sfx, query("@body('Get_my_memberships')?['value']", "@equals(" + idstr("item()?['CompetencyId']") + ", " + idstr(A + "?['CompetencyId']") + ")")),
             # a new deadline, if the change has one; a date that is not real fails here and is refused below
             ('Read_due' + sfx, set_var('varDue', "@{formatDateTime(concat(if(empty(" + NEW_DUE + "), '2000-01-01', " + NEW_DUE + "), 'T00:00:00Z'), 'yyyy-MM-dd')}")),
@@ -1251,7 +1276,7 @@ def flow_request_queue(domain='actions'):
     def common_checks(c, not_allowed, closed_msg):
         return ("if(not(" + c['OPEN'] + "), " + q(closed_msg) + ", "
                 "if(not(" + c['ALLOWED'] + "), " + q(not_allowed) + ", "
-                "if(not(empty(string(coalesce(" + c['A'] + "?['PendingRequestKey'], '')))), 'This action is being updated. Try again in a minute.', "
+                "if(not(empty(string(coalesce(" + c['A'] + "?['PendingRequestKey'], '')))), 'This action is still being updated by an earlier change. Try again in a minute.', "
                 "if(not(equals(" + idstr(c['A'] + "?['Revision']") + ", " + idstr(TX + "?['ExpectedRevision']") + ")), " + q(STALE) + ", ")
 
     def extend_tail(c):
@@ -2146,6 +2171,7 @@ def flow_request_queue(domain='actions'):
                     ('Rec_values_fixed' + code, compose(fixed)),
                     ('Rec_values' + code, compose("@union(outputs('Rec_values_own" + code + "'), outputs('Rec_values_fixed" + code + "'))")),
                     ('Save_rec' + code, merge(item, 'Rec_values' + code, if_match="@{" + T + "?['odata.etag']}")),
+                    *saved_or_stale('Save_rec' + code, code + '412', 'This was changed by someone else. Review the latest details and try again.'),
                 ))),
                 *(more_apply(c) if more_apply else []),
                 *event_steps(code, area_key, idstr(c['AREA'] + "?['Id']"), record_type_expr(c) if record_type_expr else record_type,
@@ -2583,6 +2609,7 @@ def flow_request_queue(domain='actions'):
                 ('Att_num_U_M', {'type': 'Select', 'inputs': {'from': "@body('Att_ok_M')", 'select': "@int(" + idq("item()?['SiteUserId']") + ")"}}),
                 ('Update_values_M', compose(upd_body)),
                 ('Save_update_M', merge(L('mtg', "/items(@{" + MID + "})"), 'Update_values_M', if_match="@{" + M + "?['odata.etag']}")),
+                *saved_or_stale('Save_update_M', '_MU412', MTG_STALE),
             ))),
             *event('_MU', "concat('Meeting changed: ', " + when_text + ")", 'Meeting Changed'),
             *done('_MU', "concat('Meeting changed to ', " + when_text + ", '.')"),
@@ -2597,6 +2624,7 @@ def flow_request_queue(domain='actions'):
                                                             "string(coalesce(" + M + "?['InviteState'], 'None')))), 'Cancelling', 'None')}",
                                              'InviteAttempts': 0, 'Revision': "@add(int(" + idq(M + "?['Revision']") + "), 1)", 'LastRequestKey': '@{' + KEY + '}'})),
                 ('Save_cancel_M', merge(L('mtg', "/items(@{" + MID + "})"), 'Cancel_values_M', if_match="@{" + M + "?['odata.etag']}")),
+                *saved_or_stale('Save_cancel_M', '_MC412', MTG_STALE),
             ))),
             *event('_MC', "concat('Meeting cancelled: ', " + TEXT('reason') + ")", 'Meeting Cancelled', {'Note': '@{take(' + TEXT('reason') + ', 1000)}'}),
             *done('_MC', "'Meeting cancelled.'"),
@@ -2659,6 +2687,7 @@ def flow_request_queue(domain='actions'):
                         'PreviousMeetingId': "@if(empty(body('Get_previous_M')?['value']), null, int(" + idq("first(body('Get_previous_M')?['value'])?['Id']") + "))",
                         'StartedById': '@int(' + SENDER + ')', 'Revision': "@add(int(" + idq(M + "?['Revision']") + "), 1)", 'LastRequestKey': '@{' + KEY + '}'})),
                     ('Save_start_M', merge(L('mtg', "/items(@{" + MID + "})"), 'Start_values_M', if_match="@{" + M + "?['odata.etag']}")),
+                    *saved_or_stale('Save_start_M', '_MS412', MTG_STALE),
                 ))),
                 # from here on everything follows the cut-off stored on the meeting, so a resumed run writes the same agenda
                 ('Get_started_M', http('GET', L('mtg', "/items(@{" + MID + "})?$select=Id,CutoffTime,CutoffUpdatesId,IntervalStart,PreviousMeetingId"))),
@@ -2799,6 +2828,7 @@ def flow_request_queue(domain='actions'):
             ('Apply_lock_MZ', cond("@not(" + ALREADY + ")", seq(
                 ('Lock_values_MZ', compose({'Status': 'Finalising', 'Revision': "@add(int(" + idq(M + "?['Revision']") + "), 1)", 'LastRequestKey': '@{' + KEY + '}'})),
                 ('Save_lock_MZ', merge(L('mtg', "/items(@{" + MID + "})"), 'Lock_values_MZ', if_match="@{" + M + "?['odata.etag']}")),
+                *saved_or_stale('Save_lock_MZ', '_MZ412', MTG_STALE),
             ))),
             *reset_record('_MZ'),
             # from here nobody but the flow can change the record
@@ -2890,6 +2920,7 @@ def flow_request_queue(domain='actions'):
                                              'PdfState': "@{if(not(equals(string(coalesce(first(body('Pdf_switch_MA'))?['Value'], 'Yes')), 'No')), 'Pending', 'None')}", 'PdfAttempts': 0,
                                              'Revision': "@add(int(" + idq(M + "?['Revision']") + "), 1)", 'LastRequestKey': '@{' + KEY + '}'})),
                 ('Save_amend_MA', merge(L('mtg', "/items(@{" + MID + "})"), 'Amend_values_MA', if_match="@{" + M + "?['odata.etag']}")),
+                *saved_or_stale('Save_amend_MA', '_MA412', MTG_STALE),
             ))),
             *event('_MA', "concat('Minutes amended: ', " + TEXT('reason') + ")", 'Meeting Amended', {'Note': '@{take(' + TEXT('reason') + ', 1000)}'}),
             *done('_MA', "'Amendment added. The original minutes are kept, and the amendment is shown with them.'"),
@@ -3149,6 +3180,9 @@ def flow_request_queue(domain='actions'):
     )
     fail_body = {'Status': 'Failed', 'ResultMessage': 'Not recorded yet – retrying automatically.'}
     catch = after(scope(seq(
+        # someone else changed the record between reading and writing (a 412 on the save): refused in plain words,
+        # nothing was done, and the monitor has nothing to re-run (1.10.0.0)
+        ('Was_stale', cond("@not(empty(variables('varStale')))", reject('_stale', "variables('varStale')"))),
         ('Failed_body', compose(fail_body)),
         ('Mark_failed', merge(req_item, 'Failed_body')),
         ('Has_tx', after(cond("@greater(variables('varTxId'), 0)", seq(
@@ -3176,6 +3210,7 @@ def flow_request_queue(domain='actions'):
                   ('Initialize_varLogin', init_var('varLogin', 'string', '')),
                   ('Initialize_varName', init_var('varName', 'string', '')),
                   ('Initialize_varOutbox', init_var('varOutbox', 'array', [])),
+                  ('Initialize_varStale', init_var('varStale', 'string', '')),
                   # what each kind of change sets for the shared steps (change_all)
                   ('Initialize_varVerdict', init_var('varVerdict', 'string', '')),
                   ('Initialize_varPlanObj', init_var('varPlanObj', 'object', {})),
@@ -3256,14 +3291,17 @@ def flow_request_queue(domain='actions'):
             'frequency': 'Week', 'interval': 1, 'startTime': '2026-10-01T00:00:00', 'timeZone': 'GMT Standard Time',
             'schedule': {'weekDays': ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'], 'hours': list(range(7, 19)), 'minutes': list(range(0, 60, 2))}},
             'runtimeConfiguration': {'concurrency': {'runs': 1}}}}, actions)
+    # 1.10.0.0: the trigger looks every minute, and up to five requests are worked on at once. A record is still
+    # changed by one request at a time: its lock (actions) or ETag (everything else) sees to that, and a request that
+    # finds another's lock waits for it (Wait_turn)
     triggers = {'When_a_request_is_submitted': {
         'type': 'OpenApiConnection',
-        'recurrence': {'frequency': 'Minute', 'interval': 2},
+        'recurrence': {'frequency': 'Minute', 'interval': 1},
         'splitOn': "@triggerOutputs()?['body/value']",
         'conditions': [{'expression': "@equals(triggerBody()?['Status']?['Value'], 'Submitted')"},
                        {'expression': "@not(equals(triggerBody()?['{IsFolder}'], true))"},
                        {'expression': mine}],
-        'runtimeConfiguration': {'secureData': {'properties': ['inputs', 'outputs']}, 'concurrency': {'runs': 1}},
+        'runtimeConfiguration': {'secureData': {'properties': ['inputs', 'outputs']}, 'concurrency': {'runs': 5}},
         'inputs': {'host': {'connectionName': 'shared_sharepointonline', 'operationId': 'GetOnUpdatedItems', 'apiId': SP_API},
                    'parameters': {'dataset': '@' + SITE, 'table': REQUEST_LIST},
                    'authentication': "@parameters('$authentication')"}}}
@@ -3448,7 +3486,7 @@ def flow_queue_monitor():
         ('Working', compose("@and(greaterOrEquals(dayOfWeek(" + NOW + "), 1), lessOrEquals(dayOfWeek(" + NOW + "), 5), "
                             "greaterOrEquals(outputs('Minute'), " + minutes_of(HOURS + "[0]") + "), lessOrEquals(outputs('Minute'), " + minutes_of(HOURS + "[1]") + "))")),
         # outside working hours only the first run in each interval (normally hourly) does the work
-        ('Due', cond("@or(outputs('Working'), less(mod(outputs('Minute'), max(15, int(" + HOURS + "[2]))), 15))", None,
+        ('Due', cond("@or(outputs('Working'), less(mod(outputs('Minute'), max(10, int(" + HOURS + "[2]))), 10))", None,
                      seq(('Not_now', terminate('Succeeded'))))),
         # 7 Minutes runs on weekdays 07:00-19:00: a finalise or amendment sent outside those hours waits for it, and is
         # not stuck (from 07:20, so the night's waiting ones have had time to go through)
@@ -3582,7 +3620,7 @@ def flow_queue_monitor():
                              {'Try': FAILED})
     triggers = {'Every_15_minutes': {
         'type': 'Recurrence',
-        'recurrence': {'frequency': 'Minute', 'interval': 15, 'startTime': '2026-10-01T00:00:00', 'timeZone': 'GMT Standard Time'},
+        'recurrence': {'frequency': 'Minute', 'interval': 10, 'startTime': '2026-10-01T00:00:00', 'timeZone': 'GMT Standard Time'},
         'runtimeConfiguration': {'concurrency': {'runs': 1}}}}
     return definition(triggers, actions)
 

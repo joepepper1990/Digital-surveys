@@ -277,12 +277,12 @@
             ]
           }
         },
-        "Initialise_fields": {
+        "Initialise_plan_object": {
           "type": "InitializeVariable",
           "inputs": {
             "variables": [
               {
-                "name": "varValues",
+                "name": "varPlanObj",
                 "type": "object",
                 "value": {}
               }
@@ -294,70 +294,70 @@
             ]
           }
         },
-        "Initialise_event_details": {
+        "Initialise_event_form": {
           "type": "InitializeVariable",
           "inputs": {
             "variables": [
               {
-                "name": "varEventJson",
+                "name": "varEventForm",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_plan_object": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_mtg": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varMtg",
                 "type": "object",
                 "value": {}
               }
             ]
           },
           "runAfter": {
-            "Initialise_fields": [
+            "Initialise_event_form": [
               "Succeeded"
             ]
           }
         },
-        "Initialise_flag_on": {
+        "Initialise_finalise_check": {
           "type": "InitializeVariable",
           "inputs": {
             "variables": [
               {
-                "name": "varFlagOn",
-                "type": "array",
-                "value": []
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_event_details": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_finalise_missing": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varFinMissing",
-                "type": "array",
-                "value": []
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_flag_on": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_inv_event": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varInvEvent",
+                "name": "varFinCheck",
                 "type": "string",
                 "value": ""
               }
             ]
           },
           "runAfter": {
-            "Initialise_finalise_missing": [
+            "Initialise_mtg": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_inv_result": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varInvResult",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_finalise_check": [
               "Succeeded"
             ]
           }
@@ -447,14 +447,14 @@
             ]
           }
         },
-        "Initialise_event_title": {
+        "Initialise_fields": {
           "type": "InitializeVariable",
           "inputs": {
             "variables": [
               {
-                "name": "varEventTitle",
-                "type": "string",
-                "value": ""
+                "name": "varValues",
+                "type": "object",
+                "value": {}
               }
             ]
           },
@@ -464,70 +464,70 @@
             ]
           }
         },
-        "Initialise_result": {
+        "Initialise_event_details": {
           "type": "InitializeVariable",
           "inputs": {
             "variables": [
               {
-                "name": "varResult",
-                "type": "string",
-                "value": ""
+                "name": "varEventJson",
+                "type": "object",
+                "value": {}
               }
             ]
           },
           "runAfter": {
-            "Initialise_event_title": [
+            "Initialise_fields": [
               "Succeeded"
             ]
           }
         },
-        "Initialise_flag_by": {
+        "Initialise_flag_on": {
           "type": "InitializeVariable",
           "inputs": {
             "variables": [
               {
-                "name": "varFlagBy",
+                "name": "varFlagOn",
                 "type": "array",
                 "value": []
               }
             ]
           },
           "runAfter": {
-            "Initialise_result": [
+            "Initialise_event_details": [
               "Succeeded"
             ]
           }
         },
-        "Initialise_pdf_result": {
+        "Initialise_finalise_missing": {
           "type": "InitializeVariable",
           "inputs": {
             "variables": [
               {
-                "name": "varPdfResult",
+                "name": "varFinMissing",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_flag_on": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_inv_event": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varInvEvent",
                 "type": "string",
                 "value": ""
               }
             ]
           },
           "runAfter": {
-            "Initialise_flag_by": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_inv_look": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varInvLook",
-                "type": "string",
-                "value": "ok"
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_pdf_result": [
+            "Initialise_finalise_missing": [
               "Succeeded"
             ]
           }
@@ -600,12 +600,12 @@
             ]
           }
         },
-        "Initialise_verdict": {
+        "Initialise_stale": {
           "type": "InitializeVariable",
           "inputs": {
             "variables": [
               {
-                "name": "varVerdict",
+                "name": "varStale",
                 "type": "string",
                 "value": ""
               }
@@ -617,70 +617,87 @@
             ]
           }
         },
-        "Initialise_event_type": {
+        "Initialise_event_title": {
           "type": "InitializeVariable",
           "inputs": {
             "variables": [
               {
-                "name": "varEventType",
+                "name": "varEventTitle",
                 "type": "string",
                 "value": ""
               }
             ]
           },
           "runAfter": {
-            "Initialise_verdict": [
+            "Initialise_stale": [
               "Succeeded"
             ]
           }
         },
-        "Initialise_email_list": {
+        "Initialise_result": {
           "type": "InitializeVariable",
           "inputs": {
             "variables": [
               {
-                "name": "varNoticeList",
-                "type": "array",
-                "value": []
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_event_type": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_flag_at": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varFlagAt",
-                "type": "array",
-                "value": []
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_email_list": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_pdf_email_text": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varPdfHtml",
+                "name": "varResult",
                 "type": "string",
                 "value": ""
               }
             ]
           },
           "runAfter": {
-            "Initialise_flag_at": [
+            "Initialise_event_title": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_flag_by": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varFlagBy",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_result": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_pdf_result": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varPdfResult",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_flag_by": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_inv_look": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varInvLook",
+                "type": "string",
+                "value": "ok"
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_pdf_result": [
               "Succeeded"
             ]
           }
@@ -753,14 +770,14 @@
             ]
           }
         },
-        "Initialise_plan_object": {
+        "Initialise_verdict": {
           "type": "InitializeVariable",
           "inputs": {
             "variables": [
               {
-                "name": "varPlanObj",
-                "type": "object",
-                "value": {}
+                "name": "varVerdict",
+                "type": "string",
+                "value": ""
               }
             ]
           },
@@ -770,70 +787,70 @@
             ]
           }
         },
-        "Initialise_event_form": {
+        "Initialise_event_type": {
           "type": "InitializeVariable",
           "inputs": {
             "variables": [
               {
-                "name": "varEventForm",
+                "name": "varEventType",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_verdict": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_email_list": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varNoticeList",
                 "type": "array",
                 "value": []
               }
             ]
           },
           "runAfter": {
-            "Initialise_plan_object": [
+            "Initialise_event_type": [
               "Succeeded"
             ]
           }
         },
-        "Initialise_mtg": {
+        "Initialise_flag_at": {
           "type": "InitializeVariable",
           "inputs": {
             "variables": [
               {
-                "name": "varMtg",
-                "type": "object",
-                "value": {}
+                "name": "varFlagAt",
+                "type": "array",
+                "value": []
               }
             ]
           },
           "runAfter": {
-            "Initialise_event_form": [
+            "Initialise_email_list": [
               "Succeeded"
             ]
           }
         },
-        "Initialise_finalise_check": {
+        "Initialise_pdf_email_text": {
           "type": "InitializeVariable",
           "inputs": {
             "variables": [
               {
-                "name": "varFinCheck",
+                "name": "varPdfHtml",
                 "type": "string",
                 "value": ""
               }
             ]
           },
           "runAfter": {
-            "Initialise_mtg": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_inv_result": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varInvResult",
-                "type": "string",
-                "value": ""
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_finalise_check": [
+            "Initialise_flag_at": [
               "Succeeded"
             ]
           }
@@ -2681,6 +2698,39 @@
                               "runAfter": {
                                 "Lock_fields_(finalise)": [
                                   "Succeeded"
+                                ]
+                              }
+                            },
+                            "Save_lock_OK_(finalise)": {
+                              "type": "If",
+                              "expression": "@equals(actions('Save_lock_(finalise)')?['status'], 'Succeeded')",
+                              "actions": {},
+                              "else": {
+                                "actions": {
+                                  "Save_lock_stale_(finalise)": {
+                                    "type": "SetVariable",
+                                    "inputs": {
+                                      "name": "varStale",
+                                      "value": "@if(equals(outputs('Save_lock_(finalise)')?['statusCode'], 412), 'This meeting was changed by someone else. Review the latest details and try again.', '')"
+                                    },
+                                    "runAfter": {}
+                                  },
+                                  "Save_lock_failed_(finalise)": {
+                                    "type": "Compose",
+                                    "inputs": "@int('The record could not be updated. See Save lock (finalise).')",
+                                    "runAfter": {
+                                      "Save_lock_stale_(finalise)": [
+                                        "Succeeded"
+                                      ]
+                                    }
+                                  }
+                                }
+                              },
+                              "runAfter": {
+                                "Save_lock_(finalise)": [
+                                  "Succeeded",
+                                  "Failed",
+                                  "TimedOut"
                                 ]
                               }
                             }
@@ -4667,6 +4717,39 @@
                                   "Succeeded"
                                 ]
                               }
+                            },
+                            "Save_amend_OK_(amend)": {
+                              "type": "If",
+                              "expression": "@equals(actions('Save_amend_(amend)')?['status'], 'Succeeded')",
+                              "actions": {},
+                              "else": {
+                                "actions": {
+                                  "Save_amend_stale_(amend)": {
+                                    "type": "SetVariable",
+                                    "inputs": {
+                                      "name": "varStale",
+                                      "value": "@if(equals(outputs('Save_amend_(amend)')?['statusCode'], 412), 'This meeting was changed by someone else. Review the latest details and try again.', '')"
+                                    },
+                                    "runAfter": {}
+                                  },
+                                  "Save_amend_failed_(amend)": {
+                                    "type": "Compose",
+                                    "inputs": "@int('The record could not be updated. See Save amend (amend).')",
+                                    "runAfter": {
+                                      "Save_amend_stale_(amend)": [
+                                        "Succeeded"
+                                      ]
+                                    }
+                                  }
+                                }
+                              },
+                              "runAfter": {
+                                "Save_amend_(amend)": [
+                                  "Succeeded",
+                                  "Failed",
+                                  "TimedOut"
+                                ]
+                              }
                             }
                           },
                           "else": {
@@ -5092,6 +5175,9 @@
             }
           },
           "runAfter": {
+            "Initialise_inv_result": [
+              "Succeeded"
+            ],
             "Initialise_inv_event": [
               "Succeeded"
             ],
@@ -5099,9 +5185,6 @@
               "Succeeded"
             ],
             "Initialise_pdf_email_text": [
-              "Succeeded"
-            ],
-            "Initialise_inv_result": [
               "Succeeded"
             ]
           }
@@ -6473,13 +6556,115 @@
         "Catch": {
           "type": "Scope",
           "actions": {
+            "Was_stale": {
+              "type": "If",
+              "expression": "@not(empty(variables('varStale')))",
+              "actions": {
+                "Change_record_void_stale": {
+                  "type": "Compose",
+                  "inputs": {
+                    "State": "Void",
+                    "LastError": "@{variables('varStale')}"
+                  },
+                  "runAfter": {}
+                },
+                "Save_change_record_void_stale": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items(@{first(split(string(coalesce(variables('varTx')?['Id'], '')), '.'))})",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata",
+                        "Content-Type": "application/json;odata=nometadata",
+                        "X-HTTP-Method": "MERGE",
+                        "IF-MATCH": "*"
+                      },
+                      "parameters/body": "@{string(outputs('Change_record_void_stale'))}"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "Change_record_void_stale": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Request_rejected_stale": {
+                  "type": "Compose",
+                  "inputs": {
+                    "Status": "Rejected",
+                    "ResultMessage": "@{variables('varStale')}",
+                    "ProcessedAt": "@{utcNow()}"
+                  },
+                  "runAfter": {
+                    "Save_change_record_void_stale": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Mark_the_request_rejected_stale": {
+                  "type": "OpenApiConnection",
+                  "inputs": {
+                    "host": {
+                      "connectionName": "shared_sharepointonline",
+                      "operationId": "HttpRequest",
+                      "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                    },
+                    "parameters": {
+                      "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                      "parameters/method": "POST",
+                      "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{variables('varPick')?['ID']})",
+                      "parameters/headers": {
+                        "Accept": "application/json;odata=nometadata",
+                        "Content-Type": "application/json;odata=nometadata",
+                        "X-HTTP-Method": "MERGE",
+                        "IF-MATCH": "*"
+                      },
+                      "parameters/body": "@{string(outputs('Request_rejected_stale'))}"
+                    },
+                    "authentication": "@parameters('$authentication')"
+                  },
+                  "runAfter": {
+                    "Request_rejected_stale": [
+                      "Succeeded"
+                    ]
+                  }
+                },
+                "Stop_stale": {
+                  "type": "Terminate",
+                  "inputs": {
+                    "runStatus": "Succeeded"
+                  },
+                  "runAfter": {
+                    "Mark_the_request_rejected_stale": [
+                      "Succeeded"
+                    ]
+                  }
+                }
+              },
+              "else": {
+                "actions": {}
+              },
+              "runAfter": {}
+            },
             "Failed_and_retrying": {
               "type": "Compose",
               "inputs": {
                 "Status": "Failed",
                 "ResultMessage": "Not recorded yet – retrying automatically."
               },
-              "runAfter": {}
+              "runAfter": {
+                "Was_stale": [
+                  "Succeeded"
+                ]
+              }
             },
             "Mark_the_request_failed": {
               "type": "OpenApiConnection",

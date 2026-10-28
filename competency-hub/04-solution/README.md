@@ -1,7 +1,23 @@
 # ESG Competency Hub – Power Automate solution
 
-`ESGCompetencyHub_1_9_0_6_unmanaged.zip` is the solution to import into Power Automate. It holds ten flows, which
+`ESGCompetencyHub_1_10_0_0_unmanaged.zip` is the solution to import into Power Automate. It holds ten flows, which
 all ship **Off** so nothing runs until you turn them on.
+
+**1.10.0.0 (28 October 2026), for app 1.3.0 – quicker and safe for everyone at once:**
+- The domain flows (*2 Request queue*, *4 Records*, *5 Meetings*, *6 Administration*) look for new requests every
+  minute instead of every 2, and work on up to five at once (`concurrency runs: 5`). A record is still changed by
+  one request at a time: the action lock, or the ETag every other save carries, sees to that.
+- A request that finds an action locked by another change waits for it (`Wait_turn`: a Do-until that re-reads the
+  action every 15 seconds, up to 12 times) instead of refusing at once, so quick changes from several people are
+  taken in turn. Only after 3 minutes is it refused: "This action is still being updated by an earlier change."
+- Meetings, notices and register entries handle a 412 on their save (someone else saved between the read and the
+  write) as a plain refusal, "changed by someone else", with nothing done and nothing for the monitor to re-run,
+  instead of last-writer-wins (`saved_or_stale` → `Was_stale` in Catch).
+- *3 Queue monitor* runs every 10 minutes in working hours (`MonitorHours` gap floor 10), so a stalled run is
+  picked up within 10 minutes.
+- Simulator: `wdl.py` runs Until and Wait (advancing the simulated clock); `HubFake.on_call` lets a test act as
+  another run between calls. New tests: the wait loop refusing after 12 re-reads; a lock released mid-wait letting
+  the change through; a meeting changed between read and write refused, not overwritten.
 
 **1.9.0.6 (28 October 2026):** starting and finalising a meeting write their rows ten at a time instead of one
 by one (agenda rows, permission grants, the frozen minutes rows); starting a meeting works through only the flags on
