@@ -1,7 +1,11 @@
 # ESG Competency Hub – Power Automate solution
 
-`ESGCompetencyHub_1_9_0_5_unmanaged.zip` is the solution to import into Power Automate. It holds ten flows, which
+`ESGCompetencyHub_1_9_0_6_unmanaged.zip` is the solution to import into Power Automate. It holds ten flows, which
 all ship **Off** so nothing runs until you turn them on.
+
+**1.9.0.6 (28 October 2026):** starting and finalising a meeting write their rows ten at a time instead of one
+by one (agenda rows, permission grants, the frozen minutes rows); starting a meeting works through only the flags on
+the area's open notices and issues, instead of every flag ever raised in the area.
 
 **1.9.0.5 (28 October 2026), for app 1.2.3:**
 - *7 Minutes* runs every 2 minutes on weekdays 07:00–19:00 UK time (a weekly Recurrence schedule), not at all

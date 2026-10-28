@@ -24,7 +24,7 @@
 <h1>ESG Competency Hub – installing release 1.2</h1>
 <p>25 October 2026. Release 1.2 is the version you approved in the preview. Install it in the order below: Setup first, then the solution, then the app. Allow about 30 minutes, plus a short session with Rich.</p>
 
-<div class="note"><strong>Solution 1.9.0.5 and app 1.2.4.</strong> If you have already installed release 1.2, do Step 2 (the solution) and Step 3 (the app files) only:
+<div class="note"><strong>Solution 1.9.0.6 and app 1.2.4.</strong> If you have already installed release 1.2, do Step 2 (the solution) and Step 3 (the app files) only:
   <ul class="sub">
     <li><strong>Start meeting</strong> opens the live screen at once. The agenda is fixed in the background, and outcomes you record meanwhile stay with their items.</li>
     <li><strong>Finalise</strong> shows the minutes at once, marked as being saved. The PDF follows a few minutes later.</li>
@@ -63,7 +63,7 @@
 <table>
   <tr><th>Folder</th><th>Version</th><th>Step</th></tr>
   <tr><td><code>1-Setup</code>: <code>CH_Setup.html</code>, <code>CH_Setup.js</code></td><td>Setup 1.4.3</td><td>1</td></tr>
-  <tr><td><code>2-Power-Automate</code>: <code>ESGCompetencyHub_1_9_0_5_unmanaged.zip</code></td><td>Solution 1.9.0.5</td><td>2</td></tr>
+  <tr><td><code>2-Power-Automate</code>: <code>ESGCompetencyHub_1_9_0_6_unmanaged.zip</code></td><td>Solution 1.9.0.6</td><td>2</td></tr>
   <tr><td><code>3-App</code>: <code>competency-hub.html</code>, <code>competency-hub.js</code></td><td>App 1.2.4</td><td>3</td></tr>
   <tr><td><code>4-Permission-probe</code>: <code>CH_Probe_P2.html</code>, <code>CH_Probe_P2.js</code></td><td>Probe P2-2</td><td>5 (with Rich)</td></tr>
 </table>
@@ -84,9 +84,9 @@
   <li>Type <code>SETUP</code> and click <strong>Apply</strong>. Then click <strong>Check</strong> again: it should report no changes. Send me both logs.</li>
 </ol>
 
-<h2>Step 2 – solution 1.9.0.5</h2>
+<h2>Step 2 – solution 1.9.0.6</h2>
 <ol>
-  <li>Open <a href="https://make.powerautomate.com">Power Automate</a> and go to <strong>Solutions → Import solution</strong>. Choose <code>ESGCompetencyHub_1_9_0_5_unmanaged.zip</code> and import it as an <strong>upgrade</strong>, with <em>Enable plugin steps and flows</em> <strong>unticked</strong>, as before.</li>
+  <li>Open <a href="https://make.powerautomate.com">Power Automate</a> and go to <strong>Solutions → Import solution</strong>. Choose <code>ESGCompetencyHub_1_9_0_6_unmanaged.zip</code> and import it as an <strong>upgrade</strong>, with <em>Enable plugin steps and flows</em> <strong>unticked</strong>, as before.</li>
   <li>The upgrade leaves the replaced flows Off ("deactivated and replaced"). In <strong>Solutions → ESG Competency Hub</strong>, turn <strong>On</strong>:
     <ul class="sub">
       <li><em>1 Daily tasks</em>, <em>2 Request queue</em>, <em>3 Queue monitor</em>, <em>4 Records</em>;</li>
@@ -96,7 +96,7 @@
   <li><strong>7 Minutes has changed.</strong> It now runs by itself every 5 minutes, so it can no longer fall behind the way it did on Saturday. Your hand edit (<code>string('')</code>) is already in the new version, so there is nothing to redo.</li>
   <li>If a flow refuses to turn on, send me its error.</li>
 </ol>
-<div class="note">Also fixed in 1.9.0.4 and 1.9.0.5:
+<div class="note">Also fixed in 1.9.0.4 to 1.9.0.6:
   <ul class="sub">
     <li>"Automatic processing is not working" now clears as soon as the next change of that kind is saved.</li>
     <li>The PDF minutes use Hub names, not "Pepper Joseph".</li>

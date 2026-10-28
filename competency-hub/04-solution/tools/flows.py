@@ -2494,7 +2494,7 @@ def flow_request_queue(domain='actions'):
                 ('Mgmt_group' + g, query("@body('Groups_all" + g + "')?['value']", "@equals(item()?['Title'], " + q(next(gr['title'] for gr in SCHEMA['groups'] if gr['key'] == 'Management')) + ")")),
                 ('Wanted' + g, compose("@union(createArray(" + mgmt_gid + "), body('Chair_ids_M'))")),
                 ('Break_record' + g, http('POST', REC_API + "/breakroleinheritance(copyRoleAssignments=true,clearSubscopes=true)")),
-                ('Each_grant' + g, {'type': 'Foreach', 'foreach': "@outputs('Wanted" + g + "')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
+                ('Each_grant' + g, {'type': 'Foreach', 'foreach': "@outputs('Wanted" + g + "')", 'runtimeConfiguration': {'concurrency': {'repetitions': 10}}, 'actions': seq(
                     ('Grant_now' + g, http('GET', REC_API + "/roleassignments?$filter=PrincipalId eq @{" + E + "}&$expand=RoleDefinitionBindings&$select=PrincipalId,RoleDefinitionBindings/Id")),
                     ('Grant_levels' + g, {'type': 'Select', 'inputs': {'from': "@coalesce(first(body('Grant_now" + g + "')?['value'])?['RoleDefinitionBindings'], json('[]'))", 'select': "@string(item()?['Id'])"}}),
                     ('Grant_needed' + g, cond("@not(contains(body('Grant_levels" + g + "'), " + role_id + "))", seq(
@@ -2680,7 +2680,9 @@ def flow_request_queue(domain='actions'):
                 ('Sn_mgmt_ids_M', {'type': 'Select', 'inputs': {'from': "@body('Sn_mgmt_M')", 'select': "@" + idstr(IT('SiteUserId'))}}),
                 # flags (plan F.5): in this area's folder, up to the cut-off, oldest first; who may raise and withdraw them as in the app
                 ('Sn_flags_M', http('GET', L('upd', "/items?$select=Id,EntryType,ParentType,ParentId,AuthorId,FileDirRef,IsHidden&$filter=IsFlagEvent eq 1&$top=5000"))),
+                # only flags on this area's open notices and issues count, so only those are worked through
                 ('Sn_flags_here_M', query("@body('Sn_flags_M')?['value']", "@and(" + here + ", not(equals(" + IT('IsHidden') + ", true)), "
+                                                                           "contains(body('Sn_sources_M'), concat(string(" + IT('ParentType') + "), ':', " + idstr(IT('ParentId')) + ")), "
                                                                            "lessOrEquals(int(" + idq(IT('Id')) + "), " + CUT_ID + "))")),
                 ('Each_flag_M', {'type': 'Foreach', 'foreach': "@body('Sn_flags_here_M')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
                     ('Flag_key_M', compose("@concat(string(" + F + "?['ParentType']), ':', " + idstr(F + "?['ParentId']") + ")")),
@@ -2758,7 +2760,7 @@ def flow_request_queue(domain='actions'):
                 ('Rows_M', compose("@union(body('Sec1_M'), body('Sec2_M'), body('Sec3_M'), body('Sec4_M'), body('Sec5_M'), body('Sec6_M'), body('Sec7_M'))")),
                 ('Get_agenda_M', http('GET', L('items', "/items?$select=RowKey&$filter=MeetingId eq @{" + MID + "} and RowType eq 'Agenda Item'&$top=5000"))),
                 ('Agenda_keys_M', {'type': 'Select', 'inputs': {'from': "@body('Get_agenda_M')?['value']", 'select': "@string(" + IT('RowKey') + ")"}}),
-                ('Each_row_M', {'type': 'Foreach', 'foreach': "@outputs('Rows_M')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
+                ('Each_row_M', {'type': 'Foreach', 'foreach': "@outputs('Rows_M')", 'runtimeConfiguration': {'concurrency': {'repetitions': 10}}, 'actions': seq(
                     ('Row_new_M', cond("@not(contains(body('Agenda_keys_M'), string(" + R_ + "?['key'])))", seq(
                         ('Agenda_values_M', compose("@" + R_ + "?['fields']")),
                         ('Agenda_body_M', items_values),
@@ -2806,7 +2808,7 @@ def flow_request_queue(domain='actions'):
             ('Agenda_rows_MZ', query('@' + ROWS, "@and(" + IN_MTG + ", equals(" + IT_('RowType') + ", 'Agenda Item'), not(empty(string(coalesce(" + IT_('SourceType') + ", '')))))")),
             ('Missing_start_MZ', set_var('varFinMissing', [])),
             # each agenda item takes the last outcome and notes recorded for it
-            ('Each_freeze_MZ', {'type': 'Foreach', 'foreach': "@body('Agenda_rows_MZ')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
+            ('Each_freeze_MZ', {'type': 'Foreach', 'foreach': "@body('Agenda_rows_MZ')", 'runtimeConfiguration': {'concurrency': {'repetitions': 10}}, 'actions': seq(
                 latest('Latest_MZ', out_key("string(" + FA + "?['SourceType'])", idstr(FA + "?['SourceId']"))),
                 ('Freeze_due_MZ', cond("@and(not(empty(body('Latest_MZ'))), or(not(equals(string(coalesce(" + FA + "?['Outcome'], '')), string(coalesce(" + LAST('Latest_MZ') + "?['Outcome'], '')))), "
                                        "not(equals(string(coalesce(" + FA + "?['Notes'], '')), string(coalesce(" + LAST('Latest_MZ') + "?['Notes'], ''))))))", seq(
@@ -2819,7 +2821,7 @@ def flow_request_queue(domain='actions'):
             )}),
             # new business added during the meeting becomes part of the agenda record
             ('Nb_rows_MZ', query('@' + ROWS, "@and(" + IN_REC + ", equals(" + IT_('RowType') + ", 'New Business'), startsWith(string(" + IT_('RecordKey') + "), concat(" + MID + ", '|N|')))")),
-            ('Each_nb_MZ', {'type': 'Foreach', 'foreach': "@body('Nb_rows_MZ')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
+            ('Each_nb_MZ', {'type': 'Foreach', 'foreach': "@body('Nb_rows_MZ')", 'runtimeConfiguration': {'concurrency': {'repetitions': 10}}, 'actions': seq(
                 latest('Latest_nb_MZ', out_key("'New Business'", idstr(FN + "?['Id']"))),
                 ('Nb_outcome_MZ', compose("@if(empty(body('Latest_nb_MZ')), '', string(coalesce(" + LAST('Latest_nb_MZ') + "?['Outcome'], '')))")),
                 *frozen_row('_nb_MZ', "concat('F|', " + MID + ", '|A|New Business|', " + idstr(FN + "?['Id']") + ")", {
@@ -2841,7 +2843,7 @@ def flow_request_queue(domain='actions'):
             ))),
             # attendance as it stood, one row per person invited
             ('Each_att_MZ', {'type': 'Foreach', 'foreach': "@json(if(empty(string(coalesce(" + M + "?['Attendees'], ''))), '[]', string(" + M + "?['Attendees'])))",
-                             'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
+                             'runtimeConfiguration': {'concurrency': {'repetitions': 10}}, 'actions': seq(
                 ('Att_live_MZ', query('@' + ROWS, "@and(" + IN_REC + ", equals(" + IT_('RowType') + ", 'Attendee'), equals(string(" + IT_('RecordKey') + "), concat(" + MID + ", '|P|', " + idstr(FP) + ")))")),
                 ('Att_person_MZ', query('@' + PEOPLE, "@equals(" + idstr(IT_('SiteUserId')) + ", " + idstr(FP) + ")")),
                 *frozen_row('_att_MZ', "concat('F|', " + MID + ", '|P|', " + idstr(FP) + ")", {
@@ -2849,7 +2851,7 @@ def flow_request_queue(domain='actions'):
                     'SourceId': '@{' + idstr(FP) + '}', 'Attendance': "@{if(empty(body('Att_live_MZ')), '', coalesce(" + LAST('Att_live_MZ') + "?['Attendance'], ''))}"}, 'Row_keys_MZ'),
             )}),
             ('Dec_rows_MZ', query('@' + ROWS, "@and(" + IN_REC + ", equals(" + IT_('RowType') + ", 'Decision'), startsWith(string(" + IT_('RecordKey') + "), concat(" + MID + ", '|D|')))")),
-            ('Each_dec_MZ', {'type': 'Foreach', 'foreach': "@body('Dec_rows_MZ')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
+            ('Each_dec_MZ', {'type': 'Foreach', 'foreach': "@body('Dec_rows_MZ')", 'runtimeConfiguration': {'concurrency': {'repetitions': 10}}, 'actions': seq(
                 *frozen_row('_dec_MZ', "concat('F|', " + MID + ", '|D|', " + idstr(FD + "?['Id']") + ")", {
                     'Title': "@{take(string(" + FD + "?['Title']), 255)}", 'RowType': 'Decision', 'Section': 'Decisions and additional actions', 'SortOrder': '9',
                     'Notes': "@{coalesce(" + FD + "?['Notes'], '')}"}, 'Row_keys_MZ'),
@@ -2858,7 +2860,7 @@ def flow_request_queue(domain='actions'):
             ('Get_raised_MZ', http('GET', L('act', "/items?$select=Id,Title,AssignedToId,DueDay,Status,SourceType,SourceId,PendingRequestKey,CreatedRequestKey&$filter=SourceId eq @{" + MID + "}&$top=5000"))),
             ('Raised_MZ', query("@body('Get_raised_MZ')?['value']", "@and(equals(string(" + IT_('SourceType') + "), 'Meeting'), not(and(not(empty(string(coalesce(" + IT_('PendingRequestKey') + ", '')))), "
                                                                    "equals(string(" + IT_('CreatedRequestKey') + "), concat('F|', string(" + IT_('PendingRequestKey') + "))))))")),
-            ('Each_raised_MZ', {'type': 'Foreach', 'foreach': "@body('Raised_MZ')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(
+            ('Each_raised_MZ', {'type': 'Foreach', 'foreach': "@body('Raised_MZ')", 'runtimeConfiguration': {'concurrency': {'repetitions': 10}}, 'actions': seq(
                 *frozen_row('_s_MZ', "concat('F|', " + MID + ", '|S|', " + idstr(FS + "?['Id']") + ")", {
                     'Title': "@{take(string(" + FS + "?['Title']), 255)}", 'RowType': 'Agenda Item', 'Section': 'Decisions and additional actions', 'SortOrder': '9',
                     'SourceType': 'Action', 'SourceId': '@{' + idstr(FS + "?['Id']") + '}', 'SnapshotOwner': '@{' + idstr(FS + "?['AssignedToId']") + '}',

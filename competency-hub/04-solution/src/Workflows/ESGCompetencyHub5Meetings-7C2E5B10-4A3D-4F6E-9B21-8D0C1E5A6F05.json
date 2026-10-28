@@ -3025,7 +3025,7 @@
                           "foreach": "@outputs('Wanted_(meeting)')",
                           "runtimeConfiguration": {
                             "concurrency": {
-                              "repetitions": 1
+                              "repetitions": 10
                             }
                           },
                           "actions": {
@@ -4663,7 +4663,7 @@
                           "type": "Query",
                           "inputs": {
                             "from": "@body('Sn_flags_(meeting)')?['value']",
-                            "where": "@and(equals(last(split(string(item()?['FileDirRef']), '/')), string(if(equals(string(variables('varTx')?['RequestType']), 'ScheduleMeeting'), coalesce(outputs('Payload')?['areaKey'], ''), last(split(string(coalesce(variables('varMtg')?['FileDirRef'], '')), '/'))))), not(equals(item()?['IsHidden'], true)), lessOrEquals(int(if(empty(first(split(string(coalesce(item()?['Id'], '')), '.'))), '0', first(split(string(coalesce(item()?['Id'], '')), '.')))), int(if(empty(first(split(string(coalesce(body('Get_started_(meeting)')?['CutoffUpdatesId'], '')), '.'))), '0', first(split(string(coalesce(body('Get_started_(meeting)')?['CutoffUpdatesId'], '')), '.'))))))"
+                            "where": "@and(equals(last(split(string(item()?['FileDirRef']), '/')), string(if(equals(string(variables('varTx')?['RequestType']), 'ScheduleMeeting'), coalesce(outputs('Payload')?['areaKey'], ''), last(split(string(coalesce(variables('varMtg')?['FileDirRef'], '')), '/'))))), not(equals(item()?['IsHidden'], true)), contains(body('Sn_sources_(meeting)'), concat(string(item()?['ParentType']), ':', first(split(string(coalesce(item()?['ParentId'], '')), '.')))), lessOrEquals(int(if(empty(first(split(string(coalesce(item()?['Id'], '')), '.'))), '0', first(split(string(coalesce(item()?['Id'], '')), '.')))), int(if(empty(first(split(string(coalesce(body('Get_started_(meeting)')?['CutoffUpdatesId'], '')), '.'))), '0', first(split(string(coalesce(body('Get_started_(meeting)')?['CutoffUpdatesId'], '')), '.'))))))"
                           },
                           "runAfter": {
                             "Sn_flags_(meeting)": [
@@ -5665,7 +5665,7 @@
                           "foreach": "@outputs('Rows_(meeting)')",
                           "runtimeConfiguration": {
                             "concurrency": {
-                              "repetitions": 1
+                              "repetitions": 10
                             }
                           },
                           "actions": {

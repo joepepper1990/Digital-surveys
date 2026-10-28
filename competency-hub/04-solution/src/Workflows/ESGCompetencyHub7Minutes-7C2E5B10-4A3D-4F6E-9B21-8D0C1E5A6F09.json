@@ -2874,7 +2874,7 @@
                           "foreach": "@body('Agenda_rows_(finalise)')",
                           "runtimeConfiguration": {
                             "concurrency": {
-                              "repetitions": 1
+                              "repetitions": 10
                             }
                           },
                           "actions": {
@@ -2982,7 +2982,7 @@
                           "foreach": "@body('Nb_rows_(finalise)')",
                           "runtimeConfiguration": {
                             "concurrency": {
-                              "repetitions": 1
+                              "repetitions": 10
                             }
                           },
                           "actions": {
@@ -3283,7 +3283,7 @@
                                 "foreach": "@outputs('Wanted_(finalise)')",
                                 "runtimeConfiguration": {
                                   "concurrency": {
-                                    "repetitions": 1
+                                    "repetitions": 10
                                   }
                                 },
                                 "actions": {
@@ -3583,7 +3583,7 @@
                           "foreach": "@json(if(empty(string(coalesce(variables('varMtg')?['Attendees'], ''))), '[]', string(variables('varMtg')?['Attendees'])))",
                           "runtimeConfiguration": {
                             "concurrency": {
-                              "repetitions": 1
+                              "repetitions": 10
                             }
                           },
                           "actions": {
@@ -3754,7 +3754,7 @@
                           "foreach": "@body('Dec_rows_(finalise)')",
                           "runtimeConfiguration": {
                             "concurrency": {
-                              "repetitions": 1
+                              "repetitions": 10
                             }
                           },
                           "actions": {
@@ -3925,7 +3925,7 @@
                           "foreach": "@body('Raised_(finalise)')",
                           "runtimeConfiguration": {
                             "concurrency": {
-                              "repetitions": 1
+                              "repetitions": 10
                             }
                           },
                           "actions": {
