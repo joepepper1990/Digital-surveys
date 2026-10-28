@@ -553,7 +553,8 @@ window.MockFlow = (function () {
     }
 
     return {
-      // mode: '' (about 3 seconds), 'flowSlow' (20 minutes), 'flowFail', or 'faultOnce' (the first try ends with the
+      // mode: '' (about 3 seconds), 'flowStages' (picked up after 2 s, done 24 s later: the page's checks see both
+      // stages), 'flowSlow' (20 minutes), 'flowFail', or 'faultOnce' (the first try ends with the
       // administrators, as after three failed attempts; tried again by its sender, it is recorded)
       schedule: function (req, mode) {
         setTimeout(function () {
@@ -562,9 +563,11 @@ window.MockFlow = (function () {
             req._faulted = true;
             return finish(req, 'Needs attention', 'Not recorded – an administrator has been told. Nothing was changed.');
           }
+          // picked up first, then worked on: the page sees Processing on a check before the change is done (app 1.3.1)
           req.Status = 'Processing';
-          process(req);
-        }, mode === 'flowSlow' ? 20 * 60 * 1000 : 2000 + Math.floor(Math.random() * 2000));
+          req.Modified = new Date().toISOString();
+          setTimeout(function () { process(req); }, mode === 'flowSlow' ? 0 : mode === 'flowStages' ? 24000 : 1000 + Math.floor(Math.random() * 1500));
+        }, mode === 'flowSlow' ? 20 * 60 * 1000 : mode === 'flowStages' ? 2000 : 1000 + Math.floor(Math.random() * 1500));
       },
       process: process
     };

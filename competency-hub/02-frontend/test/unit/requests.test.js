@@ -34,7 +34,7 @@ test('resume tracks the person\'s own Submitted and Processing requests again, o
   assert.equal(entries[1].state, 'submitted');
   assert.equal(tracker.forTarget(40).label, 'More time for “Replace FH40 probe”');
   assert.equal(entries[0].submittedAt.toISOString(), '2026-10-21T14:58:00.000Z');
-  assert.ok(queries.every((q) => /\$filter=Status eq '[\w ]+' and AuthorId eq 112( and Modified ge datetime'[\dT:.Z-]+')?$/.test(q)), queries.join('\n'));
+  assert.ok(queries.every((q) => /\$filter=Status eq '[\w ]+' and AuthorId eq 112( and Modified ge datetime'[\dT:.Z-]+')?(&\$orderby=Id desc)?$/.test(q)), queries.join('\n'));
 });
 
 test('resume asks for requests still on their way, waiting for an administrator, or cancelled or reverted in the last day', async () => {
@@ -42,8 +42,9 @@ test('resume asks for requests still on their way, waiting for an administrator,
   const tracker = CH.requests.tracker(fakeApp({}, queries), () => {});
   assert.equal(await tracker.resume(), 0);
   tracker.stop();
-  assert.deepEqual(queries.map((q) => /Status eq '([\w ]+)'/.exec(q)[1]), ['Submitted', 'Processing', 'Failed', 'Needs attention', 'Cancelled', 'Reverted']);
-  assert.ok(queries.slice(4).every((q) => /and Modified ge datetime'/.test(q)), queries.join('\n'));
+  // the last read is how long this person's finished changes took, for the progress ring (app 1.3.1)
+  assert.deepEqual(queries.map((q) => /Status eq '([\w ]+)'/.exec(q)[1]), ['Submitted', 'Processing', 'Failed', 'Needs attention', 'Cancelled', 'Reverted', 'Completed']);
+  assert.ok(queries.slice(4, 6).every((q) => /and Modified ge datetime'/.test(q)), queries.join('\n'));
   assert.equal(tracker.entries().length, 0);
 });
 

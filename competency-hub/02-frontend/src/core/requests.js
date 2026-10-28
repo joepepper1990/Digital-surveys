@@ -250,9 +250,17 @@ CH.requests = (function () {
           payload: payload, label: row.Title || 'Your change', meetingId: row.MeetingId || '' };
         var entry = entryFrom(spec, 'submitted');
         entry.submittedAt = row.Created ? new Date(row.Created) : new Date();
+        entry.resumed = true;   // its timing was not watched from the start, so it teaches nothing
         entries.push(entry);
         schedule(entry);
       });
+      // how long this person's recent changes took, for the time the progress ring says (a fresh browser); not
+      // waited for, so the page is not held up by it
+      if (CH.eta) {
+        app.sp.items(CH.config.lists.requests.title, '$select=RequestType,Created,ProcessedAt' +
+          "&$filter=Status eq 'Completed' and AuthorId eq " + Number(app.person.SiteUserId) + '&$orderby=Id desc', 30)
+          .then(function (past) { CH.eta.seed(past.rows); }, function () { /* the defaults are used */ });
+      }
       // what waited in this browser: queued or held, in the order it was asked for
       (stored.waiting || []).forEach(function (w) {
         if (!w.spec || byKey(w.key)) return;
@@ -314,6 +322,8 @@ CH.requests = (function () {
       // waiting in the queue, or being worked on now (spec REL-2)
       if ((status === 'Processing') !== !!entry.processing) {
         entry.processing = status === 'Processing';
+        // the stage the progress ring shows: picked up by the flow (app 1.3.1)
+        if (entry.processing && !entry.processingAt) entry.processingAt = Date.now();
         onChange(entry);
       }
       if (status === 'Rejected') return settle(entry, 'rejected', row.ResultMessage || 'This change was not accepted.');
@@ -373,7 +383,11 @@ CH.requests = (function () {
     function settle(entry, state, message) {
       entry.state = state;
       entry.message = message;
-      if (state === 'done') entry.doneAt = Date.now();
+      if (state === 'done') {
+        entry.doneAt = Date.now();
+        // how long it took, so the next change of this kind can say about how long it will be
+        if (CH.eta && !entry.resumed) CH.eta.learn(entry.type, entry.submittedAt.getTime(), entry.processingAt || null, entry.doneAt);
+      }
       onChange(entry);
       advance(entry);
       if (state === 'attention') watchAttention(entry);
@@ -458,6 +472,7 @@ CH.requests = (function () {
     return {
       submit: submit,
       resume: resume,
+      byKey: byKey,
       retry: retry,
       discard: discard,
       byKey: byKey,

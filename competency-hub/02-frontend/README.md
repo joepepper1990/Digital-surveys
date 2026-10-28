@@ -2,6 +2,21 @@
 
 Plain HTML, CSS and JavaScript, delivered as a Welcome by Accelerator 365 custom layout. Same-origin SharePoint REST runs as the signed-in user. There are no libraries and no external calls.
 
+## Version 1.3.1: a progress ring that says how far a change has got (28 October 2026)
+
+- **The ✓ Sent mark is now a ring that fills** (`CH.ui.progressRing`, `src/domain/eta.js`), on every card, the line
+  under the top bar and the open record, with the stage and about how long is left: "Waiting to be picked up ·
+  about 40 s", "Being recorded · about 20 s", "Any moment now". The flows do not report their steps, so the page
+  can see three stages: sent, picked up (the request reads Processing on a 15-second check) and saved (confirmed on
+  the record). The ring stops at 92% until the change is really confirmed, so it never claims done early.
+- **The time is learned**, not guessed: each finished change's pick-up and recording times are kept per kind in
+  `localStorage['esg-competency-hub-timings']` (last 12, medians used); a fresh browser is seeded from this person's
+  own finished requests (Created → ProcessedAt); until then the measured defaults are used, said as "usually".
+  Past 1.5× the expected time it says "taking a little longer than usual"; the 15-minute wording is unchanged.
+- **Saved** is a green circle with a tick, shown for a moment and then fading. The rings move on every second in
+  place (`CH.ui.refreshRings`), never by rebuilding the page, so nothing jumps.
+- Mock: the flow is seen in two stages (Processing, then done); `mode=flowStages` stretches them for the checks.
+
 ## Version 1.3.0: quick, mistake-proof, for everyone at once (28 October 2026)
 
 - **One press, one change.** A button whose work is still on its way is disabled until it returns (`CH.ui.guarded`,

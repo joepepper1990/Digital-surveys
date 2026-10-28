@@ -178,7 +178,54 @@ CH.ui = (function () {
   function textFactor(name) { return (TEXT_SIZES.filter(function (t) { return t[0] === name; })[0] || TEXT_SIZES[0])[1]; }
   function saveTextSize(name) { try { window.localStorage.setItem(TEXT_KEY, name); } catch (_) { /* not remembered */ } }
 
+  var SVG = 'http://www.w3.org/2000/svg';
+  var RING_R = 8, RING_C = 2 * Math.PI * RING_R;
+  function svgEl(tag, attrs) {
+    var el = document.createElementNS(SVG, tag);
+    Object.keys(attrs).forEach(function (k) { el.setAttribute(k, String(attrs[k])); });
+    return el;
+  }
+
+  // A ring that fills as a change goes through (app 1.3.1): sent, picked up by the flow, saved. words: what to
+  // say beside it; r: CH.eta.remaining(entry). data-eta-key lets refreshRings move it on every second in place.
+  function progressRing(entry, r, short) {
+    var words = CH.eta.words(r, short);
+    var svg = svgEl('svg', { viewBox: '0 0 20 20', 'aria-hidden': 'true' });
+    svg.appendChild(svgEl('circle', { class: 'track', cx: 10, cy: 10, r: RING_R }));
+    svg.appendChild(svgEl('circle', { class: 'arc', cx: 10, cy: 10, r: RING_R, 'stroke-dasharray': (r.fraction * RING_C).toFixed(1) + ' ' + RING_C.toFixed(1) }));
+    return h('span', { class: 'ring' + (r.stage === 'late' ? ' late' : ''), role: 'img', 'aria-label': CH.eta.words(r, false), 'data-eta-key': entry.key, 'data-eta-short': short ? '1' : '' },
+      svg, h('span', { class: 'ring-text', text: words }));
+  }
+
+  // The green circle with a tick, shown once a change is saved; it fades after a moment.
+  function savedMark(delayMs) {
+    var svg = svgEl('svg', { viewBox: '0 0 20 20', 'aria-hidden': 'true' });
+    svg.appendChild(svgEl('circle', { cx: 10, cy: 10, r: 9 }));
+    svg.appendChild(svgEl('path', { d: 'M5.5 10.5l3 3 6-6', fill: 'none' }));
+    return h('span', { class: 'mark saved', role: 'img', 'aria-label': 'Saved', title: 'Saved', style: 'animation-delay:' + Math.round(delayMs) + 'ms' }, svg, h('span', { class: 'ring-text', text: 'Saved' }));
+  }
+
+  // Every ring and timing text on the page moves on, without rebuilding the page (so nothing jumps).
+  function refreshRings(root, tracker) {
+    if (!root || !tracker || !CH.eta) return;
+    var rings = root.querySelectorAll('.ring[data-eta-key]');
+    for (var i = 0; i < rings.length; i++) {
+      var el = rings[i];
+      var entry = tracker.byKey(el.getAttribute('data-eta-key'));
+      if (!entry || entry.state === 'queued' || entry.state === 'held') continue;
+      var r = CH.eta.remaining(entry);
+      var arc = el.querySelector('.arc');
+      if (arc) arc.setAttribute('stroke-dasharray', (r.fraction * RING_C).toFixed(1) + ' ' + RING_C.toFixed(1));
+      var text = el.querySelector('.ring-text');
+      var words = CH.eta.words(r, !!el.getAttribute('data-eta-short'));
+      if (text && text.textContent !== words) text.textContent = words;
+      el.setAttribute('aria-label', CH.eta.words(r, false));
+      el.classList.toggle('late', r.stage === 'late');
+    }
+  }
+
   return {
+    progressRing: progressRing, savedMark: savedMark, refreshRings: refreshRings,
     scaleFor: scaleFor, TEXT_SIZES: TEXT_SIZES, textSize: textSize, textFactor: textFactor, saveTextSize: saveTextSize,
     chip: chip, card: card, button: button, linkButton: linkButton, sectionNote: sectionNote,
     actionList: actionList, tile: tile, tileGrid: tileGrid, areaStatusLines: areaStatusLines, toast: toast, say: say,

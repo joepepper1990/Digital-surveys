@@ -1,11 +1,11 @@
-/* ESG Competency Hub 1.3.0 – built from src/ by tools/build.js. Do not edit. */
+/* ESG Competency Hub 1.3.1 – built from src/ by tools/build.js. Do not edit. */
 window.ESGCompetencyHub = function (ctx) {
   'use strict';
   var CH = {};
   /* src/core/config.js */
   // Fixed names and limits. Lists are addressed by display title; folders by list URL name.
   CH.config = {
-    VERSION: '1.3.0',
+    VERSION: '1.3.1',
     ENVIRONMENT: 'TEST',
     lists: {
       competencies: { title: 'Competencies', url: 'Competencies' },
@@ -586,9 +586,17 @@ window.ESGCompetencyHub = function (ctx) {
             payload: payload, label: row.Title || 'Your change', meetingId: row.MeetingId || '' };
           var entry = entryFrom(spec, 'submitted');
           entry.submittedAt = row.Created ? new Date(row.Created) : new Date();
+          entry.resumed = true;   // its timing was not watched from the start, so it teaches nothing
           entries.push(entry);
           schedule(entry);
         });
+        // how long this person's recent changes took, for the time the progress ring says (a fresh browser); not
+        // waited for, so the page is not held up by it
+        if (CH.eta) {
+          app.sp.items(CH.config.lists.requests.title, '$select=RequestType,Created,ProcessedAt' +
+            "&$filter=Status eq 'Completed' and AuthorId eq " + Number(app.person.SiteUserId) + '&$orderby=Id desc', 30)
+            .then(function (past) { CH.eta.seed(past.rows); }, function () { /* the defaults are used */ });
+        }
         // what waited in this browser: queued or held, in the order it was asked for
         (stored.waiting || []).forEach(function (w) {
           if (!w.spec || byKey(w.key)) return;
@@ -650,6 +658,8 @@ window.ESGCompetencyHub = function (ctx) {
         // waiting in the queue, or being worked on now (spec REL-2)
         if ((status === 'Processing') !== !!entry.processing) {
           entry.processing = status === 'Processing';
+          // the stage the progress ring shows: picked up by the flow (app 1.3.1)
+          if (entry.processing && !entry.processingAt) entry.processingAt = Date.now();
           onChange(entry);
         }
         if (status === 'Rejected') return settle(entry, 'rejected', row.ResultMessage || 'This change was not accepted.');
@@ -709,7 +719,11 @@ window.ESGCompetencyHub = function (ctx) {
       function settle(entry, state, message) {
         entry.state = state;
         entry.message = message;
-        if (state === 'done') entry.doneAt = Date.now();
+        if (state === 'done') {
+          entry.doneAt = Date.now();
+          // how long it took, so the next change of this kind can say about how long it will be
+          if (CH.eta && !entry.resumed) CH.eta.learn(entry.type, entry.submittedAt.getTime(), entry.processingAt || null, entry.doneAt);
+        }
         onChange(entry);
         advance(entry);
         if (state === 'attention') watchAttention(entry);
@@ -794,6 +808,7 @@ window.ESGCompetencyHub = function (ctx) {
       return {
         submit: submit,
         resume: resume,
+        byKey: byKey,
         retry: retry,
         discard: discard,
         byKey: byKey,
@@ -1927,6 +1942,134 @@ window.ESGCompetencyHub = function (ctx) {
   return { outOfHours: outOfHours, judge: judge, hours: hours };
   })();
 
+  /* src/domain/eta.js */
+  // How far a change has got, and about how long is left (app 1.3.1).
+  //
+  // The flows do not report their steps, so the page can see three stages for a change: sent (the request was written),
+  // picked up (the request reads Processing on a check, made every 15 seconds), and saved (confirmed on the record).
+  // The time left is an estimate from how long this person's recent changes of the same kind took, kept in the
+  // browser; before any are known, the figures the flows were measured at. It is always "about", and the ring never
+  // fills until the change is really confirmed.
+  CH.eta = (function () {
+    var KEY = 'esg-competency-hub-timings';
+    var KEEP = 12;             // samples kept per kind
+    var CAP = 0.92;            // the ring stops here until the change is confirmed
+    var SOON = 8;              // seconds: "any moment now"
+    var LATE = 1.5;            // × the expected time: "taking a little longer than usual"
+
+    // seconds: [pick-up, work] measured on the site on 28 October 2026 (Administration → How long changes take)
+    var DEFAULTS = {
+      RaiseAction: [30, 25], ScheduleMeeting: [30, 30], StartMeeting: [30, 60], FinaliseMeeting: [30, 90], AmendMeeting: [30, 60],
+      RaiseRegisterEntry: [30, 25], EditNotice: [30, 25], ArchiveNotice: [30, 25], PinNotice: [30, 25], HideComment: [30, 25],
+      UpdateRegisterEntry: [30, 25], LinkActionToEntry: [30, 25], UnlinkActionFromEntry: [30, 25],
+      '*': [30, 20]
+    };
+
+    function readAll() {
+      try { return JSON.parse(window.localStorage.getItem(KEY) || 'null') || {}; } catch (_) { return {}; }
+    }
+    function writeAll(all) {
+      try { window.localStorage.setItem(KEY, JSON.stringify(all)); } catch (_) { /* not remembered */ }
+    }
+
+    function median(list) {
+      var s = list.slice().sort(function (a, b) { return a - b; });
+      if (!s.length) return null;
+      var m = s.length >> 1;
+      return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+    }
+
+    // What is expected for a kind of change: { pickup, work, total, learned } in seconds.
+    // Live samples (pick-up and work seen by this browser) count first; totals read back from the person's own
+    // finished requests next; the measured defaults last.
+    function expected(type) {
+      var d = DEFAULTS[type] || DEFAULTS['*'];
+      var mine = readAll()[type] || {};
+      var pickup = median(mine.pickup || []), work = median(mine.work || []), total = median(mine.total || []);
+      if (pickup !== null && work !== null) return { pickup: pickup, work: work, total: pickup + work, learned: true };
+      if (total !== null) {
+        // only totals are known: split them in the defaults' proportion
+        var share = d[0] / (d[0] + d[1]);
+        return { pickup: total * share, work: total * (1 - share), total: total, learned: true };
+      }
+      return { pickup: d[0], work: d[1], total: d[0] + d[1], learned: false };
+    }
+
+    // Remember how long a finished change took. processingAt is when Processing was first seen (null when the change
+    // was already finished on the first look); doneAt when it was confirmed.
+    function learn(type, sentAt, processingAt, doneAt) {
+      if (!type || !sentAt || !doneAt || doneAt < sentAt) return;
+      var all = readAll();
+      var mine = all[type] = all[type] || { pickup: [], work: [], total: [] };
+      var total = (doneAt - sentAt) / 1000;
+      push(mine.total, total);
+      if (processingAt && processingAt >= sentAt && processingAt <= doneAt) {
+        push(mine.pickup, (processingAt - sentAt) / 1000);
+        push(mine.work, (doneAt - processingAt) / 1000);
+      }
+      writeAll(all);
+    }
+    function push(list, value) { list.push(Math.round(value)); while (list.length > KEEP) list.shift(); }
+
+    // Totals read back from the person's finished requests (seeding a fresh browser): rows with RequestType, Created,
+    // ProcessedAt. Only kinds with no live samples yet are seeded.
+    function seed(rows) {
+      var all = readAll(), changed = false;
+      (rows || []).forEach(function (r) {
+        var sent = Date.parse(r.Created), done = Date.parse(r.ProcessedAt);
+        if (!r.RequestType || isNaN(sent) || isNaN(done) || done < sent) return;
+        var mine = all[r.RequestType] = all[r.RequestType] || { pickup: [], work: [], total: [] };
+        if (mine.pickup.length || mine.seeded) return;
+        push(mine.total, (done - sent) / 1000);
+        changed = true;
+      });
+      Object.keys(all).forEach(function (t) { if (all[t].total.length && !all[t].pickup.length) all[t].seeded = true; });
+      if (changed) writeAll(all);
+    }
+
+    // eased progress through a stage: quick at first, slowing towards the end, never quite there
+    function ease(x) { x = Math.max(0, Math.min(1, x)); return 1 - Math.pow(1 - x, 2); }
+
+    // How far a change has got. entry: { type, submittedAt (Date), processingAt?, doneAt?, state }. Returns
+    // { stage: 'pickup' | 'work' | 'late' | 'done', fraction (0–1), seconds (left, or null), expected, learned }.
+    function remaining(entry, now) {
+      now = now || Date.now();
+      var exp = expected(entry.type);
+      if (entry.state === 'done') return { stage: 'done', fraction: 1, seconds: 0, expected: exp.total, learned: exp.learned };
+      var sent = entry.submittedAt ? entry.submittedAt.getTime() : now;
+      var elapsed = Math.max(0, (now - sent) / 1000);
+      var pickupShare = exp.pickup / exp.total;
+      var fraction, left;
+      if (entry.processingAt) {
+        var working = Math.max(0, (now - entry.processingAt) / 1000);
+        fraction = pickupShare + (1 - pickupShare) * ease(working / exp.work);
+        left = exp.work - working;
+      } else {
+        fraction = pickupShare * ease(elapsed / exp.pickup);
+        left = exp.total - elapsed;
+      }
+      fraction = Math.min(CAP, fraction);
+      var late = elapsed > exp.total * LATE;
+      return { stage: late ? 'late' : entry.processingAt ? 'work' : 'pickup', fraction: fraction,
+        seconds: late ? null : Math.max(0, Math.round(left / 5) * 5), expected: exp.total, learned: exp.learned };
+    }
+
+    function about(seconds) { return 'about ' + (seconds >= 90 ? Math.round(seconds / 30) / 2 + ' min' : Math.round(seconds) + ' s'); }
+
+    // The words for a stage. Short: for a card ("about 40 s"); otherwise the stage as well.
+    function words(r, short) {
+      if (r.stage === 'done') return 'Saved';
+      if (r.stage === 'queued') return short ? 'in turn' : 'Waiting its turn: it is sent as soon as the change before it is saved.';
+      if (r.stage === 'late') return short ? 'a little longer' : 'Taking a little longer than usual – usually ' + about(r.expected) + ', but it will be saved.';
+      if (r.seconds !== null && r.seconds <= SOON) return short ? 'any moment' : 'Any moment now.';
+      var time = (r.learned ? '' : 'usually ') + about(r.seconds);
+      if (short) return time;
+      return (r.stage === 'work' ? 'Being recorded · ' : 'Waiting to be picked up · ') + time;
+    }
+
+    return { expected: expected, learn: learn, seed: seed, remaining: remaining, words: words, median: median, DEFAULTS: DEFAULTS, KEY: KEY, CAP: CAP };
+  })();
+
   /* src/domain/agenda.js */
   // The monthly meeting agenda (spec MTG-2, plan F.7.3). The same rules as the Meetings flow, which writes the agenda
   // when the meeting starts; before that the app shows this as a preview. It works on list rows exactly as SharePoint
@@ -2249,7 +2392,54 @@ window.ESGCompetencyHub = function (ctx) {
     function textFactor(name) { return (TEXT_SIZES.filter(function (t) { return t[0] === name; })[0] || TEXT_SIZES[0])[1]; }
     function saveTextSize(name) { try { window.localStorage.setItem(TEXT_KEY, name); } catch (_) { /* not remembered */ } }
 
+    var SVG = 'http://www.w3.org/2000/svg';
+    var RING_R = 8, RING_C = 2 * Math.PI * RING_R;
+    function svgEl(tag, attrs) {
+      var el = document.createElementNS(SVG, tag);
+      Object.keys(attrs).forEach(function (k) { el.setAttribute(k, String(attrs[k])); });
+      return el;
+    }
+
+    // A ring that fills as a change goes through (app 1.3.1): sent, picked up by the flow, saved. words: what to
+    // say beside it; r: CH.eta.remaining(entry). data-eta-key lets refreshRings move it on every second in place.
+    function progressRing(entry, r, short) {
+      var words = CH.eta.words(r, short);
+      var svg = svgEl('svg', { viewBox: '0 0 20 20', 'aria-hidden': 'true' });
+      svg.appendChild(svgEl('circle', { class: 'track', cx: 10, cy: 10, r: RING_R }));
+      svg.appendChild(svgEl('circle', { class: 'arc', cx: 10, cy: 10, r: RING_R, 'stroke-dasharray': (r.fraction * RING_C).toFixed(1) + ' ' + RING_C.toFixed(1) }));
+      return h('span', { class: 'ring' + (r.stage === 'late' ? ' late' : ''), role: 'img', 'aria-label': CH.eta.words(r, false), 'data-eta-key': entry.key, 'data-eta-short': short ? '1' : '' },
+        svg, h('span', { class: 'ring-text', text: words }));
+    }
+
+    // The green circle with a tick, shown once a change is saved; it fades after a moment.
+    function savedMark(delayMs) {
+      var svg = svgEl('svg', { viewBox: '0 0 20 20', 'aria-hidden': 'true' });
+      svg.appendChild(svgEl('circle', { cx: 10, cy: 10, r: 9 }));
+      svg.appendChild(svgEl('path', { d: 'M5.5 10.5l3 3 6-6', fill: 'none' }));
+      return h('span', { class: 'mark saved', role: 'img', 'aria-label': 'Saved', title: 'Saved', style: 'animation-delay:' + Math.round(delayMs) + 'ms' }, svg, h('span', { class: 'ring-text', text: 'Saved' }));
+    }
+
+    // Every ring and timing text on the page moves on, without rebuilding the page (so nothing jumps).
+    function refreshRings(root, tracker) {
+      if (!root || !tracker || !CH.eta) return;
+      var rings = root.querySelectorAll('.ring[data-eta-key]');
+      for (var i = 0; i < rings.length; i++) {
+        var el = rings[i];
+        var entry = tracker.byKey(el.getAttribute('data-eta-key'));
+        if (!entry || entry.state === 'queued' || entry.state === 'held') continue;
+        var r = CH.eta.remaining(entry);
+        var arc = el.querySelector('.arc');
+        if (arc) arc.setAttribute('stroke-dasharray', (r.fraction * RING_C).toFixed(1) + ' ' + RING_C.toFixed(1));
+        var text = el.querySelector('.ring-text');
+        var words = CH.eta.words(r, !!el.getAttribute('data-eta-short'));
+        if (text && text.textContent !== words) text.textContent = words;
+        el.setAttribute('aria-label', CH.eta.words(r, false));
+        el.classList.toggle('late', r.stage === 'late');
+      }
+    }
+
     return {
+      progressRing: progressRing, savedMark: savedMark, refreshRings: refreshRings,
       scaleFor: scaleFor, TEXT_SIZES: TEXT_SIZES, textSize: textSize, textFactor: textFactor, saveTextSize: saveTextSize,
       chip: chip, card: card, button: button, linkButton: linkButton, sectionNote: sectionNote,
       actionList: actionList, tile: tile, tileGrid: tileGrid, areaStatusLines: areaStatusLines, toast: toast, say: say,
@@ -3123,7 +3313,8 @@ window.ESGCompetencyHub = function (ctx) {
       var entry = app.tracker.forTarget(action.id);
       if (action.isNew) return h('p', { class: 'pending', role: 'status' }, app.mark(action, 'Action'), ' Being saved – it gets its number in a moment, and can then be changed.');
       if (entry && (entry.state === 'submitted' || entry.state === 'slow')) {
-        return h('p', { class: 'pending', role: 'status' }, app.mark(action, 'Action'), ' ' + entry.label + ' – ' +
+        // the ring, the stage and about how long is left (app 1.3.1)
+        return h('p', { class: 'pending', role: 'status' }, app.ring(entry, false), ' ' + entry.label + ' – ' +
           (entry.retrying ? entry.message : entry.state === 'slow' ? 'taking longer than usual, but it will be saved.' : 'you can carry on.'));
       }
       if (action.locked) return h('p', { class: 'pending', role: 'status', text: 'Someone else\'s change to this action is being saved… Try again in a minute.' });
@@ -3822,7 +4013,7 @@ window.ESGCompetencyHub = function (ctx) {
       var entry = app.tracker.forTarget(id, kind);
       var rec = kind === 'Notice' ? app.model.noticeById[id] : app.model.entryById[id];
       if (entry && (entry.state === 'submitted' || entry.state === 'slow')) {
-        return h('p', { class: 'pending', role: 'status' }, app.mark(rec || { sending: true }, kind), ' ' + entry.label + ' – ' + (entry.retrying ? entry.message : 'you can carry on.'));
+        return h('p', { class: 'pending', role: 'status' }, app.ring(entry, false), ' ' + entry.label + ' – ' + (entry.retrying ? entry.message : 'you can carry on.'));
       }
       if (locked) return h('p', { class: 'pending', role: 'status', text: 'Being updated… Try again in a minute.' });
       var mark = app.mark(rec, kind);
@@ -5079,7 +5270,7 @@ window.ESGCompetencyHub = function (ctx) {
         var e = app.tracker.forTarget(x.id, 'Meeting', x.id < 0 ? x.sending : null);
         // waiting its turn (release 1.3): it is sent as soon as the change before it is saved
         if (e && e.state === 'queued') {
-          return h('p', { class: 'pending', role: 'status' }, app.mark({ sending: true }, 'Meeting'), ' ' + e.label + ' – shown now; it is sent as soon as ' +
+          return h('p', { class: 'pending', role: 'status' }, app.ring(e, false), ' ' + e.label + ' – shown now; it is sent as soon as ' +
             (x.id < 0 ? 'the booking' : 'the change before it') + ' is saved, usually within a minute.');
         }
         if (e && e.state === 'held') {
@@ -5091,7 +5282,7 @@ window.ESGCompetencyHub = function (ctx) {
             : e.type === 'FinaliseMeeting' ? (app.outOfHours && app.outOfHours(new Date()) ? 'the minutes below are what is being saved. Out of hours, they and the PDF are completed from 07:00 on the next weekday.'
               : 'the minutes below are what is being saved. The PDF follows a few minutes after.')
             : 'you can carry on. The next steps are offered once it is saved.';
-          return h('p', { class: 'pending', role: 'status' }, app.mark(x, 'Meeting') || app.mark({ sending: true }, 'Meeting'), ' ' + e.label + ' – ' + what);
+          return h('p', { class: 'pending', role: 'status' }, app.ring(e, false), ' ' + e.label + ' – ' + what);
         }
         var mark = app.mark(x, 'Meeting');
         return mark ? h('p', { class: 'mark-line' }, mark) : null;
@@ -5912,6 +6103,7 @@ window.ESGCompetencyHub = function (ctx) {
       var healthTimer = null;
       var HEALTH_EVERY_MS = 5 * 60 * 1000;
       var REFRESH_EVERY_MS = 60 * 1000;
+      var ringTimer = null;
       var refreshTimer = null;
       var lastRead = null;   // when the lists were last read: the next refresh asks only for rows changed since
       var app = { state: { view: 'home', area: null, tab: 0 } };
@@ -6051,16 +6243,18 @@ window.ESGCompetencyHub = function (ctx) {
           });
         } else if (entries.length) {
           kind = 'busy';
-          var e = entries[0];
+          // the one furthest along leads (app 1.3.1): its ring and its stage, with about how long is left
+          var e = entries.slice().sort(function (a, b) { return CH.eta.remaining(b).fraction - CH.eta.remaining(a).fraction; })[0];
           var how = entries.some(function (x) { return x.retrying; }) ? ' – retrying automatically, you can carry on.'
-            : entries.some(function (x) { return x.state === 'slow'; }) ? ' – taking longer than usual, but it will be saved. You can carry on.' : ' – you can carry on.';
-          text = (entries.length === 1 ? '1 change still saving: ' + e.label : entries.length + ' changes still saving') + how;
+            : entries.some(function (x) { return x.state === 'slow'; }) ? ' – taking longer than usual, but it will be saved. You can carry on.' : ' You can carry on.';
+          text = (entries.length === 1 ? '1 change still saving: ' + e.label : entries.length + ' changes still saving, the first ' + e.label) + ' · ';
+          extra = [ring(e, false), h('span', { text: how })];
         } else {
           text = 'Everything is up to date.';
         }
         var away = outOfHours(new Date());
         return h('div', { class: 'status-line' + (kind ? ' ' + kind : ''), role: 'status', 'aria-live': 'polite' },
-          h('span', { class: 'dot', 'aria-hidden': 'true' }), h('span', { text: text }), extra,
+          kind === 'busy' ? null : h('span', { class: 'dot', 'aria-hidden': 'true' }), h('span', { class: 'status-text', text: text }), extra,
           away ? h('span', { class: 'muted small away', title: away, text: away }) : null);
       }
 
@@ -6377,14 +6571,20 @@ window.ESGCompetencyHub = function (ctx) {
       app.raiseEntry = function (key) { CH.views.entryForm.open(app, key); };
       // The mark beside a record (release 1.2): ✓ Sent while it is being saved, ✓✓ Saved for three seconds (it then fades),
       // ✕ Not saved after a refusal or a fault. kind: 'Action', 'Notice', 'Register Entry' or 'Meeting'.
+      // app 1.3.1: the ring that fills as the change goes through, with about how long is left, instead of ✓ Sent
+      function ring(e, short) {
+        if (e.state === 'queued') return CH.ui.progressRing(e, { stage: 'queued', fraction: 0, seconds: null, expected: 0, learned: true }, short);
+        return CH.ui.progressRing(e, CH.eta.remaining(e), short);
+      }
+      app.ring = ring;
       app.mark = function (rec, kind) {
         if (!rec || !app.tracker) return null;
-        if (rec.sending) return h('span', { class: 'mark sent', title: 'Sent – being saved', text: '✓ Sent' });
-        var e = app.tracker.forRecord(rec.id, kind);
+        var e = rec.sending ? app.tracker.byKey(rec.sending) : null;
+        if (!e && rec.sending) return h('span', { class: 'mark sent', title: 'Sent – being saved', text: 'Sending…' });
+        if (!e) e = app.tracker.forRecord(rec.id, kind);
+        if (e && (e.state === 'submitted' || e.state === 'slow' || e.state === 'queued')) return ring(e, true);
         var since = e && e.state === 'done' && e.doneAt ? Date.now() - e.doneAt : Infinity;
-        if (since < 4000) {
-          return h('span', { class: 'mark saved', title: 'Saved', text: '✓✓ Saved', style: 'animation-delay:' + Math.round(3000 - since) + 'ms' });
-        }
+        if (since < 4000) return CH.ui.savedMark(3000 - since);
         if (e && !e.dismissed && (e.state === 'rejected' || e.state === 'attention')) return h('span', { class: 'mark refused', text: '✕ Not saved' });
         if (rec.locked) return h('span', { class: 'mark sent', text: 'being updated' });
         return null;
@@ -6551,6 +6751,8 @@ window.ESGCompetencyHub = function (ctx) {
         if (params.get('view') === 'admin') app.state = { view: 'admin', area: null, tab: 0 };
         if (params.get('view') === 'manage' && app.access.isManagement) app.state = { view: 'manage', area: null, tab: 0 };
         healthTimer = setInterval(checkHealth, HEALTH_EVERY_MS);
+        // every second, the progress rings move on in place; nothing is rebuilt, so nothing jumps (app 1.3.1)
+        ringTimer = setInterval(function () { if (!document.hidden) CH.ui.refreshRings(app.root, app.tracker); }, 1000);
         refreshTimer = setInterval(refreshOthers, REFRESH_EVERY_MS);
         window.addEventListener('resize', fitToWindow);
         window.addEventListener('beforeunload', onLeave);

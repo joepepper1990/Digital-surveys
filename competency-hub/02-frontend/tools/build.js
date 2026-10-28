@@ -9,7 +9,7 @@ const crypto = require('crypto');
 const ROOT = path.join(__dirname, '..');
 const MODULES = [
   'src/core/config.js', 'src/core/dom.js', 'src/core/names.js', 'src/core/dates.js', 'src/core/sp.js', 'src/core/requests.js',
-  'src/domain/access.js', 'src/domain/rules.js', 'src/domain/model.js', 'src/domain/optimistic.js', 'src/domain/health.js', 'src/domain/agenda.js',
+  'src/domain/access.js', 'src/domain/rules.js', 'src/domain/model.js', 'src/domain/optimistic.js', 'src/domain/health.js', 'src/domain/eta.js', 'src/domain/agenda.js',
   'src/ui/components.js', 'src/ui/dialog.js',
   'src/views/home.js', 'src/views/area.js', 'src/views/notice-form.js', 'src/views/raise-form.js', 'src/views/action-panel.js', 'src/views/my-actions.js', 'src/views/people.js', 'src/views/record-panel.js', 'src/views/entry-form.js', 'src/views/feedback.js', 'src/views/settings.js',
   'src/views/dashboard.js', 'src/views/meeting-form.js', 'src/views/meeting-panel.js', 'src/views/cleanup.js', 'src/views/admin.js',
@@ -84,7 +84,7 @@ function build() {
     '<label>Simulate <select id="mock-mode"><option value="">Normal</option><option value="slow">Slow responses</option>' +
       '<option value="people403">People list denied (403)</option><option value="actions404">Actions list missing (404)</option>' +
       '<option value="actionsPartial">Actions over the read limit</option><option value="unknown">Unknown user</option>' +
-      '<option value="duplicate">Duplicate person</option><option value="left">Person marked Left</option><option value="flowSlow">Request flow very slow</option>' +
+      '<option value="duplicate">Duplicate person</option><option value="left">Person marked Left</option><option value="flowStages">Request flow in slow stages</option><option value="flowSlow">Request flow very slow</option>' +
       '<option value="flowFail">Request flow fails</option><option value="limited">Processing down (limited mode)</option>' +
       '<option value="attention">Changes needing attention</option></select></label></div>',
     '<div class="mock-scope"><div class="ch" data-ch-root data-ch-version="' + pkgVersion + '"><p>Loading the ESG Competency Hub…</p></div></div>',

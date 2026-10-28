@@ -102,7 +102,7 @@
 .mock-scope .ch .stale-copy {margin: 0; background: #fff3d6; color: #6b4a00; padding: calc(10 * var(--u)) calc(16 * var(--u)); text-align: center;}
 .mock-scope .ch .request-strip {list-style: none; margin: 0 0 calc(18 * var(--u)); padding: 0; display: grid; gap: calc(8 * var(--u));}
 .mock-scope .ch .status-line {display: flex; align-items: center; gap: calc(10 * var(--u)); padding: calc(5 * var(--u)) calc(32 * var(--u)); min-height: calc(32 * var(--u)); font-size: calc(14 * var(--u)); color: var(--muted); background: #fff; border-bottom: 1px solid var(--line); white-space: nowrap; overflow: hidden;}
-.mock-scope .ch .status-line > span:nth-child(2) {overflow: hidden; text-overflow: ellipsis;}
+.mock-scope .ch .status-line > .status-text {overflow: hidden; text-overflow: ellipsis;}
 .mock-scope .ch .status-line .dot {width: calc(9 * var(--u)); height: calc(9 * var(--u)); border-radius: 50%; background: var(--ok); flex: none;}
 .mock-scope .ch .status-line .away {margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
 .mock-scope .ch .status-line.busy .dot {background: var(--accent); animation: ch-pulse 1.2s infinite;}
@@ -160,11 +160,25 @@
 .mock-scope .ch @keyframes ch-pulse {50% { opacity: .35; }}
 .mock-scope .ch .mark {font-size: calc(13 * var(--u)); font-weight: 600; white-space: nowrap; margin-left: calc(6 * var(--u));}
 .mock-scope .ch .mark.sent {color: var(--muted);}
-.mock-scope .ch .mark.saved {color: var(--ok); animation: ch-fade .8s forwards;}
+.mock-scope .ch .mark.saved {color: var(--ok); animation: ch-fade .8s forwards; display: inline-flex; align-items: center; gap: calc(4 * var(--u));}
+.mock-scope .ch .mark.saved svg {width: calc(16 * var(--u)); height: calc(16 * var(--u)); flex: none;}
+.mock-scope .ch .mark.saved svg circle {fill: var(--ok);}
+.mock-scope .ch .mark.saved svg path {stroke: #fff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round;}
 .mock-scope .ch .mark.refused {color: var(--late);}
 .mock-scope .ch @keyframes ch-fade {to { opacity: 0; }}
+.mock-scope .ch .ring {display: inline-flex; align-items: center; gap: calc(5 * var(--u)); font-size: calc(13 * var(--u)); font-weight: 600; color: var(--muted); white-space: nowrap; margin-left: calc(6 * var(--u)); vertical-align: middle;}
+.mock-scope .ch .ring svg {width: calc(16 * var(--u)); height: calc(16 * var(--u)); flex: none; transform: rotate(-90deg);}
+.mock-scope .ch .ring svg circle {fill: none; stroke-width: 2.6;}
+.mock-scope .ch .ring svg .track {stroke: var(--line);}
+.mock-scope .ch .ring svg .arc {stroke: var(--accent); stroke-linecap: round; transition: stroke-dasharray .9s linear;}
+.mock-scope .ch .ring.late svg .arc {stroke: var(--accent-strong);}
+.mock-scope .ch .status-line .ring, .mock-scope .ch .pending .ring {margin-left: 0; font-weight: 500; font-size: inherit; color: inherit;}
+.mock-scope .ch .status-line .ring svg, .mock-scope .ch .pending .ring svg {width: calc(20 * var(--u)); height: calc(20 * var(--u));}
+.mock-scope .ch .status-line .ring {flex: none;}
+.mock-scope .ch .pending .ring {vertical-align: text-bottom;}
 @media (prefers-reduced-motion: reduce) {
 .mock-scope .ch .status-line.busy .dot {animation: none;}
+.mock-scope .ch .ring svg .arc {transition: none;}
 }
 .mock-scope .ch .problems {position: fixed; right: calc(24 * var(--u)); bottom: calc(24 * var(--u)); z-index: 1002; display: grid; gap: calc(10 * var(--u)); max-width: calc(440 * var(--u));}
 .mock-scope .ch .problem {background: #fff; border: 1px solid var(--late); border-left: calc(6 * var(--u)) solid var(--late); border-radius: calc(10 * var(--u)); padding: calc(12 * var(--u)) calc(16 * var(--u)); box-shadow: 0 calc(8 * var(--u)) calc(30 * var(--u)) rgba(0, 0, 0, .2);}
@@ -424,8 +438,8 @@
 
 </style></head><body>
 <div class="mock-bar"><b>Local test with simulated SharePoint – synthetic data only</b><label>Sign in as <select id="mock-user"></select></label>
-<label>Simulate <select id="mock-mode"><option value="">Normal</option><option value="slow">Slow responses</option><option value="people403">People list denied (403)</option><option value="actions404">Actions list missing (404)</option><option value="actionsPartial">Actions over the read limit</option><option value="unknown">Unknown user</option><option value="duplicate">Duplicate person</option><option value="left">Person marked Left</option><option value="flowSlow">Request flow very slow</option><option value="flowFail">Request flow fails</option><option value="limited">Processing down (limited mode)</option><option value="attention">Changes needing attention</option></select></label></div>
-<div class="mock-scope"><div class="ch" data-ch-root data-ch-version="1.3.0"><p>Loading the ESG Competency Hub…</p></div></div>
+<label>Simulate <select id="mock-mode"><option value="">Normal</option><option value="slow">Slow responses</option><option value="people403">People list denied (403)</option><option value="actions404">Actions list missing (404)</option><option value="actionsPartial">Actions over the read limit</option><option value="unknown">Unknown user</option><option value="duplicate">Duplicate person</option><option value="left">Person marked Left</option><option value="flowStages">Request flow in slow stages</option><option value="flowSlow">Request flow very slow</option><option value="flowFail">Request flow fails</option><option value="limited">Processing down (limited mode)</option><option value="attention">Changes needing attention</option></select></label></div>
+<div class="mock-scope"><div class="ch" data-ch-root data-ch-version="1.3.1"><p>Loading the ESG Competency Hub…</p></div></div>
 <script src="seed.js"></script>
 <script src="rules.js"></script>
 <script src="flow-sim.js"></script>

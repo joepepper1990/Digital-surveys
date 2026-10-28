@@ -263,7 +263,7 @@ CH.views.meetingPanel = (function () {
       var e = app.tracker.forTarget(x.id, 'Meeting', x.id < 0 ? x.sending : null);
       // waiting its turn (release 1.3): it is sent as soon as the change before it is saved
       if (e && e.state === 'queued') {
-        return h('p', { class: 'pending', role: 'status' }, app.mark({ sending: true }, 'Meeting'), ' ' + e.label + ' – shown now; it is sent as soon as ' +
+        return h('p', { class: 'pending', role: 'status' }, app.ring(e, false), ' ' + e.label + ' – shown now; it is sent as soon as ' +
           (x.id < 0 ? 'the booking' : 'the change before it') + ' is saved, usually within a minute.');
       }
       if (e && e.state === 'held') {
@@ -275,7 +275,7 @@ CH.views.meetingPanel = (function () {
           : e.type === 'FinaliseMeeting' ? (app.outOfHours && app.outOfHours(new Date()) ? 'the minutes below are what is being saved. Out of hours, they and the PDF are completed from 07:00 on the next weekday.'
             : 'the minutes below are what is being saved. The PDF follows a few minutes after.')
           : 'you can carry on. The next steps are offered once it is saved.';
-        return h('p', { class: 'pending', role: 'status' }, app.mark(x, 'Meeting') || app.mark({ sending: true }, 'Meeting'), ' ' + e.label + ' – ' + what);
+        return h('p', { class: 'pending', role: 'status' }, app.ring(e, false), ' ' + e.label + ' – ' + what);
       }
       var mark = app.mark(x, 'Meeting');
       return mark ? h('p', { class: 'mark-line' }, mark) : null;

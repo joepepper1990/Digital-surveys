@@ -24,7 +24,7 @@ CH.views.recordPanel = (function () {
     var entry = app.tracker.forTarget(id, kind);
     var rec = kind === 'Notice' ? app.model.noticeById[id] : app.model.entryById[id];
     if (entry && (entry.state === 'submitted' || entry.state === 'slow')) {
-      return h('p', { class: 'pending', role: 'status' }, app.mark(rec || { sending: true }, kind), ' ' + entry.label + ' – ' + (entry.retrying ? entry.message : 'you can carry on.'));
+      return h('p', { class: 'pending', role: 'status' }, app.ring(entry, false), ' ' + entry.label + ' – ' + (entry.retrying ? entry.message : 'you can carry on.'));
     }
     if (locked) return h('p', { class: 'pending', role: 'status', text: 'Being updated… Try again in a minute.' });
     var mark = app.mark(rec, kind);

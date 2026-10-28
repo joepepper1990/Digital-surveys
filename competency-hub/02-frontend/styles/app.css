@@ -125,7 +125,7 @@ h2 { font-size: calc(18 * var(--u)); font-weight: 600; margin: 0 0 calc(12 * var
 /* Release 1.2: one status line under the bar, always the same height, so nothing below it moves */
 .status-line { display: flex; align-items: center; gap: calc(10 * var(--u)); padding: calc(5 * var(--u)) calc(32 * var(--u)); min-height: calc(32 * var(--u));
   font-size: calc(14 * var(--u)); color: var(--muted); background: #fff; border-bottom: 1px solid var(--line); white-space: nowrap; overflow: hidden; }
-.status-line > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; }
+.status-line > .status-text { overflow: hidden; text-overflow: ellipsis; }
 .status-line .dot { width: calc(9 * var(--u)); height: calc(9 * var(--u)); border-radius: 50%; background: var(--ok); flex: none; }
 .status-line .away { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .status-line.busy .dot { background: var(--accent); animation: ch-pulse 1.2s infinite; }
@@ -178,13 +178,28 @@ table.t .num { text-align: right; white-space: nowrap; }
 table.timings tbody tr:first-child td { font-weight: 700; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 @keyframes ch-pulse { 50% { opacity: .35; } }
-/* the mark beside a record: ✓ Sent, then ✓✓ Saved which fades after three seconds, or ✕ Not saved */
+/* the mark beside a record: the progress ring while it is being saved (app 1.3.1), then the green tick circle,
+   which fades after three seconds, or ✕ Not saved */
 .mark { font-size: calc(13 * var(--u)); font-weight: 600; white-space: nowrap; margin-left: calc(6 * var(--u)); }
 .mark.sent { color: var(--muted); }
-.mark.saved { color: var(--ok); animation: ch-fade .8s forwards; }
+.mark.saved { color: var(--ok); animation: ch-fade .8s forwards; display: inline-flex; align-items: center; gap: calc(4 * var(--u)); }
+.mark.saved svg { width: calc(16 * var(--u)); height: calc(16 * var(--u)); flex: none; }
+.mark.saved svg circle { fill: var(--ok); }
+.mark.saved svg path { stroke: #fff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 .mark.refused { color: var(--late); }
 @keyframes ch-fade { to { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .status-line.busy .dot { animation: none; } }
+/* the ring: a track and an arc that fills as the change goes through; the text says the stage and about how long is left */
+.ring { display: inline-flex; align-items: center; gap: calc(5 * var(--u)); font-size: calc(13 * var(--u)); font-weight: 600; color: var(--muted); white-space: nowrap; margin-left: calc(6 * var(--u)); vertical-align: middle; }
+.ring svg { width: calc(16 * var(--u)); height: calc(16 * var(--u)); flex: none; transform: rotate(-90deg); }
+.ring svg circle { fill: none; stroke-width: 2.6; }
+.ring svg .track { stroke: var(--line); }
+.ring svg .arc { stroke: var(--accent); stroke-linecap: round; transition: stroke-dasharray .9s linear; }
+.ring.late svg .arc { stroke: var(--accent-strong); }
+.status-line .ring, .pending .ring { margin-left: 0; font-weight: 500; font-size: inherit; color: inherit; }
+.status-line .ring svg, .pending .ring svg { width: calc(20 * var(--u)); height: calc(20 * var(--u)); }
+.status-line .ring { flex: none; }
+.pending .ring { vertical-align: text-bottom; }
+@media (prefers-reduced-motion: reduce) { .status-line.busy .dot { animation: none; } .ring svg .arc { transition: none; } }
 /* a change that was not saved: says what happened, with Try again where that can work */
 .problems { position: fixed; right: calc(24 * var(--u)); bottom: calc(24 * var(--u)); z-index: 1002; display: grid; gap: calc(10 * var(--u)); max-width: calc(440 * var(--u)); }
 .problem { background: #fff; border: 1px solid var(--late); border-left: calc(6 * var(--u)) solid var(--late); border-radius: calc(10 * var(--u));

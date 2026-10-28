@@ -21,7 +21,8 @@ CH.views.actionPanel = (function () {
     var entry = app.tracker.forTarget(action.id);
     if (action.isNew) return h('p', { class: 'pending', role: 'status' }, app.mark(action, 'Action'), ' Being saved – it gets its number in a moment, and can then be changed.');
     if (entry && (entry.state === 'submitted' || entry.state === 'slow')) {
-      return h('p', { class: 'pending', role: 'status' }, app.mark(action, 'Action'), ' ' + entry.label + ' – ' +
+      // the ring, the stage and about how long is left (app 1.3.1)
+      return h('p', { class: 'pending', role: 'status' }, app.ring(entry, false), ' ' + entry.label + ' – ' +
         (entry.retrying ? entry.message : entry.state === 'slow' ? 'taking longer than usual, but it will be saved.' : 'you can carry on.'));
     }
     if (action.locked) return h('p', { class: 'pending', role: 'status', text: 'Someone else\'s change to this action is being saved… Try again in a minute.' });

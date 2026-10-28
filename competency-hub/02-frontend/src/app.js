@@ -9,6 +9,7 @@ CH.app = (function () {
     var healthTimer = null;
     var HEALTH_EVERY_MS = 5 * 60 * 1000;
     var REFRESH_EVERY_MS = 60 * 1000;
+    var ringTimer = null;
     var refreshTimer = null;
     var lastRead = null;   // when the lists were last read: the next refresh asks only for rows changed since
     var app = { state: { view: 'home', area: null, tab: 0 } };
@@ -148,16 +149,18 @@ CH.app = (function () {
         });
       } else if (entries.length) {
         kind = 'busy';
-        var e = entries[0];
+        // the one furthest along leads (app 1.3.1): its ring and its stage, with about how long is left
+        var e = entries.slice().sort(function (a, b) { return CH.eta.remaining(b).fraction - CH.eta.remaining(a).fraction; })[0];
         var how = entries.some(function (x) { return x.retrying; }) ? ' – retrying automatically, you can carry on.'
-          : entries.some(function (x) { return x.state === 'slow'; }) ? ' – taking longer than usual, but it will be saved. You can carry on.' : ' – you can carry on.';
-        text = (entries.length === 1 ? '1 change still saving: ' + e.label : entries.length + ' changes still saving') + how;
+          : entries.some(function (x) { return x.state === 'slow'; }) ? ' – taking longer than usual, but it will be saved. You can carry on.' : ' You can carry on.';
+        text = (entries.length === 1 ? '1 change still saving: ' + e.label : entries.length + ' changes still saving, the first ' + e.label) + ' · ';
+        extra = [ring(e, false), h('span', { text: how })];
       } else {
         text = 'Everything is up to date.';
       }
       var away = outOfHours(new Date());
       return h('div', { class: 'status-line' + (kind ? ' ' + kind : ''), role: 'status', 'aria-live': 'polite' },
-        h('span', { class: 'dot', 'aria-hidden': 'true' }), h('span', { text: text }), extra,
+        kind === 'busy' ? null : h('span', { class: 'dot', 'aria-hidden': 'true' }), h('span', { class: 'status-text', text: text }), extra,
         away ? h('span', { class: 'muted small away', title: away, text: away }) : null);
     }
 
@@ -474,14 +477,20 @@ CH.app = (function () {
     app.raiseEntry = function (key) { CH.views.entryForm.open(app, key); };
     // The mark beside a record (release 1.2): ✓ Sent while it is being saved, ✓✓ Saved for three seconds (it then fades),
     // ✕ Not saved after a refusal or a fault. kind: 'Action', 'Notice', 'Register Entry' or 'Meeting'.
+    // app 1.3.1: the ring that fills as the change goes through, with about how long is left, instead of ✓ Sent
+    function ring(e, short) {
+      if (e.state === 'queued') return CH.ui.progressRing(e, { stage: 'queued', fraction: 0, seconds: null, expected: 0, learned: true }, short);
+      return CH.ui.progressRing(e, CH.eta.remaining(e), short);
+    }
+    app.ring = ring;
     app.mark = function (rec, kind) {
       if (!rec || !app.tracker) return null;
-      if (rec.sending) return h('span', { class: 'mark sent', title: 'Sent – being saved', text: '✓ Sent' });
-      var e = app.tracker.forRecord(rec.id, kind);
+      var e = rec.sending ? app.tracker.byKey(rec.sending) : null;
+      if (!e && rec.sending) return h('span', { class: 'mark sent', title: 'Sent – being saved', text: 'Sending…' });
+      if (!e) e = app.tracker.forRecord(rec.id, kind);
+      if (e && (e.state === 'submitted' || e.state === 'slow' || e.state === 'queued')) return ring(e, true);
       var since = e && e.state === 'done' && e.doneAt ? Date.now() - e.doneAt : Infinity;
-      if (since < 4000) {
-        return h('span', { class: 'mark saved', title: 'Saved', text: '✓✓ Saved', style: 'animation-delay:' + Math.round(3000 - since) + 'ms' });
-      }
+      if (since < 4000) return CH.ui.savedMark(3000 - since);
       if (e && !e.dismissed && (e.state === 'rejected' || e.state === 'attention')) return h('span', { class: 'mark refused', text: '✕ Not saved' });
       if (rec.locked) return h('span', { class: 'mark sent', text: 'being updated' });
       return null;
@@ -648,6 +657,8 @@ CH.app = (function () {
       if (params.get('view') === 'admin') app.state = { view: 'admin', area: null, tab: 0 };
       if (params.get('view') === 'manage' && app.access.isManagement) app.state = { view: 'manage', area: null, tab: 0 };
       healthTimer = setInterval(checkHealth, HEALTH_EVERY_MS);
+      // every second, the progress rings move on in place; nothing is rebuilt, so nothing jumps (app 1.3.1)
+      ringTimer = setInterval(function () { if (!document.hidden) CH.ui.refreshRings(app.root, app.tracker); }, 1000);
       refreshTimer = setInterval(refreshOthers, REFRESH_EVERY_MS);
       window.addEventListener('resize', fitToWindow);
       window.addEventListener('beforeunload', onLeave);

@@ -175,7 +175,7 @@ window.MockDrivers = (function () {
       item.click();
       var opens = !!(await until(function () { return q('#ch-a .facts'); })) && q('#ch-a').textContent.indexOf('Stock is down to one box.') >= 0;
       return { areaBefore: areaBefore, areaError: areaError, stepLine: stepLine, reachable: !!onTop && item.contains(onTop), opens: opens, emptyError: emptyError, pastError: pastError, owners: owners, summary: summary, stripText: stripText,
-        stripGone: !cards().some(function (b) { return b.textContent.indexOf('Order replacement smear papers') >= 0 && b.textContent.indexOf('✓ Sent') >= 0; }),
+        stripGone: !cards().some(function (b) { return b.textContent.indexOf('Order replacement smear papers') >= 0 && /about \d+ s|any moment|a little longer|in turn/.test(b.textContent); }),
         listed: !!byText('.items .t', 'Order replacement smear papers'),
         request: { folder: req.FileDirRef.split('/').pop(), type: req.RequestType, status: req.Status },
         writes: MockSharePoint.writes.slice() };
@@ -325,10 +325,10 @@ window.MockDrivers = (function () {
       q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
       await until(function () { return q('#ch-a .pending'); });
       MockSharePoint.reload();
-      var item = await until(function () { return cards().filter(function (b) { return b.textContent.indexOf('Replace FH40 probe') >= 0 && b.textContent.indexOf('✓ Sent') >= 0; })[0]; });
+      var item = await until(function () { return cards().filter(function (b) { return b.textContent.indexOf('Replace FH40 probe') >= 0 && /about \d+ s|any moment|a little longer|in turn/.test(b.textContent); })[0]; });
       var noteAfterReload = item.textContent;
       await until(function () { return text().indexOf('Deadline moved to') >= 0; }, 120000);
-      var confirmedNoteGone = !cards().some(function (b) { return b.textContent.indexOf('Replace FH40 probe') >= 0 && b.textContent.indexOf('✓ Sent') >= 0; });
+      var confirmedNoteGone = !cards().some(function (b) { return b.textContent.indexOf('Replace FH40 probe') >= 0 && /about \d+ s|any moment|a little longer|in turn/.test(b.textContent); });
       // Raise an action, reload before the flow has run, then open the new action from the list.
       byText('button', 'Raise an action').click();
       type(await until(function () { return q('#ch-r-title'); }), 'Check spare filter stock');
@@ -345,7 +345,7 @@ window.MockDrivers = (function () {
       form.dispatchEvent(new Event('submit', { cancelable: true }));
       await until(function () { return !q('#ch-r'); });
       MockSharePoint.reload();
-      var strip = await until(function () { return cards().filter(function (b) { return b.textContent.indexOf('Check spare filter stock') >= 0 && b.textContent.indexOf('✓ Sent') >= 0; })[0]; });
+      var strip = await until(function () { return cards().filter(function (b) { return b.textContent.indexOf('Check spare filter stock') >= 0 && /about \d+ s|any moment|a little longer|in turn/.test(b.textContent); })[0]; });
       var stripAfterReload = strip.textContent;
       await until(function () { return text().indexOf('raised: Check spare filter stock') >= 0; }, 120000);
       all('.dialog-x').forEach(function (x) { x.click(); });
@@ -408,15 +408,40 @@ window.MockDrivers = (function () {
       return { cardText: cardText, reverted: reverted, requests: reqs.map(function (r) { return r.RequestType + ':' + r.Status; }),
         status: MockSharePoint.data.Actions.filter(function (a) { return a.Id === 53; })[0].Status, writes: MockSharePoint.writes.map(function (w) { return w.list + (w.update ? ':update' : ''); }) };
     },
+    // The progress ring (app 1.3.1): it says the stage and about how long is left, moves on every second in place,
+    // jumps on when the flow picks the change up, and ends in the green Saved tick. Run with mode=flowStages.
+    progressRing: async function () {
+      function card() { return cards().filter(function (c) { return c.textContent.indexOf('Review Green Stream sample results') >= 0; })[0]; }
+      function ringOf(el) { return el && el.querySelector('.ring[data-eta-key]'); }
+      function arcOf(el) { var r = ringOf(el); return r && r.querySelector('.arc').getAttribute('stroke-dasharray'); }
+      await until(function () { return card(); });
+      Array.prototype.filter.call(card().querySelectorAll('.btn'), function (x) { return x.textContent === 'Mark as done'; })[0].click();
+      await until(function () { return ringOf(card()); });
+      var atOnce = { card: ringOf(card()).textContent, label: ringOf(card()).getAttribute('aria-label'), status: q('.status-line').textContent, arc: arcOf(card()) };
+      // the ring moves on without the page being rebuilt: the same elements, a different arc
+      var ringEl = ringOf(card()), statusEl = q('.status-line'), scrollBefore = window.scrollY;
+      ringEl.focus && ringEl.focus();
+      await new Promise(function (r) { setTimeout(r, 2500); });
+      var moved = { sameRing: ringOf(card()) === ringEl, sameStatus: q('.status-line') === statusEl, arc: arcOf(card()), scrolled: window.scrollY !== scrollBefore };
+      // the flow picks it up after 2 s; the page sees that on its 15-second check
+      await until(function () { return /Being recorded/.test(ringOf(card()).getAttribute('aria-label')); }, 40000);
+      var pickedUp = { card: ringOf(card()).textContent, label: ringOf(card()).getAttribute('aria-label'), status: q('.status-line').textContent, arc: arcOf(card()) };
+      await until(function () { return card().querySelector('.mark.saved'); }, 120000);
+      var saved = card().querySelector('.mark.saved');
+      var savedShape = { circle: !!saved.querySelector('svg circle'), tick: !!saved.querySelector('svg path'), text: saved.textContent, label: saved.getAttribute('aria-label'), fades: /ch-fade/.test(getComputedStyle(saved).animationName) };
+      var stored = JSON.parse(window.localStorage.getItem('esg-competency-hub-timings') || '{}');
+      return { atOnce: atOnce, moved: moved, pickedUp: pickedUp, savedShape: savedShape, learned: stored.MarkComplete,
+        polls: MockSharePoint.data.Requests.length };
+    },
     // Mark as done straight from a to-do card (release 1.2): it stays, marked Done, with Reopen for a slip.
     quickDone: async function () {
       function card() { return cards().filter(function (c) { return c.textContent.indexOf('Review Green Stream sample results') >= 0; })[0]; }
       await until(function () { return card(); });
       var b = Array.prototype.filter.call(card().querySelectorAll('.btn'), function (x) { return x.textContent === 'Mark as done'; })[0];
       b.click();
-      await until(function () { return /Done/.test(card().textContent) && /✓ Sent/.test(card().textContent); });
+      await until(function () { return /Done/.test(card().textContent) && /about \d+ s|any moment|a little longer/.test(card().textContent); });
       var sent = card().textContent;
-      await until(function () { return /✓✓ Saved/.test(card().textContent); }, 120000);
+      await until(function () { return /Saved/.test(card().textContent); }, 120000);
       var saved = card().textContent;
       var closed = MockSharePoint.data.Actions.filter(function (a) { return a.Title === 'Review Green Stream sample results'; })[0].Status;
       Array.prototype.filter.call(card().querySelectorAll('.btn'), function (x) { return x.textContent === 'Reopen'; })[0].click();
@@ -1120,7 +1145,7 @@ window.MockDrivers = (function () {
       await until(function () { return card(); });
       var b = Array.prototype.filter.call(card().querySelectorAll('.btn'), function (x) { return x.textContent === 'Mark as done'; })[0];
       b.click(); b.click(); b.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await until(function () { return /✓ Sent/.test(card().textContent); });
+      await until(function () { return /about \d+ s|any moment|a little longer/.test(card().textContent); });
       await wait(300);
       var fromCard = MockSharePoint.data.Requests.length;
       // a form sent twice before the first send has returned
@@ -1209,7 +1234,7 @@ window.MockDrivers = (function () {
       var shownAfter = item.textContent;
       await until(function () { return MockSharePoint.data.Requests.length === 3 && MockSharePoint.data.Requests.every(function (r) { return r.Status === 'Completed'; }); }, 300000);
       var a = MockSharePoint.data.Actions.filter(function (x) { return x.Id === 40; })[0];
-      return { sentBefore: sentBefore, shownAfter: /✓ Sent|Done/.test(shownAfter), order: MockSharePoint.data.Requests.map(function (r) { return r.RequestType; }),
+      return { sentBefore: sentBefore, shownAfter: /about \d+ s|any moment|in turn|Done/.test(shownAfter), order: MockSharePoint.data.Requests.map(function (r) { return r.RequestType; }),
         action: { Title: a.Title, Status: a.Status, Revision: a.Revision }, left: JSON.parse(localStorage.getItem('esg-competency-hub-pending') || '{}').waiting };
     },
     // the first of a chain is refused (someone else changed the record): the rest is held, one card, Try again sends all
@@ -1268,7 +1293,7 @@ window.MockDrivers = (function () {
       var st = await until(function () { return q('#ch-s-status'); });
       st.value = 'Open'; st.dispatchEvent(new Event('change'));
       q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
-      await until(function () { return q('#ch-a .facts') && /✓ Sent/.test(q('#ch-a').textContent); }).catch(function () { throw new Error('no ✓ Sent: ' + q('#ch-a').textContent.slice(0, 300)); });
+      await until(function () { return q('#ch-a .facts') && /about \d+ s|any moment|a little longer/.test(q('#ch-a').textContent); }).catch(function () { throw new Error('no ring: ' + q('#ch-a').textContent.slice(0, 300)); });
       MockSharePoint.someoneElse('Actions', 40, { Description: 'Kelly added: use the spare from store B.' }, 102, 'Description changed by Kelly');
       var before = MockSharePoint.requests.length;
       document.dispatchEvent(new Event('visibilitychange'));
@@ -1284,7 +1309,7 @@ window.MockDrivers = (function () {
       Object.defineProperty(document, 'hidden', { get: function () { return false; }, configurable: true });
       document.dispatchEvent(new Event('visibilitychange'));
       await until(function () { return MockSharePoint.requests.length > quietFrom + whileHidden; }, 10000).catch(function () { throw new Error('no reads after the tab came back'); });
-      return { panel: panel, reads: reads, whileHidden: whileHidden, updatedLine: /Updated by someone else/.test(panel), stillMine: /✓ Sent|In progress/.test(panel) };
+      return { panel: panel, reads: reads, whileHidden: whileHidden, updatedLine: /Updated by someone else/.test(panel), stillMine: /about \d+ s|any moment|a little longer|In progress/.test(panel) };
     },
     // notes typed on an item go with the person when they click another item
     notesKept: async function () {

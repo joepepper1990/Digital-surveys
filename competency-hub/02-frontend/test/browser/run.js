@@ -152,9 +152,9 @@ check('raise: an engineer\'s owner list holds area members and management, with 
 check('raise from the top bar: no area is chosen for you, one must be chosen; the step line says where you are', res.ok && res.result.areaBefore === '' &&
   /Choose the area this action belongs to/.test(res.result.areaError) && /Step 2 of 4 · Who and where – next: by when/.test(res.result.stepLine) &&
   /“Order replacement smear papers” in Green Stream/.test(res.result.summary), JSON.stringify(res));
-check('raise: summary shown, then the new action at once, marked ✓ Sent until the flow confirms it', res.ok && /Order replacement smear papers/.test(res.result.summary) &&
-  /✓ Sent/.test(res.result.stripText), JSON.stringify(res));
-check('raise: once confirmed it keeps its place and the ✓ Sent mark goes', res.ok && res.result.listed && res.result.stripGone && res.result.request.status === 'Completed', JSON.stringify(res));
+check('raise: summary shown, then the new action at once, marked with the progress ring until the flow confirms it', res.ok && /Order replacement smear papers/.test(res.result.summary) &&
+  /about \d+ s|any moment|a little longer/.test(res.result.stripText), JSON.stringify(res));
+check('raise: once confirmed it keeps its place and the ring goes', res.ok && res.result.listed && res.result.stripGone && res.result.request.status === 'Completed', JSON.stringify(res));
 check('raise: once confirmed, the new action opens on click without a reload', res.ok && res.result.reachable && res.result.opens, JSON.stringify(res));
 check('raise: the only write is a request in the user\'s own folder', res.ok && res.result.writes.length === 1 && res.result.writes[0].list === 'Requests' &&
   res.result.writes[0].folder === 'u' + RICHARD && res.result.request.type === 'RaiseAction', JSON.stringify(res && res.result && res.result.writes));
@@ -163,14 +163,14 @@ check('action panel: what, who and when in plain words, with the original deadli
   /Owner: Rachel Boulden/.test(res.result.before) && /Deadline moved once \(was/.test(res.result.before), JSON.stringify(res && res.result && res.result.before));
 check('update: saved instantly into the action\'s own folder and listed', res.ok && res.result.writes[0].list === 'Updates' && res.result.writes[0].folder === 'FLK/A40', JSON.stringify(res));
 check('extend: a short reason is refused; the effect is explained', res.ok && /10 characters/.test(res.result.reasonError) && /The new deadline will be/.test(res.result.effect), JSON.stringify(res));
-check('extend: the new deadline shows at once with ✓ Sent, the buttons stay, the status line says it is saving; then ✓✓ Saved and the history shows both changes', res.ok &&
-  /✓ Sent/.test(res.result.pending) && /Deadline moved 2 times/.test(res.result.shownAtOnce) && !res.result.buttonsDisabled && /1 change still saving: New deadline/.test(res.result.status) &&
-  /✓✓ Saved/.test(res.result.saved) && /Everything is up to date/.test(res.result.statusAfter) &&
+check('extend: the new deadline shows at once with the ring, the buttons stay, the status line says it is saving; then the green Saved tick and the history shows both changes', res.ok &&
+  /about \d+ s|any moment|a little longer/.test(res.result.pending) && /Deadline moved 2 times/.test(res.result.shownAtOnce) && !res.result.buttonsDisabled && /1 change still saving: New deadline/.test(res.result.status) &&
+  /Saved/.test(res.result.saved) && /Everything is up to date/.test(res.result.statusAfter) &&
   /Show all deadline changes \(2\)/.test(res.result.after) && res.result.history === 2, JSON.stringify(res));
 res = drive('as=' + RACHEL + '&action=40&drive=reloadWhilePending', SLOW);
-check('reload while an extension is being saved: the change and its ✓ Sent come back, then the mark clears once confirmed', res.ok && /✓ Sent/.test(res.result.noteAfterReload) &&
+check('reload while an extension is being saved: the change and its ring come back, then the mark clears once confirmed', res.ok && /about \d+ s|any moment|a little longer/.test(res.result.noteAfterReload) &&
   res.result.confirmedNoteGone, JSON.stringify(res));
-check('reload while a raised action is being saved: it shows again with ✓ Sent, and once saved opens on click', res.ok && /✓ Sent/.test(res.result.stripAfterReload) &&
+check('reload while a raised action is being saved: it shows again with its ring, and once saved opens on click', res.ok && /about \d+ s|any moment|a little longer/.test(res.result.stripAfterReload) &&
   res.result.reachable && res.result.opened, JSON.stringify(res));
 res = drive('as=' + RACHEL + '&drive=staleCopy&stamp=0.0.1');
 check('an old copy of an app file is reported, with Ctrl+F5', res.ok && /Ctrl\+F5/.test(res.result.banner), JSON.stringify(res));
@@ -188,9 +188,21 @@ check('a system fault: the change goes back, a card says an administrator has be
   res.result.reverted, JSON.stringify(res));
 check('Try again after a fault resumes the same request (no second one), and it is saved', res.ok && JSON.stringify(res.result.requests) === '["MarkComplete:Completed"]' &&
   res.result.status === 'Closed' && JSON.stringify(res.result.writes) === '["Requests","Requests:update"]', JSON.stringify(res));
+res = drive('as=' + RICHARD + '&mode=flowStages&drive=progressRing', SLOW);
+check('progress ring: at once it says "Waiting to be picked up" with "usually about N s" (no history yet), on the card and the status line', res.ok &&
+  /^Waiting to be picked up · usually about \d+ s$/.test(res.result.atOnce.label) && /^usually about \d+ s$/.test(res.result.atOnce.card) &&
+  /1 change still saving: Mark as done: Review Green Stream sample results · Waiting to be picked up · usually about \d+ s/.test(res.result.atOnce.status), JSON.stringify(res));
+check('progress ring: it moves on every second in place (same elements, a different arc, no scroll)', res.ok && res.result.moved.sameRing && res.result.moved.sameStatus &&
+  res.result.moved.arc !== res.result.atOnce.arc && !res.result.moved.scrolled, JSON.stringify(res && res.result && res.result.moved));
+check('progress ring: once the flow has picked it up it says "Being recorded", further along', res.ok && /^Being recorded · usually about \d+ s$/.test(res.result.pickedUp.label) &&
+  parseFloat(res.result.pickedUp.arc) > parseFloat(res.result.moved.arc) && /Being recorded/.test(res.result.pickedUp.status), JSON.stringify(res && res.result && res.result.pickedUp));
+check('progress ring: saved shows a green circle with a tick that fades; the time it took is remembered for next time', res.ok &&
+  res.result.savedShape.circle && res.result.savedShape.tick && res.result.savedShape.text === 'Saved' && res.result.savedShape.label === 'Saved' && res.result.savedShape.fades &&
+  res.result.learned && res.result.learned.pickup.length === 1 && res.result.learned.work.length === 1 && res.result.learned.pickup[0] >= 2 && res.result.learned.pickup[0] <= 20,
+  JSON.stringify(res && res.result && [res.result.savedShape, res.result.learned]));
 res = drive('as=' + RICHARD + '&drive=quickDone', SLOW);
-check('home: Mark as done on a to-do card shows Done at once with ✓ Sent, then ✓✓ Saved; it stays with Reopen, which puts it back', res.ok &&
-  /Done/.test(res.result.sent) && /Reopen/.test(res.result.sent) && /✓✓ Saved/.test(res.result.saved) && res.result.closed === 'Closed' &&
+check('home: Mark as done on a to-do card shows Done at once with the ring, then the Saved tick; it stays with Reopen, which puts it back', res.ok &&
+  /Done/.test(res.result.sent) && /Reopen/.test(res.result.sent) && /Saved/.test(res.result.saved) && res.result.closed === 'Closed' &&
   /Mark as done/.test(res.result.after) && res.result.status === 'In Progress' && JSON.stringify(res.result.requests) === '["MarkComplete:Completed","ReopenAction:Completed"]', JSON.stringify(res));
 // Release 1.3: quick presses, chains of changes to one record, reloads, other people
 const KELLY = 102, CRAIG = 105;
