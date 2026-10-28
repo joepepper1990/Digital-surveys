@@ -5299,7 +5299,8 @@ window.ESGCompetencyHub = function (ctx) {
       EditNotice: 'Edit a notice', ArchiveNotice: 'Archive a notice', PinNotice: 'Pin or unpin a notice', HideComment: 'Hide a comment',
       RaiseRegisterEntry: 'Raise an improvement or degradation', UpdateRegisterEntry: 'Change an improvement or degradation',
       LinkActionToEntry: 'Link an action to an entry', UnlinkActionFromEntry: 'Unlink an action from an entry',
-      ScheduleMeeting: 'Book a meeting', UpdateMeeting: 'Change a meeting', CancelMeeting: 'Cancel a meeting', StartMeeting: 'Start a meeting'
+      ScheduleMeeting: 'Book a meeting', UpdateMeeting: 'Change a meeting', CancelMeeting: 'Cancel a meeting', StartMeeting: 'Start a meeting',
+      FinaliseMeeting: 'Finalise the minutes', AmendMeeting: 'Amend the minutes', RemoveTestRecords: 'Remove test data'
     };
     var SETTING_WORDS = {
       OverdueReminderIntervalDays: 'days between late reminders', ReminderDaysBefore: 'days before the deadline for the first reminder',
