@@ -2,6 +2,12 @@
 
 Plain HTML, CSS and JavaScript, delivered as a Welcome by Accelerator 365 custom layout. Same-origin SharePoint REST runs as the signed-in user. There are no libraries and no external calls.
 
+## Version 1.2.3: out-of-hours heads-up (28 October 2026)
+
+- Outside weekdays 07:00–19:00 (UK time) the status line adds a short note: changes still show at once, and
+  finalised minutes and their PDF are completed from 07:00 on the next weekday (`CH.health.outOfHours`).
+- The Timings card names finalise, amend and test-data removal in plain words.
+
 ## Version 1.2.2: a steady meeting screen (25 October 2026)
 
 - The live meeting no longer blanks and rebuilds each time something is saved. Changes arriving together are read

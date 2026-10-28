@@ -104,6 +104,7 @@
 .mock-scope .ch .status-line {display: flex; align-items: center; gap: calc(10 * var(--u)); padding: calc(5 * var(--u)) calc(32 * var(--u)); min-height: calc(32 * var(--u)); font-size: calc(14 * var(--u)); color: var(--muted); background: #fff; border-bottom: 1px solid var(--line); white-space: nowrap; overflow: hidden;}
 .mock-scope .ch .status-line > span:nth-child(2) {overflow: hidden; text-overflow: ellipsis;}
 .mock-scope .ch .status-line .dot {width: calc(9 * var(--u)); height: calc(9 * var(--u)); border-radius: 50%; background: var(--ok); flex: none;}
+.mock-scope .ch .status-line .away {margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
 .mock-scope .ch .status-line.busy .dot {background: var(--accent); animation: ch-pulse 1.2s infinite;}
 .mock-scope .ch .status-line.down {color: var(--late);}
 .mock-scope .ch .status-line.down .dot {background: var(--late);}
@@ -424,7 +425,7 @@
 </style></head><body>
 <div class="mock-bar"><b>Local test with simulated SharePoint – synthetic data only</b><label>Sign in as <select id="mock-user"></select></label>
 <label>Simulate <select id="mock-mode"><option value="">Normal</option><option value="slow">Slow responses</option><option value="people403">People list denied (403)</option><option value="actions404">Actions list missing (404)</option><option value="actionsPartial">Actions over the read limit</option><option value="unknown">Unknown user</option><option value="duplicate">Duplicate person</option><option value="left">Person marked Left</option><option value="flowSlow">Request flow very slow</option><option value="flowFail">Request flow fails</option><option value="limited">Processing down (limited mode)</option><option value="attention">Changes needing attention</option></select></label></div>
-<div class="mock-scope"><div class="ch" data-ch-root data-ch-version="1.2.2"><p>Loading the ESG Competency Hub…</p></div></div>
+<div class="mock-scope"><div class="ch" data-ch-root data-ch-version="1.2.3"><p>Loading the ESG Competency Hub…</p></div></div>
 <script src="seed.js"></script>
 <script src="rules.js"></script>
 <script src="flow-sim.js"></script>

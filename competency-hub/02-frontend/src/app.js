@@ -152,9 +152,14 @@ CH.app = (function () {
       } else {
         text = 'Everything is up to date.';
       }
+      var away = outOfHours(new Date());
       return h('div', { class: 'status-line' + (kind ? ' ' + kind : ''), role: 'status', 'aria-live': 'polite' },
-        h('span', { class: 'dot', 'aria-hidden': 'true' }), h('span', { text: text }), extra);
+        h('span', { class: 'dot', 'aria-hidden': 'true' }), h('span', { text: text }), extra,
+        away ? h('span', { class: 'muted small away', title: away, text: away }) : null);
     }
+
+    var outOfHours = CH.health.outOfHours;
+    app.outOfHours = outOfHours;
 
     // A change that was not saved: what happened, and Try again where that can work. Shown until dismissed.
     function problems() {

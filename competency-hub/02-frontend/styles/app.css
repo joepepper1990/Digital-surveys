@@ -127,6 +127,7 @@ h2 { font-size: calc(18 * var(--u)); font-weight: 600; margin: 0 0 calc(12 * var
   font-size: calc(14 * var(--u)); color: var(--muted); background: #fff; border-bottom: 1px solid var(--line); white-space: nowrap; overflow: hidden; }
 .status-line > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; }
 .status-line .dot { width: calc(9 * var(--u)); height: calc(9 * var(--u)); border-radius: 50%; background: var(--ok); flex: none; }
+.status-line .away { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .status-line.busy .dot { background: var(--accent); animation: ch-pulse 1.2s infinite; }
 .status-line.down { color: var(--late); }
 .status-line.down .dot { background: var(--late); }

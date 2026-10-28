@@ -3188,6 +3188,17 @@ def flow_request_queue(domain='actions'):
                       ('Initialize_varFlagAt', init_var('varFlagAt', 'array', [])),
                       ('Initialize_varFinCheck', init_var('varFinCheck', 'string', '')), ('Initialize_varFinMissing', init_var('varFinMissing', 'array', []))] + PDF_VARS + INVITE_VARS
                     if domain in ('meetings', 'minutes') else []))
+    # The variables are set up in four side-by-side chains, not one long one: a run reaches its work sooner, and a
+    # 7 Minutes run that finds nothing to do ends in seconds (each step after a stopped run is marked skipped in turn).
+    inits = list(actions.items())
+    chains = [inits[i::4] for i in range(4)]
+    actions, ends = {}, []
+    for chain in chains:
+        prev = None
+        for name, act in chain:
+            actions[name] = dict(act, runAfter={prev: OK} if prev else {})
+            prev = name
+        ends.append(prev)
     if domain == 'minutes':
         # 7 Minutes did not start reliably from the Requests trigger on the site (25 Oct 2026), so it runs on a timer:
         # every 5 minutes it looks for the oldest finalise or amend request still waiting, and stops at once if none.
@@ -3199,10 +3210,11 @@ def flow_request_queue(domain='actions'):
                                        "), string(item()?['RequestType']))")),
             ('Any_waiting', cond("@empty(body('Waiting_minutes'))", seq(('Nothing_waiting', terminate('Succeeded'))))),
             ('Initialize_varPick', init_var('varPick', 'object', "@first(body('Waiting_minutes'))")))
-        first = list(actions)[0]
-        actions[first] = dict(actions[first], runAfter={'Initialize_varPick': OK})
+        for name in list(actions):
+            if not actions[name]['runAfter']:
+                actions[name] = dict(actions[name], runAfter={'Initialize_varPick': OK})
         actions = dict(pick, **actions)
-    actions['Try'] = after(scope(try_actions), {list(actions)[-1]: OK})
+    actions['Try'] = after(scope(try_actions), {e: OK for e in ends})
     # emails for a change that is complete: a failure here never touches the request, and the daily run retries
     actions['Send_emails'] = after(scope(send_outbox_steps('')), {'Try': OK})
     # this flow is working again: if the monitor marked its part of processing as stopped, say it has recovered
@@ -3236,8 +3248,12 @@ def flow_request_queue(domain='actions'):
     mine = ("@not(contains(createArray(" + ", ".join(q(x) for x in others) + "), string(triggerBody()?['RequestType'])))" if domain == 'actions'
             else "@contains(createArray(" + ", ".join(q(x) for x in DOMAIN_TYPES[domain]) + "), string(triggerBody()?['RequestType']))")
     if domain == 'minutes':
-        return definition({'Every_5_minutes': {'type': 'Recurrence', 'recurrence': {'frequency': 'Minute', 'interval': 5},
-                                               'runtimeConfiguration': {'concurrency': {'runs': 1}}}}, actions)
+        # every 2 minutes on weekdays 07:00-19:00 UK time, when the Hub is in use; outside those hours a finalise or amendment
+        # waits for 07:00 the next weekday (the app says so, and shows the minutes meanwhile)
+        return definition({'Every_2_minutes_weekdays': {'type': 'Recurrence', 'recurrence': {
+            'frequency': 'Week', 'interval': 1, 'startTime': '2026-10-01T00:00:00', 'timeZone': 'GMT Standard Time',
+            'schedule': {'weekDays': ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'], 'hours': list(range(7, 19)), 'minutes': list(range(0, 60, 2))}},
+            'runtimeConfiguration': {'concurrency': {'runs': 1}}}}, actions)
     triggers = {'When_a_request_is_submitted': {
         'type': 'OpenApiConnection',
         'recurrence': {'frequency': 'Minute', 'interval': 2},
@@ -3419,6 +3435,7 @@ def flow_queue_monitor():
     # decided once, then carried out step by step: part-made as soon as it was decided
     DECIDED_TYPE = "contains(createArray(" + ", ".join(q(x) for x in DECIDED_TYPES) + "), string(" + S + "?['RequestType']))"
     ASKER = "string(coalesce(first(body('Asker'))?['Title'], 'someone'))"
+    MINUTES_ITEM = "contains(createArray(" + ", ".join(q(x) for x in DOMAIN_TYPES['minutes']) + "), string(item()?['RequestType']))"
     try_actions = seq(
         *site_and_ids(),
         ('Today', compose("@convertFromUtc(utcNow(), 'GMT Standard Time', 'yyyy-MM-dd')")),
@@ -3431,12 +3448,16 @@ def flow_queue_monitor():
         # outside working hours only the first run in each interval (normally hourly) does the work
         ('Due', cond("@or(outputs('Working'), less(mod(outputs('Minute'), max(15, int(" + HOURS + "[2]))), 15))", None,
                      seq(('Not_now', terminate('Succeeded'))))),
+        # 7 Minutes runs on weekdays 07:00-19:00: a finalise or amendment sent outside those hours waits for it, and is
+        # not stuck (from 07:20, so the night's waiting ones have had time to go through)
+        ('Minutes_on', compose("@and(greaterOrEquals(dayOfWeek(" + NOW + "), 1), lessOrEquals(dayOfWeek(" + NOW + "), 5), "
+                               "greaterOrEquals(outputs('Minute'), 440), less(outputs('Minute'), 1140))")),
         ('Get_people', http('GET', L('people', "/items?$select=Id,Title,SiteUserId,Status,IsAdministrator,Email,Person/Name,Person/EMail&$expand=Person&$top=5000"))),
         ('Admins', query("@body('Get_people')?['value']", "@and(equals(item()?['IsAdministrator'], true), equals(item()?['Status'], 'Active'))")),
         reqs('Submitted'), reqs('Processing'), reqs('Failed'),
         # never picked up or put back 10 minutes ago; a run silent for 15 minutes; a failure waiting 10 minutes
         ('Stuck', query("@union(body('Get_req_submitted')?['value'], body('Get_req_processing')?['value'], body('Get_req_failed')?['value'])",
-                        "@or(and(equals(item()?['Status'], 'Submitted'), " + older('Modified', 10) + "), "
+                        "@or(and(equals(item()?['Status'], 'Submitted'), " + older('Modified', 10) + ", or(outputs('Minutes_on'), not(" + MINUTES_ITEM + "))), "
                         "and(equals(item()?['Status'], 'Processing'), " + older('Modified', 15) + "), "
                         "and(equals(item()?['Status'], 'Failed'), " + older('Modified', 10) + "))")),
         ('Each_stuck', {'type': 'Foreach', 'foreach': "@body('Stuck')", 'runtimeConfiguration': {'concurrency': {'repetitions': 1}}, 'actions': seq(

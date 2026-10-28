@@ -99,57 +99,6 @@
           },
           "runAfter": {}
         },
-        "Initialise_change_record_ID": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varTxId",
-                "type": "integer",
-                "value": 0
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_change_record": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_change_record_plan": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varTxPlan",
-                "type": "string",
-                "value": "{}"
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_change_record_ID": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_due": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varDue",
-                "type": "string",
-                "value": ""
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_change_record_plan": [
-              "Succeeded"
-            ]
-          }
-        },
         "Initialise_action_ID": {
           "type": "InitializeVariable",
           "inputs": {
@@ -162,58 +111,7 @@
             ]
           },
           "runAfter": {
-            "Initialise_due": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_fresh": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varFresh",
-                "type": "boolean",
-                "value": false
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_action_ID": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_existing_ID": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varExistingId",
-                "type": "integer",
-                "value": 0
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_fresh": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_folder_exists": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varFolderExists",
-                "type": "boolean",
-                "value": false
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_existing_ID": [
+            "Initialise_change_record": [
               "Succeeded"
             ]
           }
@@ -230,58 +128,7 @@
             ]
           },
           "runAfter": {
-            "Initialise_folder_exists": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_locked_here": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varLockedHere",
-                "type": "boolean",
-                "value": false
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_event_ID": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_action": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varAct",
-                "type": "object",
-                "value": {}
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_locked_here": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_entry": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varEntry",
-                "type": "object",
-                "value": {}
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_action": [
+            "Initialise_action_ID": [
               "Succeeded"
             ]
           }
@@ -298,58 +145,7 @@
             ]
           },
           "runAfter": {
-            "Initialise_entry": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_src_email": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varSrcNotice",
-                "type": "object",
-                "value": {}
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_src_mtg": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_user_id": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varUid",
-                "type": "integer",
-                "value": 0
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_src_email": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_login": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varLogin",
-                "type": "string",
-                "value": ""
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_user_id": [
+            "Initialise_event_ID": [
               "Succeeded"
             ]
           }
@@ -366,58 +162,7 @@
             ]
           },
           "runAfter": {
-            "Initialise_login": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_emails_to_send": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varOutbox",
-                "type": "array",
-                "value": []
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_name": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_verdict": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varVerdict",
-                "type": "string",
-                "value": ""
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_emails_to_send": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_plan_object": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varPlanObj",
-                "type": "object",
-                "value": {}
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_verdict": [
+            "Initialise_src_mtg": [
               "Succeeded"
             ]
           }
@@ -434,58 +179,7 @@
             ]
           },
           "runAfter": {
-            "Initialise_plan_object": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_event_title": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varEventTitle",
-                "type": "string",
-                "value": ""
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_fields": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_event_type": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varEventType",
-                "type": "string",
-                "value": ""
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_event_title": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_event_form": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varEventForm",
-                "type": "array",
-                "value": []
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_event_type": [
+            "Initialise_name": [
               "Succeeded"
             ]
           }
@@ -502,58 +196,7 @@
             ]
           },
           "runAfter": {
-            "Initialise_event_form": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_result": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varResult",
-                "type": "string",
-                "value": ""
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_event_details": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_email_list": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varNoticeList",
-                "type": "array",
-                "value": []
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_result": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_mtg": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varMtg",
-                "type": "object",
-                "value": {}
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_email_list": [
+            "Initialise_fields": [
               "Succeeded"
             ]
           }
@@ -570,58 +213,7 @@
             ]
           },
           "runAfter": {
-            "Initialise_mtg": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_flag_by": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varFlagBy",
-                "type": "array",
-                "value": []
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_flag_on": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_flag_at": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varFlagAt",
-                "type": "array",
-                "value": []
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_flag_by": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_finalise_check": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varFinCheck",
-                "type": "string",
-                "value": ""
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_flag_at": [
+            "Initialise_event_details": [
               "Succeeded"
             ]
           }
@@ -638,58 +230,7 @@
             ]
           },
           "runAfter": {
-            "Initialise_finalise_check": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_pdf_result": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varPdfResult",
-                "type": "string",
-                "value": ""
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_finalise_missing": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_pdf_email_text": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varPdfHtml",
-                "type": "string",
-                "value": ""
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_pdf_result": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_inv_result": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varInvResult",
-                "type": "string",
-                "value": ""
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_pdf_email_text": [
+            "Initialise_flag_on": [
               "Succeeded"
             ]
           }
@@ -706,7 +247,156 @@
             ]
           },
           "runAfter": {
-            "Initialise_inv_result": [
+            "Initialise_finalise_missing": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_change_record_ID": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varTxId",
+                "type": "integer",
+                "value": 0
+              }
+            ]
+          },
+          "runAfter": {}
+        },
+        "Initialise_fresh": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varFresh",
+                "type": "boolean",
+                "value": false
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_change_record_ID": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_locked_here": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varLockedHere",
+                "type": "boolean",
+                "value": false
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_fresh": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_src_email": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varSrcNotice",
+                "type": "object",
+                "value": {}
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_locked_here": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_emails_to_send": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varOutbox",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_src_email": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_event_title": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varEventTitle",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_emails_to_send": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_result": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varResult",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_event_title": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_flag_by": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varFlagBy",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_result": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_pdf_result": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varPdfResult",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_flag_by": [
               "Succeeded"
             ]
           }
@@ -723,7 +413,305 @@
             ]
           },
           "runAfter": {
-            "Initialise_inv_event": [
+            "Initialise_pdf_result": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_change_record_plan": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varTxPlan",
+                "type": "string",
+                "value": "{}"
+              }
+            ]
+          },
+          "runAfter": {}
+        },
+        "Initialise_existing_ID": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varExistingId",
+                "type": "integer",
+                "value": 0
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_change_record_plan": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_action": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varAct",
+                "type": "object",
+                "value": {}
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_existing_ID": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_user_id": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varUid",
+                "type": "integer",
+                "value": 0
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_action": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_verdict": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varVerdict",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_user_id": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_event_type": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varEventType",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_verdict": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_email_list": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varNoticeList",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_event_type": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_flag_at": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varFlagAt",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_email_list": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_pdf_email_text": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varPdfHtml",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_flag_at": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_due": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varDue",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {}
+        },
+        "Initialise_folder_exists": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varFolderExists",
+                "type": "boolean",
+                "value": false
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_due": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_entry": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varEntry",
+                "type": "object",
+                "value": {}
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_folder_exists": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_login": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varLogin",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_entry": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_plan_object": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varPlanObj",
+                "type": "object",
+                "value": {}
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_login": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_event_form": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varEventForm",
+                "type": "array",
+                "value": []
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_plan_object": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_mtg": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varMtg",
+                "type": "object",
+                "value": {}
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_event_form": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_finalise_check": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varFinCheck",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_mtg": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Initialise_inv_result": {
+          "type": "InitializeVariable",
+          "inputs": {
+            "variables": [
+              {
+                "name": "varInvResult",
+                "type": "string",
+                "value": ""
+              }
+            ]
+          },
+          "runAfter": {
+            "Initialise_finalise_check": [
               "Succeeded"
             ]
           }
@@ -6188,7 +6176,16 @@
             }
           },
           "runAfter": {
+            "Initialise_inv_event": [
+              "Succeeded"
+            ],
             "Initialise_inv_look": [
+              "Succeeded"
+            ],
+            "Initialise_pdf_email_text": [
+              "Succeeded"
+            ],
+            "Initialise_inv_result": [
               "Succeeded"
             ]
           }

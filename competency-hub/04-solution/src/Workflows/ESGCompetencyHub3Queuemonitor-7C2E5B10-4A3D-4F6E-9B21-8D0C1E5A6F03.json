@@ -414,6 +414,15 @@
                 ]
               }
             },
+            "Minutes_on": {
+              "type": "Compose",
+              "inputs": "@and(greaterOrEquals(dayOfWeek(outputs('UK_time_now')), 1), lessOrEquals(dayOfWeek(outputs('UK_time_now')), 5), greaterOrEquals(outputs('Minute_of_the_day'), 440), less(outputs('Minute_of_the_day'), 1140))",
+              "runAfter": {
+                "Is_a_check_due_now": [
+                  "Succeeded"
+                ]
+              }
+            },
             "Read_the_people": {
               "type": "OpenApiConnection",
               "inputs": {
@@ -433,7 +442,7 @@
                 "authentication": "@parameters('$authentication')"
               },
               "runAfter": {
-                "Is_a_check_due_now": [
+                "Minutes_on": [
                   "Succeeded"
                 ]
               }
@@ -526,7 +535,7 @@
               "type": "Query",
               "inputs": {
                 "from": "@union(body('Get_request_submitted')?['value'], body('Get_request_processing')?['value'], body('Get_request_failed')?['value'])",
-                "where": "@or(and(equals(item()?['Status'], 'Submitted'), less(ticks(string(coalesce(item()?['Modified'], '2000-01-01T00:00:00Z'))), ticks(addMinutes(utcNow(), -10)))), and(equals(item()?['Status'], 'Processing'), less(ticks(string(coalesce(item()?['Modified'], '2000-01-01T00:00:00Z'))), ticks(addMinutes(utcNow(), -15)))), and(equals(item()?['Status'], 'Failed'), less(ticks(string(coalesce(item()?['Modified'], '2000-01-01T00:00:00Z'))), ticks(addMinutes(utcNow(), -10)))))"
+                "where": "@or(and(equals(item()?['Status'], 'Submitted'), less(ticks(string(coalesce(item()?['Modified'], '2000-01-01T00:00:00Z'))), ticks(addMinutes(utcNow(), -10))), or(outputs('Minutes_on'), not(contains(createArray('FinaliseMeeting', 'AmendMeeting'), string(item()?['RequestType']))))), and(equals(item()?['Status'], 'Processing'), less(ticks(string(coalesce(item()?['Modified'], '2000-01-01T00:00:00Z'))), ticks(addMinutes(utcNow(), -15)))), and(equals(item()?['Status'], 'Failed'), less(ticks(string(coalesce(item()?['Modified'], '2000-01-01T00:00:00Z'))), ticks(addMinutes(utcNow(), -10)))))"
               },
               "runAfter": {
                 "Get_request_failed": [

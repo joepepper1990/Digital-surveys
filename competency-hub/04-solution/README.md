@@ -1,7 +1,13 @@
 # ESG Competency Hub – Power Automate solution
 
-`ESGCompetencyHub_1_9_0_4_unmanaged.zip` is the solution to import into Power Automate. It holds ten flows, which
+`ESGCompetencyHub_1_9_0_5_unmanaged.zip` is the solution to import into Power Automate. It holds ten flows, which
 all ship **Off** so nothing runs until you turn them on.
+
+**1.9.0.5 (28 October 2026), for app 1.2.3:**
+- *7 Minutes* runs every 2 minutes on weekdays 07:00–19:00 UK time (a weekly Recurrence schedule), not at all
+  otherwise. The queue monitor does not count a finalise or amendment waiting outside those hours (until 07:20) as stuck.
+- Every request flow sets up its variables in four parallel chains, so a run reaches its work sooner and an idle
+  *7 Minutes* run ends in seconds rather than minutes.
 
 **1.9.0.4 (25 October 2026), for app 1.2.0:**
 - *7 Minutes* runs every 5 minutes by itself instead of waiting for SharePoint's trigger, which fell behind.

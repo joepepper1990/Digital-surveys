@@ -258,7 +258,8 @@ CH.views.meetingPanel = (function () {
       // release 1.2: a change to the booking already shows; a refusal has its own card, with Try again
       if (e && (e.state === 'submitted' || e.state === 'slow')) {
         var what = e.retrying ? e.message : e.type === 'StartMeeting' ? 'the meeting is on. Record it now; the agenda is fixed in the background.'
-          : e.type === 'FinaliseMeeting' ? 'the minutes below are what is being saved. The PDF follows a few minutes after.'
+          : e.type === 'FinaliseMeeting' ? (app.outOfHours && app.outOfHours(new Date()) ? 'the minutes below are what is being saved. Out of hours, they and the PDF are completed from 07:00 on the next weekday.'
+            : 'the minutes below are what is being saved. The PDF follows a few minutes after.')
           : 'you can carry on. The next steps are offered once it is saved.';
         return h('p', { class: 'pending', role: 'status' }, app.mark(x, 'Meeting') || app.mark({ sending: true }, 'Meeting'), ' ' + e.label + ' – ' + what);
       }

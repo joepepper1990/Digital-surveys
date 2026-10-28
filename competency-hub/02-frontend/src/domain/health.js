@@ -80,5 +80,15 @@ CH.health = (function () {
     return out;
   }
 
-  return { judge: judge, hours: hours };
+    // Meeting minutes are finished by 7 Minutes on weekdays 07:00-19:00 (UK). Outside those hours: a heads-up, or ''.
+  function outOfHours(now) {
+    var D = CH.dates, today = D.localDate(now), hhmm = D.ukTime(now);
+    var day = new Date(today + 'T12:00:00Z').getUTCDay();
+    var weekday = day >= 1 && day <= 5;
+    if (weekday && hhmm >= '07:00' && hhmm < '19:00') return '';
+    var when = weekday && hhmm < '07:00' ? 'from 07:00 today' : day === 5 || day === 6 || day === 0 ? 'from 07:00 on Monday' : 'from 07:00 tomorrow';
+    return 'Out of hours: changes still show straight away, but finalised meeting minutes and their PDF are completed ' + when + '.';
+  }
+
+return { outOfHours: outOfHours, judge: judge, hours: hours };
 })();

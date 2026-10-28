@@ -1,11 +1,11 @@
-/* ESG Competency Hub 1.2.2 – built from src/ by tools/build.js. Do not edit. */
+/* ESG Competency Hub 1.2.3 – built from src/ by tools/build.js. Do not edit. */
 window.ESGCompetencyHub = function (ctx) {
   'use strict';
   var CH = {};
   /* src/core/config.js */
   // Fixed names and limits. Lists are addressed by display title; folders by list URL name.
   CH.config = {
-    VERSION: '1.2.2',
+    VERSION: '1.2.3',
     ENVIRONMENT: 'TEST',
     lists: {
       competencies: { title: 'Competencies', url: 'Competencies' },
@@ -1652,7 +1652,17 @@ window.ESGCompetencyHub = function (ctx) {
       return out;
     }
 
-    return { judge: judge, hours: hours };
+      // Meeting minutes are finished by 7 Minutes on weekdays 07:00-19:00 (UK). Outside those hours: a heads-up, or ''.
+    function outOfHours(now) {
+      var D = CH.dates, today = D.localDate(now), hhmm = D.ukTime(now);
+      var day = new Date(today + 'T12:00:00Z').getUTCDay();
+      var weekday = day >= 1 && day <= 5;
+      if (weekday && hhmm >= '07:00' && hhmm < '19:00') return '';
+      var when = weekday && hhmm < '07:00' ? 'from 07:00 today' : day === 5 || day === 6 || day === 0 ? 'from 07:00 on Monday' : 'from 07:00 tomorrow';
+      return 'Out of hours: changes still show straight away, but finalised meeting minutes and their PDF are completed ' + when + '.';
+    }
+
+  return { outOfHours: outOfHours, judge: judge, hours: hours };
   })();
 
   /* src/domain/agenda.js */
@@ -4770,7 +4780,8 @@ window.ESGCompetencyHub = function (ctx) {
         // release 1.2: a change to the booking already shows; a refusal has its own card, with Try again
         if (e && (e.state === 'submitted' || e.state === 'slow')) {
           var what = e.retrying ? e.message : e.type === 'StartMeeting' ? 'the meeting is on. Record it now; the agenda is fixed in the background.'
-            : e.type === 'FinaliseMeeting' ? 'the minutes below are what is being saved. The PDF follows a few minutes after.'
+            : e.type === 'FinaliseMeeting' ? (app.outOfHours && app.outOfHours(new Date()) ? 'the minutes below are what is being saved. Out of hours, they and the PDF are completed from 07:00 on the next weekday.'
+              : 'the minutes below are what is being saved. The PDF follows a few minutes after.')
             : 'you can carry on. The next steps are offered once it is saved.';
           return h('p', { class: 'pending', role: 'status' }, app.mark(x, 'Meeting') || app.mark({ sending: true }, 'Meeting'), ' ' + e.label + ' – ' + what);
         }
@@ -5710,9 +5721,14 @@ window.ESGCompetencyHub = function (ctx) {
         } else {
           text = 'Everything is up to date.';
         }
+        var away = outOfHours(new Date());
         return h('div', { class: 'status-line' + (kind ? ' ' + kind : ''), role: 'status', 'aria-live': 'polite' },
-          h('span', { class: 'dot', 'aria-hidden': 'true' }), h('span', { text: text }), extra);
+          h('span', { class: 'dot', 'aria-hidden': 'true' }), h('span', { text: text }), extra,
+          away ? h('span', { class: 'muted small away', title: away, text: away }) : null);
       }
+
+      var outOfHours = CH.health.outOfHours;
+      app.outOfHours = outOfHours;
 
       // A change that was not saved: what happened, and Try again where that can work. Shown until dismissed.
       function problems() {
