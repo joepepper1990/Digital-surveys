@@ -1,12 +1,12 @@
 {
   "product": "ESG Competency Hub",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "outputs": {
-    "competency-hub.js": "f57797913f16c7c4a21a01ae544c27f46afd81c819ad308da787224f12bddcb5",
-    "competency-hub.html": "1f3581eb6f92209d0f6256ebeec9027bdc9bb9cc17bd0251b7a83061665cccd7"
+    "competency-hub.js": "a2539d296355fb7f2601c7f6ef02b5778ff427661b15ef9e6cc964b2bdb0bb27",
+    "competency-hub.html": "ba33c3691a6c2b1e32d19b61533c3a64fb2698e5473e3f0a5cec58f18ffe6cff"
   },
   "sources": {
-    "src/core/config.js": "d9e6a41009b87493501703b6d41c0d1ad30fa06ea09a4a800439ed9b0ba869d3",
+    "src/core/config.js": "0b462feab38e8f9dbcd0ff73b8480fe0d1a8364fa502b0aed4124986af938125",
     "src/core/dom.js": "313c1dd6467a0fb4065977850370a95aa80ecd39dd030197bc6d1538b210ff7a",
     "src/core/names.js": "798f186ead8942049882d70990c78b4f8808ba56c7a8bf0f0e20f6220600da8a",
     "src/core/dates.js": "5c44797862f7df6d5183febe10f467ca7a130d66e1e347ff0fe23d234aba0fed",
@@ -33,10 +33,10 @@
     "src/views/settings.js": "badf03ed51a8b1e10a5e036511a3eeda093f599918ebe6b3e702692af41857b4",
     "src/views/dashboard.js": "923bfb5d73c80cf274b51685030b22ba572d8262c54ef671330f4ac0c5967764",
     "src/views/meeting-form.js": "4f7f543b89b3d422a760d483ec950c9600c2d031bc5fefe1dd6c04da731f6a67",
-    "src/views/meeting-panel.js": "8c1230595f9dc50ef49365cd701aa6504c5337946b41e314e1dbfb12992e3dba",
+    "src/views/meeting-panel.js": "82aec50bd1870ae802a5114507f4767063c64903e53ff246f207c1517369f1b3",
     "src/views/cleanup.js": "e0c85ae105fa19e937088aa7963af4d5eec4b25417a611bd2d0a939b3d2ebd21",
     "src/views/admin.js": "93b6f06e493441868a23addea69587f8d1b25fd55aa8f6dad0037e362922fc31",
-    "src/app.js": "5b86a4b6898a33bdbfe702f26e88fe79028fc205c9e2b1db040f90b9f5ca9f7d",
+    "src/app.js": "01f9c72cc677c9d941d5a7029306393ffd1034bcc4417d47a4cc6a587807ac35",
     "styles/app.css": "bf41602fc889b7582a986e6d294e7eb242c3bd8d8e0dd93180a488a279406fb2",
     "layout/competency-hub.layout.html": "d1ab8207281c0906fe2ebeefbf0ac495d292c1b80af30fd3d69d96129967a4c7"
   }

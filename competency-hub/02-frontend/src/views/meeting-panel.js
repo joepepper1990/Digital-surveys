@@ -161,7 +161,7 @@ CH.views.meetingPanel = (function () {
     // what is recorded for the meeting, with what waits on this screen for its booking to be saved
     async function readItems(x) {
       var rows = x.id < 0 ? { frozen: [], live: [] } : await loadItems(app, x);
-      rows.live = rows.live.concat(app.meetingBuffer[x.id] || []);
+      rows.live = rows.live.concat(app.bufferFor(x.id));
       return rows;
     }
 
@@ -241,19 +241,23 @@ CH.views.meetingPanel = (function () {
         for (var i = list.length - 1; i >= 0; i--) if (list[i].type === 'New Business' && list[i].title === openTitle) { at = i; break; }
         openTitle = null;
       }
-      if (view !== 'main' || !dlg.isOpen()) return;
-      if (quiet && signature(mt(), agenda) === shown) return;
+      if ((view !== 'main' && view !== 'finalise') || !dlg.isOpen()) return;
+      if (quiet && view === 'main' && signature(mt(), agenda) === shown) return;
       fill();
     }
 
     // changes made from this meeting that are still being recorded (they hold back finalising)
     function meetingPending(x) {
       return app.tracker.entries().filter(function (e) {
-        return (Number(e.meetingId) === Number(x.id) || (e.type === 'StartMeeting' && Number(e.targetId) === Number(x.id))) && (e.state === 'submitted' || e.state === 'slow');
-      }).concat(x.id < 0 ? [{ label: 'The booking of this meeting' }] : []);
+        return Number(e.meetingId) === Number(x.id) && (e.state === 'submitted' || e.state === 'slow');
+      });
     }
 
     function pending(x) {
+      if (app.finaliseLater[x.id]) {
+        return h('p', { class: 'pending', role: 'status' }, app.mark({ sending: true }, 'Meeting'),
+          ' Finalise the minutes – the minutes below are what will be saved. They are sent as soon as the meeting\'s start is saved, usually within a minute.');
+      }
       var e = app.tracker.forTarget(x.id, 'Meeting');
       // release 1.2: a change to the booking already shows; a refusal has its own card, with Try again
       if (e && (e.state === 'submitted' || e.state === 'slow')) {
@@ -614,6 +618,7 @@ CH.views.meetingPanel = (function () {
           payload = { what: what.value.trim(), reason: reason.value.trim() };
         }
         if (kind === 'start' && x.id < 0 && app.startWhenBooked(x)) { view = 'main'; fill(); loadAgenda(); return; }
+        if (kind === 'finalise' && app.finaliseWhenReady(x)) { view = 'main'; fill(); loadAgenda(); return; }
         submit.disabled = true; submit.textContent = 'Sending…';
         var type = { cancel: 'CancelMeeting', start: 'StartMeeting', finalise: 'FinaliseMeeting', amend: 'AmendMeeting' }[kind];
         var verb = { cancel: 'Cancel the ', start: 'Start the ', finalise: 'Finalise the minutes of the ', amend: 'Amend the minutes of the ' }[kind];
@@ -637,8 +642,7 @@ CH.views.meetingPanel = (function () {
     function refreshNow() {
       refreshTimer = null;
       if (!dlg.isOpen()) return;
-      if (view === 'finalise') { fill(); return; }
-      if (view !== 'main') return;
+      if (view !== 'main' && view !== 'finalise') return;
       var active = document.activeElement;
       if (active && dlg.body.contains(active) && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)) { refreshTimer = setTimeout(refreshNow, 2000); return; }
       loadAgenda(true);

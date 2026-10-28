@@ -4,7 +4,7 @@ window.MockRules = (function () {
   var CH = {};
   // Fixed names and limits. Lists are addressed by display title; folders by list URL name.
   CH.config = {
-    VERSION: '1.2.3',
+    VERSION: '1.2.4',
     ENVIRONMENT: 'TEST',
     lists: {
       competencies: { title: 'Competencies', url: 'Competencies' },

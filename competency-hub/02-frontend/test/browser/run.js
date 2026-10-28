@@ -395,6 +395,10 @@ res = drive('as=' + KELLY + '&area=FLK&drive=meetingBeforeBooked', SLOW);
 check('a meeting booked a moment ago can be started at once; what is recorded is sent to its record folder when the booking is saved', res.ok && res.result.unnumbered &&
   !res.result.change && res.result.live && res.result.raiseNote && res.result.kept && res.result.status === 'In Progress' &&
   res.result.attFolder === 'MeetingItems/FLK/MTG-' + res.result.realId + '/Record' && res.result.attKey.indexOf(res.result.realId + '|P|') === 0, JSON.stringify(res));
+res = drive('as=' + KELLY + '&area=FLK&drive=meetingBookedFinalise', 400000);
+check('booked, started, recorded and finalised before the booking is saved: finalising is not held back, nothing recorded disappears, and every outcome is frozen',
+  res.ok && !res.result.booked && res.result.enabled && res.result.draft && res.result.given >= 3 && res.result.low === res.result.given &&
+  res.result.frozenDiscussed === res.result.given && JSON.stringify(res.result.newItem) === '["Discussed"]', JSON.stringify(res));
 res = drive('as=' + KELLY + '&area=FLK&meeting=2&drive=meetingCancel', SLOW);
 check('meeting: cancelling needs a reason, then shows as cancelled', res.ok && /at least 10 characters/.test(res.result.reasonError) && /Most of the area is on the outage/.test(res.result.text), JSON.stringify(res));
 res = drive('as=' + RACHEL + '&area=FLK&meeting=2&drive=meetingAsTechnician', SLOW);

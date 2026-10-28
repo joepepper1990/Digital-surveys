@@ -1062,6 +1062,54 @@ window.MockDrivers = (function () {
       return { unnumbered: unnumbered, change: change, live: live, raiseNote: raiseNote, kept: !!kept, status: mt.Status, attFolder: att.FileDirRef.split('/Lists/')[1],
         attKey: att.RecordKey, realId: mt.Id, panel: q('#ch-mt .what-label').textContent };
     },
+    // booked, started, recorded and finalised before the booking is saved: nothing recorded is lost on the way, and the
+    // minutes are frozen with every outcome once the booking and the start are saved
+    meetingBookedFinalise: async function () {
+      (await until(function () { return byText('.hm-area .btn', 'Book a meeting'); })).click();
+      var form = await until(function () { return q('#ch-m form'); });
+      q('#ch-m-dateIso').value = MockSharePoint.data.today || q('#ch-m-dateIso').min;
+      q('#ch-m-start').value = '16:30';
+      q('#ch-m-end').value = '17:30';
+      type(q('#ch-m-location'), 'Quick room');
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return !q('#ch-m'); });
+      (await until(function () { return all('.hm-area .hm-rw').filter(function (b) { return b.textContent.indexOf('Quick room') >= 0; })[0]; })).click();
+      await until(function () { return q('#ch-mt') && byText('#ch-mt .btn', 'Start meeting'); });
+      byText('#ch-mt .btn', 'Start meeting').click();
+      (await until(function () { return q('#ch-mt form.dialog-body'); })).dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-mt-progress') && q('#ch-mt .outcomes'); }, 10000);
+      // an item added by hand
+      byText('#ch-mt .agenda-list button', '+ Add an item').click();
+      type(await until(function () { return q('#ch-mt-title'); }), 'TEST in meeting item');
+      q('#ch-mt-title').form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return all('#ch-mt .agenda-list .it').some(function (b) { return /TEST in meeting item/.test(b.textContent); }); });
+      // every item with outcome buttons gets Discussed
+      var n = all('#ch-mt .agenda-list .it').length, given = 0;
+      for (var i = 0; i < n; i++) {
+        all('#ch-mt .agenda-list .it')[i].click();
+        await wait(100);
+        var ob = q('#ch-mt .outcomes') && byText('#ch-mt .outcomes button', 'Discussed');
+        if (ob) { ob.click(); given++; await until(function () { return byText('#ch-mt .outcomes button', 'Discussed').getAttribute('aria-pressed') === 'true'; }); }
+      }
+      var low = Infinity;
+      var count = function () { return all('#ch-mt .agenda-list .it').filter(function (b) { return /Discussed/.test(b.textContent); }).length; };
+      var watch = setInterval(function () { if (q('#ch-mt .agenda-list')) low = Math.min(low, count()); }, 200);
+      var booked = MockSharePoint.data.Requests.some(function (r) { return r.RequestType === 'ScheduleMeeting' && r.Status === 'Completed' && /Quick/.test(r.Payload); });
+      byText('#ch-mt .btn', 'Review and finalise').click();
+      var review = await until(function () { return q('#ch-mt form.dialog-body'); });
+      var enabled = !byText('#ch-mt form .btn', 'Finalise the minutes').disabled;
+      var reviewText = review.textContent;
+      review.dispatchEvent(new Event('submit', { cancelable: true }));
+      var draft = await until(function () { return q('#ch-mt .minutes') && /TEST in meeting item/.test(q('#ch-mt .minutes').textContent) && q('#ch-mt .minutes').textContent; }, 10000);
+      var mt = await until(function () { return MockSharePoint.data.Meetings.filter(function (m) { return m.Location === 'Quick room' && m.Status === 'Finalised'; })[0]; }, 180000);
+      await until(function () { return q('#ch-mt .minutes a[download]'); }, 120000);
+      clearInterval(watch);
+      var frozen = MockSharePoint.data['Meeting Items'].filter(function (x) { return x.MeetingId === mt.Id && /\/MTG-\d+$/.test(x.FileDirRef); });
+      return { booked: booked, given: given, low: low === Infinity ? null : low, enabled: enabled, review: reviewText, draft: /being saved/.test(draft),
+        frozenDiscussed: frozen.filter(function (x) { return x.Outcome === 'Discussed'; }).length,
+        newItem: frozen.filter(function (x) { return x.Title === 'TEST in meeting item'; }).map(function (x) { return x.Outcome; }),
+        minutes: q('#ch-mt .minutes').textContent.slice(0, 600) };
+    },
     meetingCancel: async function () {
       await until(function () { return q('#ch-mt .facts'); });
       byText('#ch-mt .btn', 'Cancel meeting').click();

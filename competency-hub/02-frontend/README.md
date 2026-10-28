@@ -2,6 +2,14 @@
 
 Plain HTML, CSS and JavaScript, delivered as a Welcome by Accelerator 365 custom layout. Same-origin SharePoint REST runs as the signed-in user. There are no libraries and no external calls.
 
+## Version 1.2.4: finalise straight after booking (28 October 2026)
+
+- Finalise is no longer held back while the meeting's booking or start is still being saved: the minutes show as
+  finalised at once, and the finalise is sent the moment the start is saved (`app.finaliseWhenReady`).
+- What was recorded before the booking was saved stays on screen until each row has been written to the meeting's
+  record folder (`app.bufferFor`), so outcomes no longer vanish while it is sent; the review before finalising reads
+  the agenda again before it repaints.
+
 ## Version 1.2.3: out-of-hours heads-up (28 October 2026)
 
 - Outside weekdays 07:00–19:00 (UK time) the status line adds a short note: changes still show at once, and

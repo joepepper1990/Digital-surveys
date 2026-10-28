@@ -1,11 +1,11 @@
-/* ESG Competency Hub 1.2.3 – built from src/ by tools/build.js. Do not edit. */
+/* ESG Competency Hub 1.2.4 – built from src/ by tools/build.js. Do not edit. */
 window.ESGCompetencyHub = function (ctx) {
   'use strict';
   var CH = {};
   /* src/core/config.js */
   // Fixed names and limits. Lists are addressed by display title; folders by list URL name.
   CH.config = {
-    VERSION: '1.2.3',
+    VERSION: '1.2.4',
     ENVIRONMENT: 'TEST',
     lists: {
       competencies: { title: 'Competencies', url: 'Competencies' },
@@ -4683,7 +4683,7 @@ window.ESGCompetencyHub = function (ctx) {
       // what is recorded for the meeting, with what waits on this screen for its booking to be saved
       async function readItems(x) {
         var rows = x.id < 0 ? { frozen: [], live: [] } : await loadItems(app, x);
-        rows.live = rows.live.concat(app.meetingBuffer[x.id] || []);
+        rows.live = rows.live.concat(app.bufferFor(x.id));
         return rows;
       }
 
@@ -4763,19 +4763,23 @@ window.ESGCompetencyHub = function (ctx) {
           for (var i = list.length - 1; i >= 0; i--) if (list[i].type === 'New Business' && list[i].title === openTitle) { at = i; break; }
           openTitle = null;
         }
-        if (view !== 'main' || !dlg.isOpen()) return;
-        if (quiet && signature(mt(), agenda) === shown) return;
+        if ((view !== 'main' && view !== 'finalise') || !dlg.isOpen()) return;
+        if (quiet && view === 'main' && signature(mt(), agenda) === shown) return;
         fill();
       }
 
       // changes made from this meeting that are still being recorded (they hold back finalising)
       function meetingPending(x) {
         return app.tracker.entries().filter(function (e) {
-          return (Number(e.meetingId) === Number(x.id) || (e.type === 'StartMeeting' && Number(e.targetId) === Number(x.id))) && (e.state === 'submitted' || e.state === 'slow');
-        }).concat(x.id < 0 ? [{ label: 'The booking of this meeting' }] : []);
+          return Number(e.meetingId) === Number(x.id) && (e.state === 'submitted' || e.state === 'slow');
+        });
       }
 
       function pending(x) {
+        if (app.finaliseLater[x.id]) {
+          return h('p', { class: 'pending', role: 'status' }, app.mark({ sending: true }, 'Meeting'),
+            ' Finalise the minutes – the minutes below are what will be saved. They are sent as soon as the meeting\'s start is saved, usually within a minute.');
+        }
         var e = app.tracker.forTarget(x.id, 'Meeting');
         // release 1.2: a change to the booking already shows; a refusal has its own card, with Try again
         if (e && (e.state === 'submitted' || e.state === 'slow')) {
@@ -5136,6 +5140,7 @@ window.ESGCompetencyHub = function (ctx) {
             payload = { what: what.value.trim(), reason: reason.value.trim() };
           }
           if (kind === 'start' && x.id < 0 && app.startWhenBooked(x)) { view = 'main'; fill(); loadAgenda(); return; }
+          if (kind === 'finalise' && app.finaliseWhenReady(x)) { view = 'main'; fill(); loadAgenda(); return; }
           submit.disabled = true; submit.textContent = 'Sending…';
           var type = { cancel: 'CancelMeeting', start: 'StartMeeting', finalise: 'FinaliseMeeting', amend: 'AmendMeeting' }[kind];
           var verb = { cancel: 'Cancel the ', start: 'Start the ', finalise: 'Finalise the minutes of the ', amend: 'Amend the minutes of the ' }[kind];
@@ -5159,8 +5164,7 @@ window.ESGCompetencyHub = function (ctx) {
       function refreshNow() {
         refreshTimer = null;
         if (!dlg.isOpen()) return;
-        if (view === 'finalise') { fill(); return; }
-        if (view !== 'main') return;
+        if (view !== 'main' && view !== 'finalise') return;
         var active = document.activeElement;
         if (active && dlg.body.contains(active) && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)) { refreshTimer = setTimeout(refreshNow, 2000); return; }
         loadAgenda(true);
@@ -5804,25 +5808,68 @@ window.ESGCompetencyHub = function (ctx) {
         var mt = real && app.model.meetingById[real];
         if (!mt) return;
         app.meetingAlias[tmp] = real;
+        if (app.finaliseLater[tmp]) { app.finaliseLater[real] = app.finaliseLater[tmp]; delete app.finaliseLater[tmp]; }
         if (entry.startNow) {
           try {
-            await app.tracker.submit({ type: 'StartMeeting', targetId: real, targetType: 'Meeting', expectedRevision: mt.revision, payload: {},
+            await app.tracker.submit({ type: 'StartMeeting', targetId: real, targetType: 'Meeting', expectedRevision: rawRevision(real), payload: {},
               label: 'Start the ' + mt.areaName + ' meeting' });
           } catch (_) { CH.ui.toast(app.root, 'The meeting could not be started just now. Open it and press Start meeting again.', 'info'); }
         }
         flush(mt, tmp, real);
       }
+      // Each row stays on screen (under the meeting's real number) until it has been written.
       async function flush(mt, tmp, real) {
-        var rows = app.meetingBuffer[tmp] || [];
-        delete app.meetingBuffer[tmp];
+        var rows = (app.meetingBuffer[tmp] || []).slice();
         var ids = {};
         for (var i = 0; i < rows.length; i++) {
           try {
             var made = await app.sp.addToFolder('meetingItems', mt.areaKey + '/MTG-' + real + '/Record', retarget(rows[i], tmp, real, ids));
             if (rows[i].RowType === 'New Business' && made) ids[rows[i].Id] = made;
           } catch (_) { CH.ui.toast(app.root, 'Part of what was recorded before the booking was saved could not be sent. Check the meeting and record it again.', 'info'); }
+          var left = app.meetingBuffer[tmp] || [];
+          left.splice(left.indexOf(rows[i]), 1);
         }
+        delete app.meetingBuffer[tmp];
         if (rows.length && app.panel) app.panel.refresh();
+      }
+      // What is kept on screen for a meeting: its own rows, and those recorded under the temporary number it had.
+      app.bufferFor = function (id) {
+        var out = (app.meetingBuffer[id] || []).slice();
+        Object.keys(app.meetingAlias).forEach(function (tmp) {
+          if (Number(app.meetingAlias[tmp]) !== Number(id)) return;
+          (app.meetingBuffer[tmp] || []).forEach(function (r) {
+            out.push(Object.assign(retarget(r, Number(tmp), Number(id), {}), { Id: r.Id, AuthorId: r.AuthorId }));
+          });
+        });
+        return out;
+      };
+      function rawRevision(id) {
+        var row = ((app.raw && app.raw.meetings && app.raw.meetings.rows) || []).filter(function (r) { return Number(r.Id) === Number(id); })[0];
+        return row ? row.Revision : null;
+      }
+
+      // ---- Finalise pressed while the meeting's booking or start is still being saved (release 1.2.4): the minutes show
+      // as finalised at once, and the finalise is sent the moment the start is saved (the flow needs a meeting in progress).
+      app.finaliseLater = {};
+      app.finaliseWhenReady = function (mt) {
+        var starting = mt.id < 0 || app.tracker.entries().some(function (e) {
+          return e.type === 'StartMeeting' && Number(e.targetId) === Number(mt.id) && (e.state === 'submitted' || e.state === 'slow');
+        });
+        if (!starting) return false;
+        app.finaliseLater[mt.id] = { at: new Date(), label: 'Finalise the minutes of the ' + mt.areaName + ' meeting' };
+        rebuild();
+        render(false);
+        return true;
+      };
+      async function finaliseNow(id) {
+        var later = app.finaliseLater[id];
+        delete app.finaliseLater[id];
+        try {
+          await app.tracker.submit({ type: 'FinaliseMeeting', targetId: Number(id), targetType: 'Meeting', expectedRevision: rawRevision(id), payload: {}, label: later.label });
+        } catch (_) {
+          rebuild(); render(false);
+          CH.ui.toast(app.root, 'The minutes could not be finalised just now. Open the meeting and finalise it again.', 'info');
+        }
       }
       // A Start pressed on a meeting whose booking is still being saved: shown at once, sent when it is booked.
       app.startWhenBooked = function (mt) {
@@ -5853,6 +5900,10 @@ window.ESGCompetencyHub = function (ctx) {
           if (entry.state === 'done' && app.state.view === 'admin') setTimeout(function () { CH.views.admin.refresh(app); }, 1500);
           return;
         }
+        if (entry.type === 'StartMeeting' && app.finaliseLater[entry.targetId] && ['rejected', 'attention', 'cancelled'].indexOf(entry.state) >= 0) {
+          delete app.finaliseLater[entry.targetId];
+          CH.ui.toast(app.root, 'The meeting could not be started, so its minutes were not finalised. Open it to try again.', 'info');
+        }
         if (entry.state !== 'done') {
           rebuild();
           render(false);
@@ -5862,6 +5913,7 @@ window.ESGCompetencyHub = function (ctx) {
         reload(listsFor(entry.type)).then(async function () {
           // a meeting started before its booking was saved is started now, before the screen shows it as booked
           if (entry.type === 'ScheduleMeeting' && entry.tempId) await meetingBooked(entry);
+          if (entry.type === 'StartMeeting' && app.finaliseLater[entry.targetId]) await finaliseNow(entry.targetId);
           render(false);
           if (app.panel) app.panel.refresh();
           var a = app.model.actionById[entry.resultId];
@@ -6022,7 +6074,11 @@ window.ESGCompetencyHub = function (ctx) {
         var today = CH.dates.localDate(now);
         var entries = app.tracker ? app.tracker.entries() : [];
         app.keep = app.keep || {};
-        var view = CH.optimistic.apply(app.raw, entries, app.keep, { personId: app.person.SiteUserId, today: today, now: now });
+        // a finalise waiting for its meeting's start shows as one being saved
+        var later = Object.keys(app.finaliseLater || {}).map(function (id) {
+          return { key: 'later|' + id, type: 'FinaliseMeeting', targetType: 'Meeting', targetId: Number(id), state: 'submitted', payload: {}, submittedAt: app.finaliseLater[id].at };
+        });
+        var view = CH.optimistic.apply(app.raw, entries.concat(later), app.keep, { personId: app.person.SiteUserId, today: today, now: now });
         entries.forEach(function (e) {
           var closing = e.type === 'MarkComplete' || e.type === 'CloseAction';
           if (closing && saving(e)) {
