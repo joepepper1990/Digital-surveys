@@ -2,6 +2,11 @@
 // "Add an update" is an instant write; "I need more time" and "Mark as done" are queued requests.
 CH.views = CH.views || {};
 CH.views.actionPanel = (function () {
+  // a record someone else changed since this page last read it (release 1.3): said plainly, above the details
+  function othersLine(mark) {
+    if (!mark) return null;
+    return CH.dom.h('p', { class: 'muted small others-line', role: 'status', text: 'Updated by someone else at ' + CH.dates.ukTime(mark.at) + ' – this is the latest.' });
+  }
   var h = CH.dom.h;
   var D = CH.dates;
   var R = CH.rules;
@@ -93,11 +98,9 @@ CH.views.actionPanel = (function () {
         return;
       }
       var r = R.roles(a, app.person.SiteUserId, app.access);
-      var entry = app.tracker.forTarget(a.id);
-      var mine = entry && (entry.state === 'submitted' || entry.state === 'slow');
-      // your own change still saving does not stop the next one: the flow takes them in order, each against the
-      // revision the one before it leaves. Someone else's change being saved does, and so does a raise not yet numbered.
-      var busy = (a.locked && !mine) || a.isNew;
+      // your own change still saving does not stop the next one: they go one at a time, in order (release 1.3), and
+      // so does a raise not yet numbered. Someone else's change being saved does hold it.
+      var busy = a.locked && !app.tracker.isMine(a.lockKey);
       var finished = a.status === 'Closed' || a.waitingCloseOut;
       // the less common changes sit under "More for this action" (plan C.9), only those this person may make
       // release 1.2: each button names what it acts on (backlog 11)
@@ -110,6 +113,7 @@ CH.views.actionPanel = (function () {
       dlg.setTitle(a.title);
       CH.dom.append(dlg.body, [
         h('p', { class: 'what-label', text: 'Action · ' + (a.isNew ? 'not yet numbered' : a.ref) + ' · ' + a.areaName + (a.priority === 'High' ? ' · High priority' : '') }),
+        othersLine(app.changedByOthers('Action', a.id)),
         pendingLine(app, a),
         h('dl', { class: 'facts' },
           h('dt', { text: 'When' }), h('dd', null, ui.chip(a.waitingCloseOut ? 'later' : a.group, a.dueText), ' ', whenText(a)),
@@ -168,7 +172,9 @@ CH.views.actionPanel = (function () {
     }
     function back() { view = 'main'; fill(); dlg.focusFirst(); }
 
+    var formKey = null;
     function formShell(title, fields, submitLabel, onSubmit) {
+      formKey = CH.requests.newKey();   // one change per form, however often Try again is pressed
       var errorBox = h('p', { class: 'form-error', role: 'alert' });
       var submit = h('button', { type: 'submit', class: 'btn btn-main', text: submitLabel });
       var form = h('form', { class: 'dialog-body', novalidate: true }, h('h3', { text: title }), fields, errorBox,
@@ -240,7 +246,8 @@ CH.views.actionPanel = (function () {
           var errors = R.validateExtend(a, v, { today: today });
           if (errors.action) { form.querySelector('.form-error').textContent = errors.action; return false; }
           if (CH.ui.dialog.showErrors(form, 'ch-x-', errors, ['newDueIso', 'reason'])) return false;
-          await app.tracker.submit({ type: 'ExtendDeadline', targetId: a.id, expectedRevision: a.revision,
+          var now = action() || a;
+          await app.tracker.submit({ key: formKey, type: 'ExtendDeadline', targetId: now.id, creationKey: now.isNew ? now.sending : null, expectedRevision: now.revision,
             payload: { newDueIso: v.newDueIso, reason: v.reason.trim(), expectedDueDay: a.dueDay }, label: 'New deadline ' + D.short(v.newDueIso) });
           back();
           return true;
@@ -258,7 +265,8 @@ CH.views.actionPanel = (function () {
           var errors = R.validateComplete(a, { note: note.value });
           if (errors.action) { form.querySelector('.form-error').textContent = errors.action; return false; }
           if (CH.ui.dialog.showErrors(form, 'ch-c-', errors, ['note'])) return false;
-          await app.tracker.submit({ type: 'MarkComplete', targetId: a.id, expectedRevision: a.revision,
+          var now = action() || a;
+          await app.tracker.submit({ key: formKey, type: 'MarkComplete', targetId: now.id, creationKey: now.isNew ? now.sending : null, expectedRevision: now.revision,
             payload: { note: note.value.trim() }, label: 'Mark as done' });
           back();
           return true;
@@ -269,7 +277,8 @@ CH.views.actionPanel = (function () {
     async function send(form, type, payload, label, errors, order, prefix) {
       if (errors.action) { form.querySelector('.form-error').textContent = errors.action; return false; }
       if (CH.ui.dialog.showErrors(form, prefix, errors, order)) return false;
-      await app.tracker.submit({ type: type, targetId: id, expectedRevision: action().revision, payload: payload, label: label });
+      var a = action();
+      await app.tracker.submit({ key: formKey, type: type, targetId: id, creationKey: a.isNew ? a.sending : null, expectedRevision: a.revision, payload: payload, label: label });
       back();
       return true;
     }

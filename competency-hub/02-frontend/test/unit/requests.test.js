@@ -96,3 +96,131 @@ test('nothing is sent while automatic processing is down, except an administrato
   tracker.stop();
   assert.equal(entry.state, 'submitted');
 });
+
+// Release 1.3: changes to one record go one at a time, in order; what waits survives a reload; a refusal holds the rest.
+function queueApp() {
+  const store = { Requests: [], Actions: [{ Id: 40, Revision: 2, LastRequestKey: '', PendingRequestKey: '' }], History: [] };
+  const app = {
+    person: { SiteUserId: 112 },
+    sp: {
+      items: async (title, query) => {
+        if (title === 'Requests') {
+          const key = /RequestKey eq '([^']+)'/.exec(query);
+          if (key) return { rows: store.Requests.filter((r) => r.RequestKey === key[1]), complete: true };
+          return { rows: [], complete: true };
+        }
+        if (title === 'Actions') return { rows: store.Actions, complete: true };
+        if (title === 'History') return { rows: store.History, complete: true };
+        return { rows: [], complete: true };
+      },
+      addToFolder: async (list, folder, values) => { store.Requests.push(Object.assign({ Id: store.Requests.length + 1, Status: 'Submitted' }, values)); return store.Requests.length; },
+      update: async () => {}
+    },
+    store,
+    // the flow saves the oldest open request: the action moves on a revision and carries the key
+    save(message) {
+      const r = store.Requests.filter((x) => x.Status === 'Submitted')[0];
+      r.Status = 'Completed'; r.ResultMessage = message || 'Saved.'; r.ResultId = 40;
+      store.Actions[0].Revision += 1; store.Actions[0].LastRequestKey = r.RequestKey;
+    },
+    refuse(message) { const r = store.Requests.filter((x) => x.Status === 'Submitted')[0]; r.Status = 'Rejected'; r.ResultMessage = message; }
+  };
+  return app;
+}
+const tick = async () => { for (let k = 0; k < 30; k++) await new Promise((r) => setImmediate(r)); };
+function queueCH(storage) {
+  const timers = [];
+  const CH2 = loadApp({ setTimeout: (fn) => { timers.push(fn); return timers.length; }, clearTimeout: () => {},
+    window: { crypto: require('crypto').webcrypto, localStorage: storage } });
+  return { CH2, timers };
+}
+function memoryStorage() { const m = {}; return { getItem: (k) => (k in m ? m[k] : null), setItem: (k, v) => { m[k] = String(v); }, m }; }
+
+test('three quick changes to one action: one is sent at a time, each against the revision the one before it left', async () => {
+  const storage = memoryStorage();
+  const { CH2 } = queueCH(storage);
+  const app = queueApp();
+  const states = [];
+  const tracker = CH2.requests.tracker(app, (e) => states.push(e.label + ':' + e.state));
+  const a = await tracker.submit({ type: 'ExtendDeadline', targetId: 40, expectedRevision: 2, payload: { newDueIso: '2026-11-04' }, label: 'A' });
+  const b = await tracker.submit({ type: 'ChangeStatus', targetId: 40, expectedRevision: 3, payload: { status: 'In Progress' }, label: 'B' });
+  const c = await tracker.submit({ type: 'MarkComplete', targetId: 40, expectedRevision: 4, payload: {}, label: 'C' });
+  assert.deepEqual([a.state, b.state, c.state], ['submitted', 'queued', 'queued']);
+  assert.equal(app.store.Requests.length, 1, 'only the first is sent');
+  assert.deepEqual(JSON.parse(storage.m['esg-competency-hub-pending']).waiting.map((w) => w.label), ['B', 'C'], 'the rest is kept in the browser');
+  app.save(); tracker.wake(); await tick();
+  assert.deepEqual([a.state, b.state, c.state], ['done', 'submitted', 'queued']);
+  assert.equal(app.store.Requests[1].ExpectedRevision, 3, 'read from the record, not guessed');
+  app.save(); tracker.wake(); await tick();
+  assert.deepEqual([b.state, c.state], ['done', 'submitted']);
+  assert.equal(app.store.Requests[2].ExpectedRevision, 4);
+  app.save(); tracker.wake(); await tick();
+  assert.equal(c.state, 'done');
+  assert.deepEqual(JSON.parse(storage.m['esg-competency-hub-pending']).waiting, []);
+  tracker.stop();
+});
+
+test('the first of a chain refused: the rest is held and never sent; Try again sends it again and the rest follows; Discard drops the lot', async () => {
+  const { CH2 } = queueCH(memoryStorage());
+  const app = queueApp();
+  const tracker = CH2.requests.tracker(app, () => {});
+  const a = await tracker.submit({ type: 'ExtendDeadline', targetId: 40, expectedRevision: 2, payload: { newDueIso: '2026-11-04' }, label: 'A' });
+  const b = await tracker.submit({ type: 'ChangeStatus', targetId: 40, expectedRevision: 3, payload: { status: 'In Progress' }, label: 'B' });
+  app.refuse('This action was updated by someone else. Review the latest details and try again.'); tracker.wake(); await tick();
+  assert.deepEqual([a.state, b.state, b.heldBy], ['rejected', 'held', a.key]);
+  assert.equal(app.store.Requests.length, 1);
+  assert.deepEqual(plain(tracker.heldBy(a).map((e) => e.label)), ['B']);
+  const again = await tracker.retry(a, 5);
+  assert.deepEqual([again.state, b.state, b.orderAfter], ['submitted', 'queued', again.key]);
+  assert.equal(app.store.Requests[1].ExpectedRevision, 5);
+  app.save(); tracker.wake(); await tick();
+  assert.deepEqual([again.state, b.state], ['done', 'submitted']);
+  app.refuse('As a technician you can raise actions for yourself in this area.'); tracker.wake(); await tick();
+  assert.equal(b.state, 'rejected');
+  tracker.discard(b);
+  assert.ok(b.dismissed);
+  tracker.stop();
+});
+
+test('a change to a record not yet numbered waits for the creation and then takes its number; a page reload loses nothing', async () => {
+  const storage = memoryStorage();
+  let { CH2 } = queueCH(storage);
+  const app = queueApp();
+  let tracker = CH2.requests.tracker(app, () => {});
+  const raise = await tracker.submit({ key: 'raise-1', type: 'RaiseAction', payload: { title: 'New' }, label: 'Raise' });
+  const done = await tracker.submit({ type: 'MarkComplete', targetId: -1, creationKey: 'raise-1', payload: {}, label: 'Done' });
+  assert.deepEqual([raise.state, done.state, done.orderAfter], ['submitted', 'queued', 'raise-1']);
+  tracker.stop();
+  // the page is reloaded before the raise is saved: the raise is found again on SharePoint, the waiting change in storage
+  ({ CH2 } = queueCH(storage));
+  app.sp.items = (function (orig) {
+    return async (title, query) => {
+      if (title === 'Requests' && /Status eq 'Submitted'/.test(query)) return { rows: app.store.Requests.filter((r) => r.Status === 'Submitted').map((r) => Object.assign({ Created: '2026-10-28T10:00:00Z' }, r)), complete: true };
+      return orig(title, query);
+    };
+  })(app.sp.items);
+  tracker = CH2.requests.tracker(app, () => {});
+  await tracker.resume();
+  const back = tracker.byKey(done.key);
+  assert.deepEqual([tracker.byKey('raise-1').state, back.state, back.orderAfter, back.creationKey], ['submitted', 'queued', 'raise-1', 'raise-1']);
+  // the raise is saved and numbered 40: the change goes, about action 40
+  app.store.Requests[0].Status = 'Completed'; app.store.Requests[0].ResultId = 40; app.store.Requests[0].ResultMessage = 'Raised.';
+  app.store.Actions[0].LastRequestKey = 'raise-1';
+  tracker.wake(); await tick();
+  assert.deepEqual([tracker.byKey('raise-1').state, back.state, back.targetId, back.creationKey, back.madeBy], ['done', 'submitted', 40, null, 'raise-1']);
+  assert.equal(app.store.Requests[1].TargetId, 40);
+  tracker.stop();
+});
+
+test('the same key twice is one change; a different record is not held back', async () => {
+  const { CH2 } = queueCH(memoryStorage());
+  const app = queueApp();
+  const tracker = CH2.requests.tracker(app, () => {});
+  const a = await tracker.submit({ key: 'same', type: 'ExtendDeadline', targetId: 40, expectedRevision: 2, payload: {}, label: 'A' });
+  const a2 = await tracker.submit({ key: 'same', type: 'ExtendDeadline', targetId: 40, expectedRevision: 2, payload: {}, label: 'A' });
+  const other = await tracker.submit({ type: 'ExtendDeadline', targetId: 41, expectedRevision: 1, payload: {}, label: 'Other' });
+  assert.equal(a2, a);
+  assert.equal(other.state, 'submitted');
+  assert.equal(app.store.Requests.length, 2);
+  tracker.stop();
+});

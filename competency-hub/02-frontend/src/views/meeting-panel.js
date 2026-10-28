@@ -153,15 +153,21 @@ CH.views.meetingPanel = (function () {
     var refreshTimer = null;
     var attOpen = null;     // the attendance list as the person left it (open or closed)
 
+    var bookingKey = id < 0 && app.model.meetingById[id] ? app.model.meetingById[id].sending : null;
+    var formKey = null;    // one change per form, however often it is tried again
+    var current = null;    // the item on screen while the meeting runs: { it, dirty(), save() }
     function mt() {
-      if (id < 0 && app.meetingAlias && app.meetingAlias[id] && app.model.meetingById[app.meetingAlias[id]]) { id = app.meetingAlias[id]; loadAgenda(true); }
+      if (id < 0 && !app.model.meetingById[id] && bookingKey) {
+        var booking = app.tracker.byKey(bookingKey);
+        if (booking && booking.resultId && app.model.meetingById[booking.resultId]) { id = Number(booking.resultId); loadAgenda(true); }
+      }
       return app.model.meetingById[id];
     }
 
     // what is recorded for the meeting, with what waits on this screen for its booking to be saved
     async function readItems(x) {
       var rows = x.id < 0 ? { frozen: [], live: [] } : await loadItems(app, x);
-      rows.live = rows.live.concat(app.bufferFor(x.id));
+      rows.live = rows.live.concat(app.bufferFor(x));
       return rows;
     }
 
@@ -254,11 +260,15 @@ CH.views.meetingPanel = (function () {
     }
 
     function pending(x) {
-      if (app.finaliseLater[x.id]) {
-        return h('p', { class: 'pending', role: 'status' }, app.mark({ sending: true }, 'Meeting'),
-          ' Finalise the minutes – the minutes below are what will be saved. They are sent as soon as the meeting\'s start is saved, usually within a minute.');
+      var e = app.tracker.forTarget(x.id, 'Meeting', x.id < 0 ? x.sending : null);
+      // waiting its turn (release 1.3): it is sent as soon as the change before it is saved
+      if (e && e.state === 'queued') {
+        return h('p', { class: 'pending', role: 'status' }, app.mark({ sending: true }, 'Meeting'), ' ' + e.label + ' – shown now; it is sent as soon as ' +
+          (x.id < 0 ? 'the booking' : 'the change before it') + ' is saved, usually within a minute.');
       }
-      var e = app.tracker.forTarget(x.id, 'Meeting');
+      if (e && e.state === 'held') {
+        return h('p', { class: 'pending', role: 'status' }, '✕ ' + e.label + ' – not sent, because an earlier change to this meeting was not saved. See the card at the bottom right.');
+      }
       // release 1.2: a change to the booking already shows; a refusal has its own card, with Try again
       if (e && (e.state === 'submitted' || e.state === 'slow')) {
         var what = e.retrying ? e.message : e.type === 'StartMeeting' ? 'the meeting is on. Record it now; the agenda is fixed in the background.'
@@ -302,7 +312,7 @@ CH.views.meetingPanel = (function () {
       // a start being saved does not hold the meeting up (release 1.2); any other change to the booking still does
       var busy = (saving && e.type !== 'StartMeeting') || app.meetingsBlocked();
       var live = runs && !busy && x.status === 'In Progress';
-      app.liveMeetingId = live ? x.id : null;
+      app.liveMeetingId = live && x.id > 0 ? x.id : null;
       var st = STATUS[x.status] || ['later', x.status];
       var words = inviteWords(app, x);
       var people = x.attendeeIds.map(function (pid) { return app.model.nameOf(pid); }).sort();
@@ -348,7 +358,7 @@ CH.views.meetingPanel = (function () {
       status.textContent = 'Saving…';
       if (x.id < 0) {
         var row = Object.assign({ Id: -(++bufferSeq), AuthorId: app.person.SiteUserId, RowKey: 'U|' + clientKey, MeetingId: x.id }, values);
-        (app.meetingBuffer[x.id] = app.meetingBuffer[x.id] || []).push(row);
+        app.bufferPush(x, row);
         if (agenda && agenda !== 'error') agenda.live.push(row);
         status.textContent = 'Kept – sent as soon as the booking is saved';
         return Promise.resolve();
@@ -364,6 +374,14 @@ CH.views.meetingPanel = (function () {
           status.textContent = error.status === 403 ? 'Only the people who run this area\'s meetings, and the Team Leaders and Group Head, can record this.' : 'Not saved – try again in a moment.';
           throw error;
         });
+    }
+
+    // typed notes go with the person when they move to another item (release 1.3)
+    function leaveItem(then) {
+      var c = current;
+      if (c && c.dirty()) return c.save().then(then, then);
+      then();
+      return null;
     }
 
     function liveScreen(x) {
@@ -386,7 +404,7 @@ CH.views.meetingPanel = (function () {
           var chip = o ? ui.chip(o === 'Not reached' || o === 'Deferred' ? 'soon' : 'done', outcomeWords(o))
             : R.DISCUSSION_SECTIONS.indexOf(x.it.section) >= 0 ? ui.chip('soon', 'Needs an outcome') : ui.chip('plain', 'To do');
           return h('button', { type: 'button', class: 'it' + (x.i === at && !adding ? ' on' : ''), 'aria-current': x.i === at && !adding ? 'true' : null,
-            onclick: function () { adding = false; at = x.i; fill(); } }, h('span', { class: 'lbl', text: x.it.title }), chip);
+            onclick: function () { return leaveItem(function () { adding = false; at = x.i; fill(); }); } }, h('span', { class: 'lbl', text: x.it.title }), chip);
         })];
       }), h('button', { type: 'button', class: 'btn btn-small add', text: '+ Add an item', onclick: function () { adding = true; fill(); var f = dlg.body.querySelector('#ch-mt-title'); if (f) f.focus(); } }));
     }
@@ -419,21 +437,26 @@ CH.views.meetingPanel = (function () {
       var needs = R.DISCUSSION_SECTIONS.indexOf(it.section) >= 0;
       var kind = kindOf(it)[0];
       var action = it.type === 'Action' ? app.model.actionById[it.sourceId] : null;
+      var closeKey = null;
       async function save(outcome, next) {
         if (!it.key) { if (next) go(at + 1); return; }
         try {
           await saveRow(x, { Title: it.title, RecordKey: it.key, RowType: 'Outcome', SourceType: it.key.split('|')[2], SourceId: Number(it.key.split('|')[3]),
             Outcome: outcome, Notes: notes.value.trim() }, status);
+          it.notes = notes.value.trim();
           if (next) go(at + 1); else fill();
         } catch (_) { /* the message is shown beside the buttons */ }
       }
+      function dirty() { return !!it.key && notes.value.trim() !== (it.notes || ''); }
+      current = { it: it, dirty: dirty, save: function () { return dirty() ? save(it.outcome, false) : Promise.resolve(); } };
       function go(i) { at = Math.max(0, Math.min(i, items.length - 1)); fill(); var o = dlg.body.querySelector('.outcomes button'); if (o) o.focus(); }
       // Close this action: recorded for the minutes as Closed, with the notes, and the action itself is closed (queued)
       async function closeIt() {
         var note = notes.value.trim();
         try {
           await save('Closed', false);
-          await app.tracker.submit({ type: 'CloseAction', targetId: action.id, expectedRevision: action.revision, meetingId: x.id,
+          closeKey = closeKey || CH.requests.newKey();
+          await app.tracker.submit({ key: closeKey, type: 'CloseAction', targetId: action.id, expectedRevision: action.revision, meetingId: x.id,
             payload: { outcome: 'Completed', note: note }, label: 'Close: ' + action.title });
           fill();
         } catch (error) { status.textContent = error.friendly || 'The action could not be closed just now. Try again in a moment.'; }
@@ -455,12 +478,12 @@ CH.views.meetingPanel = (function () {
         it.outcome === 'Closed' ? h('p', { class: 'small', text: 'Closed at this meeting – it will appear in the minutes under "Actions closed at this meeting".' }) : null,
         it.key ? [h('div', { class: 'what-label', text: 'Outcome' }),
           h('div', { class: 'outcomes', role: 'group', 'aria-label': 'Outcome' }, OUTCOME_BUTTONS.filter(function (o) { return o[0] !== 'Action raised' || kind !== 'action'; }).map(function (o) {
-            return h('button', { type: 'button', 'aria-pressed': String(it.outcome === o[0]), text: o[1], onclick: function () { save(o[0], false); } });
+            return h('button', { type: 'button', 'aria-pressed': String(it.outcome === o[0]), text: o[1], onclick: CH.ui.guarded(function () { return save(o[0], false); }) });
           })),
           h('div', { class: 'what-label', text: 'Notes for the minutes' }), notes] : h('p', { class: 'muted small', text: 'For information.' }),
         h('div', { class: 'row foot' }, buttons, h('span', { class: 'grow' }), status,
-          at > 0 ? ui.button('Previous', function () { go(at - 1); }) : null,
-          ui.button(at < items.length - 1 ? 'Next item' : 'Last item', function () { if (it.key && notes.value.trim() !== (it.notes || '')) save(it.outcome, at < items.length - 1); else if (at < items.length - 1) go(at + 1); }, 'main')));
+          at > 0 ? ui.button('Previous', function () { return leaveItem(function () { go(at - 1); }); }) : null,
+          ui.button(at < items.length - 1 ? 'Next item' : 'Last item', function () { if (dirty()) return save(it.outcome, at < items.length - 1); else if (at < items.length - 1) go(at + 1); }, 'main')));
     }
 
     function decisions(x) {
@@ -468,14 +491,17 @@ CH.views.meetingPanel = (function () {
       var title = h('input', { id: 'ch-mt-decision', type: 'text', maxlength: '255' });
       var details = h('textarea', { id: 'ch-mt-decision-details', rows: '2', maxlength: '2000' });
       var status = h('span', { class: 'muted small', role: 'status' });
+      var btn = h('button', { type: 'submit', class: 'btn', text: 'Record the decision' });
       var f = h('form', { class: 'comment-form', novalidate: true }, field('Decision', title), field('Details', details, 'Optional.'),
-        h('div', { class: 'row' }, h('button', { type: 'submit', class: 'btn', text: 'Record the decision' }), status));
+        h('div', { class: 'row' }, btn, status));
       f.addEventListener('submit', function (e) {
         e.preventDefault();
+        if (btn.disabled) return;
         var t = title.value.trim();
         if (!t) { CH.ui.dialog.showErrors(f, 'ch-mt-', { decision: 'Say what was decided.' }, ['decision']); return; }
+        btn.disabled = true;
         saveRow(x, { Title: t, RecordKey: x.id + '|D|' + CH.requests.newKey(), RowType: 'Decision', Section: 'Decisions and additional actions', Notes: details.value.trim() }, status)
-          .then(function () { fill(); }).catch(function () {});
+          .then(function () { fill(); }).catch(function () { btn.disabled = false; });
       });
       return h('section', { class: 'live-block' }, h('h3', { class: 'group-title', text: 'Decisions' }),
         list.length ? h('ul', { class: 'plain' }, list.map(function (r) { return h('li', null, h('span', null, h('b', { text: r.Title }), r.Notes ? ' – ' + r.Notes : '')); })) : null, f);
@@ -499,7 +525,7 @@ CH.views.meetingPanel = (function () {
         try {
           var nb = { Id: -(++bufferSeq), AuthorId: app.person.SiteUserId, Title: t, RowKey: 'U|' + clientKey, RecordKey: x.id + '|N|' + clientKey,
             MeetingId: x.id, RowType: 'New Business', SourceType: 'New Business', Section: 'New business', Notes: notes.value.trim() };
-          if (x.id < 0) (app.meetingBuffer[x.id] = app.meetingBuffer[x.id] || []).push(nb);
+          if (x.id < 0) app.bufferPush(x, nb);
           else { delete nb.Id; delete nb.AuthorId; await app.sp.addToFolder('meetingItems', x.areaKey + '/MTG-' + x.id + '/Record', nb); }
           adding = false;
           openTitle = t;
@@ -591,16 +617,17 @@ CH.views.meetingPanel = (function () {
         items.forEach(function (it) { if (it.key) outcomes[it.key] = it.outcome; });
         var missing = R.missingOutcomes(items, outcomes);
         var waiting = meetingPending(x);
-        blocked = !!missing.length || !!waiting.length;
+        blocked = !!missing.length;
         fields.push(h('p', { class: 'explain', text: 'Finalising makes the record read-only for good: the minutes are fixed as they are now, and a PDF is made. Team Leaders and the Group Head can add amendments later; the original stays.' }),
           h('p', { text: items.filter(function (it) { return it.outcome; }).length + ' of ' + items.length + ' items have an outcome.' }),
           missing.length ? h('div', { class: 'section-note', id: 'ch-mt-missing' }, h('b', { text: 'These items still need an outcome: ' }), missing.join('; ') + '.') : null,
           waiting.length ? h('div', { class: 'section-note', id: 'ch-mt-waiting' }, h('b', { text: 'Still being recorded: ' }), waiting.map(function (e) { return e.label; }).join('; ') +
-            '. Finalise once they show as saved.') : null);
+            '. You can finalise now: the minutes are sent as soon as these are saved.') : null);
       } else fields.push(h('p', { class: 'explain', text: 'Starting fixes the agenda from the records as they are now. It cannot be undone.' }));
       var labels = { cancel: ['Cancel this meeting?', 'Cancel the meeting'], start: ['Start this meeting?', 'Start the meeting'],
         finalise: ['Finalise the minutes?', 'Finalise the minutes'], amend: ['Amend these minutes', 'Add the amendment'] }[kind];
       var submit = h('button', { type: 'submit', class: 'btn btn-main', text: labels[1], disabled: blocked ? true : null });
+      formKey = CH.requests.newKey();
       var f = h('form', { class: 'dialog-body', novalidate: true }, h('h3', { text: labels[0] }), fields, errorBox,
         h('div', { class: 'row' }, submit, h('button', { type: 'button', class: 'btn', text: 'Back', onclick: function () { show('main'); } })));
       f.addEventListener('submit', async function (e) {
@@ -617,13 +644,13 @@ CH.views.meetingPanel = (function () {
           if (CH.ui.dialog.showErrors(f, 'ch-mt-', aerrs, ['what', 'reason'])) return;
           payload = { what: what.value.trim(), reason: reason.value.trim() };
         }
-        if (kind === 'start' && x.id < 0 && app.startWhenBooked(x)) { view = 'main'; fill(); loadAgenda(); return; }
-        if (kind === 'finalise' && app.finaliseWhenReady(x)) { view = 'main'; fill(); loadAgenda(); return; }
         submit.disabled = true; submit.textContent = 'Sending…';
         var type = { cancel: 'CancelMeeting', start: 'StartMeeting', finalise: 'FinaliseMeeting', amend: 'AmendMeeting' }[kind];
         var verb = { cancel: 'Cancel the ', start: 'Start the ', finalise: 'Finalise the minutes of the ', amend: 'Amend the minutes of the ' }[kind];
         try {
-          await app.tracker.submit({ type: type, targetId: x.id, targetType: 'Meeting', expectedRevision: x.revision, payload: payload, label: verb + x.areaName + ' meeting' });
+          // a meeting not yet booked, or a start still saving: the change waits its turn and is shown now (release 1.3)
+          await app.tracker.submit({ key: formKey, type: type, targetId: x.id, targetType: 'Meeting', creationKey: x.id < 0 ? x.sending : null,
+            expectedRevision: x.revision, payload: payload, label: verb + x.areaName + ' meeting' });
           view = 'main';
           fill();
           if (kind === 'start' || kind === 'finalise') loadAgenda();
@@ -645,6 +672,7 @@ CH.views.meetingPanel = (function () {
       if (view !== 'main' && view !== 'finalise') return;
       var active = document.activeElement;
       if (active && dlg.body.contains(active) && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)) { refreshTimer = setTimeout(refreshNow, 2000); return; }
+      if (current && current.dirty()) { refreshTimer = setTimeout(refreshNow, 2000); return; }   // never over unsaved notes
       loadAgenda(true);
     }
     app.panel = { refresh: function () {

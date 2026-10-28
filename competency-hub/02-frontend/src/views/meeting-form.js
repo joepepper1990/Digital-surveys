@@ -92,6 +92,7 @@ CH.views.meetingForm = (function () {
         chairId: Number(chair.value), attendeeIds: Array.prototype.filter.call(attendees.querySelectorAll('input'), function (i) { return i.checked; }).map(function (i) { return Number(i.value); }) };
     }
 
+    var keys = [];   // one request key per booking (or the change), kept across Try again
     form.addEventListener('submit', async function (e) {
       e.preventDefault();
       errorBox.textContent = '';
@@ -111,12 +112,15 @@ CH.views.meetingForm = (function () {
           });
           if (v.attendeeIds.slice().sort().join() !== meeting.attendeeIds.slice().sort().join()) changed.attendeeIds = v.attendeeIds;
           if (!Object.keys(changed).length) { errorBox.textContent = 'Nothing has changed.'; submit.disabled = false; submit.textContent = 'Save changes'; return; }
-          await app.tracker.submit({ type: 'UpdateMeeting', targetId: meeting.id, targetType: 'Meeting', expectedRevision: meeting.revision, payload: changed,
+          keys[0] = keys[0] || CH.requests.newKey();
+          var now = app.model.meetingById[meeting.id] || meeting;
+          await app.tracker.submit({ key: keys[0], type: 'UpdateMeeting', targetId: meeting.id, targetType: 'Meeting', expectedRevision: now.revision, payload: changed,
             label: 'Change the ' + meeting.areaName + ' meeting to ' + when(v.dateIso) });
         } else {
           var dates = [v.dateIso].concat(R.nextMonths(v.dateIso, Number(repeat.value)));
           for (var i = 0; i < dates.length; i++) {
-            await app.tracker.submit({ type: 'ScheduleMeeting', payload: Object.assign({}, v, { dateIso: dates[i] }),
+            keys[i] = keys[i] || CH.requests.newKey();
+            await app.tracker.submit({ key: keys[i], type: 'ScheduleMeeting', payload: Object.assign({}, v, { dateIso: dates[i] }),
               label: 'Book the ' + m.areaByKey[v.areaKey].name + ' meeting on ' + when(dates[i]) });
           }
         }

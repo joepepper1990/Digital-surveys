@@ -124,7 +124,7 @@ CH.views.admin = (function () {
         ui.button('Yes, ' + choice[1].toLowerCase(), async function (e) {
           e.target.disabled = true;
           try {
-            var entry = await app.tracker.submit({ type: choice[0], targetId: item.tx.Id, payload: { txId: item.tx.Id, note: '' },
+            var entry = await app.tracker.submit({ type: choice[0], targetId: item.tx.Id, targetType: 'Transaction', payload: { txId: item.tx.Id, note: '' },
               label: choice[1] + ': ' + describe(app, item) });
             item.sent = entry;
             onDone();
@@ -140,6 +140,14 @@ CH.views.admin = (function () {
     }
     CH.dom.append(box, buttons());
     return box;
+  }
+
+  // the decision already sent about this change, if any (found again after the list is read again)
+  function sentFor(app, item) {
+    if (item.sent) return item.sent;
+    return app.tracker.entries().filter(function (e) {
+      return e.targetType === 'Transaction' && Number(e.targetId) === Number(item.tx.Id) && !e.dismissed && e.state !== 'dropped';
+    }).slice(-1)[0] || null;
   }
 
   function sentLine(entry) {
@@ -164,7 +172,7 @@ CH.views.admin = (function () {
           ' · ' + (Number(r.Attempts) || 0) + (Number(r.Attempts) === 1 ? ' attempt' : ' attempts') + ' · reference ' + r.RequestKey }),
         h('p', null, ui.chip(item.partly ? 'late' : 'soon', stateWords(item))),
         r.LastError ? h('p', { class: 'muted small', text: 'Last error: ' + r.LastError }) : null,
-        item.sent ? sentLine(item.sent) : choices(app, item, function () { app.refreshView(); })));
+        sentFor(app, item) ? sentLine(sentFor(app, item)) : choices(app, item, function () { app.refreshView(); })));
     }));
   }
 

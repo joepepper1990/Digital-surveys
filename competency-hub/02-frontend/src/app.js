@@ -8,6 +8,9 @@ CH.app = (function () {
     var observer = null;
     var healthTimer = null;
     var HEALTH_EVERY_MS = 5 * 60 * 1000;
+    var REFRESH_EVERY_MS = 60 * 1000;
+    var refreshTimer = null;
+    var lastRead = null;   // when the lists were last read: the next refresh asks only for rows changed since
     var app = { state: { view: 'home', area: null, tab: 0 } };
 
     function findRoot() { return document.querySelector('[data-ch-root]'); }
@@ -164,16 +167,28 @@ CH.app = (function () {
     // A change that was not saved: what happened, and Try again where that can work. Shown until dismissed.
     function problems() {
       if (!app.tracker) return null;
-      var list = app.tracker.entries().filter(function (e) {
-        return followed(e) && !e.dismissed && ['rejected', 'attention', 'cancelled', 'reverted'].indexOf(e.state) >= 0;
-      }).slice(-3);
+      var all = app.tracker.entries();
+      var list = all.filter(function (e) {
+        return followed(e) && !e.dismissed && (['rejected', 'attention', 'cancelled', 'reverted'].indexOf(e.state) >= 0 ||
+          (e.state === 'held' && !(all.filter(function (x) { return x.key === e.heldBy; })[0])));
+      });
       if (!list.length) return null;
       return h('div', { class: 'problems', role: 'alert' }, list.map(function (e) {
         var text, again = false;
-        if (e.state === 'rejected') {
+        var held = app.tracker.heldBy(e);
+        var more = held.length ? ' ' + (held.length === 1 ? 'One more change to it (' + held[0].label + ') was waiting for this one and has not been sent.'
+          : held.length + ' more changes to it were waiting for this one and have not been sent: ' + held.map(function (x) { return x.label; }).join('; ') + '.') : '';
+        if (e.state === 'held') {
+          again = true;
+          text = 'An earlier change to this record was not saved, so this one was not sent.';
+        } else if (e.state === 'rejected') {
           again = CH.requests.isConflict(e);
-          text = again ? 'Someone else changed this a moment ago, so your change was not applied. Nothing was changed – the screen shows it as it is now.'
+          text = again ? (e.theirs && (e.theirs.who || e.theirs.fields.length)
+            ? 'Someone else changed this first' + (e.theirs.who ? ' (' + e.theirs.who + ')' : '') + (e.theirs.fields.length ? ', altering ' + e.theirs.fields.join(' and ') : '') +
+              '. Yours was not applied; the screen now shows theirs. Apply yours on top, or discard it.'
+            : 'Someone else changed this a moment ago, so your change was not applied. Nothing was changed – the screen shows it as it is now.')
             : e.message + ' Nothing was changed.';
+          text += more;
         } else if (e.state === 'attention') {
           again = true;
           text = /locked|Not fully/i.test(e.message)
@@ -182,11 +197,12 @@ CH.app = (function () {
         } else {
           text = e.message;
         }
-        return h('div', { class: 'problem' }, h('b', { text: (e.state === 'cancelled' ? 'Cancelled: ' : e.state === 'reverted' ? 'Reverted: ' : 'Not saved: ') + e.label }),
+        if (e.state === 'attention' || e.state === 'cancelled' || e.state === 'reverted') text += more;
+        return h('div', { class: 'problem' }, h('b', { text: (e.state === 'cancelled' ? 'Cancelled: ' : e.state === 'reverted' ? 'Reverted: ' : e.state === 'held' ? 'Not sent: ' : 'Not saved: ') + e.label }),
           h('p', { text: text }),
           h('div', { class: 'row' },
-            again ? CH.ui.button('Try again', function () { tryAgain(e); }, 'main') : null,
-            CH.ui.button('Dismiss', function () { app.tracker.dismiss(e); })));
+            again ? CH.ui.button(e.state === 'rejected' && e.theirs ? 'Apply mine on top' : held.length ? 'Try again, then the rest' : 'Try again', function () { return tryAgain(e); }, 'main') : null,
+            CH.ui.button(held.length ? 'Discard all' : 'Dismiss', function () { app.tracker.discard(e); render(false); })));
       }));
     }
 
@@ -194,11 +210,75 @@ CH.app = (function () {
       var rec = e.targetType === 'Notice' ? app.model.noticeById[e.targetId] : e.targetType === 'Register Entry' ? app.model.entryById[e.targetId]
         : e.targetType === 'Meeting' ? app.model.meetingById[e.targetId] : app.model.actionById[e.targetId];
       try {
+        // against the record as it is now (its revision as last read, with nothing of this person's still pending)
         await app.tracker.retry(e, e.state === 'rejected' && rec && e.spec && e.spec.expectedRevision ? rec.revision : undefined);
       } catch (error) {
         CH.ui.toast(app.root, error.friendly || 'It could not be sent just now. Try again in a moment.', 'info');
       }
       render(false);
+    }
+
+    // Changes by other people (release 1.3): every minute, while the tab is looked at, the rows changed since the last
+    // read are read (Modified is indexed) and folded in; the overlay of this person's own pending changes goes back on
+    // top. A row changed by someone else is marked, so a panel open on it can say so. Nothing is read from a hidden tab.
+    var DELTA = ['actions', 'notices', 'register', 'meetings'];
+    var refreshing = false;
+    async function refreshOthers() {
+      if (disposed || !app.raw || refreshing || document.hidden || !lastRead) return;
+      refreshing = true;
+      var since = lastRead;
+      var startedAt = new Date();
+      try {
+        var changed = await CH.model.loadChanged(app.sp, since);
+        var touched = false;
+        DELTA.forEach(function (key) {
+          var rows = changed[key];
+          if (!rows || !app.raw[key]) return;
+          var mine = {};
+          app.tracker.entries().forEach(function (e) { if (e.key) mine[e.key] = true; });
+          var current = app.raw[key].rows || [];
+          var byId = {};
+          current.forEach(function (r) { byId[Number(r.Id)] = r; });
+          rows.forEach(function (r) {
+            var id = Number(r.Id);
+            var was = byId[id];
+            if (was && JSON.stringify(was) === JSON.stringify(r)) return;
+            touched = true;
+            if (!mine[r.LastRequestKey] && !(was && was.PendingRequestKey && mine[was.PendingRequestKey])) {
+              app.others[key + '|' + id] = { at: r.Modified || startedAt.toISOString() };
+            }
+            if (was) current[current.indexOf(was)] = r; else current.push(r);
+          });
+          // rows that left the list this screen shows (closed, archived, cancelled) go
+          app.raw[key].rows = current.filter(function (r) { return !changed.gone || changed.gone[key + '|' + r.Id] !== true; });
+        });
+        lastRead = startedAt;
+        if (touched) {
+          rebuild();
+          render(false);
+          if (app.panel) app.panel.refresh();
+        }
+      } catch (_) { /* the next minute tries again */ }
+      refreshing = false;
+    }
+    app.others = {};
+    // "updated by someone else at 10:42" for a record, or null
+    app.changedByOthers = function (kind, id) {
+      var key = { 'Action': 'actions', 'Notice': 'notices', 'Register Entry': 'register', 'Meeting': 'meetings' }[kind || 'Action'];
+      return app.others[key + '|' + Number(id)] || null;
+    };
+    function onVisible() {
+      if (document.hidden || disposed) return;
+      if (app.tracker) app.tracker.wake();
+      refreshOthers();
+    }
+    // a change still waiting in this browser alone (never sent yet) is lost if the page closes before it goes
+    function onLeave(e) {
+      var waiting = app.tracker ? app.tracker.waiting() : [];
+      if (!waiting.length && !(app.tracker && app.tracker.unsent().length)) return undefined;
+      e.preventDefault();
+      e.returnValue = 'Changes are still being sent from this page.';
+      return e.returnValue;
     }
 
     // Every few minutes: is automatic processing still working (or working again)? Repaints only on a change.
@@ -213,15 +293,16 @@ CH.app = (function () {
       } catch (_) { /* the next check tries again */ }
     }
 
-    // ---- a meeting used before its booking is saved (release 1.2). It has a temporary (negative) number; what is
-    // recorded meanwhile waits here, and when the flow has made the meeting and its record folder it is sent there,
-    // under the real number, and a Start pressed meanwhile is sent too.
-    app.meetingAlias = {};
-    app.meetingBuffer = {};
+    // ---- a meeting used before its booking is saved (release 1.2). What is recorded on it waits in the tracker's
+    // stash (kept in the browser's storage, so a reload loses nothing), keyed by the booking's request key. When the
+    // flow has made the meeting and its record folder, the rows are sent there under the real number. A Start or
+    // Finalise pressed meanwhile is a queued change that follows the booking by itself (release 1.3).
+    function buffers() { return app.tracker.stash.meetingBuffer = app.tracker.stash.meetingBuffer || {}; }
     // ids: items added by hand before the booking was saved, by their temporary number -> the number SharePoint gave them
-    function retarget(values, from, to, ids) {
+    function retarget(values, to, ids) {
+      var from = Number(values.MeetingId);
       var v = Object.assign({}, values, { MeetingId: to });
-      delete v.Id;
+      delete v.Id; delete v.AuthorId;
       if (v.RecordKey && String(v.RecordKey).indexOf(from + '|') === 0) v.RecordKey = to + String(v.RecordKey).slice(String(from).length);
       if (v.SourceType === 'New Business' && v.RowType === 'Outcome' && ids[v.SourceId]) {
         v.SourceId = ids[v.SourceId];
@@ -229,83 +310,40 @@ CH.app = (function () {
       }
       return v;
     }
+    app.bufferPush = function (mt, row) {
+      (buffers()[mt.sending] = buffers()[mt.sending] || []).push(row);
+      app.tracker.persist();
+    };
+    // Each row stays on screen (under the meeting's real number) until it has been written.
     async function meetingBooked(entry) {
-      var tmp = -entry.tempId;
       var real = Number(entry.resultId);
       var mt = real && app.model.meetingById[real];
-      if (!mt) return;
-      app.meetingAlias[tmp] = real;
-      if (app.finaliseLater[tmp]) { app.finaliseLater[real] = app.finaliseLater[tmp]; delete app.finaliseLater[tmp]; }
-      if (entry.startNow) {
-        try {
-          await app.tracker.submit({ type: 'StartMeeting', targetId: real, targetType: 'Meeting', expectedRevision: rawRevision(real), payload: {},
-            label: 'Start the ' + mt.areaName + ' meeting' });
-        } catch (_) { CH.ui.toast(app.root, 'The meeting could not be started just now. Open it and press Start meeting again.', 'info'); }
-      }
-      flush(mt, tmp, real);
-    }
-    // Each row stays on screen (under the meeting's real number) until it has been written.
-    async function flush(mt, tmp, real) {
-      var rows = (app.meetingBuffer[tmp] || []).slice();
+      var rows = (buffers()[entry.key] || []).slice();
+      if (!mt || !rows.length) return;
       var ids = {};
       for (var i = 0; i < rows.length; i++) {
         try {
-          var made = await app.sp.addToFolder('meetingItems', mt.areaKey + '/MTG-' + real + '/Record', retarget(rows[i], tmp, real, ids));
+          var made = await app.sp.addToFolder('meetingItems', mt.areaKey + '/MTG-' + real + '/Record', retarget(rows[i], real, ids));
           if (rows[i].RowType === 'New Business' && made) ids[rows[i].Id] = made;
-        } catch (_) { CH.ui.toast(app.root, 'Part of what was recorded before the booking was saved could not be sent. Check the meeting and record it again.', 'info'); }
-        var left = app.meetingBuffer[tmp] || [];
+        } catch (_) {
+          CH.ui.toast(app.root, 'Part of what was recorded before the booking was saved could not be sent: ' + (rows[i].Title || rows[i].RowType) + '. Check the meeting and record it again.', 'info');
+        }
+        var left = buffers()[entry.key] || [];
         left.splice(left.indexOf(rows[i]), 1);
+        app.tracker.persist();
       }
-      delete app.meetingBuffer[tmp];
-      if (rows.length && app.panel) app.panel.refresh();
+      delete buffers()[entry.key];
+      app.tracker.persist();
+      if (app.panel) app.panel.refresh();
     }
-    // What is kept on screen for a meeting: its own rows, and those recorded under the temporary number it had.
-    app.bufferFor = function (id) {
-      var out = (app.meetingBuffer[id] || []).slice();
-      Object.keys(app.meetingAlias).forEach(function (tmp) {
-        if (Number(app.meetingAlias[tmp]) !== Number(id)) return;
-        (app.meetingBuffer[tmp] || []).forEach(function (r) {
-          out.push(Object.assign(retarget(r, Number(tmp), Number(id), {}), { Id: r.Id, AuthorId: r.AuthorId }));
-        });
-      });
-      return out;
-    };
-    function rawRevision(id) {
-      var row = ((app.raw && app.raw.meetings && app.raw.meetings.rows) || []).filter(function (r) { return Number(r.Id) === Number(id); })[0];
-      return row ? row.Revision : null;
-    }
-
-    // ---- Finalise pressed while the meeting's booking or start is still being saved (release 1.2.4): the minutes show
-    // as finalised at once, and the finalise is sent the moment the start is saved (the flow needs a meeting in progress).
-    app.finaliseLater = {};
-    app.finaliseWhenReady = function (mt) {
-      var starting = mt.id < 0 || app.tracker.entries().some(function (e) {
-        return e.type === 'StartMeeting' && Number(e.targetId) === Number(mt.id) && (e.state === 'submitted' || e.state === 'slow');
-      });
-      if (!starting) return false;
-      app.finaliseLater[mt.id] = { at: new Date(), label: 'Finalise the minutes of the ' + mt.areaName + ' meeting' };
-      rebuild();
-      render(false);
-      return true;
-    };
-    async function finaliseNow(id) {
-      var later = app.finaliseLater[id];
-      delete app.finaliseLater[id];
-      try {
-        await app.tracker.submit({ type: 'FinaliseMeeting', targetId: Number(id), targetType: 'Meeting', expectedRevision: rawRevision(id), payload: {}, label: later.label });
-      } catch (_) {
-        rebuild(); render(false);
-        CH.ui.toast(app.root, 'The minutes could not be finalised just now. Open the meeting and finalise it again.', 'info');
-      }
-    }
-    // A Start pressed on a meeting whose booking is still being saved: shown at once, sent when it is booked.
-    app.startWhenBooked = function (mt) {
-      var e = app.tracker.entries().filter(function (x) { return x.key === mt.sending; })[0];
-      if (!e) return false;
-      e.startNow = true;
-      rebuild();
-      render(false);
-      return true;
+    // What is kept on screen for a meeting: the rows recorded before its booking was saved, under its number now.
+    app.bufferFor = function (mt) {
+      var key = mt.id < 0 ? mt.sending : (function () {
+        var e = app.tracker.entries().filter(function (x) { return x.type === 'ScheduleMeeting' && x.state === 'done' && Number(x.resultId) === Number(mt.id); })[0];
+        return e ? e.key : null;
+      })();
+      if (!key) return [];
+      return (buffers()[key] || []).map(function (r) { return mt.id < 0 ? r : Object.assign(retarget(r, mt.id, {}), { Id: r.Id, AuthorId: r.AuthorId }); });
     };
 
     // The lists a saved change can alter (release 1.2: only these are read again). Health comes with the settings.
@@ -327,10 +365,7 @@ CH.app = (function () {
         if (entry.state === 'done' && app.state.view === 'admin') setTimeout(function () { CH.views.admin.refresh(app); }, 1500);
         return;
       }
-      if (entry.type === 'StartMeeting' && app.finaliseLater[entry.targetId] && ['rejected', 'attention', 'cancelled'].indexOf(entry.state) >= 0) {
-        delete app.finaliseLater[entry.targetId];
-        CH.ui.toast(app.root, 'The meeting could not be started, so its minutes were not finalised. Open it to try again.', 'info');
-      }
+      if (entry.state === 'rejected' && CH.requests.isConflict(entry) && !entry.explained) { explainConflict(entry); }
       if (entry.state !== 'done') {
         rebuild();
         render(false);
@@ -338,9 +373,10 @@ CH.app = (function () {
         return;
       }
       reload(listsFor(entry.type)).then(async function () {
-        // a meeting started before its booking was saved is started now, before the screen shows it as booked
-        if (entry.type === 'ScheduleMeeting' && entry.tempId) await meetingBooked(entry);
-        if (entry.type === 'StartMeeting' && app.finaliseLater[entry.targetId]) await finaliseNow(entry.targetId);
+        entry.reloaded = true;   // the rows now carry the change: the overlay no longer applies it
+        rebuild();
+        // what was recorded on a meeting before its booking was saved goes to the meeting now
+        if (entry.type === 'ScheduleMeeting') await meetingBooked(entry);
         render(false);
         if (app.panel) app.panel.refresh();
         var a = app.model.actionById[entry.resultId];
@@ -349,7 +385,48 @@ CH.app = (function () {
         if (entry.type === 'RaiseAction' && a) CH.ui.toast(app.root, a.ref + ' raised: ' + a.title + '.', 'ok');
         else if (entry.type === 'RaiseRegisterEntry' && e) CH.ui.toast(app.root, e.ref + ' raised: ' + e.title + '.', 'ok');
         CH.ui.say(app.root, 'Saved: ' + entry.label + '. ' + entry.message);
-      }).catch(function () { CH.ui.toast(app.root, entry.message + ' Reload the page to see it.', 'ok'); });
+      }).catch(function () { entry.reloaded = true; CH.ui.toast(app.root, entry.message + ' Reload the page to see it.', 'ok'); });
+    }
+
+    // Someone else changed the record first (release 1.3): the record is read again, and the card says what they
+    // changed. A change that cannot clash with theirs is sent again by itself; otherwise the person decides.
+    var TOUCHES = { ExtendDeadline: ['DueDay'], MarkComplete: ['Status'], CloseAction: ['Status'], ReopenAction: ['Status'], ChangeStatus: ['Status', 'Blocker'],
+      ReassignAction: ['AssignedToId', 'CoOwnerIds'], EditActionDetails: ['Title', 'Description', 'Priority', 'RequiresCloseOut', 'CloseOutById'] };
+    var WATCHED = ['Title', 'Description', 'Status', 'DueDay', 'AssignedToId', 'CoOwnerIds', 'Priority', 'RequiresCloseOut', 'CloseOutById', 'Blocker', 'IsOpen',
+      'Body', 'Category', 'IsImportant', 'EntryType', 'Impact', 'Outcome', 'ResponsiblePersonId', 'MeetingDate', 'EndTime', 'Location', 'OnlineLink', 'ChairId', 'Attendees'];
+    var FIELD_WORDS = { DueDay: 'the deadline', Status: 'the status', AssignedToId: 'the owner', CoOwnerIds: 'the co-owners', Priority: 'the priority', Title: 'the title',
+      Description: 'the description', Blocker: 'what it is waiting on', RequiresCloseOut: 'the close-out check', CloseOutById: 'who checks it', IsOpen: 'whether it is open',
+      Body: 'the text', Category: 'the category', IsImportant: 'whether it is important', EntryType: 'the type', Impact: 'the impact', Outcome: 'the outcome',
+      ResponsiblePersonId: 'who is responsible', MeetingDate: 'the time', EndTime: 'the end time', Location: 'the place', OnlineLink: 'the online link', ChairId: 'the chair', Attendees: 'who is invited' };
+    async function explainConflict(entry) {
+      entry.explained = true;
+      var sentAgain = '';
+      var list = { 'Action': 'actions', 'Notice': 'notices', 'Register Entry': 'register', 'Meeting': 'meetings' }[entry.targetType || 'Action'];
+      if (!list || !(Number(entry.targetId) > 0)) return;
+      var before = ((app.raw[list] || {}).rows || []).filter(function (r) { return Number(r.Id) === Number(entry.targetId); })[0];
+      try {
+        await reload([list]);
+        var after = ((app.raw[list] || {}).rows || []).filter(function (r) { return Number(r.Id) === Number(entry.targetId); })[0];
+        var changed = before && after ? WATCHED.filter(function (f) { return f in after && JSON.stringify(before[f]) !== JSON.stringify(after[f]); }) : [];
+        var who = '';
+        try {
+          // the event of the change that moved the record on, if History has it yet
+          var ev = after && after.LastRequestKey ? await app.sp.items(CH.config.lists.history.title, "$select=Id,Title,EventType,ActorId&$filter=RequestKey eq '" + CH.sp.escapeOData(after.LastRequestKey + '|1') + "'", 1) : { rows: [] };
+          if (ev.rows[0] && Number(ev.rows[0].ActorId) !== Number(app.person.SiteUserId)) who = app.model.nameOf(Number(ev.rows[0].ActorId)) + ': ' + (ev.rows[0].Title || ev.rows[0].EventType || 'changed it');
+        } catch (_) { who = ''; }
+        if (changed.length || who) entry.theirs = { fields: changed.map(function (f) { return FIELD_WORDS[f] || f; }), who: who };
+        var mine = TOUCHES[entry.type] || null;
+        var clash = !mine || !changed.length || changed.some(function (f) { return mine.indexOf(f) >= 0; }) || (after && after.Status === 'Closed' && !!entry.targetId && entry.type !== 'ReopenAction');
+        if (!clash) {
+          // nothing of theirs is in the way: sent again against the record as it is now
+          var rec = app.model.actionById[entry.targetId];
+          await app.tracker.retry(entry, rec ? rec.revision : after && after.Revision);
+          sentAgain = 'Someone else changed ' + entry.theirs.fields.join(' and ') + ' meanwhile; your change (' + entry.label + ') has been sent again on top.';
+        }
+      } catch (_) { /* the card still offers Try again */ }
+      render(false);
+      if (app.panel) app.panel.refresh();
+      if (sentAgain) CH.ui.toast(app.root, sentAgain, 'info');
     }
 
     function stateScreen(title, message, detail) {
@@ -411,12 +488,19 @@ CH.app = (function () {
     };
     app.markAction = function (a) { return app.mark(a, 'Action'); };
     // "Mark as done" straight from a to-do card; "Reopen" on a card just marked done, if it was a slip (release 1.2)
+    // the same press twice is one change: the key names the action and the revision the change is for
+    var quickKeys = {};
+    function quickKey(what, a) {
+      var k = what + '|' + (a.isNew ? a.sending : a.id) + '|' + a.revision;
+      quickKeys[k] = quickKeys[k] || CH.requests.newKey();
+      return quickKeys[k];
+    }
     app.quickDone = function (a) {
-      return app.tracker.submit({ type: 'MarkComplete', targetId: a.id, expectedRevision: a.revision, payload: { note: '' }, label: 'Mark as done: ' + a.title })
+      return app.tracker.submit({ key: quickKey('done', a), type: 'MarkComplete', targetId: a.id, creationKey: a.isNew ? a.sending : null, expectedRevision: a.revision, payload: { note: '' }, label: 'Mark as done: ' + a.title })
         .catch(function (error) { CH.ui.toast(app.root, error.friendly || 'It could not be sent just now. Try again in a moment.', 'info'); });
     };
     app.quickReopen = function (a) {
-      return app.tracker.submit({ type: 'ReopenAction', targetId: a.id, expectedRevision: a.revision, payload: { reason: 'Reopened straight after it was marked as done.' },
+      return app.tracker.submit({ key: quickKey('reopen', a), type: 'ReopenAction', targetId: a.id, creationKey: a.isNew ? a.sending : null, expectedRevision: a.revision, payload: { reason: 'Reopened straight after it was marked as done.' },
         label: 'Reopen: ' + a.title }).catch(function (error) { CH.ui.toast(app.root, error.friendly || 'It could not be sent just now. Try again in a moment.', 'info'); });
     };
     // After an instant write (a flag): read the flags again and repaint, keeping any open panel.
@@ -490,6 +574,7 @@ CH.app = (function () {
       var soon = (app.settings.filter(function (r) { return r.Title === 'DueSoonDays'; })[0] || {}).Value;
       CH.config.dueSoonDays = /^\d{1,2}$/.test(String(soon || '')) && Number(soon) >= 1 && Number(soon) <= 30 ? Number(soon) : 7;
       app.raw = raw;
+      lastRead = now;
       rebuild();
     }
 
@@ -501,11 +586,7 @@ CH.app = (function () {
       var today = CH.dates.localDate(now);
       var entries = app.tracker ? app.tracker.entries() : [];
       app.keep = app.keep || {};
-      // a finalise waiting for its meeting's start shows as one being saved
-      var later = Object.keys(app.finaliseLater || {}).map(function (id) {
-        return { key: 'later|' + id, type: 'FinaliseMeeting', targetType: 'Meeting', targetId: Number(id), state: 'submitted', payload: {}, submittedAt: app.finaliseLater[id].at };
-      });
-      var view = CH.optimistic.apply(app.raw, entries.concat(later), app.keep, { personId: app.person.SiteUserId, today: today, now: now });
+      var view = CH.optimistic.apply(app.raw, entries, app.keep, { personId: app.person.SiteUserId, today: today, now: now });
       entries.forEach(function (e) {
         var closing = e.type === 'MarkComplete' || e.type === 'CloseAction';
         if (closing && saving(e)) {
@@ -567,7 +648,10 @@ CH.app = (function () {
       if (params.get('view') === 'admin') app.state = { view: 'admin', area: null, tab: 0 };
       if (params.get('view') === 'manage' && app.access.isManagement) app.state = { view: 'manage', area: null, tab: 0 };
       healthTimer = setInterval(checkHealth, HEALTH_EVERY_MS);
+      refreshTimer = setInterval(refreshOthers, REFRESH_EVERY_MS);
       window.addEventListener('resize', fitToWindow);
+      window.addEventListener('beforeunload', onLeave);
+      document.addEventListener('visibilitychange', onVisible);
       document.addEventListener('keydown', onKey);
       render(false);
       var actionParam = Number(params.get('action'));
@@ -596,6 +680,9 @@ CH.app = (function () {
         disposed = true;
         if (app.tracker) app.tracker.stop();
         if (healthTimer) clearInterval(healthTimer);
+        if (refreshTimer) clearInterval(refreshTimer);
+        window.removeEventListener('beforeunload', onLeave);
+        document.removeEventListener('visibilitychange', onVisible);
         if (observer) observer.disconnect();
         window.removeEventListener('resize', applySize);
         window.removeEventListener('resize', fitToWindow);

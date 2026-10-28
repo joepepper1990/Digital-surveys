@@ -193,6 +193,8 @@ CH.views.recordPanel = (function () {
     async function send(form, spec, errorBox) {
       var btn = form.querySelector('button[type=submit]');
       btn.disabled = true; btn.textContent = 'Sending…';
+      if (!form.dataset.key) form.dataset.key = CH.requests.newKey();
+      spec.key = form.dataset.key;
       try {
         await app.tracker.submit(spec);
         view = 'main';

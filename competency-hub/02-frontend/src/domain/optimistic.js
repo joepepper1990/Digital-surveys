@@ -18,7 +18,8 @@ CH.optimistic = (function () {
 
   function copy(list) { return (list || []).map(function (r) { return Object.assign({}, r); }); }
   // the flow adds one to the revision of what it changes; a record with none (older notices) is sent without a stale check
-  function bump(row, key) { if (Number(row.Revision)) row.Revision = Number(row.Revision) + 1; row._sending = key; }
+  // a record not yet numbered keeps the key of the change creating it: that is how the screen knows it
+  function bump(row, key) { if (Number(row.Revision)) row.Revision = Number(row.Revision) + 1; if (!row._new) row._sending = key; }
   function areaId(raw, key) {
     var c = (raw.competencies.rows || []).filter(function (x) { return x.CompetencyKey === key; })[0];
     return c ? c.Id : null;
@@ -97,7 +98,8 @@ CH.optimistic = (function () {
     rows.push({ Id: -n, Title: p.title, Description: p.description, CompetencyId: areaId(raw, p.areaKey), LinkedCompetenciesId: [],
       AssignedToId: Number(p.ownerId), RaisedById: ctx.personId, DateRaised: ctx.nowIso, DueDay: D.toDueDay(p.dueIso), OriginalDueDate: p.dueIso + 'T12:00:00Z',
       Status: 'Open', IsOpen: true, Priority: p.priority || 'Normal', ExtensionCount: 0, RequiresCloseOut: !!p.requiresCloseOut, Revision: 1,
-      CoOwnerIds: JSON.stringify((p.coOwnerIds || []).map(String)), CloseOutById: p.checkerId || null, SourceType: 'None', _sending: e.key, _new: true,
+      CoOwnerIds: JSON.stringify((p.coOwnerIds || []).map(String)), CloseOutById: p.checkerId || null,
+      SourceType: Number(e.meetingId) > 0 ? 'Meeting' : 'None', SourceId: Number(e.meetingId) > 0 ? Number(e.meetingId) : null, _sending: e.key, _new: true,
       FileDirRef: folderFor(raw, 'actions', p.areaKey) });
   }
   function addEntry(raw, rows, e, p, ctx, n) {
@@ -125,7 +127,8 @@ CH.optimistic = (function () {
   function apply(raw, entries, keep, ctx) {
     var out = Object.assign({}, raw);
     var c = { personId: Number(ctx.personId), today: ctx.today, nowIso: (ctx.now || new Date()).toISOString() };
-    var sending = (entries || []).filter(function (e) { return (e.state === 'submitted' || e.state === 'slow') && e.payload; })
+    // on its way, waiting its turn, or saved but not yet read back (so the record never jumps back meanwhile)
+    var sending = (entries || []).filter(function (e) { return (e.state === 'submitted' || e.state === 'slow' || e.state === 'queued' || (e.state === 'done' && !e.reloaded)) && e.payload; })
       .sort(function (a, b) { return a.submittedAt - b.submittedAt; });
     TABLES.forEach(function (t) {
       if (!raw[t[0]]) return;
@@ -139,7 +142,9 @@ CH.optimistic = (function () {
         var p = e.payload || {};
         if (t[3][e.type]) { e.tempId = e.tempId || ++seq; t[3][e.type](raw, rows, e, p, c, e.tempId); return; }
         if (!t[2][e.type] || (e.targetType || 'Action') !== t[1]) return;
-        var row = rows.filter(function (r) { return Number(r.Id) === Number(e.targetId); })[0];
+        // by number, or (a record not yet numbered) by the key of the change creating it
+        var row = rows.filter(function (r) { return Number(e.targetId) > 0 && Number(r.Id) === Number(e.targetId); })[0]
+          || ((e.creationKey || e.madeBy) ? rows.filter(function (r) { return r._sending === (e.creationKey || e.madeBy); })[0] : null);
         if (!row) return;
         t[2][e.type](row, p, c);
         bump(row, e.key);

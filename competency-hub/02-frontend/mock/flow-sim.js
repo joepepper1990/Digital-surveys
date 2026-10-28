@@ -49,6 +49,11 @@ window.MockFlow = (function () {
       req.ResultMessage = message;
       if (resultId) req.ResultId = resultId;
       req.ProcessedAt = new Date().toISOString();
+      req.Modified = req.ProcessedAt;
+      // whatever this request changed is stamped as modified now, as SharePoint would
+      ['Actions', 'Noticeboard', 'Improvements and Degradations', 'Meetings'].forEach(function (list) {
+        (data[list] || []).forEach(function (r) { if (r.LastRequestKey === req.RequestKey || r.PendingRequestKey === req.RequestKey) r.Modified = req.ProcessedAt; });
+      });
     }
 
     // ---- notices, comments and the register (4 Records), with the same rules as the app
@@ -559,7 +564,7 @@ window.MockFlow = (function () {
           }
           req.Status = 'Processing';
           process(req);
-        }, mode === 'flowSlow' ? 20 * 60 * 1000 : 3000);
+        }, mode === 'flowSlow' ? 20 * 60 * 1000 : 2000 + Math.floor(Math.random() * 2000));
       },
       process: process
     };

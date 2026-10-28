@@ -43,8 +43,8 @@ CH.views.home = (function () {
   // A uniform card: title on one line, then a meta line with chips. The title opens the action; on your own to-dos
   // "Mark as done" sits on the card, and once done (while you stay on the page) "Reopen" where you may (release 1.2).
   function actionCard(app, a, meta, quick) {
-    var r = quick && !a.isNew ? CH.rules.roles(a, app.person.SiteUserId, app.access) : null;
-    var blocked = app.queueBlocked() || (a.locked && !a.sending);
+    var r = quick ? CH.rules.roles(a, app.person.SiteUserId, app.access) : null;
+    var blocked = app.queueBlocked() || (a.locked && !app.tracker.isMine(a.lockKey));
     var button = !r || blocked ? null : a.done ? (r.canReopen ? ui.button('Reopen', function () { app.quickReopen(a); }) : null)
       : r.canComplete && !a.waitingCloseOut ? ui.button('Mark as done', function () { app.quickDone(a); }) : null;
     if (button) button.classList.add('btn-small');

@@ -192,8 +192,33 @@ res = drive('as=' + RICHARD + '&drive=quickDone', SLOW);
 check('home: Mark as done on a to-do card shows Done at once with ✓ Sent, then ✓✓ Saved; it stays with Reopen, which puts it back', res.ok &&
   /Done/.test(res.result.sent) && /Reopen/.test(res.result.sent) && /✓✓ Saved/.test(res.result.saved) && res.result.closed === 'Closed' &&
   /Mark as done/.test(res.result.after) && res.result.status === 'In Progress' && JSON.stringify(res.result.requests) === '["MarkComplete:Completed","ReopenAction:Completed"]', JSON.stringify(res));
-// Finishing actions (plan K9): status, reassign, close and reopen, edit, close-out, My actions
+// Release 1.3: quick presses, chains of changes to one record, reloads, other people
 const KELLY = 102, CRAIG = 105;
+res = drive('as=' + RICHARD + '&drive=doubleClick', SLOW);
+check('one press, one change: a double click on a card, and a form sent twice, each make one request', res.ok && res.result.fromCard === 1 &&
+  JSON.stringify(res.result.requests) === '["MarkComplete:Completed","ExtendDeadline:Completed"]', JSON.stringify(res));
+res = drive('as=' + KELLY + '&action=40&drive=chainFive', 400000);
+check('four quick changes to one action: all shown at once, sent one at a time against the revision the last one left, saved in order, nothing refused',
+  res.ok && res.result.atOnce && res.result.maxOpen === 1 && JSON.stringify(res.result.order) === '["ExtendDeadline","ChangeStatus","EditActionDetails","MarkComplete"]' &&
+  JSON.stringify(res.result.revisions) === '[2,3,4,5]' && res.result.action.Status === 'Closed' && /\(chain\)/.test(res.result.action.Title) && res.result.action.Revision === 6 &&
+  res.result.problems === 0, JSON.stringify(res));
+res = drive('as=' + KELLY + '&action=40&drive=reloadMidChain', 400000);
+check('a reload part-way through a chain loses nothing: the waiting changes go on, in order', res.ok && res.result.sentBefore === 1 && res.result.shownAfter &&
+  JSON.stringify(res.result.order) === '["ExtendDeadline","EditActionDetails","MarkComplete"]' && res.result.action.Status === 'Closed' && /after reload/.test(res.result.action.Title) &&
+  JSON.stringify(res.result.left) === '[]', JSON.stringify(res));
+res = drive('as=' + KELLY + '&action=40&drive=refusedChain', 400000);
+check('the first of a chain refused: the rest is held and never sent, one card names it, and Try again sends the lot in order', res.ok && res.result.cardsShown === 1 &&
+  /Someone else changed this first \(Rachel Boulden: Touched by Rachel\)/.test(res.result.cardText) && /One more change to it \(Edit/.test(res.result.cardText) && res.result.sentWhileHeld === 1 &&
+  JSON.stringify(res.result.requests) === '["ExtendDeadline:Rejected","ExtendDeadline:Completed","EditActionDetails:Completed"]' && /\(held\)/.test(res.result.action.Title), JSON.stringify(res));
+res = drive('as=' + RACHEL + '&action=40&drive=otherNoClash', 400000);
+check('someone else changed another field first: the refused change is sent again by itself, on top of theirs, and both stand', res.ok &&
+  /Someone else changed the title meanwhile; your change \(New deadline/.test(res.result.toast) && JSON.stringify(res.result.requests) === '["ExtendDeadline:Rejected","ExtendDeadline:Completed"]' &&
+  res.result.problems === 0 && res.result.action.Title === 'Replace FH40 probe (Kelly)' && res.result.action.DueDay === res.result.dueDay, JSON.stringify(res));
+res = drive('as=' + RACHEL + '&action=40&drive=othersAppear', 400000);
+check('another person\'s change appears without a reload, with "updated by someone else", under this person\'s own pending change; a hidden tab reads nothing', res.ok &&
+  res.result.updatedLine && res.result.stillMine && res.result.reads >= 1 && res.result.whileHidden === 0, JSON.stringify(res));
+
+// Finishing actions (plan K9): status, reassign, close and reopen, edit, close-out, My actions
 res = drive('as=' + RACHEL + '&action=40&drive=statusBlocker', SLOW);
 check('status: "waiting on something" needs what it waits on, then shows it', res.ok && /at least 10 characters/.test(res.result.blockerError) &&
   /Waiting on/.test(res.result.panel) && res.result.action.Status === 'Awaiting Input' && /replacement probe/.test(res.result.action.Blocker), JSON.stringify(res));
@@ -391,6 +416,9 @@ res = drive('as=' + KELLY + '&area=FLK&meeting=2&drive=meetingFastRun', SLOW);
 check('a meeting gone through fast while it catches up: never blanks, never jumps to another item, keeps every outcome, then stays still', res.ok &&
   res.result.blanks === 0 && res.result.titles === res.result.clicked && res.result.stayed && res.result.withOutcome > 3 && res.result.outcomes === res.result.withOutcome &&
   res.result.pressed === res.result.withOutcome && res.result.idleRepaints === 0, JSON.stringify(res));
+res = drive('as=' + KELLY + '&area=FLK&meeting=2&drive=notesKept', SLOW);
+check('notes typed on an agenda item are saved when another item is clicked, and are there when the person comes back', res.ok &&
+  /notes typed, not saved/.test(res.result.saved) && /notes typed, not saved/.test(res.result.shownAgain), JSON.stringify(res));
 res = drive('as=' + KELLY + '&area=FLK&drive=meetingBeforeBooked', SLOW);
 check('a meeting booked a moment ago can be started at once; what is recorded is sent to its record folder when the booking is saved', res.ok && res.result.unnumbered &&
   !res.result.change && res.result.live && res.result.raiseNote && res.result.kept && res.result.status === 'In Progress' &&

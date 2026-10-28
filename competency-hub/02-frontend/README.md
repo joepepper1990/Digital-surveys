@@ -2,6 +2,33 @@
 
 Plain HTML, CSS and JavaScript, delivered as a Welcome by Accelerator 365 custom layout. Same-origin SharePoint REST runs as the signed-in user. There are no libraries and no external calls.
 
+## Version 1.3.0: quick, mistake-proof, for everyone at once (28 October 2026)
+
+- **One press, one change.** A button whose work is still on its way is disabled until it returns (`CH.ui.guarded`,
+  used by every `ui.button` and `ui.linkButton`); every form keeps its request key across Try again, so a retry can
+  never make a second request (`formKey` in the panels; one key per date in the meeting form).
+- **Changes to one record go one at a time, in order** (`src/core/requests.js`). The second waits (state `queued`,
+  shown at once by the overlay) until the first is saved, and is then sent against the revision read from the record.
+  A change to a record still being created waits for the creation (`creationKey`) and takes the number it is given.
+  If the first is refused, the rest is `held`, never sent, and offered on one card: Try again (sends the lot, in
+  order) or Discard all. Different records are never held back.
+- **Nothing lost on reload or close.** Queued and held changes, and what was recorded on a meeting not yet booked
+  (`tracker.stash.meetingBuffer`), are kept in the browser's storage and restored by `resume()`; a prompt warns
+  before the page is left while anything waits there alone.
+- **A real conflict says what happened.** When someone else changed the record first, the record is read again and
+  the card names the person (from the History event of their change) and the fields they altered, with *Apply mine
+  on top* or *Dismiss*. A change that cannot clash with theirs (another field) is sent again by itself, with a toast.
+- **Everyone sees everyone.** Every minute while the tab is looked at, rows changed since the last read are read
+  (`CH.model.loadChanged`: each list's usual indexed filter plus `Modified ge`) and folded in under this person's own
+  pending changes; a tab coming back into view refreshes at once (`visibilitychange`), and a hidden tab reads nothing.
+  A record changed by someone else since it was read shows "Updated by someone else at 10:42". A saved change is
+  noticed within 15 s for the first 3 minutes (`POLL_FAST`).
+- **A saved change never jumps back**: it stays applied until its list has been read again (`entry.reloaded`).
+- **Live meetings:** typed notes go with the person when they click another item; a quiet refresh never repaints
+  over unsaved notes; outcome buttons, Next item and Record the decision cannot double-send.
+- Finalise waits by itself for the booking, the start and every change made from the meeting, and the review page no
+  longer blocks on them. `app.finaliseLater`, `app.startWhenBooked` and `app.meetingAlias` are gone.
+
 ## Version 1.2.4: finalise straight after booking (28 October 2026)
 
 - Finalise is no longer held back while the meeting's booking or start is still being saved: the minutes show as

@@ -172,6 +172,7 @@ window.MockSharePoint = (function () {
         var own = data.Requests.filter(function (r) { return r.Id === Number(upd[1]) && /\/u(\d+)$/.exec(r.FileDirRef || '') && Number(/\/u(\d+)$/.exec(r.FileDirRef)[1]) === asId; })[0];
         if (!own || !editor) return respond(403, { error: 'Access denied' });
         body.formValues.forEach(function (f) { own[f.FieldName] = f.FieldValue; });
+        own.Modified = new Date().toISOString();
         if (own.Status === 'Submitted') flow.schedule(own, mode);
         return respond(200, { value: body.formValues.map(function (f) { return { FieldName: f.FieldName, FieldValue: f.FieldValue, HasException: false }; }) });
       }
@@ -198,6 +199,7 @@ window.MockSharePoint = (function () {
     }
     var id = data[title].reduce(function (m, n) { return Math.max(m, n.Id); }, 0) + 1;
     var row = store.row(values, id, path);
+    row.Modified = row.Modified || row.Created || new Date().toISOString();
     if (values.IsTestRecord !== undefined) row.IsTestRecord = values.IsTestRecord === '1';
     data[title].push(row);
     if (title === 'Requests') flow.schedule(row, mode);
@@ -330,5 +332,21 @@ window.MockSharePoint = (function () {
     current.onInitialize();
   }
 
-  return { start: start, reload: reload, ctx: ctx, writes: writes, requests: requests, thresholdHits: thresholdHits, data: data };
+  // Someone else's change, saved by the flows a moment ago (release 1.3 tests): the record moves on a revision and is
+  // stamped as modified, and History holds the event with their name.
+  function someoneElse(list, id, fields, byId, what) {
+    var row = data[list].filter(function (r) { return r.Id === Number(id); })[0];
+    if (!row) throw new Error('No such row');
+    Object.assign(row, fields || {});
+    row.Revision = (Number(row.Revision) || 1) + 1;
+    row.LastRequestKey = 'other-' + Math.random().toString(16).slice(2);
+    row.Modified = new Date().toISOString();
+    var hid = data.History.reduce(function (m, h) { return Math.max(m, h.Id); }, 0) + 1;
+    data.History.push({ Id: hid, RowKind: 'Event', RequestKey: row.LastRequestKey + '|1', RecordType: { Actions: 'Action', Noticeboard: 'Notice', Meetings: 'Meeting' }[list] || 'Register Entry',
+      RecordId: row.Id, EventType: 'Details Edited', Title: what || 'Changed by someone else', ActorId: byId || 102, EventTime: row.Modified, Created: row.Modified, Modified: row.Modified,
+      FileDirRef: (row.FileDirRef || '').replace('/Lists/' + list, '/Lists/History') });
+    return row;
+  }
+
+  return { start: start, reload: reload, ctx: ctx, writes: writes, requests: requests, thresholdHits: thresholdHits, data: data, someoneElse: someoneElse };
 })();

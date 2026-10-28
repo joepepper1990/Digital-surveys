@@ -36,11 +36,25 @@ test('two changes in a row: the second is sent against the revision the first le
     ['Awaiting Input', 'A part', 'New title', 4]);
 });
 
-test('a refused or failed change, or one already saved, is not applied: the screen shows the record as it is', () => {
-  ['rejected', 'attention', 'done', 'cancelled'].forEach((state) => {
-    const out = CH.optimistic.apply(raw(), [entry({ type: 'ExtendDeadline', targetId: 40, state, payload: { newDueIso: '2026-11-04' } })], {}, CTX);
+test('a refused or failed change, or one already saved and read back, is not applied: the screen shows the record as it is', () => {
+  ['rejected', 'attention', 'done', 'cancelled', 'held', 'dropped'].forEach((state) => {
+    const out = CH.optimistic.apply(raw(), [entry({ type: 'ExtendDeadline', targetId: 40, state, reloaded: true, payload: { newDueIso: '2026-11-04' } })], {}, CTX);
     assert.equal(out.actions.rows[0].DueDay, 20261028, state);
   });
+  // saved but not yet read back (release 1.3): still shown, so the record never jumps back for a moment
+  let out = CH.optimistic.apply(raw(), [entry({ type: 'ExtendDeadline', targetId: 40, state: 'done', payload: { newDueIso: '2026-11-04' } })], {}, CTX);
+  assert.equal(out.actions.rows[0].DueDay, 20261104);
+  // waiting its turn behind another change: shown too
+  out = CH.optimistic.apply(raw(), [entry({ type: 'ExtendDeadline', targetId: 40, state: 'queued', payload: { newDueIso: '2026-11-05' } })], {}, CTX);
+  assert.equal(out.actions.rows[0].DueDay, 20261105);
+});
+
+test('a change to a record not yet numbered finds it by the key of the change creating it', () => {
+  const raise = entry({ key: 'raise-1', type: 'RaiseAction', targetId: null, targetType: '', payload: { areaKey: 'RPE', title: 'Order probes', description: 'd', ownerId: 103, dueIso: '2026-11-20' } });
+  const done = entry({ key: 'done-1', type: 'MarkComplete', targetId: -99, creationKey: 'raise-1', state: 'queued', payload: { note: '' } });
+  const out = CH.optimistic.apply(raw(), [raise, done], {}, CTX);
+  const a = out.actions.rows[1];
+  assert.deepEqual(plain([a.Title, a.Status, a._sending]), ['Order probes', 'Closed', 'raise-1']);
 });
 
 test('mark as done closes it, unless it waits for a close-out check; an action closed on this screen stays until the person moves on', () => {
@@ -63,8 +77,9 @@ test('a raised action shows at once in its area, with a temporary number and the
   const out = CH.optimistic.apply(raw(), [entry({ type: 'RaiseAction', targetId: null, targetType: '', payload: { areaKey: 'RPE', title: 'Order probes', description: 'd',
     ownerId: 103, dueIso: '2026-11-20', priority: 'High', coOwnerIds: [104] } })], {}, CTX);
   const a = out.actions.rows[1];
-  assert.deepEqual(plain([a.Id, a.CompetencyId, a.AssignedToId, a.RaisedById, a.DueDay, a.Status, a.CoOwnerIds, a.FileDirRef, a._new]),
-    [-1, 2, 103, 112, 20261120, 'Open', '["104"]', '/sites/x/Lists/Actions/RPE', true]);
+  assert.ok(a.Id < 0, 'a temporary number');
+  assert.deepEqual(plain([a.CompetencyId, a.AssignedToId, a.RaisedById, a.DueDay, a.Status, a.CoOwnerIds, a.FileDirRef, a._new]),
+    [2, 103, 112, 20261120, 'Open', '["104"]', '/sites/x/Lists/Actions/RPE', true]);
 });
 
 test('a notice without a revision is not given one (it is sent without a stale check), and an archived notice goes', () => {

@@ -9,12 +9,29 @@ CH.ui = (function () {
     return h('section', { class: 'card' + (extraClass ? ' ' + extraClass : '') }, title ? h('h2', { text: title }) : null, children);
   }
 
+  // One press, one change (release 1.3): while a handler's promise is on its way the button is disabled, so a
+  // double click, or a click while a slow send is still going, can never send twice.
+  function guarded(onclick) {
+    return function (e) {
+      var b = e.currentTarget;
+      if (b.dataset.busy) return;
+      var r = onclick(e);
+      if (r && typeof r.then === 'function') {
+        b.dataset.busy = '1';
+        b.disabled = true;
+        b.setAttribute('aria-busy', 'true');
+        r.catch(function () {}).then(function () { delete b.dataset.busy; b.disabled = false; b.removeAttribute('aria-busy'); });
+      }
+      return r;
+    };
+  }
+
   function button(label, onclick, kind) {
-    return h('button', { type: 'button', class: 'btn' + (kind ? ' btn-' + kind : ''), onclick: onclick, text: label });
+    return h('button', { type: 'button', class: 'btn' + (kind ? ' btn-' + kind : ''), onclick: guarded(onclick), text: label });
   }
 
   function linkButton(label, onclick) {
-    return h('button', { type: 'button', class: 'btn-link', onclick: onclick, text: label });
+    return h('button', { type: 'button', class: 'btn-link', onclick: guarded(onclick), text: label });
   }
 
   // A plain note when a list could not be read completely. Never shown as an empty result.
@@ -166,5 +183,5 @@ CH.ui = (function () {
     chip: chip, card: card, button: button, linkButton: linkButton, sectionNote: sectionNote,
     actionList: actionList, tile: tile, tileGrid: tileGrid, areaStatusLines: areaStatusLines, toast: toast, say: say,
     folded: folded, saveFolded: saveFolded, panel: panel, fitList: fitList, refit: refit, resetFits: resetFits
-  };
+  , guarded: guarded };
 })();

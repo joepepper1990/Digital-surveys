@@ -1,11 +1,11 @@
-/* ESG Competency Hub 1.2.4 – built from src/ by tools/build.js. Do not edit. */
+/* ESG Competency Hub 1.3.0 – built from src/ by tools/build.js. Do not edit. */
 window.ESGCompetencyHub = function (ctx) {
   'use strict';
   var CH = {};
   /* src/core/config.js */
   // Fixed names and limits. Lists are addressed by display title; folders by list URL name.
   CH.config = {
-    VERSION: '1.2.4',
+    VERSION: '1.3.0',
     ENVIRONMENT: 'TEST',
     lists: {
       competencies: { title: 'Competencies', url: 'Competencies' },
@@ -337,9 +337,17 @@ window.ESGCompetencyHub = function (ctx) {
   // Queued changes (plan C.6, F.1): the browser writes a request into the user's own Requests folder and the
   // request flow applies it. Success is shown only when the request is Completed and the action itself confirms
   // it (its LastRequestKey is this request and nothing is locked), or History holds the request's event row.
+  //
+  // Release 1.3: changes to one record go out one at a time, in order. The second waits (state 'queued', shown at
+  // once) until the first is saved, and is then sent against the revision the first really left, read from the record.
+  // A change to a record that is itself still being created waits for the creation and takes the number it is given.
+  // If the first is refused, the ones behind it are held (never sent) and offered together: Try again or Discard.
+  // What waits is kept in the browser's storage, so a reload or a closed tab loses nothing.
   CH.requests = (function () {
     var UNSENT_KEY = 'esg-competency-hub-unsent';
-    var SCHEDULE = [20, 40, 60];
+    var PENDING_KEY = 'esg-competency-hub-pending';
+    var POLL_FAST = 15;          // seconds between checks for the first few minutes
+    var POLL_FAST_FOR = 180;     // seconds
     var EVERY = 60;
     var GIVE_UP_MINUTES = 15;
     var STOP_MINUTES = 120;
@@ -351,6 +359,12 @@ window.ESGCompetencyHub = function (ctx) {
     var RECORD_TYPES = ['EditNotice', 'ArchiveNotice', 'PinNotice', 'HideComment', 'RaiseRegisterEntry', 'UpdateRegisterEntry', 'LinkActionToEntry', 'UnlinkActionFromEntry'];
     // Meetings (5 Meetings): also confirmed by their History event.
     var MEETING_TYPES = ['ScheduleMeeting', 'UpdateMeeting', 'CancelMeeting', 'StartMeeting', 'FinaliseMeeting', 'AmendMeeting'];
+    // The change that creates each kind of record: a change to a record not yet numbered waits for it.
+    var CREATES = { RaiseAction: 'Action', RaiseRegisterEntry: 'Register Entry', ScheduleMeeting: 'Meeting' };
+    // Where each kind of record's revision is read from, once the change before it is saved.
+    var LISTS = { 'Action': 'actions', 'Notice': 'notices', 'Register Entry': 'register', 'Meeting': 'meetings' };
+    var ACTIVE = ['queued', 'submitted', 'slow'];
+    var FAILED = ['rejected', 'attention', 'cancelled', 'reverted'];
 
     // Thrown instead of sending while automatic processing is down (limited mode).
     function LimitedError(message) { this.name = 'LimitedError'; this.message = message; this.friendly = message; }
@@ -365,12 +379,15 @@ window.ESGCompetencyHub = function (ctx) {
       return x.slice(0, 8) + '-' + x.slice(8, 12) + '-' + x.slice(12, 16) + '-' + x.slice(16, 20) + '-' + x.slice(20);
     }
 
-    function readUnsent() {
-      try { return JSON.parse(window.localStorage.getItem(UNSENT_KEY) || '[]') || []; } catch (_) { return []; }
+    function readJson(key, fallback) {
+      try { return JSON.parse(window.localStorage.getItem(key) || 'null') || fallback; } catch (_) { return fallback; }
     }
-    function writeUnsent(list) {
-      try { window.localStorage.setItem(UNSENT_KEY, JSON.stringify(list)); } catch (_) { /* not remembered */ }
+    function writeJson(key, value) {
+      try { window.localStorage.setItem(key, JSON.stringify(value)); } catch (_) { /* not remembered */ }
     }
+    function readUnsent() { return readJson(UNSENT_KEY, []); }
+    function writeUnsent(list) { writeJson(UNSENT_KEY, list); }
+    function hidden() { return typeof document !== 'undefined' && !!document.hidden; }
 
     // app: { sp, person }. onChange(entry) is called whenever a request's state changes.
     function tracker(app, onChange) {
@@ -378,8 +395,21 @@ window.ESGCompetencyHub = function (ctx) {
       var timers = [];
       var stopped = false;
       var q = CH.sp.escapeOData;
+      var stored = readJson(PENDING_KEY, {});
+      // things the page keeps alongside its queued changes (what was recorded on a meeting not yet booked)
+      var stash = stored.stash || {};
 
       function folder() { return 'u' + app.person.SiteUserId; }
+      function byKey(key) { return entries.filter(function (e) { return e.key === key; })[0] || null; }
+      function active(e) { return ACTIVE.indexOf(e.state) >= 0; }
+      function failed(e) { return FAILED.indexOf(e.state) >= 0; }
+      function settled(e) { return e.state === 'done' || failed(e) || e.state === 'dropped'; }
+      // the record a change is about: its kind and number, or the creation it waits for
+      function recordKey(e) {
+        if (e.creationKey) return 'new|' + e.creationKey;
+        if (e.targetId && Number(e.targetId) > 0) return (e.targetType || 'Action') + '|' + Number(e.targetId);
+        return null;
+      }
 
       function values(spec) {
         return {
@@ -387,7 +417,7 @@ window.ESGCompetencyHub = function (ctx) {
           TargetType: spec.targetId ? spec.targetType || 'Action' : '', TargetId: spec.targetId || '', ExpectedRevision: spec.expectedRevision || '',
           Payload: JSON.stringify(spec.payload), Status: 'Submitted',
           // a change to an action made during a meeting carries it: the meeting is finalised only once all are recorded
-          MeetingId: spec.meetingId || (app.liveMeetingId && MEETING_TYPES.indexOf(spec.type) < 0 && RECORD_TYPES.indexOf(spec.type) < 0 && ADMIN_TYPES.indexOf(spec.type) < 0
+          MeetingId: spec.meetingId || (app.liveMeetingId && Number(app.liveMeetingId) > 0 && MEETING_TYPES.indexOf(spec.type) < 0 && RECORD_TYPES.indexOf(spec.type) < 0 && ADMIN_TYPES.indexOf(spec.type) < 0
             ? app.liveMeetingId : '')
         };
       }
@@ -398,7 +428,31 @@ window.ESGCompetencyHub = function (ctx) {
         return res.rows[0] || null;
       }
 
-      // spec: { type, targetId, expectedRevision, payload, label, key? }. Resolves to the tracked entry.
+      // What waits in this browser alone: queued and held changes, and the stash. Submitted ones are found again
+      // on SharePoint after a reload (resume).
+      function persist() {
+        var waiting = entries.filter(function (e) { return e.state === 'queued' || e.state === 'held'; }).map(function (e) {
+          return { key: e.key, state: e.state, spec: e.spec, label: e.label, creationKey: e.creationKey || null, madeBy: e.madeBy || null, orderAfter: e.orderAfter || null,
+            after: e.after || [], heldBy: e.heldBy || null, meetingId: e.meetingId || null, queuedAt: e.submittedAt.toISOString() };
+        });
+        writeJson(PENDING_KEY, { waiting: waiting, stash: stash });
+      }
+
+      // the record a change waited for has its number now: the change is about that record from here on (madeBy keeps
+      // the creation's key, so the screen still finds the row while it is shown under its temporary number)
+      function numbered(entry, id) {
+        entry.targetId = Number(id); entry.spec.targetId = entry.targetId;
+        entry.madeBy = entry.creationKey; entry.creationKey = null; entry.spec.creationKey = null;
+      }
+
+      function entryFrom(spec, state) {
+        return { key: spec.key, type: spec.type, targetId: spec.targetId || null, meetingId: values(spec).MeetingId || null,
+          targetType: spec.targetId ? spec.targetType || 'Action' : '', label: spec.label, submittedAt: new Date(),
+          state: state, message: '', resultId: null, polls: 0, payload: spec.payload, spec: spec, creationKey: spec.creationKey || null, after: [] };
+      }
+
+      // spec: { type, targetId, targetType, expectedRevision, payload, label, key?, creationKey?, meetingId? }.
+      // Resolves to the tracked entry: sent, or queued behind the change before it on the same record.
       async function submit(spec) {
         var blocked = RECORD_TYPES.indexOf(spec.type) >= 0 ? app.recordsBlocked && app.recordsBlocked()
           : MEETING_TYPES.indexOf(spec.type) >= 0 ? app.meetingsBlocked && app.meetingsBlocked()
@@ -407,6 +461,54 @@ window.ESGCompetencyHub = function (ctx) {
           throw new LimitedError('Changes cannot be processed at the moment, so nothing was sent. You can still read everything and add updates. Please try again later.');
         }
         spec.key = spec.key || newKey();
+        // the same press twice, or a form tried again: one change
+        var same = byKey(spec.key);
+        if (same && !failed(same) && same.state !== 'dropped') return same;
+        if (spec.targetId && Number(spec.targetId) < 0 && !spec.creationKey) throw new Error('This record has no number yet.');
+        var entry = entryFrom(spec, 'queued');
+        // a change to a record still being created waits for it (and if it is already numbered, uses the number)
+        var creation = entry.creationKey ? byKey(entry.creationKey) : null;
+        if (creation && creation.state === 'done' && creation.resultId) numbered(entry, creation.resultId);
+        else if (creation && failed(creation)) { entry.state = 'held'; entry.heldBy = creation.key; }
+        // behind the last change to the same record, or else behind the creation itself
+        var rk = recordKey(entry);
+        var before = entries.filter(function (e) { return e !== entry && active(e) && recordKey(e) === rk && rk; });
+        if (before.length) entry.orderAfter = before[before.length - 1].key;
+        else if (creation && active(creation)) entry.orderAfter = creation.key;
+        // finalising waits for every change made from the meeting to be recorded (the flow checks the same)
+        if (spec.type === 'FinaliseMeeting') {
+          entry.after = entries.filter(function (e) { return e !== entry && active(e) && Number(e.meetingId) === Number(entry.targetId) && e.key !== entry.orderAfter; })
+            .map(function (e) { return e.key; });
+        }
+        entries.push(entry);
+        if (entry.state === 'held') { persist(); onChange(entry); return entry; }
+        if (entry.orderAfter || entry.after.length) {
+          entry.needsRevision = true;
+          persist();
+          onChange(entry);
+          return entry;
+        }
+        try {
+          await sendNow(entry);
+        } catch (error) {
+          entries.splice(entries.indexOf(entry), 1);
+          throw error;
+        }
+        return entry;
+      }
+
+      // Writes the request. A change that waited reads the record's revision first, so it is checked against the
+      // record as the change before it left it.
+      async function sendNow(entry) {
+        var spec = entry.spec;
+        if (entry.creationKey) {
+          var creation = byKey(entry.creationKey);
+          if (!creation || creation.state !== 'done' || !creation.resultId) throw new Error('The record is not numbered yet.');
+          numbered(entry, creation.resultId);
+        }
+        if (entry.needsRevision && LISTS[entry.targetType] && entry.targetId > 0) {
+          try { spec.expectedRevision = await freshRevision(entry.targetType, entry.targetId); } catch (_) { /* sent against what the screen knows */ }
+        }
         try {
           await app.sp.addToFolder('requests', folder(), values(spec));
         } catch (error) {
@@ -421,16 +523,50 @@ window.ESGCompetencyHub = function (ctx) {
           }
         }
         writeUnsent(readUnsent().filter(function (u) { return u.key !== spec.key; }));
-        var entry = { key: spec.key, type: spec.type, targetId: spec.targetId || null, meetingId: values(spec).MeetingId || null, targetType: spec.targetId ? spec.targetType || 'Action' : '', label: spec.label, submittedAt: new Date(),
-          state: 'submitted', message: '', resultId: null, polls: 0, payload: spec.payload, spec: spec };
-        entries.push(entry);
+        entry.state = 'submitted';
+        entry.submittedAt = new Date();
+        entry.meetingId = values(spec).MeetingId || null;
+        entry.needsRevision = false;
+        persist();
         schedule(entry);
         onChange(entry);
         return entry;
       }
 
-      // After a reload: the user's own requests still waiting for the flow are tracked again (plan K7.9).
-      // Status is indexed, so it leads the filter; AuthorId keeps it to this person's requests.
+      async function freshRevision(kind, id) {
+        var res = await app.sp.items(CH.config.lists[LISTS[kind]].title, '$select=Id,Revision&$filter=Id eq ' + Number(id), 1);
+        var row = res.rows[0];
+        return row && Number(row.Revision) ? Number(row.Revision) : '';
+      }
+
+      // A change settled: the ones waiting behind it go next (or are held, if it was not saved).
+      function advance(entry) {
+        entries.forEach(function (e) {
+          if (e.after && e.after.indexOf(entry.key) >= 0) e.after = e.after.filter(function (k) { return k !== entry.key; });
+        });
+        if (entry.state === 'done') {
+          entries.filter(function (e) { return e.state === 'queued' && e.orderAfter === entry.key; }).forEach(function (e) {
+            e.orderAfter = null;
+            e.needsRevision = true;
+          });
+          entries.filter(function (e) { return e.state === 'queued' && !e.orderAfter && !e.after.length; }).forEach(function (e) {
+            sendNow(e).catch(function () { e.unsent = true; onChange(e); });
+          });
+        } else if (failed(entry) || entry.state === 'dropped') {
+          hold(entry);
+        }
+        persist();
+      }
+      function hold(entry) {
+        entries.filter(function (e) { return e.state === 'queued' && e.orderAfter === entry.key; }).forEach(function (e) {
+          e.state = 'held'; e.heldBy = entry.key; e.message = '';
+          onChange(e);
+          hold(e);
+        });
+      }
+
+      // After a reload: the user's own requests still waiting for the flow are tracked again (plan K7.9), and the
+      // changes that were waiting in this browser go on waiting, or are sent now if what they waited for is saved.
       async function resume() {
         var found = [];
         var statuses = OPEN_STATUSES.concat(['Needs attention', 'Cancelled', 'Reverted']);
@@ -446,23 +582,67 @@ window.ESGCompetencyHub = function (ctx) {
           if (!row.RequestKey || entries.some(function (e) { return e.key === row.RequestKey; })) return;
           var payload = null;
           try { payload = JSON.parse(row.Payload || 'null'); } catch (_) { payload = null; }
-          var entry = { key: row.RequestKey, type: row.RequestType, targetId: row.TargetId || null, meetingId: row.MeetingId || null, targetType: row.TargetType || (row.TargetId ? 'Action' : ''), label: row.Title || 'Your change',
-            submittedAt: row.Created ? new Date(row.Created) : new Date(), state: 'submitted', message: '', resultId: null, polls: 0, payload: payload,
-            spec: { type: row.RequestType, targetId: row.TargetId || null, targetType: row.TargetType || '', expectedRevision: row.ExpectedRevision || '', payload: payload, label: row.Title || 'Your change', meetingId: row.MeetingId || '' } };
+          var spec = { key: row.RequestKey, type: row.RequestType, targetId: row.TargetId || null, targetType: row.TargetType || '', expectedRevision: row.ExpectedRevision || '',
+            payload: payload, label: row.Title || 'Your change', meetingId: row.MeetingId || '' };
+          var entry = entryFrom(spec, 'submitted');
+          entry.submittedAt = row.Created ? new Date(row.Created) : new Date();
           entries.push(entry);
           schedule(entry);
         });
+        // what waited in this browser: queued or held, in the order it was asked for
+        (stored.waiting || []).forEach(function (w) {
+          if (!w.spec || byKey(w.key)) return;
+          var e = entryFrom(w.spec, w.state === 'held' ? 'held' : 'queued');
+          e.label = w.label || e.label; e.creationKey = w.creationKey || null; e.madeBy = w.madeBy || null; e.orderAfter = w.orderAfter || null; e.after = w.after || [];
+          e.heldBy = w.heldBy || null; e.meetingId = w.meetingId || e.meetingId; e.needsRevision = true;
+          if (w.queuedAt) e.submittedAt = new Date(w.queuedAt);
+          entries.push(e);
+        });
+        stored.waiting = [];
+        // what each waited for: saved meanwhile (go now), still on its way (wait), or gone wrong (held)
+        entries.filter(function (e) { return e.state === 'queued' || e.state === 'held'; }).forEach(function (e) {
+          var keys = (e.orderAfter ? [e.orderAfter] : []).concat(e.after || [], e.creationKey ? [e.creationKey] : []);
+          keys.forEach(function (k) {
+            var dep = byKey(k);
+            if (dep && failed(dep)) { if (e.state !== 'held') { e.state = 'held'; e.heldBy = k; } return; }
+            if (dep && active(dep)) return;
+            // not on its way any more: saved (a creation is found by its key on the record it made) or long gone
+            if (k === e.orderAfter) e.orderAfter = null;
+            e.after = (e.after || []).filter(function (x) { return x !== k; });
+          });
+        });
+        await Promise.all(entries.filter(function (e) { return e.state === 'queued' && !e.orderAfter && !e.after.length; }).map(async function (e) {
+          if (e.creationKey && !byKey(e.creationKey)) {
+            // the creation finished while the page was away: the record it made carries the key
+            try { e.targetId = await createdId(e); } catch (_) { e.targetId = null; }
+            if (!e.targetId) { e.state = 'held'; e.heldBy = e.creationKey; return; }
+            numbered(e, e.targetId);
+          }
+          try { await sendNow(e); } catch (_) { e.unsent = true; }
+        }));
+        persist();
         return found.length;
+      }
+
+      async function createdId(e) {
+        var list = LISTS[e.targetType];
+        if (!list) return null;
+        var res = await app.sp.items(CH.config.lists[list].title, "$select=Id&$filter=CreatedRequestKey eq 'F%7C" + q(e.creationKey) + "'", 1);
+        return res.rows[0] ? Number(res.rows[0].Id) : null;
       }
 
       function schedule(entry) {
         if (stopped) return;
-        var seconds = entry.polls < SCHEDULE.length ? SCHEDULE[entry.polls] - (entry.polls ? SCHEDULE[entry.polls - 1] : 0) : EVERY;
-        timers.push(setTimeout(function () { poll(entry); }, seconds * 1000));
+        var elapsed = (Date.now() - entry.submittedAt.getTime()) / 1000;
+        var seconds = elapsed < POLL_FAST_FOR ? POLL_FAST : EVERY;
+        entry.timer = setTimeout(function () { poll(entry); }, seconds * 1000);
+        timers.push(entry.timer);
       }
 
       async function poll(entry) {
         if (stopped || entry.state !== 'submitted' && entry.state !== 'slow') return;
+        // a tab nobody is looking at asks nothing; it catches up when it is looked at again (wake)
+        if (hidden()) { entry.timer = setTimeout(function () { poll(entry); }, POLL_FAST * 1000); timers.push(entry.timer); return; }
         entry.polls++;
         var row = null;
         try { row = await findRequest(entry.key); } catch (_) { row = null; }
@@ -531,6 +711,7 @@ window.ESGCompetencyHub = function (ctx) {
         entry.message = message;
         if (state === 'done') entry.doneAt = Date.now();
         onChange(entry);
+        advance(entry);
         if (state === 'attention') watchAttention(entry);
       }
 
@@ -544,12 +725,7 @@ window.ESGCompetencyHub = function (ctx) {
           try { row = await findRequest(entry.key); } catch (_) { row = null; }
           var status = row && row.Status;
           if (OPEN_STATUSES.indexOf(status) >= 0) {
-            entry.state = 'submitted';
-            entry.message = '';
-            entry.retrying = false;
-            entry.polls = 0;
-            entry.submittedAt = new Date();
-            onChange(entry);
+            reopen(entry);
             return schedule(entry);
           }
           if (status === 'Needs attention' || !status) return watchAttention(entry);
@@ -558,57 +734,113 @@ window.ESGCompetencyHub = function (ctx) {
         }, 5 * 60000));
       }
 
+      // back on its way: the changes held behind it wait for it again
+      function reopen(entry) {
+        entry.state = 'submitted';
+        entry.message = '';
+        entry.retrying = false;
+        entry.dismissed = false;
+        entry.polls = 0;
+        entry.submittedAt = new Date();
+        entries.filter(function (e) { return e.state === 'held' && e.heldBy === entry.key; }).forEach(function (e) {
+          e.state = 'queued'; e.heldBy = null; e.orderAfter = entry.key; onChange(e);
+        });
+        persist();
+        onChange(entry);
+      }
+
       // Try again (release 1.2). A change that failed on the system's side is the same request set back to Submitted: the
       // flow resumes its stored copy, so it can never be made twice. A refused change (someone else changed the record
-      // first) is sent again as a new request, against the record as it is now (revision: the record's current revision).
+      // first) is sent again as a new request, against the record as it is now; what was held behind it follows it again.
       async function retry(entry, revision) {
         if (entry.state === 'attention' && ADMIN_TYPES.indexOf(entry.type) < 0) {
           var row = await findRequest(entry.key);
           if (!row) throw new Error('The change could not be found.');
           await app.sp.update('requests', row.Id, { Status: 'Submitted' });
-          entry.state = 'submitted';
-          entry.message = '';
-          entry.retrying = false;
-          entry.dismissed = false;
-          entry.polls = 0;
-          entry.submittedAt = new Date();
-          onChange(entry);
+          reopen(entry);
           schedule(entry);
           return entry;
         }
-        if (entry.state !== 'rejected' || !entry.spec) throw new Error('This change cannot be tried again.');
-        var spec = Object.assign({}, entry.spec, { key: null });
+        if (entry.state === 'held') {
+          // never sent: goes now, against the record as it is
+          entry.state = 'queued'; entry.heldBy = null; entry.orderAfter = null; entry.needsRevision = true; entry.dismissed = false;
+          await sendNow(entry);
+          return entry;
+        }
+        if (!failed(entry) || !entry.spec) throw new Error('This change cannot be tried again.');
+        var spec = Object.assign({}, entry.spec, { key: null, creationKey: null });
         if (revision !== undefined && revision !== null) spec.expectedRevision = revision;
         entry.dismissed = true;
-        return submit(spec);
+        var held = entries.filter(function (e) { return e.state === 'held' && e.heldBy === entry.key; });
+        var again = await submit(spec);
+        held.forEach(function (e) {
+          e.state = 'queued'; e.heldBy = null; e.orderAfter = again.key; e.needsRevision = true; e.dismissed = false;
+          onChange(e);
+        });
+        persist();
+        if (again.state === 'done') advance(again);
+        return again;
+      }
+
+      // Give up on a change that was not saved, and on everything that was waiting for it.
+      function discard(entry) {
+        entry.dismissed = true;
+        if (entry.state === 'queued' || entry.state === 'held') entry.state = 'dropped';
+        entries.filter(function (e) { return e.state === 'held' && e.heldBy === entry.key; }).forEach(function (e) { discard(e); });
+        persist();
+        onChange(entry);
       }
 
       return {
         submit: submit,
         resume: resume,
         retry: retry,
+        discard: discard,
+        byKey: byKey,
         entries: function () { return entries.slice(); },
-        // The newest unfinished or unread request for a record (an action unless another kind is named).
-        forTarget: function (id, targetType) {
+        // Changes held because an earlier one to the same record was not saved.
+        heldBy: function (entry) { return entries.filter(function (e) { return e.state === 'held' && e.heldBy === entry.key; }); },
+        // Everything still waiting in this browser: a reason to warn before the page is left.
+        waiting: function () { return entries.filter(function (e) { return e.state === 'queued' || !!e.unsent; }); },
+        // The newest unfinished or unread request for a record (an action unless another kind is named). A record not
+        // yet numbered is known by the key of the change creating it.
+        forTarget: function (id, targetType, creationKey) {
           var kind = targetType || 'Action';
-          return entries.filter(function (e) { return Number(e.targetId) === Number(id) && (e.targetType || 'Action') === kind && !e.dismissed; }).slice(-1)[0] || null;
+          return entries.filter(function (e) {
+            return !e.dismissed && e.state !== 'dropped' && (creationKey && (e.creationKey === creationKey || e.madeBy === creationKey) ||
+              Number(id) > 0 && Number(e.targetId) === Number(id) && (e.targetType || 'Action') === kind);
+          }).slice(-1)[0] || null;
         },
         // The newest change for a record, including the one that created it (a raise is found by the id it was given).
         forRecord: function (id, targetType) {
           var kind = targetType || 'Action';
           var made = { 'Action': 'RaiseAction', 'Register Entry': 'RaiseRegisterEntry', 'Meeting': 'ScheduleMeeting' }[kind];
           return entries.filter(function (e) {
-            return (Number(e.targetId) === Number(id) && (e.targetType || 'Action') === kind) || (e.type === made && e.state === 'done' && Number(e.resultId) === Number(id));
+            return e.state !== 'dropped' && ((Number(e.targetId) === Number(id) && (e.targetType || 'Action') === kind) || (e.type === made && e.state === 'done' && Number(e.resultId) === Number(id)));
           }).slice(-1)[0] || null;
         },
+        // true while one of this person's changes holds the record (its lock is theirs, so the next change is fine)
+        isMine: function (key) { return !!key && !!byKey(key); },
         dismiss: function (entry) { entry.dismissed = true; onChange(entry); },
         unsent: readUnsent,
         // Sends again, with the same keys, the requests a failed connection left behind.
         resend: async function () {
           var list = readUnsent();
-          for (var i = 0; i < list.length; i++) await submit(list[i]);
+          for (var i = 0; i < list.length; i++) {
+            var e = byKey(list[i].key);
+            if (e && e.state === 'queued') { await sendNow(e); e.unsent = false; } else await submit(list[i]);
+          }
           return list.length;
         },
+        // the tab is looked at again: every change on its way is checked now
+        wake: function () {
+          entries.filter(function (e) { return e.state === 'submitted' || e.state === 'slow'; }).forEach(function (e) {
+            if (e.timer) clearTimeout(e.timer);
+            poll(e);
+          });
+        },
+        stash: stash,
+        persist: persist,
         stop: function () { stopped = true; timers.forEach(clearTimeout); }
       };
     }
@@ -618,8 +850,8 @@ window.ESGCompetencyHub = function (ctx) {
     // A refusal because someone else changed the record first (or is changing it now): trying again can work.
     function isConflict(entry) { return /someone else|being updated/i.test(String(entry && entry.message || '')); }
 
-    return { tracker: tracker, newKey: newKey, isConflict: isConflict, SCHEDULE: SCHEDULE, GIVE_UP_MINUTES: GIVE_UP_MINUTES, ADMIN_TYPES: ADMIN_TYPES, RECORD_TYPES: RECORD_TYPES, MEETING_TYPES: MEETING_TYPES,
-      LimitedError: LimitedError, RETRYING: RETRYING };
+    return { tracker: tracker, newKey: newKey, isConflict: isConflict, POLL_FAST: POLL_FAST, GIVE_UP_MINUTES: GIVE_UP_MINUTES, ADMIN_TYPES: ADMIN_TYPES, RECORD_TYPES: RECORD_TYPES, MEETING_TYPES: MEETING_TYPES,
+      CREATES: CREATES, LimitedError: LimitedError, RETRYING: RETRYING };
   })();
 
   /* src/domain/access.js */
@@ -1116,6 +1348,31 @@ window.ESGCompetencyHub = function (ctx) {
       return raw;
     }
 
+    // Rows changed since a moment (release 1.3): read every minute so other people's changes appear without a reload.
+    // Each list keeps its usual leading filter (an indexed column, so a large list is still served), with Modified added;
+    // a second read finds rows that have left the list this screen shows (closed actions, archived notices), in gone.
+    var LEFT = { actions: "IsOpen eq 0 and FSObjType eq 0", notices: "Status eq 'Archived' and FSObjType eq 0" };
+    async function loadChanged(sp, since) {
+      var iso = new Date(since).toISOString();
+      var out = { gone: {} };
+      await Promise.all(['actions', 'notices', 'register', 'meetings'].map(async function (key) {
+        var base = QUERIES[key];
+        var q = base.indexOf('$filter=') >= 0 ? base + " and Modified ge datetime'" + iso + "'" : base + "&$filter=Modified ge datetime'" + iso + "'";
+        q = q.replace(/\$select=([^&]*)/, function (_, v) { return '$select=' + v + (v.indexOf('Modified') >= 0 ? '' : ',Modified'); });
+        try {
+          var res = await sp.items(CH.config.lists[key].title, q, null, OPTIONAL[key]);
+          out[key] = res.rows;
+        } catch (_) { out[key] = null; }
+        if (LEFT[key]) {
+          try {
+            var left = await sp.items(CH.config.lists[key].title, '$select=Id&$filter=' + LEFT[key] + " and Modified ge datetime'" + iso + "'");
+            left.rows.forEach(function (r) { out.gone[key + '|' + Number(r.Id)] = true; });
+          } catch (_) { /* nothing marked as gone this time */ }
+        }
+      }));
+      return out;
+    }
+
     // What finalised meetings recorded as Discussed (spec NB-5): it clears the flags raised up to that meeting's cut-off.
     // Only meetings whose cut-off could cover a flag still in the list are read, each by its own (indexed) meeting id,
     // and only the frozen rows in the meeting's MTG folder count (only the flow writes there).
@@ -1202,7 +1459,7 @@ window.ESGCompetencyHub = function (ctx) {
           originalIso: r.OriginalDueDate ? D.localDate(r.OriginalDueDate) : dueIso,
           description: r.Description || '', priority: r.Priority || 'Normal', requiresCloseOut: !!r.RequiresCloseOut,
           raisedIso: r.DateRaised ? D.localDate(r.DateRaised) : '', raisedByName: nameOf(r.RaisedById),
-          revision: Number(r.Revision) || 1, dueDay: Number(r.DueDay), locked: !!r.PendingRequestKey,
+          revision: Number(r.Revision) || 1, dueDay: Number(r.DueDay), locked: !!r.PendingRequestKey, lockKey: r.PendingRequestKey || '',
           waitingCloseOut: waitingCloseOut, group: r.Status === 'Closed' && !keptDone ? 'done' : words.group,
           dueText: keptDone ? 'Done' : r.Status === 'Closed' ? 'Closed' : words.text, done: r.Status === 'Closed',
           // still being saved (✓ Sent), and a new one the flow has not numbered yet (a temporary negative id)
@@ -1406,7 +1663,7 @@ window.ESGCompetencyHub = function (ctx) {
       return row && !isUncommitted(row) ? row : null;
     }
 
-    return { QUERIES: QUERIES, load: load, build: build, isUncommitted: isUncommitted, loadFinished: loadFinished, loadAction: loadAction };
+    return { QUERIES: QUERIES, load: load, loadChanged: loadChanged, build: build, isUncommitted: isUncommitted, loadFinished: loadFinished, loadAction: loadAction };
   })();
 
   /* src/domain/optimistic.js */
@@ -1430,7 +1687,8 @@ window.ESGCompetencyHub = function (ctx) {
 
     function copy(list) { return (list || []).map(function (r) { return Object.assign({}, r); }); }
     // the flow adds one to the revision of what it changes; a record with none (older notices) is sent without a stale check
-    function bump(row, key) { if (Number(row.Revision)) row.Revision = Number(row.Revision) + 1; row._sending = key; }
+    // a record not yet numbered keeps the key of the change creating it: that is how the screen knows it
+    function bump(row, key) { if (Number(row.Revision)) row.Revision = Number(row.Revision) + 1; if (!row._new) row._sending = key; }
     function areaId(raw, key) {
       var c = (raw.competencies.rows || []).filter(function (x) { return x.CompetencyKey === key; })[0];
       return c ? c.Id : null;
@@ -1509,7 +1767,8 @@ window.ESGCompetencyHub = function (ctx) {
       rows.push({ Id: -n, Title: p.title, Description: p.description, CompetencyId: areaId(raw, p.areaKey), LinkedCompetenciesId: [],
         AssignedToId: Number(p.ownerId), RaisedById: ctx.personId, DateRaised: ctx.nowIso, DueDay: D.toDueDay(p.dueIso), OriginalDueDate: p.dueIso + 'T12:00:00Z',
         Status: 'Open', IsOpen: true, Priority: p.priority || 'Normal', ExtensionCount: 0, RequiresCloseOut: !!p.requiresCloseOut, Revision: 1,
-        CoOwnerIds: JSON.stringify((p.coOwnerIds || []).map(String)), CloseOutById: p.checkerId || null, SourceType: 'None', _sending: e.key, _new: true,
+        CoOwnerIds: JSON.stringify((p.coOwnerIds || []).map(String)), CloseOutById: p.checkerId || null,
+        SourceType: Number(e.meetingId) > 0 ? 'Meeting' : 'None', SourceId: Number(e.meetingId) > 0 ? Number(e.meetingId) : null, _sending: e.key, _new: true,
         FileDirRef: folderFor(raw, 'actions', p.areaKey) });
     }
     function addEntry(raw, rows, e, p, ctx, n) {
@@ -1537,7 +1796,8 @@ window.ESGCompetencyHub = function (ctx) {
     function apply(raw, entries, keep, ctx) {
       var out = Object.assign({}, raw);
       var c = { personId: Number(ctx.personId), today: ctx.today, nowIso: (ctx.now || new Date()).toISOString() };
-      var sending = (entries || []).filter(function (e) { return (e.state === 'submitted' || e.state === 'slow') && e.payload; })
+      // on its way, waiting its turn, or saved but not yet read back (so the record never jumps back meanwhile)
+      var sending = (entries || []).filter(function (e) { return (e.state === 'submitted' || e.state === 'slow' || e.state === 'queued' || (e.state === 'done' && !e.reloaded)) && e.payload; })
         .sort(function (a, b) { return a.submittedAt - b.submittedAt; });
       TABLES.forEach(function (t) {
         if (!raw[t[0]]) return;
@@ -1551,7 +1811,9 @@ window.ESGCompetencyHub = function (ctx) {
           var p = e.payload || {};
           if (t[3][e.type]) { e.tempId = e.tempId || ++seq; t[3][e.type](raw, rows, e, p, c, e.tempId); return; }
           if (!t[2][e.type] || (e.targetType || 'Action') !== t[1]) return;
-          var row = rows.filter(function (r) { return Number(r.Id) === Number(e.targetId); })[0];
+          // by number, or (a record not yet numbered) by the key of the change creating it
+          var row = rows.filter(function (r) { return Number(e.targetId) > 0 && Number(r.Id) === Number(e.targetId); })[0]
+            || ((e.creationKey || e.madeBy) ? rows.filter(function (r) { return r._sending === (e.creationKey || e.madeBy); })[0] : null);
           if (!row) return;
           t[2][e.type](row, p, c);
           bump(row, e.key);
@@ -1818,12 +2080,29 @@ window.ESGCompetencyHub = function (ctx) {
       return h('section', { class: 'card' + (extraClass ? ' ' + extraClass : '') }, title ? h('h2', { text: title }) : null, children);
     }
 
+    // One press, one change (release 1.3): while a handler's promise is on its way the button is disabled, so a
+    // double click, or a click while a slow send is still going, can never send twice.
+    function guarded(onclick) {
+      return function (e) {
+        var b = e.currentTarget;
+        if (b.dataset.busy) return;
+        var r = onclick(e);
+        if (r && typeof r.then === 'function') {
+          b.dataset.busy = '1';
+          b.disabled = true;
+          b.setAttribute('aria-busy', 'true');
+          r.catch(function () {}).then(function () { delete b.dataset.busy; b.disabled = false; b.removeAttribute('aria-busy'); });
+        }
+        return r;
+      };
+    }
+
     function button(label, onclick, kind) {
-      return h('button', { type: 'button', class: 'btn' + (kind ? ' btn-' + kind : ''), onclick: onclick, text: label });
+      return h('button', { type: 'button', class: 'btn' + (kind ? ' btn-' + kind : ''), onclick: guarded(onclick), text: label });
     }
 
     function linkButton(label, onclick) {
-      return h('button', { type: 'button', class: 'btn-link', onclick: onclick, text: label });
+      return h('button', { type: 'button', class: 'btn-link', onclick: guarded(onclick), text: label });
     }
 
     // A plain note when a list could not be read completely. Never shown as an empty result.
@@ -1975,7 +2254,7 @@ window.ESGCompetencyHub = function (ctx) {
       chip: chip, card: card, button: button, linkButton: linkButton, sectionNote: sectionNote,
       actionList: actionList, tile: tile, tileGrid: tileGrid, areaStatusLines: areaStatusLines, toast: toast, say: say,
       folded: folded, saveFolded: saveFolded, panel: panel, fitList: fitList, refit: refit, resetFits: resetFits
-    };
+    , guarded: guarded };
   })();
 
   /* src/ui/dialog.js */
@@ -2099,8 +2378,8 @@ window.ESGCompetencyHub = function (ctx) {
     // A uniform card: title on one line, then a meta line with chips. The title opens the action; on your own to-dos
     // "Mark as done" sits on the card, and once done (while you stay on the page) "Reopen" where you may (release 1.2).
     function actionCard(app, a, meta, quick) {
-      var r = quick && !a.isNew ? CH.rules.roles(a, app.person.SiteUserId, app.access) : null;
-      var blocked = app.queueBlocked() || (a.locked && !a.sending);
+      var r = quick ? CH.rules.roles(a, app.person.SiteUserId, app.access) : null;
+      var blocked = app.queueBlocked() || (a.locked && !app.tracker.isMine(a.lockKey));
       var button = !r || blocked ? null : a.done ? (r.canReopen ? ui.button('Reopen', function () { app.quickReopen(a); }) : null)
         : r.canComplete && !a.waitingCloseOut ? ui.button('Mark as done', function () { app.quickDone(a); }) : null;
       if (button) button.classList.add('btn-small');
@@ -2825,6 +3104,11 @@ window.ESGCompetencyHub = function (ctx) {
   // "Add an update" is an instant write; "I need more time" and "Mark as done" are queued requests.
   CH.views = CH.views || {};
   CH.views.actionPanel = (function () {
+    // a record someone else changed since this page last read it (release 1.3): said plainly, above the details
+    function othersLine(mark) {
+      if (!mark) return null;
+      return CH.dom.h('p', { class: 'muted small others-line', role: 'status', text: 'Updated by someone else at ' + CH.dates.ukTime(mark.at) + ' – this is the latest.' });
+    }
     var h = CH.dom.h;
     var D = CH.dates;
     var R = CH.rules;
@@ -2916,11 +3200,9 @@ window.ESGCompetencyHub = function (ctx) {
           return;
         }
         var r = R.roles(a, app.person.SiteUserId, app.access);
-        var entry = app.tracker.forTarget(a.id);
-        var mine = entry && (entry.state === 'submitted' || entry.state === 'slow');
-        // your own change still saving does not stop the next one: the flow takes them in order, each against the
-        // revision the one before it leaves. Someone else's change being saved does, and so does a raise not yet numbered.
-        var busy = (a.locked && !mine) || a.isNew;
+        // your own change still saving does not stop the next one: they go one at a time, in order (release 1.3), and
+        // so does a raise not yet numbered. Someone else's change being saved does hold it.
+        var busy = a.locked && !app.tracker.isMine(a.lockKey);
         var finished = a.status === 'Closed' || a.waitingCloseOut;
         // the less common changes sit under "More for this action" (plan C.9), only those this person may make
         // release 1.2: each button names what it acts on (backlog 11)
@@ -2933,6 +3215,7 @@ window.ESGCompetencyHub = function (ctx) {
         dlg.setTitle(a.title);
         CH.dom.append(dlg.body, [
           h('p', { class: 'what-label', text: 'Action · ' + (a.isNew ? 'not yet numbered' : a.ref) + ' · ' + a.areaName + (a.priority === 'High' ? ' · High priority' : '') }),
+          othersLine(app.changedByOthers('Action', a.id)),
           pendingLine(app, a),
           h('dl', { class: 'facts' },
             h('dt', { text: 'When' }), h('dd', null, ui.chip(a.waitingCloseOut ? 'later' : a.group, a.dueText), ' ', whenText(a)),
@@ -2991,7 +3274,9 @@ window.ESGCompetencyHub = function (ctx) {
       }
       function back() { view = 'main'; fill(); dlg.focusFirst(); }
 
+      var formKey = null;
       function formShell(title, fields, submitLabel, onSubmit) {
+        formKey = CH.requests.newKey();   // one change per form, however often Try again is pressed
         var errorBox = h('p', { class: 'form-error', role: 'alert' });
         var submit = h('button', { type: 'submit', class: 'btn btn-main', text: submitLabel });
         var form = h('form', { class: 'dialog-body', novalidate: true }, h('h3', { text: title }), fields, errorBox,
@@ -3063,7 +3348,8 @@ window.ESGCompetencyHub = function (ctx) {
             var errors = R.validateExtend(a, v, { today: today });
             if (errors.action) { form.querySelector('.form-error').textContent = errors.action; return false; }
             if (CH.ui.dialog.showErrors(form, 'ch-x-', errors, ['newDueIso', 'reason'])) return false;
-            await app.tracker.submit({ type: 'ExtendDeadline', targetId: a.id, expectedRevision: a.revision,
+            var now = action() || a;
+            await app.tracker.submit({ key: formKey, type: 'ExtendDeadline', targetId: now.id, creationKey: now.isNew ? now.sending : null, expectedRevision: now.revision,
               payload: { newDueIso: v.newDueIso, reason: v.reason.trim(), expectedDueDay: a.dueDay }, label: 'New deadline ' + D.short(v.newDueIso) });
             back();
             return true;
@@ -3081,7 +3367,8 @@ window.ESGCompetencyHub = function (ctx) {
             var errors = R.validateComplete(a, { note: note.value });
             if (errors.action) { form.querySelector('.form-error').textContent = errors.action; return false; }
             if (CH.ui.dialog.showErrors(form, 'ch-c-', errors, ['note'])) return false;
-            await app.tracker.submit({ type: 'MarkComplete', targetId: a.id, expectedRevision: a.revision,
+            var now = action() || a;
+            await app.tracker.submit({ key: formKey, type: 'MarkComplete', targetId: now.id, creationKey: now.isNew ? now.sending : null, expectedRevision: now.revision,
               payload: { note: note.value.trim() }, label: 'Mark as done' });
             back();
             return true;
@@ -3092,7 +3379,8 @@ window.ESGCompetencyHub = function (ctx) {
       async function send(form, type, payload, label, errors, order, prefix) {
         if (errors.action) { form.querySelector('.form-error').textContent = errors.action; return false; }
         if (CH.ui.dialog.showErrors(form, prefix, errors, order)) return false;
-        await app.tracker.submit({ type: type, targetId: id, expectedRevision: action().revision, payload: payload, label: label });
+        var a = action();
+        await app.tracker.submit({ key: formKey, type: type, targetId: id, creationKey: a.isNew ? a.sending : null, expectedRevision: a.revision, payload: payload, label: label });
         back();
         return true;
       }
@@ -3703,6 +3991,8 @@ window.ESGCompetencyHub = function (ctx) {
       async function send(form, spec, errorBox) {
         var btn = form.querySelector('button[type=submit]');
         btn.disabled = true; btn.textContent = 'Sending…';
+        if (!form.dataset.key) form.dataset.key = CH.requests.newKey();
+        spec.key = form.dataset.key;
         try {
           await app.tracker.submit(spec);
           view = 'main';
@@ -4477,6 +4767,7 @@ window.ESGCompetencyHub = function (ctx) {
           chairId: Number(chair.value), attendeeIds: Array.prototype.filter.call(attendees.querySelectorAll('input'), function (i) { return i.checked; }).map(function (i) { return Number(i.value); }) };
       }
 
+      var keys = [];   // one request key per booking (or the change), kept across Try again
       form.addEventListener('submit', async function (e) {
         e.preventDefault();
         errorBox.textContent = '';
@@ -4496,12 +4787,15 @@ window.ESGCompetencyHub = function (ctx) {
             });
             if (v.attendeeIds.slice().sort().join() !== meeting.attendeeIds.slice().sort().join()) changed.attendeeIds = v.attendeeIds;
             if (!Object.keys(changed).length) { errorBox.textContent = 'Nothing has changed.'; submit.disabled = false; submit.textContent = 'Save changes'; return; }
-            await app.tracker.submit({ type: 'UpdateMeeting', targetId: meeting.id, targetType: 'Meeting', expectedRevision: meeting.revision, payload: changed,
+            keys[0] = keys[0] || CH.requests.newKey();
+            var now = app.model.meetingById[meeting.id] || meeting;
+            await app.tracker.submit({ key: keys[0], type: 'UpdateMeeting', targetId: meeting.id, targetType: 'Meeting', expectedRevision: now.revision, payload: changed,
               label: 'Change the ' + meeting.areaName + ' meeting to ' + when(v.dateIso) });
           } else {
             var dates = [v.dateIso].concat(R.nextMonths(v.dateIso, Number(repeat.value)));
             for (var i = 0; i < dates.length; i++) {
-              await app.tracker.submit({ type: 'ScheduleMeeting', payload: Object.assign({}, v, { dateIso: dates[i] }),
+              keys[i] = keys[i] || CH.requests.newKey();
+              await app.tracker.submit({ key: keys[i], type: 'ScheduleMeeting', payload: Object.assign({}, v, { dateIso: dates[i] }),
                 label: 'Book the ' + m.areaByKey[v.areaKey].name + ' meeting on ' + when(dates[i]) });
             }
           }
@@ -4675,15 +4969,21 @@ window.ESGCompetencyHub = function (ctx) {
       var refreshTimer = null;
       var attOpen = null;     // the attendance list as the person left it (open or closed)
 
+      var bookingKey = id < 0 && app.model.meetingById[id] ? app.model.meetingById[id].sending : null;
+      var formKey = null;    // one change per form, however often it is tried again
+      var current = null;    // the item on screen while the meeting runs: { it, dirty(), save() }
       function mt() {
-        if (id < 0 && app.meetingAlias && app.meetingAlias[id] && app.model.meetingById[app.meetingAlias[id]]) { id = app.meetingAlias[id]; loadAgenda(true); }
+        if (id < 0 && !app.model.meetingById[id] && bookingKey) {
+          var booking = app.tracker.byKey(bookingKey);
+          if (booking && booking.resultId && app.model.meetingById[booking.resultId]) { id = Number(booking.resultId); loadAgenda(true); }
+        }
         return app.model.meetingById[id];
       }
 
       // what is recorded for the meeting, with what waits on this screen for its booking to be saved
       async function readItems(x) {
         var rows = x.id < 0 ? { frozen: [], live: [] } : await loadItems(app, x);
-        rows.live = rows.live.concat(app.bufferFor(x.id));
+        rows.live = rows.live.concat(app.bufferFor(x));
         return rows;
       }
 
@@ -4776,11 +5076,15 @@ window.ESGCompetencyHub = function (ctx) {
       }
 
       function pending(x) {
-        if (app.finaliseLater[x.id]) {
-          return h('p', { class: 'pending', role: 'status' }, app.mark({ sending: true }, 'Meeting'),
-            ' Finalise the minutes – the minutes below are what will be saved. They are sent as soon as the meeting\'s start is saved, usually within a minute.');
+        var e = app.tracker.forTarget(x.id, 'Meeting', x.id < 0 ? x.sending : null);
+        // waiting its turn (release 1.3): it is sent as soon as the change before it is saved
+        if (e && e.state === 'queued') {
+          return h('p', { class: 'pending', role: 'status' }, app.mark({ sending: true }, 'Meeting'), ' ' + e.label + ' – shown now; it is sent as soon as ' +
+            (x.id < 0 ? 'the booking' : 'the change before it') + ' is saved, usually within a minute.');
         }
-        var e = app.tracker.forTarget(x.id, 'Meeting');
+        if (e && e.state === 'held') {
+          return h('p', { class: 'pending', role: 'status' }, '✕ ' + e.label + ' – not sent, because an earlier change to this meeting was not saved. See the card at the bottom right.');
+        }
         // release 1.2: a change to the booking already shows; a refusal has its own card, with Try again
         if (e && (e.state === 'submitted' || e.state === 'slow')) {
           var what = e.retrying ? e.message : e.type === 'StartMeeting' ? 'the meeting is on. Record it now; the agenda is fixed in the background.'
@@ -4824,7 +5128,7 @@ window.ESGCompetencyHub = function (ctx) {
         // a start being saved does not hold the meeting up (release 1.2); any other change to the booking still does
         var busy = (saving && e.type !== 'StartMeeting') || app.meetingsBlocked();
         var live = runs && !busy && x.status === 'In Progress';
-        app.liveMeetingId = live ? x.id : null;
+        app.liveMeetingId = live && x.id > 0 ? x.id : null;
         var st = STATUS[x.status] || ['later', x.status];
         var words = inviteWords(app, x);
         var people = x.attendeeIds.map(function (pid) { return app.model.nameOf(pid); }).sort();
@@ -4870,7 +5174,7 @@ window.ESGCompetencyHub = function (ctx) {
         status.textContent = 'Saving…';
         if (x.id < 0) {
           var row = Object.assign({ Id: -(++bufferSeq), AuthorId: app.person.SiteUserId, RowKey: 'U|' + clientKey, MeetingId: x.id }, values);
-          (app.meetingBuffer[x.id] = app.meetingBuffer[x.id] || []).push(row);
+          app.bufferPush(x, row);
           if (agenda && agenda !== 'error') agenda.live.push(row);
           status.textContent = 'Kept – sent as soon as the booking is saved';
           return Promise.resolve();
@@ -4886,6 +5190,14 @@ window.ESGCompetencyHub = function (ctx) {
             status.textContent = error.status === 403 ? 'Only the people who run this area\'s meetings, and the Team Leaders and Group Head, can record this.' : 'Not saved – try again in a moment.';
             throw error;
           });
+      }
+
+      // typed notes go with the person when they move to another item (release 1.3)
+      function leaveItem(then) {
+        var c = current;
+        if (c && c.dirty()) return c.save().then(then, then);
+        then();
+        return null;
       }
 
       function liveScreen(x) {
@@ -4908,7 +5220,7 @@ window.ESGCompetencyHub = function (ctx) {
             var chip = o ? ui.chip(o === 'Not reached' || o === 'Deferred' ? 'soon' : 'done', outcomeWords(o))
               : R.DISCUSSION_SECTIONS.indexOf(x.it.section) >= 0 ? ui.chip('soon', 'Needs an outcome') : ui.chip('plain', 'To do');
             return h('button', { type: 'button', class: 'it' + (x.i === at && !adding ? ' on' : ''), 'aria-current': x.i === at && !adding ? 'true' : null,
-              onclick: function () { adding = false; at = x.i; fill(); } }, h('span', { class: 'lbl', text: x.it.title }), chip);
+              onclick: function () { return leaveItem(function () { adding = false; at = x.i; fill(); }); } }, h('span', { class: 'lbl', text: x.it.title }), chip);
           })];
         }), h('button', { type: 'button', class: 'btn btn-small add', text: '+ Add an item', onclick: function () { adding = true; fill(); var f = dlg.body.querySelector('#ch-mt-title'); if (f) f.focus(); } }));
       }
@@ -4941,21 +5253,26 @@ window.ESGCompetencyHub = function (ctx) {
         var needs = R.DISCUSSION_SECTIONS.indexOf(it.section) >= 0;
         var kind = kindOf(it)[0];
         var action = it.type === 'Action' ? app.model.actionById[it.sourceId] : null;
+        var closeKey = null;
         async function save(outcome, next) {
           if (!it.key) { if (next) go(at + 1); return; }
           try {
             await saveRow(x, { Title: it.title, RecordKey: it.key, RowType: 'Outcome', SourceType: it.key.split('|')[2], SourceId: Number(it.key.split('|')[3]),
               Outcome: outcome, Notes: notes.value.trim() }, status);
+            it.notes = notes.value.trim();
             if (next) go(at + 1); else fill();
           } catch (_) { /* the message is shown beside the buttons */ }
         }
+        function dirty() { return !!it.key && notes.value.trim() !== (it.notes || ''); }
+        current = { it: it, dirty: dirty, save: function () { return dirty() ? save(it.outcome, false) : Promise.resolve(); } };
         function go(i) { at = Math.max(0, Math.min(i, items.length - 1)); fill(); var o = dlg.body.querySelector('.outcomes button'); if (o) o.focus(); }
         // Close this action: recorded for the minutes as Closed, with the notes, and the action itself is closed (queued)
         async function closeIt() {
           var note = notes.value.trim();
           try {
             await save('Closed', false);
-            await app.tracker.submit({ type: 'CloseAction', targetId: action.id, expectedRevision: action.revision, meetingId: x.id,
+            closeKey = closeKey || CH.requests.newKey();
+            await app.tracker.submit({ key: closeKey, type: 'CloseAction', targetId: action.id, expectedRevision: action.revision, meetingId: x.id,
               payload: { outcome: 'Completed', note: note }, label: 'Close: ' + action.title });
             fill();
           } catch (error) { status.textContent = error.friendly || 'The action could not be closed just now. Try again in a moment.'; }
@@ -4977,12 +5294,12 @@ window.ESGCompetencyHub = function (ctx) {
           it.outcome === 'Closed' ? h('p', { class: 'small', text: 'Closed at this meeting – it will appear in the minutes under "Actions closed at this meeting".' }) : null,
           it.key ? [h('div', { class: 'what-label', text: 'Outcome' }),
             h('div', { class: 'outcomes', role: 'group', 'aria-label': 'Outcome' }, OUTCOME_BUTTONS.filter(function (o) { return o[0] !== 'Action raised' || kind !== 'action'; }).map(function (o) {
-              return h('button', { type: 'button', 'aria-pressed': String(it.outcome === o[0]), text: o[1], onclick: function () { save(o[0], false); } });
+              return h('button', { type: 'button', 'aria-pressed': String(it.outcome === o[0]), text: o[1], onclick: CH.ui.guarded(function () { return save(o[0], false); }) });
             })),
             h('div', { class: 'what-label', text: 'Notes for the minutes' }), notes] : h('p', { class: 'muted small', text: 'For information.' }),
           h('div', { class: 'row foot' }, buttons, h('span', { class: 'grow' }), status,
-            at > 0 ? ui.button('Previous', function () { go(at - 1); }) : null,
-            ui.button(at < items.length - 1 ? 'Next item' : 'Last item', function () { if (it.key && notes.value.trim() !== (it.notes || '')) save(it.outcome, at < items.length - 1); else if (at < items.length - 1) go(at + 1); }, 'main')));
+            at > 0 ? ui.button('Previous', function () { return leaveItem(function () { go(at - 1); }); }) : null,
+            ui.button(at < items.length - 1 ? 'Next item' : 'Last item', function () { if (dirty()) return save(it.outcome, at < items.length - 1); else if (at < items.length - 1) go(at + 1); }, 'main')));
       }
 
       function decisions(x) {
@@ -4990,14 +5307,17 @@ window.ESGCompetencyHub = function (ctx) {
         var title = h('input', { id: 'ch-mt-decision', type: 'text', maxlength: '255' });
         var details = h('textarea', { id: 'ch-mt-decision-details', rows: '2', maxlength: '2000' });
         var status = h('span', { class: 'muted small', role: 'status' });
+        var btn = h('button', { type: 'submit', class: 'btn', text: 'Record the decision' });
         var f = h('form', { class: 'comment-form', novalidate: true }, field('Decision', title), field('Details', details, 'Optional.'),
-          h('div', { class: 'row' }, h('button', { type: 'submit', class: 'btn', text: 'Record the decision' }), status));
+          h('div', { class: 'row' }, btn, status));
         f.addEventListener('submit', function (e) {
           e.preventDefault();
+          if (btn.disabled) return;
           var t = title.value.trim();
           if (!t) { CH.ui.dialog.showErrors(f, 'ch-mt-', { decision: 'Say what was decided.' }, ['decision']); return; }
+          btn.disabled = true;
           saveRow(x, { Title: t, RecordKey: x.id + '|D|' + CH.requests.newKey(), RowType: 'Decision', Section: 'Decisions and additional actions', Notes: details.value.trim() }, status)
-            .then(function () { fill(); }).catch(function () {});
+            .then(function () { fill(); }).catch(function () { btn.disabled = false; });
         });
         return h('section', { class: 'live-block' }, h('h3', { class: 'group-title', text: 'Decisions' }),
           list.length ? h('ul', { class: 'plain' }, list.map(function (r) { return h('li', null, h('span', null, h('b', { text: r.Title }), r.Notes ? ' – ' + r.Notes : '')); })) : null, f);
@@ -5021,7 +5341,7 @@ window.ESGCompetencyHub = function (ctx) {
           try {
             var nb = { Id: -(++bufferSeq), AuthorId: app.person.SiteUserId, Title: t, RowKey: 'U|' + clientKey, RecordKey: x.id + '|N|' + clientKey,
               MeetingId: x.id, RowType: 'New Business', SourceType: 'New Business', Section: 'New business', Notes: notes.value.trim() };
-            if (x.id < 0) (app.meetingBuffer[x.id] = app.meetingBuffer[x.id] || []).push(nb);
+            if (x.id < 0) app.bufferPush(x, nb);
             else { delete nb.Id; delete nb.AuthorId; await app.sp.addToFolder('meetingItems', x.areaKey + '/MTG-' + x.id + '/Record', nb); }
             adding = false;
             openTitle = t;
@@ -5113,16 +5433,17 @@ window.ESGCompetencyHub = function (ctx) {
           items.forEach(function (it) { if (it.key) outcomes[it.key] = it.outcome; });
           var missing = R.missingOutcomes(items, outcomes);
           var waiting = meetingPending(x);
-          blocked = !!missing.length || !!waiting.length;
+          blocked = !!missing.length;
           fields.push(h('p', { class: 'explain', text: 'Finalising makes the record read-only for good: the minutes are fixed as they are now, and a PDF is made. Team Leaders and the Group Head can add amendments later; the original stays.' }),
             h('p', { text: items.filter(function (it) { return it.outcome; }).length + ' of ' + items.length + ' items have an outcome.' }),
             missing.length ? h('div', { class: 'section-note', id: 'ch-mt-missing' }, h('b', { text: 'These items still need an outcome: ' }), missing.join('; ') + '.') : null,
             waiting.length ? h('div', { class: 'section-note', id: 'ch-mt-waiting' }, h('b', { text: 'Still being recorded: ' }), waiting.map(function (e) { return e.label; }).join('; ') +
-              '. Finalise once they show as saved.') : null);
+              '. You can finalise now: the minutes are sent as soon as these are saved.') : null);
         } else fields.push(h('p', { class: 'explain', text: 'Starting fixes the agenda from the records as they are now. It cannot be undone.' }));
         var labels = { cancel: ['Cancel this meeting?', 'Cancel the meeting'], start: ['Start this meeting?', 'Start the meeting'],
           finalise: ['Finalise the minutes?', 'Finalise the minutes'], amend: ['Amend these minutes', 'Add the amendment'] }[kind];
         var submit = h('button', { type: 'submit', class: 'btn btn-main', text: labels[1], disabled: blocked ? true : null });
+        formKey = CH.requests.newKey();
         var f = h('form', { class: 'dialog-body', novalidate: true }, h('h3', { text: labels[0] }), fields, errorBox,
           h('div', { class: 'row' }, submit, h('button', { type: 'button', class: 'btn', text: 'Back', onclick: function () { show('main'); } })));
         f.addEventListener('submit', async function (e) {
@@ -5139,13 +5460,13 @@ window.ESGCompetencyHub = function (ctx) {
             if (CH.ui.dialog.showErrors(f, 'ch-mt-', aerrs, ['what', 'reason'])) return;
             payload = { what: what.value.trim(), reason: reason.value.trim() };
           }
-          if (kind === 'start' && x.id < 0 && app.startWhenBooked(x)) { view = 'main'; fill(); loadAgenda(); return; }
-          if (kind === 'finalise' && app.finaliseWhenReady(x)) { view = 'main'; fill(); loadAgenda(); return; }
           submit.disabled = true; submit.textContent = 'Sending…';
           var type = { cancel: 'CancelMeeting', start: 'StartMeeting', finalise: 'FinaliseMeeting', amend: 'AmendMeeting' }[kind];
           var verb = { cancel: 'Cancel the ', start: 'Start the ', finalise: 'Finalise the minutes of the ', amend: 'Amend the minutes of the ' }[kind];
           try {
-            await app.tracker.submit({ type: type, targetId: x.id, targetType: 'Meeting', expectedRevision: x.revision, payload: payload, label: verb + x.areaName + ' meeting' });
+            // a meeting not yet booked, or a start still saving: the change waits its turn and is shown now (release 1.3)
+            await app.tracker.submit({ key: formKey, type: type, targetId: x.id, targetType: 'Meeting', creationKey: x.id < 0 ? x.sending : null,
+              expectedRevision: x.revision, payload: payload, label: verb + x.areaName + ' meeting' });
             view = 'main';
             fill();
             if (kind === 'start' || kind === 'finalise') loadAgenda();
@@ -5167,6 +5488,7 @@ window.ESGCompetencyHub = function (ctx) {
         if (view !== 'main' && view !== 'finalise') return;
         var active = document.activeElement;
         if (active && dlg.body.contains(active) && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)) { refreshTimer = setTimeout(refreshNow, 2000); return; }
+        if (current && current.dirty()) { refreshTimer = setTimeout(refreshNow, 2000); return; }   // never over unsaved notes
         loadAgenda(true);
       }
       app.panel = { refresh: function () {
@@ -5420,7 +5742,7 @@ window.ESGCompetencyHub = function (ctx) {
           ui.button('Yes, ' + choice[1].toLowerCase(), async function (e) {
             e.target.disabled = true;
             try {
-              var entry = await app.tracker.submit({ type: choice[0], targetId: item.tx.Id, payload: { txId: item.tx.Id, note: '' },
+              var entry = await app.tracker.submit({ type: choice[0], targetId: item.tx.Id, targetType: 'Transaction', payload: { txId: item.tx.Id, note: '' },
                 label: choice[1] + ': ' + describe(app, item) });
               item.sent = entry;
               onDone();
@@ -5436,6 +5758,14 @@ window.ESGCompetencyHub = function (ctx) {
       }
       CH.dom.append(box, buttons());
       return box;
+    }
+
+    // the decision already sent about this change, if any (found again after the list is read again)
+    function sentFor(app, item) {
+      if (item.sent) return item.sent;
+      return app.tracker.entries().filter(function (e) {
+        return e.targetType === 'Transaction' && Number(e.targetId) === Number(item.tx.Id) && !e.dismissed && e.state !== 'dropped';
+      }).slice(-1)[0] || null;
     }
 
     function sentLine(entry) {
@@ -5460,7 +5790,7 @@ window.ESGCompetencyHub = function (ctx) {
             ' · ' + (Number(r.Attempts) || 0) + (Number(r.Attempts) === 1 ? ' attempt' : ' attempts') + ' · reference ' + r.RequestKey }),
           h('p', null, ui.chip(item.partly ? 'late' : 'soon', stateWords(item))),
           r.LastError ? h('p', { class: 'muted small', text: 'Last error: ' + r.LastError }) : null,
-          item.sent ? sentLine(item.sent) : choices(app, item, function () { app.refreshView(); })));
+          sentFor(app, item) ? sentLine(sentFor(app, item)) : choices(app, item, function () { app.refreshView(); })));
       }));
     }
 
@@ -5581,6 +5911,9 @@ window.ESGCompetencyHub = function (ctx) {
       var observer = null;
       var healthTimer = null;
       var HEALTH_EVERY_MS = 5 * 60 * 1000;
+      var REFRESH_EVERY_MS = 60 * 1000;
+      var refreshTimer = null;
+      var lastRead = null;   // when the lists were last read: the next refresh asks only for rows changed since
       var app = { state: { view: 'home', area: null, tab: 0 } };
 
       function findRoot() { return document.querySelector('[data-ch-root]'); }
@@ -5737,16 +6070,28 @@ window.ESGCompetencyHub = function (ctx) {
       // A change that was not saved: what happened, and Try again where that can work. Shown until dismissed.
       function problems() {
         if (!app.tracker) return null;
-        var list = app.tracker.entries().filter(function (e) {
-          return followed(e) && !e.dismissed && ['rejected', 'attention', 'cancelled', 'reverted'].indexOf(e.state) >= 0;
-        }).slice(-3);
+        var all = app.tracker.entries();
+        var list = all.filter(function (e) {
+          return followed(e) && !e.dismissed && (['rejected', 'attention', 'cancelled', 'reverted'].indexOf(e.state) >= 0 ||
+            (e.state === 'held' && !(all.filter(function (x) { return x.key === e.heldBy; })[0])));
+        });
         if (!list.length) return null;
         return h('div', { class: 'problems', role: 'alert' }, list.map(function (e) {
           var text, again = false;
-          if (e.state === 'rejected') {
+          var held = app.tracker.heldBy(e);
+          var more = held.length ? ' ' + (held.length === 1 ? 'One more change to it (' + held[0].label + ') was waiting for this one and has not been sent.'
+            : held.length + ' more changes to it were waiting for this one and have not been sent: ' + held.map(function (x) { return x.label; }).join('; ') + '.') : '';
+          if (e.state === 'held') {
+            again = true;
+            text = 'An earlier change to this record was not saved, so this one was not sent.';
+          } else if (e.state === 'rejected') {
             again = CH.requests.isConflict(e);
-            text = again ? 'Someone else changed this a moment ago, so your change was not applied. Nothing was changed – the screen shows it as it is now.'
+            text = again ? (e.theirs && (e.theirs.who || e.theirs.fields.length)
+              ? 'Someone else changed this first' + (e.theirs.who ? ' (' + e.theirs.who + ')' : '') + (e.theirs.fields.length ? ', altering ' + e.theirs.fields.join(' and ') : '') +
+                '. Yours was not applied; the screen now shows theirs. Apply yours on top, or discard it.'
+              : 'Someone else changed this a moment ago, so your change was not applied. Nothing was changed – the screen shows it as it is now.')
               : e.message + ' Nothing was changed.';
+            text += more;
           } else if (e.state === 'attention') {
             again = true;
             text = /locked|Not fully/i.test(e.message)
@@ -5755,11 +6100,12 @@ window.ESGCompetencyHub = function (ctx) {
           } else {
             text = e.message;
           }
-          return h('div', { class: 'problem' }, h('b', { text: (e.state === 'cancelled' ? 'Cancelled: ' : e.state === 'reverted' ? 'Reverted: ' : 'Not saved: ') + e.label }),
+          if (e.state === 'attention' || e.state === 'cancelled' || e.state === 'reverted') text += more;
+          return h('div', { class: 'problem' }, h('b', { text: (e.state === 'cancelled' ? 'Cancelled: ' : e.state === 'reverted' ? 'Reverted: ' : e.state === 'held' ? 'Not sent: ' : 'Not saved: ') + e.label }),
             h('p', { text: text }),
             h('div', { class: 'row' },
-              again ? CH.ui.button('Try again', function () { tryAgain(e); }, 'main') : null,
-              CH.ui.button('Dismiss', function () { app.tracker.dismiss(e); })));
+              again ? CH.ui.button(e.state === 'rejected' && e.theirs ? 'Apply mine on top' : held.length ? 'Try again, then the rest' : 'Try again', function () { return tryAgain(e); }, 'main') : null,
+              CH.ui.button(held.length ? 'Discard all' : 'Dismiss', function () { app.tracker.discard(e); render(false); })));
         }));
       }
 
@@ -5767,11 +6113,75 @@ window.ESGCompetencyHub = function (ctx) {
         var rec = e.targetType === 'Notice' ? app.model.noticeById[e.targetId] : e.targetType === 'Register Entry' ? app.model.entryById[e.targetId]
           : e.targetType === 'Meeting' ? app.model.meetingById[e.targetId] : app.model.actionById[e.targetId];
         try {
+          // against the record as it is now (its revision as last read, with nothing of this person's still pending)
           await app.tracker.retry(e, e.state === 'rejected' && rec && e.spec && e.spec.expectedRevision ? rec.revision : undefined);
         } catch (error) {
           CH.ui.toast(app.root, error.friendly || 'It could not be sent just now. Try again in a moment.', 'info');
         }
         render(false);
+      }
+
+      // Changes by other people (release 1.3): every minute, while the tab is looked at, the rows changed since the last
+      // read are read (Modified is indexed) and folded in; the overlay of this person's own pending changes goes back on
+      // top. A row changed by someone else is marked, so a panel open on it can say so. Nothing is read from a hidden tab.
+      var DELTA = ['actions', 'notices', 'register', 'meetings'];
+      var refreshing = false;
+      async function refreshOthers() {
+        if (disposed || !app.raw || refreshing || document.hidden || !lastRead) return;
+        refreshing = true;
+        var since = lastRead;
+        var startedAt = new Date();
+        try {
+          var changed = await CH.model.loadChanged(app.sp, since);
+          var touched = false;
+          DELTA.forEach(function (key) {
+            var rows = changed[key];
+            if (!rows || !app.raw[key]) return;
+            var mine = {};
+            app.tracker.entries().forEach(function (e) { if (e.key) mine[e.key] = true; });
+            var current = app.raw[key].rows || [];
+            var byId = {};
+            current.forEach(function (r) { byId[Number(r.Id)] = r; });
+            rows.forEach(function (r) {
+              var id = Number(r.Id);
+              var was = byId[id];
+              if (was && JSON.stringify(was) === JSON.stringify(r)) return;
+              touched = true;
+              if (!mine[r.LastRequestKey] && !(was && was.PendingRequestKey && mine[was.PendingRequestKey])) {
+                app.others[key + '|' + id] = { at: r.Modified || startedAt.toISOString() };
+              }
+              if (was) current[current.indexOf(was)] = r; else current.push(r);
+            });
+            // rows that left the list this screen shows (closed, archived, cancelled) go
+            app.raw[key].rows = current.filter(function (r) { return !changed.gone || changed.gone[key + '|' + r.Id] !== true; });
+          });
+          lastRead = startedAt;
+          if (touched) {
+            rebuild();
+            render(false);
+            if (app.panel) app.panel.refresh();
+          }
+        } catch (_) { /* the next minute tries again */ }
+        refreshing = false;
+      }
+      app.others = {};
+      // "updated by someone else at 10:42" for a record, or null
+      app.changedByOthers = function (kind, id) {
+        var key = { 'Action': 'actions', 'Notice': 'notices', 'Register Entry': 'register', 'Meeting': 'meetings' }[kind || 'Action'];
+        return app.others[key + '|' + Number(id)] || null;
+      };
+      function onVisible() {
+        if (document.hidden || disposed) return;
+        if (app.tracker) app.tracker.wake();
+        refreshOthers();
+      }
+      // a change still waiting in this browser alone (never sent yet) is lost if the page closes before it goes
+      function onLeave(e) {
+        var waiting = app.tracker ? app.tracker.waiting() : [];
+        if (!waiting.length && !(app.tracker && app.tracker.unsent().length)) return undefined;
+        e.preventDefault();
+        e.returnValue = 'Changes are still being sent from this page.';
+        return e.returnValue;
       }
 
       // Every few minutes: is automatic processing still working (or working again)? Repaints only on a change.
@@ -5786,15 +6196,16 @@ window.ESGCompetencyHub = function (ctx) {
         } catch (_) { /* the next check tries again */ }
       }
 
-      // ---- a meeting used before its booking is saved (release 1.2). It has a temporary (negative) number; what is
-      // recorded meanwhile waits here, and when the flow has made the meeting and its record folder it is sent there,
-      // under the real number, and a Start pressed meanwhile is sent too.
-      app.meetingAlias = {};
-      app.meetingBuffer = {};
+      // ---- a meeting used before its booking is saved (release 1.2). What is recorded on it waits in the tracker's
+      // stash (kept in the browser's storage, so a reload loses nothing), keyed by the booking's request key. When the
+      // flow has made the meeting and its record folder, the rows are sent there under the real number. A Start or
+      // Finalise pressed meanwhile is a queued change that follows the booking by itself (release 1.3).
+      function buffers() { return app.tracker.stash.meetingBuffer = app.tracker.stash.meetingBuffer || {}; }
       // ids: items added by hand before the booking was saved, by their temporary number -> the number SharePoint gave them
-      function retarget(values, from, to, ids) {
+      function retarget(values, to, ids) {
+        var from = Number(values.MeetingId);
         var v = Object.assign({}, values, { MeetingId: to });
-        delete v.Id;
+        delete v.Id; delete v.AuthorId;
         if (v.RecordKey && String(v.RecordKey).indexOf(from + '|') === 0) v.RecordKey = to + String(v.RecordKey).slice(String(from).length);
         if (v.SourceType === 'New Business' && v.RowType === 'Outcome' && ids[v.SourceId]) {
           v.SourceId = ids[v.SourceId];
@@ -5802,83 +6213,40 @@ window.ESGCompetencyHub = function (ctx) {
         }
         return v;
       }
+      app.bufferPush = function (mt, row) {
+        (buffers()[mt.sending] = buffers()[mt.sending] || []).push(row);
+        app.tracker.persist();
+      };
+      // Each row stays on screen (under the meeting's real number) until it has been written.
       async function meetingBooked(entry) {
-        var tmp = -entry.tempId;
         var real = Number(entry.resultId);
         var mt = real && app.model.meetingById[real];
-        if (!mt) return;
-        app.meetingAlias[tmp] = real;
-        if (app.finaliseLater[tmp]) { app.finaliseLater[real] = app.finaliseLater[tmp]; delete app.finaliseLater[tmp]; }
-        if (entry.startNow) {
-          try {
-            await app.tracker.submit({ type: 'StartMeeting', targetId: real, targetType: 'Meeting', expectedRevision: rawRevision(real), payload: {},
-              label: 'Start the ' + mt.areaName + ' meeting' });
-          } catch (_) { CH.ui.toast(app.root, 'The meeting could not be started just now. Open it and press Start meeting again.', 'info'); }
-        }
-        flush(mt, tmp, real);
-      }
-      // Each row stays on screen (under the meeting's real number) until it has been written.
-      async function flush(mt, tmp, real) {
-        var rows = (app.meetingBuffer[tmp] || []).slice();
+        var rows = (buffers()[entry.key] || []).slice();
+        if (!mt || !rows.length) return;
         var ids = {};
         for (var i = 0; i < rows.length; i++) {
           try {
-            var made = await app.sp.addToFolder('meetingItems', mt.areaKey + '/MTG-' + real + '/Record', retarget(rows[i], tmp, real, ids));
+            var made = await app.sp.addToFolder('meetingItems', mt.areaKey + '/MTG-' + real + '/Record', retarget(rows[i], real, ids));
             if (rows[i].RowType === 'New Business' && made) ids[rows[i].Id] = made;
-          } catch (_) { CH.ui.toast(app.root, 'Part of what was recorded before the booking was saved could not be sent. Check the meeting and record it again.', 'info'); }
-          var left = app.meetingBuffer[tmp] || [];
+          } catch (_) {
+            CH.ui.toast(app.root, 'Part of what was recorded before the booking was saved could not be sent: ' + (rows[i].Title || rows[i].RowType) + '. Check the meeting and record it again.', 'info');
+          }
+          var left = buffers()[entry.key] || [];
           left.splice(left.indexOf(rows[i]), 1);
+          app.tracker.persist();
         }
-        delete app.meetingBuffer[tmp];
-        if (rows.length && app.panel) app.panel.refresh();
+        delete buffers()[entry.key];
+        app.tracker.persist();
+        if (app.panel) app.panel.refresh();
       }
-      // What is kept on screen for a meeting: its own rows, and those recorded under the temporary number it had.
-      app.bufferFor = function (id) {
-        var out = (app.meetingBuffer[id] || []).slice();
-        Object.keys(app.meetingAlias).forEach(function (tmp) {
-          if (Number(app.meetingAlias[tmp]) !== Number(id)) return;
-          (app.meetingBuffer[tmp] || []).forEach(function (r) {
-            out.push(Object.assign(retarget(r, Number(tmp), Number(id), {}), { Id: r.Id, AuthorId: r.AuthorId }));
-          });
-        });
-        return out;
-      };
-      function rawRevision(id) {
-        var row = ((app.raw && app.raw.meetings && app.raw.meetings.rows) || []).filter(function (r) { return Number(r.Id) === Number(id); })[0];
-        return row ? row.Revision : null;
-      }
-
-      // ---- Finalise pressed while the meeting's booking or start is still being saved (release 1.2.4): the minutes show
-      // as finalised at once, and the finalise is sent the moment the start is saved (the flow needs a meeting in progress).
-      app.finaliseLater = {};
-      app.finaliseWhenReady = function (mt) {
-        var starting = mt.id < 0 || app.tracker.entries().some(function (e) {
-          return e.type === 'StartMeeting' && Number(e.targetId) === Number(mt.id) && (e.state === 'submitted' || e.state === 'slow');
-        });
-        if (!starting) return false;
-        app.finaliseLater[mt.id] = { at: new Date(), label: 'Finalise the minutes of the ' + mt.areaName + ' meeting' };
-        rebuild();
-        render(false);
-        return true;
-      };
-      async function finaliseNow(id) {
-        var later = app.finaliseLater[id];
-        delete app.finaliseLater[id];
-        try {
-          await app.tracker.submit({ type: 'FinaliseMeeting', targetId: Number(id), targetType: 'Meeting', expectedRevision: rawRevision(id), payload: {}, label: later.label });
-        } catch (_) {
-          rebuild(); render(false);
-          CH.ui.toast(app.root, 'The minutes could not be finalised just now. Open the meeting and finalise it again.', 'info');
-        }
-      }
-      // A Start pressed on a meeting whose booking is still being saved: shown at once, sent when it is booked.
-      app.startWhenBooked = function (mt) {
-        var e = app.tracker.entries().filter(function (x) { return x.key === mt.sending; })[0];
-        if (!e) return false;
-        e.startNow = true;
-        rebuild();
-        render(false);
-        return true;
+      // What is kept on screen for a meeting: the rows recorded before its booking was saved, under its number now.
+      app.bufferFor = function (mt) {
+        var key = mt.id < 0 ? mt.sending : (function () {
+          var e = app.tracker.entries().filter(function (x) { return x.type === 'ScheduleMeeting' && x.state === 'done' && Number(x.resultId) === Number(mt.id); })[0];
+          return e ? e.key : null;
+        })();
+        if (!key) return [];
+        return (buffers()[key] || []).map(function (r) { return mt.id < 0 ? r : Object.assign(retarget(r, mt.id, {}), { Id: r.Id, AuthorId: r.AuthorId }); });
       };
 
       // The lists a saved change can alter (release 1.2: only these are read again). Health comes with the settings.
@@ -5900,10 +6268,7 @@ window.ESGCompetencyHub = function (ctx) {
           if (entry.state === 'done' && app.state.view === 'admin') setTimeout(function () { CH.views.admin.refresh(app); }, 1500);
           return;
         }
-        if (entry.type === 'StartMeeting' && app.finaliseLater[entry.targetId] && ['rejected', 'attention', 'cancelled'].indexOf(entry.state) >= 0) {
-          delete app.finaliseLater[entry.targetId];
-          CH.ui.toast(app.root, 'The meeting could not be started, so its minutes were not finalised. Open it to try again.', 'info');
-        }
+        if (entry.state === 'rejected' && CH.requests.isConflict(entry) && !entry.explained) { explainConflict(entry); }
         if (entry.state !== 'done') {
           rebuild();
           render(false);
@@ -5911,9 +6276,10 @@ window.ESGCompetencyHub = function (ctx) {
           return;
         }
         reload(listsFor(entry.type)).then(async function () {
-          // a meeting started before its booking was saved is started now, before the screen shows it as booked
-          if (entry.type === 'ScheduleMeeting' && entry.tempId) await meetingBooked(entry);
-          if (entry.type === 'StartMeeting' && app.finaliseLater[entry.targetId]) await finaliseNow(entry.targetId);
+          entry.reloaded = true;   // the rows now carry the change: the overlay no longer applies it
+          rebuild();
+          // what was recorded on a meeting before its booking was saved goes to the meeting now
+          if (entry.type === 'ScheduleMeeting') await meetingBooked(entry);
           render(false);
           if (app.panel) app.panel.refresh();
           var a = app.model.actionById[entry.resultId];
@@ -5922,7 +6288,48 @@ window.ESGCompetencyHub = function (ctx) {
           if (entry.type === 'RaiseAction' && a) CH.ui.toast(app.root, a.ref + ' raised: ' + a.title + '.', 'ok');
           else if (entry.type === 'RaiseRegisterEntry' && e) CH.ui.toast(app.root, e.ref + ' raised: ' + e.title + '.', 'ok');
           CH.ui.say(app.root, 'Saved: ' + entry.label + '. ' + entry.message);
-        }).catch(function () { CH.ui.toast(app.root, entry.message + ' Reload the page to see it.', 'ok'); });
+        }).catch(function () { entry.reloaded = true; CH.ui.toast(app.root, entry.message + ' Reload the page to see it.', 'ok'); });
+      }
+
+      // Someone else changed the record first (release 1.3): the record is read again, and the card says what they
+      // changed. A change that cannot clash with theirs is sent again by itself; otherwise the person decides.
+      var TOUCHES = { ExtendDeadline: ['DueDay'], MarkComplete: ['Status'], CloseAction: ['Status'], ReopenAction: ['Status'], ChangeStatus: ['Status', 'Blocker'],
+        ReassignAction: ['AssignedToId', 'CoOwnerIds'], EditActionDetails: ['Title', 'Description', 'Priority', 'RequiresCloseOut', 'CloseOutById'] };
+      var WATCHED = ['Title', 'Description', 'Status', 'DueDay', 'AssignedToId', 'CoOwnerIds', 'Priority', 'RequiresCloseOut', 'CloseOutById', 'Blocker', 'IsOpen',
+        'Body', 'Category', 'IsImportant', 'EntryType', 'Impact', 'Outcome', 'ResponsiblePersonId', 'MeetingDate', 'EndTime', 'Location', 'OnlineLink', 'ChairId', 'Attendees'];
+      var FIELD_WORDS = { DueDay: 'the deadline', Status: 'the status', AssignedToId: 'the owner', CoOwnerIds: 'the co-owners', Priority: 'the priority', Title: 'the title',
+        Description: 'the description', Blocker: 'what it is waiting on', RequiresCloseOut: 'the close-out check', CloseOutById: 'who checks it', IsOpen: 'whether it is open',
+        Body: 'the text', Category: 'the category', IsImportant: 'whether it is important', EntryType: 'the type', Impact: 'the impact', Outcome: 'the outcome',
+        ResponsiblePersonId: 'who is responsible', MeetingDate: 'the time', EndTime: 'the end time', Location: 'the place', OnlineLink: 'the online link', ChairId: 'the chair', Attendees: 'who is invited' };
+      async function explainConflict(entry) {
+        entry.explained = true;
+        var sentAgain = '';
+        var list = { 'Action': 'actions', 'Notice': 'notices', 'Register Entry': 'register', 'Meeting': 'meetings' }[entry.targetType || 'Action'];
+        if (!list || !(Number(entry.targetId) > 0)) return;
+        var before = ((app.raw[list] || {}).rows || []).filter(function (r) { return Number(r.Id) === Number(entry.targetId); })[0];
+        try {
+          await reload([list]);
+          var after = ((app.raw[list] || {}).rows || []).filter(function (r) { return Number(r.Id) === Number(entry.targetId); })[0];
+          var changed = before && after ? WATCHED.filter(function (f) { return f in after && JSON.stringify(before[f]) !== JSON.stringify(after[f]); }) : [];
+          var who = '';
+          try {
+            // the event of the change that moved the record on, if History has it yet
+            var ev = after && after.LastRequestKey ? await app.sp.items(CH.config.lists.history.title, "$select=Id,Title,EventType,ActorId&$filter=RequestKey eq '" + CH.sp.escapeOData(after.LastRequestKey + '|1') + "'", 1) : { rows: [] };
+            if (ev.rows[0] && Number(ev.rows[0].ActorId) !== Number(app.person.SiteUserId)) who = app.model.nameOf(Number(ev.rows[0].ActorId)) + ': ' + (ev.rows[0].Title || ev.rows[0].EventType || 'changed it');
+          } catch (_) { who = ''; }
+          if (changed.length || who) entry.theirs = { fields: changed.map(function (f) { return FIELD_WORDS[f] || f; }), who: who };
+          var mine = TOUCHES[entry.type] || null;
+          var clash = !mine || !changed.length || changed.some(function (f) { return mine.indexOf(f) >= 0; }) || (after && after.Status === 'Closed' && !!entry.targetId && entry.type !== 'ReopenAction');
+          if (!clash) {
+            // nothing of theirs is in the way: sent again against the record as it is now
+            var rec = app.model.actionById[entry.targetId];
+            await app.tracker.retry(entry, rec ? rec.revision : after && after.Revision);
+            sentAgain = 'Someone else changed ' + entry.theirs.fields.join(' and ') + ' meanwhile; your change (' + entry.label + ') has been sent again on top.';
+          }
+        } catch (_) { /* the card still offers Try again */ }
+        render(false);
+        if (app.panel) app.panel.refresh();
+        if (sentAgain) CH.ui.toast(app.root, sentAgain, 'info');
       }
 
       function stateScreen(title, message, detail) {
@@ -5984,12 +6391,19 @@ window.ESGCompetencyHub = function (ctx) {
       };
       app.markAction = function (a) { return app.mark(a, 'Action'); };
       // "Mark as done" straight from a to-do card; "Reopen" on a card just marked done, if it was a slip (release 1.2)
+      // the same press twice is one change: the key names the action and the revision the change is for
+      var quickKeys = {};
+      function quickKey(what, a) {
+        var k = what + '|' + (a.isNew ? a.sending : a.id) + '|' + a.revision;
+        quickKeys[k] = quickKeys[k] || CH.requests.newKey();
+        return quickKeys[k];
+      }
       app.quickDone = function (a) {
-        return app.tracker.submit({ type: 'MarkComplete', targetId: a.id, expectedRevision: a.revision, payload: { note: '' }, label: 'Mark as done: ' + a.title })
+        return app.tracker.submit({ key: quickKey('done', a), type: 'MarkComplete', targetId: a.id, creationKey: a.isNew ? a.sending : null, expectedRevision: a.revision, payload: { note: '' }, label: 'Mark as done: ' + a.title })
           .catch(function (error) { CH.ui.toast(app.root, error.friendly || 'It could not be sent just now. Try again in a moment.', 'info'); });
       };
       app.quickReopen = function (a) {
-        return app.tracker.submit({ type: 'ReopenAction', targetId: a.id, expectedRevision: a.revision, payload: { reason: 'Reopened straight after it was marked as done.' },
+        return app.tracker.submit({ key: quickKey('reopen', a), type: 'ReopenAction', targetId: a.id, creationKey: a.isNew ? a.sending : null, expectedRevision: a.revision, payload: { reason: 'Reopened straight after it was marked as done.' },
           label: 'Reopen: ' + a.title }).catch(function (error) { CH.ui.toast(app.root, error.friendly || 'It could not be sent just now. Try again in a moment.', 'info'); });
       };
       // After an instant write (a flag): read the flags again and repaint, keeping any open panel.
@@ -6063,6 +6477,7 @@ window.ESGCompetencyHub = function (ctx) {
         var soon = (app.settings.filter(function (r) { return r.Title === 'DueSoonDays'; })[0] || {}).Value;
         CH.config.dueSoonDays = /^\d{1,2}$/.test(String(soon || '')) && Number(soon) >= 1 && Number(soon) <= 30 ? Number(soon) : 7;
         app.raw = raw;
+        lastRead = now;
         rebuild();
       }
 
@@ -6074,11 +6489,7 @@ window.ESGCompetencyHub = function (ctx) {
         var today = CH.dates.localDate(now);
         var entries = app.tracker ? app.tracker.entries() : [];
         app.keep = app.keep || {};
-        // a finalise waiting for its meeting's start shows as one being saved
-        var later = Object.keys(app.finaliseLater || {}).map(function (id) {
-          return { key: 'later|' + id, type: 'FinaliseMeeting', targetType: 'Meeting', targetId: Number(id), state: 'submitted', payload: {}, submittedAt: app.finaliseLater[id].at };
-        });
-        var view = CH.optimistic.apply(app.raw, entries.concat(later), app.keep, { personId: app.person.SiteUserId, today: today, now: now });
+        var view = CH.optimistic.apply(app.raw, entries, app.keep, { personId: app.person.SiteUserId, today: today, now: now });
         entries.forEach(function (e) {
           var closing = e.type === 'MarkComplete' || e.type === 'CloseAction';
           if (closing && saving(e)) {
@@ -6140,7 +6551,10 @@ window.ESGCompetencyHub = function (ctx) {
         if (params.get('view') === 'admin') app.state = { view: 'admin', area: null, tab: 0 };
         if (params.get('view') === 'manage' && app.access.isManagement) app.state = { view: 'manage', area: null, tab: 0 };
         healthTimer = setInterval(checkHealth, HEALTH_EVERY_MS);
+        refreshTimer = setInterval(refreshOthers, REFRESH_EVERY_MS);
         window.addEventListener('resize', fitToWindow);
+        window.addEventListener('beforeunload', onLeave);
+        document.addEventListener('visibilitychange', onVisible);
         document.addEventListener('keydown', onKey);
         render(false);
         var actionParam = Number(params.get('action'));
@@ -6169,6 +6583,9 @@ window.ESGCompetencyHub = function (ctx) {
           disposed = true;
           if (app.tracker) app.tracker.stop();
           if (healthTimer) clearInterval(healthTimer);
+          if (refreshTimer) clearInterval(refreshTimer);
+          window.removeEventListener('beforeunload', onLeave);
+          document.removeEventListener('visibilitychange', onVisible);
           if (observer) observer.disconnect();
           window.removeEventListener('resize', applySize);
           window.removeEventListener('resize', fitToWindow);

@@ -41,6 +41,31 @@ CH.model = (function () {
     return raw;
   }
 
+  // Rows changed since a moment (release 1.3): read every minute so other people's changes appear without a reload.
+  // Each list keeps its usual leading filter (an indexed column, so a large list is still served), with Modified added;
+  // a second read finds rows that have left the list this screen shows (closed actions, archived notices), in gone.
+  var LEFT = { actions: "IsOpen eq 0 and FSObjType eq 0", notices: "Status eq 'Archived' and FSObjType eq 0" };
+  async function loadChanged(sp, since) {
+    var iso = new Date(since).toISOString();
+    var out = { gone: {} };
+    await Promise.all(['actions', 'notices', 'register', 'meetings'].map(async function (key) {
+      var base = QUERIES[key];
+      var q = base.indexOf('$filter=') >= 0 ? base + " and Modified ge datetime'" + iso + "'" : base + "&$filter=Modified ge datetime'" + iso + "'";
+      q = q.replace(/\$select=([^&]*)/, function (_, v) { return '$select=' + v + (v.indexOf('Modified') >= 0 ? '' : ',Modified'); });
+      try {
+        var res = await sp.items(CH.config.lists[key].title, q, null, OPTIONAL[key]);
+        out[key] = res.rows;
+      } catch (_) { out[key] = null; }
+      if (LEFT[key]) {
+        try {
+          var left = await sp.items(CH.config.lists[key].title, '$select=Id&$filter=' + LEFT[key] + " and Modified ge datetime'" + iso + "'");
+          left.rows.forEach(function (r) { out.gone[key + '|' + Number(r.Id)] = true; });
+        } catch (_) { /* nothing marked as gone this time */ }
+      }
+    }));
+    return out;
+  }
+
   // What finalised meetings recorded as Discussed (spec NB-5): it clears the flags raised up to that meeting's cut-off.
   // Only meetings whose cut-off could cover a flag still in the list are read, each by its own (indexed) meeting id,
   // and only the frozen rows in the meeting's MTG folder count (only the flow writes there).
@@ -127,7 +152,7 @@ CH.model = (function () {
         originalIso: r.OriginalDueDate ? D.localDate(r.OriginalDueDate) : dueIso,
         description: r.Description || '', priority: r.Priority || 'Normal', requiresCloseOut: !!r.RequiresCloseOut,
         raisedIso: r.DateRaised ? D.localDate(r.DateRaised) : '', raisedByName: nameOf(r.RaisedById),
-        revision: Number(r.Revision) || 1, dueDay: Number(r.DueDay), locked: !!r.PendingRequestKey,
+        revision: Number(r.Revision) || 1, dueDay: Number(r.DueDay), locked: !!r.PendingRequestKey, lockKey: r.PendingRequestKey || '',
         waitingCloseOut: waitingCloseOut, group: r.Status === 'Closed' && !keptDone ? 'done' : words.group,
         dueText: keptDone ? 'Done' : r.Status === 'Closed' ? 'Closed' : words.text, done: r.Status === 'Closed',
         // still being saved (✓ Sent), and a new one the flow has not numbered yet (a temporary negative id)
@@ -331,5 +356,5 @@ CH.model = (function () {
     return row && !isUncommitted(row) ? row : null;
   }
 
-  return { QUERIES: QUERIES, load: load, build: build, isUncommitted: isUncommitted, loadFinished: loadFinished, loadAction: loadAction };
+  return { QUERIES: QUERIES, load: load, loadChanged: loadChanged, build: build, isUncommitted: isUncommitted, loadFinished: loadFinished, loadAction: loadAction };
 })();

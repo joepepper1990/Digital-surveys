@@ -1100,8 +1100,11 @@ window.MockDrivers = (function () {
       var enabled = !byText('#ch-mt form .btn', 'Finalise the minutes').disabled;
       var reviewText = review.textContent;
       review.dispatchEvent(new Event('submit', { cancelable: true }));
-      var draft = await until(function () { return q('#ch-mt .minutes') && /TEST in meeting item/.test(q('#ch-mt .minutes').textContent) && q('#ch-mt .minutes').textContent; }, 10000);
-      var mt = await until(function () { return MockSharePoint.data.Meetings.filter(function (m) { return m.Location === 'Quick room' && m.Status === 'Finalised'; })[0]; }, 180000);
+      var draft = await until(function () { return q('#ch-mt .minutes') && /TEST in meeting item/.test(q('#ch-mt .minutes').textContent) && q('#ch-mt .minutes').textContent; }, 10000)
+        .catch(function () { throw new Error('draft: ' + (q('#ch-mt') || {}).textContent + ' || status: ' + q('.status-line').textContent + ' || problems: ' + (q('.problems') || {}).textContent); });
+      var mt = await until(function () { return MockSharePoint.data.Meetings.filter(function (m) { return m.Location === 'Quick room' && m.Status === 'Finalised'; })[0]; }, 180000)
+        .catch(function () { throw new Error('finalised: ' + JSON.stringify(MockSharePoint.data.Requests.map(function (r) { return r.RequestType + ':' + r.Status + ':' + r.ResultMessage + ':' + r.Created + '>' + r.ProcessedAt + ':exp' + r.ExpectedRevision + ':tgt' + r.TargetId; })) +
+          ' pending=' + localStorage.getItem('esg-competency-hub-pending') + ' status=' + q('.status-line').textContent + ' problems=' + (q('.problems') || {}).textContent); });
       await until(function () { return q('#ch-mt .minutes a[download]'); }, 120000);
       clearInterval(watch);
       var frozen = MockSharePoint.data['Meeting Items'].filter(function (x) { return x.MeetingId === mt.Id && /\/MTG-\d+$/.test(x.FileDirRef); });
@@ -1109,6 +1112,194 @@ window.MockDrivers = (function () {
         frozenDiscussed: frozen.filter(function (x) { return x.Outcome === 'Discussed'; }).length,
         newItem: frozen.filter(function (x) { return x.Title === 'TEST in meeting item'; }).map(function (x) { return x.Outcome; }),
         minutes: q('#ch-mt .minutes').textContent.slice(0, 600) };
+    },
+    // ---- Release 1.3: quick presses, chains of changes, reloads, other people
+    // a double click sends one change, from a card and from a form
+    doubleClick: async function () {
+      function card() { return cards().filter(function (c) { return c.textContent.indexOf('Review Green Stream sample results') >= 0; })[0]; }
+      await until(function () { return card(); });
+      var b = Array.prototype.filter.call(card().querySelectorAll('.btn'), function (x) { return x.textContent === 'Mark as done'; })[0];
+      b.click(); b.click(); b.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await until(function () { return /✓ Sent/.test(card().textContent); });
+      await wait(300);
+      var fromCard = MockSharePoint.data.Requests.length;
+      // a form sent twice before the first send has returned
+      var other = cards().filter(function (c) { return c.textContent.indexOf('Replace FH40 probe') >= 0 || c.textContent.indexOf('sample') < 0; })[0];
+      var open = all('.hm-card .item-open').filter(function (x) { return x.textContent !== 'Review Green Stream sample results'; })[0];
+      open.click();
+      await until(function () { return q('#ch-a .facts'); });
+      byText('#ch-a button', 'I need more time').click();
+      var date = await until(function () { return q('#ch-x-newDueIso'); });
+      date.value = MockRules.dates.addDays(MockRules.dates.localDate(new Date()), 9);
+      date.dispatchEvent(new Event('input'));
+      type(q('#ch-x-reason'), 'Waiting for the replacement probe to arrive.');
+      var form = q('#ch-a form');
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-a .facts'); });
+      await wait(300);
+      await until(function () { return /up to date/.test(q('.status-line').textContent); }, 120000);
+      return { fromCard: fromCard, requests: MockSharePoint.data.Requests.map(function (r) { return r.RequestType + ':' + r.Status; }), extra: !!other };
+    },
+    // four changes to one action in a few seconds: shown at once, sent one at a time, saved in order
+    chainFive: async function () {
+      await until(function () { return q('#ch-a .facts'); });
+      var open = [];
+      var watch = setInterval(function () {
+        open.push(MockSharePoint.data.Requests.filter(function (r) { return r.Status === 'Submitted' || r.Status === 'Processing'; }).length);
+      }, 100);
+      byText('#ch-a button', 'I need more time').click();
+      var date = await until(function () { return q('#ch-x-newDueIso'); });
+      date.value = MockRules.dates.addDays(MockRules.dates.localDate(new Date()), 10);
+      date.dispatchEvent(new Event('input'));
+      type(q('#ch-x-reason'), 'Waiting for the replacement probe to arrive.');
+      q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-a .facts'); });
+      var statusBtn = byText('#ch-a button', 'Change its status');
+      if (!statusBtn) throw new Error('no status button: ' + q('#ch-a').textContent.slice(0, 600));
+      statusBtn.click();
+      var st = await until(function () { return q('#ch-s-status'); });
+      st.value = 'Awaiting Input'; st.dispatchEvent(new Event('change'));
+      type(q('#ch-s-blocker'), 'Waiting for the stores count to finish.');
+      q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-a .facts'); });
+      var editBtn = byText('#ch-a button', 'Edit this action');
+      if (!editBtn) throw new Error('no edit button: ' + q('#ch-a').textContent.slice(0, 700) + ' || reqs ' + JSON.stringify(MockSharePoint.data.Requests.map(function (r) { return r.RequestType + ':' + r.Status; })));
+      editBtn.click();
+      var title = await until(function () { return q('#ch-e-title'); });
+      type(title, 'Replace FH40 probe (chain)');
+      q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-a .facts'); });
+      byText('#ch-a button', 'Mark as done').click();
+      await until(function () { return q('#ch-c-note'); });
+      q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-a .facts'); });
+      var atOnce = q('#ch-a').textContent;
+      var queued = /shown now|waiting/.test(q('.status-line').textContent) || MockSharePoint.data.Requests.length < 4;
+      await until(function () { return MockSharePoint.data.Requests.length === 4 && MockSharePoint.data.Requests.every(function (r) { return r.Status === 'Completed'; }); }, 300000);
+      clearInterval(watch);
+      var a = MockSharePoint.data.Actions.filter(function (x) { return x.Id === 40; })[0];
+      await until(function () { return /up to date/.test(q('.status-line').textContent); }, 120000);
+      return { atOnce: /Closed on|Done/.test(atOnce) && /\(chain\)/.test(atOnce), queued: queued, maxOpen: Math.max.apply(null, open),
+        order: MockSharePoint.data.Requests.map(function (r) { return r.RequestType; }), revisions: MockSharePoint.data.Requests.map(function (r) { return Number(r.ExpectedRevision); }),
+        action: { Title: a.Title, Status: a.Status, Revision: a.Revision, Blocker: a.Blocker }, problems: all('.problems .problem').length };
+    },
+    // a reload part-way through a chain: what was waiting goes on, in order
+    reloadMidChain: async function () {
+      await until(function () { return q('#ch-a .facts'); });
+      byText('#ch-a button', 'I need more time').click();
+      var date = await until(function () { return q('#ch-x-newDueIso'); });
+      date.value = MockRules.dates.addDays(MockRules.dates.localDate(new Date()), 10);
+      date.dispatchEvent(new Event('input'));
+      type(q('#ch-x-reason'), 'Waiting for the replacement probe to arrive.');
+      q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-a .facts'); });
+      byText('#ch-a button', 'Edit this action').click();
+      type(await until(function () { return q('#ch-e-title'); }), 'Replace FH40 probe (after reload)');
+      q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-a .facts'); });
+      byText('#ch-a button', 'Mark as done').click();
+      await until(function () { return q('#ch-c-note'); });
+      q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-a .facts'); });
+      var sentBefore = MockSharePoint.data.Requests.length;
+      MockSharePoint.reload();   // the page comes back on the same action (?action=40)
+      var item = await until(function () { return q('#ch-a .facts') && /after reload/.test(q('#ch-a').textContent) && q('#ch-a'); }, 20000)
+        .catch(function () { throw new Error('after reload: ' + ((q('#ch-a') || {}).textContent || '').slice(0, 300) + ' pending=' + localStorage.getItem('esg-competency-hub-pending')); });
+      var shownAfter = item.textContent;
+      await until(function () { return MockSharePoint.data.Requests.length === 3 && MockSharePoint.data.Requests.every(function (r) { return r.Status === 'Completed'; }); }, 300000);
+      var a = MockSharePoint.data.Actions.filter(function (x) { return x.Id === 40; })[0];
+      return { sentBefore: sentBefore, shownAfter: /✓ Sent|Done/.test(shownAfter), order: MockSharePoint.data.Requests.map(function (r) { return r.RequestType; }),
+        action: { Title: a.Title, Status: a.Status, Revision: a.Revision }, left: JSON.parse(localStorage.getItem('esg-competency-hub-pending') || '{}').waiting };
+    },
+    // the first of a chain is refused (someone else changed the record): the rest is held, one card, Try again sends all
+    refusedChain: async function () {
+      await until(function () { return q('#ch-a .facts'); });
+      MockSharePoint.someoneElse('Actions', 40, {}, 112, 'Touched by Rachel');
+      byText('#ch-a button', 'I need more time').click();
+      var date = await until(function () { return q('#ch-x-newDueIso'); });
+      date.value = MockRules.dates.addDays(MockRules.dates.localDate(new Date()), 10);
+      date.dispatchEvent(new Event('input'));
+      type(q('#ch-x-reason'), 'Waiting for the replacement probe to arrive.');
+      q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-a .facts'); });
+      byText('#ch-a button', 'Edit this action').click();
+      type(await until(function () { return q('#ch-e-title'); }), 'Replace FH40 probe (held)');
+      q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-a .facts'); });
+      var card = await until(function () { return q('.problems .problem'); }, 120000);
+      await until(function () { return /waiting for this one/.test(q('.problems').textContent); }, 5000);
+      var cardText = q('.problems').textContent;
+      var cardsShown = all('.problems .problem').length;
+      var sentWhileHeld = MockSharePoint.data.Requests.length;
+      var again = all('.problems .btn').filter(function (b) { return /Try again|Apply/.test(b.textContent); })[0];
+      again.click();
+      await until(function () { return !q('.problems'); }, 20000);
+      await until(function () { return MockSharePoint.data.Requests.length === 3 && MockSharePoint.data.Requests.filter(function (r) { return r.Status === 'Completed'; }).length === 2; }, 300000);
+      var a = MockSharePoint.data.Actions.filter(function (x) { return x.Id === 40; })[0];
+      return { cardText: cardText, cardsShown: cardsShown, sentWhileHeld: sentWhileHeld, requests: MockSharePoint.data.Requests.map(function (r) { return r.RequestType + ':' + r.Status; }),
+        action: { Title: a.Title, DueDay: a.DueDay } };
+    },
+    // someone else changed a different field meanwhile: the refused change is sent again by itself, on top of theirs
+    otherNoClash: async function () {
+      await until(function () { return q('#ch-a .facts'); });
+      MockSharePoint.someoneElse('Actions', 40, { Title: 'Replace FH40 probe (Kelly)' }, 102, 'Title changed by Kelly');   // Rachel is signed in
+      byText('#ch-a button', 'I need more time').click();
+      var date = await until(function () { return q('#ch-x-newDueIso'); });
+      var iso = MockRules.dates.addDays(MockRules.dates.localDate(new Date()), 10);
+      date.value = iso;
+      date.dispatchEvent(new Event('input'));
+      type(q('#ch-x-reason'), 'Waiting for the replacement probe to arrive.');
+      q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-a .facts'); });
+      var toast = await until(function () { return all('.toast').filter(function (t) { return /sent again on top/.test(t.textContent); })[0]; }, 120000)
+        .catch(function () { throw new Error('no toast: problems=' + (q('.problems') || {}).textContent + ' reqs=' + JSON.stringify(MockSharePoint.data.Requests.map(function (r) { return r.RequestType + ':' + r.Status + ':' + r.ResultMessage; })) + ' toast=' + (q('.toast') || {}).textContent); });
+      var toastText = toast.textContent;
+      await until(function () { return MockSharePoint.data.Requests.length === 2 && MockSharePoint.data.Requests[1].Status === 'Completed'; }, 300000);
+      await until(function () { return /up to date/.test(q('.status-line').textContent); }, 120000);
+      var a = MockSharePoint.data.Actions.filter(function (x) { return x.Id === 40; })[0];
+      return { toast: toastText, requests: MockSharePoint.data.Requests.map(function (r) { return r.RequestType + ':' + r.Status; }), problems: all('.problems .problem').length,
+        action: { Title: a.Title, DueDay: a.DueDay }, dueDay: Number(iso.replace(/-/g, '')), panel: q('#ch-a').textContent };
+    },
+    // another person's change appears without a reload, under this person's own pending change; a hidden tab reads nothing
+    othersAppear: async function () {
+      await until(function () { return q('#ch-a .facts'); });
+      byText('#ch-a button', 'Change its status').click();
+      var st = await until(function () { return q('#ch-s-status'); });
+      st.value = 'Open'; st.dispatchEvent(new Event('change'));
+      q('#ch-a form').dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-a .facts') && /✓ Sent/.test(q('#ch-a').textContent); }).catch(function () { throw new Error('no ✓ Sent: ' + q('#ch-a').textContent.slice(0, 300)); });
+      MockSharePoint.someoneElse('Actions', 40, { Description: 'Kelly added: use the spare from store B.' }, 102, 'Description changed by Kelly');
+      var before = MockSharePoint.requests.length;
+      document.dispatchEvent(new Event('visibilitychange'));
+      await until(function () { return /spare from store B/.test(q('#ch-a').textContent); }, 20000)
+        .catch(function () { throw new Error('not shown: reads=' + JSON.stringify(MockSharePoint.requests.slice(before).map(decodeURIComponent)) + ' panel=' + q('#ch-a').textContent.slice(0, 300)); });
+      var panel = q('#ch-a').textContent;
+      var reads = MockSharePoint.requests.slice(before).filter(function (r) { return /Modified ge/.test(decodeURIComponent(r)); }).length;
+      // a tab nobody is looking at: no reads for a while
+      Object.defineProperty(document, 'hidden', { get: function () { return true; }, configurable: true });
+      var quietFrom = MockSharePoint.requests.length;
+      await wait(70000);
+      var whileHidden = MockSharePoint.requests.slice(quietFrom).filter(function (r) { return /Requests|Modified ge/.test(decodeURIComponent(r)); }).length;
+      Object.defineProperty(document, 'hidden', { get: function () { return false; }, configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+      await until(function () { return MockSharePoint.requests.length > quietFrom + whileHidden; }, 10000).catch(function () { throw new Error('no reads after the tab came back'); });
+      return { panel: panel, reads: reads, whileHidden: whileHidden, updatedLine: /Updated by someone else/.test(panel), stillMine: /✓ Sent|In progress/.test(panel) };
+    },
+    // notes typed on an item go with the person when they click another item
+    notesKept: async function () {
+      await until(function () { return q('#ch-mt .facts') && byText('#ch-mt .btn', 'Start meeting'); });
+      byText('#ch-mt .btn', 'Start meeting').click();
+      (await until(function () { return q('#ch-mt form.dialog-body'); })).dispatchEvent(new Event('submit', { cancelable: true }));
+      await until(function () { return q('#ch-mt-progress') && q('#ch-mt-item-notes'); }, 10000);
+      var first = q('#ch-mt-item-title').textContent;
+      type(q('#ch-mt-item-notes'), 'Stock is the priority – notes typed, not saved.');
+      all('#ch-mt .agenda-list .it')[1].click();
+      await until(function () { return q('#ch-mt-item-title').textContent !== first; }, 10000);
+      var row = await until(function () { return MockSharePoint.data['Meeting Items'].filter(function (x) { return x.RowType === 'Outcome' && x.Title === first; })[0]; }, 10000);
+      all('#ch-mt .agenda-list .it')[0].click();
+      await until(function () { return q('#ch-mt-item-title').textContent === first; }, 10000);
+      return { saved: row.Notes, shownAgain: q('#ch-mt-item-notes').value };
     },
     meetingCancel: async function () {
       await until(function () { return q('#ch-mt .facts'); });
