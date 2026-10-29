@@ -13,6 +13,12 @@ CH.app = (function () {
     var refreshTimer = null;
     var lastRead = null;   // when the lists were last read: the next refresh asks only for rows changed since
     var app = { state: { view: 'home', area: null, tab: 0 } };
+    // the open panels, bottom to top (app 1.3.2): a panel under another keeps being refreshed, and comes back to the
+    // top when the one over it closes. app.panel is the top one.
+    app.panels = [];
+    app.panelOpen = function (panel) { app.panels.push(panel); app.panel = panel; return panel; };
+    app.panelClose = function (panel) { app.panels = app.panels.filter(function (p) { return p !== panel; }); app.panel = app.panels[app.panels.length - 1] || null; };
+    app.refreshPanels = function () { app.panels.slice().forEach(function (p) { if (p.refresh) p.refresh(); }); };
 
     function findRoot() { return document.querySelector('[data-ch-root]'); }
 
@@ -259,7 +265,7 @@ CH.app = (function () {
         if (touched) {
           rebuild();
           render(false);
-          if (app.panel) app.panel.refresh();
+          app.refreshPanels();
         }
       } catch (_) { /* the next minute tries again */ }
       refreshing = false;
@@ -337,7 +343,7 @@ CH.app = (function () {
       }
       delete buffers()[entry.key];
       app.tracker.persist();
-      if (app.panel) app.panel.refresh();
+      app.refreshPanels();
     }
     // What is kept on screen for a meeting: the rows recorded before its booking was saved, under its number now.
     app.bufferFor = function (mt) {
@@ -372,7 +378,7 @@ CH.app = (function () {
       if (entry.state !== 'done') {
         rebuild();
         render(false);
-        if (app.panel) app.panel.refresh();
+        app.refreshPanels();
         return;
       }
       reload(listsFor(entry.type)).then(async function () {
@@ -381,7 +387,7 @@ CH.app = (function () {
         // what was recorded on a meeting before its booking was saved goes to the meeting now
         if (entry.type === 'ScheduleMeeting') await meetingBooked(entry);
         render(false);
-        if (app.panel) app.panel.refresh();
+        app.refreshPanels();
         var a = app.model.actionById[entry.resultId];
         var e = app.model.entryById[entry.resultId];
         // a new record gets its number now; other changes just show ✓✓ Saved where they are (and are told to screen readers)
@@ -428,7 +434,7 @@ CH.app = (function () {
         }
       } catch (_) { /* the card still offers Try again */ }
       render(false);
-      if (app.panel) app.panel.refresh();
+      app.refreshPanels();
       if (sentAgain) CH.ui.toast(app.root, sentAgain, 'info');
     }
 
@@ -516,7 +522,7 @@ CH.app = (function () {
     app.recordChanged = async function () {
       await reload(['updates']);
       render(false);
-      if (app.panel) app.panel.refresh();
+      app.refreshPanels();
     };
     // keys: every noticeboard it was posted to (the first is where it is kept); all of them reads "every noticeboard"
     app.noticePosted = async function (key, keys) {

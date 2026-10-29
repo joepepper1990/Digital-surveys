@@ -428,6 +428,16 @@ res = drive('as=' + KELLY + '&area=FLK&meeting=2&drive=meetingFastRun', SLOW);
 check('a meeting gone through fast while it catches up: never blanks, never jumps to another item, keeps every outcome, then stays still', res.ok &&
   res.result.blanks === 0 && res.result.titles === res.result.clicked && res.result.stayed && res.result.withOutcome > 3 && res.result.outcomes === res.result.withOutcome &&
   res.result.pressed === res.result.withOutcome && res.result.idleRepaints === 0, JSON.stringify(res));
+res = drive('as=' + KELLY + '&area=FLK&meeting=2&drive=typingKept', SLOW);
+check('a thing being edited is never rebuilt: notes, a half-typed decision and an attendance choice survive the repaint when a change from the meeting finishes; the window stays open and wide, the caret stays put', res.ok &&
+  res.result.open && res.result.wide && res.result.repainted && res.result.editor && res.result.notes === 'Replaced and checked. More typed after sending, not saved.' && res.result.caret === 21 &&
+  res.result.focused && res.result.decision === 'Half a decision, still being typ' && res.result.attendance === 'Apologies' && /Closed/.test(res.result.chip), JSON.stringify(res));
+res = drive('as=' + KELLY + '&area=FLK&meeting=2&drive=healthBlip', SLOW);
+check('the flows going down never takes the live screen away: the editor and notes stay, only the buttons that need the flows go', res.ok &&
+  res.result.editor && res.result.wide && res.result.notes === 'Typed while the flows go down.' && res.result.before.indexOf('Cancel meeting') >= 0 && res.result.after.indexOf('Cancel meeting') < 0 &&
+  res.result.after.indexOf('Review and finalise') >= 0, JSON.stringify(res));
+res = drive('as=' + KELLY + '&area=FLK&meeting=2&drive=panelStack', SLOW);
+check('an action opened from the agenda and closed again: the meeting underneath still refreshes when a change finishes', res.ok && res.result.meetingStillOpen && res.result.cleared, JSON.stringify(res));
 res = drive('as=' + KELLY + '&area=FLK&meeting=2&drive=notesKept', SLOW);
 check('notes typed on an agenda item are saved when another item is clicked, and are there when the person comes back', res.ok &&
   /notes typed, not saved/.test(res.result.saved) && /notes typed, not saved/.test(res.result.shownAgain), JSON.stringify(res));

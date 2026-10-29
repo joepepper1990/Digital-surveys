@@ -38,7 +38,8 @@ CH.views.recordPanel = (function () {
 
   // The panel shared by notices and entries: a main view and one form at a time.
   function panel(app, cfg) {
-    var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-rec', title: cfg.title, wide: true, onClose: function () { app.panel = null; } });
+    var panel = { refresh: function () { if (dlg.isOpen()) { if (view === 'main') { comments = null; fill(); loadExtras(); } } } };
+    var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-rec', title: cfg.title, wide: true, onClose: function () { app.panelClose(panel); } });
     var view = 'main';
     var comments = null;
     var discussed = [];
@@ -161,7 +162,9 @@ CH.views.recordPanel = (function () {
       ];
     }
 
-    function fill() {
+    // what someone is typing survives a repaint (app 1.3.2)
+    function fill() { CH.ui.keepInputs(dlg.body, paint); }
+    function paint() {
       CH.dom.clear(dlg.body);
       var r = rec();
       if (!r) {
@@ -206,7 +209,7 @@ CH.views.recordPanel = (function () {
     }
 
     var ctl = { show: show, send: send, busy: function (r) { return busy(app, r.id, cfg.parentType) || app.recordsBlocked(); }, dlg: dlg };
-    app.panel = { refresh: function () { if (dlg.isOpen()) { if (view === 'main') { comments = null; fill(); loadExtras(); } } } };
+    app.panelOpen(panel);
     fill();
     loadExtras();
     dlg.focusFirst();

@@ -2,6 +2,26 @@
 
 Plain HTML, CSS and JavaScript, delivered as a Welcome by Accelerator 365 custom layout. Same-origin SharePoint REST runs as the signed-in user. There are no libraries and no external calls.
 
+## Version 1.3.2: a thing being edited is never rebuilt (29 October 2026)
+
+- **Why.** The three panels (meeting, action, record) refreshed by throwing their body away and rebuilding it, so a
+  refresh that arrived while someone was typing (a change finishing in the flow, the minute's read of others'
+  changes) wiped the field. The live meeting screen also switched itself off whenever a change to the booking was
+  saving or the flows reported down, and the dialog shrank: a click at the old edge landed on the scrim and closed it.
+- **The rule.** `CH.ui.keepInputs(container, repaint)`: before a repaint, every input, textarea and select with a
+  keep key (its id, or `data-keep` where the id is shared, as the item notes are keyed per agenda item) is
+  snapshotted; after it, what was typed or chosen is put back on the element with the same key, with focus and the
+  caret; `data-keep-scroll` keeps a list's scroll. All three panels repaint through it.
+- **The live screen stays on** while the meeting is In Progress, whatever is saving or down: only Start, Change,
+  Cancel and Amend (the buttons that need the flows) are held back. Once the meeting has gone live the window keeps
+  its width until closed.
+- **Panels stack** (`app.panels`, `panelOpen`/`panelClose`/`refreshPanels`): an action opened from the agenda and
+  closed again leaves the meeting screen under it still refreshing.
+- The meeting panel no longer puts a refresh off while a field is focused or notes are unsaved (typing now survives
+  the repaint), and the reads after Add an item, a form submit and a booking being numbered go the quiet way.
+- Browser checks: typing kept through a finished change (notes, caret, decision, attendance), a health blip, the
+  panel stack.
+
 ## Version 1.3.1: a progress ring that says how far a change has got (28 October 2026)
 
 - **The ✓ Sent mark is now a ring that fills** (`CH.ui.progressRing`, `src/domain/eta.js`), on every card, the line

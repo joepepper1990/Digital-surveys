@@ -178,6 +178,48 @@ CH.ui = (function () {
   function textFactor(name) { return (TEXT_SIZES.filter(function (t) { return t[0] === name; })[0] || TEXT_SIZES[0])[1]; }
   function saveTextSize(name) { try { window.localStorage.setItem(TEXT_KEY, name); } catch (_) { /* not remembered */ } }
 
+  // A thing someone is editing is never rebuilt (app 1.3.2). repaint() may clear and refill the container; what was
+  // typed or chosen in any input, textarea or select with a keep key (its id, or data-keep where an id is not enough
+  // to say which thing it belongs to) is put back on the element with the same key, with focus and the caret.
+  var KEEPABLE = 'input, textarea, select';
+  function keepKey(el) { return el.getAttribute('data-keep') || el.id || ''; }
+  function defaultIndex(sel) { for (var i = 0; i < sel.options.length; i++) if (sel.options[i].defaultSelected) return i; return 0; }
+  function keepInputs(container, repaint) {
+    var kept = {}, focused = null;
+    var active = typeof document !== 'undefined' ? document.activeElement : null;
+    var els = container.querySelectorAll(KEEPABLE);
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i], key = keepKey(el);
+      if (!key) continue;
+      var state = { value: el.value, checked: el.checked, touched: el.tagName === 'SELECT' ? el.selectedIndex !== defaultIndex(el) : el.value !== (el.defaultValue || '') || el.checked !== el.defaultChecked };
+      if (el === active) {
+        focused = key;
+        try { state.start = el.selectionStart; state.end = el.selectionEnd; } catch (_) { /* not a text field */ }
+      }
+      kept[key] = state;
+    }
+    var scrolls = [];
+    var scrollers = container.querySelectorAll('[data-keep-scroll]');
+    for (var s = 0; s < scrollers.length; s++) scrolls.push([scrollers[s].getAttribute('data-keep-scroll'), scrollers[s].scrollTop]);
+    var top = container.scrollTop;
+    repaint();
+    container.scrollTop = top;
+    scrolls.forEach(function (sc) { var el = container.querySelector('[data-keep-scroll="' + sc[0] + '"]'); if (el) el.scrollTop = sc[1]; });
+    var after = container.querySelectorAll(KEEPABLE);
+    for (var j = 0; j < after.length; j++) {
+      var n = after[j], k = keepKey(n), was = kept[k];
+      if (!was) continue;
+      if (was.touched) {
+        if (n.type === 'checkbox' || n.type === 'radio') n.checked = was.checked; else n.value = was.value;
+      }
+      if (k === focused) {
+        n.focus({ preventScroll: true });
+        if (was.start !== undefined) { try { n.setSelectionRange(was.start, was.end); } catch (_) { /* not a text field */ } }
+      }
+    }
+    return focused;
+  }
+
   var SVG = 'http://www.w3.org/2000/svg';
   var RING_R = 8, RING_C = 2 * Math.PI * RING_R;
   function svgEl(tag, attrs) {
@@ -225,7 +267,7 @@ CH.ui = (function () {
   }
 
   return {
-    progressRing: progressRing, savedMark: savedMark, refreshRings: refreshRings,
+    keepInputs: keepInputs, progressRing: progressRing, savedMark: savedMark, refreshRings: refreshRings,
     scaleFor: scaleFor, TEXT_SIZES: TEXT_SIZES, textSize: textSize, textFactor: textFactor, saveTextSize: saveTextSize,
     chip: chip, card: card, button: button, linkButton: linkButton, sectionNote: sectionNote,
     actionList: actionList, tile: tile, tileGrid: tileGrid, areaStatusLines: areaStatusLines, toast: toast, say: say,

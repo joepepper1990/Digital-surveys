@@ -1,11 +1,11 @@
-/* ESG Competency Hub 1.3.1 – built from src/ by tools/build.js. Do not edit. */
+/* ESG Competency Hub 1.3.2 – built from src/ by tools/build.js. Do not edit. */
 window.ESGCompetencyHub = function (ctx) {
   'use strict';
   var CH = {};
   /* src/core/config.js */
   // Fixed names and limits. Lists are addressed by display title; folders by list URL name.
   CH.config = {
-    VERSION: '1.3.1',
+    VERSION: '1.3.2',
     ENVIRONMENT: 'TEST',
     lists: {
       competencies: { title: 'Competencies', url: 'Competencies' },
@@ -2392,6 +2392,48 @@ window.ESGCompetencyHub = function (ctx) {
     function textFactor(name) { return (TEXT_SIZES.filter(function (t) { return t[0] === name; })[0] || TEXT_SIZES[0])[1]; }
     function saveTextSize(name) { try { window.localStorage.setItem(TEXT_KEY, name); } catch (_) { /* not remembered */ } }
 
+    // A thing someone is editing is never rebuilt (app 1.3.2). repaint() may clear and refill the container; what was
+    // typed or chosen in any input, textarea or select with a keep key (its id, or data-keep where an id is not enough
+    // to say which thing it belongs to) is put back on the element with the same key, with focus and the caret.
+    var KEEPABLE = 'input, textarea, select';
+    function keepKey(el) { return el.getAttribute('data-keep') || el.id || ''; }
+    function defaultIndex(sel) { for (var i = 0; i < sel.options.length; i++) if (sel.options[i].defaultSelected) return i; return 0; }
+    function keepInputs(container, repaint) {
+      var kept = {}, focused = null;
+      var active = typeof document !== 'undefined' ? document.activeElement : null;
+      var els = container.querySelectorAll(KEEPABLE);
+      for (var i = 0; i < els.length; i++) {
+        var el = els[i], key = keepKey(el);
+        if (!key) continue;
+        var state = { value: el.value, checked: el.checked, touched: el.tagName === 'SELECT' ? el.selectedIndex !== defaultIndex(el) : el.value !== (el.defaultValue || '') || el.checked !== el.defaultChecked };
+        if (el === active) {
+          focused = key;
+          try { state.start = el.selectionStart; state.end = el.selectionEnd; } catch (_) { /* not a text field */ }
+        }
+        kept[key] = state;
+      }
+      var scrolls = [];
+      var scrollers = container.querySelectorAll('[data-keep-scroll]');
+      for (var s = 0; s < scrollers.length; s++) scrolls.push([scrollers[s].getAttribute('data-keep-scroll'), scrollers[s].scrollTop]);
+      var top = container.scrollTop;
+      repaint();
+      container.scrollTop = top;
+      scrolls.forEach(function (sc) { var el = container.querySelector('[data-keep-scroll="' + sc[0] + '"]'); if (el) el.scrollTop = sc[1]; });
+      var after = container.querySelectorAll(KEEPABLE);
+      for (var j = 0; j < after.length; j++) {
+        var n = after[j], k = keepKey(n), was = kept[k];
+        if (!was) continue;
+        if (was.touched) {
+          if (n.type === 'checkbox' || n.type === 'radio') n.checked = was.checked; else n.value = was.value;
+        }
+        if (k === focused) {
+          n.focus({ preventScroll: true });
+          if (was.start !== undefined) { try { n.setSelectionRange(was.start, was.end); } catch (_) { /* not a text field */ } }
+        }
+      }
+      return focused;
+    }
+
     var SVG = 'http://www.w3.org/2000/svg';
     var RING_R = 8, RING_C = 2 * Math.PI * RING_R;
     function svgEl(tag, attrs) {
@@ -2439,7 +2481,7 @@ window.ESGCompetencyHub = function (ctx) {
     }
 
     return {
-      progressRing: progressRing, savedMark: savedMark, refreshRings: refreshRings,
+      keepInputs: keepInputs, progressRing: progressRing, savedMark: savedMark, refreshRings: refreshRings,
       scaleFor: scaleFor, TEXT_SIZES: TEXT_SIZES, textSize: textSize, textFactor: textFactor, saveTextSize: saveTextSize,
       chip: chip, card: card, button: button, linkButton: linkButton, sectionNote: sectionNote,
       actionList: actionList, tile: tile, tileGrid: tileGrid, areaStatusLines: areaStatusLines, toast: toast, say: say,
@@ -3357,7 +3399,8 @@ window.ESGCompetencyHub = function (ctx) {
     }
 
     function open(app, id) {
-      var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-a', title: 'Action', wide: true, onClose: function () { app.panel = null; } });
+      var panel = { id: id, refresh: refresh };
+      var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-a', title: 'Action', wide: true, onClose: function () { app.panelClose(panel); } });
       var view = 'main';
       var updates = null;
       var extensions = null;
@@ -3381,7 +3424,9 @@ window.ESGCompetencyHub = function (ctx) {
         if (view === 'main' && dlg.isOpen()) fill();
       }
 
-      function fill() {
+      // what someone is typing survives a repaint (app 1.3.2)
+      function fill() { CH.ui.keepInputs(dlg.body, paint); }
+      function paint() {
         CH.dom.clear(dlg.body);
         var a = action();
         if (!a) {
@@ -3683,7 +3728,7 @@ window.ESGCompetencyHub = function (ctx) {
         dlg.focusFirst();
         loadExtras();
       });
-      app.panel = { id: id, refresh: refresh };
+      app.panelOpen(panel);
     }
 
     return { open: open };
@@ -4027,7 +4072,8 @@ window.ESGCompetencyHub = function (ctx) {
 
     // The panel shared by notices and entries: a main view and one form at a time.
     function panel(app, cfg) {
-      var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-rec', title: cfg.title, wide: true, onClose: function () { app.panel = null; } });
+      var panel = { refresh: function () { if (dlg.isOpen()) { if (view === 'main') { comments = null; fill(); loadExtras(); } } } };
+      var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-rec', title: cfg.title, wide: true, onClose: function () { app.panelClose(panel); } });
       var view = 'main';
       var comments = null;
       var discussed = [];
@@ -4150,7 +4196,9 @@ window.ESGCompetencyHub = function (ctx) {
         ];
       }
 
-      function fill() {
+      // what someone is typing survives a repaint (app 1.3.2)
+      function fill() { CH.ui.keepInputs(dlg.body, paint); }
+      function paint() {
         CH.dom.clear(dlg.body);
         var r = rec();
         if (!r) {
@@ -4195,7 +4243,7 @@ window.ESGCompetencyHub = function (ctx) {
       }
 
       var ctl = { show: show, send: send, busy: function (r) { return busy(app, r.id, cfg.parentType) || app.recordsBlocked(); }, dlg: dlg };
-      app.panel = { refresh: function () { if (dlg.isOpen()) { if (view === 'main') { comments = null; fill(); loadExtras(); } } } };
+      app.panelOpen(panel);
       fill();
       loadExtras();
       dlg.focusFirst();
@@ -5148,7 +5196,13 @@ window.ESGCompetencyHub = function (ctx) {
     var bufferSeq = 0;   // temporary numbers for rows kept until a booking is saved
 
     function open(app, id) {
-      var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-mt', title: 'Meeting', wide: true, onClose: function () { app.panel = null; app.liveMeetingId = null; } });
+      var panel = { refresh: function () {
+        if (!dlg.isOpen()) return;
+        clearTimeout(refreshTimer);
+        refreshTimer = setTimeout(refreshNow, 600);
+      } };
+      var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-mt', title: 'Meeting', wide: true, onClose: function () { app.panelClose(panel); app.liveMeetingId = null; } });
+      var wentLive = false;   // once the live screen has shown, the window keeps its width until it is closed
       var view = 'main';
       var agenda = null;      // { kind: 'preview' | 'fixed', items, frozen, live } or 'error'
       var at = 0;             // the agenda item on screen while the meeting runs
@@ -5166,7 +5220,7 @@ window.ESGCompetencyHub = function (ctx) {
       function mt() {
         if (id < 0 && !app.model.meetingById[id] && bookingKey) {
           var booking = app.tracker.byKey(bookingKey);
-          if (booking && booking.resultId && app.model.meetingById[booking.resultId]) { id = Number(booking.resultId); loadAgenda(true); }
+          if (booking && booking.resultId && app.model.meetingById[booking.resultId]) { id = Number(booking.resultId); panel.refresh(); }
         }
         return app.model.meetingById[id];
       }
@@ -5288,13 +5342,11 @@ window.ESGCompetencyHub = function (ctx) {
         return mark ? h('p', { class: 'mark-line' }, mark) : null;
       }
 
+      // A repaint never loses what someone typed or chose (app 1.3.2): every field with a key is put back as it was,
+      // with focus and the caret; a focused button is found again by its text.
       function fill() {
-        var keep = { body: dlg.body.scrollTop, nav: (dlg.body.querySelector('.agenda-list') || {}).scrollTop || 0,
-          focus: document.activeElement && dlg.node.contains(document.activeElement) ? focusPath(document.activeElement) : null };
-        paint();
-        dlg.body.scrollTop = keep.body;
-        var nav = dlg.body.querySelector('.agenda-list');
-        if (nav) nav.scrollTop = keep.nav;
+        var keep = { focus: document.activeElement && dlg.node.contains(document.activeElement) && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) ? focusPath(document.activeElement) : null };
+        CH.ui.keepInputs(dlg.body, paint);
         if (keep.focus) { var el = findPath(keep.focus); if (el && el !== document.activeElement) el.focus({ preventScroll: true }); }
         shown = signature(mt(), agenda);
       }
@@ -5316,15 +5368,18 @@ window.ESGCompetencyHub = function (ctx) {
         var runs = app.access.runsMeetings(x.areaKey);
         var e = app.tracker.forTarget(x.id, 'Meeting');
         var saving = e && (e.state === 'submitted' || e.state === 'slow');
-        // a start being saved does not hold the meeting up (release 1.2); any other change to the booking still does
+        // a change to the booking being saved, or the flows being down, only holds back the buttons that need the
+        // flows (Start, Change, Cancel, Amend); recording a meeting that is on never stops (app 1.3.2)
         var busy = (saving && e.type !== 'StartMeeting') || app.meetingsBlocked();
-        var live = runs && !busy && x.status === 'In Progress';
+        var live = runs && x.status === 'In Progress';
         app.liveMeetingId = live && x.id > 0 ? x.id : null;
         var st = STATUS[x.status] || ['later', x.status];
         var words = inviteWords(app, x);
         var people = x.attendeeIds.map(function (pid) { return app.model.nameOf(pid); }).sort();
-        // while it runs the meeting gets the room: wider, and when, where and who on one line (release 1.2)
-        dlg.node.classList.toggle('dialog-xl', live);
+        // while it runs the meeting gets the room: wider, and when, where and who on one line (release 1.2); the window
+        // keeps that width until it is closed, so it never shrinks under the mouse
+        wentLive = wentLive || live;
+        dlg.node.classList.toggle('dialog-xl', wentLive);
         CH.dom.append(dlg.body, [
           h('p', { class: 'what-label' }, 'Meeting · ' + (x.isNew ? 'not yet numbered' : x.ref) + ' · ' + x.areaName + ' ', ui.chip(st[0], st[1])),
           pending(x),
@@ -5403,7 +5458,7 @@ window.ESGCompetencyHub = function (ctx) {
       // the agenda, grouped by kind, each with how far it has got; "Add an item" sits with it (backlog 6)
       function agendaNav(items) {
         var groups = [['action', 'Actions'], ['issue', 'Issues'], ['notice', 'Notices'], ['other', 'Other business']];
-        return h('nav', { class: 'agenda-list', 'aria-label': 'Agenda' }, groups.map(function (g) {
+        return h('nav', { class: 'agenda-list', 'data-keep-scroll': 'agenda', 'aria-label': 'Agenda' }, groups.map(function (g) {
           var mine = items.map(function (it, i) { return { it: it, i: i }; }).filter(function (x) { return kindOf(x.it)[0] === g[0]; });
           if (!mine.length) return null;
           return [h('div', { class: 'sec', text: g[1] }), mine.map(function (x) {
@@ -5439,8 +5494,9 @@ window.ESGCompetencyHub = function (ctx) {
       function oneItem(x, items) {
         var it = items[at];
         var status = h('span', { class: 'muted small', role: 'status' });
-        var notes = h('textarea', { id: 'ch-mt-item-notes', rows: '3', maxlength: '4000', 'aria-label': 'Notes for the minutes' });
+        var notes = h('textarea', { id: 'ch-mt-item-notes', 'data-keep': 'notes|' + (it.key || it.title), rows: '3', maxlength: '4000', 'aria-label': 'Notes for the minutes' });
         notes.value = it.notes || '';
+        notes.defaultValue = notes.value;
         var needs = R.DISCUSSION_SECTIONS.indexOf(it.section) >= 0;
         var kind = kindOf(it)[0];
         var action = it.type === 'Action' ? app.model.actionById[it.sourceId] : null;
@@ -5537,7 +5593,7 @@ window.ESGCompetencyHub = function (ctx) {
             adding = false;
             openTitle = t;
             fill();
-            loadAgenda();
+            loadAgenda(true);
             CH.ui.toast(app.root, 'Added to the agenda.', 'ok');
           } catch (error) {
             btn.disabled = false; btn.textContent = 'Try again';
@@ -5660,7 +5716,7 @@ window.ESGCompetencyHub = function (ctx) {
               expectedRevision: x.revision, payload: payload, label: verb + x.areaName + ' meeting' });
             view = 'main';
             fill();
-            if (kind === 'start' || kind === 'finalise') loadAgenda();
+            if (kind === 'start' || kind === 'finalise') loadAgenda(true);
           } catch (error) {
             submit.disabled = false; submit.textContent = 'Try again';
             errorBox.textContent = error.friendly || 'This could not be sent just now. Try again in a moment.';
@@ -5672,21 +5728,15 @@ window.ESGCompetencyHub = function (ctx) {
       function show(next) { view = next; fill(); var first = dlg.body.querySelector('textarea, input'); if (first) first.focus(); }
 
       // Changes elsewhere (a request saved, the page read again) come in bursts while a meeting catches up: they are
-      // gathered into one quiet read, and never repaint over what someone is typing or choosing.
+      // gathered into one quiet read. What someone is typing or choosing is kept through the repaint (fill), so the
+      // read is never put off.
       function refreshNow() {
         refreshTimer = null;
         if (!dlg.isOpen()) return;
         if (view !== 'main' && view !== 'finalise') return;
-        var active = document.activeElement;
-        if (active && dlg.body.contains(active) && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)) { refreshTimer = setTimeout(refreshNow, 2000); return; }
-        if (current && current.dirty()) { refreshTimer = setTimeout(refreshNow, 2000); return; }   // never over unsaved notes
         loadAgenda(true);
       }
-      app.panel = { refresh: function () {
-        if (!dlg.isOpen()) return;
-        clearTimeout(refreshTimer);
-        refreshTimer = setTimeout(refreshNow, 600);
-      } };
+      app.panelOpen(panel);
       fill();
       loadAgenda();
       dlg.focusFirst();
@@ -6107,6 +6157,12 @@ window.ESGCompetencyHub = function (ctx) {
       var refreshTimer = null;
       var lastRead = null;   // when the lists were last read: the next refresh asks only for rows changed since
       var app = { state: { view: 'home', area: null, tab: 0 } };
+      // the open panels, bottom to top (app 1.3.2): a panel under another keeps being refreshed, and comes back to the
+      // top when the one over it closes. app.panel is the top one.
+      app.panels = [];
+      app.panelOpen = function (panel) { app.panels.push(panel); app.panel = panel; return panel; };
+      app.panelClose = function (panel) { app.panels = app.panels.filter(function (p) { return p !== panel; }); app.panel = app.panels[app.panels.length - 1] || null; };
+      app.refreshPanels = function () { app.panels.slice().forEach(function (p) { if (p.refresh) p.refresh(); }); };
 
       function findRoot() { return document.querySelector('[data-ch-root]'); }
 
@@ -6353,7 +6409,7 @@ window.ESGCompetencyHub = function (ctx) {
           if (touched) {
             rebuild();
             render(false);
-            if (app.panel) app.panel.refresh();
+            app.refreshPanels();
           }
         } catch (_) { /* the next minute tries again */ }
         refreshing = false;
@@ -6431,7 +6487,7 @@ window.ESGCompetencyHub = function (ctx) {
         }
         delete buffers()[entry.key];
         app.tracker.persist();
-        if (app.panel) app.panel.refresh();
+        app.refreshPanels();
       }
       // What is kept on screen for a meeting: the rows recorded before its booking was saved, under its number now.
       app.bufferFor = function (mt) {
@@ -6466,7 +6522,7 @@ window.ESGCompetencyHub = function (ctx) {
         if (entry.state !== 'done') {
           rebuild();
           render(false);
-          if (app.panel) app.panel.refresh();
+          app.refreshPanels();
           return;
         }
         reload(listsFor(entry.type)).then(async function () {
@@ -6475,7 +6531,7 @@ window.ESGCompetencyHub = function (ctx) {
           // what was recorded on a meeting before its booking was saved goes to the meeting now
           if (entry.type === 'ScheduleMeeting') await meetingBooked(entry);
           render(false);
-          if (app.panel) app.panel.refresh();
+          app.refreshPanels();
           var a = app.model.actionById[entry.resultId];
           var e = app.model.entryById[entry.resultId];
           // a new record gets its number now; other changes just show ✓✓ Saved where they are (and are told to screen readers)
@@ -6522,7 +6578,7 @@ window.ESGCompetencyHub = function (ctx) {
           }
         } catch (_) { /* the card still offers Try again */ }
         render(false);
-        if (app.panel) app.panel.refresh();
+        app.refreshPanels();
         if (sentAgain) CH.ui.toast(app.root, sentAgain, 'info');
       }
 
@@ -6610,7 +6666,7 @@ window.ESGCompetencyHub = function (ctx) {
       app.recordChanged = async function () {
         await reload(['updates']);
         render(false);
-        if (app.panel) app.panel.refresh();
+        app.refreshPanels();
       };
       // keys: every noticeboard it was posted to (the first is where it is kept); all of them reads "every noticeboard"
       app.noticePosted = async function (key, keys) {

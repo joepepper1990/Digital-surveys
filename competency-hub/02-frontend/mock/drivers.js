@@ -12,6 +12,19 @@ window.MockDrivers = (function () {
   function all(sel) { return Array.prototype.slice.call(document.querySelectorAll('[data-ch-root] ' + sel)); }
   function byText(sel, text) { return all(sel).filter(function (n) { return n.textContent.trim() === text; })[0]; }
   function text() { return document.querySelector('[data-ch-root]').textContent; }
+  // app 1.3.2 drivers: a meeting started on this screen, and the FH40 action on its agenda
+  async function startLive() {
+    await until(function () { return q('#ch-mt .facts') && byText('#ch-mt .btn', 'Start meeting'); });
+    byText('#ch-mt .btn', 'Start meeting').click();
+    (await until(function () { return q('#ch-mt form.dialog-body'); })).dispatchEvent(new Event('submit', { cancelable: true }));
+    await until(function () { return q('#ch-mt-progress') && q('#ch-mt-item-notes'); }, 10000);
+    await until(function () { return meeting2().Status === 'In Progress'; }, 120000);
+  }
+  function meeting2() { return MockSharePoint.data.Meetings.filter(function (m) { return m.Id === 2; })[0]; }
+  function toAction() {
+    all('#ch-mt .agenda-list .it').filter(function (b) { return /Replace FH40 probe/.test(b.textContent); })[0].click();
+    return until(function () { return /Replace FH40 probe/.test(q('#ch-mt-item-title').textContent); });
+  }
   function type(el, value) { el.value = value; el.dispatchEvent(new Event('input', { bubbles: true })); }
   // the area page opens on Actions; notices and issues have their own tab (release 1.2)
   async function openNoticesTab() {
@@ -1325,6 +1338,60 @@ window.MockDrivers = (function () {
       all('#ch-mt .agenda-list .it')[0].click();
       await until(function () { return q('#ch-mt-item-title').textContent === first; }, 10000);
       return { saved: row.Notes, shownAgain: q('#ch-mt-item-notes').value };
+    },
+    // app 1.3.2: a thing someone is editing is never rebuilt. While notes, a decision and an attendance choice are
+    // half done, a change sent from this meeting finishes in the flow and the screen is read again: nothing goes.
+    typingKept: async function () {
+      await startLive();
+      var att = q('#ch-mt-att-112');
+      att.value = 'Apologies'; att.dispatchEvent(new Event('change'));
+      type(q('#ch-mt-decision'), 'Half a decision, still being typ');
+      await toAction();
+      type(q('#ch-mt-item-notes'), 'Replaced and checked.');
+      byText('#ch-mt .item-pane .btn', 'Close this action').click();
+      await until(function () { return MockSharePoint.data.Requests.some(function (r) { return r.RequestType === 'CloseAction'; }); });
+      // keep typing after the close was sent, and leave the caret in the middle
+      var notes = q('#ch-mt-item-notes');
+      notes.focus();
+      type(notes, 'Replaced and checked. More typed after sending, not saved.');
+      notes.setSelectionRange(21, 21);
+      var dlgBefore = q('#ch-mt'), notesBefore = notes;
+      // the close finishes in the flow; the meeting is read again and repainted
+      await until(function () { return MockSharePoint.data.Actions.filter(function (a) { return a.Id === 40; })[0].Status === 'Closed' && /up to date/.test(q('.status-line').textContent); }, 120000);
+      await wait(1500);
+      var n = q('#ch-mt-item-notes');
+      return { open: !!q('#ch-mt') && q('#ch-mt') === dlgBefore, wide: q('#ch-mt').classList.contains('dialog-xl'), repainted: n !== notesBefore,
+        notes: n && n.value, caret: n && n.selectionStart, focused: document.activeElement === n, decision: q('#ch-mt-decision') && q('#ch-mt-decision').value,
+        attendance: q('#ch-mt-att-112') && q('#ch-mt-att-112').value, editor: !!q('#ch-mt .outcomes'),
+        chip: all('#ch-mt .agenda-list .it').filter(function (b) { return /Replace FH40 probe/.test(b.textContent); })[0].textContent };
+    },
+    // the flows going down, or a change to the booking being saved, never takes the live screen away
+    healthBlip: async function () {
+      await startLive();
+      await toAction();
+      type(q('#ch-mt-item-notes'), 'Typed while the flows go down.');
+      var before = all('#ch-mt .actions-row .btn').map(function (b) { return b.textContent; });
+      MockSharePoint.data['Competency Hub Settings'][0].Value = JSON.stringify({ state: 'Down', reason: 'Changes are not being picked up.', checkedAt: new Date().toISOString(), attention: 0 });
+      byText('#ch-mt .item-pane .btn', 'Close this action').click();
+      await until(function () { return MockSharePoint.data.Actions.filter(function (a) { return a.Id === 40; })[0].Status === 'Closed'; }, 120000);
+      await until(function () { return /can't be processed/.test(q('.status-line').textContent); }, 30000);
+      await wait(1500);
+      return { before: before, after: all('#ch-mt .actions-row .btn').map(function (b) { return b.textContent; }), editor: !!q('#ch-mt .outcomes') && !!q('#ch-mt-item-notes'),
+        wide: q('#ch-mt').classList.contains('dialog-xl'), notes: q('#ch-mt-item-notes').value, blocked: /can't be processed|not working|held back/i.test(q('.status-line').textContent + q('#ch-mt').textContent) };
+    },
+    // an action opened from the agenda and closed again: the meeting screen underneath keeps being refreshed
+    panelStack: async function () {
+      await startLive();
+      await toAction();
+      byText('#ch-mt .item-pane .btn', 'Open this action').click();
+      await until(function () { return q('#ch-a .facts'); });
+      q('#ch-a .dialog-x').click();
+      await until(function () { return !q('#ch-a'); });
+      byText('#ch-mt .item-pane .btn', 'Close this action').click();
+      await until(function () { return MockSharePoint.data.Requests.some(function (r) { return r.RequestType === 'CloseAction'; }); });
+      await until(function () { return MockSharePoint.data.Actions.filter(function (a) { return a.Id === 40; })[0].Status === 'Closed'; }, 120000);
+      var cleared = await until(function () { return /Closed/.test(all('#ch-mt .agenda-list .it').filter(function (b) { return /Replace FH40 probe/.test(b.textContent); })[0].textContent); }, 30000).then(function () { return true; }, function () { return false; });
+      return { meetingStillOpen: !!q('#ch-mt'), cleared: cleared };
     },
     meetingCancel: async function () {
       await until(function () { return q('#ch-mt .facts'); });

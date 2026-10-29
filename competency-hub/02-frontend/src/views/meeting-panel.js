@@ -141,7 +141,13 @@ CH.views.meetingPanel = (function () {
   var bufferSeq = 0;   // temporary numbers for rows kept until a booking is saved
 
   function open(app, id) {
-    var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-mt', title: 'Meeting', wide: true, onClose: function () { app.panel = null; app.liveMeetingId = null; } });
+    var panel = { refresh: function () {
+      if (!dlg.isOpen()) return;
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(refreshNow, 600);
+    } };
+    var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-mt', title: 'Meeting', wide: true, onClose: function () { app.panelClose(panel); app.liveMeetingId = null; } });
+    var wentLive = false;   // once the live screen has shown, the window keeps its width until it is closed
     var view = 'main';
     var agenda = null;      // { kind: 'preview' | 'fixed', items, frozen, live } or 'error'
     var at = 0;             // the agenda item on screen while the meeting runs
@@ -159,7 +165,7 @@ CH.views.meetingPanel = (function () {
     function mt() {
       if (id < 0 && !app.model.meetingById[id] && bookingKey) {
         var booking = app.tracker.byKey(bookingKey);
-        if (booking && booking.resultId && app.model.meetingById[booking.resultId]) { id = Number(booking.resultId); loadAgenda(true); }
+        if (booking && booking.resultId && app.model.meetingById[booking.resultId]) { id = Number(booking.resultId); panel.refresh(); }
       }
       return app.model.meetingById[id];
     }
@@ -281,13 +287,11 @@ CH.views.meetingPanel = (function () {
       return mark ? h('p', { class: 'mark-line' }, mark) : null;
     }
 
+    // A repaint never loses what someone typed or chose (app 1.3.2): every field with a key is put back as it was,
+    // with focus and the caret; a focused button is found again by its text.
     function fill() {
-      var keep = { body: dlg.body.scrollTop, nav: (dlg.body.querySelector('.agenda-list') || {}).scrollTop || 0,
-        focus: document.activeElement && dlg.node.contains(document.activeElement) ? focusPath(document.activeElement) : null };
-      paint();
-      dlg.body.scrollTop = keep.body;
-      var nav = dlg.body.querySelector('.agenda-list');
-      if (nav) nav.scrollTop = keep.nav;
+      var keep = { focus: document.activeElement && dlg.node.contains(document.activeElement) && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) ? focusPath(document.activeElement) : null };
+      CH.ui.keepInputs(dlg.body, paint);
       if (keep.focus) { var el = findPath(keep.focus); if (el && el !== document.activeElement) el.focus({ preventScroll: true }); }
       shown = signature(mt(), agenda);
     }
@@ -309,15 +313,18 @@ CH.views.meetingPanel = (function () {
       var runs = app.access.runsMeetings(x.areaKey);
       var e = app.tracker.forTarget(x.id, 'Meeting');
       var saving = e && (e.state === 'submitted' || e.state === 'slow');
-      // a start being saved does not hold the meeting up (release 1.2); any other change to the booking still does
+      // a change to the booking being saved, or the flows being down, only holds back the buttons that need the
+      // flows (Start, Change, Cancel, Amend); recording a meeting that is on never stops (app 1.3.2)
       var busy = (saving && e.type !== 'StartMeeting') || app.meetingsBlocked();
-      var live = runs && !busy && x.status === 'In Progress';
+      var live = runs && x.status === 'In Progress';
       app.liveMeetingId = live && x.id > 0 ? x.id : null;
       var st = STATUS[x.status] || ['later', x.status];
       var words = inviteWords(app, x);
       var people = x.attendeeIds.map(function (pid) { return app.model.nameOf(pid); }).sort();
-      // while it runs the meeting gets the room: wider, and when, where and who on one line (release 1.2)
-      dlg.node.classList.toggle('dialog-xl', live);
+      // while it runs the meeting gets the room: wider, and when, where and who on one line (release 1.2); the window
+      // keeps that width until it is closed, so it never shrinks under the mouse
+      wentLive = wentLive || live;
+      dlg.node.classList.toggle('dialog-xl', wentLive);
       CH.dom.append(dlg.body, [
         h('p', { class: 'what-label' }, 'Meeting · ' + (x.isNew ? 'not yet numbered' : x.ref) + ' · ' + x.areaName + ' ', ui.chip(st[0], st[1])),
         pending(x),
@@ -396,7 +403,7 @@ CH.views.meetingPanel = (function () {
     // the agenda, grouped by kind, each with how far it has got; "Add an item" sits with it (backlog 6)
     function agendaNav(items) {
       var groups = [['action', 'Actions'], ['issue', 'Issues'], ['notice', 'Notices'], ['other', 'Other business']];
-      return h('nav', { class: 'agenda-list', 'aria-label': 'Agenda' }, groups.map(function (g) {
+      return h('nav', { class: 'agenda-list', 'data-keep-scroll': 'agenda', 'aria-label': 'Agenda' }, groups.map(function (g) {
         var mine = items.map(function (it, i) { return { it: it, i: i }; }).filter(function (x) { return kindOf(x.it)[0] === g[0]; });
         if (!mine.length) return null;
         return [h('div', { class: 'sec', text: g[1] }), mine.map(function (x) {
@@ -432,8 +439,9 @@ CH.views.meetingPanel = (function () {
     function oneItem(x, items) {
       var it = items[at];
       var status = h('span', { class: 'muted small', role: 'status' });
-      var notes = h('textarea', { id: 'ch-mt-item-notes', rows: '3', maxlength: '4000', 'aria-label': 'Notes for the minutes' });
+      var notes = h('textarea', { id: 'ch-mt-item-notes', 'data-keep': 'notes|' + (it.key || it.title), rows: '3', maxlength: '4000', 'aria-label': 'Notes for the minutes' });
       notes.value = it.notes || '';
+      notes.defaultValue = notes.value;
       var needs = R.DISCUSSION_SECTIONS.indexOf(it.section) >= 0;
       var kind = kindOf(it)[0];
       var action = it.type === 'Action' ? app.model.actionById[it.sourceId] : null;
@@ -530,7 +538,7 @@ CH.views.meetingPanel = (function () {
           adding = false;
           openTitle = t;
           fill();
-          loadAgenda();
+          loadAgenda(true);
           CH.ui.toast(app.root, 'Added to the agenda.', 'ok');
         } catch (error) {
           btn.disabled = false; btn.textContent = 'Try again';
@@ -653,7 +661,7 @@ CH.views.meetingPanel = (function () {
             expectedRevision: x.revision, payload: payload, label: verb + x.areaName + ' meeting' });
           view = 'main';
           fill();
-          if (kind === 'start' || kind === 'finalise') loadAgenda();
+          if (kind === 'start' || kind === 'finalise') loadAgenda(true);
         } catch (error) {
           submit.disabled = false; submit.textContent = 'Try again';
           errorBox.textContent = error.friendly || 'This could not be sent just now. Try again in a moment.';
@@ -665,21 +673,15 @@ CH.views.meetingPanel = (function () {
     function show(next) { view = next; fill(); var first = dlg.body.querySelector('textarea, input'); if (first) first.focus(); }
 
     // Changes elsewhere (a request saved, the page read again) come in bursts while a meeting catches up: they are
-    // gathered into one quiet read, and never repaint over what someone is typing or choosing.
+    // gathered into one quiet read. What someone is typing or choosing is kept through the repaint (fill), so the
+    // read is never put off.
     function refreshNow() {
       refreshTimer = null;
       if (!dlg.isOpen()) return;
       if (view !== 'main' && view !== 'finalise') return;
-      var active = document.activeElement;
-      if (active && dlg.body.contains(active) && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)) { refreshTimer = setTimeout(refreshNow, 2000); return; }
-      if (current && current.dirty()) { refreshTimer = setTimeout(refreshNow, 2000); return; }   // never over unsaved notes
       loadAgenda(true);
     }
-    app.panel = { refresh: function () {
-      if (!dlg.isOpen()) return;
-      clearTimeout(refreshTimer);
-      refreshTimer = setTimeout(refreshNow, 600);
-    } };
+    app.panelOpen(panel);
     fill();
     loadAgenda();
     dlg.focusFirst();

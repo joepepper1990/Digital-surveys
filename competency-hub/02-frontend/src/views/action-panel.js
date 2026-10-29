@@ -65,7 +65,8 @@ CH.views.actionPanel = (function () {
   }
 
   function open(app, id) {
-    var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-a', title: 'Action', wide: true, onClose: function () { app.panel = null; } });
+    var panel = { id: id, refresh: refresh };
+    var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-a', title: 'Action', wide: true, onClose: function () { app.panelClose(panel); } });
     var view = 'main';
     var updates = null;
     var extensions = null;
@@ -89,7 +90,9 @@ CH.views.actionPanel = (function () {
       if (view === 'main' && dlg.isOpen()) fill();
     }
 
-    function fill() {
+    // what someone is typing survives a repaint (app 1.3.2)
+    function fill() { CH.ui.keepInputs(dlg.body, paint); }
+    function paint() {
       CH.dom.clear(dlg.body);
       var a = action();
       if (!a) {
@@ -391,7 +394,7 @@ CH.views.actionPanel = (function () {
       dlg.focusFirst();
       loadExtras();
     });
-    app.panel = { id: id, refresh: refresh };
+    app.panelOpen(panel);
   }
 
   return { open: open };
