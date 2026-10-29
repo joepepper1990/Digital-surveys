@@ -46,7 +46,7 @@
           "type": "OpenApiConnection",
           "recurrence": {
             "frequency": "Minute",
-            "interval": 1
+            "interval": 15
           },
           "splitOn": "@triggerOutputs()?['body/value']",
           "conditions": [
@@ -68,7 +68,7 @@
               ]
             },
             "concurrency": {
-              "runs": 5
+              "runs": 1
             }
           },
           "inputs": {
@@ -184,23 +184,6 @@
             ]
           }
         },
-        "Initialise_event_form": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varEventForm",
-                "type": "array",
-                "value": []
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_plan_object": [
-              "Succeeded"
-            ]
-          }
-        },
         "Initialise_change_record_ID": {
           "type": "InitializeVariable",
           "inputs": {
@@ -299,23 +282,6 @@
             ]
           }
         },
-        "Initialise_event_details": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varEventJson",
-                "type": "object",
-                "value": {}
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_fields": [
-              "Succeeded"
-            ]
-          }
-        },
         "Initialise_change_record_plan": {
           "type": "InitializeVariable",
           "inputs": {
@@ -397,36 +363,25 @@
             ]
           }
         },
-        "Initialise_event_title": {
+        "Initialise_rec": {
           "type": "InitializeVariable",
           "inputs": {
             "variables": [
               {
-                "name": "varEventTitle",
-                "type": "string",
-                "value": ""
+                "name": "varRec",
+                "type": "object",
+                "value": {
+                  "title": "",
+                  "type": "",
+                  "form": [],
+                  "json": {},
+                  "result": ""
+                }
               }
             ]
           },
           "runAfter": {
             "Initialise_stale": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_result": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varResult",
-                "type": "string",
-                "value": ""
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_event_title": [
               "Succeeded"
             ]
           }
@@ -512,23 +467,6 @@
             ]
           }
         },
-        "Initialise_event_type": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varEventType",
-                "type": "string",
-                "value": ""
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_verdict": [
-              "Succeeded"
-            ]
-          }
-        },
         "Initialise_email_list": {
           "type": "InitializeVariable",
           "inputs": {
@@ -541,7 +479,7 @@
             ]
           },
           "runAfter": {
-            "Initialise_event_type": [
+            "Initialise_verdict": [
               "Succeeded"
             ]
           }
@@ -811,7 +749,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['people']}')/items?$select=Id,Title,KnownAs,SiteUserId,Role,Status,IsAdministrator,Email,Person/Name,Person/EMail&$expand=Person&$filter=SiteUserId eq @{replace(string(coalesce(outputs('Sender_ID'), '')), '''', '''''')}",
+                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['people']}')/items?$select=Id,Title,KnownAs,SiteUserId,Role,Status,IsAdministrator,Email,Person/Name,Person/EMail&$expand=Person&$top=5000",
                   "parameters/headers": {
                     "Accept": "application/json;odata=nometadata"
                   }
@@ -824,11 +762,23 @@
                 ]
               }
             },
-            "Person_who_sent_it": {
-              "type": "Compose",
-              "inputs": "@first(body('Read_the_person_who_sent_it')?['value'])",
+            "Requester_rows": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Read_the_person_who_sent_it')?['value']",
+                "where": "@equals(first(split(string(coalesce(item()?['SiteUserId'], '')), '.')), first(split(string(coalesce(outputs('Sender_ID'), '')), '.')))"
+              },
               "runAfter": {
                 "Read_the_person_who_sent_it": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Person_who_sent_it": {
+              "type": "Compose",
+              "inputs": "@first(body('Requester_rows'))",
+              "runAfter": {
+                "Requester_rows": [
                   "Succeeded"
                 ]
               }
@@ -3417,13 +3367,13 @@
             }
           },
           "runAfter": {
-            "Initialise_event_form": [
+            "Initialise_plan_object": [
               "Succeeded"
             ],
-            "Initialise_event_details": [
+            "Initialise_fields": [
               "Succeeded"
             ],
-            "Initialise_result": [
+            "Initialise_rec": [
               "Succeeded"
             ],
             "Initialise_email_list": [
@@ -3774,7 +3724,7 @@
                   "parameters/method": "GET",
                   "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['settings']}')/items?$select=Id,Title,Value&$filter=Title eq 'QueueHealth'",
                   "parameters/headers": {
-                    "Accept": "application/json;odata=nometadata"
+                    "Accept": "application/json;odata=minimalmetadata"
                   }
                 },
                 "authentication": "@parameters('$authentication')"
@@ -3817,7 +3767,7 @@
                         "Accept": "application/json;odata=nometadata",
                         "Content-Type": "application/json;odata=nometadata",
                         "X-HTTP-Method": "MERGE",
-                        "IF-MATCH": "*"
+                        "IF-MATCH": "@{first(body('Health_now')?['value'])?['odata.etag']}"
                       },
                       "parameters/body": "@{string(outputs('Health_fixed'))}"
                     },
@@ -3826,6 +3776,17 @@
                   "runAfter": {
                     "Health_fixed": [
                       "Succeeded"
+                    ]
+                  }
+                },
+                "Health_saved": {
+                  "type": "Compose",
+                  "inputs": "@actions('Save_the_health_setting')?['status']",
+                  "runAfter": {
+                    "Save_the_health_setting": [
+                      "Succeeded",
+                      "Failed",
+                      "TimedOut"
                     ]
                   }
                 }

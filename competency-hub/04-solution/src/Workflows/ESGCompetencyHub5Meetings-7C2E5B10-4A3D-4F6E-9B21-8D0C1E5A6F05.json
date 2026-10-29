@@ -184,23 +184,6 @@
             ]
           }
         },
-        "Initialise_event_form": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varEventForm",
-                "type": "array",
-                "value": []
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_plan_object": [
-              "Succeeded"
-            ]
-          }
-        },
         "Initialise_mtg": {
           "type": "InitializeVariable",
           "inputs": {
@@ -213,7 +196,7 @@
             ]
           },
           "runAfter": {
-            "Initialise_event_form": [
+            "Initialise_plan_object": [
               "Succeeded"
             ]
           }
@@ -350,23 +333,6 @@
             ]
           }
         },
-        "Initialise_event_details": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varEventJson",
-                "type": "object",
-                "value": {}
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_fields": [
-              "Succeeded"
-            ]
-          }
-        },
         "Initialise_flag_on": {
           "type": "InitializeVariable",
           "inputs": {
@@ -379,7 +345,7 @@
             ]
           },
           "runAfter": {
-            "Initialise_event_details": [
+            "Initialise_fields": [
               "Succeeded"
             ]
           }
@@ -499,36 +465,25 @@
             ]
           }
         },
-        "Initialise_event_title": {
+        "Initialise_rec": {
           "type": "InitializeVariable",
           "inputs": {
             "variables": [
               {
-                "name": "varEventTitle",
-                "type": "string",
-                "value": ""
+                "name": "varRec",
+                "type": "object",
+                "value": {
+                  "title": "",
+                  "type": "",
+                  "form": [],
+                  "json": {},
+                  "result": ""
+                }
               }
             ]
           },
           "runAfter": {
             "Initialise_stale": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_result": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varResult",
-                "type": "string",
-                "value": ""
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_event_title": [
               "Succeeded"
             ]
           }
@@ -545,7 +500,7 @@
             ]
           },
           "runAfter": {
-            "Initialise_result": [
+            "Initialise_rec": [
               "Succeeded"
             ]
           }
@@ -665,23 +620,6 @@
             ]
           }
         },
-        "Initialise_event_type": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varEventType",
-                "type": "string",
-                "value": ""
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_verdict": [
-              "Succeeded"
-            ]
-          }
-        },
         "Initialise_email_list": {
           "type": "InitializeVariable",
           "inputs": {
@@ -694,7 +632,7 @@
             ]
           },
           "runAfter": {
-            "Initialise_event_type": [
+            "Initialise_verdict": [
               "Succeeded"
             ]
           }
@@ -998,7 +936,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['people']}')/items?$select=Id,Title,KnownAs,SiteUserId,Role,Status,IsAdministrator,Email,Person/Name,Person/EMail&$expand=Person&$filter=SiteUserId eq @{replace(string(coalesce(outputs('Sender_ID'), '')), '''', '''''')}",
+                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['people']}')/items?$select=Id,Title,KnownAs,SiteUserId,Role,Status,IsAdministrator,Email,Person/Name,Person/EMail&$expand=Person&$top=5000",
                   "parameters/headers": {
                     "Accept": "application/json;odata=nometadata"
                   }
@@ -1011,11 +949,23 @@
                 ]
               }
             },
-            "Person_who_sent_it": {
-              "type": "Compose",
-              "inputs": "@first(body('Read_the_person_who_sent_it')?['value'])",
+            "Requester_rows": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Read_the_person_who_sent_it')?['value']",
+                "where": "@equals(first(split(string(coalesce(item()?['SiteUserId'], '')), '.')), first(split(string(coalesce(outputs('Sender_ID'), '')), '.')))"
+              },
               "runAfter": {
                 "Read_the_person_who_sent_it": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Person_who_sent_it": {
+              "type": "Compose",
+              "inputs": "@first(body('Requester_rows'))",
+              "runAfter": {
+                "Requester_rows": [
                   "Succeeded"
                 ]
               }
@@ -3907,105 +3857,6 @@
                     "CancelMeeting": {
                       "case": "CancelMeeting",
                       "actions": {
-                        "Find_record_(meeting)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "GET",
-                              "parameters/uri": "_api/web/GetFolderByServerRelativePath(decodedurl='@{outputs('List_addresses')?['itemsRoot']}/@{string(if(equals(string(variables('varTx')?['RequestType']), 'ScheduleMeeting'), coalesce(outputs('Payload')?['areaKey'], ''), last(split(string(coalesce(variables('varMtg')?['FileDirRef'], '')), '/'))))}/MTG-@{string(variables('varActionId'))}/Record')/ListItemAllFields?$select=Id,HasUniqueRoleAssignments",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata"
-                              }
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {}
-                        },
-                        "Record_there_(meeting)": {
-                          "type": "If",
-                          "expression": "@and(equals(actions('Find_record_(meeting)')?['status'], 'Succeeded'), equals(body('Find_record_(meeting)')?['HasUniqueRoleAssignments'], true))",
-                          "actions": {
-                            "Reset_record_(meeting)": {
-                              "type": "OpenApiConnection",
-                              "inputs": {
-                                "host": {
-                                  "connectionName": "shared_sharepointonline",
-                                  "operationId": "HttpRequest",
-                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                                },
-                                "parameters": {
-                                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                                  "parameters/method": "POST",
-                                  "parameters/uri": "_api/web/GetFolderByServerRelativePath(decodedurl='@{outputs('List_addresses')?['itemsRoot']}/@{string(if(equals(string(variables('varTx')?['RequestType']), 'ScheduleMeeting'), coalesce(outputs('Payload')?['areaKey'], ''), last(split(string(coalesce(variables('varMtg')?['FileDirRef'], '')), '/'))))}/MTG-@{string(variables('varActionId'))}/Record')/ListItemAllFields/resetroleinheritance",
-                                  "parameters/headers": {
-                                    "Accept": "application/json;odata=nometadata"
-                                  }
-                                },
-                                "authentication": "@parameters('$authentication')"
-                              },
-                              "runAfter": {}
-                            },
-                            "Record_back_(meeting)": {
-                              "type": "OpenApiConnection",
-                              "inputs": {
-                                "host": {
-                                  "connectionName": "shared_sharepointonline",
-                                  "operationId": "HttpRequest",
-                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                                },
-                                "parameters": {
-                                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                                  "parameters/method": "GET",
-                                  "parameters/uri": "_api/web/GetFolderByServerRelativePath(decodedurl='@{outputs('List_addresses')?['itemsRoot']}/@{string(if(equals(string(variables('varTx')?['RequestType']), 'ScheduleMeeting'), coalesce(outputs('Payload')?['areaKey'], ''), last(split(string(coalesce(variables('varMtg')?['FileDirRef'], '')), '/'))))}/MTG-@{string(variables('varActionId'))}/Record')/ListItemAllFields?$select=Id,HasUniqueRoleAssignments",
-                                  "parameters/headers": {
-                                    "Accept": "application/json;odata=nometadata"
-                                  }
-                                },
-                                "authentication": "@parameters('$authentication')"
-                              },
-                              "runAfter": {
-                                "Reset_record_(meeting)": [
-                                  "Succeeded"
-                                ]
-                              }
-                            },
-                            "Record_reset_(meeting)": {
-                              "type": "If",
-                              "expression": "@equals(body('Record_back_(meeting)')?['HasUniqueRoleAssignments'], true)",
-                              "actions": {
-                                "Record_stop_(meeting)": {
-                                  "type": "Compose",
-                                  "inputs": "@int('The meeting record folder could not be made read-only. See Reset record (meeting).')",
-                                  "runAfter": {}
-                                }
-                              },
-                              "else": {
-                                "actions": {}
-                              },
-                              "runAfter": {
-                                "Record_back_(meeting)": [
-                                  "Succeeded"
-                                ]
-                              }
-                            }
-                          },
-                          "else": {
-                            "actions": {}
-                          },
-                          "runAfter": {
-                            "Find_record_(meeting)": [
-                              "Succeeded",
-                              "Failed",
-                              "TimedOut"
-                            ]
-                          }
-                        },
                         "Apply_cancel_(meeting)": {
                           "type": "If",
                           "expression": "@not(equals(string(coalesce(variables('varMtg')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey'])))",
@@ -4087,9 +3938,108 @@
                           "else": {
                             "actions": {}
                           },
+                          "runAfter": {}
+                        },
+                        "Find_record_(meeting)": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                              "parameters/method": "GET",
+                              "parameters/uri": "_api/web/GetFolderByServerRelativePath(decodedurl='@{outputs('List_addresses')?['itemsRoot']}/@{string(if(equals(string(variables('varTx')?['RequestType']), 'ScheduleMeeting'), coalesce(outputs('Payload')?['areaKey'], ''), last(split(string(coalesce(variables('varMtg')?['FileDirRef'], '')), '/'))))}/MTG-@{string(variables('varActionId'))}/Record')/ListItemAllFields?$select=Id,HasUniqueRoleAssignments",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata"
+                              }
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
                           "runAfter": {
-                            "Record_there_(meeting)": [
+                            "Apply_cancel_(meeting)": [
                               "Succeeded"
+                            ]
+                          }
+                        },
+                        "Record_there_(meeting)": {
+                          "type": "If",
+                          "expression": "@and(equals(actions('Find_record_(meeting)')?['status'], 'Succeeded'), equals(body('Find_record_(meeting)')?['HasUniqueRoleAssignments'], true))",
+                          "actions": {
+                            "Reset_record_(meeting)": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "connectionName": "shared_sharepointonline",
+                                  "operationId": "HttpRequest",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                },
+                                "parameters": {
+                                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                                  "parameters/method": "POST",
+                                  "parameters/uri": "_api/web/GetFolderByServerRelativePath(decodedurl='@{outputs('List_addresses')?['itemsRoot']}/@{string(if(equals(string(variables('varTx')?['RequestType']), 'ScheduleMeeting'), coalesce(outputs('Payload')?['areaKey'], ''), last(split(string(coalesce(variables('varMtg')?['FileDirRef'], '')), '/'))))}/MTG-@{string(variables('varActionId'))}/Record')/ListItemAllFields/resetroleinheritance",
+                                  "parameters/headers": {
+                                    "Accept": "application/json;odata=nometadata"
+                                  }
+                                },
+                                "authentication": "@parameters('$authentication')"
+                              },
+                              "runAfter": {}
+                            },
+                            "Record_back_(meeting)": {
+                              "type": "OpenApiConnection",
+                              "inputs": {
+                                "host": {
+                                  "connectionName": "shared_sharepointonline",
+                                  "operationId": "HttpRequest",
+                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                                },
+                                "parameters": {
+                                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                                  "parameters/method": "GET",
+                                  "parameters/uri": "_api/web/GetFolderByServerRelativePath(decodedurl='@{outputs('List_addresses')?['itemsRoot']}/@{string(if(equals(string(variables('varTx')?['RequestType']), 'ScheduleMeeting'), coalesce(outputs('Payload')?['areaKey'], ''), last(split(string(coalesce(variables('varMtg')?['FileDirRef'], '')), '/'))))}/MTG-@{string(variables('varActionId'))}/Record')/ListItemAllFields?$select=Id,HasUniqueRoleAssignments",
+                                  "parameters/headers": {
+                                    "Accept": "application/json;odata=nometadata"
+                                  }
+                                },
+                                "authentication": "@parameters('$authentication')"
+                              },
+                              "runAfter": {
+                                "Reset_record_(meeting)": [
+                                  "Succeeded"
+                                ]
+                              }
+                            },
+                            "Record_reset_(meeting)": {
+                              "type": "If",
+                              "expression": "@equals(body('Record_back_(meeting)')?['HasUniqueRoleAssignments'], true)",
+                              "actions": {
+                                "Record_stop_(meeting)": {
+                                  "type": "Compose",
+                                  "inputs": "@int('The meeting record folder could not be made read-only. See Reset record (meeting).')",
+                                  "runAfter": {}
+                                }
+                              },
+                              "else": {
+                                "actions": {}
+                              },
+                              "runAfter": {
+                                "Record_back_(meeting)": [
+                                  "Succeeded"
+                                ]
+                              }
+                            }
+                          },
+                          "else": {
+                            "actions": {}
+                          },
+                          "runAfter": {
+                            "Find_record_(meeting)": [
+                              "Succeeded",
+                              "Failed",
+                              "TimedOut"
                             ]
                           }
                         },
@@ -4112,7 +4062,7 @@
                             "authentication": "@parameters('$authentication')"
                           },
                           "runAfter": {
-                            "Apply_cancel_(meeting)": [
+                            "Record_there_(meeting)": [
                               "Succeeded"
                             ]
                           }
@@ -6649,7 +6599,7 @@
                   "parameters/method": "GET",
                   "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['settings']}')/items?$select=Id,Title,Value&$filter=Title eq 'QueueHealth'",
                   "parameters/headers": {
-                    "Accept": "application/json;odata=nometadata"
+                    "Accept": "application/json;odata=minimalmetadata"
                   }
                 },
                 "authentication": "@parameters('$authentication')"
@@ -6692,7 +6642,7 @@
                         "Accept": "application/json;odata=nometadata",
                         "Content-Type": "application/json;odata=nometadata",
                         "X-HTTP-Method": "MERGE",
-                        "IF-MATCH": "*"
+                        "IF-MATCH": "@{first(body('Health_now')?['value'])?['odata.etag']}"
                       },
                       "parameters/body": "@{string(outputs('Health_fixed'))}"
                     },
@@ -6701,6 +6651,17 @@
                   "runAfter": {
                     "Health_fixed": [
                       "Succeeded"
+                    ]
+                  }
+                },
+                "Health_saved": {
+                  "type": "Compose",
+                  "inputs": "@actions('Save_the_health_setting')?['status']",
+                  "runAfter": {
+                    "Save_the_health_setting": [
+                      "Succeeded",
+                      "Failed",
+                      "TimedOut"
                     ]
                   }
                 }

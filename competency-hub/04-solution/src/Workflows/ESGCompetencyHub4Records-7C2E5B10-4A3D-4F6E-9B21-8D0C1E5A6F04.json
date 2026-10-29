@@ -184,23 +184,6 @@
             ]
           }
         },
-        "Initialise_event_form": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varEventForm",
-                "type": "array",
-                "value": []
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_plan_object": [
-              "Succeeded"
-            ]
-          }
-        },
         "Initialise_change_record_ID": {
           "type": "InitializeVariable",
           "inputs": {
@@ -299,23 +282,6 @@
             ]
           }
         },
-        "Initialise_event_details": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varEventJson",
-                "type": "object",
-                "value": {}
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_fields": [
-              "Succeeded"
-            ]
-          }
-        },
         "Initialise_change_record_plan": {
           "type": "InitializeVariable",
           "inputs": {
@@ -397,36 +363,25 @@
             ]
           }
         },
-        "Initialise_event_title": {
+        "Initialise_rec": {
           "type": "InitializeVariable",
           "inputs": {
             "variables": [
               {
-                "name": "varEventTitle",
-                "type": "string",
-                "value": ""
+                "name": "varRec",
+                "type": "object",
+                "value": {
+                  "title": "",
+                  "type": "",
+                  "form": [],
+                  "json": {},
+                  "result": ""
+                }
               }
             ]
           },
           "runAfter": {
             "Initialise_stale": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_result": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varResult",
-                "type": "string",
-                "value": ""
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_event_title": [
               "Succeeded"
             ]
           }
@@ -512,23 +467,6 @@
             ]
           }
         },
-        "Initialise_event_type": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varEventType",
-                "type": "string",
-                "value": ""
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_verdict": [
-              "Succeeded"
-            ]
-          }
-        },
         "Initialise_email_list": {
           "type": "InitializeVariable",
           "inputs": {
@@ -541,7 +479,7 @@
             ]
           },
           "runAfter": {
-            "Initialise_event_type": [
+            "Initialise_verdict": [
               "Succeeded"
             ]
           }
@@ -811,7 +749,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['people']}')/items?$select=Id,Title,KnownAs,SiteUserId,Role,Status,IsAdministrator,Email,Person/Name,Person/EMail&$expand=Person&$filter=SiteUserId eq @{replace(string(coalesce(outputs('Sender_ID'), '')), '''', '''''')}",
+                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['people']}')/items?$select=Id,Title,KnownAs,SiteUserId,Role,Status,IsAdministrator,Email,Person/Name,Person/EMail&$expand=Person&$top=5000",
                   "parameters/headers": {
                     "Accept": "application/json;odata=nometadata"
                   }
@@ -824,11 +762,23 @@
                 ]
               }
             },
-            "Person_who_sent_it": {
-              "type": "Compose",
-              "inputs": "@first(body('Read_the_person_who_sent_it')?['value'])",
+            "Requester_rows": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Read_the_person_who_sent_it')?['value']",
+                "where": "@equals(first(split(string(coalesce(item()?['SiteUserId'], '')), '.')), first(split(string(coalesce(outputs('Sender_ID'), '')), '.')))"
+              },
               "runAfter": {
                 "Read_the_person_who_sent_it": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Person_who_sent_it": {
+              "type": "Compose",
+              "inputs": "@first(body('Requester_rows'))",
+              "runAfter": {
+                "Requester_rows": [
                   "Succeeded"
                 ]
               }
@@ -2012,65 +1962,18 @@
                             ]
                           }
                         },
-                        "Find_rec_event_(edit_notice)": {
-                          "type": "OpenApiConnection",
+                        "Event_record_(edit_notice)": {
+                          "type": "SetVariable",
                           "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "GET",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items?$select=Id&$filter=RequestKey eq '@{concat(string(variables('varTx')?['RequestKey']), '%7C1')}'",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata"
-                              }
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Apply_(edit_notice)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Create_rec_event_if_missing_(edit_notice)": {
-                          "type": "If",
-                          "expression": "@empty(body('Find_rec_event_(edit_notice)')?['value'])",
-                          "actions": {
-                            "Rec_event_fields_(edit_notice)": {
-                              "type": "Compose",
-                              "inputs": [
-                                {
-                                  "FieldName": "Title",
-                                  "FieldValue": "@{take(concat('Notice edited: ', string(body('Get_rec_(edit_notice)')?['Title'])), 255)}"
-                                },
-                                {
-                                  "FieldName": "RowKind",
-                                  "FieldValue": "Event"
-                                },
-                                {
-                                  "FieldName": "RequestKey",
-                                  "FieldValue": "@{concat(string(variables('varTx')?['RequestKey']), '|1')}"
-                                },
-                                {
-                                  "FieldName": "RecordType",
-                                  "FieldValue": "Notice"
-                                },
-                                {
-                                  "FieldName": "RecordId",
-                                  "FieldValue": "@{first(split(string(coalesce(body('Get_rec_(edit_notice)')?['Id'], '')), '.'))}"
-                                },
-                                {
-                                  "FieldName": "EventType",
-                                  "FieldValue": "Notice Edited"
-                                },
-                                {
-                                  "FieldName": "RequestType",
-                                  "FieldValue": "@{string(variables('varTx')?['RequestType'])}"
-                                },
+                            "name": "varRec",
+                            "value": {
+                              "title": "@{take(concat('Notice edited: ', string(body('Get_rec_(edit_notice)')?['Title'])), 255)}",
+                              "type": "Notice Edited",
+                              "recordType": "Notice",
+                              "recordId": "@{first(split(string(coalesce(body('Get_rec_(edit_notice)')?['Id'], '')), '.'))}",
+                              "areaKey": "@{last(split(string(body('Get_rec_(edit_notice)')?['FileDirRef']), '/'))}",
+                              "areaId": "@{first(split(string(coalesce(first(body('Area_(edit_notice)'))?['Id'], '')), '.'))}",
+                              "form": [
                                 {
                                   "FieldName": "PreviousValue",
                                   "FieldValue": "@{take(string(body('Get_rec_(edit_notice)')?['Body']), 2000)}"
@@ -2080,238 +1983,11 @@
                                   "FieldValue": "@{take(trim(string(coalesce(outputs('Payload')?['body'], ''))), 2000)}"
                                 }
                               ],
-                              "runAfter": {}
-                            },
-                            "Rec_event_request_(edit_notice)": {
-                              "type": "Compose",
-                              "inputs": {
-                                "listItemCreateInfo": {
-                                  "FolderPath": {
-                                    "DecodedUrl": "@{outputs('List_addresses')?['histRoot']}/@{last(split(string(body('Get_rec_(edit_notice)')?['FileDirRef']), '/'))}"
-                                  },
-                                  "UnderlyingObjectType": 0
-                                },
-                                "formValues": "@outputs('Rec_event_fields_(edit_notice)')",
-                                "bNewDocumentUpdate": false
-                              },
-                              "runAfter": {
-                                "Rec_event_fields_(edit_notice)": [
-                                  "Succeeded"
-                                ]
-                              }
-                            },
-                            "Rec_event_(edit_notice)": {
-                              "type": "OpenApiConnection",
-                              "inputs": {
-                                "host": {
-                                  "connectionName": "shared_sharepointonline",
-                                  "operationId": "HttpRequest",
-                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                                },
-                                "parameters": {
-                                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                                  "parameters/method": "POST",
-                                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/AddValidateUpdateItemUsingPath",
-                                  "parameters/headers": {
-                                    "Accept": "application/json;odata=nometadata",
-                                    "Content-Type": "application/json;odata=nometadata"
-                                  },
-                                  "parameters/body": "@{string(outputs('Rec_event_request_(edit_notice)'))}"
-                                },
-                                "authentication": "@parameters('$authentication')"
-                              },
-                              "runAfter": {
-                                "Rec_event_request_(edit_notice)": [
-                                  "Succeeded"
-                                ]
-                              }
-                            },
-                            "Was_rec_event_refused_(edit_notice)": {
-                              "type": "Query",
-                              "inputs": {
-                                "from": "@body('Rec_event_(edit_notice)')?['value']",
-                                "where": "@equals(item()?['HasException'], true)"
-                              },
-                              "runAfter": {
-                                "Rec_event_(edit_notice)": [
-                                  "Succeeded"
-                                ]
-                              }
-                            },
-                            "Check_rec_event_was_created_(edit_notice)": {
-                              "type": "If",
-                              "expression": "@empty(body('Was_rec_event_refused_(edit_notice)'))",
-                              "actions": {},
-                              "else": {
-                                "actions": {
-                                  "Stop_if_rec_event_was_not_created_(edit_notice)": {
-                                    "type": "Compose",
-                                    "inputs": "@int('The History event could not be created. See Rec event (edit notice).')",
-                                    "runAfter": {}
-                                  }
-                                }
-                              },
-                              "runAfter": {
-                                "Was_rec_event_refused_(edit_notice)": [
-                                  "Succeeded"
-                                ]
-                              }
+                              "result": "@{'Notice saved.'}"
                             }
                           },
-                          "else": {
-                            "actions": {}
-                          },
                           "runAfter": {
-                            "Find_rec_event_(edit_notice)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Get_rec_event_(edit_notice)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "GET",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items?$select=Id&$filter=RequestKey eq '@{concat(string(variables('varTx')?['RequestKey']), '%7C1')}'",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata"
-                              }
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Create_rec_event_if_missing_(edit_notice)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Rec_event_details_(edit_notice)": {
-                          "type": "Compose",
-                          "inputs": {
-                            "ActorId": "@int(outputs('Sender_ID'))",
-                            "EventTime": "@{outputs('Time_of_the_change')}",
-                            "ProcessedAt": "@{utcNow()}",
-                            "CompetencyId": "@int(first(split(string(coalesce(first(body('Area_(edit_notice)'))?['Id'], '')), '.')))"
-                          },
-                          "runAfter": {
-                            "Get_rec_event_(edit_notice)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Save_rec_event_(edit_notice)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "POST",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items(@{first(body('Get_rec_event_(edit_notice)')?['value'])?['Id']})",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata",
-                                "Content-Type": "application/json;odata=nometadata",
-                                "X-HTTP-Method": "MERGE",
-                                "IF-MATCH": "*"
-                              },
-                              "parameters/body": "@{string(outputs('Rec_event_details_(edit_notice)'))}"
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Rec_event_details_(edit_notice)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Change_record_applied_(edit_notice)": {
-                          "type": "Compose",
-                          "inputs": {
-                            "State": "Applied",
-                            "ProcessedAt": "@{utcNow()}",
-                            "EventTime": "@{body('Read_the_request')?['Created']}"
-                          },
-                          "runAfter": {
-                            "Save_rec_event_(edit_notice)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Save_change_record_applied_(edit_notice)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "POST",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items(@{first(split(string(coalesce(variables('varTx')?['Id'], '')), '.'))})",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata",
-                                "Content-Type": "application/json;odata=nometadata",
-                                "X-HTTP-Method": "MERGE",
-                                "IF-MATCH": "*"
-                              },
-                              "parameters/body": "@{string(outputs('Change_record_applied_(edit_notice)'))}"
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Change_record_applied_(edit_notice)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Request_completed_(edit_notice)": {
-                          "type": "Compose",
-                          "inputs": {
-                            "Status": "Completed",
-                            "ResultMessage": "@{'Notice saved.'}",
-                            "ProcessedAt": "@{utcNow()}",
-                            "ResultId": "@int(if(empty(first(split(string(coalesce(body('Get_rec_(edit_notice)')?['Id'], '')), '.'))), '0', first(split(string(coalesce(body('Get_rec_(edit_notice)')?['Id'], '')), '.'))))"
-                          },
-                          "runAfter": {
-                            "Save_change_record_applied_(edit_notice)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Mark_the_request_completed_(edit_notice)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "POST",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{triggerBody()?['ID']})",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata",
-                                "Content-Type": "application/json;odata=nometadata",
-                                "X-HTTP-Method": "MERGE",
-                                "IF-MATCH": "*"
-                              },
-                              "parameters/body": "@{string(outputs('Request_completed_(edit_notice)'))}"
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Request_completed_(edit_notice)": [
+                            "Apply_(edit_notice)": [
                               "Succeeded"
                             ]
                           }
@@ -2748,298 +2424,23 @@
                             ]
                           }
                         },
-                        "Find_rec_event_(archive_notice)": {
-                          "type": "OpenApiConnection",
+                        "Event_record_(archive_notice)": {
+                          "type": "SetVariable",
                           "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "GET",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items?$select=Id&$filter=RequestKey eq '@{concat(string(variables('varTx')?['RequestKey']), '%7C1')}'",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata"
-                              }
-                            },
-                            "authentication": "@parameters('$authentication')"
+                            "name": "varRec",
+                            "value": {
+                              "title": "@{take(concat('Notice archived: ', string(body('Get_rec_(archive_notice)')?['Title'])), 255)}",
+                              "type": "Notice Archived",
+                              "recordType": "Notice",
+                              "recordId": "@{first(split(string(coalesce(body('Get_rec_(archive_notice)')?['Id'], '')), '.'))}",
+                              "areaKey": "@{last(split(string(body('Get_rec_(archive_notice)')?['FileDirRef']), '/'))}",
+                              "areaId": "@{first(split(string(coalesce(first(body('Area_(archive_notice)'))?['Id'], '')), '.'))}",
+                              "form": [],
+                              "result": "@{'Notice archived.'}"
+                            }
                           },
                           "runAfter": {
                             "Apply_(archive_notice)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Create_rec_event_if_missing_(archive_notice)": {
-                          "type": "If",
-                          "expression": "@empty(body('Find_rec_event_(archive_notice)')?['value'])",
-                          "actions": {
-                            "Rec_event_fields_(archive_notice)": {
-                              "type": "Compose",
-                              "inputs": [
-                                {
-                                  "FieldName": "Title",
-                                  "FieldValue": "@{take(concat('Notice archived: ', string(body('Get_rec_(archive_notice)')?['Title'])), 255)}"
-                                },
-                                {
-                                  "FieldName": "RowKind",
-                                  "FieldValue": "Event"
-                                },
-                                {
-                                  "FieldName": "RequestKey",
-                                  "FieldValue": "@{concat(string(variables('varTx')?['RequestKey']), '|1')}"
-                                },
-                                {
-                                  "FieldName": "RecordType",
-                                  "FieldValue": "Notice"
-                                },
-                                {
-                                  "FieldName": "RecordId",
-                                  "FieldValue": "@{first(split(string(coalesce(body('Get_rec_(archive_notice)')?['Id'], '')), '.'))}"
-                                },
-                                {
-                                  "FieldName": "EventType",
-                                  "FieldValue": "Notice Archived"
-                                },
-                                {
-                                  "FieldName": "RequestType",
-                                  "FieldValue": "@{string(variables('varTx')?['RequestType'])}"
-                                }
-                              ],
-                              "runAfter": {}
-                            },
-                            "Rec_event_request_(archive_notice)": {
-                              "type": "Compose",
-                              "inputs": {
-                                "listItemCreateInfo": {
-                                  "FolderPath": {
-                                    "DecodedUrl": "@{outputs('List_addresses')?['histRoot']}/@{last(split(string(body('Get_rec_(archive_notice)')?['FileDirRef']), '/'))}"
-                                  },
-                                  "UnderlyingObjectType": 0
-                                },
-                                "formValues": "@outputs('Rec_event_fields_(archive_notice)')",
-                                "bNewDocumentUpdate": false
-                              },
-                              "runAfter": {
-                                "Rec_event_fields_(archive_notice)": [
-                                  "Succeeded"
-                                ]
-                              }
-                            },
-                            "Rec_event_(archive_notice)": {
-                              "type": "OpenApiConnection",
-                              "inputs": {
-                                "host": {
-                                  "connectionName": "shared_sharepointonline",
-                                  "operationId": "HttpRequest",
-                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                                },
-                                "parameters": {
-                                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                                  "parameters/method": "POST",
-                                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/AddValidateUpdateItemUsingPath",
-                                  "parameters/headers": {
-                                    "Accept": "application/json;odata=nometadata",
-                                    "Content-Type": "application/json;odata=nometadata"
-                                  },
-                                  "parameters/body": "@{string(outputs('Rec_event_request_(archive_notice)'))}"
-                                },
-                                "authentication": "@parameters('$authentication')"
-                              },
-                              "runAfter": {
-                                "Rec_event_request_(archive_notice)": [
-                                  "Succeeded"
-                                ]
-                              }
-                            },
-                            "Was_rec_event_refused_(archive_notice)": {
-                              "type": "Query",
-                              "inputs": {
-                                "from": "@body('Rec_event_(archive_notice)')?['value']",
-                                "where": "@equals(item()?['HasException'], true)"
-                              },
-                              "runAfter": {
-                                "Rec_event_(archive_notice)": [
-                                  "Succeeded"
-                                ]
-                              }
-                            },
-                            "Check_rec_event_was_created_(archive_notice)": {
-                              "type": "If",
-                              "expression": "@empty(body('Was_rec_event_refused_(archive_notice)'))",
-                              "actions": {},
-                              "else": {
-                                "actions": {
-                                  "Stop_if_rec_event_was_not_created_(archive_notice)": {
-                                    "type": "Compose",
-                                    "inputs": "@int('The History event could not be created. See Rec event (archive notice).')",
-                                    "runAfter": {}
-                                  }
-                                }
-                              },
-                              "runAfter": {
-                                "Was_rec_event_refused_(archive_notice)": [
-                                  "Succeeded"
-                                ]
-                              }
-                            }
-                          },
-                          "else": {
-                            "actions": {}
-                          },
-                          "runAfter": {
-                            "Find_rec_event_(archive_notice)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Get_rec_event_(archive_notice)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "GET",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items?$select=Id&$filter=RequestKey eq '@{concat(string(variables('varTx')?['RequestKey']), '%7C1')}'",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata"
-                              }
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Create_rec_event_if_missing_(archive_notice)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Rec_event_details_(archive_notice)": {
-                          "type": "Compose",
-                          "inputs": {
-                            "ActorId": "@int(outputs('Sender_ID'))",
-                            "EventTime": "@{outputs('Time_of_the_change')}",
-                            "ProcessedAt": "@{utcNow()}",
-                            "CompetencyId": "@int(first(split(string(coalesce(first(body('Area_(archive_notice)'))?['Id'], '')), '.')))"
-                          },
-                          "runAfter": {
-                            "Get_rec_event_(archive_notice)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Save_rec_event_(archive_notice)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "POST",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items(@{first(body('Get_rec_event_(archive_notice)')?['value'])?['Id']})",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata",
-                                "Content-Type": "application/json;odata=nometadata",
-                                "X-HTTP-Method": "MERGE",
-                                "IF-MATCH": "*"
-                              },
-                              "parameters/body": "@{string(outputs('Rec_event_details_(archive_notice)'))}"
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Rec_event_details_(archive_notice)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Change_record_applied_(archive_notice)": {
-                          "type": "Compose",
-                          "inputs": {
-                            "State": "Applied",
-                            "ProcessedAt": "@{utcNow()}",
-                            "EventTime": "@{body('Read_the_request')?['Created']}"
-                          },
-                          "runAfter": {
-                            "Save_rec_event_(archive_notice)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Save_change_record_applied_(archive_notice)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "POST",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items(@{first(split(string(coalesce(variables('varTx')?['Id'], '')), '.'))})",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata",
-                                "Content-Type": "application/json;odata=nometadata",
-                                "X-HTTP-Method": "MERGE",
-                                "IF-MATCH": "*"
-                              },
-                              "parameters/body": "@{string(outputs('Change_record_applied_(archive_notice)'))}"
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Change_record_applied_(archive_notice)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Request_completed_(archive_notice)": {
-                          "type": "Compose",
-                          "inputs": {
-                            "Status": "Completed",
-                            "ResultMessage": "@{'Notice archived.'}",
-                            "ProcessedAt": "@{utcNow()}",
-                            "ResultId": "@int(if(empty(first(split(string(coalesce(body('Get_rec_(archive_notice)')?['Id'], '')), '.'))), '0', first(split(string(coalesce(body('Get_rec_(archive_notice)')?['Id'], '')), '.'))))"
-                          },
-                          "runAfter": {
-                            "Save_change_record_applied_(archive_notice)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Mark_the_request_completed_(archive_notice)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "POST",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{triggerBody()?['ID']})",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata",
-                                "Content-Type": "application/json;odata=nometadata",
-                                "X-HTTP-Method": "MERGE",
-                                "IF-MATCH": "*"
-                              },
-                              "parameters/body": "@{string(outputs('Request_completed_(archive_notice)'))}"
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Request_completed_(archive_notice)": [
                               "Succeeded"
                             ]
                           }
@@ -3476,298 +2877,23 @@
                             ]
                           }
                         },
-                        "Find_rec_event_(pin_notice)": {
-                          "type": "OpenApiConnection",
+                        "Event_record_(pin_notice)": {
+                          "type": "SetVariable",
                           "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "GET",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items?$select=Id&$filter=RequestKey eq '@{concat(string(variables('varTx')?['RequestKey']), '%7C1')}'",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata"
-                              }
-                            },
-                            "authentication": "@parameters('$authentication')"
+                            "name": "varRec",
+                            "value": {
+                              "title": "@{take(concat(if(equals(outputs('Payload')?['pinned'], true), 'Notice pinned: ', 'Notice unpinned: '), string(body('Get_rec_(pin_notice)')?['Title'])), 255)}",
+                              "type": "@{if(equals(outputs('Payload')?['pinned'], true), 'Notice Pinned', 'Notice Unpinned')}",
+                              "recordType": "Notice",
+                              "recordId": "@{first(split(string(coalesce(body('Get_rec_(pin_notice)')?['Id'], '')), '.'))}",
+                              "areaKey": "@{last(split(string(body('Get_rec_(pin_notice)')?['FileDirRef']), '/'))}",
+                              "areaId": "@{first(split(string(coalesce(first(body('Area_(pin_notice)'))?['Id'], '')), '.'))}",
+                              "form": [],
+                              "result": "@{if(equals(outputs('Payload')?['pinned'], true), 'Notice pinned.', 'Notice unpinned.')}"
+                            }
                           },
                           "runAfter": {
                             "Apply_(pin_notice)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Create_rec_event_if_missing_(pin_notice)": {
-                          "type": "If",
-                          "expression": "@empty(body('Find_rec_event_(pin_notice)')?['value'])",
-                          "actions": {
-                            "Rec_event_fields_(pin_notice)": {
-                              "type": "Compose",
-                              "inputs": [
-                                {
-                                  "FieldName": "Title",
-                                  "FieldValue": "@{take(concat(if(equals(outputs('Payload')?['pinned'], true), 'Notice pinned: ', 'Notice unpinned: '), string(body('Get_rec_(pin_notice)')?['Title'])), 255)}"
-                                },
-                                {
-                                  "FieldName": "RowKind",
-                                  "FieldValue": "Event"
-                                },
-                                {
-                                  "FieldName": "RequestKey",
-                                  "FieldValue": "@{concat(string(variables('varTx')?['RequestKey']), '|1')}"
-                                },
-                                {
-                                  "FieldName": "RecordType",
-                                  "FieldValue": "Notice"
-                                },
-                                {
-                                  "FieldName": "RecordId",
-                                  "FieldValue": "@{first(split(string(coalesce(body('Get_rec_(pin_notice)')?['Id'], '')), '.'))}"
-                                },
-                                {
-                                  "FieldName": "EventType",
-                                  "FieldValue": "@{if(equals(outputs('Payload')?['pinned'], true), 'Notice Pinned', 'Notice Unpinned')}"
-                                },
-                                {
-                                  "FieldName": "RequestType",
-                                  "FieldValue": "@{string(variables('varTx')?['RequestType'])}"
-                                }
-                              ],
-                              "runAfter": {}
-                            },
-                            "Rec_event_request_(pin_notice)": {
-                              "type": "Compose",
-                              "inputs": {
-                                "listItemCreateInfo": {
-                                  "FolderPath": {
-                                    "DecodedUrl": "@{outputs('List_addresses')?['histRoot']}/@{last(split(string(body('Get_rec_(pin_notice)')?['FileDirRef']), '/'))}"
-                                  },
-                                  "UnderlyingObjectType": 0
-                                },
-                                "formValues": "@outputs('Rec_event_fields_(pin_notice)')",
-                                "bNewDocumentUpdate": false
-                              },
-                              "runAfter": {
-                                "Rec_event_fields_(pin_notice)": [
-                                  "Succeeded"
-                                ]
-                              }
-                            },
-                            "Rec_event_(pin_notice)": {
-                              "type": "OpenApiConnection",
-                              "inputs": {
-                                "host": {
-                                  "connectionName": "shared_sharepointonline",
-                                  "operationId": "HttpRequest",
-                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                                },
-                                "parameters": {
-                                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                                  "parameters/method": "POST",
-                                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/AddValidateUpdateItemUsingPath",
-                                  "parameters/headers": {
-                                    "Accept": "application/json;odata=nometadata",
-                                    "Content-Type": "application/json;odata=nometadata"
-                                  },
-                                  "parameters/body": "@{string(outputs('Rec_event_request_(pin_notice)'))}"
-                                },
-                                "authentication": "@parameters('$authentication')"
-                              },
-                              "runAfter": {
-                                "Rec_event_request_(pin_notice)": [
-                                  "Succeeded"
-                                ]
-                              }
-                            },
-                            "Was_rec_event_refused_(pin_notice)": {
-                              "type": "Query",
-                              "inputs": {
-                                "from": "@body('Rec_event_(pin_notice)')?['value']",
-                                "where": "@equals(item()?['HasException'], true)"
-                              },
-                              "runAfter": {
-                                "Rec_event_(pin_notice)": [
-                                  "Succeeded"
-                                ]
-                              }
-                            },
-                            "Check_rec_event_was_created_(pin_notice)": {
-                              "type": "If",
-                              "expression": "@empty(body('Was_rec_event_refused_(pin_notice)'))",
-                              "actions": {},
-                              "else": {
-                                "actions": {
-                                  "Stop_if_rec_event_was_not_created_(pin_notice)": {
-                                    "type": "Compose",
-                                    "inputs": "@int('The History event could not be created. See Rec event (pin notice).')",
-                                    "runAfter": {}
-                                  }
-                                }
-                              },
-                              "runAfter": {
-                                "Was_rec_event_refused_(pin_notice)": [
-                                  "Succeeded"
-                                ]
-                              }
-                            }
-                          },
-                          "else": {
-                            "actions": {}
-                          },
-                          "runAfter": {
-                            "Find_rec_event_(pin_notice)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Get_rec_event_(pin_notice)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "GET",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items?$select=Id&$filter=RequestKey eq '@{concat(string(variables('varTx')?['RequestKey']), '%7C1')}'",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata"
-                              }
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Create_rec_event_if_missing_(pin_notice)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Rec_event_details_(pin_notice)": {
-                          "type": "Compose",
-                          "inputs": {
-                            "ActorId": "@int(outputs('Sender_ID'))",
-                            "EventTime": "@{outputs('Time_of_the_change')}",
-                            "ProcessedAt": "@{utcNow()}",
-                            "CompetencyId": "@int(first(split(string(coalesce(first(body('Area_(pin_notice)'))?['Id'], '')), '.')))"
-                          },
-                          "runAfter": {
-                            "Get_rec_event_(pin_notice)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Save_rec_event_(pin_notice)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "POST",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items(@{first(body('Get_rec_event_(pin_notice)')?['value'])?['Id']})",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata",
-                                "Content-Type": "application/json;odata=nometadata",
-                                "X-HTTP-Method": "MERGE",
-                                "IF-MATCH": "*"
-                              },
-                              "parameters/body": "@{string(outputs('Rec_event_details_(pin_notice)'))}"
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Rec_event_details_(pin_notice)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Change_record_applied_(pin_notice)": {
-                          "type": "Compose",
-                          "inputs": {
-                            "State": "Applied",
-                            "ProcessedAt": "@{utcNow()}",
-                            "EventTime": "@{body('Read_the_request')?['Created']}"
-                          },
-                          "runAfter": {
-                            "Save_rec_event_(pin_notice)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Save_change_record_applied_(pin_notice)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "POST",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items(@{first(split(string(coalesce(variables('varTx')?['Id'], '')), '.'))})",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata",
-                                "Content-Type": "application/json;odata=nometadata",
-                                "X-HTTP-Method": "MERGE",
-                                "IF-MATCH": "*"
-                              },
-                              "parameters/body": "@{string(outputs('Change_record_applied_(pin_notice)'))}"
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Change_record_applied_(pin_notice)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Request_completed_(pin_notice)": {
-                          "type": "Compose",
-                          "inputs": {
-                            "Status": "Completed",
-                            "ResultMessage": "@{if(equals(outputs('Payload')?['pinned'], true), 'Notice pinned.', 'Notice unpinned.')}",
-                            "ProcessedAt": "@{utcNow()}",
-                            "ResultId": "@int(if(empty(first(split(string(coalesce(body('Get_rec_(pin_notice)')?['Id'], '')), '.'))), '0', first(split(string(coalesce(body('Get_rec_(pin_notice)')?['Id'], '')), '.'))))"
-                          },
-                          "runAfter": {
-                            "Save_change_record_applied_(pin_notice)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Mark_the_request_completed_(pin_notice)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "POST",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{triggerBody()?['ID']})",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata",
-                                "Content-Type": "application/json;odata=nometadata",
-                                "X-HTTP-Method": "MERGE",
-                                "IF-MATCH": "*"
-                              },
-                              "parameters/body": "@{string(outputs('Request_completed_(pin_notice)'))}"
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Request_completed_(pin_notice)": [
                               "Succeeded"
                             ]
                           }
@@ -4200,298 +3326,23 @@
                             ]
                           }
                         },
-                        "Find_rec_event_(hide_comment)": {
-                          "type": "OpenApiConnection",
+                        "Event_record_(hide_comment)": {
+                          "type": "SetVariable",
                           "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "GET",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items?$select=Id&$filter=RequestKey eq '@{concat(string(variables('varTx')?['RequestKey']), '%7C1')}'",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata"
-                              }
-                            },
-                            "authentication": "@parameters('$authentication')"
+                            "name": "varRec",
+                            "value": {
+                              "title": "@{take(concat('Comment hidden by a moderator: ', take(string(body('Get_rec_(hide_comment)')?['Body']), 120)), 255)}",
+                              "type": "Comment Hidden",
+                              "recordType": "@{if(equals(string(body('Get_rec_(hide_comment)')?['ParentType']), 'Register Entry'), 'Register Entry', 'Notice')}",
+                              "recordId": "@{first(split(string(coalesce(body('Get_rec_(hide_comment)')?['Id'], '')), '.'))}",
+                              "areaKey": "@{last(split(string(body('Get_rec_(hide_comment)')?['FileDirRef']), '/'))}",
+                              "areaId": "@{first(split(string(coalesce(first(body('Area_(hide_comment)'))?['Id'], '')), '.'))}",
+                              "form": [],
+                              "result": "@{'Comment hidden.'}"
+                            }
                           },
                           "runAfter": {
                             "Apply_(hide_comment)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Create_rec_event_if_missing_(hide_comment)": {
-                          "type": "If",
-                          "expression": "@empty(body('Find_rec_event_(hide_comment)')?['value'])",
-                          "actions": {
-                            "Rec_event_fields_(hide_comment)": {
-                              "type": "Compose",
-                              "inputs": [
-                                {
-                                  "FieldName": "Title",
-                                  "FieldValue": "@{take(concat('Comment hidden by a moderator: ', take(string(body('Get_rec_(hide_comment)')?['Body']), 120)), 255)}"
-                                },
-                                {
-                                  "FieldName": "RowKind",
-                                  "FieldValue": "Event"
-                                },
-                                {
-                                  "FieldName": "RequestKey",
-                                  "FieldValue": "@{concat(string(variables('varTx')?['RequestKey']), '|1')}"
-                                },
-                                {
-                                  "FieldName": "RecordType",
-                                  "FieldValue": "@{if(equals(string(body('Get_rec_(hide_comment)')?['ParentType']), 'Register Entry'), 'Register Entry', 'Notice')}"
-                                },
-                                {
-                                  "FieldName": "RecordId",
-                                  "FieldValue": "@{first(split(string(coalesce(body('Get_rec_(hide_comment)')?['Id'], '')), '.'))}"
-                                },
-                                {
-                                  "FieldName": "EventType",
-                                  "FieldValue": "Comment Hidden"
-                                },
-                                {
-                                  "FieldName": "RequestType",
-                                  "FieldValue": "@{string(variables('varTx')?['RequestType'])}"
-                                }
-                              ],
-                              "runAfter": {}
-                            },
-                            "Rec_event_request_(hide_comment)": {
-                              "type": "Compose",
-                              "inputs": {
-                                "listItemCreateInfo": {
-                                  "FolderPath": {
-                                    "DecodedUrl": "@{outputs('List_addresses')?['histRoot']}/@{last(split(string(body('Get_rec_(hide_comment)')?['FileDirRef']), '/'))}"
-                                  },
-                                  "UnderlyingObjectType": 0
-                                },
-                                "formValues": "@outputs('Rec_event_fields_(hide_comment)')",
-                                "bNewDocumentUpdate": false
-                              },
-                              "runAfter": {
-                                "Rec_event_fields_(hide_comment)": [
-                                  "Succeeded"
-                                ]
-                              }
-                            },
-                            "Rec_event_(hide_comment)": {
-                              "type": "OpenApiConnection",
-                              "inputs": {
-                                "host": {
-                                  "connectionName": "shared_sharepointonline",
-                                  "operationId": "HttpRequest",
-                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                                },
-                                "parameters": {
-                                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                                  "parameters/method": "POST",
-                                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/AddValidateUpdateItemUsingPath",
-                                  "parameters/headers": {
-                                    "Accept": "application/json;odata=nometadata",
-                                    "Content-Type": "application/json;odata=nometadata"
-                                  },
-                                  "parameters/body": "@{string(outputs('Rec_event_request_(hide_comment)'))}"
-                                },
-                                "authentication": "@parameters('$authentication')"
-                              },
-                              "runAfter": {
-                                "Rec_event_request_(hide_comment)": [
-                                  "Succeeded"
-                                ]
-                              }
-                            },
-                            "Was_rec_event_refused_(hide_comment)": {
-                              "type": "Query",
-                              "inputs": {
-                                "from": "@body('Rec_event_(hide_comment)')?['value']",
-                                "where": "@equals(item()?['HasException'], true)"
-                              },
-                              "runAfter": {
-                                "Rec_event_(hide_comment)": [
-                                  "Succeeded"
-                                ]
-                              }
-                            },
-                            "Check_rec_event_was_created_(hide_comment)": {
-                              "type": "If",
-                              "expression": "@empty(body('Was_rec_event_refused_(hide_comment)'))",
-                              "actions": {},
-                              "else": {
-                                "actions": {
-                                  "Stop_if_rec_event_was_not_created_(hide_comment)": {
-                                    "type": "Compose",
-                                    "inputs": "@int('The History event could not be created. See Rec event (hide comment).')",
-                                    "runAfter": {}
-                                  }
-                                }
-                              },
-                              "runAfter": {
-                                "Was_rec_event_refused_(hide_comment)": [
-                                  "Succeeded"
-                                ]
-                              }
-                            }
-                          },
-                          "else": {
-                            "actions": {}
-                          },
-                          "runAfter": {
-                            "Find_rec_event_(hide_comment)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Get_rec_event_(hide_comment)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "GET",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items?$select=Id&$filter=RequestKey eq '@{concat(string(variables('varTx')?['RequestKey']), '%7C1')}'",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata"
-                              }
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Create_rec_event_if_missing_(hide_comment)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Rec_event_details_(hide_comment)": {
-                          "type": "Compose",
-                          "inputs": {
-                            "ActorId": "@int(outputs('Sender_ID'))",
-                            "EventTime": "@{outputs('Time_of_the_change')}",
-                            "ProcessedAt": "@{utcNow()}",
-                            "CompetencyId": "@int(first(split(string(coalesce(first(body('Area_(hide_comment)'))?['Id'], '')), '.')))"
-                          },
-                          "runAfter": {
-                            "Get_rec_event_(hide_comment)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Save_rec_event_(hide_comment)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "POST",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items(@{first(body('Get_rec_event_(hide_comment)')?['value'])?['Id']})",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata",
-                                "Content-Type": "application/json;odata=nometadata",
-                                "X-HTTP-Method": "MERGE",
-                                "IF-MATCH": "*"
-                              },
-                              "parameters/body": "@{string(outputs('Rec_event_details_(hide_comment)'))}"
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Rec_event_details_(hide_comment)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Change_record_applied_(hide_comment)": {
-                          "type": "Compose",
-                          "inputs": {
-                            "State": "Applied",
-                            "ProcessedAt": "@{utcNow()}",
-                            "EventTime": "@{body('Read_the_request')?['Created']}"
-                          },
-                          "runAfter": {
-                            "Save_rec_event_(hide_comment)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Save_change_record_applied_(hide_comment)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "POST",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items(@{first(split(string(coalesce(variables('varTx')?['Id'], '')), '.'))})",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata",
-                                "Content-Type": "application/json;odata=nometadata",
-                                "X-HTTP-Method": "MERGE",
-                                "IF-MATCH": "*"
-                              },
-                              "parameters/body": "@{string(outputs('Change_record_applied_(hide_comment)'))}"
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Change_record_applied_(hide_comment)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Request_completed_(hide_comment)": {
-                          "type": "Compose",
-                          "inputs": {
-                            "Status": "Completed",
-                            "ResultMessage": "@{'Comment hidden.'}",
-                            "ProcessedAt": "@{utcNow()}",
-                            "ResultId": "@int(if(empty(first(split(string(coalesce(body('Get_rec_(hide_comment)')?['Id'], '')), '.'))), '0', first(split(string(coalesce(body('Get_rec_(hide_comment)')?['Id'], '')), '.'))))"
-                          },
-                          "runAfter": {
-                            "Save_change_record_applied_(hide_comment)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Mark_the_request_completed_(hide_comment)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "POST",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{triggerBody()?['ID']})",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata",
-                                "Content-Type": "application/json;odata=nometadata",
-                                "X-HTTP-Method": "MERGE",
-                                "IF-MATCH": "*"
-                              },
-                              "parameters/body": "@{string(outputs('Request_completed_(hide_comment)'))}"
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Request_completed_(hide_comment)": [
                               "Succeeded"
                             ]
                           }
@@ -5659,65 +4510,18 @@
                             ]
                           }
                         },
-                        "Find_rec_event_(update_entry)": {
-                          "type": "OpenApiConnection",
+                        "Event_record_(update_entry)": {
+                          "type": "SetVariable",
                           "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "GET",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items?$select=Id&$filter=RequestKey eq '@{concat(string(variables('varTx')?['RequestKey']), '%7C1')}'",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata"
-                              }
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Apply_(update_entry)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Create_rec_event_if_missing_(update_entry)": {
-                          "type": "If",
-                          "expression": "@empty(body('Find_rec_event_(update_entry)')?['value'])",
-                          "actions": {
-                            "Rec_event_fields_(update_entry)": {
-                              "type": "Compose",
-                              "inputs": [
-                                {
-                                  "FieldName": "Title",
-                                  "FieldValue": "@{take(concat(if(contains(outputs('Payload'), 'status'), concat('Status changed to ', string(coalesce(outputs('Payload')?['status'], '')), ': '), 'Entry updated: '), string(body('Get_rec_(update_entry)')?['Title'])), 255)}"
-                                },
-                                {
-                                  "FieldName": "RowKind",
-                                  "FieldValue": "Event"
-                                },
-                                {
-                                  "FieldName": "RequestKey",
-                                  "FieldValue": "@{concat(string(variables('varTx')?['RequestKey']), '|1')}"
-                                },
-                                {
-                                  "FieldName": "RecordType",
-                                  "FieldValue": "Register Entry"
-                                },
-                                {
-                                  "FieldName": "RecordId",
-                                  "FieldValue": "@{first(split(string(coalesce(body('Get_rec_(update_entry)')?['Id'], '')), '.'))}"
-                                },
-                                {
-                                  "FieldName": "EventType",
-                                  "FieldValue": "@{if(contains(outputs('Payload'), 'status'), 'Entry Status Changed', 'Entry Updated')}"
-                                },
-                                {
-                                  "FieldName": "RequestType",
-                                  "FieldValue": "@{string(variables('varTx')?['RequestType'])}"
-                                },
+                            "name": "varRec",
+                            "value": {
+                              "title": "@{take(concat(if(contains(outputs('Payload'), 'status'), concat('Status changed to ', string(coalesce(outputs('Payload')?['status'], '')), ': '), 'Entry updated: '), string(body('Get_rec_(update_entry)')?['Title'])), 255)}",
+                              "type": "@{if(contains(outputs('Payload'), 'status'), 'Entry Status Changed', 'Entry Updated')}",
+                              "recordType": "Register Entry",
+                              "recordId": "@{first(split(string(coalesce(body('Get_rec_(update_entry)')?['Id'], '')), '.'))}",
+                              "areaKey": "@{last(split(string(body('Get_rec_(update_entry)')?['FileDirRef']), '/'))}",
+                              "areaId": "@{first(split(string(coalesce(first(body('Area_(update_entry)'))?['Id'], '')), '.'))}",
+                              "form": [
                                 {
                                   "FieldName": "PreviousValue",
                                   "FieldValue": "@{string(body('Get_rec_(update_entry)')?['Status'])}"
@@ -5731,238 +4535,11 @@
                                   "FieldValue": "@{trim(string(coalesce(outputs('Payload')?['outcome'], '')))}"
                                 }
                               ],
-                              "runAfter": {}
-                            },
-                            "Rec_event_request_(update_entry)": {
-                              "type": "Compose",
-                              "inputs": {
-                                "listItemCreateInfo": {
-                                  "FolderPath": {
-                                    "DecodedUrl": "@{outputs('List_addresses')?['histRoot']}/@{last(split(string(body('Get_rec_(update_entry)')?['FileDirRef']), '/'))}"
-                                  },
-                                  "UnderlyingObjectType": 0
-                                },
-                                "formValues": "@outputs('Rec_event_fields_(update_entry)')",
-                                "bNewDocumentUpdate": false
-                              },
-                              "runAfter": {
-                                "Rec_event_fields_(update_entry)": [
-                                  "Succeeded"
-                                ]
-                              }
-                            },
-                            "Rec_event_(update_entry)": {
-                              "type": "OpenApiConnection",
-                              "inputs": {
-                                "host": {
-                                  "connectionName": "shared_sharepointonline",
-                                  "operationId": "HttpRequest",
-                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                                },
-                                "parameters": {
-                                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                                  "parameters/method": "POST",
-                                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/AddValidateUpdateItemUsingPath",
-                                  "parameters/headers": {
-                                    "Accept": "application/json;odata=nometadata",
-                                    "Content-Type": "application/json;odata=nometadata"
-                                  },
-                                  "parameters/body": "@{string(outputs('Rec_event_request_(update_entry)'))}"
-                                },
-                                "authentication": "@parameters('$authentication')"
-                              },
-                              "runAfter": {
-                                "Rec_event_request_(update_entry)": [
-                                  "Succeeded"
-                                ]
-                              }
-                            },
-                            "Was_rec_event_refused_(update_entry)": {
-                              "type": "Query",
-                              "inputs": {
-                                "from": "@body('Rec_event_(update_entry)')?['value']",
-                                "where": "@equals(item()?['HasException'], true)"
-                              },
-                              "runAfter": {
-                                "Rec_event_(update_entry)": [
-                                  "Succeeded"
-                                ]
-                              }
-                            },
-                            "Check_rec_event_was_created_(update_entry)": {
-                              "type": "If",
-                              "expression": "@empty(body('Was_rec_event_refused_(update_entry)'))",
-                              "actions": {},
-                              "else": {
-                                "actions": {
-                                  "Stop_if_rec_event_was_not_created_(update_entry)": {
-                                    "type": "Compose",
-                                    "inputs": "@int('The History event could not be created. See Rec event (update entry).')",
-                                    "runAfter": {}
-                                  }
-                                }
-                              },
-                              "runAfter": {
-                                "Was_rec_event_refused_(update_entry)": [
-                                  "Succeeded"
-                                ]
-                              }
+                              "result": "@{'Entry saved.'}"
                             }
                           },
-                          "else": {
-                            "actions": {}
-                          },
                           "runAfter": {
-                            "Find_rec_event_(update_entry)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Get_rec_event_(update_entry)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "GET",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items?$select=Id&$filter=RequestKey eq '@{concat(string(variables('varTx')?['RequestKey']), '%7C1')}'",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata"
-                              }
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Create_rec_event_if_missing_(update_entry)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Rec_event_details_(update_entry)": {
-                          "type": "Compose",
-                          "inputs": {
-                            "ActorId": "@int(outputs('Sender_ID'))",
-                            "EventTime": "@{outputs('Time_of_the_change')}",
-                            "ProcessedAt": "@{utcNow()}",
-                            "CompetencyId": "@int(first(split(string(coalesce(first(body('Area_(update_entry)'))?['Id'], '')), '.')))"
-                          },
-                          "runAfter": {
-                            "Get_rec_event_(update_entry)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Save_rec_event_(update_entry)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "POST",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items(@{first(body('Get_rec_event_(update_entry)')?['value'])?['Id']})",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata",
-                                "Content-Type": "application/json;odata=nometadata",
-                                "X-HTTP-Method": "MERGE",
-                                "IF-MATCH": "*"
-                              },
-                              "parameters/body": "@{string(outputs('Rec_event_details_(update_entry)'))}"
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Rec_event_details_(update_entry)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Change_record_applied_(update_entry)": {
-                          "type": "Compose",
-                          "inputs": {
-                            "State": "Applied",
-                            "ProcessedAt": "@{utcNow()}",
-                            "EventTime": "@{body('Read_the_request')?['Created']}"
-                          },
-                          "runAfter": {
-                            "Save_rec_event_(update_entry)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Save_change_record_applied_(update_entry)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "POST",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items(@{first(split(string(coalesce(variables('varTx')?['Id'], '')), '.'))})",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata",
-                                "Content-Type": "application/json;odata=nometadata",
-                                "X-HTTP-Method": "MERGE",
-                                "IF-MATCH": "*"
-                              },
-                              "parameters/body": "@{string(outputs('Change_record_applied_(update_entry)'))}"
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Change_record_applied_(update_entry)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Request_completed_(update_entry)": {
-                          "type": "Compose",
-                          "inputs": {
-                            "Status": "Completed",
-                            "ResultMessage": "@{'Entry saved.'}",
-                            "ProcessedAt": "@{utcNow()}",
-                            "ResultId": "@int(if(empty(first(split(string(coalesce(body('Get_rec_(update_entry)')?['Id'], '')), '.'))), '0', first(split(string(coalesce(body('Get_rec_(update_entry)')?['Id'], '')), '.'))))"
-                          },
-                          "runAfter": {
-                            "Save_change_record_applied_(update_entry)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Mark_the_request_completed_(update_entry)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "POST",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{triggerBody()?['ID']})",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata",
-                                "Content-Type": "application/json;odata=nometadata",
-                                "X-HTTP-Method": "MERGE",
-                                "IF-MATCH": "*"
-                              },
-                              "parameters/body": "@{string(outputs('Request_completed_(update_entry)'))}"
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Request_completed_(update_entry)": [
+                            "Apply_(update_entry)": [
                               "Succeeded"
                             ]
                           }
@@ -6177,7 +4754,7 @@
                           "actions": {
                             "Reason_to_refuse_if_any_(link_action)": {
                               "type": "Compose",
-                              "inputs": "@if(equals(string(coalesce(body('Get_rec_(link_action)')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey'])), '', if(empty(first(body('Area_(link_action)'))), 'That could not be found.', if(and(greater(int(if(empty(first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.'))), '0', first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 0), not(equals(first(split(string(coalesce(body('Get_rec_(link_action)')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.'))))), 'This was changed by someone else. Review the latest details and try again.', if(not(or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), and(not(empty(first(body('My_member_(link_action)')))), equals(string(outputs('Person_who_sent_it')?['Role']), 'Engineer'))), and(not(empty(first(body('My_member_(link_action)')))), equals(first(body('My_member_(link_action)'))?['CanManageMeetings'], true)), equals(first(split(string(coalesce(body('Get_rec_(link_action)')?['RaisedById'], '')), '.')), outputs('Sender_ID')))), 'Only the people who look after this entry can link actions to it.', if(empty(string(coalesce(outputs('Link_action_OK_(link_action)')?['Id'], ''))), 'That action could not be found.', if(not(equals(first(split(string(coalesce(outputs('Link_action_OK_(link_action)')?['CompetencyId'], '')), '.')), first(split(string(coalesce(body('Get_rec_(link_action)')?['CompetencyId'], '')), '.')))), 'Choose an action in the same area as this entry.', if(not(equals(outputs('Link_action_OK_(link_action)')?['IsOpen'], true)), 'Choose an open action.', if(and(equals(string(coalesce(outputs('Link_action_OK_(link_action)')?['SourceType'], '')), 'Register'), not(and(equals(string(coalesce(outputs('Link_action_OK_(link_action)')?['SourceType'], '')), 'Register'), equals(first(split(string(coalesce(outputs('Link_action_OK_(link_action)')?['SourceId'], '')), '.')), first(split(string(coalesce(body('Get_rec_(link_action)')?['Id'], '')), '.')))))), 'That action is already linked to another entry.', ''))))))))",
+                              "inputs": "@if(equals(string(coalesce(body('Get_rec_(link_action)')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey'])), '', if(empty(first(body('Area_(link_action)'))), 'That could not be found.', if(and(greater(int(if(empty(first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.'))), '0', first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 0), not(equals(first(split(string(coalesce(body('Get_rec_(link_action)')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.'))))), 'This was changed by someone else. Review the latest details and try again.', if(not(or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), and(not(empty(first(body('My_member_(link_action)')))), equals(string(outputs('Person_who_sent_it')?['Role']), 'Engineer'))), and(not(empty(first(body('My_member_(link_action)')))), equals(first(body('My_member_(link_action)'))?['CanManageMeetings'], true)), equals(first(split(string(coalesce(body('Get_rec_(link_action)')?['RaisedById'], '')), '.')), outputs('Sender_ID')))), 'Only the people who look after this entry can link actions to it.', if(empty(string(coalesce(outputs('Link_action_OK_(link_action)')?['Id'], ''))), 'That action could not be found.', if(not(empty(string(coalesce(outputs('Link_action_OK_(link_action)')?['PendingRequestKey'], '')))), 'That action is being changed just now. Try again in a minute.', if(not(equals(first(split(string(coalesce(outputs('Link_action_OK_(link_action)')?['CompetencyId'], '')), '.')), first(split(string(coalesce(body('Get_rec_(link_action)')?['CompetencyId'], '')), '.')))), 'Choose an action in the same area as this entry.', if(not(equals(outputs('Link_action_OK_(link_action)')?['IsOpen'], true)), 'Choose an open action.', if(and(equals(string(coalesce(outputs('Link_action_OK_(link_action)')?['SourceType'], '')), 'Register'), not(and(equals(string(coalesce(outputs('Link_action_OK_(link_action)')?['SourceType'], '')), 'Register'), equals(first(split(string(coalesce(outputs('Link_action_OK_(link_action)')?['SourceId'], '')), '.')), first(split(string(coalesce(body('Get_rec_(link_action)')?['Id'], '')), '.')))))), 'That action is already linked to another entry.', '')))))))))",
                               "runAfter": {}
                             },
                             "Refused_or_allowed_(link_action)": {
@@ -6481,302 +5058,28 @@
                             ]
                           }
                         },
-                        "Find_rec_event_(link_action)": {
-                          "type": "OpenApiConnection",
+                        "Event_record_(link_action)": {
+                          "type": "SetVariable",
                           "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "GET",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items?$select=Id&$filter=RequestKey eq '@{concat(string(variables('varTx')?['RequestKey']), '%7C1')}'",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata"
-                              }
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Link_needed_(link_action)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Create_rec_event_if_missing_(link_action)": {
-                          "type": "If",
-                          "expression": "@empty(body('Find_rec_event_(link_action)')?['value'])",
-                          "actions": {
-                            "Rec_event_fields_(link_action)": {
-                              "type": "Compose",
-                              "inputs": [
-                                {
-                                  "FieldName": "Title",
-                                  "FieldValue": "@{take(concat(if(true, 'Action linked: ', 'Action unlinked: '), string(outputs('Link_action_OK_(link_action)')?['Title'])), 255)}"
-                                },
-                                {
-                                  "FieldName": "RowKind",
-                                  "FieldValue": "Event"
-                                },
-                                {
-                                  "FieldName": "RequestKey",
-                                  "FieldValue": "@{concat(string(variables('varTx')?['RequestKey']), '|1')}"
-                                },
-                                {
-                                  "FieldName": "RecordType",
-                                  "FieldValue": "Register Entry"
-                                },
-                                {
-                                  "FieldName": "RecordId",
-                                  "FieldValue": "@{first(split(string(coalesce(body('Get_rec_(link_action)')?['Id'], '')), '.'))}"
-                                },
-                                {
-                                  "FieldName": "EventType",
-                                  "FieldValue": "Action Linked"
-                                },
-                                {
-                                  "FieldName": "RequestType",
-                                  "FieldValue": "@{string(variables('varTx')?['RequestType'])}"
-                                },
+                            "name": "varRec",
+                            "value": {
+                              "title": "@{take(concat(if(true, 'Action linked: ', 'Action unlinked: '), string(outputs('Link_action_OK_(link_action)')?['Title'])), 255)}",
+                              "type": "Action Linked",
+                              "recordType": "Register Entry",
+                              "recordId": "@{first(split(string(coalesce(body('Get_rec_(link_action)')?['Id'], '')), '.'))}",
+                              "areaKey": "@{last(split(string(body('Get_rec_(link_action)')?['FileDirRef']), '/'))}",
+                              "areaId": "@{first(split(string(coalesce(first(body('Area_(link_action)'))?['Id'], '')), '.'))}",
+                              "form": [
                                 {
                                   "FieldName": "NewValue",
                                   "FieldValue": "@{if(empty(first(split(string(coalesce(outputs('Payload')?['actionId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['actionId'], '')), '.')))}"
                                 }
                               ],
-                              "runAfter": {}
-                            },
-                            "Rec_event_request_(link_action)": {
-                              "type": "Compose",
-                              "inputs": {
-                                "listItemCreateInfo": {
-                                  "FolderPath": {
-                                    "DecodedUrl": "@{outputs('List_addresses')?['histRoot']}/@{last(split(string(body('Get_rec_(link_action)')?['FileDirRef']), '/'))}"
-                                  },
-                                  "UnderlyingObjectType": 0
-                                },
-                                "formValues": "@outputs('Rec_event_fields_(link_action)')",
-                                "bNewDocumentUpdate": false
-                              },
-                              "runAfter": {
-                                "Rec_event_fields_(link_action)": [
-                                  "Succeeded"
-                                ]
-                              }
-                            },
-                            "Rec_event_(link_action)": {
-                              "type": "OpenApiConnection",
-                              "inputs": {
-                                "host": {
-                                  "connectionName": "shared_sharepointonline",
-                                  "operationId": "HttpRequest",
-                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                                },
-                                "parameters": {
-                                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                                  "parameters/method": "POST",
-                                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/AddValidateUpdateItemUsingPath",
-                                  "parameters/headers": {
-                                    "Accept": "application/json;odata=nometadata",
-                                    "Content-Type": "application/json;odata=nometadata"
-                                  },
-                                  "parameters/body": "@{string(outputs('Rec_event_request_(link_action)'))}"
-                                },
-                                "authentication": "@parameters('$authentication')"
-                              },
-                              "runAfter": {
-                                "Rec_event_request_(link_action)": [
-                                  "Succeeded"
-                                ]
-                              }
-                            },
-                            "Was_rec_event_refused_(link_action)": {
-                              "type": "Query",
-                              "inputs": {
-                                "from": "@body('Rec_event_(link_action)')?['value']",
-                                "where": "@equals(item()?['HasException'], true)"
-                              },
-                              "runAfter": {
-                                "Rec_event_(link_action)": [
-                                  "Succeeded"
-                                ]
-                              }
-                            },
-                            "Check_rec_event_was_created_(link_action)": {
-                              "type": "If",
-                              "expression": "@empty(body('Was_rec_event_refused_(link_action)'))",
-                              "actions": {},
-                              "else": {
-                                "actions": {
-                                  "Stop_if_rec_event_was_not_created_(link_action)": {
-                                    "type": "Compose",
-                                    "inputs": "@int('The History event could not be created. See Rec event (link action).')",
-                                    "runAfter": {}
-                                  }
-                                }
-                              },
-                              "runAfter": {
-                                "Was_rec_event_refused_(link_action)": [
-                                  "Succeeded"
-                                ]
-                              }
+                              "result": "@{'Action linked.'}"
                             }
                           },
-                          "else": {
-                            "actions": {}
-                          },
                           "runAfter": {
-                            "Find_rec_event_(link_action)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Get_rec_event_(link_action)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "GET",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items?$select=Id&$filter=RequestKey eq '@{concat(string(variables('varTx')?['RequestKey']), '%7C1')}'",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata"
-                              }
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Create_rec_event_if_missing_(link_action)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Rec_event_details_(link_action)": {
-                          "type": "Compose",
-                          "inputs": {
-                            "ActorId": "@int(outputs('Sender_ID'))",
-                            "EventTime": "@{outputs('Time_of_the_change')}",
-                            "ProcessedAt": "@{utcNow()}",
-                            "CompetencyId": "@int(first(split(string(coalesce(first(body('Area_(link_action)'))?['Id'], '')), '.')))"
-                          },
-                          "runAfter": {
-                            "Get_rec_event_(link_action)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Save_rec_event_(link_action)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "POST",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items(@{first(body('Get_rec_event_(link_action)')?['value'])?['Id']})",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata",
-                                "Content-Type": "application/json;odata=nometadata",
-                                "X-HTTP-Method": "MERGE",
-                                "IF-MATCH": "*"
-                              },
-                              "parameters/body": "@{string(outputs('Rec_event_details_(link_action)'))}"
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Rec_event_details_(link_action)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Change_record_applied_(link_action)": {
-                          "type": "Compose",
-                          "inputs": {
-                            "State": "Applied",
-                            "ProcessedAt": "@{utcNow()}",
-                            "EventTime": "@{body('Read_the_request')?['Created']}"
-                          },
-                          "runAfter": {
-                            "Save_rec_event_(link_action)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Save_change_record_applied_(link_action)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "POST",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items(@{first(split(string(coalesce(variables('varTx')?['Id'], '')), '.'))})",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata",
-                                "Content-Type": "application/json;odata=nometadata",
-                                "X-HTTP-Method": "MERGE",
-                                "IF-MATCH": "*"
-                              },
-                              "parameters/body": "@{string(outputs('Change_record_applied_(link_action)'))}"
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Change_record_applied_(link_action)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Request_completed_(link_action)": {
-                          "type": "Compose",
-                          "inputs": {
-                            "Status": "Completed",
-                            "ResultMessage": "@{'Action linked.'}",
-                            "ProcessedAt": "@{utcNow()}",
-                            "ResultId": "@int(if(empty(first(split(string(coalesce(body('Get_rec_(link_action)')?['Id'], '')), '.'))), '0', first(split(string(coalesce(body('Get_rec_(link_action)')?['Id'], '')), '.'))))"
-                          },
-                          "runAfter": {
-                            "Save_change_record_applied_(link_action)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Mark_the_request_completed_(link_action)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "POST",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{triggerBody()?['ID']})",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata",
-                                "Content-Type": "application/json;odata=nometadata",
-                                "X-HTTP-Method": "MERGE",
-                                "IF-MATCH": "*"
-                              },
-                              "parameters/body": "@{string(outputs('Request_completed_(link_action)'))}"
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Request_completed_(link_action)": [
+                            "Link_needed_(link_action)": [
                               "Succeeded"
                             ]
                           }
@@ -6991,7 +5294,7 @@
                           "actions": {
                             "Reason_to_refuse_if_any_(unlink_action)": {
                               "type": "Compose",
-                              "inputs": "@if(equals(string(coalesce(body('Get_rec_(unlink_action)')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey'])), '', if(empty(first(body('Area_(unlink_action)'))), 'That could not be found.', if(and(greater(int(if(empty(first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.'))), '0', first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 0), not(equals(first(split(string(coalesce(body('Get_rec_(unlink_action)')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.'))))), 'This was changed by someone else. Review the latest details and try again.', if(not(or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), and(not(empty(first(body('My_member_(unlink_action)')))), equals(string(outputs('Person_who_sent_it')?['Role']), 'Engineer'))), and(not(empty(first(body('My_member_(unlink_action)')))), equals(first(body('My_member_(unlink_action)'))?['CanManageMeetings'], true)), equals(first(split(string(coalesce(body('Get_rec_(unlink_action)')?['RaisedById'], '')), '.')), outputs('Sender_ID')))), 'Only the people who look after this entry can link actions to it.', if(empty(string(coalesce(outputs('Link_action_OK_(unlink_action)')?['Id'], ''))), 'That action could not be found.', if(not(and(equals(string(coalesce(outputs('Link_action_OK_(unlink_action)')?['SourceType'], '')), 'Register'), equals(first(split(string(coalesce(outputs('Link_action_OK_(unlink_action)')?['SourceId'], '')), '.')), first(split(string(coalesce(body('Get_rec_(unlink_action)')?['Id'], '')), '.'))))), 'That action is not linked to this entry.', ''))))))",
+                              "inputs": "@if(equals(string(coalesce(body('Get_rec_(unlink_action)')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey'])), '', if(empty(first(body('Area_(unlink_action)'))), 'That could not be found.', if(and(greater(int(if(empty(first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.'))), '0', first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 0), not(equals(first(split(string(coalesce(body('Get_rec_(unlink_action)')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.'))))), 'This was changed by someone else. Review the latest details and try again.', if(not(or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), and(not(empty(first(body('My_member_(unlink_action)')))), equals(string(outputs('Person_who_sent_it')?['Role']), 'Engineer'))), and(not(empty(first(body('My_member_(unlink_action)')))), equals(first(body('My_member_(unlink_action)'))?['CanManageMeetings'], true)), equals(first(split(string(coalesce(body('Get_rec_(unlink_action)')?['RaisedById'], '')), '.')), outputs('Sender_ID')))), 'Only the people who look after this entry can link actions to it.', if(empty(string(coalesce(outputs('Link_action_OK_(unlink_action)')?['Id'], ''))), 'That action could not be found.', if(not(empty(string(coalesce(outputs('Link_action_OK_(unlink_action)')?['PendingRequestKey'], '')))), 'That action is being changed just now. Try again in a minute.', if(not(and(equals(string(coalesce(outputs('Link_action_OK_(unlink_action)')?['SourceType'], '')), 'Register'), equals(first(split(string(coalesce(outputs('Link_action_OK_(unlink_action)')?['SourceId'], '')), '.')), first(split(string(coalesce(body('Get_rec_(unlink_action)')?['Id'], '')), '.'))))), 'That action is not linked to this entry.', '')))))))",
                               "runAfter": {}
                             },
                             "Refused_or_allowed_(unlink_action)": {
@@ -7295,302 +5598,28 @@
                             ]
                           }
                         },
-                        "Find_rec_event_(unlink_action)": {
-                          "type": "OpenApiConnection",
+                        "Event_record_(unlink_action)": {
+                          "type": "SetVariable",
                           "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "GET",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items?$select=Id&$filter=RequestKey eq '@{concat(string(variables('varTx')?['RequestKey']), '%7C1')}'",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata"
-                              }
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Link_needed_(unlink_action)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Create_rec_event_if_missing_(unlink_action)": {
-                          "type": "If",
-                          "expression": "@empty(body('Find_rec_event_(unlink_action)')?['value'])",
-                          "actions": {
-                            "Rec_event_fields_(unlink_action)": {
-                              "type": "Compose",
-                              "inputs": [
-                                {
-                                  "FieldName": "Title",
-                                  "FieldValue": "@{take(concat(if(false, 'Action linked: ', 'Action unlinked: '), string(outputs('Link_action_OK_(unlink_action)')?['Title'])), 255)}"
-                                },
-                                {
-                                  "FieldName": "RowKind",
-                                  "FieldValue": "Event"
-                                },
-                                {
-                                  "FieldName": "RequestKey",
-                                  "FieldValue": "@{concat(string(variables('varTx')?['RequestKey']), '|1')}"
-                                },
-                                {
-                                  "FieldName": "RecordType",
-                                  "FieldValue": "Register Entry"
-                                },
-                                {
-                                  "FieldName": "RecordId",
-                                  "FieldValue": "@{first(split(string(coalesce(body('Get_rec_(unlink_action)')?['Id'], '')), '.'))}"
-                                },
-                                {
-                                  "FieldName": "EventType",
-                                  "FieldValue": "Action Unlinked"
-                                },
-                                {
-                                  "FieldName": "RequestType",
-                                  "FieldValue": "@{string(variables('varTx')?['RequestType'])}"
-                                },
+                            "name": "varRec",
+                            "value": {
+                              "title": "@{take(concat(if(false, 'Action linked: ', 'Action unlinked: '), string(outputs('Link_action_OK_(unlink_action)')?['Title'])), 255)}",
+                              "type": "Action Unlinked",
+                              "recordType": "Register Entry",
+                              "recordId": "@{first(split(string(coalesce(body('Get_rec_(unlink_action)')?['Id'], '')), '.'))}",
+                              "areaKey": "@{last(split(string(body('Get_rec_(unlink_action)')?['FileDirRef']), '/'))}",
+                              "areaId": "@{first(split(string(coalesce(first(body('Area_(unlink_action)'))?['Id'], '')), '.'))}",
+                              "form": [
                                 {
                                   "FieldName": "NewValue",
                                   "FieldValue": "@{if(empty(first(split(string(coalesce(outputs('Payload')?['actionId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['actionId'], '')), '.')))}"
                                 }
                               ],
-                              "runAfter": {}
-                            },
-                            "Rec_event_request_(unlink_action)": {
-                              "type": "Compose",
-                              "inputs": {
-                                "listItemCreateInfo": {
-                                  "FolderPath": {
-                                    "DecodedUrl": "@{outputs('List_addresses')?['histRoot']}/@{last(split(string(body('Get_rec_(unlink_action)')?['FileDirRef']), '/'))}"
-                                  },
-                                  "UnderlyingObjectType": 0
-                                },
-                                "formValues": "@outputs('Rec_event_fields_(unlink_action)')",
-                                "bNewDocumentUpdate": false
-                              },
-                              "runAfter": {
-                                "Rec_event_fields_(unlink_action)": [
-                                  "Succeeded"
-                                ]
-                              }
-                            },
-                            "Rec_event_(unlink_action)": {
-                              "type": "OpenApiConnection",
-                              "inputs": {
-                                "host": {
-                                  "connectionName": "shared_sharepointonline",
-                                  "operationId": "HttpRequest",
-                                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                                },
-                                "parameters": {
-                                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                                  "parameters/method": "POST",
-                                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/AddValidateUpdateItemUsingPath",
-                                  "parameters/headers": {
-                                    "Accept": "application/json;odata=nometadata",
-                                    "Content-Type": "application/json;odata=nometadata"
-                                  },
-                                  "parameters/body": "@{string(outputs('Rec_event_request_(unlink_action)'))}"
-                                },
-                                "authentication": "@parameters('$authentication')"
-                              },
-                              "runAfter": {
-                                "Rec_event_request_(unlink_action)": [
-                                  "Succeeded"
-                                ]
-                              }
-                            },
-                            "Was_rec_event_refused_(unlink_action)": {
-                              "type": "Query",
-                              "inputs": {
-                                "from": "@body('Rec_event_(unlink_action)')?['value']",
-                                "where": "@equals(item()?['HasException'], true)"
-                              },
-                              "runAfter": {
-                                "Rec_event_(unlink_action)": [
-                                  "Succeeded"
-                                ]
-                              }
-                            },
-                            "Check_rec_event_was_created_(unlink_action)": {
-                              "type": "If",
-                              "expression": "@empty(body('Was_rec_event_refused_(unlink_action)'))",
-                              "actions": {},
-                              "else": {
-                                "actions": {
-                                  "Stop_if_rec_event_was_not_created_(unlink_action)": {
-                                    "type": "Compose",
-                                    "inputs": "@int('The History event could not be created. See Rec event (unlink action).')",
-                                    "runAfter": {}
-                                  }
-                                }
-                              },
-                              "runAfter": {
-                                "Was_rec_event_refused_(unlink_action)": [
-                                  "Succeeded"
-                                ]
-                              }
+                              "result": "@{'Action unlinked.'}"
                             }
                           },
-                          "else": {
-                            "actions": {}
-                          },
                           "runAfter": {
-                            "Find_rec_event_(unlink_action)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Get_rec_event_(unlink_action)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "GET",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items?$select=Id&$filter=RequestKey eq '@{concat(string(variables('varTx')?['RequestKey']), '%7C1')}'",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata"
-                              }
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Create_rec_event_if_missing_(unlink_action)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Rec_event_details_(unlink_action)": {
-                          "type": "Compose",
-                          "inputs": {
-                            "ActorId": "@int(outputs('Sender_ID'))",
-                            "EventTime": "@{outputs('Time_of_the_change')}",
-                            "ProcessedAt": "@{utcNow()}",
-                            "CompetencyId": "@int(first(split(string(coalesce(first(body('Area_(unlink_action)'))?['Id'], '')), '.')))"
-                          },
-                          "runAfter": {
-                            "Get_rec_event_(unlink_action)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Save_rec_event_(unlink_action)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "POST",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items(@{first(body('Get_rec_event_(unlink_action)')?['value'])?['Id']})",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata",
-                                "Content-Type": "application/json;odata=nometadata",
-                                "X-HTTP-Method": "MERGE",
-                                "IF-MATCH": "*"
-                              },
-                              "parameters/body": "@{string(outputs('Rec_event_details_(unlink_action)'))}"
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Rec_event_details_(unlink_action)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Change_record_applied_(unlink_action)": {
-                          "type": "Compose",
-                          "inputs": {
-                            "State": "Applied",
-                            "ProcessedAt": "@{utcNow()}",
-                            "EventTime": "@{body('Read_the_request')?['Created']}"
-                          },
-                          "runAfter": {
-                            "Save_rec_event_(unlink_action)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Save_change_record_applied_(unlink_action)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "POST",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items(@{first(split(string(coalesce(variables('varTx')?['Id'], '')), '.'))})",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata",
-                                "Content-Type": "application/json;odata=nometadata",
-                                "X-HTTP-Method": "MERGE",
-                                "IF-MATCH": "*"
-                              },
-                              "parameters/body": "@{string(outputs('Change_record_applied_(unlink_action)'))}"
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Change_record_applied_(unlink_action)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Request_completed_(unlink_action)": {
-                          "type": "Compose",
-                          "inputs": {
-                            "Status": "Completed",
-                            "ResultMessage": "@{'Action unlinked.'}",
-                            "ProcessedAt": "@{utcNow()}",
-                            "ResultId": "@int(if(empty(first(split(string(coalesce(body('Get_rec_(unlink_action)')?['Id'], '')), '.'))), '0', first(split(string(coalesce(body('Get_rec_(unlink_action)')?['Id'], '')), '.'))))"
-                          },
-                          "runAfter": {
-                            "Save_change_record_applied_(unlink_action)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Mark_the_request_completed_(unlink_action)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "POST",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{triggerBody()?['ID']})",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata",
-                                "Content-Type": "application/json;odata=nometadata",
-                                "X-HTTP-Method": "MERGE",
-                                "IF-MATCH": "*"
-                              },
-                              "parameters/body": "@{string(outputs('Request_completed_(unlink_action)'))}"
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Request_completed_(unlink_action)": [
+                            "Link_needed_(unlink_action)": [
                               "Succeeded"
                             ]
                           }
@@ -7695,6 +5724,389 @@
                       "Succeeded"
                     ]
                   }
+                },
+                "Changed": {
+                  "type": "If",
+                  "expression": "@not(empty(string(variables('varRec')?['type'])))",
+                  "actions": {
+                    "Check_rec_event_RC": {
+                      "type": "If",
+                      "expression": "@not(variables('varFresh'))",
+                      "actions": {
+                        "Find_rec_event_RC": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                              "parameters/method": "GET",
+                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items?$select=Id&$filter=RequestKey eq '@{concat(string(variables('varTx')?['RequestKey']), '%7C1')}'",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata"
+                              }
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runAfter": {}
+                        },
+                        "Rec_event_found_RC": {
+                          "type": "SetVariable",
+                          "inputs": {
+                            "name": "varEventId",
+                            "value": "@int(if(empty(body('Find_rec_event_RC')?['value']), '0', first(split(string(coalesce(first(body('Find_rec_event_RC')?['value'])?['Id'], '')), '.'))))"
+                          },
+                          "runAfter": {
+                            "Find_rec_event_RC": [
+                              "Succeeded"
+                            ]
+                          }
+                        }
+                      },
+                      "else": {
+                        "actions": {}
+                      },
+                      "runAfter": {}
+                    },
+                    "Create_rec_event_RC_if_missing": {
+                      "type": "If",
+                      "expression": "@equals(variables('varEventId'), 0)",
+                      "actions": {
+                        "Rec_event_fixed_RC": {
+                          "type": "Compose",
+                          "inputs": [
+                            {
+                              "FieldName": "Title",
+                              "FieldValue": "@{variables('varRec')?['title']}"
+                            },
+                            {
+                              "FieldName": "RowKind",
+                              "FieldValue": "Event"
+                            },
+                            {
+                              "FieldName": "RequestKey",
+                              "FieldValue": "@{concat(string(variables('varTx')?['RequestKey']), '|1')}"
+                            },
+                            {
+                              "FieldName": "RecordType",
+                              "FieldValue": "@{variables('varRec')?['recordType']}"
+                            },
+                            {
+                              "FieldName": "RecordId",
+                              "FieldValue": "@{variables('varRec')?['recordId']}"
+                            },
+                            {
+                              "FieldName": "EventType",
+                              "FieldValue": "@{variables('varRec')?['type']}"
+                            },
+                            {
+                              "FieldName": "RequestType",
+                              "FieldValue": "@{string(variables('varTx')?['RequestType'])}"
+                            }
+                          ],
+                          "runAfter": {}
+                        },
+                        "Rec_event_fields_RC": {
+                          "type": "Compose",
+                          "inputs": "@union(outputs('Rec_event_fixed_RC'), variables('varRec')?['form'])",
+                          "runAfter": {
+                            "Rec_event_fixed_RC": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Rec_event_request_RC": {
+                          "type": "Compose",
+                          "inputs": {
+                            "listItemCreateInfo": {
+                              "FolderPath": {
+                                "DecodedUrl": "@{outputs('List_addresses')?['histRoot']}/@{variables('varRec')?['areaKey']}"
+                              },
+                              "UnderlyingObjectType": 0
+                            },
+                            "formValues": "@outputs('Rec_event_fields_RC')",
+                            "bNewDocumentUpdate": false
+                          },
+                          "runAfter": {
+                            "Rec_event_fields_RC": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Rec_event_RC": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                              "parameters/method": "POST",
+                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/AddValidateUpdateItemUsingPath",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata",
+                                "Content-Type": "application/json;odata=nometadata"
+                              },
+                              "parameters/body": "@{string(outputs('Rec_event_request_RC'))}"
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runAfter": {
+                            "Rec_event_request_RC": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Was_rec_event_RC_refused": {
+                          "type": "Query",
+                          "inputs": {
+                            "from": "@body('Rec_event_RC')?['value']",
+                            "where": "@equals(item()?['HasException'], true)"
+                          },
+                          "runAfter": {
+                            "Rec_event_RC": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Rec_event_made_RC": {
+                          "type": "If",
+                          "expression": "@empty(body('Was_rec_event_RC_refused'))",
+                          "actions": {},
+                          "else": {
+                            "actions": {
+                              "Rec_event_made_RC_stop": {
+                                "type": "Compose",
+                                "inputs": "@int('The History event could not be created. See Rec event RC.')",
+                                "runAfter": {}
+                              }
+                            }
+                          },
+                          "runAfter": {
+                            "Was_rec_event_RC_refused": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Rec_event_ID_RC": {
+                          "type": "Query",
+                          "inputs": {
+                            "from": "@body('Rec_event_RC')?['value']",
+                            "where": "@equals(item()?['FieldName'], 'Id')"
+                          },
+                          "runAfter": {
+                            "Rec_event_made_RC": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Rec_event_new_RC": {
+                          "type": "SetVariable",
+                          "inputs": {
+                            "name": "varEventId",
+                            "value": "@int(coalesce(first(body('Rec_event_ID_RC'))?['FieldValue'], '0'))"
+                          },
+                          "runAfter": {
+                            "Rec_event_ID_RC": [
+                              "Succeeded"
+                            ]
+                          }
+                        }
+                      },
+                      "else": {
+                        "actions": {}
+                      },
+                      "runAfter": {
+                        "Check_rec_event_RC": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Rec_event_known_RC": {
+                      "type": "If",
+                      "expression": "@equals(variables('varEventId'), 0)",
+                      "actions": {
+                        "Get_rec_event_RC": {
+                          "type": "OpenApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connectionName": "shared_sharepointonline",
+                              "operationId": "HttpRequest",
+                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                            },
+                            "parameters": {
+                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                              "parameters/method": "GET",
+                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items?$select=Id&$filter=RequestKey eq '@{concat(string(variables('varTx')?['RequestKey']), '%7C1')}'",
+                              "parameters/headers": {
+                                "Accept": "application/json;odata=nometadata"
+                              }
+                            },
+                            "authentication": "@parameters('$authentication')"
+                          },
+                          "runAfter": {}
+                        },
+                        "Rec_event_read_RC": {
+                          "type": "SetVariable",
+                          "inputs": {
+                            "name": "varEventId",
+                            "value": "@int(first(split(string(coalesce(first(body('Get_rec_event_RC')?['value'])?['Id'], '')), '.')))"
+                          },
+                          "runAfter": {
+                            "Get_rec_event_RC": [
+                              "Succeeded"
+                            ]
+                          }
+                        }
+                      },
+                      "else": {
+                        "actions": {}
+                      },
+                      "runAfter": {
+                        "Create_rec_event_RC_if_missing": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Rec_event_details_RC": {
+                      "type": "Compose",
+                      "inputs": {
+                        "ActorId": "@int(outputs('Sender_ID'))",
+                        "EventTime": "@{outputs('Time_of_the_change')}",
+                        "ProcessedAt": "@{utcNow()}",
+                        "CompetencyId": "@int(variables('varRec')?['areaId'])"
+                      },
+                      "runAfter": {
+                        "Rec_event_known_RC": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Save_rec_event_RC": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                          "parameters/method": "POST",
+                          "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items(@{variables('varEventId')})",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata",
+                            "Content-Type": "application/json;odata=nometadata",
+                            "X-HTTP-Method": "MERGE",
+                            "IF-MATCH": "*"
+                          },
+                          "parameters/body": "@{string(outputs('Rec_event_details_RC'))}"
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {
+                        "Rec_event_details_RC": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Change_record_applied_RC": {
+                      "type": "Compose",
+                      "inputs": {
+                        "State": "Applied",
+                        "ProcessedAt": "@{utcNow()}",
+                        "EventTime": "@{body('Read_the_request')?['Created']}"
+                      },
+                      "runAfter": {
+                        "Save_rec_event_RC": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Save_change_record_applied_RC": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                          "parameters/method": "POST",
+                          "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['hist']}')/items(@{first(split(string(coalesce(variables('varTx')?['Id'], '')), '.'))})",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata",
+                            "Content-Type": "application/json;odata=nometadata",
+                            "X-HTTP-Method": "MERGE",
+                            "IF-MATCH": "*"
+                          },
+                          "parameters/body": "@{string(outputs('Change_record_applied_RC'))}"
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {
+                        "Change_record_applied_RC": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Request_completed_RC": {
+                      "type": "Compose",
+                      "inputs": {
+                        "Status": "Completed",
+                        "ResultMessage": "@{variables('varRec')?['result']}",
+                        "ProcessedAt": "@{utcNow()}",
+                        "ResultId": "@int(variables('varRec')?['recordId'])"
+                      },
+                      "runAfter": {
+                        "Save_change_record_applied_RC": [
+                          "Succeeded"
+                        ]
+                      }
+                    },
+                    "Mark_the_request_completed_RC": {
+                      "type": "OpenApiConnection",
+                      "inputs": {
+                        "host": {
+                          "connectionName": "shared_sharepointonline",
+                          "operationId": "HttpRequest",
+                          "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+                        },
+                        "parameters": {
+                          "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+                          "parameters/method": "POST",
+                          "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items(@{triggerBody()?['ID']})",
+                          "parameters/headers": {
+                            "Accept": "application/json;odata=nometadata",
+                            "Content-Type": "application/json;odata=nometadata",
+                            "X-HTTP-Method": "MERGE",
+                            "IF-MATCH": "*"
+                          },
+                          "parameters/body": "@{string(outputs('Request_completed_RC'))}"
+                        },
+                        "authentication": "@parameters('$authentication')"
+                      },
+                      "runAfter": {
+                        "Request_completed_RC": [
+                          "Succeeded"
+                        ]
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {}
+                  },
+                  "runAfter": {
+                    "Record_type": [
+                      "Succeeded"
+                    ]
+                  }
                 }
               },
               "runAfter": {
@@ -7705,13 +6117,13 @@
             }
           },
           "runAfter": {
-            "Initialise_event_form": [
+            "Initialise_plan_object": [
               "Succeeded"
             ],
-            "Initialise_event_details": [
+            "Initialise_fields": [
               "Succeeded"
             ],
-            "Initialise_result": [
+            "Initialise_rec": [
               "Succeeded"
             ],
             "Initialise_email_list": [
@@ -8062,7 +6474,7 @@
                   "parameters/method": "GET",
                   "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['settings']}')/items?$select=Id,Title,Value&$filter=Title eq 'QueueHealth'",
                   "parameters/headers": {
-                    "Accept": "application/json;odata=nometadata"
+                    "Accept": "application/json;odata=minimalmetadata"
                   }
                 },
                 "authentication": "@parameters('$authentication')"
@@ -8105,7 +6517,7 @@
                         "Accept": "application/json;odata=nometadata",
                         "Content-Type": "application/json;odata=nometadata",
                         "X-HTTP-Method": "MERGE",
-                        "IF-MATCH": "*"
+                        "IF-MATCH": "@{first(body('Health_now')?['value'])?['odata.etag']}"
                       },
                       "parameters/body": "@{string(outputs('Health_fixed'))}"
                     },
@@ -8114,6 +6526,17 @@
                   "runAfter": {
                     "Health_fixed": [
                       "Succeeded"
+                    ]
+                  }
+                },
+                "Health_saved": {
+                  "type": "Compose",
+                  "inputs": "@actions('Save_the_health_setting')?['status']",
+                  "runAfter": {
+                    "Save_the_health_setting": [
+                      "Succeeded",
+                      "Failed",
+                      "TimedOut"
                     ]
                   }
                 }

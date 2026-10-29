@@ -51,7 +51,7 @@
         }
       },
       "triggers": {
-        "Every_15_minutes": {
+        "Every_10_minutes": {
           "type": "Recurrence",
           "recurrence": {
             "frequency": "Minute",
@@ -67,6 +67,141 @@
         }
       },
       "actions": {
+        "Site_path": {
+          "type": "Compose",
+          "inputs": "@if(endsWith(uriPath(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')), '/'), take(uriPath(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')), sub(length(uriPath(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)'))), 1)), uriPath(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')))",
+          "runAfter": {}
+        },
+        "Site_address": {
+          "type": "Compose",
+          "inputs": "@if(endsWith(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)'), '/'), take(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)'), sub(length(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')), 1)), parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)'))",
+          "runAfter": {
+            "Site_path": [
+              "Succeeded"
+            ]
+          }
+        },
+        "List_addresses": {
+          "type": "Compose",
+          "inputs": {
+            "req": "@{outputs('Site_path')}/Lists/Requests",
+            "act": "@{outputs('Site_path')}/Lists/Actions",
+            "hist": "@{outputs('Site_path')}/Lists/History",
+            "upd": "@{outputs('Site_path')}/Lists/Updates",
+            "people": "@{outputs('Site_path')}/Lists/People",
+            "members": "@{outputs('Site_path')}/Lists/CompetencyMembers",
+            "comps": "@{outputs('Site_path')}/Lists/Competencies",
+            "notif": "@{outputs('Site_path')}/Lists/NotificationLog",
+            "settings": "@{outputs('Site_path')}/Lists/Settings",
+            "notices": "@{outputs('Site_path')}/Lists/Noticeboard",
+            "reg": "@{outputs('Site_path')}/Lists/ImprovementRegister",
+            "mtg": "@{outputs('Site_path')}/Lists/Meetings",
+            "items": "@{outputs('Site_path')}/Lists/MeetingItems",
+            "cal": "@{outputs('Site_path')}/Lists/CalendarEvents",
+            "fb": "@{outputs('Site_path')}/Lists/Feedback",
+            "reqRoot": "@{outputs('Site_path')}/Lists/Requests",
+            "actRoot": "@{outputs('Site_path')}/Lists/Actions",
+            "histRoot": "@{outputs('Site_path')}/Lists/History",
+            "updRoot": "@{outputs('Site_path')}/Lists/Updates",
+            "notifRoot": "@{outputs('Site_path')}/Lists/NotificationLog",
+            "membersRoot": "@{outputs('Site_path')}/Lists/CompetencyMembers",
+            "peopleRoot": "@{outputs('Site_path')}/Lists/People",
+            "regRoot": "@{outputs('Site_path')}/Lists/ImprovementRegister",
+            "noticesRoot": "@{outputs('Site_path')}/Lists/Noticeboard",
+            "mtgRoot": "@{outputs('Site_path')}/Lists/Meetings",
+            "itemsRoot": "@{outputs('Site_path')}/Lists/MeetingItems",
+            "minutesRoot": "@{outputs('Site_path')}/MeetingMinutes"
+          },
+          "runAfter": {
+            "Site_address": [
+              "Succeeded"
+            ]
+          }
+        },
+        "UK_time_now": {
+          "type": "Compose",
+          "inputs": "@convertFromUtc(utcNow(), 'GMT Standard Time')",
+          "runAfter": {
+            "List_addresses": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Read_the_settings": {
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "connectionName": "shared_sharepointonline",
+              "operationId": "HttpRequest",
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
+            },
+            "parameters": {
+              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
+              "parameters/method": "GET",
+              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['settings']}')/items?$select=Id,Title,Value&$top=500",
+              "parameters/headers": {
+                "Accept": "application/json;odata=nometadata"
+              }
+            },
+            "authentication": "@parameters('$authentication')"
+          },
+          "runAfter": {
+            "UK_time_now": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Monitor_hours_setting": {
+          "type": "Query",
+          "inputs": {
+            "from": "@body('Read_the_settings')?['value']",
+            "where": "@equals(item()?['Title'], 'MonitorHours')"
+          },
+          "runAfter": {
+            "Read_the_settings": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Minute_of_the_day": {
+          "type": "Compose",
+          "inputs": "@add(mul(int(formatDateTime(outputs('UK_time_now'), 'HH')), 60), int(formatDateTime(outputs('UK_time_now'), 'mm')))",
+          "runAfter": {
+            "Monitor_hours_setting": [
+              "Succeeded"
+            ]
+          }
+        },
+        "In_working_hours": {
+          "type": "Compose",
+          "inputs": "@and(greaterOrEquals(dayOfWeek(outputs('UK_time_now')), 1), lessOrEquals(dayOfWeek(outputs('UK_time_now')), 5), greaterOrEquals(outputs('Minute_of_the_day'), add(mul(int(substring(split(string(coalesce(first(body('Monitor_hours_setting'))?['Value'], '07:00|19:45|60')), '|')[0], 0, 2)), 60), int(substring(split(string(coalesce(first(body('Monitor_hours_setting'))?['Value'], '07:00|19:45|60')), '|')[0], 3, 2)))), lessOrEquals(outputs('Minute_of_the_day'), add(mul(int(substring(split(string(coalesce(first(body('Monitor_hours_setting'))?['Value'], '07:00|19:45|60')), '|')[1], 0, 2)), 60), int(substring(split(string(coalesce(first(body('Monitor_hours_setting'))?['Value'], '07:00|19:45|60')), '|')[1], 3, 2)))))",
+          "runAfter": {
+            "Minute_of_the_day": [
+              "Succeeded"
+            ]
+          }
+        },
+        "Is_a_check_due_now": {
+          "type": "If",
+          "expression": "@or(outputs('In_working_hours'), less(mod(outputs('Minute_of_the_day'), max(10, int(split(string(coalesce(first(body('Monitor_hours_setting'))?['Value'], '07:00|19:45|60')), '|')[2]))), 10))",
+          "actions": {},
+          "else": {
+            "actions": {
+              "Not_now": {
+                "type": "Terminate",
+                "inputs": {
+                  "runStatus": "Succeeded"
+                },
+                "runAfter": {}
+              }
+            }
+          },
+          "runAfter": {
+            "In_working_hours": [
+              "Succeeded"
+            ]
+          }
+        },
         "Initialise_emails_to_send": {
           "type": "InitializeVariable",
           "inputs": {
@@ -78,7 +213,11 @@
               }
             ]
           },
-          "runAfter": {}
+          "runAfter": {
+            "Is_a_check_due_now": [
+              "Succeeded"
+            ]
+          }
         },
         "Initialise_alerts": {
           "type": "InitializeVariable",
@@ -270,155 +409,16 @@
         "Try": {
           "type": "Scope",
           "actions": {
-            "Site_path": {
-              "type": "Compose",
-              "inputs": "@if(endsWith(uriPath(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')), '/'), take(uriPath(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')), sub(length(uriPath(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)'))), 1)), uriPath(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')))",
-              "runAfter": {}
-            },
-            "Site_address": {
-              "type": "Compose",
-              "inputs": "@if(endsWith(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)'), '/'), take(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)'), sub(length(parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')), 1)), parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)'))",
-              "runAfter": {
-                "Site_path": [
-                  "Succeeded"
-                ]
-              }
-            },
-            "List_addresses": {
-              "type": "Compose",
-              "inputs": {
-                "req": "@{outputs('Site_path')}/Lists/Requests",
-                "act": "@{outputs('Site_path')}/Lists/Actions",
-                "hist": "@{outputs('Site_path')}/Lists/History",
-                "upd": "@{outputs('Site_path')}/Lists/Updates",
-                "people": "@{outputs('Site_path')}/Lists/People",
-                "members": "@{outputs('Site_path')}/Lists/CompetencyMembers",
-                "comps": "@{outputs('Site_path')}/Lists/Competencies",
-                "notif": "@{outputs('Site_path')}/Lists/NotificationLog",
-                "settings": "@{outputs('Site_path')}/Lists/Settings",
-                "notices": "@{outputs('Site_path')}/Lists/Noticeboard",
-                "reg": "@{outputs('Site_path')}/Lists/ImprovementRegister",
-                "mtg": "@{outputs('Site_path')}/Lists/Meetings",
-                "items": "@{outputs('Site_path')}/Lists/MeetingItems",
-                "cal": "@{outputs('Site_path')}/Lists/CalendarEvents",
-                "fb": "@{outputs('Site_path')}/Lists/Feedback",
-                "reqRoot": "@{outputs('Site_path')}/Lists/Requests",
-                "actRoot": "@{outputs('Site_path')}/Lists/Actions",
-                "histRoot": "@{outputs('Site_path')}/Lists/History",
-                "updRoot": "@{outputs('Site_path')}/Lists/Updates",
-                "notifRoot": "@{outputs('Site_path')}/Lists/NotificationLog",
-                "membersRoot": "@{outputs('Site_path')}/Lists/CompetencyMembers",
-                "peopleRoot": "@{outputs('Site_path')}/Lists/People",
-                "regRoot": "@{outputs('Site_path')}/Lists/ImprovementRegister",
-                "noticesRoot": "@{outputs('Site_path')}/Lists/Noticeboard",
-                "mtgRoot": "@{outputs('Site_path')}/Lists/Meetings",
-                "itemsRoot": "@{outputs('Site_path')}/Lists/MeetingItems",
-                "minutesRoot": "@{outputs('Site_path')}/MeetingMinutes"
-              },
-              "runAfter": {
-                "Site_address": [
-                  "Succeeded"
-                ]
-              }
-            },
             "Today_in_the_UK": {
               "type": "Compose",
               "inputs": "@convertFromUtc(utcNow(), 'GMT Standard Time', 'yyyy-MM-dd')",
-              "runAfter": {
-                "List_addresses": [
-                  "Succeeded"
-                ]
-              }
-            },
-            "UK_time_now": {
-              "type": "Compose",
-              "inputs": "@convertFromUtc(utcNow(), 'GMT Standard Time')",
-              "runAfter": {
-                "Today_in_the_UK": [
-                  "Succeeded"
-                ]
-              }
-            },
-            "Read_the_settings": {
-              "type": "OpenApiConnection",
-              "inputs": {
-                "host": {
-                  "connectionName": "shared_sharepointonline",
-                  "operationId": "HttpRequest",
-                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                },
-                "parameters": {
-                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                  "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['settings']}')/items?$select=Id,Title,Value&$top=500",
-                  "parameters/headers": {
-                    "Accept": "application/json;odata=nometadata"
-                  }
-                },
-                "authentication": "@parameters('$authentication')"
-              },
-              "runAfter": {
-                "UK_time_now": [
-                  "Succeeded"
-                ]
-              }
-            },
-            "Monitor_hours_setting": {
-              "type": "Query",
-              "inputs": {
-                "from": "@body('Read_the_settings')?['value']",
-                "where": "@equals(item()?['Title'], 'MonitorHours')"
-              },
-              "runAfter": {
-                "Read_the_settings": [
-                  "Succeeded"
-                ]
-              }
-            },
-            "Minute_of_the_day": {
-              "type": "Compose",
-              "inputs": "@add(mul(int(formatDateTime(outputs('UK_time_now'), 'HH')), 60), int(formatDateTime(outputs('UK_time_now'), 'mm')))",
-              "runAfter": {
-                "Monitor_hours_setting": [
-                  "Succeeded"
-                ]
-              }
-            },
-            "In_working_hours": {
-              "type": "Compose",
-              "inputs": "@and(greaterOrEquals(dayOfWeek(outputs('UK_time_now')), 1), lessOrEquals(dayOfWeek(outputs('UK_time_now')), 5), greaterOrEquals(outputs('Minute_of_the_day'), add(mul(int(substring(split(string(coalesce(first(body('Monitor_hours_setting'))?['Value'], '07:00|19:45|60')), '|')[0], 0, 2)), 60), int(substring(split(string(coalesce(first(body('Monitor_hours_setting'))?['Value'], '07:00|19:45|60')), '|')[0], 3, 2)))), lessOrEquals(outputs('Minute_of_the_day'), add(mul(int(substring(split(string(coalesce(first(body('Monitor_hours_setting'))?['Value'], '07:00|19:45|60')), '|')[1], 0, 2)), 60), int(substring(split(string(coalesce(first(body('Monitor_hours_setting'))?['Value'], '07:00|19:45|60')), '|')[1], 3, 2)))))",
-              "runAfter": {
-                "Minute_of_the_day": [
-                  "Succeeded"
-                ]
-              }
-            },
-            "Is_a_check_due_now": {
-              "type": "If",
-              "expression": "@or(outputs('In_working_hours'), less(mod(outputs('Minute_of_the_day'), max(10, int(split(string(coalesce(first(body('Monitor_hours_setting'))?['Value'], '07:00|19:45|60')), '|')[2]))), 10))",
-              "actions": {},
-              "else": {
-                "actions": {
-                  "Not_now": {
-                    "type": "Terminate",
-                    "inputs": {
-                      "runStatus": "Succeeded"
-                    },
-                    "runAfter": {}
-                  }
-                }
-              },
-              "runAfter": {
-                "In_working_hours": [
-                  "Succeeded"
-                ]
-              }
+              "runAfter": {}
             },
             "Minutes_on": {
               "type": "Compose",
               "inputs": "@and(greaterOrEquals(dayOfWeek(outputs('UK_time_now')), 1), lessOrEquals(dayOfWeek(outputs('UK_time_now')), 5), greaterOrEquals(outputs('Minute_of_the_day'), 440), less(outputs('Minute_of_the_day'), 1140))",
               "runAfter": {
-                "Is_a_check_due_now": [
+                "Today_in_the_UK": [
                   "Succeeded"
                 ]
               }
@@ -459,7 +459,7 @@
                 ]
               }
             },
-            "Get_request_submitted": {
+            "Get_request_open": {
               "type": "OpenApiConnection",
               "inputs": {
                 "host": {
@@ -470,7 +470,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items?$select=Id,Title,RequestKey,RequestType,TargetId,Status,Attempts,Created,Modified,AuthorId&$filter=Status eq 'Submitted'&$top=5000",
+                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items?$select=Id,Title,RequestKey,RequestType,TargetId,Status,Attempts,Created,Modified,AuthorId&$filter=Status eq 'Submitted' or Status eq 'Processing' or Status eq 'Failed'&$top=5000",
                   "parameters/headers": {
                     "Accept": "application/json;odata=minimalmetadata"
                   }
@@ -483,62 +483,14 @@
                 ]
               }
             },
-            "Get_request_processing": {
-              "type": "OpenApiConnection",
-              "inputs": {
-                "host": {
-                  "connectionName": "shared_sharepointonline",
-                  "operationId": "HttpRequest",
-                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                },
-                "parameters": {
-                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                  "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items?$select=Id,Title,RequestKey,RequestType,TargetId,Status,Attempts,Created,Modified,AuthorId&$filter=Status eq 'Processing'&$top=5000",
-                  "parameters/headers": {
-                    "Accept": "application/json;odata=minimalmetadata"
-                  }
-                },
-                "authentication": "@parameters('$authentication')"
-              },
-              "runAfter": {
-                "Get_request_submitted": [
-                  "Succeeded"
-                ]
-              }
-            },
-            "Get_request_failed": {
-              "type": "OpenApiConnection",
-              "inputs": {
-                "host": {
-                  "connectionName": "shared_sharepointonline",
-                  "operationId": "HttpRequest",
-                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                },
-                "parameters": {
-                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                  "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['req']}')/items?$select=Id,Title,RequestKey,RequestType,TargetId,Status,Attempts,Created,Modified,AuthorId&$filter=Status eq 'Failed'&$top=5000",
-                  "parameters/headers": {
-                    "Accept": "application/json;odata=minimalmetadata"
-                  }
-                },
-                "authentication": "@parameters('$authentication')"
-              },
-              "runAfter": {
-                "Get_request_processing": [
-                  "Succeeded"
-                ]
-              }
-            },
             "Changes_that_have_stalled": {
               "type": "Query",
               "inputs": {
-                "from": "@union(body('Get_request_submitted')?['value'], body('Get_request_processing')?['value'], body('Get_request_failed')?['value'])",
-                "where": "@or(and(equals(item()?['Status'], 'Submitted'), less(ticks(string(coalesce(item()?['Modified'], '2000-01-01T00:00:00Z'))), ticks(addMinutes(utcNow(), -10))), or(outputs('Minutes_on'), not(contains(createArray('FinaliseMeeting', 'AmendMeeting'), string(item()?['RequestType']))))), and(equals(item()?['Status'], 'Processing'), less(ticks(string(coalesce(item()?['Modified'], '2000-01-01T00:00:00Z'))), ticks(addMinutes(utcNow(), -15)))), and(equals(item()?['Status'], 'Failed'), less(ticks(string(coalesce(item()?['Modified'], '2000-01-01T00:00:00Z'))), ticks(addMinutes(utcNow(), -10)))))"
+                "from": "@body('Get_request_open')?['value']",
+                "where": "@or(and(equals(item()?['Status'], 'Submitted'), less(ticks(string(coalesce(item()?['Modified'], '2000-01-01T00:00:00Z'))), ticks(addMinutes(utcNow(), -10))), or(outputs('Minutes_on'), not(contains(createArray('FinaliseMeeting', 'AmendMeeting'), string(item()?['RequestType']))))), and(equals(item()?['Status'], 'Processing'), less(ticks(string(coalesce(item()?['Modified'], '2000-01-01T00:00:00Z'))), ticks(addMinutes(utcNow(), -15))), or(not(contains(createArray('FinaliseMeeting', 'AmendMeeting', 'RemoveTestRecords'), string(item()?['RequestType']))), less(ticks(string(coalesce(item()?['Modified'], '2000-01-01T00:00:00Z'))), ticks(addMinutes(utcNow(), -30))))), and(equals(item()?['Status'], 'Failed'), less(ticks(string(coalesce(item()?['Modified'], '2000-01-01T00:00:00Z'))), ticks(addMinutes(utcNow(), -10)))))"
               },
               "runAfter": {
-                "Get_request_failed": [
+                "Get_request_open": [
                   "Succeeded"
                 ]
               }
@@ -586,7 +538,7 @@
                 },
                 "Not_picked_up_by_its_flow": {
                   "type": "If",
-                  "expression": "@and(equals(items('Each_stalled_change')?['Status'], 'Submitted'), empty(first(body('Find_the_change_record')?['value'])), greater(int(if(empty(first(split(string(coalesce(items('Each_stalled_change')?['Attempts'], '')), '.'))), '0', first(split(string(coalesce(items('Each_stalled_change')?['Attempts'], '')), '.')))), 0))",
+                  "expression": "@and(equals(items('Each_stalled_change')?['Status'], 'Submitted'), empty(first(body('Find_the_change_record')?['value'])), greater(int(if(empty(first(split(string(coalesce(items('Each_stalled_change')?['Attempts'], '')), '.'))), '0', first(split(string(coalesce(items('Each_stalled_change')?['Attempts'], '')), '.')))), 0), less(ticks(string(items('Each_stalled_change')?['Created'])), ticks(addMinutes(utcNow(), -20))))",
                   "actions": {
                     "Which_flow_has_stopped": {
                       "type": "If",
@@ -862,7 +814,7 @@
                             "Accept": "application/json;odata=nometadata",
                             "Content-Type": "application/json;odata=nometadata",
                             "X-HTTP-Method": "MERGE",
-                            "IF-MATCH": "*"
+                            "IF-MATCH": "@{items('Each_stalled_change')?['odata.etag']}"
                           },
                           "parameters/body": "@{string(outputs('Needs_attention_message'))}"
                         },
@@ -876,7 +828,7 @@
                     },
                     "Attention_alert": {
                       "type": "If",
-                      "expression": "@true",
+                      "expression": "@equals(actions('Save_on_the_request')?['status'], 'Succeeded')",
                       "actions": {
                         "Attention_alert_to": {
                           "type": "Select",
@@ -930,7 +882,9 @@
                       },
                       "runAfter": {
                         "Save_on_the_request": [
-                          "Succeeded"
+                          "Succeeded",
+                          "Failed",
+                          "TimedOut"
                         ]
                       }
                     }
@@ -961,7 +915,7 @@
                               "Accept": "application/json;odata=nometadata",
                               "Content-Type": "application/json;odata=nometadata",
                               "X-HTTP-Method": "MERGE",
-                              "IF-MATCH": "*"
+                              "IF-MATCH": "@{items('Each_stalled_change')?['odata.etag']}"
                             },
                             "parameters/body": "@{string(outputs('Back_in_the_queue'))}"
                           },
@@ -975,7 +929,7 @@
                       },
                       "Count_the_attempt": {
                         "type": "If",
-                        "expression": "@and(not(empty(first(body('Find_the_change_record')?['value']))), not(and(not(empty(first(body('Find_the_change_record')?['value']))), contains(createArray('Applied', 'Void', 'Cancelled', 'Reverted', 'Rolled Back'), string(first(body('Find_the_change_record')?['value'])?['State'])))))",
+                        "expression": "@and(equals(actions('Put_back_in_the_queue')?['status'], 'Succeeded'), not(empty(first(body('Find_the_change_record')?['value']))), not(and(not(empty(first(body('Find_the_change_record')?['value']))), contains(createArray('Applied', 'Void', 'Cancelled', 'Reverted', 'Rolled Back'), string(first(body('Find_the_change_record')?['value'])?['State'])))))",
                         "actions": {
                           "Attempt_request": {
                             "type": "Compose",
@@ -1018,7 +972,9 @@
                         },
                         "runAfter": {
                           "Put_back_in_the_queue": [
-                            "Succeeded"
+                            "Succeeded",
+                            "Failed",
+                            "TimedOut"
                           ]
                         }
                       }
@@ -2931,7 +2887,7 @@
                 ]
               }
             },
-            "Emails_that_failed": {
+            "Get_retry": {
               "type": "OpenApiConnection",
               "inputs": {
                 "host": {
@@ -2942,7 +2898,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notif']}')/items?$select=Id,NotificationKey,NotificationType,State,Attempts,DueDay,NextAttemptAfter,SendingSince,RenderData,LastError&$filter=State eq 'Failed'&$top=5000",
+                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notif']}')/items?$select=Id,NotificationKey,NotificationType,State,Attempts,DueDay,NextAttemptAfter,SendingSince,RenderData,LastError&$filter=State eq 'Failed' or State eq 'Unknown' or State eq 'Sending'&$top=5000",
                   "parameters/headers": {
                     "Accept": "application/json;odata=minimalmetadata"
                   }
@@ -2955,62 +2911,14 @@
                 ]
               }
             },
-            "Emails_with_an_unclear_outcome": {
-              "type": "OpenApiConnection",
-              "inputs": {
-                "host": {
-                  "connectionName": "shared_sharepointonline",
-                  "operationId": "HttpRequest",
-                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                },
-                "parameters": {
-                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                  "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notif']}')/items?$select=Id,NotificationKey,NotificationType,State,Attempts,DueDay,NextAttemptAfter,SendingSince,RenderData,LastError&$filter=State eq 'Unknown'&$top=5000",
-                  "parameters/headers": {
-                    "Accept": "application/json;odata=minimalmetadata"
-                  }
-                },
-                "authentication": "@parameters('$authentication')"
-              },
-              "runAfter": {
-                "Emails_that_failed": [
-                  "Succeeded"
-                ]
-              }
-            },
-            "Emails_left_sending": {
-              "type": "OpenApiConnection",
-              "inputs": {
-                "host": {
-                  "connectionName": "shared_sharepointonline",
-                  "operationId": "HttpRequest",
-                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                },
-                "parameters": {
-                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                  "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notif']}')/items?$select=Id,NotificationKey,NotificationType,State,Attempts,DueDay,NextAttemptAfter,SendingSince,RenderData,LastError&$filter=State eq 'Sending'&$top=5000",
-                  "parameters/headers": {
-                    "Accept": "application/json;odata=minimalmetadata"
-                  }
-                },
-                "authentication": "@parameters('$authentication')"
-              },
-              "runAfter": {
-                "Emails_with_an_unclear_outcome": [
-                  "Succeeded"
-                ]
-              }
-            },
             "Emails_due_another_try": {
               "type": "Query",
               "inputs": {
-                "from": "@union(body('Emails_that_failed')?['value'], body('Emails_with_an_unclear_outcome')?['value'], body('Emails_left_sending')?['value'])",
+                "from": "@body('Get_retry')?['value']",
                 "where": "@or(and(not(equals(item()?['State'], 'Sending')), lessOrEquals(ticks(string(coalesce(item()?['NextAttemptAfter'], '2000-01-01T00:00:00Z'))), ticks(utcNow()))), and(equals(item()?['State'], 'Sending'), lessOrEquals(ticks(string(coalesce(item()?['SendingSince'], '2000-01-01T00:00:00Z'))), ticks(addMinutes(utcNow(), -30)))))"
               },
               "runAfter": {
-                "Emails_left_sending": [
+                "Get_retry": [
                   "Succeeded"
                 ]
               }

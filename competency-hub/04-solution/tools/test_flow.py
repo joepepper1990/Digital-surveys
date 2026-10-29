@@ -256,7 +256,7 @@ class Extend(unittest.TestCase):
         before = s.clock
         status, eng = run(s, r)
         # 1.10.0.0: a lock held by another change is waited for (12 re-reads, 15 s apart), then refused plainly
-        self.assertEqual(request(s, r)['ResultMessage'], 'This action is still being updated by an earlier change. Try again in a minute.')
+        self.assertEqual(request(s, r)['ResultMessage'], 'Another change to this action is taking longer than usual to finish. Nothing was changed – try again in a few minutes.')
         self.assertEqual(len([u for m, u in s.calls if m == 'GET' and '/items({0})'.format(s.action) in u]), 13)
         self.assertGreaterEqual((eng.now - before).total_seconds(), 180)
         s = site()
@@ -646,7 +646,7 @@ class Daily(unittest.TestCase):
         s = site()
         due_on(s, '2026-12-31')
         run_daily(s, date(2026, 10, 21))
-        self.assertLessEqual(len(s.calls), 10, s.calls)   # settings, people, actions, ledger, areas, memberships, 3 retry states, LastDailyRun
+        self.assertLessEqual(len(s.calls), 8, s.calls)   # settings, people, actions, ledger, areas, memberships, emails to retry, LastDailyRun
 
 
 class Retries(unittest.TestCase):
@@ -821,7 +821,9 @@ class Calls(unittest.TestCase):
     # SharePoint calls for the change itself; each email adds at most 3 (queue it, record the outcome, cover a reminder)
     # 1.9.0.0: raising reads the area's members and the active people, to check co-owners and the close-out check (+2)
     # 1.9.0.4: after Completed, one read of the QueueHealth row so a Down part clears itself (+1, not seen by the user)
-    BUDGET = {'RaiseAction': 23, 'ExtendDeadline': 18, 'MarkComplete': 18}
+    # 1.10.1.0: everyone read once per run (the sender, the owner, who may be emailed) and the owner's membership found
+    # among the area's members (-1 for a change, -3 for a raise)
+    BUDGET = {'RaiseAction': 20, 'ExtendDeadline': 17, 'MarkComplete': 17}
 
     def first_run(self, rtype, s=None):
         s = s or site()
@@ -987,8 +989,8 @@ class Monitor(unittest.TestCase):
         s = site()
         status, eng = run_monitor(s, WEEKDAY)
         self.assertEqual(status, 'Succeeded', eng.log)
-        # settings, people, 3 request states, invitations to retry, needs attention, 3 email states, the health row
-        self.assertLessEqual(len(s.calls), 11, s.calls)
+        # settings, people, requests on their way, invitations to retry, needs attention, emails to retry, the health row
+        self.assertLessEqual(len(s.calls), 7, s.calls)
         self.assertEqual(s.sent, [])
         self.assertEqual((health(s)['state'], health(s)['attention']), ('Healthy', 0))
 
@@ -1113,10 +1115,14 @@ class Monitor(unittest.TestCase):
         run_monitor(s, WEEKDAY)
         self.assertEqual(health(s)['state'], 'Healthy', 'one put-back is normal')
         age(s, 'requests', r, 15)
+        # 1.10.1.0: put back once and still waiting 15 minutes after it was sent is a backlog (five runs at a time), not an outage
         run_monitor(s, WEEKDAY + timedelta(minutes=15))
+        self.assertEqual(health(s)['state'], 'Healthy', 'behind, not down')
+        age(s, 'requests', r, 15)
+        run_monitor(s, WEEKDAY + timedelta(minutes=25))
         self.assertEqual((health(s)['state'], health(s)['reason']), ('Down', 'Changes to actions are not being picked up by ESG Competency Hub | 2 Request queue.'))
-        run(s, r, now=WEEKDAY + timedelta(minutes=20))
-        run_monitor(s, WEEKDAY + timedelta(minutes=30))
+        run(s, r, now=WEEKDAY + timedelta(minutes=30))
+        run_monitor(s, WEEKDAY + timedelta(minutes=40))
         self.assertEqual(health(s)['state'], 'Healthy', 'back to normal by itself')
 
     def test_daily_tasks_and_the_monitor_watch_each_other(self):
@@ -1577,7 +1583,8 @@ class Settings(unittest.TestCase):
         for name, value, message in (('OverdueReminderIntervalDays', '14', 'Setting saved.'), ('OverdueReminderIntervalDays', '45', 'Enter a whole number of days from 1 to 30.'),
                                      ('OverdueReminderIntervalDays', '7x', 'Enter a whole number of days from 1 to 30.'),
                                      ('MonitorHours', '06:30|18:00|30', 'Setting saved.'), ('MonitorHours', '18:00|06:30|30', None), ('MonitorHours', '6:30|18:00|30', None),
-                                     ('MonitorHours', '06:30|18:00|5', None), ('LastDailyRun', '2026', 'Choose a setting.')):
+                                     ('MonitorHours', '06:30|18:00|5', None), ('MonitorHours', '06:30|18:00|15', 'Give the start and end of working hours (start before end), and the minutes between checks outside them: 20 to 90, in tens (the monitor runs every 10 minutes).'),
+                                     ('MonitorHours', '06:30|18:00|120', None), ('LastDailyRun', '2026', 'Choose a setting.')):
             with self.subTest(name=name, value=value):
                 res, eng = run_people(s, JOE, 'UpdateSetting', {'name': name, 'value': value}, key='k-' + name + value.replace('|', '-'))
                 if message == 'Setting saved.':
@@ -1852,7 +1859,7 @@ class ReviewFindings(unittest.TestCase):
         age(s, 'requests', r, 11)
         run_monitor(s, WEEKDAY)
         age(s, 'requests', r, 15)
-        run_monitor(s, WEEKDAY + timedelta(minutes=15))
+        run_monitor(s, WEEKDAY + timedelta(minutes=25))
         self.assertEqual((health(s)['state'], health(s)['admin']), ('Healthy', 'Down'))
 
     def test_a_short_outlook_outage_loses_no_email(self):
@@ -1890,6 +1897,59 @@ class ReviewFindings(unittest.TestCase):
         c = submit(s, JOE, 'CancelTransaction', {'txId': tx_of(s, r)['id'], 'note': ''}, target=tx_of(s, r)['id'], key=KEY2)
         run_admin(s, c, now=s.clock + timedelta(minutes=1))
         self.assertEqual(request(s, c)['Status'], 'Rejected')
+
+
+
+class Review1101(unittest.TestCase):
+    """Defects found in the review of 29 October (solution 1.10.1.0)."""
+
+    def test_a_change_made_before_the_lock_is_refused_at_once_without_waiting(self):
+        s = site()
+        s.item('actions', s.action)['f']['PendingRequestKey'] = 'someone-else'
+        s.item('actions', s.action)['f']['Revision'] = 3   # the change holding it has raised the revision
+        r = submit(s, RACHEL, 'ExtendDeadline', Extend().payload(), target=s.action, revision=2)
+        before = s.clock
+        status, eng = run(s, r)
+        self.assertEqual(request(s, r)['ResultMessage'], flows.STALE)
+        self.assertEqual(len([u for m, u in s.calls if m == 'GET' and '/items({0})'.format(s.action) in u]), 1, 'read once, no waiting')
+        self.assertLess((eng.now - before).total_seconds(), 15)
+
+    def test_the_monitor_never_overwrites_a_request_a_run_finished_meanwhile(self):
+        for attempts, label in ((3, 'given up'), (0, 'put back')):
+            with self.subTest(label):
+                s = site()
+                s.clock = WEEKDAY
+                r = submit(s, RACHEL, 'ExtendDeadline', Extend().payload(), target=s.action, revision=2)
+                s.item('requests', r)['f']['Attempts'] = attempts
+                s.item('requests', r)['f']['Status'] = 'Failed'
+                age(s, 'requests', r, 11)
+
+                def finishes(method, uri, site_):
+                    # the request flow finishes it just before the monitor writes
+                    if method == 'POST' and 'Requests' in uri and uri.split('?')[0].endswith('/items({0})'.format(r)):
+                        it = site_.item('requests', r)
+                        if it['f']['Status'] != 'Completed':
+                            it['f']['Status'] = 'Completed'
+                            it['version'] += 1
+                            fired.append(uri)
+                fired = []
+                s.on_call = finishes
+                status, eng = run_monitor(s, WEEKDAY)
+                self.assertEqual(len(fired), 1, 'the monitor did try to write the request')
+                self.assertEqual(request(s, r)['Status'], 'Completed', eng.log)
+                self.assertEqual(status, 'Succeeded', eng.log)
+
+    def test_administration_and_clean_up_run_one_at_a_time(self):
+        built = {f['name']: f['json'] for f in flows.build_all()}
+        def trig(name):
+            d = built['ESG Competency Hub | ' + name]['properties']['definition']['triggers']
+            return list(d.values())[0]
+        self.assertEqual(trig('6 Administration')['runtimeConfiguration']['concurrency']['runs'], 1)
+        self.assertEqual(trig('8 Clean-up')['runtimeConfiguration']['concurrency']['runs'], 1)
+        self.assertEqual(trig('8 Clean-up')['recurrence']['interval'], 15)
+        for n in ('2 Request queue', '4 Records', '5 Meetings'):
+            self.assertEqual(trig(n)['runtimeConfiguration']['concurrency']['runs'], 5, n)
+            self.assertEqual(trig(n)['recurrence']['interval'], 1, n)
 
 
 if __name__ == '__main__':

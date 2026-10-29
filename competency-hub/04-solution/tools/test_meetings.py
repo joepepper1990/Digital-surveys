@@ -757,5 +757,62 @@ class Probe(unittest.TestCase):
         self.assertEqual(s.events, {})
 
 
+
+def racing_on(s, list_key, item_id):
+    """Someone else saves the item just before the flow's conditional write reaches it."""
+    original = s.rest
+
+    def racing(method, uri, headers, body):
+        if headers.get('X-HTTP-Method') == 'MERGE' and headers.get('IF-MATCH', '*') != '*' and uri.split('?')[0].endswith('/items({0})'.format(item_id)):
+            s.item(list_key, item_id)['version'] += 1
+            s.rest = original
+        return original(method, uri, headers, body)
+    s.rest = racing
+
+
+class Review1101(unittest.TestCase):
+    """A change refused because someone else saved first leaves nothing behind (solution 1.10.1.0)."""
+
+    def test_an_amendment_refused_leaves_no_amendment_row(self):
+        s = started()
+        finalise(s)
+        rev = s.item('meetings', s.mid)['f']['Revision']
+        r = submit(s, JOE, 'AmendMeeting', {'what': 'The decision applies from January.', 'reason': 'The date was missed.'}, target=s.mid, revision=rev, key=KEY4)
+        racing_on(s, 'meetings', s.mid)
+        status, eng = run(s, r)
+        self.assertEqual((request(s, r)['Status'], request(s, r)['ResultMessage']), ('Rejected', flows.MTG_STALE), eng.log)
+        self.assertEqual([f for f in frozen(s) if f['RowType'] == 'Amendment'], [])
+        self.assertEqual(s.item('meetings', s.mid)['f']['AmendmentCount'] or 0, 0)
+
+    def test_an_amendment_resumed_after_saving_adds_its_row_once_with_the_right_number(self):
+        s = started()
+        finalise(s)
+        rev = s.item('meetings', s.mid)['f']['Revision']
+        r = submit(s, JOE, 'AmendMeeting', {'what': 'The decision applies from January.', 'reason': 'The date was missed.'}, target=s.mid, revision=rev, key=KEY4)
+        s.fail_if = lambda method, path, where: 'Meeting Items' in str(where) + str(path)
+        run(s, r)
+        s.fail_if = None
+        self.assertEqual(s.item('meetings', s.mid)['f']['AmendmentCount'], 1.0, 'the meeting was saved before the row failed')
+        request(s, r)['Status'] = 'Submitted'
+        status, eng = run(s, r, now=s.clock + timedelta(minutes=10))
+        self.assertEqual(request(s, r)['Status'], 'Completed', eng.log)
+        rows = [f for f in frozen(s) if f['RowType'] == 'Amendment']
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(rows[0]['Title'].startswith('Amendment 1 '), rows[0]['Title'])
+        self.assertEqual(s.item('meetings', s.mid)['f']['AmendmentCount'], 1.0)
+
+    def test_a_cancellation_refused_leaves_the_meeting_record_open(self):
+        s = site()
+        book(s)
+        m = meeting(s)
+        r = submit(s, KELLY, 'CancelMeeting', {'reason': 'Most of the area is on the outage.'}, target=m['id'], revision=1, key=KEY3)
+        racing_on(s, 'meetings', m['id'])
+        status, eng = run(s, r)
+        self.assertEqual((request(s, r)['Status'], request(s, r)['ResultMessage']), ('Rejected', flows.MTG_STALE), eng.log)
+        rec = s.folder_item('meetingItems', 'FLK/MTG-{0}/Record'.format(m['id']))
+        self.assertTrue(rec['unique'], 'the record folder of a live meeting is still open to its runners')
+        self.assertEqual(meeting(s)['f']['Status'], 'Scheduled')
+
+
 if __name__ == '__main__':
     unittest.main()

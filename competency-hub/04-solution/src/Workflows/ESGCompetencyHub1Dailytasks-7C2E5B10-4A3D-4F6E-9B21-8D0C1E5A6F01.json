@@ -975,7 +975,7 @@
                 ]
               }
             },
-            "Emails_that_failed": {
+            "Get_retry": {
               "type": "OpenApiConnection",
               "inputs": {
                 "host": {
@@ -986,7 +986,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notif']}')/items?$select=Id,NotificationKey,NotificationType,State,Attempts,DueDay,NextAttemptAfter,SendingSince,RenderData,LastError&$filter=State eq 'Failed'&$top=5000",
+                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notif']}')/items?$select=Id,NotificationKey,NotificationType,State,Attempts,DueDay,NextAttemptAfter,SendingSince,RenderData,LastError&$filter=State eq 'Failed' or State eq 'Unknown' or State eq 'Sending'&$top=5000",
                   "parameters/headers": {
                     "Accept": "application/json;odata=minimalmetadata"
                   }
@@ -999,62 +999,14 @@
                 ]
               }
             },
-            "Emails_with_an_unclear_outcome": {
-              "type": "OpenApiConnection",
-              "inputs": {
-                "host": {
-                  "connectionName": "shared_sharepointonline",
-                  "operationId": "HttpRequest",
-                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                },
-                "parameters": {
-                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                  "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notif']}')/items?$select=Id,NotificationKey,NotificationType,State,Attempts,DueDay,NextAttemptAfter,SendingSince,RenderData,LastError&$filter=State eq 'Unknown'&$top=5000",
-                  "parameters/headers": {
-                    "Accept": "application/json;odata=minimalmetadata"
-                  }
-                },
-                "authentication": "@parameters('$authentication')"
-              },
-              "runAfter": {
-                "Emails_that_failed": [
-                  "Succeeded"
-                ]
-              }
-            },
-            "Emails_left_sending": {
-              "type": "OpenApiConnection",
-              "inputs": {
-                "host": {
-                  "connectionName": "shared_sharepointonline",
-                  "operationId": "HttpRequest",
-                  "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                },
-                "parameters": {
-                  "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                  "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['notif']}')/items?$select=Id,NotificationKey,NotificationType,State,Attempts,DueDay,NextAttemptAfter,SendingSince,RenderData,LastError&$filter=State eq 'Sending'&$top=5000",
-                  "parameters/headers": {
-                    "Accept": "application/json;odata=minimalmetadata"
-                  }
-                },
-                "authentication": "@parameters('$authentication')"
-              },
-              "runAfter": {
-                "Emails_with_an_unclear_outcome": [
-                  "Succeeded"
-                ]
-              }
-            },
             "Emails_due_another_try": {
               "type": "Query",
               "inputs": {
-                "from": "@union(body('Emails_that_failed')?['value'], body('Emails_with_an_unclear_outcome')?['value'], body('Emails_left_sending')?['value'])",
+                "from": "@body('Get_retry')?['value']",
                 "where": "@or(and(not(equals(item()?['State'], 'Sending')), lessOrEquals(ticks(string(coalesce(item()?['NextAttemptAfter'], '2000-01-01T00:00:00Z'))), ticks(utcNow()))), and(equals(item()?['State'], 'Sending'), lessOrEquals(ticks(string(coalesce(item()?['SendingSince'], '2000-01-01T00:00:00Z'))), ticks(addMinutes(utcNow(), -30)))))"
               },
               "runAfter": {
-                "Emails_left_sending": [
+                "Get_retry": [
                   "Succeeded"
                 ]
               }

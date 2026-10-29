@@ -565,6 +565,11 @@ class HubFake:
         if ' or ' in flt and ' and ' not in flt:
             return any(self._matches(lst, it, part.strip()) for part in flt.split(' or '))
         for clause in re.split(r'\s+and\s+', flt):
+            # (Column eq 'a' or Column eq 'b'): any one of them, within an "and"
+            if clause.strip().startswith('(') and clause.strip().endswith(')'):
+                if not any(self._matches(lst, it, part.strip()) for part in clause.strip()[1:-1].split(' or ')):
+                    return False
+                continue
             dm = re.match(r"^(\w+) (eq|le|ge|lt|gt) datetime'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)'$", clause.strip())
             if dm:
                 have = it['f'].get(dm.group(1))

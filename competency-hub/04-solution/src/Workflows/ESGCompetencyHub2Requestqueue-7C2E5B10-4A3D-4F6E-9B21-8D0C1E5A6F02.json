@@ -184,23 +184,6 @@
             ]
           }
         },
-        "Initialise_event_form": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varEventForm",
-                "type": "array",
-                "value": []
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_plan_object": [
-              "Succeeded"
-            ]
-          }
-        },
         "Initialise_change_record_ID": {
           "type": "InitializeVariable",
           "inputs": {
@@ -299,23 +282,6 @@
             ]
           }
         },
-        "Initialise_event_details": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varEventJson",
-                "type": "object",
-                "value": {}
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_fields": [
-              "Succeeded"
-            ]
-          }
-        },
         "Initialise_change_record_plan": {
           "type": "InitializeVariable",
           "inputs": {
@@ -397,36 +363,25 @@
             ]
           }
         },
-        "Initialise_event_title": {
+        "Initialise_rec": {
           "type": "InitializeVariable",
           "inputs": {
             "variables": [
               {
-                "name": "varEventTitle",
-                "type": "string",
-                "value": ""
+                "name": "varRec",
+                "type": "object",
+                "value": {
+                  "title": "",
+                  "type": "",
+                  "form": [],
+                  "json": {},
+                  "result": ""
+                }
               }
             ]
           },
           "runAfter": {
             "Initialise_stale": [
-              "Succeeded"
-            ]
-          }
-        },
-        "Initialise_result": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varResult",
-                "type": "string",
-                "value": ""
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_event_title": [
               "Succeeded"
             ]
           }
@@ -512,23 +467,6 @@
             ]
           }
         },
-        "Initialise_event_type": {
-          "type": "InitializeVariable",
-          "inputs": {
-            "variables": [
-              {
-                "name": "varEventType",
-                "type": "string",
-                "value": ""
-              }
-            ]
-          },
-          "runAfter": {
-            "Initialise_verdict": [
-              "Succeeded"
-            ]
-          }
-        },
         "Initialise_email_list": {
           "type": "InitializeVariable",
           "inputs": {
@@ -541,7 +479,7 @@
             ]
           },
           "runAfter": {
-            "Initialise_event_type": [
+            "Initialise_verdict": [
               "Succeeded"
             ]
           }
@@ -811,7 +749,7 @@
                 "parameters": {
                   "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                   "parameters/method": "GET",
-                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['people']}')/items?$select=Id,Title,KnownAs,SiteUserId,Role,Status,IsAdministrator,Email,Person/Name,Person/EMail&$expand=Person&$filter=SiteUserId eq @{replace(string(coalesce(outputs('Sender_ID'), '')), '''', '''''')}",
+                  "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['people']}')/items?$select=Id,Title,KnownAs,SiteUserId,Role,Status,IsAdministrator,Email,Person/Name,Person/EMail&$expand=Person&$top=5000",
                   "parameters/headers": {
                     "Accept": "application/json;odata=nometadata"
                   }
@@ -824,11 +762,23 @@
                 ]
               }
             },
-            "Person_who_sent_it": {
-              "type": "Compose",
-              "inputs": "@first(body('Read_the_person_who_sent_it')?['value'])",
+            "Requester_rows": {
+              "type": "Query",
+              "inputs": {
+                "from": "@body('Read_the_person_who_sent_it')?['value']",
+                "where": "@equals(first(split(string(coalesce(item()?['SiteUserId'], '')), '.')), first(split(string(coalesce(outputs('Sender_ID'), '')), '.')))"
+              },
               "runAfter": {
                 "Read_the_person_who_sent_it": [
+                  "Succeeded"
+                ]
+              }
+            },
+            "Person_who_sent_it": {
+              "type": "Compose",
+              "inputs": "@first(body('Requester_rows'))",
+              "runAfter": {
+                "Requester_rows": [
                   "Succeeded"
                 ]
               }
@@ -1595,22 +1545,10 @@
                           }
                         },
                         "Get_owner_(raise)": {
-                          "type": "OpenApiConnection",
+                          "type": "Query",
                           "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "GET",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['people']}')/items?$select=Id,Title,SiteUserId,Role,Status,Email,Person/Name,Person/EMail&$expand=Person&$filter=SiteUserId eq @{if(empty(first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.')))}",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata"
-                              }
-                            },
-                            "authentication": "@parameters('$authentication')"
+                            "from": "@body('Read_the_person_who_sent_it')?['value']",
+                            "where": "@equals(first(split(string(coalesce(item()?['SiteUserId'], '')), '.')), if(empty(first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.'))))"
                           },
                           "runAfter": {
                             "My_member_(raise)": [
@@ -1618,7 +1556,7 @@
                             ]
                           }
                         },
-                        "Owner_member_(raise)": {
+                        "Area_members_(raise)": {
                           "type": "OpenApiConnection",
                           "inputs": {
                             "host": {
@@ -1629,7 +1567,7 @@
                             "parameters": {
                               "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
                               "parameters/method": "GET",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['members']}')/items?$select=Id&$filter=PersonId eq @{if(empty(first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.')))} and CompetencyId eq @{if(empty(first(split(string(coalesce(first(body('Get_area_(raise)')?['value'])?['Id'], '')), '.'))), '0', first(split(string(coalesce(first(body('Get_area_(raise)')?['value'])?['Id'], '')), '.')))} and Status eq 'Active'",
+                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['members']}')/items?$select=PersonId&$filter=CompetencyId eq @{if(empty(first(split(string(coalesce(first(body('Get_area_(raise)')?['value'])?['Id'], '')), '.'))), '0', first(split(string(coalesce(first(body('Get_area_(raise)')?['value'])?['Id'], '')), '.')))} and Status eq 'Active'&$top=5000",
                               "parameters/headers": {
                                 "Accept": "application/json;odata=nometadata"
                               }
@@ -1638,6 +1576,18 @@
                           },
                           "runAfter": {
                             "Get_owner_(raise)": [
+                              "Succeeded"
+                            ]
+                          }
+                        },
+                        "Owner_member_(raise)": {
+                          "type": "Query",
+                          "inputs": {
+                            "from": "@body('Area_members_(raise)')?['value']",
+                            "where": "@equals(first(split(string(coalesce(item()?['PersonId'], '')), '.')), if(empty(first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.'))))"
+                          },
+                          "runAfter": {
+                            "Area_members_(raise)": [
                               "Succeeded"
                             ]
                           }
@@ -1912,50 +1862,14 @@
                             ]
                           }
                         },
-                        "Area_members_(raise)": {
-                          "type": "OpenApiConnection",
+                        "Active_people_(raise)": {
+                          "type": "Query",
                           "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "GET",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['members']}')/items?$select=PersonId&$filter=CompetencyId eq @{if(empty(first(split(string(coalesce(first(body('Get_area_(raise)')?['value'])?['Id'], '')), '.'))), '0', first(split(string(coalesce(first(body('Get_area_(raise)')?['value'])?['Id'], '')), '.')))} and Status eq 'Active'&$top=5000",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata"
-                              }
-                            },
-                            "authentication": "@parameters('$authentication')"
+                            "from": "@body('Read_the_person_who_sent_it')?['value']",
+                            "where": "@equals(item()?['Status'], 'Active')"
                           },
                           "runAfter": {
                             "Max_due_(raise)": [
-                              "Succeeded"
-                            ]
-                          }
-                        },
-                        "Active_people_(raise)": {
-                          "type": "OpenApiConnection",
-                          "inputs": {
-                            "host": {
-                              "connectionName": "shared_sharepointonline",
-                              "operationId": "HttpRequest",
-                              "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                            },
-                            "parameters": {
-                              "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                              "parameters/method": "GET",
-                              "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['people']}')/items?$select=Id,Title,KnownAs,SiteUserId,Role,Status,Email,Person/Name,Person/EMail&$expand=Person&$filter=Status eq 'Active'&$top=5000",
-                              "parameters/headers": {
-                                "Accept": "application/json;odata=nometadata"
-                              }
-                            },
-                            "authentication": "@parameters('$authentication')"
-                          },
-                          "runAfter": {
-                            "Area_members_(raise)": [
                               "Succeeded"
                             ]
                           }
@@ -1975,7 +1889,7 @@
                         "Eligible_(raise)": {
                           "type": "Query",
                           "inputs": {
-                            "from": "@body('Active_people_(raise)')?['value']",
+                            "from": "@body('Active_people_(raise)')",
                             "where": "@or(contains(createArray('Team Leader', 'Group Head'), string(item()?['Role'])), contains(body('Member_ids_(raise)'), first(split(string(coalesce(item()?['SiteUserId'], '')), '.'))))"
                           },
                           "runAfter": {
@@ -2012,7 +1926,7 @@
                           "type": "Query",
                           "inputs": {
                             "from": "@body('Co_ids_(raise)')",
-                            "where": "@or(not(contains(body('Eligible_ids_(raise)'), item())), equals(item(), first(split(string(coalesce(first(body('Get_owner_(raise)')?['value'])?['SiteUserId'], '')), '.'))))"
+                            "where": "@or(not(contains(body('Eligible_ids_(raise)'), item())), equals(item(), first(split(string(coalesce(first(body('Get_owner_(raise)'))?['SiteUserId'], '')), '.'))))"
                           },
                           "runAfter": {
                             "Co_ids_(raise)": [
@@ -2034,7 +1948,7 @@
                         },
                         "Co_verdict_(raise)": {
                           "type": "Compose",
-                          "inputs": "@if(greater(length(body('Co_ids_(raise)')), 5), 'Choose up to 5 co-owners.', if(and(and(equals(string(outputs('Person_who_sent_it')?['Role']), 'Technician'), not(equals(first(body('My_member_(raise)'))?['CanManageMeetings'], true))), not(empty(body('Co_ids_(raise)')))), 'As a technician you can raise actions for yourself in this area. Ask an engineer, or someone who runs meetings in this area, to raise it for someone else.', if(not(empty(body('Co_bad_(raise)'))), 'Choose co-owners from the members of this area, and the Team Leaders and Group Head, other than the owner.', if(and(equals(outputs('Payload')?['requiresCloseOut'], true), equals(if(equals(if(empty(first(split(string(coalesce(outputs('Payload')?['checkerId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['checkerId'], '')), '.'))), '0'), outputs('Sender_ID'), if(empty(first(split(string(coalesce(outputs('Payload')?['checkerId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['checkerId'], '')), '.')))), first(split(string(coalesce(first(body('Get_owner_(raise)')?['value'])?['SiteUserId'], '')), '.')))), 'Choose someone other than the owner to do the close-out check.', if(and(equals(outputs('Payload')?['requiresCloseOut'], true), not(contains(body('Eligible_ids_(raise)'), if(equals(if(empty(first(split(string(coalesce(outputs('Payload')?['checkerId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['checkerId'], '')), '.'))), '0'), outputs('Sender_ID'), if(empty(first(split(string(coalesce(outputs('Payload')?['checkerId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['checkerId'], '')), '.'))))))), 'Choose a member of this area or a Team Leader to do the close-out check.', '')))))",
+                          "inputs": "@if(greater(length(body('Co_ids_(raise)')), 5), 'Choose up to 5 co-owners.', if(and(and(equals(string(outputs('Person_who_sent_it')?['Role']), 'Technician'), not(equals(first(body('My_member_(raise)'))?['CanManageMeetings'], true))), not(empty(body('Co_ids_(raise)')))), 'As a technician you can raise actions for yourself in this area. Ask an engineer, or someone who runs meetings in this area, to raise it for someone else.', if(not(empty(body('Co_bad_(raise)'))), 'Choose co-owners from the members of this area, and the Team Leaders and Group Head, other than the owner.', if(and(equals(outputs('Payload')?['requiresCloseOut'], true), equals(if(equals(if(empty(first(split(string(coalesce(outputs('Payload')?['checkerId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['checkerId'], '')), '.'))), '0'), outputs('Sender_ID'), if(empty(first(split(string(coalesce(outputs('Payload')?['checkerId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['checkerId'], '')), '.')))), first(split(string(coalesce(first(body('Get_owner_(raise)'))?['SiteUserId'], '')), '.')))), 'Choose someone other than the owner to do the close-out check.', if(and(equals(outputs('Payload')?['requiresCloseOut'], true), not(contains(body('Eligible_ids_(raise)'), if(equals(if(empty(first(split(string(coalesce(outputs('Payload')?['checkerId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['checkerId'], '')), '.'))), '0'), outputs('Sender_ID'), if(empty(first(split(string(coalesce(outputs('Payload')?['checkerId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['checkerId'], '')), '.'))))))), 'Choose a member of this area or a Team Leader to do the close-out check.', '')))))",
                           "runAfter": {
                             "Co_people_(raise)": [
                               "Succeeded"
@@ -2043,7 +1957,7 @@
                         },
                         "Verdict_base_(raise)": {
                           "type": "Compose",
-                          "inputs": "@if(greater(variables('varExistingId'), 0), '', if(or(empty(first(body('Get_area_(raise)')?['value'])), not(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), not(empty(body('My_member_(raise)')))))), 'Choose one of your areas.', if(or(empty(first(body('Get_owner_(raise)')?['value'])), not(equals(string(first(body('Get_owner_(raise)')?['value'])?['Status']), 'Active')), not(or(contains(createArray('Team Leader', 'Group Head'), string(first(body('Get_owner_(raise)')?['value'])?['Role'])), not(empty(body('Owner_member_(raise)')?['value']))))), 'Choose a member of this area or a Team Leader.', if(and(equals(string(outputs('Person_who_sent_it')?['Role']), 'Technician'), not(equals(first(body('My_member_(raise)'))?['CanManageMeetings'], true)), not(equals(first(split(string(coalesce(first(body('Get_owner_(raise)')?['value'])?['SiteUserId'], '')), '.')), outputs('Sender_ID')))), 'As a technician you can raise actions for yourself in this area. Ask an engineer, or someone who runs meetings in this area, to raise it for someone else.', if(and(greater(int(if(empty(first(split(string(coalesce(outputs('Payload')?['sourceEntryId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['sourceEntryId'], '')), '.')))), 0), not(and(not(empty(string(coalesce(variables('varEntry')?['Id'], '')))), equals(first(split(string(coalesce(variables('varEntry')?['CompetencyId'], '')), '.')), first(split(string(coalesce(first(body('Get_area_(raise)')?['value'])?['Id'], '')), '.'))), not(equals(string(variables('varEntry')?['Status']), 'Closed'))))), 'That improvement or degradation could not be found in this area, or it is closed.', if(and(greater(int(if(empty(first(split(string(coalesce(outputs('Payload')?['sourceMeetingId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['sourceMeetingId'], '')), '.')))), 0), not(and(equals(first(split(string(coalesce(variables('varSrcMtg')?['CompetencyId'], '')), '.')), first(split(string(coalesce(first(body('Get_area_(raise)')?['value'])?['Id'], '')), '.'))), equals(string(variables('varSrcMtg')?['Status']), 'In Progress'), or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), equals(first(body('My_member_(raise)'))?['CanManageMeetings'], true))))), 'Actions are raised from a meeting only while it is in progress, by the people who run it.', if(and(greater(int(if(empty(first(split(string(coalesce(outputs('Payload')?['sourceNoticeId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['sourceNoticeId'], '')), '.')))), 0), not(and(equals(string(variables('varSrcNotice')?['Status']), 'Active'), or(endsWith(string(coalesce(variables('varSrcNotice')?['FileDirRef'], '')), concat('/', string(first(body('Get_area_(raise)')?['value'])?['CompetencyKey']))), equals(string(coalesce(variables('varSrcNotice')?['ShownIn'], '')), 'All'), contains(concat(';', string(coalesce(variables('varSrcNotice')?['ShownIn'], '')), ';'), concat(';', string(first(body('Get_area_(raise)')?['value'])?['CompetencyKey']), ';'))), or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), equals(first(body('My_member_(raise)'))?['CanManageMeetings'], true), and(equals(string(outputs('Person_who_sent_it')?['Role']), 'Engineer'), not(empty(body('My_member_(raise)')))))))), 'Only the engineers of this area, its meeting leads, and the Team Leaders and Group Head can turn a notice shown here into an action.', if(empty(trim(string(coalesce(outputs('Payload')?['title'], '')))), 'Enter what needs doing.', if(greater(length(trim(string(coalesce(outputs('Payload')?['title'], '')))), 255), 'Keep the title to 255 characters or fewer.', if(empty(trim(string(coalesce(outputs('Payload')?['description'], '')))), 'Add a short description.', if(greater(length(trim(string(coalesce(outputs('Payload')?['description'], '')))), 5000), 'Keep the description to 5,000 characters or fewer.', if(not(and(equals(variables('varDue'), string(coalesce(outputs('Payload')?['dueIso'], ''))), not(empty(string(coalesce(outputs('Payload')?['dueIso'], '')))))), 'Choose a target date.', if(less(int(replace(if(and(equals(variables('varDue'), string(coalesce(outputs('Payload')?['dueIso'], ''))), not(empty(string(coalesce(outputs('Payload')?['dueIso'], ''))))), string(coalesce(outputs('Payload')?['dueIso'], '')), '2000-01-01'), '-', '')), int(replace(outputs('Today_in_the_UK'), '-', ''))), 'The target date cannot be in the past.', if(greater(int(replace(if(and(equals(variables('varDue'), string(coalesce(outputs('Payload')?['dueIso'], ''))), not(empty(string(coalesce(outputs('Payload')?['dueIso'], ''))))), string(coalesce(outputs('Payload')?['dueIso'], '')), '2000-01-01'), '-', '')), int(replace(outputs('Max_due_(raise)'), '-', ''))), concat('Choose a date within ', string(outputs('Years_(raise)')), if(equals(outputs('Years_(raise)'), 1), ' year.', ' years.')), if(not(contains(createArray('Low', 'Normal', 'High'), string(coalesce(outputs('Payload')?['priority'], 'Normal')))), 'Choose a priority.', '')))))))))))))))",
+                          "inputs": "@if(greater(variables('varExistingId'), 0), '', if(or(empty(first(body('Get_area_(raise)')?['value'])), not(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), not(empty(body('My_member_(raise)')))))), 'Choose one of your areas.', if(or(empty(first(body('Get_owner_(raise)'))), not(equals(string(first(body('Get_owner_(raise)'))?['Status']), 'Active')), not(or(contains(createArray('Team Leader', 'Group Head'), string(first(body('Get_owner_(raise)'))?['Role'])), not(empty(body('Owner_member_(raise)')))))), 'Choose a member of this area or a Team Leader.', if(and(equals(string(outputs('Person_who_sent_it')?['Role']), 'Technician'), not(equals(first(body('My_member_(raise)'))?['CanManageMeetings'], true)), not(equals(first(split(string(coalesce(first(body('Get_owner_(raise)'))?['SiteUserId'], '')), '.')), outputs('Sender_ID')))), 'As a technician you can raise actions for yourself in this area. Ask an engineer, or someone who runs meetings in this area, to raise it for someone else.', if(and(greater(int(if(empty(first(split(string(coalesce(outputs('Payload')?['sourceEntryId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['sourceEntryId'], '')), '.')))), 0), not(and(not(empty(string(coalesce(variables('varEntry')?['Id'], '')))), equals(first(split(string(coalesce(variables('varEntry')?['CompetencyId'], '')), '.')), first(split(string(coalesce(first(body('Get_area_(raise)')?['value'])?['Id'], '')), '.'))), not(equals(string(variables('varEntry')?['Status']), 'Closed'))))), 'That improvement or degradation could not be found in this area, or it is closed.', if(and(greater(int(if(empty(first(split(string(coalesce(outputs('Payload')?['sourceMeetingId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['sourceMeetingId'], '')), '.')))), 0), not(and(equals(first(split(string(coalesce(variables('varSrcMtg')?['CompetencyId'], '')), '.')), first(split(string(coalesce(first(body('Get_area_(raise)')?['value'])?['Id'], '')), '.'))), equals(string(variables('varSrcMtg')?['Status']), 'In Progress'), or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), equals(first(body('My_member_(raise)'))?['CanManageMeetings'], true))))), 'Actions are raised from a meeting only while it is in progress, by the people who run it.', if(and(greater(int(if(empty(first(split(string(coalesce(outputs('Payload')?['sourceNoticeId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['sourceNoticeId'], '')), '.')))), 0), not(and(equals(string(variables('varSrcNotice')?['Status']), 'Active'), or(endsWith(string(coalesce(variables('varSrcNotice')?['FileDirRef'], '')), concat('/', string(first(body('Get_area_(raise)')?['value'])?['CompetencyKey']))), equals(string(coalesce(variables('varSrcNotice')?['ShownIn'], '')), 'All'), contains(concat(';', string(coalesce(variables('varSrcNotice')?['ShownIn'], '')), ';'), concat(';', string(first(body('Get_area_(raise)')?['value'])?['CompetencyKey']), ';'))), or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), equals(first(body('My_member_(raise)'))?['CanManageMeetings'], true), and(equals(string(outputs('Person_who_sent_it')?['Role']), 'Engineer'), not(empty(body('My_member_(raise)')))))))), 'Only the engineers of this area, its meeting leads, and the Team Leaders and Group Head can turn a notice shown here into an action.', if(empty(trim(string(coalesce(outputs('Payload')?['title'], '')))), 'Enter what needs doing.', if(greater(length(trim(string(coalesce(outputs('Payload')?['title'], '')))), 255), 'Keep the title to 255 characters or fewer.', if(empty(trim(string(coalesce(outputs('Payload')?['description'], '')))), 'Add a short description.', if(greater(length(trim(string(coalesce(outputs('Payload')?['description'], '')))), 5000), 'Keep the description to 5,000 characters or fewer.', if(not(and(equals(variables('varDue'), string(coalesce(outputs('Payload')?['dueIso'], ''))), not(empty(string(coalesce(outputs('Payload')?['dueIso'], '')))))), 'Choose a target date.', if(less(int(replace(if(and(equals(variables('varDue'), string(coalesce(outputs('Payload')?['dueIso'], ''))), not(empty(string(coalesce(outputs('Payload')?['dueIso'], ''))))), string(coalesce(outputs('Payload')?['dueIso'], '')), '2000-01-01'), '-', '')), int(replace(outputs('Today_in_the_UK'), '-', ''))), 'The target date cannot be in the past.', if(greater(int(replace(if(and(equals(variables('varDue'), string(coalesce(outputs('Payload')?['dueIso'], ''))), not(empty(string(coalesce(outputs('Payload')?['dueIso'], ''))))), string(coalesce(outputs('Payload')?['dueIso'], '')), '2000-01-01'), '-', '')), int(replace(outputs('Max_due_(raise)'), '-', ''))), concat('Choose a date within ', string(outputs('Years_(raise)')), if(equals(outputs('Years_(raise)'), 1), ' year.', ' years.')), if(not(contains(createArray('Low', 'Normal', 'High'), string(coalesce(outputs('Payload')?['priority'], 'Normal')))), 'Choose a priority.', '')))))))))))))))",
                           "runAfter": {
                             "Co_verdict_(raise)": [
                               "Succeeded"
@@ -2084,7 +1998,7 @@
                                     },
                                     {
                                       "FieldName": "AssignedTo",
-                                      "FieldValue": "@{concat('[{\"Key\":\"', first(body('Get_owner_(raise)')?['value'])?['Person']?['Name'], '\"}]')}"
+                                      "FieldValue": "@{concat('[{\"Key\":\"', first(body('Get_owner_(raise)'))?['Person']?['Name'], '\"}]')}"
                                     },
                                     {
                                       "FieldName": "RaisedBy",
@@ -2500,12 +2414,12 @@
                               "type": "Compose",
                               "inputs": [
                                 {
-                                  "send": "@and(not(equals(first(split(string(coalesce(first(body('Get_owner_(raise)')?['value'])?['SiteUserId'], '')), '.')), outputs('Sender_ID'))), equals(string(first(body('Get_owner_(raise)')?['value'])?['Status']), 'Active'))",
+                                  "send": "@and(not(equals(first(split(string(coalesce(first(body('Get_owner_(raise)'))?['SiteUserId'], '')), '.')), outputs('Sender_ID'))), equals(string(first(body('Get_owner_(raise)'))?['Status']), 'Active'))",
                                   "type": "ASG",
-                                  "key": "@{concat('ASG|', string(variables('varTx')?['RequestKey']), '|', first(split(string(coalesce(first(body('Get_owner_(raise)')?['value'])?['SiteUserId'], '')), '.')))}",
-                                  "recipientId": "@{first(split(string(coalesce(first(body('Get_owner_(raise)')?['value'])?['SiteUserId'], '')), '.'))}",
-                                  "login": "@{first(body('Get_owner_(raise)')?['value'])?['Person']?['Name']}",
-                                  "email": "@{coalesce(first(body('Get_owner_(raise)')?['value'])?['Person']?['EMail'], first(body('Get_owner_(raise)')?['value'])?['Email'])}",
+                                  "key": "@{concat('ASG|', string(variables('varTx')?['RequestKey']), '|', first(split(string(coalesce(first(body('Get_owner_(raise)'))?['SiteUserId'], '')), '.')))}",
+                                  "recipientId": "@{first(split(string(coalesce(first(body('Get_owner_(raise)'))?['SiteUserId'], '')), '.'))}",
+                                  "login": "@{first(body('Get_owner_(raise)'))?['Person']?['Name']}",
+                                  "email": "@{coalesce(first(body('Get_owner_(raise)'))?['Person']?['EMail'], first(body('Get_owner_(raise)'))?['Email'])}",
                                   "actor": "@{if(empty(trim(string(coalesce(outputs('Person_who_sent_it')?['KnownAs'], '')))), string(outputs('Person_who_sent_it')?['Title']), trim(string(outputs('Person_who_sent_it')?['KnownAs'])))}",
                                   "actionId": "@{string(variables('varActionId'))}",
                                   "title": "@{trim(string(coalesce(outputs('Payload')?['title'], '')))}",
@@ -2959,7 +2873,7 @@
                                 "EventTime": "@{outputs('Time_of_the_change')}",
                                 "ProcessedAt": "@{utcNow()}",
                                 "NewDueDate": "@{convertToUtc(concat(string(coalesce(outputs('Payload')?['dueIso'], '')), 'T00:00:00'), 'GMT Standard Time')}",
-                                "OwnerId": "@int(first(split(string(coalesce(first(body('Get_owner_(raise)')?['value'])?['SiteUserId'], '')), '.')))",
+                                "OwnerId": "@int(first(split(string(coalesce(first(body('Get_owner_(raise)'))?['SiteUserId'], '')), '.')))",
                                 "DueDayAtEvent": "@int(replace(string(coalesce(outputs('Payload')?['dueIso'], '')), '-', ''))"
                               },
                               "runAfter": {
@@ -3824,7 +3738,7 @@
                       },
                       "Held_by_other_(change)": {
                         "type": "If",
-                        "expression": "@and(not(empty(string(coalesce(variables('varAct')?['PendingRequestKey'], '')))), not(equals(string(coalesce(variables('varAct')?['PendingRequestKey'], '')), string(variables('varTx')?['RequestKey']))))",
+                        "expression": "@and(not(empty(string(coalesce(variables('varAct')?['PendingRequestKey'], '')))), not(equals(string(coalesce(variables('varAct')?['PendingRequestKey'], '')), string(variables('varTx')?['RequestKey']))), equals(first(split(string(coalesce(variables('varAct')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.'))))",
                         "actions": {
                           "Wait_turn_(change)": {
                             "type": "Until",
@@ -3939,7 +3853,7 @@
                                 "type": "SetVariable",
                                 "inputs": {
                                   "name": "varVerdict",
-                                  "value": "@if(or(equals(string(coalesce(variables('varAct')?['PendingRequestKey'], '')), string(variables('varTx')?['RequestKey'])), equals(string(coalesce(variables('varAct')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey']))), '', if(and(not(empty(string(coalesce(variables('varAct')?['PendingRequestKey'], '')))), equals(string(coalesce(variables('varAct')?['CreatedRequestKey'], '')), concat('F|', string(coalesce(variables('varAct')?['PendingRequestKey'], ''))))), 'That action could not be found.', if(not(contains(createArray('Open', 'In Progress', 'Awaiting Input'), string(variables('varAct')?['Status']))), 'This action is no longer open, so its deadline cannot be moved.', if(not(or(equals(first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.')), outputs('Sender_ID')), or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), and(not(empty(first(body('My_member_(change)')))), equals(string(outputs('Person_who_sent_it')?['Role']), 'Engineer'))), and(not(empty(first(body('My_member_(change)')))), equals(first(body('My_member_(change)'))?['CanManageMeetings'], true)), equals(first(split(string(coalesce(variables('varAct')?['RaisedById'], '')), '.')), outputs('Sender_ID'))))), 'Only the owner or the people who manage this action can move its deadline.', if(not(empty(string(coalesce(variables('varAct')?['PendingRequestKey'], '')))), 'This action is still being updated by an earlier change. Try again in a minute.', if(not(equals(first(split(string(coalesce(variables('varAct')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(not(equals(first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.')), first(split(string(coalesce(outputs('Payload')?['expectedDueDay'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(not(and(equals(variables('varDue'), string(coalesce(outputs('Payload')?['newDueIso'], ''))), not(empty(string(coalesce(outputs('Payload')?['newDueIso'], '')))))), 'Choose the new deadline.', if(lessOrEquals(int(replace(if(and(equals(variables('varDue'), string(coalesce(outputs('Payload')?['newDueIso'], ''))), not(empty(string(coalesce(outputs('Payload')?['newDueIso'], ''))))), string(coalesce(outputs('Payload')?['newDueIso'], '')), '2000-01-01'), '-', '')), int(first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.')))), concat('The new deadline must be after ', formatDateTime(concat(concat(substring(first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.')), 0, 4), '-', substring(first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.')), 4, 2), '-', substring(first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.')), 6, 2)), 'T00:00:00Z'), 'd MMMM yyyy'), '.'), if(less(int(replace(if(and(equals(variables('varDue'), string(coalesce(outputs('Payload')?['newDueIso'], ''))), not(empty(string(coalesce(outputs('Payload')?['newDueIso'], ''))))), string(coalesce(outputs('Payload')?['newDueIso'], '')), '2000-01-01'), '-', '')), int(replace(outputs('Today_in_the_UK'), '-', ''))), 'The new deadline cannot be in the past.', if(less(length(trim(string(coalesce(outputs('Payload')?['reason'], '')))), 10), 'Give a reason of at least 10 characters.', if(greater(length(trim(string(coalesce(outputs('Payload')?['reason'], '')))), 1000), 'Keep the reason to 1,000 characters or fewer.', ''))))))))))))"
+                                  "value": "@if(or(equals(string(coalesce(variables('varAct')?['PendingRequestKey'], '')), string(variables('varTx')?['RequestKey'])), equals(string(coalesce(variables('varAct')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey']))), '', if(and(not(empty(string(coalesce(variables('varAct')?['PendingRequestKey'], '')))), equals(string(coalesce(variables('varAct')?['CreatedRequestKey'], '')), concat('F|', string(coalesce(variables('varAct')?['PendingRequestKey'], ''))))), 'That action could not be found.', if(not(contains(createArray('Open', 'In Progress', 'Awaiting Input'), string(variables('varAct')?['Status']))), 'This action is no longer open, so its deadline cannot be moved.', if(not(or(equals(first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.')), outputs('Sender_ID')), or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), and(not(empty(first(body('My_member_(change)')))), equals(string(outputs('Person_who_sent_it')?['Role']), 'Engineer'))), and(not(empty(first(body('My_member_(change)')))), equals(first(body('My_member_(change)'))?['CanManageMeetings'], true)), equals(first(split(string(coalesce(variables('varAct')?['RaisedById'], '')), '.')), outputs('Sender_ID'))))), 'Only the owner or the people who manage this action can move its deadline.', if(not(equals(first(split(string(coalesce(variables('varAct')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(not(empty(string(coalesce(variables('varAct')?['PendingRequestKey'], '')))), 'Another change to this action is taking longer than usual to finish. Nothing was changed – try again in a few minutes.', if(not(equals(first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.')), first(split(string(coalesce(outputs('Payload')?['expectedDueDay'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(not(and(equals(variables('varDue'), string(coalesce(outputs('Payload')?['newDueIso'], ''))), not(empty(string(coalesce(outputs('Payload')?['newDueIso'], '')))))), 'Choose the new deadline.', if(lessOrEquals(int(replace(if(and(equals(variables('varDue'), string(coalesce(outputs('Payload')?['newDueIso'], ''))), not(empty(string(coalesce(outputs('Payload')?['newDueIso'], ''))))), string(coalesce(outputs('Payload')?['newDueIso'], '')), '2000-01-01'), '-', '')), int(first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.')))), concat('The new deadline must be after ', formatDateTime(concat(concat(substring(first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.')), 0, 4), '-', substring(first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.')), 4, 2), '-', substring(first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.')), 6, 2)), 'T00:00:00Z'), 'd MMMM yyyy'), '.'), if(less(int(replace(if(and(equals(variables('varDue'), string(coalesce(outputs('Payload')?['newDueIso'], ''))), not(empty(string(coalesce(outputs('Payload')?['newDueIso'], ''))))), string(coalesce(outputs('Payload')?['newDueIso'], '')), '2000-01-01'), '-', '')), int(replace(outputs('Today_in_the_UK'), '-', ''))), 'The new deadline cannot be in the past.', if(less(length(trim(string(coalesce(outputs('Payload')?['reason'], '')))), 10), 'Give a reason of at least 10 characters.', if(greater(length(trim(string(coalesce(outputs('Payload')?['reason'], '')))), 1000), 'Keep the reason to 1,000 characters or fewer.', ''))))))))))))"
                                 },
                                 "runAfter": {}
                               }
@@ -3952,7 +3866,7 @@
                                 "type": "SetVariable",
                                 "inputs": {
                                   "name": "varVerdict",
-                                  "value": "@if(or(equals(string(coalesce(variables('varAct')?['PendingRequestKey'], '')), string(variables('varTx')?['RequestKey'])), equals(string(coalesce(variables('varAct')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey']))), '', if(and(not(empty(string(coalesce(variables('varAct')?['PendingRequestKey'], '')))), equals(string(coalesce(variables('varAct')?['CreatedRequestKey'], '')), concat('F|', string(coalesce(variables('varAct')?['PendingRequestKey'], ''))))), 'That action could not be found.', if(not(contains(createArray('Open', 'In Progress', 'Awaiting Input'), string(variables('varAct')?['Status']))), 'This action is already done.', if(not(or(equals(first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.')), outputs('Sender_ID')), or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), and(not(empty(first(body('My_member_(change)')))), equals(string(outputs('Person_who_sent_it')?['Role']), 'Engineer'))), and(not(empty(first(body('My_member_(change)')))), equals(first(body('My_member_(change)'))?['CanManageMeetings'], true)), equals(first(split(string(coalesce(variables('varAct')?['RaisedById'], '')), '.')), outputs('Sender_ID'))))), 'Only the owner or the people who manage this action can mark it as done.', if(not(empty(string(coalesce(variables('varAct')?['PendingRequestKey'], '')))), 'This action is still being updated by an earlier change. Try again in a minute.', if(not(equals(first(split(string(coalesce(variables('varAct')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(greater(length(trim(string(coalesce(outputs('Payload')?['note'], '')))), 1000), 'Keep the note to 1,000 characters or fewer.', '')))))))"
+                                  "value": "@if(or(equals(string(coalesce(variables('varAct')?['PendingRequestKey'], '')), string(variables('varTx')?['RequestKey'])), equals(string(coalesce(variables('varAct')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey']))), '', if(and(not(empty(string(coalesce(variables('varAct')?['PendingRequestKey'], '')))), equals(string(coalesce(variables('varAct')?['CreatedRequestKey'], '')), concat('F|', string(coalesce(variables('varAct')?['PendingRequestKey'], ''))))), 'That action could not be found.', if(not(contains(createArray('Open', 'In Progress', 'Awaiting Input'), string(variables('varAct')?['Status']))), 'This action is already done.', if(not(or(equals(first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.')), outputs('Sender_ID')), or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), and(not(empty(first(body('My_member_(change)')))), equals(string(outputs('Person_who_sent_it')?['Role']), 'Engineer'))), and(not(empty(first(body('My_member_(change)')))), equals(first(body('My_member_(change)'))?['CanManageMeetings'], true)), equals(first(split(string(coalesce(variables('varAct')?['RaisedById'], '')), '.')), outputs('Sender_ID'))))), 'Only the owner or the people who manage this action can mark it as done.', if(not(equals(first(split(string(coalesce(variables('varAct')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(not(empty(string(coalesce(variables('varAct')?['PendingRequestKey'], '')))), 'Another change to this action is taking longer than usual to finish. Nothing was changed – try again in a few minutes.', if(greater(length(trim(string(coalesce(outputs('Payload')?['note'], '')))), 1000), 'Keep the note to 1,000 characters or fewer.', '')))))))"
                                 },
                                 "runAfter": {}
                               }
@@ -3965,7 +3879,7 @@
                                 "type": "SetVariable",
                                 "inputs": {
                                   "name": "varVerdict",
-                                  "value": "@if(or(equals(string(coalesce(variables('varAct')?['PendingRequestKey'], '')), string(variables('varTx')?['RequestKey'])), equals(string(coalesce(variables('varAct')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey']))), '', if(and(not(empty(string(coalesce(variables('varAct')?['PendingRequestKey'], '')))), equals(string(coalesce(variables('varAct')?['CreatedRequestKey'], '')), concat('F|', string(coalesce(variables('varAct')?['PendingRequestKey'], ''))))), 'That action could not be found.', if(not(contains(createArray('Open', 'In Progress', 'Awaiting Input'), string(variables('varAct')?['Status']))), 'This action is no longer open.', if(not(or(equals(first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.')), outputs('Sender_ID')), or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), and(not(empty(first(body('My_member_(change)')))), equals(string(outputs('Person_who_sent_it')?['Role']), 'Engineer'))), and(not(empty(first(body('My_member_(change)')))), equals(first(body('My_member_(change)'))?['CanManageMeetings'], true)), equals(first(split(string(coalesce(variables('varAct')?['RaisedById'], '')), '.')), outputs('Sender_ID'))))), 'Only the owner or the people who manage this action can change its status.', if(not(empty(string(coalesce(variables('varAct')?['PendingRequestKey'], '')))), 'This action is being updated. Try again in a minute.', if(not(equals(first(split(string(coalesce(variables('varAct')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(not(contains(createArray('Open', 'In Progress', 'Awaiting Input'), string(coalesce(outputs('Payload')?['status'], '')))), 'Choose a status.', if(equals(string(coalesce(outputs('Payload')?['status'], '')), string(variables('varAct')?['Status'])), 'Choose a different status.', if(and(equals(string(coalesce(outputs('Payload')?['status'], '')), 'Awaiting Input'), less(length(trim(string(coalesce(outputs('Payload')?['blocker'], '')))), 10)), 'Say what it is waiting on (at least 10 characters).', if(and(equals(string(coalesce(outputs('Payload')?['status'], '')), 'Awaiting Input'), greater(length(trim(string(coalesce(outputs('Payload')?['blocker'], '')))), 1000)), 'Keep it to 1,000 characters or fewer.', ''))))))))))"
+                                  "value": "@if(or(equals(string(coalesce(variables('varAct')?['PendingRequestKey'], '')), string(variables('varTx')?['RequestKey'])), equals(string(coalesce(variables('varAct')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey']))), '', if(and(not(empty(string(coalesce(variables('varAct')?['PendingRequestKey'], '')))), equals(string(coalesce(variables('varAct')?['CreatedRequestKey'], '')), concat('F|', string(coalesce(variables('varAct')?['PendingRequestKey'], ''))))), 'That action could not be found.', if(not(contains(createArray('Open', 'In Progress', 'Awaiting Input'), string(variables('varAct')?['Status']))), 'This action is no longer open.', if(not(or(equals(first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.')), outputs('Sender_ID')), or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), and(not(empty(first(body('My_member_(change)')))), equals(string(outputs('Person_who_sent_it')?['Role']), 'Engineer'))), and(not(empty(first(body('My_member_(change)')))), equals(first(body('My_member_(change)'))?['CanManageMeetings'], true)), equals(first(split(string(coalesce(variables('varAct')?['RaisedById'], '')), '.')), outputs('Sender_ID'))))), 'Only the owner or the people who manage this action can change its status.', if(not(equals(first(split(string(coalesce(variables('varAct')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(not(empty(string(coalesce(variables('varAct')?['PendingRequestKey'], '')))), 'Another change to this action is taking longer than usual to finish. Nothing was changed – try again in a few minutes.', if(not(contains(createArray('Open', 'In Progress', 'Awaiting Input'), string(coalesce(outputs('Payload')?['status'], '')))), 'Choose a status.', if(equals(string(coalesce(outputs('Payload')?['status'], '')), string(variables('varAct')?['Status'])), 'Choose a different status.', if(and(equals(string(coalesce(outputs('Payload')?['status'], '')), 'Awaiting Input'), less(length(trim(string(coalesce(outputs('Payload')?['blocker'], '')))), 10)), 'Say what it is waiting on (at least 10 characters).', if(and(equals(string(coalesce(outputs('Payload')?['status'], '')), 'Awaiting Input'), greater(length(trim(string(coalesce(outputs('Payload')?['blocker'], '')))), 1000)), 'Keep it to 1,000 characters or fewer.', ''))))))))))"
                                 },
                                 "runAfter": {}
                               }
@@ -4219,7 +4133,7 @@
                                 "type": "SetVariable",
                                 "inputs": {
                                   "name": "varVerdict",
-                                  "value": "@if(or(equals(string(coalesce(variables('varAct')?['PendingRequestKey'], '')), string(variables('varTx')?['RequestKey'])), equals(string(coalesce(variables('varAct')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey']))), '', if(and(not(empty(string(coalesce(variables('varAct')?['PendingRequestKey'], '')))), equals(string(coalesce(variables('varAct')?['CreatedRequestKey'], '')), concat('F|', string(coalesce(variables('varAct')?['PendingRequestKey'], ''))))), 'That action could not be found.', if(not(contains(createArray('Open', 'In Progress', 'Awaiting Input'), string(variables('varAct')?['Status']))), 'This action is no longer open, so it cannot be reassigned.', if(not(or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), and(not(empty(first(body('My_member_(change)')))), equals(string(outputs('Person_who_sent_it')?['Role']), 'Engineer'))), and(not(empty(first(body('My_member_(change)')))), equals(first(body('My_member_(change)'))?['CanManageMeetings'], true)), and(equals(first(split(string(coalesce(variables('varAct')?['RaisedById'], '')), '.')), outputs('Sender_ID')), not(and(equals(string(outputs('Person_who_sent_it')?['Role']), 'Technician'), not(and(not(empty(first(body('My_member_(change)')))), equals(first(body('My_member_(change)'))?['CanManageMeetings'], true)))))))), 'Only the people who manage this action can reassign it.', if(not(empty(string(coalesce(variables('varAct')?['PendingRequestKey'], '')))), 'This action is being updated. Try again in a minute.', if(not(equals(first(split(string(coalesce(variables('varAct')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(equals(if(empty(first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.'))), '0'), 'Choose who will do it.', if(equals(if(empty(first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.'))), first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.'))), 'Choose someone other than the current owner.', if(not(and(not(empty(first(body('Get_new_owner_(reassign)')?['value']))), equals(string(first(body('Get_new_owner_(reassign)')?['value'])?['Status']), 'Active'), or(contains(createArray('Team Leader', 'Group Head'), string(first(body('Get_new_owner_(reassign)')?['value'])?['Role'])), not(empty(body('New_owner_member_(reassign)')?['value']))))), 'Choose a member of this area or a Team Leader.', if(greater(length(body('Co_final_(reassign)')), 5), 'Choose up to 5 co-owners.', if(not(empty(body('Co_bad_(reassign)'))), 'Choose co-owners from the members of this area, and the Team Leaders and Group Head, other than the owner.', if(less(length(trim(string(coalesce(outputs('Payload')?['reason'], '')))), 10), 'Give a reason of at least 10 characters.', if(greater(length(trim(string(coalesce(outputs('Payload')?['reason'], '')))), 1000), 'Keep the reason to 1,000 characters or fewer.', '')))))))))))))"
+                                  "value": "@if(or(equals(string(coalesce(variables('varAct')?['PendingRequestKey'], '')), string(variables('varTx')?['RequestKey'])), equals(string(coalesce(variables('varAct')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey']))), '', if(and(not(empty(string(coalesce(variables('varAct')?['PendingRequestKey'], '')))), equals(string(coalesce(variables('varAct')?['CreatedRequestKey'], '')), concat('F|', string(coalesce(variables('varAct')?['PendingRequestKey'], ''))))), 'That action could not be found.', if(not(contains(createArray('Open', 'In Progress', 'Awaiting Input'), string(variables('varAct')?['Status']))), 'This action is no longer open, so it cannot be reassigned.', if(not(or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), and(not(empty(first(body('My_member_(change)')))), equals(string(outputs('Person_who_sent_it')?['Role']), 'Engineer'))), and(not(empty(first(body('My_member_(change)')))), equals(first(body('My_member_(change)'))?['CanManageMeetings'], true)), and(equals(first(split(string(coalesce(variables('varAct')?['RaisedById'], '')), '.')), outputs('Sender_ID')), not(and(equals(string(outputs('Person_who_sent_it')?['Role']), 'Technician'), not(and(not(empty(first(body('My_member_(change)')))), equals(first(body('My_member_(change)'))?['CanManageMeetings'], true)))))))), 'Only the people who manage this action can reassign it.', if(not(equals(first(split(string(coalesce(variables('varAct')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(not(empty(string(coalesce(variables('varAct')?['PendingRequestKey'], '')))), 'Another change to this action is taking longer than usual to finish. Nothing was changed – try again in a few minutes.', if(equals(if(empty(first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.'))), '0'), 'Choose who will do it.', if(equals(if(empty(first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.'))), first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.'))), 'Choose someone other than the current owner.', if(not(and(not(empty(first(body('Get_new_owner_(reassign)')?['value']))), equals(string(first(body('Get_new_owner_(reassign)')?['value'])?['Status']), 'Active'), or(contains(createArray('Team Leader', 'Group Head'), string(first(body('Get_new_owner_(reassign)')?['value'])?['Role'])), not(empty(body('New_owner_member_(reassign)')?['value']))))), 'Choose a member of this area or a Team Leader.', if(greater(length(body('Co_final_(reassign)')), 5), 'Choose up to 5 co-owners.', if(not(empty(body('Co_bad_(reassign)'))), 'Choose co-owners from the members of this area, and the Team Leaders and Group Head, other than the owner.', if(less(length(trim(string(coalesce(outputs('Payload')?['reason'], '')))), 10), 'Give a reason of at least 10 characters.', if(greater(length(trim(string(coalesce(outputs('Payload')?['reason'], '')))), 1000), 'Keep the reason to 1,000 characters or fewer.', '')))))))))))))"
                                 },
                                 "runAfter": {
                                   "Co_notices_(reassign)": [
@@ -4236,7 +4150,7 @@
                                 "type": "SetVariable",
                                 "inputs": {
                                   "name": "varVerdict",
-                                  "value": "@if(or(equals(string(coalesce(variables('varAct')?['PendingRequestKey'], '')), string(variables('varTx')?['RequestKey'])), equals(string(coalesce(variables('varAct')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey']))), '', if(and(not(empty(string(coalesce(variables('varAct')?['PendingRequestKey'], '')))), equals(string(coalesce(variables('varAct')?['CreatedRequestKey'], '')), concat('F|', string(coalesce(variables('varAct')?['PendingRequestKey'], ''))))), 'That action could not be found.', if(not(or(contains(createArray('Open', 'In Progress', 'Awaiting Input'), string(variables('varAct')?['Status'])), equals(string(variables('varAct')?['Status']), 'Completed'))), 'This action is already closed.', if(not(if(and(equals(string(variables('varAct')?['Status']), 'Completed'), not(empty(first(split(string(coalesce(variables('varAct')?['CloseOutById'], '')), '.'))))), or(equals(first(split(string(coalesce(variables('varAct')?['CloseOutById'], '')), '.')), outputs('Sender_ID')), contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role']))), or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), and(not(empty(first(body('My_member_(change)')))), equals(string(outputs('Person_who_sent_it')?['Role']), 'Engineer'))), and(not(empty(first(body('My_member_(change)')))), equals(first(body('My_member_(change)'))?['CanManageMeetings'], true)), equals(first(split(string(coalesce(variables('varAct')?['RaisedById'], '')), '.')), outputs('Sender_ID'))))), if(equals(string(variables('varAct')?['Status']), 'Completed'), 'Only the person named to check it, or a Team Leader or the Group Head, can confirm the close-out.', 'Only the people who manage this action can close it.'), if(not(empty(string(coalesce(variables('varAct')?['PendingRequestKey'], '')))), 'This action is being updated. Try again in a minute.', if(not(equals(first(split(string(coalesce(variables('varAct')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(not(contains(createArray('Completed', 'No longer required', 'Superseded', 'Other'), string(coalesce(outputs('Payload')?['outcome'], '')))), 'Choose an outcome.', if(and(not(equals(string(coalesce(outputs('Payload')?['outcome'], '')), 'Completed')), less(length(trim(string(coalesce(outputs('Payload')?['note'], '')))), 10)), 'Explain the outcome in at least 10 characters.', if(greater(length(trim(string(coalesce(outputs('Payload')?['note'], '')))), 1000), 'Keep the note to 1,000 characters or fewer.', '')))))))))"
+                                  "value": "@if(or(equals(string(coalesce(variables('varAct')?['PendingRequestKey'], '')), string(variables('varTx')?['RequestKey'])), equals(string(coalesce(variables('varAct')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey']))), '', if(and(not(empty(string(coalesce(variables('varAct')?['PendingRequestKey'], '')))), equals(string(coalesce(variables('varAct')?['CreatedRequestKey'], '')), concat('F|', string(coalesce(variables('varAct')?['PendingRequestKey'], ''))))), 'That action could not be found.', if(not(or(contains(createArray('Open', 'In Progress', 'Awaiting Input'), string(variables('varAct')?['Status'])), equals(string(variables('varAct')?['Status']), 'Completed'))), 'This action is already closed.', if(not(if(and(equals(string(variables('varAct')?['Status']), 'Completed'), not(empty(first(split(string(coalesce(variables('varAct')?['CloseOutById'], '')), '.'))))), or(equals(first(split(string(coalesce(variables('varAct')?['CloseOutById'], '')), '.')), outputs('Sender_ID')), contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role']))), or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), and(not(empty(first(body('My_member_(change)')))), equals(string(outputs('Person_who_sent_it')?['Role']), 'Engineer'))), and(not(empty(first(body('My_member_(change)')))), equals(first(body('My_member_(change)'))?['CanManageMeetings'], true)), equals(first(split(string(coalesce(variables('varAct')?['RaisedById'], '')), '.')), outputs('Sender_ID'))))), if(equals(string(variables('varAct')?['Status']), 'Completed'), 'Only the person named to check it, or a Team Leader or the Group Head, can confirm the close-out.', 'Only the people who manage this action can close it.'), if(not(equals(first(split(string(coalesce(variables('varAct')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(not(empty(string(coalesce(variables('varAct')?['PendingRequestKey'], '')))), 'Another change to this action is taking longer than usual to finish. Nothing was changed – try again in a few minutes.', if(not(contains(createArray('Completed', 'No longer required', 'Superseded', 'Other'), string(coalesce(outputs('Payload')?['outcome'], '')))), 'Choose an outcome.', if(and(not(equals(string(coalesce(outputs('Payload')?['outcome'], '')), 'Completed')), less(length(trim(string(coalesce(outputs('Payload')?['note'], '')))), 10)), 'Explain the outcome in at least 10 characters.', if(greater(length(trim(string(coalesce(outputs('Payload')?['note'], '')))), 1000), 'Keep the note to 1,000 characters or fewer.', '')))))))))"
                                 },
                                 "runAfter": {}
                               }
@@ -4249,7 +4163,7 @@
                                 "type": "SetVariable",
                                 "inputs": {
                                   "name": "varVerdict",
-                                  "value": "@if(or(equals(string(coalesce(variables('varAct')?['PendingRequestKey'], '')), string(variables('varTx')?['RequestKey'])), equals(string(coalesce(variables('varAct')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey']))), '', if(and(not(empty(string(coalesce(variables('varAct')?['PendingRequestKey'], '')))), equals(string(coalesce(variables('varAct')?['CreatedRequestKey'], '')), concat('F|', string(coalesce(variables('varAct')?['PendingRequestKey'], ''))))), 'That action could not be found.', if(not(contains(createArray('Closed', 'Completed'), string(variables('varAct')?['Status']))), 'This action is already open.', if(not(or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), and(not(empty(first(body('My_member_(change)')))), equals(string(outputs('Person_who_sent_it')?['Role']), 'Engineer'))), equals(first(split(string(coalesce(variables('varAct')?['RaisedById'], '')), '.')), outputs('Sender_ID')))), 'Only the people who manage this action can reopen it.', if(not(empty(string(coalesce(variables('varAct')?['PendingRequestKey'], '')))), 'This action is being updated. Try again in a minute.', if(not(equals(first(split(string(coalesce(variables('varAct')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(less(length(trim(string(coalesce(outputs('Payload')?['reason'], '')))), 10), 'Give a reason of at least 10 characters.', if(greater(length(trim(string(coalesce(outputs('Payload')?['reason'], '')))), 1000), 'Keep the reason to 1,000 characters or fewer.', ''))))))))"
+                                  "value": "@if(or(equals(string(coalesce(variables('varAct')?['PendingRequestKey'], '')), string(variables('varTx')?['RequestKey'])), equals(string(coalesce(variables('varAct')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey']))), '', if(and(not(empty(string(coalesce(variables('varAct')?['PendingRequestKey'], '')))), equals(string(coalesce(variables('varAct')?['CreatedRequestKey'], '')), concat('F|', string(coalesce(variables('varAct')?['PendingRequestKey'], ''))))), 'That action could not be found.', if(not(contains(createArray('Closed', 'Completed'), string(variables('varAct')?['Status']))), 'This action is already open.', if(not(or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), and(not(empty(first(body('My_member_(change)')))), equals(string(outputs('Person_who_sent_it')?['Role']), 'Engineer'))), equals(first(split(string(coalesce(variables('varAct')?['RaisedById'], '')), '.')), outputs('Sender_ID')))), 'Only the people who manage this action can reopen it.', if(not(equals(first(split(string(coalesce(variables('varAct')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(not(empty(string(coalesce(variables('varAct')?['PendingRequestKey'], '')))), 'Another change to this action is taking longer than usual to finish. Nothing was changed – try again in a few minutes.', if(less(length(trim(string(coalesce(outputs('Payload')?['reason'], '')))), 10), 'Give a reason of at least 10 characters.', if(greater(length(trim(string(coalesce(outputs('Payload')?['reason'], '')))), 1000), 'Keep the reason to 1,000 characters or fewer.', ''))))))))"
                                 },
                                 "runAfter": {}
                               }
@@ -4342,7 +4256,7 @@
                                 "type": "SetVariable",
                                 "inputs": {
                                   "name": "varVerdict",
-                                  "value": "@if(or(equals(string(coalesce(variables('varAct')?['PendingRequestKey'], '')), string(variables('varTx')?['RequestKey'])), equals(string(coalesce(variables('varAct')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey']))), '', if(and(not(empty(string(coalesce(variables('varAct')?['PendingRequestKey'], '')))), equals(string(coalesce(variables('varAct')?['CreatedRequestKey'], '')), concat('F|', string(coalesce(variables('varAct')?['PendingRequestKey'], ''))))), 'That action could not be found.', if(not(contains(createArray('Open', 'In Progress', 'Awaiting Input'), string(variables('varAct')?['Status']))), 'This action is no longer open.', if(not(or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), and(not(empty(first(body('My_member_(change)')))), equals(string(outputs('Person_who_sent_it')?['Role']), 'Engineer'))), and(not(empty(first(body('My_member_(change)')))), equals(first(body('My_member_(change)'))?['CanManageMeetings'], true)), equals(first(split(string(coalesce(variables('varAct')?['RaisedById'], '')), '.')), outputs('Sender_ID')))), 'Only the people who manage this action can change its details.', if(not(empty(string(coalesce(variables('varAct')?['PendingRequestKey'], '')))), 'This action is being updated. Try again in a minute.', if(not(equals(first(split(string(coalesce(variables('varAct')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(or(contains(outputs('Payload'), 'ownerId'), contains(outputs('Payload'), 'AssignedTo'), contains(outputs('Payload'), 'AssignedToId')), 'The owner is changed with Reassign.', if(not(or(contains(outputs('Payload'), 'title'), contains(outputs('Payload'), 'description'), contains(outputs('Payload'), 'priority'), contains(outputs('Payload'), 'requiresCloseOut'), contains(outputs('Payload'), 'checkerId'))), 'Nothing has changed.', if(and(if(contains(outputs('Payload'), 'requiresCloseOut'), equals(outputs('Payload')?['requiresCloseOut'], true), equals(variables('varAct')?['RequiresCloseOut'], true)), equals(if(contains(outputs('Payload'), 'checkerId'), if(empty(first(split(string(coalesce(outputs('Payload')?['checkerId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['checkerId'], '')), '.'))), if(empty(first(split(string(coalesce(variables('varAct')?['CloseOutById'], '')), '.'))), first(split(string(coalesce(variables('varAct')?['RaisedById'], '')), '.')), first(split(string(coalesce(variables('varAct')?['CloseOutById'], '')), '.')))), first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.')))), 'Choose someone other than the owner to do the close-out check.', if(and(if(contains(outputs('Payload'), 'requiresCloseOut'), equals(outputs('Payload')?['requiresCloseOut'], true), equals(variables('varAct')?['RequiresCloseOut'], true)), not(contains(body('Eligible_ids_(edit)'), if(contains(outputs('Payload'), 'checkerId'), if(empty(first(split(string(coalesce(outputs('Payload')?['checkerId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['checkerId'], '')), '.'))), if(empty(first(split(string(coalesce(variables('varAct')?['CloseOutById'], '')), '.'))), first(split(string(coalesce(variables('varAct')?['RaisedById'], '')), '.')), first(split(string(coalesce(variables('varAct')?['CloseOutById'], '')), '.'))))))), 'Choose a member of this area or a Team Leader to do the close-out check.', if(and(contains(outputs('Payload'), 'title'), equals(length(trim(string(coalesce(outputs('Payload')?['title'], '')))), 0)), 'Enter what needs doing.', if(and(contains(outputs('Payload'), 'title'), greater(length(trim(string(coalesce(outputs('Payload')?['title'], '')))), 255)), 'Keep the title to 255 characters or fewer.', if(and(contains(outputs('Payload'), 'description'), equals(length(trim(string(coalesce(outputs('Payload')?['description'], '')))), 0)), 'Add a short description.', if(and(contains(outputs('Payload'), 'description'), greater(length(trim(string(coalesce(outputs('Payload')?['description'], '')))), 5000)), 'Keep the description to 5,000 characters or fewer.', if(and(contains(outputs('Payload'), 'priority'), not(contains(createArray('Low', 'Normal', 'High'), string(coalesce(outputs('Payload')?['priority'], ''))))), 'Choose a priority.', '')))))))))))))))"
+                                  "value": "@if(or(equals(string(coalesce(variables('varAct')?['PendingRequestKey'], '')), string(variables('varTx')?['RequestKey'])), equals(string(coalesce(variables('varAct')?['LastRequestKey'], '')), string(variables('varTx')?['RequestKey']))), '', if(and(not(empty(string(coalesce(variables('varAct')?['PendingRequestKey'], '')))), equals(string(coalesce(variables('varAct')?['CreatedRequestKey'], '')), concat('F|', string(coalesce(variables('varAct')?['PendingRequestKey'], ''))))), 'That action could not be found.', if(not(contains(createArray('Open', 'In Progress', 'Awaiting Input'), string(variables('varAct')?['Status']))), 'This action is no longer open.', if(not(or(or(contains(createArray('Team Leader', 'Group Head'), string(outputs('Person_who_sent_it')?['Role'])), and(not(empty(first(body('My_member_(change)')))), equals(string(outputs('Person_who_sent_it')?['Role']), 'Engineer'))), and(not(empty(first(body('My_member_(change)')))), equals(first(body('My_member_(change)'))?['CanManageMeetings'], true)), equals(first(split(string(coalesce(variables('varAct')?['RaisedById'], '')), '.')), outputs('Sender_ID')))), 'Only the people who manage this action can change its details.', if(not(equals(first(split(string(coalesce(variables('varAct')?['Revision'], '')), '.')), first(split(string(coalesce(variables('varTx')?['ExpectedRevision'], '')), '.')))), 'This action was updated by someone else. Review the latest details and try again.', if(not(empty(string(coalesce(variables('varAct')?['PendingRequestKey'], '')))), 'Another change to this action is taking longer than usual to finish. Nothing was changed – try again in a few minutes.', if(or(contains(outputs('Payload'), 'ownerId'), contains(outputs('Payload'), 'AssignedTo'), contains(outputs('Payload'), 'AssignedToId')), 'The owner is changed with Reassign.', if(not(or(contains(outputs('Payload'), 'title'), contains(outputs('Payload'), 'description'), contains(outputs('Payload'), 'priority'), contains(outputs('Payload'), 'requiresCloseOut'), contains(outputs('Payload'), 'checkerId'))), 'Nothing has changed.', if(and(if(contains(outputs('Payload'), 'requiresCloseOut'), equals(outputs('Payload')?['requiresCloseOut'], true), equals(variables('varAct')?['RequiresCloseOut'], true)), equals(if(contains(outputs('Payload'), 'checkerId'), if(empty(first(split(string(coalesce(outputs('Payload')?['checkerId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['checkerId'], '')), '.'))), if(empty(first(split(string(coalesce(variables('varAct')?['CloseOutById'], '')), '.'))), first(split(string(coalesce(variables('varAct')?['RaisedById'], '')), '.')), first(split(string(coalesce(variables('varAct')?['CloseOutById'], '')), '.')))), first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.')))), 'Choose someone other than the owner to do the close-out check.', if(and(if(contains(outputs('Payload'), 'requiresCloseOut'), equals(outputs('Payload')?['requiresCloseOut'], true), equals(variables('varAct')?['RequiresCloseOut'], true)), not(contains(body('Eligible_ids_(edit)'), if(contains(outputs('Payload'), 'checkerId'), if(empty(first(split(string(coalesce(outputs('Payload')?['checkerId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['checkerId'], '')), '.'))), if(empty(first(split(string(coalesce(variables('varAct')?['CloseOutById'], '')), '.'))), first(split(string(coalesce(variables('varAct')?['RaisedById'], '')), '.')), first(split(string(coalesce(variables('varAct')?['CloseOutById'], '')), '.'))))))), 'Choose a member of this area or a Team Leader to do the close-out check.', if(and(contains(outputs('Payload'), 'title'), equals(length(trim(string(coalesce(outputs('Payload')?['title'], '')))), 0)), 'Enter what needs doing.', if(and(contains(outputs('Payload'), 'title'), greater(length(trim(string(coalesce(outputs('Payload')?['title'], '')))), 255)), 'Keep the title to 255 characters or fewer.', if(and(contains(outputs('Payload'), 'description'), equals(length(trim(string(coalesce(outputs('Payload')?['description'], '')))), 0)), 'Add a short description.', if(and(contains(outputs('Payload'), 'description'), greater(length(trim(string(coalesce(outputs('Payload')?['description'], '')))), 5000)), 'Keep the description to 5,000 characters or fewer.', if(and(contains(outputs('Payload'), 'priority'), not(contains(createArray('Low', 'Normal', 'High'), string(coalesce(outputs('Payload')?['priority'], ''))))), 'Choose a priority.', '')))))))))))))))"
                                 },
                                 "runAfter": {
                                   "Eligible_ids_(edit)": [
@@ -5117,23 +5031,11 @@
                             },
                             "runAfter": {}
                           },
-                          "Read_the_people": {
-                            "type": "OpenApiConnection",
+                          "Owner_person_(change)": {
+                            "type": "Query",
                             "inputs": {
-                              "host": {
-                                "connectionName": "shared_sharepointonline",
-                                "operationId": "HttpRequest",
-                                "apiId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline"
-                              },
-                              "parameters": {
-                                "dataset": "@parameters('ESG Competency Hub Site URL (esghub_CompetencyHubSiteUrl)')",
-                                "parameters/method": "GET",
-                                "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['people']}')/items?$select=Id,Title,SiteUserId,Role,Status,Email,Person/Name,Person/EMail&$expand=Person&$top=5000",
-                                "parameters/headers": {
-                                  "Accept": "application/json;odata=nometadata"
-                                }
-                              },
-                              "authentication": "@parameters('$authentication')"
+                              "from": "@body('Read_the_person_who_sent_it')?['value']",
+                              "where": "@equals(first(split(string(coalesce(item()?['SiteUserId'], '')), '.')), first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.')))"
                             },
                             "runAfter": {
                               "Not_yet_applied_(change)": [
@@ -5141,22 +5043,10 @@
                               ]
                             }
                           },
-                          "Owner_person_(change)": {
-                            "type": "Query",
-                            "inputs": {
-                              "from": "@body('Read_the_people')?['value']",
-                              "where": "@equals(first(split(string(coalesce(item()?['SiteUserId'], '')), '.')), first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.')))"
-                            },
-                            "runAfter": {
-                              "Read_the_people": [
-                                "Succeeded"
-                              ]
-                            }
-                          },
                           "Raiser_person_(change)": {
                             "type": "Query",
                             "inputs": {
-                              "from": "@body('Read_the_people')?['value']",
+                              "from": "@body('Read_the_person_who_sent_it')?['value']",
                               "where": "@equals(first(split(string(coalesce(item()?['SiteUserId'], '')), '.')), first(split(string(coalesce(variables('varAct')?['RaisedById'], '')), '.')))"
                             },
                             "runAfter": {
@@ -5168,7 +5058,7 @@
                           "New_person_(change)": {
                             "type": "Query",
                             "inputs": {
-                              "from": "@body('Read_the_people')?['value']",
+                              "from": "@body('Read_the_person_who_sent_it')?['value']",
                               "where": "@equals(first(split(string(coalesce(item()?['SiteUserId'], '')), '.')), if(empty(first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.'))))"
                             },
                             "runAfter": {
@@ -5180,7 +5070,7 @@
                           "Previous_person_(change)": {
                             "type": "Query",
                             "inputs": {
-                              "from": "@body('Read_the_people')?['value']",
+                              "from": "@body('Read_the_person_who_sent_it')?['value']",
                               "where": "@equals(first(split(string(coalesce(item()?['SiteUserId'], '')), '.')), string(json(string(coalesce(variables('varTxPlan'), '{}')))?['owner']))"
                             },
                             "runAfter": {
@@ -5192,7 +5082,7 @@
                           "Checker_person_(change)": {
                             "type": "Query",
                             "inputs": {
-                              "from": "@body('Read_the_people')?['value']",
+                              "from": "@body('Read_the_person_who_sent_it')?['value']",
                               "where": "@equals(first(split(string(coalesce(item()?['SiteUserId'], '')), '.')), if(empty(first(split(string(coalesce(variables('varAct')?['CloseOutById'], '')), '.'))), first(split(string(coalesce(variables('varAct')?['RaisedById'], '')), '.')), first(split(string(coalesce(variables('varAct')?['CloseOutById'], '')), '.'))))"
                             },
                             "runAfter": {
@@ -5208,79 +5098,37 @@
                               "ExtendDeadline": {
                                 "case": "ExtendDeadline",
                                 "actions": {
-                                  "Event_title_(move_deadline)": {
+                                  "Event_record_(move_deadline)": {
                                     "type": "SetVariable",
                                     "inputs": {
-                                      "name": "varEventTitle",
-                                      "value": "@{take(concat('Deadline moved to ', formatDateTime(concat(string(coalesce(outputs('Payload')?['newDueIso'], '')), 'T00:00:00Z'), 'd MMMM yyyy')), 255)}"
-                                    },
-                                    "runAfter": {}
-                                  },
-                                  "Event_type_(move_deadline)": {
-                                    "type": "SetVariable",
-                                    "inputs": {
-                                      "name": "varEventType",
-                                      "value": "Deadline Extended"
-                                    },
-                                    "runAfter": {
-                                      "Event_title_(move_deadline)": [
-                                        "Succeeded"
-                                      ]
-                                    }
-                                  },
-                                  "Event_form_(move_deadline)": {
-                                    "type": "SetVariable",
-                                    "inputs": {
-                                      "name": "varEventForm",
-                                      "value": [
-                                        {
-                                          "FieldName": "Note",
-                                          "FieldValue": "@{trim(string(coalesce(outputs('Payload')?['reason'], '')))}"
-                                        },
-                                        {
-                                          "FieldName": "ExtensionNumber",
-                                          "FieldValue": "@{add(int(string(json(string(coalesce(variables('varTxPlan'), '{}')))?['ext'])), 1)}"
-                                        }
-                                      ]
-                                    },
-                                    "runAfter": {
-                                      "Event_type_(move_deadline)": [
-                                        "Succeeded"
-                                      ]
-                                    }
-                                  },
-                                  "Event_details_(move_deadline)": {
-                                    "type": "SetVariable",
-                                    "inputs": {
-                                      "name": "varEventJson",
+                                      "name": "varRec",
                                       "value": {
-                                        "OwnerId": "@int(if(empty(first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.'))), '0', first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.'))))",
-                                        "DueDayAtEvent": "@int(replace(string(coalesce(outputs('Payload')?['newDueIso'], '')), '-', ''))",
-                                        "OriginalDueDate": "@{variables('varAct')?['OriginalDueDate']}",
-                                        "PreviousDueDate": "@{convertToUtc(concat(string(json(string(coalesce(variables('varTxPlan'), '{}')))?['due']), 'T00:00:00'), 'GMT Standard Time')}",
-                                        "NewDueDate": "@{convertToUtc(concat(string(coalesce(outputs('Payload')?['newDueIso'], '')), 'T00:00:00'), 'GMT Standard Time')}",
-                                        "WasOverdue": "@greater(div(sub(ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z')), ticks(concat(string(json(string(coalesce(variables('varTxPlan'), '{}')))?['due']), 'T00:00:00Z'))), 864000000000), 0)",
-                                        "DaysOverdue": "@max(div(sub(ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z')), ticks(concat(string(json(string(coalesce(variables('varTxPlan'), '{}')))?['due']), 'T00:00:00Z'))), 864000000000), 0)",
-                                        "IsOnBehalf": "@not(equals(json(string(coalesce(variables('varTxPlan'), '{}')))?['owner'], true))"
+                                        "title": "@{take(concat('Deadline moved to ', formatDateTime(concat(string(coalesce(outputs('Payload')?['newDueIso'], '')), 'T00:00:00Z'), 'd MMMM yyyy')), 255)}",
+                                        "type": "Deadline Extended",
+                                        "form": [
+                                          {
+                                            "FieldName": "Note",
+                                            "FieldValue": "@{trim(string(coalesce(outputs('Payload')?['reason'], '')))}"
+                                          },
+                                          {
+                                            "FieldName": "ExtensionNumber",
+                                            "FieldValue": "@{add(int(string(json(string(coalesce(variables('varTxPlan'), '{}')))?['ext'])), 1)}"
+                                          }
+                                        ],
+                                        "json": {
+                                          "OwnerId": "@int(if(empty(first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.'))), '0', first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.'))))",
+                                          "DueDayAtEvent": "@int(replace(string(coalesce(outputs('Payload')?['newDueIso'], '')), '-', ''))",
+                                          "OriginalDueDate": "@{variables('varAct')?['OriginalDueDate']}",
+                                          "PreviousDueDate": "@{convertToUtc(concat(string(json(string(coalesce(variables('varTxPlan'), '{}')))?['due']), 'T00:00:00'), 'GMT Standard Time')}",
+                                          "NewDueDate": "@{convertToUtc(concat(string(coalesce(outputs('Payload')?['newDueIso'], '')), 'T00:00:00'), 'GMT Standard Time')}",
+                                          "WasOverdue": "@greater(div(sub(ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z')), ticks(concat(string(json(string(coalesce(variables('varTxPlan'), '{}')))?['due']), 'T00:00:00Z'))), 864000000000), 0)",
+                                          "DaysOverdue": "@max(div(sub(ticks(concat(outputs('Today_in_the_UK'), 'T00:00:00Z')), ticks(concat(string(json(string(coalesce(variables('varTxPlan'), '{}')))?['due']), 'T00:00:00Z'))), 864000000000), 0)",
+                                          "IsOnBehalf": "@not(equals(json(string(coalesce(variables('varTxPlan'), '{}')))?['owner'], true))"
+                                        },
+                                        "result": "@{concat('Deadline moved to ', formatDateTime(concat(string(coalesce(outputs('Payload')?['newDueIso'], '')), 'T00:00:00Z'), 'd MMMM yyyy'), '.')}"
                                       }
                                     },
-                                    "runAfter": {
-                                      "Event_form_(move_deadline)": [
-                                        "Succeeded"
-                                      ]
-                                    }
-                                  },
-                                  "Result_(move_deadline)": {
-                                    "type": "SetVariable",
-                                    "inputs": {
-                                      "name": "varResult",
-                                      "value": "@{concat('Deadline moved to ', formatDateTime(concat(string(coalesce(outputs('Payload')?['newDueIso'], '')), 'T00:00:00Z'), 'd MMMM yyyy'), '.')}"
-                                    },
-                                    "runAfter": {
-                                      "Event_details_(move_deadline)": [
-                                        "Succeeded"
-                                      ]
-                                    }
+                                    "runAfter": {}
                                   },
                                   "Emails_set_(move_deadline)": {
                                     "type": "SetVariable",
@@ -5308,7 +5156,7 @@
                                       ]
                                     },
                                     "runAfter": {
-                                      "Result_(move_deadline)": [
+                                      "Event_record_(move_deadline)": [
                                         "Succeeded"
                                       ]
                                     }
@@ -5318,70 +5166,28 @@
                               "MarkComplete": {
                                 "case": "MarkComplete",
                                 "actions": {
-                                  "Event_title_(mark_done)": {
+                                  "Event_record_(mark_done)": {
                                     "type": "SetVariable",
                                     "inputs": {
-                                      "name": "varEventTitle",
-                                      "value": "@{take(if(not(equals(json(string(coalesce(variables('varTxPlan'), '{}')))?['closeOut'], true)), 'Action closed', 'Action marked as done'), 255)}"
-                                    },
-                                    "runAfter": {}
-                                  },
-                                  "Event_type_(mark_done)": {
-                                    "type": "SetVariable",
-                                    "inputs": {
-                                      "name": "varEventType",
-                                      "value": "@{if(not(equals(json(string(coalesce(variables('varTxPlan'), '{}')))?['closeOut'], true)), 'Closed', 'Completed')}"
-                                    },
-                                    "runAfter": {
-                                      "Event_title_(mark_done)": [
-                                        "Succeeded"
-                                      ]
-                                    }
-                                  },
-                                  "Event_form_(mark_done)": {
-                                    "type": "SetVariable",
-                                    "inputs": {
-                                      "name": "varEventForm",
-                                      "value": [
-                                        {
-                                          "FieldName": "Note",
-                                          "FieldValue": "@{trim(string(coalesce(outputs('Payload')?['note'], '')))}"
-                                        }
-                                      ]
-                                    },
-                                    "runAfter": {
-                                      "Event_type_(mark_done)": [
-                                        "Succeeded"
-                                      ]
-                                    }
-                                  },
-                                  "Event_details_(mark_done)": {
-                                    "type": "SetVariable",
-                                    "inputs": {
-                                      "name": "varEventJson",
+                                      "name": "varRec",
                                       "value": {
-                                        "OwnerId": "@int(if(empty(first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.'))), '0', first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.'))))",
-                                        "DueDayAtEvent": "@int(if(empty(first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.'))), '0', first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.'))))",
-                                        "CompletionKind": "MarkedDone"
+                                        "title": "@{take(if(not(equals(json(string(coalesce(variables('varTxPlan'), '{}')))?['closeOut'], true)), 'Action closed', 'Action marked as done'), 255)}",
+                                        "type": "@{if(not(equals(json(string(coalesce(variables('varTxPlan'), '{}')))?['closeOut'], true)), 'Closed', 'Completed')}",
+                                        "form": [
+                                          {
+                                            "FieldName": "Note",
+                                            "FieldValue": "@{trim(string(coalesce(outputs('Payload')?['note'], '')))}"
+                                          }
+                                        ],
+                                        "json": {
+                                          "OwnerId": "@int(if(empty(first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.'))), '0', first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.'))))",
+                                          "DueDayAtEvent": "@int(if(empty(first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.'))), '0', first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.'))))",
+                                          "CompletionKind": "MarkedDone"
+                                        },
+                                        "result": "@{if(not(equals(json(string(coalesce(variables('varTxPlan'), '{}')))?['closeOut'], true)), 'Action closed.', 'Marked as done; waiting for a close-out check.')}"
                                       }
                                     },
-                                    "runAfter": {
-                                      "Event_form_(mark_done)": [
-                                        "Succeeded"
-                                      ]
-                                    }
-                                  },
-                                  "Result_(mark_done)": {
-                                    "type": "SetVariable",
-                                    "inputs": {
-                                      "name": "varResult",
-                                      "value": "@{if(not(equals(json(string(coalesce(variables('varTxPlan'), '{}')))?['closeOut'], true)), 'Action closed.', 'Marked as done; waiting for a close-out check.')}"
-                                    },
-                                    "runAfter": {
-                                      "Event_details_(mark_done)": [
-                                        "Succeeded"
-                                      ]
-                                    }
+                                    "runAfter": {}
                                   },
                                   "Emails_set_(mark_done)": {
                                     "type": "SetVariable",
@@ -5427,7 +5233,7 @@
                                       ]
                                     },
                                     "runAfter": {
-                                      "Result_(mark_done)": [
+                                      "Event_record_(mark_done)": [
                                         "Succeeded"
                                       ]
                                     }
@@ -5437,77 +5243,35 @@
                               "ChangeStatus": {
                                 "case": "ChangeStatus",
                                 "actions": {
-                                  "Event_title_(status)": {
+                                  "Event_record_(status)": {
                                     "type": "SetVariable",
                                     "inputs": {
-                                      "name": "varEventTitle",
-                                      "value": "@{take(concat('Status changed to ', if(equals(string(coalesce(outputs('Payload')?['status'], '')), 'Awaiting Input'), 'Waiting on something', if(equals(string(coalesce(outputs('Payload')?['status'], '')), 'In Progress'), 'In progress', string(coalesce(outputs('Payload')?['status'], ''))))), 255)}"
-                                    },
-                                    "runAfter": {}
-                                  },
-                                  "Event_type_(status)": {
-                                    "type": "SetVariable",
-                                    "inputs": {
-                                      "name": "varEventType",
-                                      "value": "Status Changed"
-                                    },
-                                    "runAfter": {
-                                      "Event_title_(status)": [
-                                        "Succeeded"
-                                      ]
-                                    }
-                                  },
-                                  "Event_form_(status)": {
-                                    "type": "SetVariable",
-                                    "inputs": {
-                                      "name": "varEventForm",
-                                      "value": [
-                                        {
-                                          "FieldName": "Note",
-                                          "FieldValue": "@{if(equals(string(coalesce(outputs('Payload')?['status'], '')), 'Awaiting Input'), trim(string(coalesce(outputs('Payload')?['blocker'], ''))), '')}"
-                                        },
-                                        {
-                                          "FieldName": "PreviousValue",
-                                          "FieldValue": "@{if(equals(string(json(string(coalesce(variables('varTxPlan'), '{}')))?['status']), 'Awaiting Input'), 'Waiting on something', if(equals(string(json(string(coalesce(variables('varTxPlan'), '{}')))?['status']), 'In Progress'), 'In progress', string(json(string(coalesce(variables('varTxPlan'), '{}')))?['status'])))}"
-                                        },
-                                        {
-                                          "FieldName": "NewValue",
-                                          "FieldValue": "@{if(equals(string(coalesce(outputs('Payload')?['status'], '')), 'Awaiting Input'), 'Waiting on something', if(equals(string(coalesce(outputs('Payload')?['status'], '')), 'In Progress'), 'In progress', string(coalesce(outputs('Payload')?['status'], ''))))}"
-                                        }
-                                      ]
-                                    },
-                                    "runAfter": {
-                                      "Event_type_(status)": [
-                                        "Succeeded"
-                                      ]
-                                    }
-                                  },
-                                  "Event_details_(status)": {
-                                    "type": "SetVariable",
-                                    "inputs": {
-                                      "name": "varEventJson",
+                                      "name": "varRec",
                                       "value": {
-                                        "OwnerId": "@int(if(empty(first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.'))), '0', first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.'))))",
-                                        "DueDayAtEvent": "@int(if(empty(first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.'))), '0', first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.'))))"
+                                        "title": "@{take(concat('Status changed to ', if(equals(string(coalesce(outputs('Payload')?['status'], '')), 'Awaiting Input'), 'Waiting on something', if(equals(string(coalesce(outputs('Payload')?['status'], '')), 'In Progress'), 'In progress', string(coalesce(outputs('Payload')?['status'], ''))))), 255)}",
+                                        "type": "Status Changed",
+                                        "form": [
+                                          {
+                                            "FieldName": "Note",
+                                            "FieldValue": "@{if(equals(string(coalesce(outputs('Payload')?['status'], '')), 'Awaiting Input'), trim(string(coalesce(outputs('Payload')?['blocker'], ''))), '')}"
+                                          },
+                                          {
+                                            "FieldName": "PreviousValue",
+                                            "FieldValue": "@{if(equals(string(json(string(coalesce(variables('varTxPlan'), '{}')))?['status']), 'Awaiting Input'), 'Waiting on something', if(equals(string(json(string(coalesce(variables('varTxPlan'), '{}')))?['status']), 'In Progress'), 'In progress', string(json(string(coalesce(variables('varTxPlan'), '{}')))?['status'])))}"
+                                          },
+                                          {
+                                            "FieldName": "NewValue",
+                                            "FieldValue": "@{if(equals(string(coalesce(outputs('Payload')?['status'], '')), 'Awaiting Input'), 'Waiting on something', if(equals(string(coalesce(outputs('Payload')?['status'], '')), 'In Progress'), 'In progress', string(coalesce(outputs('Payload')?['status'], ''))))}"
+                                          }
+                                        ],
+                                        "json": {
+                                          "OwnerId": "@int(if(empty(first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.'))), '0', first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.'))))",
+                                          "DueDayAtEvent": "@int(if(empty(first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.'))), '0', first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.'))))"
+                                        },
+                                        "result": "@{concat('Status changed to ', toLower(if(equals(string(coalesce(outputs('Payload')?['status'], '')), 'Awaiting Input'), 'Waiting on something', if(equals(string(coalesce(outputs('Payload')?['status'], '')), 'In Progress'), 'In progress', string(coalesce(outputs('Payload')?['status'], ''))))), '.')}"
                                       }
                                     },
-                                    "runAfter": {
-                                      "Event_form_(status)": [
-                                        "Succeeded"
-                                      ]
-                                    }
-                                  },
-                                  "Result_(status)": {
-                                    "type": "SetVariable",
-                                    "inputs": {
-                                      "name": "varResult",
-                                      "value": "@{concat('Status changed to ', toLower(if(equals(string(coalesce(outputs('Payload')?['status'], '')), 'Awaiting Input'), 'Waiting on something', if(equals(string(coalesce(outputs('Payload')?['status'], '')), 'In Progress'), 'In progress', string(coalesce(outputs('Payload')?['status'], ''))))), '.')}"
-                                    },
-                                    "runAfter": {
-                                      "Event_details_(status)": [
-                                        "Succeeded"
-                                      ]
-                                    }
+                                    "runAfter": {}
                                   },
                                   "Emails_set_(status)": {
                                     "type": "SetVariable",
@@ -5516,7 +5280,7 @@
                                       "value": []
                                     },
                                     "runAfter": {
-                                      "Result_(status)": [
+                                      "Event_record_(status)": [
                                         "Succeeded"
                                       ]
                                     }
@@ -5526,78 +5290,36 @@
                               "ReassignAction": {
                                 "case": "ReassignAction",
                                 "actions": {
-                                  "Event_title_(reassign)": {
+                                  "Event_record_(reassign)": {
                                     "type": "SetVariable",
                                     "inputs": {
-                                      "name": "varEventTitle",
-                                      "value": "@{take(concat('Reassigned to ', string(first(body('Get_new_owner_(reassign)')?['value'])?['Title'])), 255)}"
-                                    },
-                                    "runAfter": {}
-                                  },
-                                  "Event_type_(reassign)": {
-                                    "type": "SetVariable",
-                                    "inputs": {
-                                      "name": "varEventType",
-                                      "value": "Reassigned"
-                                    },
-                                    "runAfter": {
-                                      "Event_title_(reassign)": [
-                                        "Succeeded"
-                                      ]
-                                    }
-                                  },
-                                  "Event_form_(reassign)": {
-                                    "type": "SetVariable",
-                                    "inputs": {
-                                      "name": "varEventForm",
-                                      "value": [
-                                        {
-                                          "FieldName": "Note",
-                                          "FieldValue": "@{trim(string(coalesce(outputs('Payload')?['reason'], '')))}"
-                                        },
-                                        {
-                                          "FieldName": "PreviousValue",
-                                          "FieldValue": "@{json(string(coalesce(variables('varTxPlan'), '{}')))?['ownerName']}"
-                                        },
-                                        {
-                                          "FieldName": "NewValue",
-                                          "FieldValue": "@{first(body('Get_new_owner_(reassign)')?['value'])?['Title']}"
-                                        }
-                                      ]
-                                    },
-                                    "runAfter": {
-                                      "Event_type_(reassign)": [
-                                        "Succeeded"
-                                      ]
-                                    }
-                                  },
-                                  "Event_details_(reassign)": {
-                                    "type": "SetVariable",
-                                    "inputs": {
-                                      "name": "varEventJson",
+                                      "name": "varRec",
                                       "value": {
-                                        "OwnerId": "@int(if(empty(first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.'))))",
-                                        "DueDayAtEvent": "@int(if(empty(first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.'))), '0', first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.'))))",
-                                        "PreviousOwnerId": "@int(string(json(string(coalesce(variables('varTxPlan'), '{}')))?['owner']))"
+                                        "title": "@{take(concat('Reassigned to ', string(first(body('Get_new_owner_(reassign)')?['value'])?['Title'])), 255)}",
+                                        "type": "Reassigned",
+                                        "form": [
+                                          {
+                                            "FieldName": "Note",
+                                            "FieldValue": "@{trim(string(coalesce(outputs('Payload')?['reason'], '')))}"
+                                          },
+                                          {
+                                            "FieldName": "PreviousValue",
+                                            "FieldValue": "@{json(string(coalesce(variables('varTxPlan'), '{}')))?['ownerName']}"
+                                          },
+                                          {
+                                            "FieldName": "NewValue",
+                                            "FieldValue": "@{first(body('Get_new_owner_(reassign)')?['value'])?['Title']}"
+                                          }
+                                        ],
+                                        "json": {
+                                          "OwnerId": "@int(if(empty(first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.'))), '0', first(split(string(coalesce(outputs('Payload')?['ownerId'], '')), '.'))))",
+                                          "DueDayAtEvent": "@int(if(empty(first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.'))), '0', first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.'))))",
+                                          "PreviousOwnerId": "@int(string(json(string(coalesce(variables('varTxPlan'), '{}')))?['owner']))"
+                                        },
+                                        "result": "@{concat('Reassigned to ', string(first(body('Get_new_owner_(reassign)')?['value'])?['Title']), '.')}"
                                       }
                                     },
-                                    "runAfter": {
-                                      "Event_form_(reassign)": [
-                                        "Succeeded"
-                                      ]
-                                    }
-                                  },
-                                  "Result_(reassign)": {
-                                    "type": "SetVariable",
-                                    "inputs": {
-                                      "name": "varResult",
-                                      "value": "@{concat('Reassigned to ', string(first(body('Get_new_owner_(reassign)')?['value'])?['Title']), '.')}"
-                                    },
-                                    "runAfter": {
-                                      "Event_details_(reassign)": [
-                                        "Succeeded"
-                                      ]
-                                    }
+                                    "runAfter": {}
                                   },
                                   "Emails_list_(reassign)": {
                                     "type": "Compose",
@@ -5640,7 +5362,7 @@
                                       }
                                     ],
                                     "runAfter": {
-                                      "Result_(reassign)": [
+                                      "Event_record_(reassign)": [
                                         "Succeeded"
                                       ]
                                     }
@@ -5662,74 +5384,32 @@
                               "CloseAction": {
                                 "case": "CloseAction",
                                 "actions": {
-                                  "Event_title_(close)": {
+                                  "Event_record_(close)": {
                                     "type": "SetVariable",
                                     "inputs": {
-                                      "name": "varEventTitle",
-                                      "value": "@{take(concat('Closed: ', string(coalesce(outputs('Payload')?['outcome'], ''))), 255)}"
-                                    },
-                                    "runAfter": {}
-                                  },
-                                  "Event_type_(close)": {
-                                    "type": "SetVariable",
-                                    "inputs": {
-                                      "name": "varEventType",
-                                      "value": "Closed"
-                                    },
-                                    "runAfter": {
-                                      "Event_title_(close)": [
-                                        "Succeeded"
-                                      ]
-                                    }
-                                  },
-                                  "Event_form_(close)": {
-                                    "type": "SetVariable",
-                                    "inputs": {
-                                      "name": "varEventForm",
-                                      "value": [
-                                        {
-                                          "FieldName": "Note",
-                                          "FieldValue": "@{trim(string(coalesce(outputs('Payload')?['note'], '')))}"
-                                        },
-                                        {
-                                          "FieldName": "NewValue",
-                                          "FieldValue": "@{string(coalesce(outputs('Payload')?['outcome'], ''))}"
-                                        }
-                                      ]
-                                    },
-                                    "runAfter": {
-                                      "Event_type_(close)": [
-                                        "Succeeded"
-                                      ]
-                                    }
-                                  },
-                                  "Event_details_(close)": {
-                                    "type": "SetVariable",
-                                    "inputs": {
-                                      "name": "varEventJson",
+                                      "name": "varRec",
                                       "value": {
-                                        "OwnerId": "@int(if(empty(first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.'))), '0', first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.'))))",
-                                        "DueDayAtEvent": "@int(if(empty(first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.'))), '0', first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.'))))",
-                                        "CompletionKind": "@{if(not(equals(string(coalesce(outputs('Payload')?['outcome'], '')), 'Completed')), 'ClosedNotCompleted', if(equals(string(json(string(coalesce(variables('varTxPlan'), '{}')))?['status']), 'Completed'), 'CloseOutConfirmed', 'ClosedByManager'))}"
+                                        "title": "@{take(concat('Closed: ', string(coalesce(outputs('Payload')?['outcome'], ''))), 255)}",
+                                        "type": "Closed",
+                                        "form": [
+                                          {
+                                            "FieldName": "Note",
+                                            "FieldValue": "@{trim(string(coalesce(outputs('Payload')?['note'], '')))}"
+                                          },
+                                          {
+                                            "FieldName": "NewValue",
+                                            "FieldValue": "@{string(coalesce(outputs('Payload')?['outcome'], ''))}"
+                                          }
+                                        ],
+                                        "json": {
+                                          "OwnerId": "@int(if(empty(first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.'))), '0', first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.'))))",
+                                          "DueDayAtEvent": "@int(if(empty(first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.'))), '0', first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.'))))",
+                                          "CompletionKind": "@{if(not(equals(string(coalesce(outputs('Payload')?['outcome'], '')), 'Completed')), 'ClosedNotCompleted', if(equals(string(json(string(coalesce(variables('varTxPlan'), '{}')))?['status']), 'Completed'), 'CloseOutConfirmed', 'ClosedByManager'))}"
+                                        },
+                                        "result": "@{'Action closed.'}"
                                       }
                                     },
-                                    "runAfter": {
-                                      "Event_form_(close)": [
-                                        "Succeeded"
-                                      ]
-                                    }
-                                  },
-                                  "Result_(close)": {
-                                    "type": "SetVariable",
-                                    "inputs": {
-                                      "name": "varResult",
-                                      "value": "@{'Action closed.'}"
-                                    },
-                                    "runAfter": {
-                                      "Event_details_(close)": [
-                                        "Succeeded"
-                                      ]
-                                    }
+                                    "runAfter": {}
                                   },
                                   "Emails_set_(close)": {
                                     "type": "SetVariable",
@@ -5757,7 +5437,7 @@
                                       ]
                                     },
                                     "runAfter": {
-                                      "Result_(close)": [
+                                      "Event_record_(close)": [
                                         "Succeeded"
                                       ]
                                     }
@@ -5767,77 +5447,35 @@
                               "ReopenAction": {
                                 "case": "ReopenAction",
                                 "actions": {
-                                  "Event_title_(reopen)": {
+                                  "Event_record_(reopen)": {
                                     "type": "SetVariable",
                                     "inputs": {
-                                      "name": "varEventTitle",
-                                      "value": "@{take('Reopened', 255)}"
-                                    },
-                                    "runAfter": {}
-                                  },
-                                  "Event_type_(reopen)": {
-                                    "type": "SetVariable",
-                                    "inputs": {
-                                      "name": "varEventType",
-                                      "value": "Reopened"
-                                    },
-                                    "runAfter": {
-                                      "Event_title_(reopen)": [
-                                        "Succeeded"
-                                      ]
-                                    }
-                                  },
-                                  "Event_form_(reopen)": {
-                                    "type": "SetVariable",
-                                    "inputs": {
-                                      "name": "varEventForm",
-                                      "value": [
-                                        {
-                                          "FieldName": "Note",
-                                          "FieldValue": "@{trim(string(coalesce(outputs('Payload')?['reason'], '')))}"
-                                        },
-                                        {
-                                          "FieldName": "PreviousValue",
-                                          "FieldValue": "@{json(string(coalesce(variables('varTxPlan'), '{}')))?['status']}"
-                                        },
-                                        {
-                                          "FieldName": "NewValue",
-                                          "FieldValue": "In Progress"
-                                        }
-                                      ]
-                                    },
-                                    "runAfter": {
-                                      "Event_type_(reopen)": [
-                                        "Succeeded"
-                                      ]
-                                    }
-                                  },
-                                  "Event_details_(reopen)": {
-                                    "type": "SetVariable",
-                                    "inputs": {
-                                      "name": "varEventJson",
+                                      "name": "varRec",
                                       "value": {
-                                        "OwnerId": "@int(if(empty(first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.'))), '0', first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.'))))",
-                                        "DueDayAtEvent": "@int(if(empty(first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.'))), '0', first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.'))))"
+                                        "title": "@{take('Reopened', 255)}",
+                                        "type": "Reopened",
+                                        "form": [
+                                          {
+                                            "FieldName": "Note",
+                                            "FieldValue": "@{trim(string(coalesce(outputs('Payload')?['reason'], '')))}"
+                                          },
+                                          {
+                                            "FieldName": "PreviousValue",
+                                            "FieldValue": "@{json(string(coalesce(variables('varTxPlan'), '{}')))?['status']}"
+                                          },
+                                          {
+                                            "FieldName": "NewValue",
+                                            "FieldValue": "In Progress"
+                                          }
+                                        ],
+                                        "json": {
+                                          "OwnerId": "@int(if(empty(first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.'))), '0', first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.'))))",
+                                          "DueDayAtEvent": "@int(if(empty(first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.'))), '0', first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.'))))"
+                                        },
+                                        "result": "@{'Action reopened.'}"
                                       }
                                     },
-                                    "runAfter": {
-                                      "Event_form_(reopen)": [
-                                        "Succeeded"
-                                      ]
-                                    }
-                                  },
-                                  "Result_(reopen)": {
-                                    "type": "SetVariable",
-                                    "inputs": {
-                                      "name": "varResult",
-                                      "value": "@{'Action reopened.'}"
-                                    },
-                                    "runAfter": {
-                                      "Event_details_(reopen)": [
-                                        "Succeeded"
-                                      ]
-                                    }
+                                    "runAfter": {}
                                   },
                                   "Emails_set_(reopen)": {
                                     "type": "SetVariable",
@@ -5846,7 +5484,7 @@
                                       "value": []
                                     },
                                     "runAfter": {
-                                      "Result_(reopen)": [
+                                      "Event_record_(reopen)": [
                                         "Succeeded"
                                       ]
                                     }
@@ -5856,73 +5494,31 @@
                               "EditActionDetails": {
                                 "case": "EditActionDetails",
                                 "actions": {
-                                  "Event_title_(edit)": {
+                                  "Event_record_(edit)": {
                                     "type": "SetVariable",
                                     "inputs": {
-                                      "name": "varEventTitle",
-                                      "value": "@{take('Details edited', 255)}"
-                                    },
-                                    "runAfter": {}
-                                  },
-                                  "Event_type_(edit)": {
-                                    "type": "SetVariable",
-                                    "inputs": {
-                                      "name": "varEventType",
-                                      "value": "Details Edited"
-                                    },
-                                    "runAfter": {
-                                      "Event_title_(edit)": [
-                                        "Succeeded"
-                                      ]
-                                    }
-                                  },
-                                  "Event_form_(edit)": {
-                                    "type": "SetVariable",
-                                    "inputs": {
-                                      "name": "varEventForm",
-                                      "value": [
-                                        {
-                                          "FieldName": "PreviousValue",
-                                          "FieldValue": "@{string(json(string(coalesce(variables('varTxPlan'), '{}'))))}"
-                                        },
-                                        {
-                                          "FieldName": "NewValue",
-                                          "FieldValue": "@{string(outputs('Payload'))}"
-                                        }
-                                      ]
-                                    },
-                                    "runAfter": {
-                                      "Event_type_(edit)": [
-                                        "Succeeded"
-                                      ]
-                                    }
-                                  },
-                                  "Event_details_(edit)": {
-                                    "type": "SetVariable",
-                                    "inputs": {
-                                      "name": "varEventJson",
+                                      "name": "varRec",
                                       "value": {
-                                        "OwnerId": "@int(if(empty(first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.'))), '0', first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.'))))",
-                                        "DueDayAtEvent": "@int(if(empty(first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.'))), '0', first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.'))))"
+                                        "title": "@{take('Details edited', 255)}",
+                                        "type": "Details Edited",
+                                        "form": [
+                                          {
+                                            "FieldName": "PreviousValue",
+                                            "FieldValue": "@{string(json(string(coalesce(variables('varTxPlan'), '{}'))))}"
+                                          },
+                                          {
+                                            "FieldName": "NewValue",
+                                            "FieldValue": "@{string(outputs('Payload'))}"
+                                          }
+                                        ],
+                                        "json": {
+                                          "OwnerId": "@int(if(empty(first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.'))), '0', first(split(string(coalesce(variables('varAct')?['AssignedToId'], '')), '.'))))",
+                                          "DueDayAtEvent": "@int(if(empty(first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.'))), '0', first(split(string(coalesce(variables('varAct')?['DueDay'], '')), '.'))))"
+                                        },
+                                        "result": "@{'Details saved.'}"
                                       }
                                     },
-                                    "runAfter": {
-                                      "Event_form_(edit)": [
-                                        "Succeeded"
-                                      ]
-                                    }
-                                  },
-                                  "Result_(edit)": {
-                                    "type": "SetVariable",
-                                    "inputs": {
-                                      "name": "varResult",
-                                      "value": "@{'Details saved.'}"
-                                    },
-                                    "runAfter": {
-                                      "Event_details_(edit)": [
-                                        "Succeeded"
-                                      ]
-                                    }
+                                    "runAfter": {}
                                   },
                                   "Emails_set_(edit)": {
                                     "type": "SetVariable",
@@ -5931,7 +5527,7 @@
                                       "value": []
                                     },
                                     "runAfter": {
-                                      "Result_(edit)": [
+                                      "Event_record_(edit)": [
                                         "Succeeded"
                                       ]
                                     }
@@ -6181,7 +5777,7 @@
                                 "inputs": [
                                   {
                                     "FieldName": "Title",
-                                    "FieldValue": "@{take(variables('varEventTitle'), 255)}"
+                                    "FieldValue": "@{take(variables('varRec')?['title'], 255)}"
                                   },
                                   {
                                     "FieldName": "RowKind",
@@ -6201,7 +5797,7 @@
                                   },
                                   {
                                     "FieldName": "EventType",
-                                    "FieldValue": "@{variables('varEventType')}"
+                                    "FieldValue": "@{variables('varRec')?['type']}"
                                   },
                                   {
                                     "FieldName": "RequestType",
@@ -6212,7 +5808,7 @@
                               },
                               "Event_fields_(change)": {
                                 "type": "Compose",
-                                "inputs": "@union(outputs('Event_fixed_(change)'), variables('varEventForm'))",
+                                "inputs": "@union(outputs('Event_fixed_(change)'), variables('varRec')?['form'])",
                                 "runAfter": {
                                   "Event_fixed_(change)": [
                                     "Succeeded"
@@ -6387,7 +5983,7 @@
                           },
                           "Event_details_(change)": {
                             "type": "Compose",
-                            "inputs": "@union(outputs('Event_details_fixed_(change)'), variables('varEventJson'))",
+                            "inputs": "@union(outputs('Event_details_fixed_(change)'), variables('varRec')?['json'])",
                             "runAfter": {
                               "Event_details_fixed_(change)": [
                                 "Succeeded"
@@ -6954,7 +6550,7 @@
                             "type": "Compose",
                             "inputs": {
                               "Status": "Completed",
-                              "ResultMessage": "@{variables('varResult')}",
+                              "ResultMessage": "@{variables('varRec')?['result']}",
                               "ProcessedAt": "@{utcNow()}",
                               "ResultId": "@int(first(split(string(coalesce(variables('varAct')?['Id'], '')), '.')))"
                             },
@@ -7741,13 +7337,13 @@
             }
           },
           "runAfter": {
-            "Initialise_event_form": [
+            "Initialise_plan_object": [
               "Succeeded"
             ],
-            "Initialise_event_details": [
+            "Initialise_fields": [
               "Succeeded"
             ],
-            "Initialise_result": [
+            "Initialise_rec": [
               "Succeeded"
             ],
             "Initialise_email_list": [
@@ -8098,7 +7694,7 @@
                   "parameters/method": "GET",
                   "parameters/uri": "_api/web/GetList('@{outputs('List_addresses')?['settings']}')/items?$select=Id,Title,Value&$filter=Title eq 'QueueHealth'",
                   "parameters/headers": {
-                    "Accept": "application/json;odata=nometadata"
+                    "Accept": "application/json;odata=minimalmetadata"
                   }
                 },
                 "authentication": "@parameters('$authentication')"
@@ -8141,7 +7737,7 @@
                         "Accept": "application/json;odata=nometadata",
                         "Content-Type": "application/json;odata=nometadata",
                         "X-HTTP-Method": "MERGE",
-                        "IF-MATCH": "*"
+                        "IF-MATCH": "@{first(body('Health_now')?['value'])?['odata.etag']}"
                       },
                       "parameters/body": "@{string(outputs('Health_fixed'))}"
                     },
@@ -8150,6 +7746,17 @@
                   "runAfter": {
                     "Health_fixed": [
                       "Succeeded"
+                    ]
+                  }
+                },
+                "Health_saved": {
+                  "type": "Compose",
+                  "inputs": "@actions('Save_the_health_setting')?['status']",
+                  "runAfter": {
+                    "Save_the_health_setting": [
+                      "Succeeded",
+                      "Failed",
+                      "TimedOut"
                     ]
                   }
                 }

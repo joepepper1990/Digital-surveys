@@ -167,6 +167,15 @@ class Register(unittest.TestCase):
                 run(s, r)
                 self.assertEqual(request(s, r)['Status'], 'Completed' if ok else 'Rejected')
 
+    def test_an_action_another_change_is_being_made_to_is_not_linked(self):
+        s = site()
+        s.item('actions', s.action)['f']['PendingRequestKey'] = 'someone-else'
+        r = submit(s, KELLY, 'LinkActionToEntry', {'actionId': s.action}, target=s.entry)
+        run(s, r)
+        a = s.item('actions', s.action)['f']
+        self.assertEqual((request(s, r)['Status'], request(s, r)['ResultMessage']), ('Rejected', 'That action is being changed just now. Try again in a minute.'))
+        self.assertNotEqual(a.get('SourceType'), 'Register')
+
     def test_link_and_unlink_an_action(self):
         s = site()
         r = submit(s, KELLY, 'LinkActionToEntry', {'actionId': s.action}, target=s.entry)

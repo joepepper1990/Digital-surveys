@@ -55,7 +55,7 @@
         <LocalizedName languagecode="1033" description="ESG Competency Hub | 1 Daily tasks" />
       </LocalizedNames>
     </Workflow>
-    <Workflow WorkflowId="{7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f03}" Name="ESG Competency Hub | 3 Queue monitor" Description="Every 15 minutes in working hours and hourly outside them: puts stalled changes back in the queue, retries emails, tells the administrators about anything that needs them, and records whether processing is healthy.">
+    <Workflow WorkflowId="{7c2e5b10-4a3d-4f6e-9b21-8d0c1e5a6f03}" Name="ESG Competency Hub | 3 Queue monitor" Description="Every 10 minutes in working hours and hourly outside them: puts stalled changes back in the queue, retries emails, tells the administrators about anything that needs them, and records whether processing is healthy.">
       <JsonFileName>/Workflows/ESGCompetencyHub3Queuemonitor-7C2E5B10-4A3D-4F6E-9B21-8D0C1E5A6F03.json</JsonFileName>
       <Type>1</Type>
       <Subprocess>0</Subprocess>
