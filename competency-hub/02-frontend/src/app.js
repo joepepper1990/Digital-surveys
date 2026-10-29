@@ -18,7 +18,8 @@ CH.app = (function () {
     app.panels = [];
     app.panelOpen = function (panel) { app.panels.push(panel); app.panel = panel; return panel; };
     app.panelClose = function (panel) { app.panels = app.panels.filter(function (p) { return p !== panel; }); app.panel = app.panels[app.panels.length - 1] || null; };
-    app.refreshPanels = function () { app.panels.slice().forEach(function (p) { if (p.refresh) p.refresh(); }); };
+    // entry: the change that moved on, when there is one; each panel refreshes only for changes to what it shows (1.4.1)
+    app.refreshPanels = function (entry) { app.panels.slice().forEach(function (p) { if (p.refresh && (!entry || !p.shows || p.shows(entry))) p.refresh(); }); };
 
     function findRoot() { return document.querySelector('[data-ch-root]'); }
     // an error in the page itself, kept for the "what went wrong lately" list (only ours: the script's file name)
@@ -240,20 +241,24 @@ CH.app = (function () {
     // read are read (Modified is indexed) and folded in; the overlay of this person's own pending changes goes back on
     // top. A row changed by someone else is marked, so a panel open on it can say so. Nothing is read from a hidden tab.
     var DELTA = ['actions', 'notices', 'register', 'meetings'];
+    var OVERLAP_MS = 2 * 60 * 1000;
+    var staleTries = 0, staleRetryAt = 0;
     var refreshing = false;
     async function refreshOthers() {
       if (disposed || !app.raw || refreshing || document.hidden || !lastRead) return;
       refreshing = true;
       var since = lastRead;
-      var startedAt = new Date();
+      // two minutes of overlap: the browser's clock and SharePoint's need not agree, and a row read twice is taken once
+      var startedAt = new Date(Date.now() - OVERLAP_MS);
       try {
-        // lists SharePoint could not give us last time are read again in full first (app 2.0)
-        if (app.staleLists && app.staleLists.length) {
+        // lists SharePoint could not give last time are read again in full, less often while they keep failing
+        // (1, 2, 4 … 10 minutes); the others carry on being refreshed meanwhile (1.4.1)
+        if (app.staleLists && app.staleLists.length && Date.now() >= staleRetryAt) {
           await reload(app.staleLists.slice());
+          staleTries = app.staleLists.length ? staleTries + 1 : 0;
+          staleRetryAt = Date.now() + Math.min(10, Math.pow(2, Math.max(0, staleTries - 1))) * 60000;
           render(false);
           app.refreshPanels();
-          refreshing = false;
-          return;
         }
         var changed = await CH.model.loadChanged(app.sp, since);
         var touched = false;
@@ -292,12 +297,16 @@ CH.app = (function () {
     // "updated by someone else at 10:42" for a record, or null
     app.changedByOthers = function (kind, id) {
       var key = { 'Action': 'actions', 'Notice': 'notices', 'Register Entry': 'register', 'Meeting': 'meetings' }[kind || 'Action'];
-      return app.others[key + '|' + Number(id)] || null;
+      var mark = app.others[key + '|' + Number(id)];
+      // a mark lasts an hour: after that the change is old news, and the mark is forgotten (1.4.1)
+      if (mark && Date.parse(mark.at) < Date.now() - 3600000) { delete app.others[key + '|' + Number(id)]; return null; }
+      return mark || null;
     };
     function onVisible() {
       if (document.hidden || disposed) return;
       if (app.tracker) app.tracker.wake();
       refreshOthers();
+      checkHealth();   // a tab coming back shows whether processing still works, without waiting 5 minutes
     }
     // a change still waiting in this browser alone (never sent yet) is lost if the page closes before it goes
     function onLeave(e) {
@@ -373,13 +382,77 @@ CH.app = (function () {
       return (buffers()[key] || []).map(function (r) { return mt.id < 0 ? r : Object.assign(retarget(r, mt.id, {}), { Id: r.Id, AuthorId: r.AuthorId }); });
     };
 
-    // The lists a saved change can alter (release 1.2: only these are read again). Health comes with the settings.
+    // The lists a saved change can alter (release 1.2), read again in full only for the few kinds that change more
+    // than their own row; settings and health are read by the health check every 5 minutes (1.4.1).
     function listsFor(type) {
-      if (CH.requests.RECORD_TYPES.indexOf(type) >= 0) return ['notices', 'register', 'actions', 'settings'];
-      if (CH.requests.MEETING_TYPES.indexOf(type) >= 0) return ['meetings', 'actions', 'settings'];
-      return ['actions', 'settings'];
+      if (CH.requests.RECORD_TYPES.indexOf(type) >= 0) return ['notices', 'register', 'actions'];
+      if (CH.requests.MEETING_TYPES.indexOf(type) >= 0) return ['meetings', 'actions'];
+      return ['actions'];
+    }
+    // The rows a saved change touched, by list (1.4.1): read by Id instead of the whole list. null: read the lists.
+    var KIND_LIST = { 'Action': 'actions', 'Notice': 'notices', 'Register Entry': 'register', 'Meeting': 'meetings' };
+    function rowsFor(entry) {
+      if (['HideComment', 'FinaliseMeeting', 'AmendMeeting', 'StartMeeting'].indexOf(entry.type) >= 0) return null;
+      var kind = CH.requests.CREATES[entry.type] || entry.targetType || 'Action';
+      var list = KIND_LIST[kind];
+      var id = Number(entry.resultId) || Number(entry.targetId);
+      if (!list || !(id > 0)) return null;
+      var out = {};
+      out[list] = [id];
+      // linking an entry to an action changes the action too
+      var linked = entry.payload && Number(entry.payload.actionId);
+      if (linked > 0) (out.actions = out.actions || []).push(linked);
+      return out;
     }
 
+    // Saved changes are gathered for two seconds and their rows read together (1.4.1): five quick changes, one read.
+    var savedBatch = [], savedTimer = null;
+    function whenSaved(entry) {
+      savedBatch.push(entry);
+      clearTimeout(savedTimer);
+      savedTimer = setTimeout(readSaved, 2000);
+    }
+    async function readSaved() {
+      var batch = savedBatch;
+      savedBatch = [];
+      var ids = {}, lists = [];
+      batch.forEach(function (e) {
+        var rows = rowsFor(e);
+        if (!rows) { listsFor(e.type).forEach(function (l) { if (lists.indexOf(l) < 0) lists.push(l); }); return; }
+        Object.keys(rows).forEach(function (l) { ids[l] = (ids[l] || []).concat(rows[l]); });
+      });
+      lists.forEach(function (l) { delete ids[l]; });
+      try {
+        if (lists.length) await reload(lists);
+        if (Object.keys(ids).length) {
+          try { app.raw = await CH.model.loadRows(app.sp, app.raw, ids); }
+          catch (_) { await reload(Object.keys(ids)); }
+        }
+        batch.forEach(function (e) { e.reloaded = true; });   // the rows now carry the change: the overlay no longer applies it
+        rebuild();
+        // what was recorded on a meeting before its booking was saved goes to the meeting now
+        for (var i = 0; i < batch.length; i++) if (batch[i].type === 'ScheduleMeeting') await meetingBooked(batch[i]);
+        render(false);
+        app.refreshPanels();
+        batch.forEach(function (entry) {
+          var a = app.model.actionById[entry.resultId];
+          var e = app.model.entryById[entry.resultId];
+          // a new record gets its number now; other changes just show the green tick where they are (and are told to screen readers)
+          if (entry.type === 'RaiseAction' && a) CH.ui.toast(app.root, a.ref + ' raised: ' + a.title + '.', 'ok');
+          else if (entry.type === 'RaiseRegisterEntry' && e) CH.ui.toast(app.root, e.ref + ' raised: ' + e.title + '.', 'ok');
+          CH.ui.say(app.root, 'Saved: ' + entry.label + '. ' + entry.message);
+        });
+      } catch (_) {
+        batch.forEach(function (e) { e.reloaded = true; });
+        CH.ui.toast(app.root, (batch.length === 1 ? batch[0].message : 'Your changes are saved.') + ' Reload the page to see it.', 'ok');
+      }
+    }
+
+    var shownState = {};
+    function refreshStatusLine() {
+      var old = app.root && app.root.querySelector('.status-line');
+      if (old && old.parentNode) old.parentNode.replaceChild(statusLine(), old);
+    }
     function onRequestChange(entry) {
       if (CH.requests.ADMIN_TYPES.indexOf(entry.type) >= 0) {
         // a saved setting is read again, so the page shows the new value and uses it (DueSoonDays, MaxDeadlineYears)
@@ -393,26 +466,22 @@ CH.app = (function () {
         return;
       }
       if (entry.state === 'rejected' && CH.requests.isConflict(entry) && !entry.explained) { explainConflict(entry); }
+      // only how far it has got moved (picked up by the flow): what the screen shows is the same, so only the status
+      // line is drawn again; the rings move by themselves. A new state or message (retrying) repaints (1.4.1)
+      var shown = entry.state + '|' + (entry.message || '');
+      if (shown === shownState[entry.key]) { refreshStatusLine(); return; }
+      shownState[entry.key] = shown;
       if (entry.state !== 'done') {
         rebuild();
         render(false);
-        app.refreshPanels();
+        app.refreshPanels(entry);
         return;
       }
-      reload(listsFor(entry.type)).then(async function () {
-        entry.reloaded = true;   // the rows now carry the change: the overlay no longer applies it
-        rebuild();
-        // what was recorded on a meeting before its booking was saved goes to the meeting now
-        if (entry.type === 'ScheduleMeeting') await meetingBooked(entry);
-        render(false);
-        app.refreshPanels();
-        var a = app.model.actionById[entry.resultId];
-        var e = app.model.entryById[entry.resultId];
-        // a new record gets its number now; other changes just show ✓✓ Saved where they are (and are told to screen readers)
-        if (entry.type === 'RaiseAction' && a) CH.ui.toast(app.root, a.ref + ' raised: ' + a.title + '.', 'ok');
-        else if (entry.type === 'RaiseRegisterEntry' && e) CH.ui.toast(app.root, e.ref + ' raised: ' + e.title + '.', 'ok');
-        CH.ui.say(app.root, 'Saved: ' + entry.label + '. ' + entry.message);
-      }).catch(function () { entry.reloaded = true; CH.ui.toast(app.root, entry.message + ' Reload the page to see it.', 'ok'); });
+      // the green tick shows at once (rebuild with the change still applied); its rows are read a moment later
+      rebuild();
+      render(false);
+      app.refreshPanels(entry);
+      whenSaved(entry);
     }
 
     // Someone else changed the record first (release 1.3): the record is read again, and the card says what they
@@ -489,7 +558,6 @@ CH.app = (function () {
       render(!keepFocus);
       if (keepFocus) { var t = app.root.querySelector('.subtabs [aria-selected="true"]'); if (t) t.focus(); }
     };
-    app.comingSoon = function (what) { CH.ui.toast(app.root, what + ' will be available in the next version of the Competency Hub.', 'info'); };
     app.postNotice = function (key) { CH.views.noticeForm.open(app, key); };
     app.raiseAction = function (key) {
       if (app.queueBlocked()) { CH.ui.toast(app.root, 'Raising actions is paused while changes can\'t be processed. Please try again later.', 'info'); return; }
@@ -587,9 +655,10 @@ CH.app = (function () {
 
     // only: the lists to read again (release 1.2); everything when not given
     async function reload(only) {
+      // the time of the read is taken before it, with the overlap (see refreshOthers)
+      var readAt = new Date(Date.now() - OVERLAP_MS);
       var raw = await CH.model.load(app.sp, only, app.raw);
       var now = new Date();
-      var today = CH.dates.localDate(now);
       var memberships = (raw.members.rows || [])
         .filter(function (m) { return Number(m.PersonId) === Number(app.person.SiteUserId); })
         .map(function (m) {
@@ -598,8 +667,8 @@ CH.app = (function () {
         }).filter(Boolean);
       var areasByKey = {};
       (raw.competencies.rows || []).forEach(function (c) { areasByKey[c.CompetencyKey] = { status: c.Status }; });
-      if (raw.competencies.error !== undefined && !raw.competencies.stale) throw new CH.sp.SpError(raw.competencies.error, 'The list of areas could not be loaded.');
-      if (raw.members.error !== undefined && !raw.members.stale) throw new CH.sp.SpError(raw.members.error, 'Area memberships could not be loaded.');
+      if (raw.competencies.error !== undefined && (!raw.competencies.stale || raw.competencies.empty)) throw new CH.sp.SpError(raw.competencies.error, 'The list of areas could not be loaded.');
+      if (raw.members.error !== undefined && (!raw.members.stale || raw.members.empty)) throw new CH.sp.SpError(raw.members.error, 'Area memberships could not be loaded.');
       app.access = CH.access.build(app.person, memberships, areasByKey);
       app.health = CH.health.judge(raw.settings.rows, now);
       app.settings = raw.settings.rows || [];
@@ -607,10 +676,12 @@ CH.app = (function () {
       var soon = (app.settings.filter(function (r) { return r.Title === 'DueSoonDays'; })[0] || {}).Value;
       CH.config.dueSoonDays = /^\d{1,2}$/.test(String(soon || '')) && Number(soon) >= 1 && Number(soon) <= 30 ? Number(soon) : 7;
       app.raw = raw;
-      // what could not be read again is kept and read on the next refresh; the time of the last good read only moves
-      // on when every list this read asked for came back, so the minute's read of changes misses nothing (app 2.0)
+      // what could not be read again is kept and read on the next refresh (1.4.0)
       app.staleLists = Object.keys(raw).filter(function (k) { return raw[k] && raw[k].stale; });
-      if (!(only || Object.keys(raw)).some(function (k) { return raw[k] && raw[k].stale; })) lastRead = now;
+      // only a full read moves the time of the last read on: a part read (after a saved change) did not read the
+      // other lists, whose changes the next minute's read must still find; a list that failed is read again in full
+      // by refreshOthers, so it misses nothing either (1.4.1)
+      if (!only) lastRead = readAt;
       rebuild();
     }
 
@@ -637,7 +708,7 @@ CH.app = (function () {
 
     async function start() {
       app.root = await waitForRoot();
-      // Welcome started the layout again on the same page while this one still runs (app 2.0): the running one is kept,
+      // Welcome started the layout again on the same page while this one still runs (1.4.0): the running one is kept,
       // so nothing open on it is lost, and the new one does nothing
       var live = window.__esgCompetencyHubLive;
       if (live && !live.disposed() && live.root === app.root && live.root.isConnected) {

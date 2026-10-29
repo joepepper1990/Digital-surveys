@@ -1,11 +1,11 @@
-/* ESG Competency Hub 1.4.0 – built from src/ by tools/build.js. Do not edit. */
+/* ESG Competency Hub 1.4.1 – built from src/ by tools/build.js. Do not edit. */
 window.ESGCompetencyHub = function (ctx) {
   'use strict';
   var CH = {};
   /* src/core/config.js */
   // Fixed names and limits. Lists are addressed by display title; folders by list URL name.
   CH.config = {
-    VERSION: '1.4.0',
+    VERSION: '1.4.1',
     ENVIRONMENT: 'TEST',
     lists: {
       competencies: { title: 'Competencies', url: 'Competencies' },
@@ -69,7 +69,7 @@ window.ESGCompetencyHub = function (ctx) {
   })();
 
   /* src/core/names.js */
-  // People's names for display. The directory stores names surname first ("Pepper Joseph"); addresses are
+  // People's names for display. The directory stores names surname first ("Bloggs Jo"); addresses are
   // firstname.lastname@, so the first name from the address tells us which word to move to the front.
   CH.names = (function () {
     // The name a person is known by (People.KnownAs, set by an administrator) comes first; otherwise their full
@@ -334,7 +334,7 @@ window.ESGCompetencyHub = function (ctx) {
   })();
 
   /* src/core/log.js */
-  // What the Hub noticed going wrong on this screen (app 2.0): a list SharePoint could not give, the page started a
+  // What the Hub noticed going wrong on this screen (1.4.0): a list SharePoint could not give, the page started a
   // second time, an error in the page itself. Kept in this browser only (the last 50, at most one of a kind a
   // minute), shown under Administration and sent with feedback when the person agrees, so a report of a glitch comes
   // with the evidence.
@@ -463,6 +463,27 @@ window.ESGCompetencyHub = function (ctx) {
         };
       }
 
+      // This person's requests still on their way, read once for every change being checked within 10 seconds
+      // (1.4.1: one read instead of one per change); a change no longer among them is read on its own, to see how it ended.
+      var openRead = null, openAt = 0;
+      function openRequests() {
+        if (!openRead || Date.now() - openAt > 10000) {
+          openAt = Date.now();
+          openRead = app.sp.items(CH.config.lists.requests.title, '$select=Id,Status,ResultMessage,ResultId,RequestKey,AuthorId&$filter=' +
+            OPEN_STATUSES.map(function (s) { return "Status eq '" + s + "'"; }).join(' or '), 500)
+            .then(function (res) {
+              if (!res.complete) return null;   // more than one page: not to be relied on for "not open any more"
+              return res.rows.filter(function (r) { return Number(r.AuthorId) === Number(app.person.SiteUserId); });
+            }, function () { return null; });
+        }
+        return openRead;
+      }
+      async function currentRow(entry) {
+        var open = await openRequests();
+        var row = open ? open.filter(function (r) { return r.RequestKey === entry.key; })[0] : null;
+        return row || findRequest(entry.key);
+      }
+
       async function findRequest(key) {
         var res = await app.sp.items(CH.config.lists.requests.title,
           "$select=Id,Status,ResultMessage,ResultId&$filter=RequestKey eq '" + q(key) + "'", 1);
@@ -541,6 +562,12 @@ window.ESGCompetencyHub = function (ctx) {
       // Writes the request. A change that waited reads the record's revision first, so it is checked against the
       // record as the change before it left it.
       async function sendNow(entry) {
+        // one send at a time for a change: a second call while the first is on its way waits for it (1.4.1)
+        if (entry.inFlight) return entry.inFlight;
+        entry.inFlight = sendOnce(entry);
+        try { return await entry.inFlight; } finally { entry.inFlight = null; }
+      }
+      async function sendOnce(entry) {
         var spec = entry.spec;
         if (entry.creationKey) {
           var creation = byKey(entry.creationKey);
@@ -580,23 +607,40 @@ window.ESGCompetencyHub = function (ctx) {
         return row && Number(row.Revision) ? Number(row.Revision) : '';
       }
 
-      // A change settled: the ones waiting behind it go next (or are held, if it was not saved).
+      // A change settled: the ones waiting behind it go next (or are held, if it was not saved). A change that waited
+      // for several (a finalise, for every change made from the meeting) is held as well if any of them was not saved,
+      // and a creation saved without its new number holds what waits for it too, so nothing waits for ever (1.4.1).
       function advance(entry) {
+        var lost = failed(entry) || entry.state === 'dropped' || (entry.state === 'done' && CREATES[entry.type] && !entry.resultId);
         entries.forEach(function (e) {
-          if (e.after && e.after.indexOf(entry.key) >= 0) e.after = e.after.filter(function (k) { return k !== entry.key; });
+          if (!e.after || e.after.indexOf(entry.key) < 0) return;
+          e.after = e.after.filter(function (k) { return k !== entry.key; });
+          if (lost && e.state === 'queued') { e.state = 'held'; e.heldBy = entry.key; e.message = ''; onChange(e); hold(e); }
         });
-        if (entry.state === 'done') {
+        if (entry.state === 'done' && !lost) {
           entries.filter(function (e) { return e.state === 'queued' && e.orderAfter === entry.key; }).forEach(function (e) {
             e.orderAfter = null;
             e.needsRevision = true;
           });
-          entries.filter(function (e) { return e.state === 'queued' && !e.orderAfter && !e.after.length; }).forEach(function (e) {
-            sendNow(e).catch(function () { e.unsent = true; onChange(e); });
-          });
-        } else if (failed(entry) || entry.state === 'dropped') {
+        } else if (lost) {
           hold(entry);
+          entries.filter(function (e) { return e.state === 'queued' && (e.creationKey === entry.key); }).forEach(function (e) {
+            e.state = 'held'; e.heldBy = entry.key; e.message = ''; onChange(e); hold(e);
+          });
         }
+        sendReady();
         persist();
+      }
+      // every waiting change with nothing left to wait for is sent, once: one already on its way is not sent again
+      function sendReady() {
+        entries.filter(function (e) {
+          if (e.state !== 'queued' || e.inFlight || e.orderAfter || (e.after && e.after.length)) return false;
+          if (!e.creationKey) return true;
+          var c = byKey(e.creationKey);
+          return !!c && c.state === 'done' && !!c.resultId;
+        }).forEach(function (e) {
+          sendNow(e).catch(function () { e.unsent = true; onChange(e); });
+        });
       }
       function hold(entry) {
         entries.filter(function (e) { return e.state === 'queued' && e.orderAfter === entry.key; }).forEach(function (e) {
@@ -685,16 +729,15 @@ window.ESGCompetencyHub = function (ctx) {
         var elapsed = (Date.now() - entry.submittedAt.getTime()) / 1000;
         var seconds = elapsed < POLL_FAST_FOR ? POLL_FAST : EVERY;
         entry.timer = setTimeout(function () { poll(entry); }, seconds * 1000);
-        timers.push(entry.timer);
       }
 
       async function poll(entry) {
         if (stopped || entry.state !== 'submitted' && entry.state !== 'slow') return;
         // a tab nobody is looking at asks nothing; it catches up when it is looked at again (wake)
-        if (hidden()) { entry.timer = setTimeout(function () { poll(entry); }, POLL_FAST * 1000); timers.push(entry.timer); return; }
+        if (hidden()) { entry.hiddenSeen = true; entry.timer = setTimeout(function () { poll(entry); }, POLL_FAST * 1000); return; }
         entry.polls++;
         var row = null;
-        try { row = await findRequest(entry.key); } catch (_) { row = null; }
+        try { row = await currentRow(entry); } catch (_) { row = null; }
         var status = row && row.Status;
         // waiting in the queue, or being worked on now (spec REL-2)
         if ((status === 'Processing') !== !!entry.processing) {
@@ -757,13 +800,32 @@ window.ESGCompetencyHub = function (ctx) {
         }
       }
 
+      // Changes finished long enough ago are forgotten (1.4.1): saved ones once their list was read again, and ones
+      // given up on or dismissed, after 10 minutes; nothing still waiting or still shown as a problem goes.
+      function prune() {
+        var old = Date.now() - 10 * 60000;
+        entries = entries.filter(function (e) {
+          if (!(e.settledAt < old)) return true;
+          if (e.state === 'done') return !e.reloaded;
+          if (e.state === 'dropped') return false;
+          return !(FAILED.indexOf(e.state) >= 0 && e.dismissed && !entries.some(function (x) { return x.heldBy === e.key; }));
+        });
+      }
       function settle(entry, state, message) {
+        prune();
+        entry.settledAt = Date.now();
         entry.state = state;
         entry.message = message;
         if (state === 'done') {
           entry.doneAt = Date.now();
           // how long it took, so the next change of this kind can say about how long it will be
-          if (CH.eta && !entry.resumed) CH.eta.learn(entry.type, entry.submittedAt.getTime(), entry.processingAt || null, entry.doneAt);
+          // only a change watched all the way teaches the estimate: not one picked up again after a reload, one that
+          // went to an administrator, one that finished while the tab was hidden (checks were paused), nor one that took
+          // three times as long as expected (a lock wait, an outage) (1.4.1)
+          var took = (entry.doneAt - entry.submittedAt.getTime()) / 1000;
+          if (CH.eta && !entry.resumed && !entry.everAttention && !entry.hiddenSeen && took <= 3 * CH.eta.expected(entry.type).total) {
+            CH.eta.learn(entry.type, entry.submittedAt.getTime(), entry.processingAt || null, entry.doneAt);
+          }
         }
         onChange(entry);
         advance(entry);
@@ -774,6 +836,7 @@ window.ESGCompetencyHub = function (ctx) {
       // followed as before) or cancelled or reverted it.
       function watchAttention(entry) {
         if (stopped) return;
+        entry.everAttention = true;
         timers.push(setTimeout(async function () {
           if (stopped || entry.state !== 'attention') return;
           var row = null;
@@ -840,6 +903,7 @@ window.ESGCompetencyHub = function (ctx) {
       // Give up on a change that was not saved, and on everything that was waiting for it.
       function discard(entry) {
         entry.dismissed = true;
+        entry.settledAt = entry.settledAt || Date.now();
         if (entry.state === 'queued' || entry.state === 'held') entry.state = 'dropped';
         entries.filter(function (e) { return e.state === 'held' && e.heldBy === entry.key; }).forEach(function (e) { discard(e); });
         persist();
@@ -852,7 +916,6 @@ window.ESGCompetencyHub = function (ctx) {
         byKey: byKey,
         retry: retry,
         discard: discard,
-        byKey: byKey,
         entries: function () { return entries.slice(); },
         // Changes held because an earlier one to the same record was not saved.
         heldBy: function (entry) { return entries.filter(function (e) { return e.state === 'held' && e.heldBy === entry.key; }); },
@@ -897,7 +960,7 @@ window.ESGCompetencyHub = function (ctx) {
         },
         stash: stash,
         persist: persist,
-        stop: function () { stopped = true; timers.forEach(clearTimeout); }
+        stop: function () { stopped = true; timers.forEach(clearTimeout); entries.forEach(function (e) { if (e.timer) clearTimeout(e.timer); }); }
       };
     }
 
@@ -1398,14 +1461,18 @@ window.ESGCompetencyHub = function (ctx) {
           raw[key] = { rows: res.rows, complete: res.complete };
         } catch (error) {
           // a list that could not be read again (SharePoint busy, the connection dropped) keeps what was read last
-          // time, marked stale, so nothing on screen disappears; only a first read that fails is empty (app 2.0)
+          // time, marked stale, so nothing on screen disappears, however many reads in a row fail; one never read
+          // is empty and marked stale too, so it is tried again (1.4.0, 1.4.1)
           var was = prev && prev[key];
-          raw[key] = was && !was.error && was.rows ? { rows: was.rows, complete: was.complete, stale: true, error: error.status || 0 }
-            : { rows: [], complete: false, error: error.status || 0 };
+          raw[key] = was && was.rows && !was.empty && (was.stale || was.error === undefined)
+            ? { rows: was.rows, complete: was.complete, stale: true, error: error.status || 0 }
+            : { rows: [], complete: false, stale: true, empty: true, error: error.status || 0 };
           if (CH.log) CH.log.note('read-failed', key + ' could not be read again (HTTP ' + (error.status || 0) + ')' + (was ? '; the last read is kept' : ''));
         }
       }));
-      raw.discussed = !only || !prev || keys.indexOf('meetings') >= 0 || keys.indexOf('updates') >= 0 ? await discussed(sp, raw) : prev.discussed;
+      // what finalised meetings discussed: kept from the last read when it cannot be read again (1.4.1)
+      var again = !only || !prev || keys.indexOf('meetings') >= 0 || keys.indexOf('updates') >= 0 ? await discussed(sp, raw) : null;
+      raw.discussed = again || (prev && prev.discussed) || [];
       return raw;
     }
 
@@ -1452,11 +1519,13 @@ window.ESGCompetencyHub = function (ctx) {
           });
         });
         return out;
-      } catch (_) { return []; }
+      } catch (_) { return null; }
     }
 
     function section(r) {
       if (!r) return 'unavailable';
+      // rows kept from the last read while SharePoint is busy are shown as they were (the status line says so)
+      if (r.stale && !r.empty) return r.complete ? 'complete' : 'partial';
       if (r.error !== undefined) return 'unavailable';
       return r.complete ? 'complete' : 'partial';
     }
@@ -1724,7 +1793,29 @@ window.ESGCompetencyHub = function (ctx) {
       return row && !isUncommitted(row) ? row : null;
     }
 
-    return { QUERIES: QUERIES, load: load, loadChanged: loadChanged, build: build, isUncommitted: isUncommitted, loadFinished: loadFinished, loadAction: loadAction };
+    // A saved change's own rows (1.4.1), read by Id with the list's usual columns and folded into what was read last:
+    // a row that no longer belongs on the screen's list (a closed action, an archived notice) leaves it. ids: up to
+    // 20 per list. Returns a new raw object; the lists not asked for are the same as before.
+    var BELONGS = { actions: function (r) { return r.IsOpen === true || r.IsOpen === 1; }, notices: function (r) { return r.Status === 'Active'; },
+      calendar: function (r) { return r.Status === 'Scheduled'; } };
+    async function loadRows(sp, prev, ids) {
+      var raw = Object.assign({}, prev);
+      await Promise.all(Object.keys(ids).map(async function (key) {
+        var list = ids[key].filter(function (id, i, all) { return Number(id) > 0 && all.indexOf(id) === i; }).slice(0, 20);
+        if (!list.length || !QUERIES[key] || !prev[key] || prev[key].empty) return;
+        var q = QUERIES[key].replace(/&\$filter=.*$/, '') + '&$filter=' + list.map(function (id) { return 'Id eq ' + Number(id); }).join(' or ');
+        var res = await sp.items(CH.config.lists[key].title, q, null, OPTIONAL[key]);
+        var byId = {};
+        res.rows.forEach(function (r) { byId[Number(r.Id)] = r; });
+        var belongs = BELONGS[key] || function () { return true; };
+        var rows = (prev[key].rows || []).filter(function (r) { return !(Number(r.Id) in byId) && list.indexOf(Number(r.Id)) < 0; });
+        list.forEach(function (id) { var r = byId[Number(id)]; if (r && belongs(r)) rows.push(r); });
+        raw[key] = Object.assign({}, prev[key], { rows: rows });
+      }));
+      return raw;
+    }
+
+    return { QUERIES: QUERIES, load: load, loadChanged: loadChanged, loadRows: loadRows, build: build, isUncommitted: isUncommitted, loadFinished: loadFinished, loadAction: loadAction };
   })();
 
   /* src/domain/optimistic.js */
@@ -1899,7 +1990,7 @@ window.ESGCompetencyHub = function (ctx) {
   // stale reminders never stop people changing actions.
   CH.health = (function () {
     var DAILY_LIMIT_HOURS = 26;
-    var WORKING_SLACK_MINUTES = 45;
+    var WORKING_SLACK_MINUTES = 25;
 
     function value(rows, title) {
       var row = (rows || []).filter(function (r) { return r.Title === title; })[0];
@@ -2011,10 +2102,15 @@ window.ESGCompetencyHub = function (ctx) {
       '*': [30, 20]
     };
 
+    // read from the browser's storage once, then kept in memory (the rings ask every second: 1.4.1)
+    var cache = null;
     function readAll() {
-      try { return JSON.parse(window.localStorage.getItem(KEY) || 'null') || {}; } catch (_) { return {}; }
+      if (cache) return cache;
+      try { cache = JSON.parse(window.localStorage.getItem(KEY) || 'null') || {}; } catch (_) { cache = {}; }
+      return cache;
     }
     function writeAll(all) {
+      cache = all;
       try { window.localStorage.setItem(KEY, JSON.stringify(all)); } catch (_) { /* not remembered */ }
     }
 
@@ -2296,15 +2392,16 @@ window.ESGCompetencyHub = function (ctx) {
 
     // A plain note when a list could not be read completely. Never shown as an empty result.
     function sectionNote(state, what) {
-      if (state === 'unavailable') return h('p', { class: 'section-note', role: 'status', text: 'Could not load ' + what + ' just now. Reload the page to try again.' });
+      if (state === 'unavailable') return h('p', { class: 'section-note', role: 'status', text: 'Could not load ' + what + ' just now. It is tried again in a minute.' });
       if (state === 'partial') return h('p', { class: 'section-note', role: 'status', text: 'Showing the first ' + CH.config.maxRows + ' ' + what + ' only. This list is not complete.' });
       return null;
     }
 
-    var GROUPS = [['late', 'Late', 'var(--late)'], ['soon', 'Due within 7 days', 'var(--soon)'], ['later', 'Coming up', '#9aa5af']];
+    // the "due soon" window follows the DueSoonDays setting (1 to 30 days)
+    var GROUPS = [['late', 'Late', 'var(--late)'], ['soon', function () { return 'Due within ' + CH.config.dueSoonDays + ' days'; }, 'var(--soon)'], ['later', 'Coming up', '#9aa5af']];
 
-    // Actions grouped as Late / Due within 7 days / Coming up. sub(action) gives the grey second line.
-    // Each action opens with open(action); mark(action) gives its ✓ Sent / ✓✓ Saved mark, if any (release 1.2).
+    // Actions grouped as Late / Due soon / Coming up. sub(action) gives the grey second line.
+    // Each action opens with open(action); mark(action) gives its progress ring / green tick mark, if any (release 1.2).
     function actionList(actions, sub, emptyText, state, open, mark) {
       if (state === 'unavailable') return null;
       if (!actions.length) return h('p', { class: 'muted', text: emptyText });
@@ -2313,7 +2410,7 @@ window.ESGCompetencyHub = function (ctx) {
         var rows = actions.filter(function (a) { return a.group === g[0]; })
           .sort(function (a, b) { return a.dueIso.localeCompare(b.dueIso); });
         if (!rows.length) return;
-        out.push(h('h3', { class: 'group-title' }, h('span', { class: 'dot', style: 'background:' + g[2], 'aria-hidden': 'true' }), g[1]));
+        out.push(h('h3', { class: 'group-title' }, h('span', { class: 'dot', style: 'background:' + g[2], 'aria-hidden': 'true' }), typeof g[1] === 'function' ? g[1]() : g[1]));
         out.push(h('ul', { class: 'items' }, rows.map(function (a) {
           return h('li', null, h('button', { type: 'button', class: 'item-open', onclick: open ? function () { open(a); } : null, disabled: open ? null : true },
             h('span', null, h('span', { class: 't', text: a.title }), h('span', { class: 's' }, sub(a), mark ? mark(a) : null)),
@@ -2427,17 +2524,6 @@ window.ESGCompetencyHub = function (ctx) {
       return 1;
     }
 
-    // The reader's text size, remembered in this browser only. Storage can be unavailable; then Normal is used.
-    var TEXT_SIZES = [['Normal', 1], ['Large', 1.15], ['Larger', 1.3]];
-    var TEXT_KEY = 'esg-competency-hub-text-size';
-    function textSize() {
-      var saved = null;
-      try { saved = window.localStorage.getItem(TEXT_KEY); } catch (_) { saved = null; }
-      return TEXT_SIZES.some(function (t) { return t[0] === saved; }) ? saved : 'Normal';
-    }
-    function textFactor(name) { return (TEXT_SIZES.filter(function (t) { return t[0] === name; })[0] || TEXT_SIZES[0])[1]; }
-    function saveTextSize(name) { try { window.localStorage.setItem(TEXT_KEY, name); } catch (_) { /* not remembered */ } }
-
     // A thing someone is editing is never rebuilt (app 1.3.2). repaint() may clear and refill the container; what was
     // typed or chosen in any input, textarea or select with a keep key (its id, or data-keep where an id is not enough
     // to say which thing it belongs to) is put back on the element with the same key, with focus and the caret.
@@ -2528,7 +2614,7 @@ window.ESGCompetencyHub = function (ctx) {
 
     return {
       keepInputs: keepInputs, progressRing: progressRing, savedMark: savedMark, refreshRings: refreshRings,
-      scaleFor: scaleFor, TEXT_SIZES: TEXT_SIZES, textSize: textSize, textFactor: textFactor, saveTextSize: saveTextSize,
+      scaleFor: scaleFor,
       chip: chip, card: card, button: button, linkButton: linkButton, sectionNote: sectionNote,
       actionList: actionList, tile: tile, tileGrid: tileGrid, areaStatusLines: areaStatusLines, toast: toast, say: say,
       folded: folded, saveFolded: saveFolded, panel: panel, fitList: fitList, refit: refit, resetFits: resetFits
@@ -2539,7 +2625,7 @@ window.ESGCompetencyHub = function (ctx) {
   // The one dialog used by every form and the action panel: modal, focus kept inside, and focus returns to where it
   // was. It closes when asked: the × or a Cancel button always; Escape or a click on the backdrop only while nothing in
   // it has been typed or chosen, and only a press that starts and ends on the backdrop (a drag out of a text box never
-  // closes it), only an Escape from inside the dialog and not part of typing (app 2.0).
+  // closes it), only an Escape from inside the dialog and not part of typing (1.4.0).
   CH.ui.dialog = (function () {
     var h = CH.dom.h;
     var FOCUSABLE = 'a[href], select, input, textarea, button:not([disabled])';
@@ -2556,8 +2642,10 @@ window.ESGCompetencyHub = function (ctx) {
       var touched = false;
       var scrim = h('div', { class: 'scrim', onmousedown: function (e) { pressedOnScrim = e.target === scrim; },
         onclick: function (e) { var ok = pressedOnScrim && e.target === scrim; pressedOnScrim = false; if (ok && !touched) close(); } }, dialog);
-      dialog.addEventListener('input', function () { touched = true; });
-      dialog.addEventListener('change', function () { touched = true; });
+      // a choice saved the moment it is made (data-instant, such as attendance) is not unsaved work (1.4.1)
+      function typed(e) { if (!(e.target && e.target.closest && e.target.closest('[data-instant]'))) touched = true; }
+      dialog.addEventListener('input', typed);
+      dialog.addEventListener('change', typed);
       var closed = false;
 
       function close() {
@@ -3375,7 +3463,7 @@ window.ESGCompetencyHub = function (ctx) {
             coOwnerIds: v.coOwnerIds.length ? v.coOwnerIds : undefined, checkerId: v.checkerId, sourceEntryId: entry ? entry.id : undefined, sourceNoticeId: notice ? notice.id : undefined,
             sourceMeetingId: meeting ? meeting.id : undefined }, meetingId: meeting ? meeting.id : undefined });
           dlg.close();
-          CH.ui.toast(app.root, 'Sent. It shows ✓✓ Saved as soon as it is recorded – you can carry on.', 'ok');
+          CH.ui.toast(app.root, 'Sent. A green tick shows as soon as it is recorded – you can carry on.', 'ok');
         } catch (error) {
           nextBtn.disabled = false;
           nextBtn.textContent = 'Try again';
@@ -3457,7 +3545,9 @@ window.ESGCompetencyHub = function (ctx) {
     }
 
     function open(app, id) {
-      var panel = { id: id, refresh: refresh };
+      var panel = { id: id, refresh: refresh, shows: function (e) {
+        return Number(e.targetId) === Number(id) || Number(e.resultId) === Number(id) || (!!e.creationKey && e.creationKey === (action() || {}).sending);
+      } };
       var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-a', title: 'Action', wide: true, onClose: function () { app.panelClose(panel); } });
       var view = 'main';
       var updates = null;
@@ -3566,7 +3656,8 @@ window.ESGCompetencyHub = function (ctx) {
         if (which === 'edit') editForm(a);
         dlg.focusFirst();
       }
-      function back() { view = 'main'; fill(); dlg.focusFirst(); }
+      // back to the action after a change was sent: nothing is left unsaved, so Escape closes it again (1.4.1)
+      function back() { view = 'main'; dlg.clean(); fill(); dlg.focusFirst(); }
 
       var formKey = null;
       function formShell(title, fields, submitLabel, onSubmit) {
@@ -3943,7 +4034,7 @@ window.ESGCompetencyHub = function (ctx) {
 
     function sendAndShow(app, box, spec) {
       CH.dom.clear(box);
-      box.appendChild(h('p', { class: 'pending', role: 'status', text: 'Sent – being recorded (usually under 5 minutes).' }));
+      box.appendChild(h('p', { class: 'pending', role: 'status', text: 'Sent – being recorded (usually within a minute or two).' }));
       return app.tracker.submit(spec).then(function (entry) { watch(app, box, entry); return entry; }, function (error) {
         CH.dom.clear(box);
         box.appendChild(h('p', { class: 'field-error', role: 'alert', text: error.friendly || 'Could not send that just now. Try again in a moment.' }));
@@ -3969,7 +4060,7 @@ window.ESGCompetencyHub = function (ctx) {
       var posts = h('input', { id: 'ch-pa-posts', type: 'checkbox', checked: true });
       var areas = areaTable(app, 'ch-pa-', {}, function () { return role.value; });
       var result = h('div', { class: 'result' });
-      var paste = h('textarea', { id: 'ch-pa-list', rows: '8', placeholder: 'firstname.lastname@edf-energy.com, Technician, GRS RP, Jo' });
+      var paste = h('textarea', { id: 'ch-pa-list', rows: '8', placeholder: 'firstname.lastname@…, Technician, GRS RP, Jo' });
       var pasteResult = h('ul', { class: 'plain result' });
       CH.dom.append(dlg.body, [
         h('h3', { text: 'One person' }),
@@ -4130,7 +4221,9 @@ window.ESGCompetencyHub = function (ctx) {
 
     // The panel shared by notices and entries: a main view and one form at a time.
     function panel(app, cfg) {
-      var panel = { refresh: function () { if (dlg.isOpen()) { if (view === 'main') { comments = null; fill(); loadExtras(); } } } };
+      var panel = { refresh: function () { if (dlg.isOpen()) { if (view === 'main') { comments = null; fill(); loadExtras(); } } },
+        // a change to this notice or entry, or to an action linked to it or raised from it
+        shows: function (e) { var r = rec(); return !r || Number(e.targetId) === Number(r.id) || e.type === 'RaiseAction' || (e.targetType || 'Action') === 'Action'; } };
       var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-rec', title: cfg.title, wide: true, onClose: function () { app.panelClose(panel); } });
       var view = 'main';
       var comments = null;
@@ -4293,6 +4386,7 @@ window.ESGCompetencyHub = function (ctx) {
         try {
           await app.tracker.submit(spec);
           view = 'main';
+          dlg.clean();
           fill();
         } catch (error) {
           btn.disabled = false; btn.textContent = 'Try again';
@@ -4554,7 +4648,7 @@ window.ESGCompetencyHub = function (ctx) {
           await app.tracker.submit({ key: key, type: 'RaiseRegisterEntry', label: 'Raise “' + v.title.trim() + '”', payload: {
             areaKey: v.areaKey, entryType: v.entryType, impact: v.impact, title: v.title.trim(), description: v.description.trim() } });
           dlg.close();
-          CH.ui.toast(app.root, 'Sent. It shows ✓✓ Saved as soon as it is recorded – you can carry on.', 'ok');
+          CH.ui.toast(app.root, 'Sent. A green tick shows as soon as it is recorded – you can carry on.', 'ok');
         } catch (error) {
           submit.disabled = false;
           submit.textContent = 'Try again';
@@ -4609,7 +4703,7 @@ window.ESGCompetencyHub = function (ctx) {
       var type = h('select', { id: 'ch-fb-type' }, TYPES.map(function (t) { return h('option', { value: t, text: t }); }));
       var description = h('textarea', { id: 'ch-fb-description', rows: '6', maxlength: '4000' });
       var errorBox = h('p', { class: 'form-error', role: 'alert' });
-      // what this browser noticed going wrong lately goes with it, if the person agrees (app 2.0)
+      // what this browser noticed going wrong lately goes with it, if the person agrees (1.4.0)
       var noticed = CH.log.asText(7);
       var attach = h('input', { id: 'ch-fb-attach', type: 'checkbox', checked: noticed ? true : null });
       var submit = h('button', { type: 'submit', class: 'btn btn-main', text: 'Send feedback' });
@@ -4749,7 +4843,7 @@ window.ESGCompetencyHub = function (ctx) {
       { name: 'MaxDeadlineYears', label: 'Furthest deadline', unit: 'years ahead', min: 1, max: 5, fallback: '2',
         hint: 'The latest target date anyone can choose.' },
       { name: 'MonitorHours', label: 'Queue monitor hours', hours: true, fallback: '07:00|19:45|60',
-        hint: 'Every 15 minutes in working hours on weekdays; outside them, every so many minutes.' },
+        hint: 'Every 10 minutes in working hours on weekdays; outside them, every so many minutes (20 to 90, in tens).' },
       { name: 'InvitesEnabled', label: 'Outlook invitations', yesNo: true, fallback: 'Yes',
         hint: 'Yes: meetings send Outlook invitations, updates and cancellations. No: people add meetings to their calendar from the Hub.' },
       { name: 'PdfEnabled', label: 'PDF minutes', yesNo: true, fallback: 'Yes',
@@ -4767,8 +4861,8 @@ window.ESGCompetencyHub = function (ctx) {
       if (item.hours) {
         var p = String(value).split('|');
         var t = function (x) { var m = /^(\d{2}):(\d{2})$/.exec(x || ''); return m && +m[1] < 24 && +m[2] < 60 ? +m[1] * 60 + +m[2] : -1; };
-        if (p.length !== 3 || t(p[0]) < 0 || t(p[1]) < 0 || t(p[0]) >= t(p[1]) || !/^\d{1,2}$/.test(p[2]) || Number(p[2]) < 15) {
-          return 'Give the start and end of working hours (start before end), and at least 15 minutes between checks outside them.';
+        if (p.length !== 3 || t(p[0]) < 0 || t(p[1]) < 0 || t(p[0]) >= t(p[1]) || !/^\d{1,2}$/.test(p[2]) || Number(p[2]) < 20 || Number(p[2]) > 90 || Number(p[2]) % 10) {
+          return 'Give the start and end of working hours (start before end), and the minutes between checks outside them: 20 to 90, in tens (the monitor runs every 10 minutes).';
         }
         return '';
       }
@@ -4800,7 +4894,7 @@ window.ESGCompetencyHub = function (ctx) {
         var p = value.split('|');
         inputs = [h('input', { type: 'time', id: 'ch-set-' + item.name, 'aria-label': 'Start', value: p[0] }), ' to ',
           h('input', { type: 'time', 'aria-label': 'End', value: p[1] }), ', then every ',
-          h('input', { type: 'number', min: '15', max: '99', 'aria-label': 'Minutes between checks outside working hours', value: p[2], class: 'num' }), ' minutes'];
+          h('input', { type: 'number', min: '20', max: '90', step: '10', 'aria-label': 'Minutes between checks outside working hours', value: p[2], class: 'num' }), ' minutes'];
       } else {
         inputs = [h('input', { type: 'number', id: 'ch-set-' + item.name, min: String(item.min), max: String(item.max), value: value, class: 'num' }), ' ' + item.unit];
       }
@@ -4834,7 +4928,7 @@ window.ESGCompetencyHub = function (ctx) {
       var editing = app.settingEdit || '';
       var sent = (app.tracker ? app.tracker.entries() : []).filter(function (e) { return e.type === 'UpdateSetting' && !e.dismissed; });
       return [
-        h('p', { class: 'muted small', text: 'Each change is checked, recorded with its previous value, and takes effect within a few minutes.' }),
+        h('p', { class: 'muted small', text: 'Each change is checked, recorded with its previous value, and takes effect in about a minute.' }),
         h('ul', { class: 'plain settings' }, ITEMS.map(function (item) {
           var waiting = sent.filter(function (e) { return (e.label.indexOf(item.label.toLowerCase()) >= 0 || e.label.indexOf(item.label) >= 0) && (e.state === 'submitted' || e.state === 'slow'); })[0];
           return h('li', null, h('div', { class: 'setting' },
@@ -5102,7 +5196,7 @@ window.ESGCompetencyHub = function (ctx) {
             }
           }
           dlg.close();
-          CH.ui.toast(app.root, meeting ? 'Your change has been sent.' : 'Sent. The meeting appears in a few minutes, and the invitation goes out then.', 'ok');
+          CH.ui.toast(app.root, meeting ? 'Your change has been sent.' : 'Sent. The meeting shows straight away; the invitation goes out once it is saved, in about a minute.', 'ok');
         } catch (error) {
           submit.disabled = false;
           submit.textContent = 'Try again';
@@ -5263,7 +5357,10 @@ window.ESGCompetencyHub = function (ctx) {
         if (!dlg.isOpen()) return;
         clearTimeout(refreshTimer);
         refreshTimer = setTimeout(refreshNow, 600);
-      } };
+      },
+        // a change to this meeting, made from it, or to an action (its agenda shows actions)
+        shows: function (e) { var x = mt(); return !x || Number(e.meetingId) === Number(x.id) || (e.targetType === 'Meeting' && Number(e.targetId) === Number(x.id)) ||
+          e.type === 'ScheduleMeeting' || (e.targetType || 'Action') === 'Action' || e.type === 'RaiseAction'; } };
       var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-mt', title: 'Meeting', wide: true, onClose: function () { app.panelClose(panel); app.liveMeetingId = null; } });
       var wentLive = false;   // once the live screen has shown, the window keeps its width until it is closed
       var view = 'main';
@@ -5280,7 +5377,7 @@ window.ESGCompetencyHub = function (ctx) {
       var bookingKey = id < 0 && app.model.meetingById[id] ? app.model.meetingById[id].sending : null;
       var formKey = null;    // one change per form, however often it is tried again
       var current = null;    // the item on screen while the meeting runs: { it, dirty(), save() }
-      var lastKnown = null;   // the meeting as last shown: kept while the meetings list could not be read again (app 2.0)
+      var lastKnown = null;   // the meeting as last shown: kept while the meetings list could not be read again (1.4.0)
       function mt() {
         if (id < 0 && !app.model.meetingById[id] && bookingKey) {
           var booking = app.tracker.byKey(bookingKey);
@@ -5291,7 +5388,8 @@ window.ESGCompetencyHub = function (ctx) {
         // not in the rows: kept if the read failed, or while its booking is still being saved; otherwise it is gone
         var stale = (app.staleLists || []).indexOf('meetings') >= 0;
         var booking2 = bookingKey ? app.tracker.byKey(bookingKey) : null;
-        if (lastKnown && (stale || (booking2 && booking2.state !== 'done' && booking2.state !== 'rejected'))) return lastKnown;
+        var bookingOnWay = !!booking2 && ['queued', 'submitted', 'slow'].indexOf(booking2.state) >= 0;
+        if (lastKnown && (stale || bookingOnWay)) return lastKnown;
         if (lastKnown) { CH.log.note('meeting-gone', 'Meeting ' + id + ' was open and is no longer in the meetings list'); lastKnown = null; }
         return undefined;
       }
@@ -5396,7 +5494,7 @@ window.ESGCompetencyHub = function (ctx) {
         // waiting its turn (release 1.3): it is sent as soon as the change before it is saved
         if (e && e.state === 'queued') {
           return h('p', { class: 'pending', role: 'status' }, app.ring(e, false), ' ' + e.label + ' – shown now; it is sent as soon as ' +
-            (x.id < 0 ? 'the booking' : 'the change before it') + ' is saved, usually within a minute.');
+            (x.id < 0 ? 'the booking' : 'the change before it') + ' is saved, in about a minute.');
         }
         if (e && e.state === 'held') {
           return h('p', { class: 'pending', role: 'status' }, '✕ ' + e.label + ' – not sent, because an earlier change to this meeting was not saved. See the card at the bottom right.');
@@ -5549,7 +5647,7 @@ window.ESGCompetencyHub = function (ctx) {
           h('summary', null, h('span', { class: 'group-title', text: 'Attendance' }), ' ', h('span', { class: 'muted small', text: done + ' of ' + x.attendeeIds.length + ' recorded' })), status,
           h('ul', { class: 'plain attendance' }, x.attendeeIds.map(function (pid) {
             var rec = last[x.id + '|P|' + pid];
-            var sel = h('select', { id: 'ch-mt-att-' + pid, 'aria-label': 'Attendance of ' + app.model.nameOf(pid) },
+            var sel = h('select', { id: 'ch-mt-att-' + pid, 'data-instant': '1', 'aria-label': 'Attendance of ' + app.model.nameOf(pid) },
               [h('option', { value: '', text: 'Not recorded' })].concat(ATTENDANCE.map(function (a) { return h('option', { value: a, text: a, selected: rec && rec.Attendance === a ? true : null }); })));
             sel.addEventListener('change', function () {
               if (!sel.value) return;
@@ -5578,6 +5676,7 @@ window.ESGCompetencyHub = function (ctx) {
             await saveRow(x, { Title: it.title, RecordKey: it.key, RowType: 'Outcome', SourceType: it.key.split('|')[2], SourceId: Number(it.key.split('|')[3]),
               Outcome: outcome, Notes: notes.value.trim() }, status);
             it.notes = notes.value.trim();
+            dlg.clean();   // the notes are saved: nothing on this screen is unsaved now
             if (next) go(at + 1); else fill();
           } catch (_) { /* the message is shown beside the buttons */ }
         }
@@ -5596,7 +5695,7 @@ window.ESGCompetencyHub = function (ctx) {
           } catch (error) { status.textContent = error.friendly || 'The action could not be closed just now. Try again in a moment.'; }
         }
         var r = action ? R.roles(action, app.person.SiteUserId, app.access) : null;
-        var buttons = x.id < 0 ? [h('span', { class: 'muted small', text: 'Actions can be raised or closed from here once the booking is saved – usually within a minute.' })]
+        var buttons = x.id < 0 ? [h('span', { class: 'muted small', text: 'Actions can be raised or closed from here once the booking is saved – in about a minute.' })]
           : kind === 'action' ? [
           it.open ? ui.button('Open this action', it.open) : null,
           action && r.canClose && it.outcome !== 'Closed' && !action.done ? ui.button('Close this action', closeIt) : null,
@@ -5786,6 +5885,7 @@ window.ESGCompetencyHub = function (ctx) {
             await app.tracker.submit({ key: formKey, type: type, targetId: x.id, targetType: 'Meeting', creationKey: x.id < 0 ? x.sending : null,
               expectedRevision: x.revision, payload: payload, label: verb + x.areaName + ' meeting' });
             view = 'main';
+            dlg.clean();
             fill();
             if (kind === 'start' || kind === 'finalise') loadAgenda(true);
           } catch (error) {
@@ -6176,7 +6276,7 @@ window.ESGCompetencyHub = function (ctx) {
           : h('p', { class: 'muted', text: 'No changes have been saved with their times yet. Times are kept from solution 1.9.0.4 on.' })]);
     }
 
-    // What this browser noticed going wrong lately (app 2.0): staff send theirs with their feedback.
+    // What this browser noticed going wrong lately (1.4.0): staff send theirs with their feedback.
     function lateCard() {
       var list = CH.log.recent(7);
       return ui.card('What went wrong lately on this computer', list.length
@@ -6243,7 +6343,8 @@ window.ESGCompetencyHub = function (ctx) {
       app.panels = [];
       app.panelOpen = function (panel) { app.panels.push(panel); app.panel = panel; return panel; };
       app.panelClose = function (panel) { app.panels = app.panels.filter(function (p) { return p !== panel; }); app.panel = app.panels[app.panels.length - 1] || null; };
-      app.refreshPanels = function () { app.panels.slice().forEach(function (p) { if (p.refresh) p.refresh(); }); };
+      // entry: the change that moved on, when there is one; each panel refreshes only for changes to what it shows (1.4.1)
+      app.refreshPanels = function (entry) { app.panels.slice().forEach(function (p) { if (p.refresh && (!entry || !p.shows || p.shows(entry))) p.refresh(); }); };
 
       function findRoot() { return document.querySelector('[data-ch-root]'); }
       // an error in the page itself, kept for the "what went wrong lately" list (only ours: the script's file name)
@@ -6465,20 +6566,24 @@ window.ESGCompetencyHub = function (ctx) {
       // read are read (Modified is indexed) and folded in; the overlay of this person's own pending changes goes back on
       // top. A row changed by someone else is marked, so a panel open on it can say so. Nothing is read from a hidden tab.
       var DELTA = ['actions', 'notices', 'register', 'meetings'];
+      var OVERLAP_MS = 2 * 60 * 1000;
+      var staleTries = 0, staleRetryAt = 0;
       var refreshing = false;
       async function refreshOthers() {
         if (disposed || !app.raw || refreshing || document.hidden || !lastRead) return;
         refreshing = true;
         var since = lastRead;
-        var startedAt = new Date();
+        // two minutes of overlap: the browser's clock and SharePoint's need not agree, and a row read twice is taken once
+        var startedAt = new Date(Date.now() - OVERLAP_MS);
         try {
-          // lists SharePoint could not give us last time are read again in full first (app 2.0)
-          if (app.staleLists && app.staleLists.length) {
+          // lists SharePoint could not give last time are read again in full, less often while they keep failing
+          // (1, 2, 4 … 10 minutes); the others carry on being refreshed meanwhile (1.4.1)
+          if (app.staleLists && app.staleLists.length && Date.now() >= staleRetryAt) {
             await reload(app.staleLists.slice());
+            staleTries = app.staleLists.length ? staleTries + 1 : 0;
+            staleRetryAt = Date.now() + Math.min(10, Math.pow(2, Math.max(0, staleTries - 1))) * 60000;
             render(false);
             app.refreshPanels();
-            refreshing = false;
-            return;
           }
           var changed = await CH.model.loadChanged(app.sp, since);
           var touched = false;
@@ -6517,12 +6622,16 @@ window.ESGCompetencyHub = function (ctx) {
       // "updated by someone else at 10:42" for a record, or null
       app.changedByOthers = function (kind, id) {
         var key = { 'Action': 'actions', 'Notice': 'notices', 'Register Entry': 'register', 'Meeting': 'meetings' }[kind || 'Action'];
-        return app.others[key + '|' + Number(id)] || null;
+        var mark = app.others[key + '|' + Number(id)];
+        // a mark lasts an hour: after that the change is old news, and the mark is forgotten (1.4.1)
+        if (mark && Date.parse(mark.at) < Date.now() - 3600000) { delete app.others[key + '|' + Number(id)]; return null; }
+        return mark || null;
       };
       function onVisible() {
         if (document.hidden || disposed) return;
         if (app.tracker) app.tracker.wake();
         refreshOthers();
+        checkHealth();   // a tab coming back shows whether processing still works, without waiting 5 minutes
       }
       // a change still waiting in this browser alone (never sent yet) is lost if the page closes before it goes
       function onLeave(e) {
@@ -6598,13 +6707,77 @@ window.ESGCompetencyHub = function (ctx) {
         return (buffers()[key] || []).map(function (r) { return mt.id < 0 ? r : Object.assign(retarget(r, mt.id, {}), { Id: r.Id, AuthorId: r.AuthorId }); });
       };
 
-      // The lists a saved change can alter (release 1.2: only these are read again). Health comes with the settings.
+      // The lists a saved change can alter (release 1.2), read again in full only for the few kinds that change more
+      // than their own row; settings and health are read by the health check every 5 minutes (1.4.1).
       function listsFor(type) {
-        if (CH.requests.RECORD_TYPES.indexOf(type) >= 0) return ['notices', 'register', 'actions', 'settings'];
-        if (CH.requests.MEETING_TYPES.indexOf(type) >= 0) return ['meetings', 'actions', 'settings'];
-        return ['actions', 'settings'];
+        if (CH.requests.RECORD_TYPES.indexOf(type) >= 0) return ['notices', 'register', 'actions'];
+        if (CH.requests.MEETING_TYPES.indexOf(type) >= 0) return ['meetings', 'actions'];
+        return ['actions'];
+      }
+      // The rows a saved change touched, by list (1.4.1): read by Id instead of the whole list. null: read the lists.
+      var KIND_LIST = { 'Action': 'actions', 'Notice': 'notices', 'Register Entry': 'register', 'Meeting': 'meetings' };
+      function rowsFor(entry) {
+        if (['HideComment', 'FinaliseMeeting', 'AmendMeeting', 'StartMeeting'].indexOf(entry.type) >= 0) return null;
+        var kind = CH.requests.CREATES[entry.type] || entry.targetType || 'Action';
+        var list = KIND_LIST[kind];
+        var id = Number(entry.resultId) || Number(entry.targetId);
+        if (!list || !(id > 0)) return null;
+        var out = {};
+        out[list] = [id];
+        // linking an entry to an action changes the action too
+        var linked = entry.payload && Number(entry.payload.actionId);
+        if (linked > 0) (out.actions = out.actions || []).push(linked);
+        return out;
       }
 
+      // Saved changes are gathered for two seconds and their rows read together (1.4.1): five quick changes, one read.
+      var savedBatch = [], savedTimer = null;
+      function whenSaved(entry) {
+        savedBatch.push(entry);
+        clearTimeout(savedTimer);
+        savedTimer = setTimeout(readSaved, 2000);
+      }
+      async function readSaved() {
+        var batch = savedBatch;
+        savedBatch = [];
+        var ids = {}, lists = [];
+        batch.forEach(function (e) {
+          var rows = rowsFor(e);
+          if (!rows) { listsFor(e.type).forEach(function (l) { if (lists.indexOf(l) < 0) lists.push(l); }); return; }
+          Object.keys(rows).forEach(function (l) { ids[l] = (ids[l] || []).concat(rows[l]); });
+        });
+        lists.forEach(function (l) { delete ids[l]; });
+        try {
+          if (lists.length) await reload(lists);
+          if (Object.keys(ids).length) {
+            try { app.raw = await CH.model.loadRows(app.sp, app.raw, ids); }
+            catch (_) { await reload(Object.keys(ids)); }
+          }
+          batch.forEach(function (e) { e.reloaded = true; });   // the rows now carry the change: the overlay no longer applies it
+          rebuild();
+          // what was recorded on a meeting before its booking was saved goes to the meeting now
+          for (var i = 0; i < batch.length; i++) if (batch[i].type === 'ScheduleMeeting') await meetingBooked(batch[i]);
+          render(false);
+          app.refreshPanels();
+          batch.forEach(function (entry) {
+            var a = app.model.actionById[entry.resultId];
+            var e = app.model.entryById[entry.resultId];
+            // a new record gets its number now; other changes just show the green tick where they are (and are told to screen readers)
+            if (entry.type === 'RaiseAction' && a) CH.ui.toast(app.root, a.ref + ' raised: ' + a.title + '.', 'ok');
+            else if (entry.type === 'RaiseRegisterEntry' && e) CH.ui.toast(app.root, e.ref + ' raised: ' + e.title + '.', 'ok');
+            CH.ui.say(app.root, 'Saved: ' + entry.label + '. ' + entry.message);
+          });
+        } catch (_) {
+          batch.forEach(function (e) { e.reloaded = true; });
+          CH.ui.toast(app.root, (batch.length === 1 ? batch[0].message : 'Your changes are saved.') + ' Reload the page to see it.', 'ok');
+        }
+      }
+
+      var shownState = {};
+      function refreshStatusLine() {
+        var old = app.root && app.root.querySelector('.status-line');
+        if (old && old.parentNode) old.parentNode.replaceChild(statusLine(), old);
+      }
       function onRequestChange(entry) {
         if (CH.requests.ADMIN_TYPES.indexOf(entry.type) >= 0) {
           // a saved setting is read again, so the page shows the new value and uses it (DueSoonDays, MaxDeadlineYears)
@@ -6618,26 +6791,22 @@ window.ESGCompetencyHub = function (ctx) {
           return;
         }
         if (entry.state === 'rejected' && CH.requests.isConflict(entry) && !entry.explained) { explainConflict(entry); }
+        // only how far it has got moved (picked up by the flow): what the screen shows is the same, so only the status
+        // line is drawn again; the rings move by themselves. A new state or message (retrying) repaints (1.4.1)
+        var shown = entry.state + '|' + (entry.message || '');
+        if (shown === shownState[entry.key]) { refreshStatusLine(); return; }
+        shownState[entry.key] = shown;
         if (entry.state !== 'done') {
           rebuild();
           render(false);
-          app.refreshPanels();
+          app.refreshPanels(entry);
           return;
         }
-        reload(listsFor(entry.type)).then(async function () {
-          entry.reloaded = true;   // the rows now carry the change: the overlay no longer applies it
-          rebuild();
-          // what was recorded on a meeting before its booking was saved goes to the meeting now
-          if (entry.type === 'ScheduleMeeting') await meetingBooked(entry);
-          render(false);
-          app.refreshPanels();
-          var a = app.model.actionById[entry.resultId];
-          var e = app.model.entryById[entry.resultId];
-          // a new record gets its number now; other changes just show ✓✓ Saved where they are (and are told to screen readers)
-          if (entry.type === 'RaiseAction' && a) CH.ui.toast(app.root, a.ref + ' raised: ' + a.title + '.', 'ok');
-          else if (entry.type === 'RaiseRegisterEntry' && e) CH.ui.toast(app.root, e.ref + ' raised: ' + e.title + '.', 'ok');
-          CH.ui.say(app.root, 'Saved: ' + entry.label + '. ' + entry.message);
-        }).catch(function () { entry.reloaded = true; CH.ui.toast(app.root, entry.message + ' Reload the page to see it.', 'ok'); });
+        // the green tick shows at once (rebuild with the change still applied); its rows are read a moment later
+        rebuild();
+        render(false);
+        app.refreshPanels(entry);
+        whenSaved(entry);
       }
 
       // Someone else changed the record first (release 1.3): the record is read again, and the card says what they
@@ -6714,7 +6883,6 @@ window.ESGCompetencyHub = function (ctx) {
         render(!keepFocus);
         if (keepFocus) { var t = app.root.querySelector('.subtabs [aria-selected="true"]'); if (t) t.focus(); }
       };
-      app.comingSoon = function (what) { CH.ui.toast(app.root, what + ' will be available in the next version of the Competency Hub.', 'info'); };
       app.postNotice = function (key) { CH.views.noticeForm.open(app, key); };
       app.raiseAction = function (key) {
         if (app.queueBlocked()) { CH.ui.toast(app.root, 'Raising actions is paused while changes can\'t be processed. Please try again later.', 'info'); return; }
@@ -6812,9 +6980,10 @@ window.ESGCompetencyHub = function (ctx) {
 
       // only: the lists to read again (release 1.2); everything when not given
       async function reload(only) {
+        // the time of the read is taken before it, with the overlap (see refreshOthers)
+        var readAt = new Date(Date.now() - OVERLAP_MS);
         var raw = await CH.model.load(app.sp, only, app.raw);
         var now = new Date();
-        var today = CH.dates.localDate(now);
         var memberships = (raw.members.rows || [])
           .filter(function (m) { return Number(m.PersonId) === Number(app.person.SiteUserId); })
           .map(function (m) {
@@ -6823,8 +6992,8 @@ window.ESGCompetencyHub = function (ctx) {
           }).filter(Boolean);
         var areasByKey = {};
         (raw.competencies.rows || []).forEach(function (c) { areasByKey[c.CompetencyKey] = { status: c.Status }; });
-        if (raw.competencies.error !== undefined && !raw.competencies.stale) throw new CH.sp.SpError(raw.competencies.error, 'The list of areas could not be loaded.');
-        if (raw.members.error !== undefined && !raw.members.stale) throw new CH.sp.SpError(raw.members.error, 'Area memberships could not be loaded.');
+        if (raw.competencies.error !== undefined && (!raw.competencies.stale || raw.competencies.empty)) throw new CH.sp.SpError(raw.competencies.error, 'The list of areas could not be loaded.');
+        if (raw.members.error !== undefined && (!raw.members.stale || raw.members.empty)) throw new CH.sp.SpError(raw.members.error, 'Area memberships could not be loaded.');
         app.access = CH.access.build(app.person, memberships, areasByKey);
         app.health = CH.health.judge(raw.settings.rows, now);
         app.settings = raw.settings.rows || [];
@@ -6832,10 +7001,12 @@ window.ESGCompetencyHub = function (ctx) {
         var soon = (app.settings.filter(function (r) { return r.Title === 'DueSoonDays'; })[0] || {}).Value;
         CH.config.dueSoonDays = /^\d{1,2}$/.test(String(soon || '')) && Number(soon) >= 1 && Number(soon) <= 30 ? Number(soon) : 7;
         app.raw = raw;
-        // what could not be read again is kept and read on the next refresh; the time of the last good read only moves
-        // on when every list this read asked for came back, so the minute's read of changes misses nothing (app 2.0)
+        // what could not be read again is kept and read on the next refresh (1.4.0)
         app.staleLists = Object.keys(raw).filter(function (k) { return raw[k] && raw[k].stale; });
-        if (!(only || Object.keys(raw)).some(function (k) { return raw[k] && raw[k].stale; })) lastRead = now;
+        // only a full read moves the time of the last read on: a part read (after a saved change) did not read the
+        // other lists, whose changes the next minute's read must still find; a list that failed is read again in full
+        // by refreshOthers, so it misses nothing either (1.4.1)
+        if (!only) lastRead = readAt;
         rebuild();
       }
 
@@ -6862,7 +7033,7 @@ window.ESGCompetencyHub = function (ctx) {
 
       async function start() {
         app.root = await waitForRoot();
-        // Welcome started the layout again on the same page while this one still runs (app 2.0): the running one is kept,
+        // Welcome started the layout again on the same page while this one still runs (1.4.0): the running one is kept,
         // so nothing open on it is lost, and the new one does nothing
         var live = window.__esgCompetencyHubLive;
         if (live && !live.disposed() && live.root === app.root && live.root.isConnected) {

@@ -77,9 +77,10 @@ window.MockSharePoint = (function () {
     return raw;
   }
 
-  // Supports "Field eq value" clauses joined by "and", which is all the app uses.
+  // Supports "Field eq value" clauses joined by "and", or all joined by "or" (the app reads saved rows by Id that way).
   function matches(row, filter) {
     if (!filter) return true;
+    if (/\s+or\s+/.test(filter) && !/\s+and\s+/.test(filter)) return filter.split(/\s+or\s+/).some(function (c) { return matches(row, c); });
     return filter.split(/\s+and\s+/).every(function (clause) {
       // DateColumn ge datetime'2026-10-01T00:00:00Z'
       var dt = /^(\w+)\s+(ge|le|gt|lt)\s+datetime'([^']+)'$/.exec(clause.trim());

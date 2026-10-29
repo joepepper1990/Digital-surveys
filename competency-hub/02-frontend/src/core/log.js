@@ -1,4 +1,4 @@
-// What the Hub noticed going wrong on this screen (app 2.0): a list SharePoint could not give, the page started a
+// What the Hub noticed going wrong on this screen (1.4.0): a list SharePoint could not give, the page started a
 // second time, an error in the page itself. Kept in this browser only (the last 50, at most one of a kind a
 // minute), shown under Administration and sent with feedback when the person agrees, so a report of a glitch comes
 // with the evidence.

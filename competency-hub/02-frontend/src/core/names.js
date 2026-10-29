@@ -1,4 +1,4 @@
-// People's names for display. The directory stores names surname first ("Pepper Joseph"); addresses are
+// People's names for display. The directory stores names surname first ("Bloggs Jo"); addresses are
 // firstname.lastname@, so the first name from the address tells us which word to move to the front.
 CH.names = (function () {
   // The name a person is known by (People.KnownAs, set by an administrator) comes first; otherwise their full

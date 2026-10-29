@@ -533,7 +533,7 @@ window.MockDrivers = (function () {
     },
     // People administration (spec ADM-1 to ADM-3): add one person, change someone's areas, and never your own.
     peoplePage: async function () {
-      byText('button', 'Open Administration').click();
+      (await until(function () { return byText('button', 'Open Administration'); })).click();
       (await until(function () { return byText('.subtabs button', 'People'); })).click();
       await until(function () { return q('#ch-p-search'); });
       var names = all('.people-list .item-open .t').map(function (n) { return n.textContent; });
@@ -1365,6 +1365,7 @@ window.MockDrivers = (function () {
       await startLive();
       var scrim = q('#ch-mt').parentNode;
       var notes = q('#ch-mt-item-notes');
+      type(notes, 'Being worked in.');
       notes.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
       scrim.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
       scrim.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -1429,6 +1430,8 @@ window.MockDrivers = (function () {
       MockSharePoint.data['Competency Hub Settings'][0].Value = JSON.stringify({ state: 'Down', reason: 'Changes are not being picked up.', checkedAt: new Date().toISOString(), attention: 0 });
       byText('#ch-mt .item-pane .btn', 'Close this action').click();
       await until(function () { return MockSharePoint.data.Actions.filter(function (a) { return a.Id === 40; })[0].Status === 'Closed'; }, 120000);
+      // the health check runs every 5 minutes, and at once when the tab comes back
+      document.dispatchEvent(new Event('visibilitychange'));
       await until(function () { return /can't be processed/.test(q('.status-line').textContent); }, 30000);
       await wait(1500);
       return { before: before, after: all('#ch-mt .actions-row .btn').map(function (b) { return b.textContent; }), editor: !!q('#ch-mt .outcomes') && !!q('#ch-mt-item-notes'),
@@ -1613,6 +1616,8 @@ window.MockDrivers = (function () {
       form.dispatchEvent(new Event('submit', { cancelable: true }));
       await until(function () { return MockSharePoint.data.Meetings.filter(function (m) { return m.AmendmentCount === 1; }).length; }, 120000);
       await until(function () { return q('#ch-mt .minutes') && /Amendments/.test(q('#ch-mt .minutes').textContent); }, 120000);
+      // the new PDF version is made after the amendment, and read with the next minute's read of changes
+      await until(function () { return /-v2\.pdf$/.test(q('#ch-mt .minutes a.btn').getAttribute('href') || ''); }, 120000).catch(function () {});
       return { errors: errors, minutes: q('#ch-mt .minutes').textContent, pdf: q('#ch-mt .minutes a.btn').getAttribute('href') };
     },
     // ---- Release 6: removing the test records before go-live

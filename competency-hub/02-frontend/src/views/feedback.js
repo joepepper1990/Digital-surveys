@@ -39,7 +39,7 @@ CH.views.feedback = (function () {
     var type = h('select', { id: 'ch-fb-type' }, TYPES.map(function (t) { return h('option', { value: t, text: t }); }));
     var description = h('textarea', { id: 'ch-fb-description', rows: '6', maxlength: '4000' });
     var errorBox = h('p', { class: 'form-error', role: 'alert' });
-    // what this browser noticed going wrong lately goes with it, if the person agrees (app 2.0)
+    // what this browser noticed going wrong lately goes with it, if the person agrees (1.4.0)
     var noticed = CH.log.asText(7);
     var attach = h('input', { id: 'ch-fb-attach', type: 'checkbox', checked: noticed ? true : null });
     var submit = h('button', { type: 'submit', class: 'btn btn-main', text: 'Send feedback' });

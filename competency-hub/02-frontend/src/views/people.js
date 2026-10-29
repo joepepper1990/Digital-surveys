@@ -63,7 +63,7 @@ CH.views.people = (function () {
 
   function sendAndShow(app, box, spec) {
     CH.dom.clear(box);
-    box.appendChild(h('p', { class: 'pending', role: 'status', text: 'Sent – being recorded (usually under 5 minutes).' }));
+    box.appendChild(h('p', { class: 'pending', role: 'status', text: 'Sent – being recorded (usually within a minute or two).' }));
     return app.tracker.submit(spec).then(function (entry) { watch(app, box, entry); return entry; }, function (error) {
       CH.dom.clear(box);
       box.appendChild(h('p', { class: 'field-error', role: 'alert', text: error.friendly || 'Could not send that just now. Try again in a moment.' }));
@@ -89,7 +89,7 @@ CH.views.people = (function () {
     var posts = h('input', { id: 'ch-pa-posts', type: 'checkbox', checked: true });
     var areas = areaTable(app, 'ch-pa-', {}, function () { return role.value; });
     var result = h('div', { class: 'result' });
-    var paste = h('textarea', { id: 'ch-pa-list', rows: '8', placeholder: 'firstname.lastname@edf-energy.com, Technician, GRS RP, Jo' });
+    var paste = h('textarea', { id: 'ch-pa-list', rows: '8', placeholder: 'firstname.lastname@…, Technician, GRS RP, Jo' });
     var pasteResult = h('ul', { class: 'plain result' });
     CH.dom.append(dlg.body, [
       h('h3', { text: 'One person' }),

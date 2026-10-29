@@ -65,7 +65,9 @@ CH.views.actionPanel = (function () {
   }
 
   function open(app, id) {
-    var panel = { id: id, refresh: refresh };
+    var panel = { id: id, refresh: refresh, shows: function (e) {
+      return Number(e.targetId) === Number(id) || Number(e.resultId) === Number(id) || (!!e.creationKey && e.creationKey === (action() || {}).sending);
+    } };
     var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-a', title: 'Action', wide: true, onClose: function () { app.panelClose(panel); } });
     var view = 'main';
     var updates = null;
@@ -174,7 +176,8 @@ CH.views.actionPanel = (function () {
       if (which === 'edit') editForm(a);
       dlg.focusFirst();
     }
-    function back() { view = 'main'; fill(); dlg.focusFirst(); }
+    // back to the action after a change was sent: nothing is left unsaved, so Escape closes it again (1.4.1)
+    function back() { view = 'main'; dlg.clean(); fill(); dlg.focusFirst(); }
 
     var formKey = null;
     function formShell(title, fields, submitLabel, onSubmit) {

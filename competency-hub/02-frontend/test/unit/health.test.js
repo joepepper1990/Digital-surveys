@@ -26,11 +26,11 @@ test('the monitor reporting Down stops queued changes, with its reason', () => {
   assert.equal(h.reason, 'Changes are not being picked up by the request flow.');
 });
 
-test('a monitor silent for more than 45 minutes in working hours counts as down', () => {
-  assert.equal(CH.health.judge(rows({ state: 'Healthy', checkedAt: '2026-10-22T08:20:00Z' }), WED_10).processing, 'ok');
-  const h = CH.health.judge(rows({ state: 'Healthy', checkedAt: '2026-10-22T08:10:00Z' }), WED_10);
+test('a monitor silent for more than 25 minutes in working hours counts as down', () => {
+  assert.equal(CH.health.judge(rows({ state: 'Healthy', checkedAt: '2026-10-22T08:40:00Z' }), WED_10).processing, 'ok');
+  const h = CH.health.judge(rows({ state: 'Healthy', checkedAt: '2026-10-22T08:30:00Z' }), WED_10);
   assert.equal(h.processing, 'down');
-  assert.match(h.reason, /has not reported since 09:10/);
+  assert.match(h.reason, /has not reported since 09:30/);
 });
 
 test('outside working hours the monitor reports hourly, so an hour and a half of silence is still fine', () => {

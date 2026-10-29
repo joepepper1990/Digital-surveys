@@ -35,14 +35,18 @@ CH.model = (function () {
         raw[key] = { rows: res.rows, complete: res.complete };
       } catch (error) {
         // a list that could not be read again (SharePoint busy, the connection dropped) keeps what was read last
-        // time, marked stale, so nothing on screen disappears; only a first read that fails is empty (app 2.0)
+        // time, marked stale, so nothing on screen disappears, however many reads in a row fail; one never read
+        // is empty and marked stale too, so it is tried again (1.4.0, 1.4.1)
         var was = prev && prev[key];
-        raw[key] = was && !was.error && was.rows ? { rows: was.rows, complete: was.complete, stale: true, error: error.status || 0 }
-          : { rows: [], complete: false, error: error.status || 0 };
+        raw[key] = was && was.rows && !was.empty && (was.stale || was.error === undefined)
+          ? { rows: was.rows, complete: was.complete, stale: true, error: error.status || 0 }
+          : { rows: [], complete: false, stale: true, empty: true, error: error.status || 0 };
         if (CH.log) CH.log.note('read-failed', key + ' could not be read again (HTTP ' + (error.status || 0) + ')' + (was ? '; the last read is kept' : ''));
       }
     }));
-    raw.discussed = !only || !prev || keys.indexOf('meetings') >= 0 || keys.indexOf('updates') >= 0 ? await discussed(sp, raw) : prev.discussed;
+    // what finalised meetings discussed: kept from the last read when it cannot be read again (1.4.1)
+    var again = !only || !prev || keys.indexOf('meetings') >= 0 || keys.indexOf('updates') >= 0 ? await discussed(sp, raw) : null;
+    raw.discussed = again || (prev && prev.discussed) || [];
     return raw;
   }
 
@@ -89,11 +93,13 @@ CH.model = (function () {
         });
       });
       return out;
-    } catch (_) { return []; }
+    } catch (_) { return null; }
   }
 
   function section(r) {
     if (!r) return 'unavailable';
+    // rows kept from the last read while SharePoint is busy are shown as they were (the status line says so)
+    if (r.stale && !r.empty) return r.complete ? 'complete' : 'partial';
     if (r.error !== undefined) return 'unavailable';
     return r.complete ? 'complete' : 'partial';
   }
@@ -361,5 +367,27 @@ CH.model = (function () {
     return row && !isUncommitted(row) ? row : null;
   }
 
-  return { QUERIES: QUERIES, load: load, loadChanged: loadChanged, build: build, isUncommitted: isUncommitted, loadFinished: loadFinished, loadAction: loadAction };
+  // A saved change's own rows (1.4.1), read by Id with the list's usual columns and folded into what was read last:
+  // a row that no longer belongs on the screen's list (a closed action, an archived notice) leaves it. ids: up to
+  // 20 per list. Returns a new raw object; the lists not asked for are the same as before.
+  var BELONGS = { actions: function (r) { return r.IsOpen === true || r.IsOpen === 1; }, notices: function (r) { return r.Status === 'Active'; },
+    calendar: function (r) { return r.Status === 'Scheduled'; } };
+  async function loadRows(sp, prev, ids) {
+    var raw = Object.assign({}, prev);
+    await Promise.all(Object.keys(ids).map(async function (key) {
+      var list = ids[key].filter(function (id, i, all) { return Number(id) > 0 && all.indexOf(id) === i; }).slice(0, 20);
+      if (!list.length || !QUERIES[key] || !prev[key] || prev[key].empty) return;
+      var q = QUERIES[key].replace(/&\$filter=.*$/, '') + '&$filter=' + list.map(function (id) { return 'Id eq ' + Number(id); }).join(' or ');
+      var res = await sp.items(CH.config.lists[key].title, q, null, OPTIONAL[key]);
+      var byId = {};
+      res.rows.forEach(function (r) { byId[Number(r.Id)] = r; });
+      var belongs = BELONGS[key] || function () { return true; };
+      var rows = (prev[key].rows || []).filter(function (r) { return !(Number(r.Id) in byId) && list.indexOf(Number(r.Id)) < 0; });
+      list.forEach(function (id) { var r = byId[Number(id)]; if (r && belongs(r)) rows.push(r); });
+      raw[key] = Object.assign({}, prev[key], { rows: rows });
+    }));
+    return raw;
+  }
+
+  return { QUERIES: QUERIES, load: load, loadChanged: loadChanged, loadRows: loadRows, build: build, isUncommitted: isUncommitted, loadFinished: loadFinished, loadAction: loadAction };
 })();

@@ -4,7 +4,7 @@
 // stale reminders never stop people changing actions.
 CH.health = (function () {
   var DAILY_LIMIT_HOURS = 26;
-  var WORKING_SLACK_MINUTES = 45;
+  var WORKING_SLACK_MINUTES = 25;
 
   function value(rows, title) {
     var row = (rows || []).filter(function (r) { return r.Title === title; })[0];

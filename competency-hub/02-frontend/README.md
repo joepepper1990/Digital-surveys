@@ -2,6 +2,31 @@
 
 Plain HTML, CSS and JavaScript, delivered as a Welcome by Accelerator 365 custom layout. Same-origin SharePoint REST runs as the signed-in user. There are no libraries and no external calls.
 
+## Version 1.4.1: accurate and lighter (29 October 2026)
+
+From a review of the whole app:
+- **A list that fails twice keeps its rows.** `CH.model.load` kept the last rows on the first failure but emptied
+  the list on a second one; now it keeps them however often it fails, and a first read that fails is marked stale
+  and empty and read again. `discussed` falls back to what it had. Kept stale rows count as present (`section()`),
+  so actions are not shown as unavailable.
+- **The time of the last read** is taken before the read, moves only on a full reload, and the minute's read of
+  changes overlaps it by 2 minutes (server and browser clocks). A list that keeps failing is read again with
+  back-off (1, 2, 4 … 10 minutes) while the others go on being refreshed.
+- **Changes waiting on another** (`after`, `creationKey`): a refused or dropped one, or a creation saved without a
+  number, holds those behind it with one card; a waiting change is never sent twice (`inFlight`).
+- **A saved change reads only its own row** (`CH.model.loadRows`, by Id), merged into what is shown; completions
+  within 2 seconds are read together. Settings are read by the health check only (every 5 minutes, and when the tab
+  comes back). One read of this person's open requests per poll round serves every pending change.
+- **Panels repaint only for their own record** (`shows(entry)`); a change only picked up by the flow redraws the
+  status line alone; a new state or message (retrying) repaints.
+- **Dialogs:** `clean()` after a send, and `[data-instant]` controls (meeting attendance) don't count as typing.
+- **The ring learns only from normal changes** (not from ones that needed an administrator, finished while hidden or
+  took over 3× the estimate); timings are cached in memory. Settled changes are forgotten after 10 minutes, with
+  their timers; "updated by someone else" marks after an hour.
+- **Text:** "in about a minute", "It is tried again in a minute", the monitor counted silent after 25 minutes in
+  working hours; the out-of-hours monitor gap 20–90 in tens. Dead code removed (text size, `comingSoon`, a duplicate
+  export).
+
 ## Version 1.4.0: windows close only when asked (29 October 2026) – step 1 of app 2.0
 
 Why a meeting window still closed by itself after 1.3.2, and what is changed:
@@ -121,7 +146,7 @@ Why a meeting window still closed by itself after 1.3.2, and what is changed:
 ## Version 1.2.0: release 1.2, as approved in the preview (25 October 2026)
 
 - **Changes show at once** (`src/domain/optimistic.js`): every change still being saved is applied to the rows last
-  read, by request type, before the model is built. It is marked ✓ Sent, then ✓✓ Saved (which fades); it survives a
+  read, by request type, before the model is built. It is marked with a progress ring, then a green tick (which fades); it survives a
   page reload, and simply stops showing if it is refused or fails. Your own change still saving no longer locks the
   panel: the next one is sent against the revision the first leaves.
 - **One status line** under the bar replaces the request strip and the limited-mode banner (backlog 2).
@@ -243,7 +268,7 @@ The home page approved on 23 October 2026 (preview: `preview/designs/design-4-we
   closes it and focus returns to the tile. `?area=FLK` opens Flask this way; `?view=area&area=FLK` opens the full page.
 - **Top bar**: *My week*, *My actions* and (administrators) *Administration*; on the home page, *Post a notice* and
   *Raise an action*.
-- **Names first name first** ("Joseph Pepper" rather than the directory's "Pepper Joseph"), worked out from the
+- **Names first name first** ("Jo Bloggs" rather than the directory's "Bloggs, Jo"), worked out from the
   firstname.lastname address (`src/core/names.js`).
 
 ## Version 0.5.1: Release 2 – administration and permissions
@@ -306,7 +331,7 @@ The home page approved on 23 October 2026 (preview: `preview/designs/design-4-we
 
 ## Version 0.1.1: first fixes from the live site
 
-- The greeting uses the first name from the user's Microsoft 365 profile. If that can't be read, it uses the part of a `firstname.lastname@` address before the dot. Display names at EDF are "Surname Firstname", so "Pepper" was shown before.
+- The greeting uses the first name from the user's Microsoft 365 profile. If that can't be read, it uses the part of a `firstname.lastname@` address before the dot. Display names at EDF are "Surname Firstname", so the surname was shown before.
 - An area counts as overdue for a meeting only once more than 35 days have passed since its last meeting or, with no meeting yet, since its Tracking Start date. Before, a new site showed all ten areas as overdue.
 
 ## Version 0.1.0: the app shell

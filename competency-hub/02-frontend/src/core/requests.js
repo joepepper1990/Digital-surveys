@@ -86,6 +86,27 @@ CH.requests = (function () {
       };
     }
 
+    // This person's requests still on their way, read once for every change being checked within 10 seconds
+    // (1.4.1: one read instead of one per change); a change no longer among them is read on its own, to see how it ended.
+    var openRead = null, openAt = 0;
+    function openRequests() {
+      if (!openRead || Date.now() - openAt > 10000) {
+        openAt = Date.now();
+        openRead = app.sp.items(CH.config.lists.requests.title, '$select=Id,Status,ResultMessage,ResultId,RequestKey,AuthorId&$filter=' +
+          OPEN_STATUSES.map(function (s) { return "Status eq '" + s + "'"; }).join(' or '), 500)
+          .then(function (res) {
+            if (!res.complete) return null;   // more than one page: not to be relied on for "not open any more"
+            return res.rows.filter(function (r) { return Number(r.AuthorId) === Number(app.person.SiteUserId); });
+          }, function () { return null; });
+      }
+      return openRead;
+    }
+    async function currentRow(entry) {
+      var open = await openRequests();
+      var row = open ? open.filter(function (r) { return r.RequestKey === entry.key; })[0] : null;
+      return row || findRequest(entry.key);
+    }
+
     async function findRequest(key) {
       var res = await app.sp.items(CH.config.lists.requests.title,
         "$select=Id,Status,ResultMessage,ResultId&$filter=RequestKey eq '" + q(key) + "'", 1);
@@ -164,6 +185,12 @@ CH.requests = (function () {
     // Writes the request. A change that waited reads the record's revision first, so it is checked against the
     // record as the change before it left it.
     async function sendNow(entry) {
+      // one send at a time for a change: a second call while the first is on its way waits for it (1.4.1)
+      if (entry.inFlight) return entry.inFlight;
+      entry.inFlight = sendOnce(entry);
+      try { return await entry.inFlight; } finally { entry.inFlight = null; }
+    }
+    async function sendOnce(entry) {
       var spec = entry.spec;
       if (entry.creationKey) {
         var creation = byKey(entry.creationKey);
@@ -203,23 +230,40 @@ CH.requests = (function () {
       return row && Number(row.Revision) ? Number(row.Revision) : '';
     }
 
-    // A change settled: the ones waiting behind it go next (or are held, if it was not saved).
+    // A change settled: the ones waiting behind it go next (or are held, if it was not saved). A change that waited
+    // for several (a finalise, for every change made from the meeting) is held as well if any of them was not saved,
+    // and a creation saved without its new number holds what waits for it too, so nothing waits for ever (1.4.1).
     function advance(entry) {
+      var lost = failed(entry) || entry.state === 'dropped' || (entry.state === 'done' && CREATES[entry.type] && !entry.resultId);
       entries.forEach(function (e) {
-        if (e.after && e.after.indexOf(entry.key) >= 0) e.after = e.after.filter(function (k) { return k !== entry.key; });
+        if (!e.after || e.after.indexOf(entry.key) < 0) return;
+        e.after = e.after.filter(function (k) { return k !== entry.key; });
+        if (lost && e.state === 'queued') { e.state = 'held'; e.heldBy = entry.key; e.message = ''; onChange(e); hold(e); }
       });
-      if (entry.state === 'done') {
+      if (entry.state === 'done' && !lost) {
         entries.filter(function (e) { return e.state === 'queued' && e.orderAfter === entry.key; }).forEach(function (e) {
           e.orderAfter = null;
           e.needsRevision = true;
         });
-        entries.filter(function (e) { return e.state === 'queued' && !e.orderAfter && !e.after.length; }).forEach(function (e) {
-          sendNow(e).catch(function () { e.unsent = true; onChange(e); });
-        });
-      } else if (failed(entry) || entry.state === 'dropped') {
+      } else if (lost) {
         hold(entry);
+        entries.filter(function (e) { return e.state === 'queued' && (e.creationKey === entry.key); }).forEach(function (e) {
+          e.state = 'held'; e.heldBy = entry.key; e.message = ''; onChange(e); hold(e);
+        });
       }
+      sendReady();
       persist();
+    }
+    // every waiting change with nothing left to wait for is sent, once: one already on its way is not sent again
+    function sendReady() {
+      entries.filter(function (e) {
+        if (e.state !== 'queued' || e.inFlight || e.orderAfter || (e.after && e.after.length)) return false;
+        if (!e.creationKey) return true;
+        var c = byKey(e.creationKey);
+        return !!c && c.state === 'done' && !!c.resultId;
+      }).forEach(function (e) {
+        sendNow(e).catch(function () { e.unsent = true; onChange(e); });
+      });
     }
     function hold(entry) {
       entries.filter(function (e) { return e.state === 'queued' && e.orderAfter === entry.key; }).forEach(function (e) {
@@ -308,16 +352,15 @@ CH.requests = (function () {
       var elapsed = (Date.now() - entry.submittedAt.getTime()) / 1000;
       var seconds = elapsed < POLL_FAST_FOR ? POLL_FAST : EVERY;
       entry.timer = setTimeout(function () { poll(entry); }, seconds * 1000);
-      timers.push(entry.timer);
     }
 
     async function poll(entry) {
       if (stopped || entry.state !== 'submitted' && entry.state !== 'slow') return;
       // a tab nobody is looking at asks nothing; it catches up when it is looked at again (wake)
-      if (hidden()) { entry.timer = setTimeout(function () { poll(entry); }, POLL_FAST * 1000); timers.push(entry.timer); return; }
+      if (hidden()) { entry.hiddenSeen = true; entry.timer = setTimeout(function () { poll(entry); }, POLL_FAST * 1000); return; }
       entry.polls++;
       var row = null;
-      try { row = await findRequest(entry.key); } catch (_) { row = null; }
+      try { row = await currentRow(entry); } catch (_) { row = null; }
       var status = row && row.Status;
       // waiting in the queue, or being worked on now (spec REL-2)
       if ((status === 'Processing') !== !!entry.processing) {
@@ -380,13 +423,32 @@ CH.requests = (function () {
       }
     }
 
+    // Changes finished long enough ago are forgotten (1.4.1): saved ones once their list was read again, and ones
+    // given up on or dismissed, after 10 minutes; nothing still waiting or still shown as a problem goes.
+    function prune() {
+      var old = Date.now() - 10 * 60000;
+      entries = entries.filter(function (e) {
+        if (!(e.settledAt < old)) return true;
+        if (e.state === 'done') return !e.reloaded;
+        if (e.state === 'dropped') return false;
+        return !(FAILED.indexOf(e.state) >= 0 && e.dismissed && !entries.some(function (x) { return x.heldBy === e.key; }));
+      });
+    }
     function settle(entry, state, message) {
+      prune();
+      entry.settledAt = Date.now();
       entry.state = state;
       entry.message = message;
       if (state === 'done') {
         entry.doneAt = Date.now();
         // how long it took, so the next change of this kind can say about how long it will be
-        if (CH.eta && !entry.resumed) CH.eta.learn(entry.type, entry.submittedAt.getTime(), entry.processingAt || null, entry.doneAt);
+        // only a change watched all the way teaches the estimate: not one picked up again after a reload, one that
+        // went to an administrator, one that finished while the tab was hidden (checks were paused), nor one that took
+        // three times as long as expected (a lock wait, an outage) (1.4.1)
+        var took = (entry.doneAt - entry.submittedAt.getTime()) / 1000;
+        if (CH.eta && !entry.resumed && !entry.everAttention && !entry.hiddenSeen && took <= 3 * CH.eta.expected(entry.type).total) {
+          CH.eta.learn(entry.type, entry.submittedAt.getTime(), entry.processingAt || null, entry.doneAt);
+        }
       }
       onChange(entry);
       advance(entry);
@@ -397,6 +459,7 @@ CH.requests = (function () {
     // followed as before) or cancelled or reverted it.
     function watchAttention(entry) {
       if (stopped) return;
+      entry.everAttention = true;
       timers.push(setTimeout(async function () {
         if (stopped || entry.state !== 'attention') return;
         var row = null;
@@ -463,6 +526,7 @@ CH.requests = (function () {
     // Give up on a change that was not saved, and on everything that was waiting for it.
     function discard(entry) {
       entry.dismissed = true;
+      entry.settledAt = entry.settledAt || Date.now();
       if (entry.state === 'queued' || entry.state === 'held') entry.state = 'dropped';
       entries.filter(function (e) { return e.state === 'held' && e.heldBy === entry.key; }).forEach(function (e) { discard(e); });
       persist();
@@ -475,7 +539,6 @@ CH.requests = (function () {
       byKey: byKey,
       retry: retry,
       discard: discard,
-      byKey: byKey,
       entries: function () { return entries.slice(); },
       // Changes held because an earlier one to the same record was not saved.
       heldBy: function (entry) { return entries.filter(function (e) { return e.state === 'held' && e.heldBy === entry.key; }); },
@@ -520,7 +583,7 @@ CH.requests = (function () {
       },
       stash: stash,
       persist: persist,
-      stop: function () { stopped = true; timers.forEach(clearTimeout); }
+      stop: function () { stopped = true; timers.forEach(clearTimeout); entries.forEach(function (e) { if (e.timer) clearTimeout(e.timer); }); }
     };
   }
 

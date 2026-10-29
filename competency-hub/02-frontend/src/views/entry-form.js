@@ -38,7 +38,7 @@ CH.views.entryForm = (function () {
         await app.tracker.submit({ key: key, type: 'RaiseRegisterEntry', label: 'Raise “' + v.title.trim() + '”', payload: {
           areaKey: v.areaKey, entryType: v.entryType, impact: v.impact, title: v.title.trim(), description: v.description.trim() } });
         dlg.close();
-        CH.ui.toast(app.root, 'Sent. It shows ✓✓ Saved as soon as it is recorded – you can carry on.', 'ok');
+        CH.ui.toast(app.root, 'Sent. A green tick shows as soon as it is recorded – you can carry on.', 'ok');
       } catch (error) {
         submit.disabled = false;
         submit.textContent = 'Try again';

@@ -125,7 +125,7 @@ CH.views.meetingForm = (function () {
           }
         }
         dlg.close();
-        CH.ui.toast(app.root, meeting ? 'Your change has been sent.' : 'Sent. The meeting appears in a few minutes, and the invitation goes out then.', 'ok');
+        CH.ui.toast(app.root, meeting ? 'Your change has been sent.' : 'Sent. The meeting shows straight away; the invitation goes out once it is saved, in about a minute.', 'ok');
       } catch (error) {
         submit.disabled = false;
         submit.textContent = 'Try again';

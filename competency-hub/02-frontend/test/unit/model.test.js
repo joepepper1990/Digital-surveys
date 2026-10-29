@@ -131,7 +131,11 @@ test('app 2.0: a list SharePoint cannot give again keeps what was read last time
   assert.ok(!next.actions.stale);
   const first = await CH2.model.load(sp);
   assert.deepEqual(plain(first.meetings.rows), []);
-  assert.ok(!first.meetings.stale, 'nothing to keep on a first read');
+  assert.ok(first.meetings.stale && first.meetings.empty, 'nothing to keep on a first read: empty, and tried again');
+  // 1.4.1: a second failure in a row still keeps the rows
+  const twice = await CH2.model.load(sp, ['meetings'], next);
+  assert.equal(twice.meetings.stale, true);
+  assert.deepEqual(plain(twice.meetings.rows), plain(prev.meetings.rows), 'still there after two failures');
   busy = false;
   const again = await CH2.model.load(sp, ['meetings'], next);
   assert.ok(!again.meetings.stale, 'recovers on the next good read');

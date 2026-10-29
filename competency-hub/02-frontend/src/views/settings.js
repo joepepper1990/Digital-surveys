@@ -15,7 +15,7 @@ CH.views.settings = (function () {
     { name: 'MaxDeadlineYears', label: 'Furthest deadline', unit: 'years ahead', min: 1, max: 5, fallback: '2',
       hint: 'The latest target date anyone can choose.' },
     { name: 'MonitorHours', label: 'Queue monitor hours', hours: true, fallback: '07:00|19:45|60',
-      hint: 'Every 15 minutes in working hours on weekdays; outside them, every so many minutes.' },
+      hint: 'Every 10 minutes in working hours on weekdays; outside them, every so many minutes (20 to 90, in tens).' },
     { name: 'InvitesEnabled', label: 'Outlook invitations', yesNo: true, fallback: 'Yes',
       hint: 'Yes: meetings send Outlook invitations, updates and cancellations. No: people add meetings to their calendar from the Hub.' },
     { name: 'PdfEnabled', label: 'PDF minutes', yesNo: true, fallback: 'Yes',
@@ -33,8 +33,8 @@ CH.views.settings = (function () {
     if (item.hours) {
       var p = String(value).split('|');
       var t = function (x) { var m = /^(\d{2}):(\d{2})$/.exec(x || ''); return m && +m[1] < 24 && +m[2] < 60 ? +m[1] * 60 + +m[2] : -1; };
-      if (p.length !== 3 || t(p[0]) < 0 || t(p[1]) < 0 || t(p[0]) >= t(p[1]) || !/^\d{1,2}$/.test(p[2]) || Number(p[2]) < 15) {
-        return 'Give the start and end of working hours (start before end), and at least 15 minutes between checks outside them.';
+      if (p.length !== 3 || t(p[0]) < 0 || t(p[1]) < 0 || t(p[0]) >= t(p[1]) || !/^\d{1,2}$/.test(p[2]) || Number(p[2]) < 20 || Number(p[2]) > 90 || Number(p[2]) % 10) {
+        return 'Give the start and end of working hours (start before end), and the minutes between checks outside them: 20 to 90, in tens (the monitor runs every 10 minutes).';
       }
       return '';
     }
@@ -66,7 +66,7 @@ CH.views.settings = (function () {
       var p = value.split('|');
       inputs = [h('input', { type: 'time', id: 'ch-set-' + item.name, 'aria-label': 'Start', value: p[0] }), ' to ',
         h('input', { type: 'time', 'aria-label': 'End', value: p[1] }), ', then every ',
-        h('input', { type: 'number', min: '15', max: '99', 'aria-label': 'Minutes between checks outside working hours', value: p[2], class: 'num' }), ' minutes'];
+        h('input', { type: 'number', min: '20', max: '90', step: '10', 'aria-label': 'Minutes between checks outside working hours', value: p[2], class: 'num' }), ' minutes'];
     } else {
       inputs = [h('input', { type: 'number', id: 'ch-set-' + item.name, min: String(item.min), max: String(item.max), value: value, class: 'num' }), ' ' + item.unit];
     }
@@ -100,7 +100,7 @@ CH.views.settings = (function () {
     var editing = app.settingEdit || '';
     var sent = (app.tracker ? app.tracker.entries() : []).filter(function (e) { return e.type === 'UpdateSetting' && !e.dismissed; });
     return [
-      h('p', { class: 'muted small', text: 'Each change is checked, recorded with its previous value, and takes effect within a few minutes.' }),
+      h('p', { class: 'muted small', text: 'Each change is checked, recorded with its previous value, and takes effect in about a minute.' }),
       h('ul', { class: 'plain settings' }, ITEMS.map(function (item) {
         var waiting = sent.filter(function (e) { return (e.label.indexOf(item.label.toLowerCase()) >= 0 || e.label.indexOf(item.label) >= 0) && (e.state === 'submitted' || e.state === 'slow'); })[0];
         return h('li', null, h('div', { class: 'setting' },

@@ -38,7 +38,9 @@ CH.views.recordPanel = (function () {
 
   // The panel shared by notices and entries: a main view and one form at a time.
   function panel(app, cfg) {
-    var panel = { refresh: function () { if (dlg.isOpen()) { if (view === 'main') { comments = null; fill(); loadExtras(); } } } };
+    var panel = { refresh: function () { if (dlg.isOpen()) { if (view === 'main') { comments = null; fill(); loadExtras(); } } },
+      // a change to this notice or entry, or to an action linked to it or raised from it
+      shows: function (e) { var r = rec(); return !r || Number(e.targetId) === Number(r.id) || e.type === 'RaiseAction' || (e.targetType || 'Action') === 'Action'; } };
     var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-rec', title: cfg.title, wide: true, onClose: function () { app.panelClose(panel); } });
     var view = 'main';
     var comments = null;
@@ -201,6 +203,7 @@ CH.views.recordPanel = (function () {
       try {
         await app.tracker.submit(spec);
         view = 'main';
+        dlg.clean();
         fill();
       } catch (error) {
         btn.disabled = false; btn.textContent = 'Try again';

@@ -54,7 +54,9 @@ function pollingApp(script) {
   return {
     person: { SiteUserId: 112 },
     sp: {
-      items: async (title) => {
+      items: async (title, query) => {
+        // 1.4.1: the shared read of open requests finds nothing here, so each check reads its own request
+        if (title === 'Requests' && !/RequestKey eq/.test(query || '')) return { rows: [], complete: true };
         if (title === 'Requests') return { rows: [script[Math.min(n++, script.length - 1)]], complete: true };
         if (title === 'Actions') return { rows: [{ Id: 40, LastRequestKey: 'k', PendingRequestKey: '' }], complete: true };
         return { rows: [], complete: true };

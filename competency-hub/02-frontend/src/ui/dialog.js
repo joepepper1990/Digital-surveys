@@ -1,7 +1,7 @@
 // The one dialog used by every form and the action panel: modal, focus kept inside, and focus returns to where it
 // was. It closes when asked: the × or a Cancel button always; Escape or a click on the backdrop only while nothing in
 // it has been typed or chosen, and only a press that starts and ends on the backdrop (a drag out of a text box never
-// closes it), only an Escape from inside the dialog and not part of typing (app 2.0).
+// closes it), only an Escape from inside the dialog and not part of typing (1.4.0).
 CH.ui.dialog = (function () {
   var h = CH.dom.h;
   var FOCUSABLE = 'a[href], select, input, textarea, button:not([disabled])';
@@ -18,8 +18,10 @@ CH.ui.dialog = (function () {
     var touched = false;
     var scrim = h('div', { class: 'scrim', onmousedown: function (e) { pressedOnScrim = e.target === scrim; },
       onclick: function (e) { var ok = pressedOnScrim && e.target === scrim; pressedOnScrim = false; if (ok && !touched) close(); } }, dialog);
-    dialog.addEventListener('input', function () { touched = true; });
-    dialog.addEventListener('change', function () { touched = true; });
+    // a choice saved the moment it is made (data-instant, such as attendance) is not unsaved work (1.4.1)
+    function typed(e) { if (!(e.target && e.target.closest && e.target.closest('[data-instant]'))) touched = true; }
+    dialog.addEventListener('input', typed);
+    dialog.addEventListener('change', typed);
     var closed = false;
 
     function close() {

@@ -36,15 +36,16 @@ CH.ui = (function () {
 
   // A plain note when a list could not be read completely. Never shown as an empty result.
   function sectionNote(state, what) {
-    if (state === 'unavailable') return h('p', { class: 'section-note', role: 'status', text: 'Could not load ' + what + ' just now. Reload the page to try again.' });
+    if (state === 'unavailable') return h('p', { class: 'section-note', role: 'status', text: 'Could not load ' + what + ' just now. It is tried again in a minute.' });
     if (state === 'partial') return h('p', { class: 'section-note', role: 'status', text: 'Showing the first ' + CH.config.maxRows + ' ' + what + ' only. This list is not complete.' });
     return null;
   }
 
-  var GROUPS = [['late', 'Late', 'var(--late)'], ['soon', 'Due within 7 days', 'var(--soon)'], ['later', 'Coming up', '#9aa5af']];
+  // the "due soon" window follows the DueSoonDays setting (1 to 30 days)
+  var GROUPS = [['late', 'Late', 'var(--late)'], ['soon', function () { return 'Due within ' + CH.config.dueSoonDays + ' days'; }, 'var(--soon)'], ['later', 'Coming up', '#9aa5af']];
 
-  // Actions grouped as Late / Due within 7 days / Coming up. sub(action) gives the grey second line.
-  // Each action opens with open(action); mark(action) gives its ✓ Sent / ✓✓ Saved mark, if any (release 1.2).
+  // Actions grouped as Late / Due soon / Coming up. sub(action) gives the grey second line.
+  // Each action opens with open(action); mark(action) gives its progress ring / green tick mark, if any (release 1.2).
   function actionList(actions, sub, emptyText, state, open, mark) {
     if (state === 'unavailable') return null;
     if (!actions.length) return h('p', { class: 'muted', text: emptyText });
@@ -53,7 +54,7 @@ CH.ui = (function () {
       var rows = actions.filter(function (a) { return a.group === g[0]; })
         .sort(function (a, b) { return a.dueIso.localeCompare(b.dueIso); });
       if (!rows.length) return;
-      out.push(h('h3', { class: 'group-title' }, h('span', { class: 'dot', style: 'background:' + g[2], 'aria-hidden': 'true' }), g[1]));
+      out.push(h('h3', { class: 'group-title' }, h('span', { class: 'dot', style: 'background:' + g[2], 'aria-hidden': 'true' }), typeof g[1] === 'function' ? g[1]() : g[1]));
       out.push(h('ul', { class: 'items' }, rows.map(function (a) {
         return h('li', null, h('button', { type: 'button', class: 'item-open', onclick: open ? function () { open(a); } : null, disabled: open ? null : true },
           h('span', null, h('span', { class: 't', text: a.title }), h('span', { class: 's' }, sub(a), mark ? mark(a) : null)),
@@ -167,17 +168,6 @@ CH.ui = (function () {
     return 1;
   }
 
-  // The reader's text size, remembered in this browser only. Storage can be unavailable; then Normal is used.
-  var TEXT_SIZES = [['Normal', 1], ['Large', 1.15], ['Larger', 1.3]];
-  var TEXT_KEY = 'esg-competency-hub-text-size';
-  function textSize() {
-    var saved = null;
-    try { saved = window.localStorage.getItem(TEXT_KEY); } catch (_) { saved = null; }
-    return TEXT_SIZES.some(function (t) { return t[0] === saved; }) ? saved : 'Normal';
-  }
-  function textFactor(name) { return (TEXT_SIZES.filter(function (t) { return t[0] === name; })[0] || TEXT_SIZES[0])[1]; }
-  function saveTextSize(name) { try { window.localStorage.setItem(TEXT_KEY, name); } catch (_) { /* not remembered */ } }
-
   // A thing someone is editing is never rebuilt (app 1.3.2). repaint() may clear and refill the container; what was
   // typed or chosen in any input, textarea or select with a keep key (its id, or data-keep where an id is not enough
   // to say which thing it belongs to) is put back on the element with the same key, with focus and the caret.
@@ -268,7 +258,7 @@ CH.ui = (function () {
 
   return {
     keepInputs: keepInputs, progressRing: progressRing, savedMark: savedMark, refreshRings: refreshRings,
-    scaleFor: scaleFor, TEXT_SIZES: TEXT_SIZES, textSize: textSize, textFactor: textFactor, saveTextSize: saveTextSize,
+    scaleFor: scaleFor,
     chip: chip, card: card, button: button, linkButton: linkButton, sectionNote: sectionNote,
     actionList: actionList, tile: tile, tileGrid: tileGrid, areaStatusLines: areaStatusLines, toast: toast, say: say,
     folded: folded, saveFolded: saveFolded, panel: panel, fitList: fitList, refit: refit, resetFits: resetFits

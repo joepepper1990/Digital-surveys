@@ -246,7 +246,7 @@ CH.views.admin = (function () {
         : h('p', { class: 'muted', text: 'No changes have been saved with their times yet. Times are kept from solution 1.9.0.4 on.' })]);
   }
 
-  // What this browser noticed going wrong lately (app 2.0): staff send theirs with their feedback.
+  // What this browser noticed going wrong lately (1.4.0): staff send theirs with their feedback.
   function lateCard() {
     var list = CH.log.recent(7);
     return ui.card('What went wrong lately on this computer', list.length

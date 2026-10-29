@@ -20,10 +20,15 @@ CH.eta = (function () {
     '*': [30, 20]
   };
 
+  // read from the browser's storage once, then kept in memory (the rings ask every second: 1.4.1)
+  var cache = null;
   function readAll() {
-    try { return JSON.parse(window.localStorage.getItem(KEY) || 'null') || {}; } catch (_) { return {}; }
+    if (cache) return cache;
+    try { cache = JSON.parse(window.localStorage.getItem(KEY) || 'null') || {}; } catch (_) { cache = {}; }
+    return cache;
   }
   function writeAll(all) {
+    cache = all;
     try { window.localStorage.setItem(KEY, JSON.stringify(all)); } catch (_) { /* not remembered */ }
   }
 

@@ -79,7 +79,9 @@ test('settings: the same ranges as the Administration flow', () => {
   assert.equal(CH.views.settings.check(item('MaxDeadlineYears'), '6'), 'Enter a whole number from 1 to 5.');
   assert.equal(CH.views.settings.check(item('MonitorHours'), '07:00|19:45|60'), '');
   assert.match(CH.views.settings.check(item('MonitorHours'), '19:45|07:00|60'), /start before end/);
-  assert.match(CH.views.settings.check(item('MonitorHours'), '07:00|19:45|5'), /at least 15 minutes/);
+  assert.match(CH.views.settings.check(item('MonitorHours'), '07:00|19:45|5'), /20 to 90, in tens/);
+  assert.match(CH.views.settings.check(item('MonitorHours'), '07:00|19:45|15'), /20 to 90, in tens/);
+  assert.equal(CH.views.settings.check(item('MonitorHours'), '07:00|19:45|30'), '');
   assert.deepEqual(plain(CH.views.settings.ITEMS.map((i) => i.name)), ['ReminderDaysBefore', 'DueSoonDays', 'OverdueReminderIntervalDays', 'MaxDeadlineYears', 'MonitorHours',
     'InvitesEnabled', 'PdfEnabled']);
   assert.equal(CH.views.settings.check(item('InvitesEnabled'), 'No'), '');

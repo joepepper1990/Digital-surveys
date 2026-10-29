@@ -188,7 +188,7 @@ CH.views.raiseForm = (function () {
           coOwnerIds: v.coOwnerIds.length ? v.coOwnerIds : undefined, checkerId: v.checkerId, sourceEntryId: entry ? entry.id : undefined, sourceNoticeId: notice ? notice.id : undefined,
           sourceMeetingId: meeting ? meeting.id : undefined }, meetingId: meeting ? meeting.id : undefined });
         dlg.close();
-        CH.ui.toast(app.root, 'Sent. It shows ✓✓ Saved as soon as it is recorded – you can carry on.', 'ok');
+        CH.ui.toast(app.root, 'Sent. A green tick shows as soon as it is recorded – you can carry on.', 'ok');
       } catch (error) {
         nextBtn.disabled = false;
         nextBtn.textContent = 'Try again';

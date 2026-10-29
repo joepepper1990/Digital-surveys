@@ -63,7 +63,10 @@ test('finished changes teach the estimate; twelve are kept per kind; storage fai
   eta.learn('X', null, null, null);
   const broken = loadApp({ window: { localStorage: { getItem: () => { throw new Error('no'); }, setItem: () => { throw new Error('no'); } } } }).eta;
   broken.learn('ExtendDeadline', T0, T0 + 1000, T0 + 2000);
-  assert.equal(broken.expected('ExtendDeadline').learned, false);
+  // 1.4.1: kept in memory for the rest of the page, but not remembered: a fresh page starts from the defaults
+  assert.equal(broken.expected('ExtendDeadline').learned, true);
+  const fresh = loadApp({ window: { localStorage: { getItem: () => { throw new Error('no'); }, setItem: () => { throw new Error('no'); } } } }).eta;
+  assert.equal(fresh.expected('ExtendDeadline').learned, false);
 });
 
 test('a fresh browser is seeded from the person\'s finished requests, until live samples exist', () => {

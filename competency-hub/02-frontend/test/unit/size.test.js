@@ -11,9 +11,6 @@ test('the scale grows in steps with the width the app has', () => {
   cases.forEach(([w, s]) => assert.equal(CH.ui.scaleFor(w), s, w + ' px'));
 });
 
-test('text sizes are Normal, Large and Larger, and anything unknown means Normal', () => {
-  assert.equal(CH.ui.textFactor('Normal'), 1);
-  assert.equal(CH.ui.textFactor('Large'), 1.15);
-  assert.equal(CH.ui.textFactor('Larger'), 1.3);
-  assert.equal(CH.ui.textFactor('Huge'), 1);
+test('the text size control is gone: the browser\'s own zoom is used', () => {
+  assert.equal(CH.ui.textFactor, undefined);
 });

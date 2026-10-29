@@ -145,7 +145,10 @@ CH.views.meetingPanel = (function () {
       if (!dlg.isOpen()) return;
       clearTimeout(refreshTimer);
       refreshTimer = setTimeout(refreshNow, 600);
-    } };
+    },
+      // a change to this meeting, made from it, or to an action (its agenda shows actions)
+      shows: function (e) { var x = mt(); return !x || Number(e.meetingId) === Number(x.id) || (e.targetType === 'Meeting' && Number(e.targetId) === Number(x.id)) ||
+        e.type === 'ScheduleMeeting' || (e.targetType || 'Action') === 'Action' || e.type === 'RaiseAction'; } };
     var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-mt', title: 'Meeting', wide: true, onClose: function () { app.panelClose(panel); app.liveMeetingId = null; } });
     var wentLive = false;   // once the live screen has shown, the window keeps its width until it is closed
     var view = 'main';
@@ -162,7 +165,7 @@ CH.views.meetingPanel = (function () {
     var bookingKey = id < 0 && app.model.meetingById[id] ? app.model.meetingById[id].sending : null;
     var formKey = null;    // one change per form, however often it is tried again
     var current = null;    // the item on screen while the meeting runs: { it, dirty(), save() }
-    var lastKnown = null;   // the meeting as last shown: kept while the meetings list could not be read again (app 2.0)
+    var lastKnown = null;   // the meeting as last shown: kept while the meetings list could not be read again (1.4.0)
     function mt() {
       if (id < 0 && !app.model.meetingById[id] && bookingKey) {
         var booking = app.tracker.byKey(bookingKey);
@@ -173,7 +176,8 @@ CH.views.meetingPanel = (function () {
       // not in the rows: kept if the read failed, or while its booking is still being saved; otherwise it is gone
       var stale = (app.staleLists || []).indexOf('meetings') >= 0;
       var booking2 = bookingKey ? app.tracker.byKey(bookingKey) : null;
-      if (lastKnown && (stale || (booking2 && booking2.state !== 'done' && booking2.state !== 'rejected'))) return lastKnown;
+      var bookingOnWay = !!booking2 && ['queued', 'submitted', 'slow'].indexOf(booking2.state) >= 0;
+      if (lastKnown && (stale || bookingOnWay)) return lastKnown;
       if (lastKnown) { CH.log.note('meeting-gone', 'Meeting ' + id + ' was open and is no longer in the meetings list'); lastKnown = null; }
       return undefined;
     }
@@ -278,7 +282,7 @@ CH.views.meetingPanel = (function () {
       // waiting its turn (release 1.3): it is sent as soon as the change before it is saved
       if (e && e.state === 'queued') {
         return h('p', { class: 'pending', role: 'status' }, app.ring(e, false), ' ' + e.label + ' – shown now; it is sent as soon as ' +
-          (x.id < 0 ? 'the booking' : 'the change before it') + ' is saved, usually within a minute.');
+          (x.id < 0 ? 'the booking' : 'the change before it') + ' is saved, in about a minute.');
       }
       if (e && e.state === 'held') {
         return h('p', { class: 'pending', role: 'status' }, '✕ ' + e.label + ' – not sent, because an earlier change to this meeting was not saved. See the card at the bottom right.');
@@ -431,7 +435,7 @@ CH.views.meetingPanel = (function () {
         h('summary', null, h('span', { class: 'group-title', text: 'Attendance' }), ' ', h('span', { class: 'muted small', text: done + ' of ' + x.attendeeIds.length + ' recorded' })), status,
         h('ul', { class: 'plain attendance' }, x.attendeeIds.map(function (pid) {
           var rec = last[x.id + '|P|' + pid];
-          var sel = h('select', { id: 'ch-mt-att-' + pid, 'aria-label': 'Attendance of ' + app.model.nameOf(pid) },
+          var sel = h('select', { id: 'ch-mt-att-' + pid, 'data-instant': '1', 'aria-label': 'Attendance of ' + app.model.nameOf(pid) },
             [h('option', { value: '', text: 'Not recorded' })].concat(ATTENDANCE.map(function (a) { return h('option', { value: a, text: a, selected: rec && rec.Attendance === a ? true : null }); })));
           sel.addEventListener('change', function () {
             if (!sel.value) return;
@@ -460,6 +464,7 @@ CH.views.meetingPanel = (function () {
           await saveRow(x, { Title: it.title, RecordKey: it.key, RowType: 'Outcome', SourceType: it.key.split('|')[2], SourceId: Number(it.key.split('|')[3]),
             Outcome: outcome, Notes: notes.value.trim() }, status);
           it.notes = notes.value.trim();
+          dlg.clean();   // the notes are saved: nothing on this screen is unsaved now
           if (next) go(at + 1); else fill();
         } catch (_) { /* the message is shown beside the buttons */ }
       }
@@ -478,7 +483,7 @@ CH.views.meetingPanel = (function () {
         } catch (error) { status.textContent = error.friendly || 'The action could not be closed just now. Try again in a moment.'; }
       }
       var r = action ? R.roles(action, app.person.SiteUserId, app.access) : null;
-      var buttons = x.id < 0 ? [h('span', { class: 'muted small', text: 'Actions can be raised or closed from here once the booking is saved – usually within a minute.' })]
+      var buttons = x.id < 0 ? [h('span', { class: 'muted small', text: 'Actions can be raised or closed from here once the booking is saved – in about a minute.' })]
         : kind === 'action' ? [
         it.open ? ui.button('Open this action', it.open) : null,
         action && r.canClose && it.outcome !== 'Closed' && !action.done ? ui.button('Close this action', closeIt) : null,
@@ -668,6 +673,7 @@ CH.views.meetingPanel = (function () {
           await app.tracker.submit({ key: formKey, type: type, targetId: x.id, targetType: 'Meeting', creationKey: x.id < 0 ? x.sending : null,
             expectedRevision: x.revision, payload: payload, label: verb + x.areaName + ' meeting' });
           view = 'main';
+          dlg.clean();
           fill();
           if (kind === 'start' || kind === 'finalise') loadAgenda(true);
         } catch (error) {
