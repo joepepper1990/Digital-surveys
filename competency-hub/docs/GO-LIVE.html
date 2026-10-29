@@ -20,12 +20,12 @@
 </head>
 <body>
 <h1>ESG Competency Hub – going live</h1>
-<p>The steps from a finished TEST system to everyone using the Hub, in order. Do them once Releases 1 to 6 are installed (HOW-TO Parts A to I) and every check there has passed. Updated 24 October 2026.</p>
+<p>The steps from a finished TEST system to everyone using the Hub, in order. Do them once Releases 1 to 6 are installed (the steps in each release's HOW-TO) and every check there has passed. Updated 24 October 2026.</p>
 <p class="note">Each step changes the live site. Nothing here can be undone in the app, apart from the clean-up, which keeps everything in the recycle bin for 93 days.</p>
 
 <h2>1. A week before</h2>
 <ol>
-  <li><strong>Permission probe again.</strong> Run the P2 probe with the test colleague (HOW-TO Part E). Every row should pass, including the refused notice after <em>Can post notices</em> is switched off.</li>
+  <li><strong>Permission probe again.</strong> Run the P2 probe with the test colleague (the HOW-TO step with Rich). Every row should pass, including the refused notice after <em>Can post notices</em> is switched off.</li>
   <li><strong>Power Automate use.</strong> In the Power Platform admin centre, open <em>Analytics → Power Automate</em> (or each flow's <em>Analytics</em>) and note the runs and actions per day over a normal week. Your account's daily allowance (6,000 requests) is shared with the 1-to-1 flows. If the total is above about 4,500 a day, reduce the queue monitor's hours under <em>Administration → Settings → Queue monitor hours</em> (for example 07:00–18:00, hourly outside), and tell me.</li>
   <li><strong>The staff list.</strong> Have the 28 people ready as one line each: <code>email, role, area keys</code> (for example <code>firstname.lastname@…, Technician, GRS RP</code>). Engineers get <em>Can run meetings</em> in their areas; technicians don't, unless you tick it later.</li>
 </ol>
@@ -34,7 +34,7 @@
 <ol>
   <li><strong>Health.</strong> <em>Administration</em>: the first card should say processing, reminders, emails and meetings are all working, and <em>Changes needing attention</em> should be empty.</li>
   <li><strong>Remove the test data.</strong> <em>Administration → Remove test data</em>. Everything marked as a test record is listed. Under <em>Made before marking</em>, tick the early TEST actions, notices and meetings from before Release 2. Type <code>REMOVE TEST DATA</code> and confirm. Within a few minutes it reports how many were removed, and test marking is switched off. (Turn <em>ESG Competency Hub | 8 Clean-up</em> on first, and off again afterwards.)</li>
-  <li><strong>Add the staff.</strong> <em>Administration → People → Add people → Or paste a list</em>: paste the 28 lines and send them. Each line is <em>email, role, area keys, Known as</em>; take the Known as name from <code>known-as.txt</code> (for example <code>firstname.lastname@edf-energy.com, Technician, GRS RP, Rachel</code>). Or set them all afterwards with the <em>Known as</em> box in Setup. Each person shows <em>Done and verified</em> once their access has been read back. Any line that can't be found in Microsoft 365 is reported; correct it and send that one again.</li>
+  <li><strong>Add the staff.</strong> <em>Administration → People → Add people → Or paste a list</em>: paste the 28 lines and send them. Each line is <em>email, role, area keys, Known as</em>; take the Known as name from <code>known-as.txt</code> (for example <code>firstname.lastname@…, Technician, GRS RP, Rachel</code>). Or set them all afterwards with the <em>Known as</em> box in Setup. Each person shows <em>Done and verified</em> once their access has been read back. Any line that can't be found in Microsoft 365 is reported; correct it and send that one again.</li>
   <li><strong>Check two people.</strong> Open one technician and one engineer in People: their areas, meeting rights and notice posting are as intended.</li>
   <li><strong>Book the first real meetings</strong>, or let each area's engineers do it on the first day.</li>
 </ol>

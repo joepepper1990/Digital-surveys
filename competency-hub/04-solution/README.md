@@ -1,7 +1,40 @@
 # ESG Competency Hub – Power Automate solution
 
-`ESGCompetencyHub_1_10_0_0_unmanaged.zip` is the solution to import into Power Automate. It holds ten flows, which
+`ESGCompetencyHub_1_10_1_0_unmanaged.zip` is the solution to import into Power Automate. It holds ten flows, which
 all ship **Off** so nothing runs until you turn them on.
+
+**1.10.1.0 (29 October 2026), for app 1.4.1 – a review of every flow for accuracy and fewer calls:**
+- Faults fixed:
+  - *Cancel a meeting* saves the meeting (with its ETag) before it makes the Record folder read-only, so a refused
+    cancel leaves the live meeting as it was; *Amend minutes* saves the meeting before it writes the Amendment row,
+    so a refused amendment leaves no row behind (a resumed run adds it once).
+  - *3 Queue monitor* writes the request it re-fires or marks Needs attention with the ETag it read (a request that
+    finished meanwhile is left alone, a 412 skipped), and still sends its alert when one save fails.
+  - A request waits for an action's lock only when its revision still matches (the holder raises the revision, so
+    waiting could never help otherwise); stale is checked before locked; after the wait: "Another change to this
+    action is taking longer than usual to finish. Nothing was changed – try again in a few minutes."
+  - *Link* and *Unlink* refuse an action that is locked by another change.
+  - *6 Administration* and *8 Clean-up* run one at a time again (two administrators could otherwise remove each
+    other's rights); *8 Clean-up* looks for work every 15 minutes.
+  - `Health_back` reads and writes QueueHealth with its ETag, and a 412 there is ignored.
+  - The monitor counts Processing as stalled after 15 minutes (30 for minutes and clean-up) and reports a flow down
+    only for a request still Submitted after 20 minutes that was already re-fired, so a backlog behind five runs at
+    once is not an outage. The MonitorHours out-of-hours gap must be 20–90 in tens.
+- Fewer calls and actions:
+  - one People read per run (everyone, then queries), area members read once and the owner found in them;
+  - the monitor checks `Due` before setting anything up (an idle run is 1 call), reads open requests with one
+    `or` query and email retries with one more;
+  - *7 Minutes* finds work with one filtered `$top=1` read;
+  - *2 Request queue* keeps the record being written in one object variable; *4 Records* builds every change on one
+    skeleton and its event on a first run without the Find.
+  - Calls per run: raise 20 (was 23), extend and complete 17 (was 18), a quiet daily run 8, a quiet monitor run 7.
+    Actions per flow: Request queue 468, Records 420, Meetings 444, Minutes 417, Admin 487, Monitor 255, Daily 155,
+    Clean-up 249 (limit 500).
+- Not used by any flow, kept in Settings for later: `EventTimeToleranceMinutes` (the flows use 30 minutes) and
+  `RequestRetentionDays` (requests are not purged yet).
+- Tests: a refused amendment leaves no row and a resumed one adds it once; a refused cancel keeps the record open;
+  a wait only on a matching revision; the monitor never overwrites a finished request; one-at-a-time administration
+  and clean-up; a locked action is not linked; call budgets lowered to match.
 
 **1.10.0.0 (28 October 2026), for app 1.3.0 – quicker and safe for everyone at once:**
 - The domain flows (*2 Request queue*, *4 Records*, *5 Meetings*, *6 Administration*) look for new requests every
@@ -44,7 +77,7 @@ The flows:
 |---|---|
 | **ESG Competency Hub \| 1 Daily tasks** | Every morning at 06:00 UK time: deadline reminders, another try for emails that were not sent, and the end of temporary access to an area |
 | **ESG Competency Hub \| 2 Request queue** | Records the changes to actions that people send from the Hub: raise, move a deadline, mark as done, change status, reassign, edit, close and reopen |
-| **ESG Competency Hub \| 3 Queue monitor** | Every 15 minutes in working hours and hourly outside them: puts stalled changes back in the queue, retries emails, tells the administrators about anything that needs them, and records whether processing is healthy |
+| **ESG Competency Hub \| 3 Queue monitor** | Every 10 minutes in working hours and hourly outside them (Administration → Settings → Queue monitor hours): puts stalled changes back in the queue, retries emails, tells the administrators about anything that needs them, and records whether processing is healthy |
 | **ESG Competency Hub \| 4 Records** | Records changes to notices and the register: edit, pin, archive, hide a comment; raise and update improvements and degradations, and link actions to them |
 | **ESG Competency Hub \| 5 Meetings** | Books, changes, cancels and starts monthly meetings. It sends the Outlook invitation, update or cancellation from the Outlook connection's calendar, and fixes the agenda when the meeting starts |
 | **ESG Competency Hub \| 6 Administration** | Records administrators' changes: people, their areas, meeting rights and notice posting, settings, and the decisions on changes needing attention |
