@@ -483,7 +483,8 @@ window.MockDrivers = (function () {
       item.click();
       await until(function () { return q('#ch-a'); });
       var inside = q('#ch-a').contains(document.activeElement);
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      // a real key press comes from the element that has focus
+      (document.activeElement || document).dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       await wait(50);
       return { inside: inside, closed: !q('#ch-a'), focusBack: document.activeElement === item };
     },
@@ -1341,6 +1342,60 @@ window.MockDrivers = (function () {
     },
     // app 1.3.2: a thing someone is editing is never rebuilt. While notes, a decision and an attendance choice are
     // half done, a change sent from this meeting finishes in the flow and the screen is read again: nothing goes.
+    // app 2.0: SharePoint too busy to read the meetings list again, while a change from the meeting finishes: the
+    // window stays, with the meeting, and the status line says what is happening; it recovers when reads work again
+    throttledMeeting: async function () {
+      await startLive();
+      await toAction();
+      type(q('#ch-mt-item-notes'), 'Typed while SharePoint is busy.');
+      MockSharePoint.throttle.lists = ['Meetings'];
+      byText('#ch-mt .item-pane .btn', 'Close this action').click();
+      await until(function () { return MockSharePoint.data.Actions.filter(function (a) { return a.Id === 40; })[0].Status === 'Closed'; }, 120000);
+      await until(function () { return /SharePoint is busy/.test(q('.status-line').textContent); }, 60000);
+      await wait(2500);
+      var during = { open: !!q('#ch-mt'), notAvailable: /Meeting not available/.test(q('#ch-mt').textContent), editor: !!q('#ch-mt .outcomes'),
+        notes: q('#ch-mt-item-notes') && q('#ch-mt-item-notes').value, status: q('.status-line').textContent };
+      MockSharePoint.throttle.lists = [];
+      var recovered = await until(function () { return !/SharePoint is busy/.test(q('.status-line').textContent); }, 90000).then(function () { return true; }, function () { return false; });
+      var log = JSON.parse(window.localStorage.getItem('esg-competency-hub-log') || '[]').map(function (e) { return e.kind; });
+      return { during: during, recovered: recovered, open: !!q('#ch-mt'), log: log };
+    },
+    // a drag that starts in the notes and ends on the backdrop, Escape from a select, Escape from outside: nothing closes
+    dialogStays: async function () {
+      await startLive();
+      var scrim = q('#ch-mt').parentNode;
+      var notes = q('#ch-mt-item-notes');
+      notes.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      scrim.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+      scrim.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      var afterDrag = !!q('#ch-mt');
+      var att = q('#ch-mt-att-112');
+      att.value = 'Present'; att.dispatchEvent(new Event('change', { bubbles: true }));
+      att.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      var afterEscSelect = !!q('#ch-mt');
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      var afterEscPage = !!q('#ch-mt');
+      scrim.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      scrim.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      var afterScrimTouched = !!q('#ch-mt');
+      q('#ch-mt .dialog-x').click();
+      var closedByX = !q('#ch-mt');
+      // an untouched form still closes with Escape
+      byText('.btn', 'Raise an action') && byText('.btn', 'Raise an action').click();
+      var raise = await until(function () { return q('#ch-r form'); }).then(function () { return true; }, function () { return false; });
+      if (raise) q('#ch-r form input, #ch-r form textarea').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      return { afterDrag: afterDrag, afterEscSelect: afterEscSelect, afterEscPage: afterEscPage, afterScrimTouched: afterScrimTouched, closedByX: closedByX,
+        untouchedEscCloses: raise && !q('#ch-r') };
+    },
+    // Welcome starting the layout again while a meeting is open: the running copy is kept, the meeting stays
+    hostAgain: async function () {
+      await startLive();
+      type(q('#ch-mt-item-notes'), 'Typed before the host started again.');
+      MockSharePoint.startAgain();
+      await wait(3000);
+      var log = JSON.parse(window.localStorage.getItem('esg-competency-hub-log') || '[]').map(function (e) { return e.kind; });
+      return { open: !!q('#ch-mt'), notes: q('#ch-mt-item-notes') && q('#ch-mt-item-notes').value, log: log, shells: all('.shell, [data-ch-shell]').length };
+    },
     typingKept: async function () {
       await startLive();
       var att = q('#ch-mt-att-112');

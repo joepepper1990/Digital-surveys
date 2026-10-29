@@ -21,6 +21,13 @@ CH.app = (function () {
     app.refreshPanels = function () { app.panels.slice().forEach(function (p) { if (p.refresh) p.refresh(); }); };
 
     function findRoot() { return document.querySelector('[data-ch-root]'); }
+    // an error in the page itself, kept for the "what went wrong lately" list (only ours: the script's file name)
+    function onPageError(e) {
+      var err = e && (e.error || e.reason);
+      var where = (e && e.filename) || (err && err.stack) || '';
+      if (!/competency-hub/.test(where)) return;
+      CH.log.note('page-error', String(err && err.message || e.message || err || 'error'));
+    }
 
     function waitForRoot() {
       return new Promise(function (resolve, reject) {
@@ -161,6 +168,8 @@ CH.app = (function () {
           : entries.some(function (x) { return x.state === 'slow'; }) ? ' – taking longer than usual, but it will be saved. You can carry on.' : ' You can carry on.';
         text = (entries.length === 1 ? '1 change still saving: ' + e.label : entries.length + ' changes still saving, the first ' + e.label) + ' · ';
         extra = [ring(e, false), h('span', { text: how })];
+      } else if (app.staleLists && app.staleLists.length) {
+        text = 'SharePoint is busy – showing what was last read. It is read again in a moment; nothing you have done is lost.';
       } else {
         text = 'Everything is up to date.';
       }
@@ -238,6 +247,14 @@ CH.app = (function () {
       var since = lastRead;
       var startedAt = new Date();
       try {
+        // lists SharePoint could not give us last time are read again in full first (app 2.0)
+        if (app.staleLists && app.staleLists.length) {
+          await reload(app.staleLists.slice());
+          render(false);
+          app.refreshPanels();
+          refreshing = false;
+          return;
+        }
         var changed = await CH.model.loadChanged(app.sp, since);
         var touched = false;
         DELTA.forEach(function (key) {
@@ -261,7 +278,8 @@ CH.app = (function () {
           // rows that left the list this screen shows (closed, archived, cancelled) go
           app.raw[key].rows = current.filter(function (r) { return !changed.gone || changed.gone[key + '|' + r.Id] !== true; });
         });
-        lastRead = startedAt;
+        // a list whose changes could not be read is asked again from the same moment next time
+        if (DELTA.every(function (key) { return changed[key] !== null; })) lastRead = startedAt;
         if (touched) {
           rebuild();
           render(false);
@@ -580,8 +598,8 @@ CH.app = (function () {
         }).filter(Boolean);
       var areasByKey = {};
       (raw.competencies.rows || []).forEach(function (c) { areasByKey[c.CompetencyKey] = { status: c.Status }; });
-      if (raw.competencies.error !== undefined) throw new CH.sp.SpError(raw.competencies.error, 'The list of areas could not be loaded.');
-      if (raw.members.error !== undefined) throw new CH.sp.SpError(raw.members.error, 'Area memberships could not be loaded.');
+      if (raw.competencies.error !== undefined && !raw.competencies.stale) throw new CH.sp.SpError(raw.competencies.error, 'The list of areas could not be loaded.');
+      if (raw.members.error !== undefined && !raw.members.stale) throw new CH.sp.SpError(raw.members.error, 'Area memberships could not be loaded.');
       app.access = CH.access.build(app.person, memberships, areasByKey);
       app.health = CH.health.judge(raw.settings.rows, now);
       app.settings = raw.settings.rows || [];
@@ -589,7 +607,10 @@ CH.app = (function () {
       var soon = (app.settings.filter(function (r) { return r.Title === 'DueSoonDays'; })[0] || {}).Value;
       CH.config.dueSoonDays = /^\d{1,2}$/.test(String(soon || '')) && Number(soon) >= 1 && Number(soon) <= 30 ? Number(soon) : 7;
       app.raw = raw;
-      lastRead = now;
+      // what could not be read again is kept and read on the next refresh; the time of the last good read only moves
+      // on when every list this read asked for came back, so the minute's read of changes misses nothing (app 2.0)
+      app.staleLists = Object.keys(raw).filter(function (k) { return raw[k] && raw[k].stale; });
+      if (!(only || Object.keys(raw)).some(function (k) { return raw[k] && raw[k].stale; })) lastRead = now;
       rebuild();
     }
 
@@ -616,6 +637,17 @@ CH.app = (function () {
 
     async function start() {
       app.root = await waitForRoot();
+      // Welcome started the layout again on the same page while this one still runs (app 2.0): the running one is kept,
+      // so nothing open on it is lost, and the new one does nothing
+      var live = window.__esgCompetencyHubLive;
+      if (live && !live.disposed() && live.root === app.root && live.root.isConnected) {
+        CH.log.note('second-start', 'Welcome started the Hub again on the same page; the running copy was kept');
+        disposed = true;
+        return;
+      }
+      window.__esgCompetencyHubLive = { root: app.root, disposed: function () { return disposed; } };
+      window.addEventListener('error', onPageError);
+      window.addEventListener('unhandledrejection', onPageError);
       app.stale = staleCopy();
       watchSize();
       var webPart = ctx.getWebPart();
@@ -692,12 +724,17 @@ CH.app = (function () {
       },
       onError: function (error) {
         if (window.console) console.error('Competency Hub: Welcome reported an error', error);
+        CH.log.note('welcome-error', String(error && error.message || error));
       },
       onDispose: function () {
         disposed = true;
+        CH.log.note('dispose', 'Welcome closed the Hub on this page');
         if (app.tracker) app.tracker.stop();
         if (healthTimer) clearInterval(healthTimer);
         if (refreshTimer) clearInterval(refreshTimer);
+        if (ringTimer) clearInterval(ringTimer);
+        window.removeEventListener('error', onPageError);
+        window.removeEventListener('unhandledrejection', onPageError);
         window.removeEventListener('beforeunload', onLeave);
         document.removeEventListener('visibilitychange', onVisible);
         if (observer) observer.disconnect();

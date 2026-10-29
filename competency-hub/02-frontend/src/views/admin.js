@@ -246,6 +246,15 @@ CH.views.admin = (function () {
         : h('p', { class: 'muted', text: 'No changes have been saved with their times yet. Times are kept from solution 1.9.0.4 on.' })]);
   }
 
+  // What this browser noticed going wrong lately (app 2.0): staff send theirs with their feedback.
+  function lateCard() {
+    var list = CH.log.recent(7);
+    return ui.card('What went wrong lately on this computer', list.length
+      ? [h('p', { class: 'muted small', text: 'The last 7 days. Other people\'s come with their feedback when they tick the box.' }),
+        h('ul', { class: 'plain small' }, list.slice(0, 12).map(function (e) { return h('li', { text: CH.dates.ukTime(new Date(e.at)) + ' ' + e.at.slice(0, 10) + ' – ' + e.text }); }))]
+      : h('p', { class: 'muted small', text: 'Nothing in the last 7 days.' }));
+  }
+
   var TABS = ['Changes needing attention', 'People', 'Settings', 'Feedback', 'Remove test data'];
 
   function render(app) {
@@ -268,6 +277,7 @@ CH.views.admin = (function () {
     var panel = tab === 1 ? CH.views.people.list(app) : tab === 2 ? CH.views.settings.render(app) : tab === 3 ? CH.views.feedback.review(app) : tab === 4 ? CH.views.cleanup.render(app) : [
       healthCard(app),
       timingsCard(app),
+      lateCard(),
       ui.card('Changes needing attention', [
         h('p', { class: 'muted small', text: 'Changes that failed three times, and runs that stopped more than ' + QUIET_MINUTES + ' minutes ago. The queue monitor retries the rest by itself.' }),
         h('div', { class: 'row' }, ui.linkButton('Check again', function () { refresh(app); })),

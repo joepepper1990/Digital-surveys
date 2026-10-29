@@ -1,11 +1,11 @@
-/* ESG Competency Hub 1.3.2 – built from src/ by tools/build.js. Do not edit. */
+/* ESG Competency Hub 1.4.0 – built from src/ by tools/build.js. Do not edit. */
 window.ESGCompetencyHub = function (ctx) {
   'use strict';
   var CH = {};
   /* src/core/config.js */
   // Fixed names and limits. Lists are addressed by display title; folders by list URL name.
   CH.config = {
-    VERSION: '1.3.2',
+    VERSION: '1.4.0',
     ENVIRONMENT: 'TEST',
     lists: {
       competencies: { title: 'Competencies', url: 'Competencies' },
@@ -331,6 +331,47 @@ window.ESGCompetencyHub = function (ctx) {
     }
 
     return { create: create, SpError: SpError, escapeOData: escapeOData, folderOf: folderOf };
+  })();
+
+  /* src/core/log.js */
+  // What the Hub noticed going wrong on this screen (app 2.0): a list SharePoint could not give, the page started a
+  // second time, an error in the page itself. Kept in this browser only (the last 50, at most one of a kind a
+  // minute), shown under Administration and sent with feedback when the person agrees, so a report of a glitch comes
+  // with the evidence.
+  CH.log = (function () {
+    var KEY = 'esg-competency-hub-log';
+    var KEEP = 50;
+    var QUIET_MS = 60 * 1000;
+    var lastOf = {};
+
+    function read() {
+      try { return JSON.parse(window.localStorage.getItem(KEY) || '[]') || []; } catch (_) { return []; }
+    }
+    function write(list) {
+      try { window.localStorage.setItem(KEY, JSON.stringify(list)); } catch (_) { /* not remembered */ }
+    }
+
+    function note(kind, text) {
+      var now = Date.now();
+      if (lastOf[kind] && now - lastOf[kind] < QUIET_MS) return;
+      lastOf[kind] = now;
+      var list = read();
+      list.push({ at: new Date(now).toISOString(), kind: String(kind).slice(0, 40), text: String(text || '').slice(0, 300) });
+      while (list.length > KEEP) list.shift();
+      write(list);
+    }
+
+    // the newest first, within the last days given
+    function recent(days) {
+      var since = Date.now() - (days || 7) * 86400000;
+      return read().filter(function (e) { return Date.parse(e.at) >= since; }).reverse();
+    }
+
+    function asText(days) {
+      return recent(days).map(function (e) { return e.at.slice(0, 16).replace('T', ' ') + ' ' + e.kind + ': ' + e.text; }).join('\n');
+    }
+
+    return { note: note, recent: recent, asText: asText, KEY: KEY };
   })();
 
   /* src/core/requests.js */
@@ -1356,7 +1397,12 @@ window.ESGCompetencyHub = function (ctx) {
           var res = await sp.items(CH.config.lists[key].title, QUERIES[key], null, OPTIONAL[key]);
           raw[key] = { rows: res.rows, complete: res.complete };
         } catch (error) {
-          raw[key] = { rows: [], complete: false, error: error.status || 0 };
+          // a list that could not be read again (SharePoint busy, the connection dropped) keeps what was read last
+          // time, marked stale, so nothing on screen disappears; only a first read that fails is empty (app 2.0)
+          var was = prev && prev[key];
+          raw[key] = was && !was.error && was.rows ? { rows: was.rows, complete: was.complete, stale: true, error: error.status || 0 }
+            : { rows: [], complete: false, error: error.status || 0 };
+          if (CH.log) CH.log.note('read-failed', key + ' could not be read again (HTTP ' + (error.status || 0) + ')' + (was ? '; the last read is kept' : ''));
         }
       }));
       raw.discussed = !only || !prev || keys.indexOf('meetings') >= 0 || keys.indexOf('updates') >= 0 ? await discussed(sp, raw) : prev.discussed;
@@ -2490,8 +2536,10 @@ window.ESGCompetencyHub = function (ctx) {
   })();
 
   /* src/ui/dialog.js */
-  // The one dialog used by every form and the action panel: modal, focus kept inside, Escape or the
-  // backdrop closes it, and focus returns to where it was.
+  // The one dialog used by every form and the action panel: modal, focus kept inside, and focus returns to where it
+  // was. It closes when asked: the × or a Cancel button always; Escape or a click on the backdrop only while nothing in
+  // it has been typed or chosen, and only a press that starts and ends on the backdrop (a drag out of a text box never
+  // closes it), only an Escape from inside the dialog and not part of typing (app 2.0).
   CH.ui.dialog = (function () {
     var h = CH.dom.h;
     var FOCUSABLE = 'a[href], select, input, textarea, button:not([disabled])';
@@ -2504,7 +2552,12 @@ window.ESGCompetencyHub = function (ctx) {
       var closeBtn = h('button', { type: 'button', class: 'dialog-x', 'aria-label': 'Close', text: '×' });
       var dialog = h('div', { class: 'dialog' + (opts.wide ? ' dialog-wide' : ''), role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': opts.id + '-heading', id: opts.id },
         h('div', { class: 'dialog-head' }, heading, closeBtn), body);
-      var scrim = h('div', { class: 'scrim', onclick: function (e) { if (e.target === scrim) close(); } }, dialog);
+      var pressedOnScrim = false;
+      var touched = false;
+      var scrim = h('div', { class: 'scrim', onmousedown: function (e) { pressedOnScrim = e.target === scrim; },
+        onclick: function (e) { var ok = pressedOnScrim && e.target === scrim; pressedOnScrim = false; if (ok && !touched) close(); } }, dialog);
+      dialog.addEventListener('input', function () { touched = true; });
+      dialog.addEventListener('change', function () { touched = true; });
       var closed = false;
 
       function close() {
@@ -2518,7 +2571,10 @@ window.ESGCompetencyHub = function (ctx) {
       function onKey(e) {
         // only the dialog on top answers: one opened over another (an action from a meeting) closes on its own
         if (scrim.parentNode && scrim.parentNode.lastElementChild !== scrim) return;
-        if (e.key === 'Escape') { e.preventDefault(); close(); return; }
+        if (e.key === 'Escape') {
+          if (e.isComposing || e.defaultPrevented || !dialog.contains(e.target) || touched) return;
+          e.preventDefault(); close(); return;
+        }
         if (e.key !== 'Tab') return;
         var focusable = Array.prototype.filter.call(dialog.querySelectorAll(FOCUSABLE), function (n) { return n.offsetParent !== null; });
         if (!focusable.length) return;
@@ -2533,6 +2589,8 @@ window.ESGCompetencyHub = function (ctx) {
       return {
         node: dialog, body: body, close: close,
         isOpen: function () { return !closed; },
+        // the dialog's work was saved: Escape and the backdrop may close it again
+        clean: function () { touched = false; },
         setTitle: function (text) { heading.textContent = text; },
         focusFirst: function () {
           var first = body.querySelector('input, select, textarea, button');
@@ -4551,11 +4609,15 @@ window.ESGCompetencyHub = function (ctx) {
       var type = h('select', { id: 'ch-fb-type' }, TYPES.map(function (t) { return h('option', { value: t, text: t }); }));
       var description = h('textarea', { id: 'ch-fb-description', rows: '6', maxlength: '4000' });
       var errorBox = h('p', { class: 'form-error', role: 'alert' });
+      // what this browser noticed going wrong lately goes with it, if the person agrees (app 2.0)
+      var noticed = CH.log.asText(7);
+      var attach = h('input', { id: 'ch-fb-attach', type: 'checkbox', checked: noticed ? true : null });
       var submit = h('button', { type: 'submit', class: 'btn btn-main', text: 'Send feedback' });
       var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-fb', title: 'Send feedback' });
       var form = h('form', { class: 'dialog-body', novalidate: true },
         h('p', { class: 'explain', text: 'Your feedback goes to the Competency Hub administrators. Only they can read it.' }),
         field('What kind of feedback?', type), field('Your feedback', description, 'What happened, or what you would like. Include the page you were on if it helps.'),
+        noticed ? h('label', { class: 'check' }, attach, ' Include what the Hub noticed going wrong on this computer lately (' + noticed.split('\n').length + ' notes). It helps us find faults.') : null,
         errorBox, h('div', { class: 'row' }, submit, h('button', { type: 'button', class: 'btn', text: 'Cancel', onclick: dlg.close })));
       dlg.body.appendChild(form);
       form.addEventListener('submit', async function (e) {
@@ -4565,7 +4627,8 @@ window.ESGCompetencyHub = function (ctx) {
         if (CH.ui.dialog.showErrors(form, 'ch-fb-', validate(v), ['type', 'description'])) return;
         submit.disabled = true;
         submit.textContent = 'Sending…';
-        var values = { Title: (v.type + ': ' + v.description.trim()).slice(0, 255), FeedbackType: v.type, Description: v.description.trim(), Status: 'New',
+        var text = v.description.trim() + (noticed && attach.checked ? '\n\n— What the Hub noticed on this computer —\n' + noticed : '');
+        var values = { Title: (v.type + ': ' + v.description.trim()).slice(0, 255), FeedbackType: v.type, Description: text.slice(0, 4000), Status: 'New',
           PageView: String(app.state.view || 'home').slice(0, 100), ClientKey: clientKey };
         try {
           await app.sp.addToFolder('feedback', '', Object.assign(values, app.testMark()));
@@ -5217,12 +5280,20 @@ window.ESGCompetencyHub = function (ctx) {
       var bookingKey = id < 0 && app.model.meetingById[id] ? app.model.meetingById[id].sending : null;
       var formKey = null;    // one change per form, however often it is tried again
       var current = null;    // the item on screen while the meeting runs: { it, dirty(), save() }
+      var lastKnown = null;   // the meeting as last shown: kept while the meetings list could not be read again (app 2.0)
       function mt() {
         if (id < 0 && !app.model.meetingById[id] && bookingKey) {
           var booking = app.tracker.byKey(bookingKey);
           if (booking && booking.resultId && app.model.meetingById[booking.resultId]) { id = Number(booking.resultId); panel.refresh(); }
         }
-        return app.model.meetingById[id];
+        var found = app.model.meetingById[id];
+        if (found) { lastKnown = found; return found; }
+        // not in the rows: kept if the read failed, or while its booking is still being saved; otherwise it is gone
+        var stale = (app.staleLists || []).indexOf('meetings') >= 0;
+        var booking2 = bookingKey ? app.tracker.byKey(bookingKey) : null;
+        if (lastKnown && (stale || (booking2 && booking2.state !== 'done' && booking2.state !== 'rejected'))) return lastKnown;
+        if (lastKnown) { CH.log.note('meeting-gone', 'Meeting ' + id + ' was open and is no longer in the meetings list'); lastKnown = null; }
+        return undefined;
       }
 
       // what is recorded for the meeting, with what waits on this screen for its booking to be saved
@@ -6105,6 +6176,15 @@ window.ESGCompetencyHub = function (ctx) {
           : h('p', { class: 'muted', text: 'No changes have been saved with their times yet. Times are kept from solution 1.9.0.4 on.' })]);
     }
 
+    // What this browser noticed going wrong lately (app 2.0): staff send theirs with their feedback.
+    function lateCard() {
+      var list = CH.log.recent(7);
+      return ui.card('What went wrong lately on this computer', list.length
+        ? [h('p', { class: 'muted small', text: 'The last 7 days. Other people\'s come with their feedback when they tick the box.' }),
+          h('ul', { class: 'plain small' }, list.slice(0, 12).map(function (e) { return h('li', { text: CH.dates.ukTime(new Date(e.at)) + ' ' + e.at.slice(0, 10) + ' – ' + e.text }); }))]
+        : h('p', { class: 'muted small', text: 'Nothing in the last 7 days.' }));
+    }
+
     var TABS = ['Changes needing attention', 'People', 'Settings', 'Feedback', 'Remove test data'];
 
     function render(app) {
@@ -6127,6 +6207,7 @@ window.ESGCompetencyHub = function (ctx) {
       var panel = tab === 1 ? CH.views.people.list(app) : tab === 2 ? CH.views.settings.render(app) : tab === 3 ? CH.views.feedback.review(app) : tab === 4 ? CH.views.cleanup.render(app) : [
         healthCard(app),
         timingsCard(app),
+        lateCard(),
         ui.card('Changes needing attention', [
           h('p', { class: 'muted small', text: 'Changes that failed three times, and runs that stopped more than ' + QUIET_MINUTES + ' minutes ago. The queue monitor retries the rest by itself.' }),
           h('div', { class: 'row' }, ui.linkButton('Check again', function () { refresh(app); })),
@@ -6165,6 +6246,13 @@ window.ESGCompetencyHub = function (ctx) {
       app.refreshPanels = function () { app.panels.slice().forEach(function (p) { if (p.refresh) p.refresh(); }); };
 
       function findRoot() { return document.querySelector('[data-ch-root]'); }
+      // an error in the page itself, kept for the "what went wrong lately" list (only ours: the script's file name)
+      function onPageError(e) {
+        var err = e && (e.error || e.reason);
+        var where = (e && e.filename) || (err && err.stack) || '';
+        if (!/competency-hub/.test(where)) return;
+        CH.log.note('page-error', String(err && err.message || e.message || err || 'error'));
+      }
 
       function waitForRoot() {
         return new Promise(function (resolve, reject) {
@@ -6305,6 +6393,8 @@ window.ESGCompetencyHub = function (ctx) {
             : entries.some(function (x) { return x.state === 'slow'; }) ? ' – taking longer than usual, but it will be saved. You can carry on.' : ' You can carry on.';
           text = (entries.length === 1 ? '1 change still saving: ' + e.label : entries.length + ' changes still saving, the first ' + e.label) + ' · ';
           extra = [ring(e, false), h('span', { text: how })];
+        } else if (app.staleLists && app.staleLists.length) {
+          text = 'SharePoint is busy – showing what was last read. It is read again in a moment; nothing you have done is lost.';
         } else {
           text = 'Everything is up to date.';
         }
@@ -6382,6 +6472,14 @@ window.ESGCompetencyHub = function (ctx) {
         var since = lastRead;
         var startedAt = new Date();
         try {
+          // lists SharePoint could not give us last time are read again in full first (app 2.0)
+          if (app.staleLists && app.staleLists.length) {
+            await reload(app.staleLists.slice());
+            render(false);
+            app.refreshPanels();
+            refreshing = false;
+            return;
+          }
           var changed = await CH.model.loadChanged(app.sp, since);
           var touched = false;
           DELTA.forEach(function (key) {
@@ -6405,7 +6503,8 @@ window.ESGCompetencyHub = function (ctx) {
             // rows that left the list this screen shows (closed, archived, cancelled) go
             app.raw[key].rows = current.filter(function (r) { return !changed.gone || changed.gone[key + '|' + r.Id] !== true; });
           });
-          lastRead = startedAt;
+          // a list whose changes could not be read is asked again from the same moment next time
+          if (DELTA.every(function (key) { return changed[key] !== null; })) lastRead = startedAt;
           if (touched) {
             rebuild();
             render(false);
@@ -6724,8 +6823,8 @@ window.ESGCompetencyHub = function (ctx) {
           }).filter(Boolean);
         var areasByKey = {};
         (raw.competencies.rows || []).forEach(function (c) { areasByKey[c.CompetencyKey] = { status: c.Status }; });
-        if (raw.competencies.error !== undefined) throw new CH.sp.SpError(raw.competencies.error, 'The list of areas could not be loaded.');
-        if (raw.members.error !== undefined) throw new CH.sp.SpError(raw.members.error, 'Area memberships could not be loaded.');
+        if (raw.competencies.error !== undefined && !raw.competencies.stale) throw new CH.sp.SpError(raw.competencies.error, 'The list of areas could not be loaded.');
+        if (raw.members.error !== undefined && !raw.members.stale) throw new CH.sp.SpError(raw.members.error, 'Area memberships could not be loaded.');
         app.access = CH.access.build(app.person, memberships, areasByKey);
         app.health = CH.health.judge(raw.settings.rows, now);
         app.settings = raw.settings.rows || [];
@@ -6733,7 +6832,10 @@ window.ESGCompetencyHub = function (ctx) {
         var soon = (app.settings.filter(function (r) { return r.Title === 'DueSoonDays'; })[0] || {}).Value;
         CH.config.dueSoonDays = /^\d{1,2}$/.test(String(soon || '')) && Number(soon) >= 1 && Number(soon) <= 30 ? Number(soon) : 7;
         app.raw = raw;
-        lastRead = now;
+        // what could not be read again is kept and read on the next refresh; the time of the last good read only moves
+        // on when every list this read asked for came back, so the minute's read of changes misses nothing (app 2.0)
+        app.staleLists = Object.keys(raw).filter(function (k) { return raw[k] && raw[k].stale; });
+        if (!(only || Object.keys(raw)).some(function (k) { return raw[k] && raw[k].stale; })) lastRead = now;
         rebuild();
       }
 
@@ -6760,6 +6862,17 @@ window.ESGCompetencyHub = function (ctx) {
 
       async function start() {
         app.root = await waitForRoot();
+        // Welcome started the layout again on the same page while this one still runs (app 2.0): the running one is kept,
+        // so nothing open on it is lost, and the new one does nothing
+        var live = window.__esgCompetencyHubLive;
+        if (live && !live.disposed() && live.root === app.root && live.root.isConnected) {
+          CH.log.note('second-start', 'Welcome started the Hub again on the same page; the running copy was kept');
+          disposed = true;
+          return;
+        }
+        window.__esgCompetencyHubLive = { root: app.root, disposed: function () { return disposed; } };
+        window.addEventListener('error', onPageError);
+        window.addEventListener('unhandledrejection', onPageError);
         app.stale = staleCopy();
         watchSize();
         var webPart = ctx.getWebPart();
@@ -6836,12 +6949,17 @@ window.ESGCompetencyHub = function (ctx) {
         },
         onError: function (error) {
           if (window.console) console.error('Competency Hub: Welcome reported an error', error);
+          CH.log.note('welcome-error', String(error && error.message || error));
         },
         onDispose: function () {
           disposed = true;
+          CH.log.note('dispose', 'Welcome closed the Hub on this page');
           if (app.tracker) app.tracker.stop();
           if (healthTimer) clearInterval(healthTimer);
           if (refreshTimer) clearInterval(refreshTimer);
+          if (ringTimer) clearInterval(ringTimer);
+          window.removeEventListener('error', onPageError);
+          window.removeEventListener('unhandledrejection', onPageError);
           window.removeEventListener('beforeunload', onLeave);
           document.removeEventListener('visibilitychange', onVisible);
           if (observer) observer.disconnect();

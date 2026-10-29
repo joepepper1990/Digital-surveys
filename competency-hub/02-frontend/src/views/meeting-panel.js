@@ -162,12 +162,20 @@ CH.views.meetingPanel = (function () {
     var bookingKey = id < 0 && app.model.meetingById[id] ? app.model.meetingById[id].sending : null;
     var formKey = null;    // one change per form, however often it is tried again
     var current = null;    // the item on screen while the meeting runs: { it, dirty(), save() }
+    var lastKnown = null;   // the meeting as last shown: kept while the meetings list could not be read again (app 2.0)
     function mt() {
       if (id < 0 && !app.model.meetingById[id] && bookingKey) {
         var booking = app.tracker.byKey(bookingKey);
         if (booking && booking.resultId && app.model.meetingById[booking.resultId]) { id = Number(booking.resultId); panel.refresh(); }
       }
-      return app.model.meetingById[id];
+      var found = app.model.meetingById[id];
+      if (found) { lastKnown = found; return found; }
+      // not in the rows: kept if the read failed, or while its booking is still being saved; otherwise it is gone
+      var stale = (app.staleLists || []).indexOf('meetings') >= 0;
+      var booking2 = bookingKey ? app.tracker.byKey(bookingKey) : null;
+      if (lastKnown && (stale || (booking2 && booking2.state !== 'done' && booking2.state !== 'rejected'))) return lastKnown;
+      if (lastKnown) { CH.log.note('meeting-gone', 'Meeting ' + id + ' was open and is no longer in the meetings list'); lastKnown = null; }
+      return undefined;
     }
 
     // what is recorded for the meeting, with what waits on this screen for its booking to be saved

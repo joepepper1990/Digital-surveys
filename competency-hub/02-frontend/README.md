@@ -2,6 +2,26 @@
 
 Plain HTML, CSS and JavaScript, delivered as a Welcome by Accelerator 365 custom layout. Same-origin SharePoint REST runs as the signed-in user. There are no libraries and no external calls.
 
+## Version 1.4.0: windows close only when asked (29 October 2026) – step 1 of app 2.0
+
+Why a meeting window still closed by itself after 1.3.2, and what is changed:
+- **A failed read no longer empties the screen.** When SharePoint was too busy (429/503 after three retries), a list
+  read again after a saved change came back empty and the open meeting "disappeared": the window showed "Meeting not
+  available". Now `CH.model.load` keeps the last rows of a list it cannot read again (marked `stale`), `reload()`
+  does not move the time of the last read on, the next minute's refresh reads stale lists again in full, and the
+  status line says "SharePoint is busy – showing what was last read". The meeting window also keeps the meeting it
+  shows while its list is stale or its booking is still being saved.
+- **Windows close only when asked** (`ui/dialog.js`): the × and Cancel always; the backdrop only for a press that
+  starts and ends on it and only while nothing in the window has been typed or chosen; Escape only from inside the
+  window, not while typing, and only while untouched. A drag out of a text box no longer closes anything.
+- **Welcome starting the layout again** on the same page while the Hub runs keeps the running copy (and any open
+  window); `onDispose` stops every timer.
+- **What went wrong lately** (`src/core/log.js`): failed reads, a second start, errors in the page, a meeting that
+  left the list while open: kept in this browser (last 50), listed under Administration, and sent with Feedback when
+  the person ticks the box.
+- Next (app 2.0): the meeting, action and notice editors become full pages with their own address, local drafts and
+  controls built once.
+
 ## Version 1.3.2: a thing being edited is never rebuilt (29 October 2026)
 
 - **Why.** The three panels (meeting, action, record) refreshed by throwing their body away and rebuilding it, so a

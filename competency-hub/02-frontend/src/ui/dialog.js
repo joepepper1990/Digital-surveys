@@ -1,5 +1,7 @@
-// The one dialog used by every form and the action panel: modal, focus kept inside, Escape or the
-// backdrop closes it, and focus returns to where it was.
+// The one dialog used by every form and the action panel: modal, focus kept inside, and focus returns to where it
+// was. It closes when asked: the × or a Cancel button always; Escape or a click on the backdrop only while nothing in
+// it has been typed or chosen, and only a press that starts and ends on the backdrop (a drag out of a text box never
+// closes it), only an Escape from inside the dialog and not part of typing (app 2.0).
 CH.ui.dialog = (function () {
   var h = CH.dom.h;
   var FOCUSABLE = 'a[href], select, input, textarea, button:not([disabled])';
@@ -12,7 +14,12 @@ CH.ui.dialog = (function () {
     var closeBtn = h('button', { type: 'button', class: 'dialog-x', 'aria-label': 'Close', text: '×' });
     var dialog = h('div', { class: 'dialog' + (opts.wide ? ' dialog-wide' : ''), role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': opts.id + '-heading', id: opts.id },
       h('div', { class: 'dialog-head' }, heading, closeBtn), body);
-    var scrim = h('div', { class: 'scrim', onclick: function (e) { if (e.target === scrim) close(); } }, dialog);
+    var pressedOnScrim = false;
+    var touched = false;
+    var scrim = h('div', { class: 'scrim', onmousedown: function (e) { pressedOnScrim = e.target === scrim; },
+      onclick: function (e) { var ok = pressedOnScrim && e.target === scrim; pressedOnScrim = false; if (ok && !touched) close(); } }, dialog);
+    dialog.addEventListener('input', function () { touched = true; });
+    dialog.addEventListener('change', function () { touched = true; });
     var closed = false;
 
     function close() {
@@ -26,7 +33,10 @@ CH.ui.dialog = (function () {
     function onKey(e) {
       // only the dialog on top answers: one opened over another (an action from a meeting) closes on its own
       if (scrim.parentNode && scrim.parentNode.lastElementChild !== scrim) return;
-      if (e.key === 'Escape') { e.preventDefault(); close(); return; }
+      if (e.key === 'Escape') {
+        if (e.isComposing || e.defaultPrevented || !dialog.contains(e.target) || touched) return;
+        e.preventDefault(); close(); return;
+      }
       if (e.key !== 'Tab') return;
       var focusable = Array.prototype.filter.call(dialog.querySelectorAll(FOCUSABLE), function (n) { return n.offsetParent !== null; });
       if (!focusable.length) return;
@@ -41,6 +51,8 @@ CH.ui.dialog = (function () {
     return {
       node: dialog, body: body, close: close,
       isOpen: function () { return !closed; },
+      // the dialog's work was saved: Escape and the backdrop may close it again
+      clean: function () { touched = false; },
       setTitle: function (text) { heading.textContent = text; },
       focusFirst: function () {
         var first = body.querySelector('input, select, textarea, button');

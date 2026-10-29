@@ -39,11 +39,15 @@ CH.views.feedback = (function () {
     var type = h('select', { id: 'ch-fb-type' }, TYPES.map(function (t) { return h('option', { value: t, text: t }); }));
     var description = h('textarea', { id: 'ch-fb-description', rows: '6', maxlength: '4000' });
     var errorBox = h('p', { class: 'form-error', role: 'alert' });
+    // what this browser noticed going wrong lately goes with it, if the person agrees (app 2.0)
+    var noticed = CH.log.asText(7);
+    var attach = h('input', { id: 'ch-fb-attach', type: 'checkbox', checked: noticed ? true : null });
     var submit = h('button', { type: 'submit', class: 'btn btn-main', text: 'Send feedback' });
     var dlg = CH.ui.dialog.open({ root: app.layer, id: 'ch-fb', title: 'Send feedback' });
     var form = h('form', { class: 'dialog-body', novalidate: true },
       h('p', { class: 'explain', text: 'Your feedback goes to the Competency Hub administrators. Only they can read it.' }),
       field('What kind of feedback?', type), field('Your feedback', description, 'What happened, or what you would like. Include the page you were on if it helps.'),
+      noticed ? h('label', { class: 'check' }, attach, ' Include what the Hub noticed going wrong on this computer lately (' + noticed.split('\n').length + ' notes). It helps us find faults.') : null,
       errorBox, h('div', { class: 'row' }, submit, h('button', { type: 'button', class: 'btn', text: 'Cancel', onclick: dlg.close })));
     dlg.body.appendChild(form);
     form.addEventListener('submit', async function (e) {
@@ -53,7 +57,8 @@ CH.views.feedback = (function () {
       if (CH.ui.dialog.showErrors(form, 'ch-fb-', validate(v), ['type', 'description'])) return;
       submit.disabled = true;
       submit.textContent = 'Sending…';
-      var values = { Title: (v.type + ': ' + v.description.trim()).slice(0, 255), FeedbackType: v.type, Description: v.description.trim(), Status: 'New',
+      var text = v.description.trim() + (noticed && attach.checked ? '\n\n— What the Hub noticed on this computer —\n' + noticed : '');
+      var values = { Title: (v.type + ': ' + v.description.trim()).slice(0, 255), FeedbackType: v.type, Description: text.slice(0, 4000), Status: 'New',
         PageView: String(app.state.view || 'home').slice(0, 100), ClientKey: clientKey };
       try {
         await app.sp.addToFolder('feedback', '', Object.assign(values, app.testMark()));

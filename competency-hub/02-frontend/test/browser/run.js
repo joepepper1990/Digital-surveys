@@ -428,6 +428,16 @@ res = drive('as=' + KELLY + '&area=FLK&meeting=2&drive=meetingFastRun', SLOW);
 check('a meeting gone through fast while it catches up: never blanks, never jumps to another item, keeps every outcome, then stays still', res.ok &&
   res.result.blanks === 0 && res.result.titles === res.result.clicked && res.result.stayed && res.result.withOutcome > 3 && res.result.outcomes === res.result.withOutcome &&
   res.result.pressed === res.result.withOutcome && res.result.idleRepaints === 0, JSON.stringify(res));
+res = drive('as=' + KELLY + '&area=FLK&meeting=2&drive=throttledMeeting', SLOW);
+check('SharePoint too busy to read the meetings list again: the meeting window stays with the meeting and the notes, the status line says so, and it recovers', res.ok &&
+  res.result.during.open && !res.result.during.notAvailable && res.result.during.editor && res.result.during.notes === 'Typed while SharePoint is busy.' &&
+  /SharePoint is busy/.test(res.result.during.status) && res.result.recovered && res.result.open && res.result.log.indexOf('read-failed') >= 0, JSON.stringify(res));
+res = drive('as=' + KELLY + '&area=FLK&meeting=2&drive=dialogStays', SLOW);
+check('a window being worked in closes only when asked: not on a drag out of the notes, Escape in a list or on the page, or a click outside; the × closes it; an untouched form still closes with Escape', res.ok &&
+  res.result.afterDrag && res.result.afterEscSelect && res.result.afterEscPage && res.result.afterScrimTouched && res.result.closedByX && res.result.untouchedEscCloses, JSON.stringify(res));
+res = drive('as=' + KELLY + '&area=FLK&meeting=2&drive=hostAgain', SLOW);
+check('Welcome starting the Hub again on the same page: the running copy and the open meeting are kept, and it is noted', res.ok &&
+  res.result.open && res.result.notes === 'Typed before the host started again.' && res.result.log.indexOf('second-start') >= 0, JSON.stringify(res));
 res = drive('as=' + KELLY + '&area=FLK&meeting=2&drive=typingKept', SLOW);
 check('a thing being edited is never rebuilt: notes, a half-typed decision and an attendance choice survive the repaint when a change from the meeting finishes; the window stays open and wide, the caret stays put', res.ok &&
   res.result.open && res.result.wide && res.result.repainted && res.result.editor && res.result.notes === 'Replaced and checked. More typed after sending, not saved.' && res.result.caret === 21 &&

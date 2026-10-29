@@ -34,7 +34,12 @@ CH.model = (function () {
         var res = await sp.items(CH.config.lists[key].title, QUERIES[key], null, OPTIONAL[key]);
         raw[key] = { rows: res.rows, complete: res.complete };
       } catch (error) {
-        raw[key] = { rows: [], complete: false, error: error.status || 0 };
+        // a list that could not be read again (SharePoint busy, the connection dropped) keeps what was read last
+        // time, marked stale, so nothing on screen disappears; only a first read that fails is empty (app 2.0)
+        var was = prev && prev[key];
+        raw[key] = was && !was.error && was.rows ? { rows: was.rows, complete: was.complete, stale: true, error: error.status || 0 }
+          : { rows: [], complete: false, error: error.status || 0 };
+        if (CH.log) CH.log.note('read-failed', key + ' could not be read again (HTTP ' + (error.status || 0) + ')' + (was ? '; the last read is kept' : ''));
       }
     }));
     raw.discussed = !only || !prev || keys.indexOf('meetings') >= 0 || keys.indexOf('updates') >= 0 ? await discussed(sp, raw) : prev.discussed;

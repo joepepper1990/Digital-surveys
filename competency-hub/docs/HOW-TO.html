@@ -24,8 +24,9 @@
 <h1>ESG Competency Hub – installing release 1.2</h1>
 <p>25 October 2026. Release 1.2 is the version you approved in the preview. Install it in the order below: Setup first, then the solution, then the app. Allow about 30 minutes, plus a short session with Rich.</p>
 
-<div class="note"><strong>App 1.3.2 and solution 1.10.0.0 (29 October): quicker, and safe however fast people press.</strong> If you have already installed release 1.2, do Step 3 (the app files) first, then Step 2 (the solution), then the quick tests in Step 4b. The app works with the solution you have now; the solution is what makes saving quicker.
+<div class="note"><strong>App 1.4.0 and solution 1.10.0.0 (29 October): quicker, and safe however fast people press.</strong> If you have already installed release 1.2, do Step 3 (the app files) first, then Step 2 (the solution), then the quick tests in Step 4b. The app works with the solution you have now; the solution is what makes saving quicker.
   <ul class="sub">
+    <li><strong>App 1.4.0 – windows close only when you close them.</strong> The meeting window could still close or empty itself when SharePoint was busy: a background re-read failed, and the app took the meeting as gone. Now what was last read is kept and read again a moment later, and the line under the top bar says <em>SharePoint is busy – showing what was last read</em>. A window you have typed or chosen something in closes only with its × or Cancel: not by a click outside, a drag that ends outside, or Escape. If anything odd happens, <strong>Feedback</strong> offers to include what the Hub noticed on your computer, so I can see exactly what went wrong.</li>
     <li><strong>App 1.3.2 – nothing you are typing is ever thrown away.</strong> The meeting screen (and the action and notice windows) used to rebuild themselves when a change finished saving, which wiped what you were typing; the live meeting screen also switched itself off while a change to the booking was saving, and the window shrank, so a click at its old edge closed it. Now what you have typed or chosen is kept through every refresh, with the cursor where it was; the live screen stays on whatever is saving; and an action opened from the agenda and closed again leaves the meeting still updating underneath.</li>
     <li><strong>App 1.3.1 – a progress ring instead of ✓ Sent.</strong> On every card, the line under the top bar and the open record, a small ring fills as the change goes through, with the stage and about how long is left: <em>Waiting to be picked up · about 40 s</em>, <em>Being recorded · about 20 s</em>, <em>Any moment now</em>. The times are learned from how long your own recent changes took (it says <em>usually</em> until it has a few to go on). It cannot be exact to the second: the flows don't report their steps, so the page sees three stages (sent, picked up, saved) and estimates the rest. The ring never fills until the change is really saved; then a green circle with a tick shows and fades.</li>
     <li><strong>App 1.3.0 – one press, one change.</strong> A button whose change is on its way is greyed until it returns, so a double click never sends twice. Changes to one record go out one at a time, in order, each against the revision the one before it left; changes to different records go out at once.</li>
@@ -76,7 +77,7 @@
   <tr><th>Folder</th><th>Version</th><th>Step</th></tr>
   <tr><td><code>1-Setup</code>: <code>CH_Setup.html</code>, <code>CH_Setup.js</code></td><td>Setup 1.4.3</td><td>1</td></tr>
   <tr><td><code>2-Power-Automate</code>: <code>ESGCompetencyHub_1_10_0_0_unmanaged.zip</code></td><td>Solution 1.10.0.0</td><td>2</td></tr>
-  <tr><td><code>3-App</code>: <code>competency-hub.html</code>, <code>competency-hub.js</code></td><td>App 1.3.2</td><td>3</td></tr>
+  <tr><td><code>3-App</code>: <code>competency-hub.html</code>, <code>competency-hub.js</code></td><td>App 1.4.0</td><td>3</td></tr>
   <tr><td><code>4-Permission-probe</code>: <code>CH_Probe_P2.html</code>, <code>CH_Probe_P2.js</code></td><td>Probe P2-2</td><td>5 (with Rich)</td></tr>
 </table>
 
@@ -115,10 +116,10 @@
   </ul>
 </div>
 
-<h2>Step 3 – app 1.3.2</h2>
+<h2>Step 3 – app 1.4.0</h2>
 <ol>
   <li>Open <a href="{SITE}/_layouts/15/viewlsts.aspx">Site contents</a>, then <em>Welcome Web Part - Custom Layouts</em>. Upload both files from <code>3-App</code> and choose <strong>Replace</strong> for each.</li>
-  <li>Open the <a href="{SITE}/SitePages/Hub.aspx">Hub</a>. Edit the web part, click <strong>Reset layout cache</strong>, republish, then press <strong>Ctrl+F5</strong>. The footer should say <em>version 1.3.2</em>, and a line under the top bar should say <em>Everything is up to date</em>.</li>
+  <li>Open the <a href="{SITE}/SitePages/Hub.aspx">Hub</a>. Edit the web part, click <strong>Reset layout cache</strong>, republish, then press <strong>Ctrl+F5</strong>. The footer should say <em>version 1.4.0</em>, and a line under the top bar should say <em>Everything is up to date</em>.</li>
 </ol>
 
 <h2>Step 4 – try it (as yourself, about 15 minutes)</h2>

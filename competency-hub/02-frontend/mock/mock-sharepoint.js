@@ -284,7 +284,13 @@ window.MockSharePoint = (function () {
 
   function Client() {}
   Client.configurations = { v1: {} };
-  Client.prototype.get = function (url) { return get(url); };
+  // SharePoint busy (app 2.0 tests): while throttle names a list (or '*'), every read of it answers 429
+  var throttle = { lists: [] };
+  Client.prototype.get = function (url) {
+    var m = /getbytitle\('([^']+)'\)/.exec(decodeURIComponent(url));
+    if (throttle.lists.length && m && (throttle.lists.indexOf('*') >= 0 || throttle.lists.indexOf(m[1]) >= 0)) return respond(429, { error: { message: 'Too many requests' } });
+    return get(url);
+  };
   Client.prototype.post = function (url, config, options) { return post(url, options || {}); };
 
   var ctx = {
@@ -348,5 +354,8 @@ window.MockSharePoint = (function () {
     return row;
   }
 
-  return { start: start, reload: reload, ctx: ctx, writes: writes, requests: requests, thresholdHits: thresholdHits, data: data, someoneElse: someoneElse };
+  // Welcome running the layout a second time on the same page, without closing the first (app 2.0 tests)
+  function startAgain() { var again = window.ESGCompetencyHub(ctx); again.onInitialize(); return again; }
+
+  return { start: start, reload: reload, startAgain: startAgain, throttle: throttle, ctx: ctx, writes: writes, requests: requests, thresholdHits: thresholdHits, data: data, someoneElse: someoneElse };
 })();

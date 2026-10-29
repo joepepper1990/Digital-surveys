@@ -2,7 +2,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadApp, loadSeed } = require('../load.js');
+const { loadApp, loadSeed, plain } = require('../load.js');
 
 const TODAY = '2026-10-21';
 const CH = loadApp();
@@ -112,4 +112,38 @@ test('release 1.2: a saved change reads only the lists it can alter; the others 
   assert.deepEqual(asked.slice().sort(), [CH2.config.lists.actions.title, CH2.config.lists.settings.title].sort());
   assert.equal(next.notices, prev.notices);
   assert.notEqual(next.actions, prev.actions);
+});
+
+test('app 2.0: a list SharePoint cannot give again keeps what was read last time, marked stale; a first read that fails is empty', async () => {
+  const CH2 = loadApp({ window: { localStorage: { getItem: () => null, setItem: () => {} } } });
+  let busy = false;
+  const sp = { items: async (title) => {
+    if (busy && title === CH2.config.lists.meetings.title) { const e = new Error('Too many requests'); e.status = 429; throw e; }
+    return { rows: [{ Id: 7, Title: title }], complete: true };
+  } };
+  const prev = await CH2.model.load(sp);
+  busy = true;
+  const next = await CH2.model.load(sp, ['meetings', 'actions'], prev);
+  assert.equal(next.meetings.stale, true);
+  assert.equal(next.meetings.error, 429);
+  assert.deepEqual(plain(next.meetings.rows), plain(prev.meetings.rows), 'the meeting is still there');
+  assert.notEqual(next.actions, prev.actions);
+  assert.ok(!next.actions.stale);
+  const first = await CH2.model.load(sp);
+  assert.deepEqual(plain(first.meetings.rows), []);
+  assert.ok(!first.meetings.stale, 'nothing to keep on a first read');
+  busy = false;
+  const again = await CH2.model.load(sp, ['meetings'], next);
+  assert.ok(!again.meetings.stale, 'recovers on the next good read');
+});
+
+test('app 2.0: the log keeps the last notes of each kind, at most one a minute, newest first', () => {
+  const store = {};
+  const CH2 = loadApp({ window: { localStorage: { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = v; } } } });
+  CH2.log.note('read-failed', 'meetings could not be read again');
+  CH2.log.note('read-failed', 'again within the minute');
+  CH2.log.note('second-start', 'Welcome started the Hub again');
+  const list = CH2.log.recent(7);
+  assert.deepEqual(plain(list.map((e) => e.kind)), ['second-start', 'read-failed']);
+  assert.match(CH2.log.asText(7), /read-failed: meetings could not be read again/);
 });
